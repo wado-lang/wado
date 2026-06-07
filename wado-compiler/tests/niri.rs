@@ -15,107 +15,139 @@ use wado_compiler::Span;
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::nir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, NirBinaryOp, NirBlock, NirExpr, NirExprKind,
-    NirFunction, NirLiteralPattern, NirLocal, NirMatchArm, NirParam, NirPattern, NirStmt,
-    NirStmtKind, NirUnaryOp, ReturnAbi,
+    FunctionKind, FunctionRef, InlineHint, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal,
+    NirParam, NirUnaryOp, ReturnAbi,
+};
+use wado_compiler::nir_arena::{
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, PatNode, StmtId,
+    StmtKind, StmtNode,
 };
 use wado_compiler::niri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 
-fn char_lit(c: char) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::CharLiteral(c),
-        TypeTable::CHAR,
-        Span::default(),
-    )
-}
+/// A deferred expression builder: appends a subtree to the given arena `Body`
+/// and returns its root id. `Rc` so a builder can be cloned and re-used to
+/// build into more than one body (e.g. an operand shared by two parents).
+type Build = Rc<dyn Fn(&mut Body) -> ExprId>;
 
-fn cast_expr(inner: NirExpr, target_ty: TypeId) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::Cast {
-            expr: Box::new(inner),
-            target_type: target_ty,
-        },
-        target_ty,
-        Span::default(),
-    )
-}
-
-fn int_lit(value: u64, type_id: TypeId, repr: &str) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::IntLiteral {
-            repr: repr.to_string(),
-            value,
-        },
+fn pe(body: &mut Body, kind: ExprKind, type_id: TypeId) -> ExprId {
+    body.exprs.push(ExprNode {
+        kind,
         type_id,
-        Span::default(),
-    )
+        span: Span::default(),
+    })
 }
 
-fn float_lit(value: f64, type_id: TypeId, repr: &str) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::FloatLiteral {
-            repr: repr.to_string(),
-            value,
-        },
-        type_id,
-        Span::default(),
-    )
+fn char_lit(c: char) -> Build {
+    Rc::new(move |b| pe(b, ExprKind::CharLiteral(c), TypeTable::CHAR))
 }
 
-fn bool_lit(value: bool) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::BoolLiteral(value),
-        TypeTable::BOOL,
-        Span::default(),
-    )
+fn cast_expr(inner: Build, target_ty: TypeId) -> Build {
+    Rc::new(move |b| {
+        let e = inner(b);
+        pe(
+            b,
+            ExprKind::Cast {
+                expr: e,
+                target_type: target_ty,
+            },
+            target_ty,
+        )
+    })
 }
 
-fn binary(op: NirBinaryOp, left: NirExpr, right: NirExpr, result_ty: TypeId) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::Binary {
-            left: Box::new(left),
-            op,
-            right: Box::new(right),
-        },
-        result_ty,
-        Span::default(),
-    )
+fn int_lit(value: u64, type_id: TypeId, repr: &str) -> Build {
+    let repr = repr.to_string();
+    Rc::new(move |b| {
+        pe(
+            b,
+            ExprKind::IntLiteral {
+                value,
+                repr: repr.clone(),
+            },
+            type_id,
+        )
+    })
 }
 
-fn unary(op: NirUnaryOp, expr: NirExpr, result_ty: TypeId) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::Unary {
-            op,
-            expr: Box::new(expr),
-        },
-        result_ty,
-        Span::default(),
-    )
+fn float_lit(value: f64, type_id: TypeId, repr: &str) -> Build {
+    let repr = repr.to_string();
+    Rc::new(move |b| {
+        pe(
+            b,
+            ExprKind::FloatLiteral {
+                value,
+                repr: repr.clone(),
+            },
+            type_id,
+        )
+    })
 }
 
-fn local_expr(index: u32, type_id: TypeId) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::Local {
-            index,
-            name: format!("l{index}"),
-        },
-        type_id,
-        Span::default(),
-    )
+fn bool_lit(value: bool) -> Build {
+    Rc::new(move |b| pe(b, ExprKind::BoolLiteral(value), TypeTable::BOOL))
 }
 
-/// Convenience wrapper used by the legacy "is this a Const?" tests: run
-/// `reduce_to_lattice` and project to `Option<Value>` via
-/// [`Lattice::as_const`]. Unevaluated and `NonConst` both collapse to
-/// `None` here — when a test cares about the distinction it pattern
-/// matches on [`Lattice`] directly.
-fn eval(expr: &NirExpr) -> Option<Value> {
+fn binary(op: NirBinaryOp, left: Build, right: Build, result_ty: TypeId) -> Build {
+    Rc::new(move |b| {
+        let l = left(b);
+        let r = right(b);
+        pe(b, ExprKind::Binary { left: l, op, right: r }, result_ty)
+    })
+}
+
+fn unary(op: NirUnaryOp, expr: Build, result_ty: TypeId) -> Build {
+    Rc::new(move |b| {
+        let e = expr(b);
+        pe(b, ExprKind::Unary { op, expr: e }, result_ty)
+    })
+}
+
+fn local_expr(index: u32, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        pe(
+            b,
+            ExprKind::Local {
+                index,
+                name: format!("l{index}"),
+            },
+            type_id,
+        )
+    })
+}
+
+/// Build `build` into a fresh `Body`, returning both so a caller can run an
+/// interpreter method and then inspect the (possibly rewritten) node.
+fn into_body(build: &Build) -> (Body, ExprId) {
+    let mut body = Body::empty();
+    let e = build(&mut body);
+    (body, e)
+}
+
+/// Full bottom-up reduction of a freshly-built expression to a lattice, using
+/// a default interpreter (no env / callees). The arena analogue of the old
+/// `reduce_lat(&mut Interpreter::new(&table), &expr)`.
+fn lattice_of(build: &Build) -> Lattice {
     let table = TypeTable::new();
-    Interpreter::new(&table).reduce_to_lattice(expr).as_const()
+    let (mut body, e) = into_body(build);
+    Interpreter::new(&table).reduce_to_lattice_full_a(&mut body, e)
 }
 
-fn expect_int(expr: &NirExpr, expected_value: u64, expected_prim: PrimitiveType) {
+/// Like [`lattice_of`] but against a caller-supplied (stateful) interpreter.
+fn reduce_lat(interp: &mut Interpreter, build: &Build) -> Lattice {
+    let (mut body, e) = into_body(build);
+    interp.reduce_to_lattice_full_a(&mut body, e)
+}
+
+/// Convenience wrapper used by the legacy "is this a Const?" tests: reduce and
+/// project to `Option<Value>` via [`Lattice::as_const`]. Unevaluated and
+/// `NonConst` both collapse to `None` here — when a test cares about the
+/// distinction it pattern matches on [`Lattice`] directly.
+fn eval(expr: &Build) -> Option<Value> {
+    lattice_of(expr).as_const()
+}
+
+fn expect_int(expr: &Build, expected_value: u64, expected_prim: PrimitiveType) {
     let v = eval(expr).expect("expected reduction");
     assert_eq!(
         v,
@@ -127,7 +159,7 @@ fn expect_int(expr: &NirExpr, expected_value: u64, expected_prim: PrimitiveType)
     );
 }
 
-fn expect_float(expr: &NirExpr, expected_value: f64, expected_prim: PrimitiveType) {
+fn expect_float(expr: &Build, expected_value: f64, expected_prim: PrimitiveType) {
     let v = eval(expr).expect("expected reduction");
     match v {
         Value::Float { value, prim } => {
@@ -138,8 +170,38 @@ fn expect_float(expr: &NirExpr, expected_value: f64, expected_prim: PrimitiveTyp
     }
 }
 
-fn expect_bool(expr: &NirExpr, expected: bool) {
+fn expect_bool(expr: &Build, expected: bool) {
     assert_eq!(eval(expr), Some(Value::Bool(expected)));
+}
+
+fn unit_lit() -> Build {
+    Rc::new(|b| pe(b, ExprKind::Unit, TypeTable::UNIT))
+}
+
+/// Build, run the in-place reducer (`reduce_in_place_a`, the arena analogue of
+/// the old tree `reduce`) with a default interpreter, and return the arena so
+/// the caller can inspect the rewritten root node via `body.exprs[e].kind`.
+fn reduce_to_expr(build: &Build) -> (Body, ExprId) {
+    let table = TypeTable::new();
+    let (mut body, e) = into_body(build);
+    Interpreter::new(&table).reduce_in_place_a(&mut body, e);
+    (body, e)
+}
+
+/// Like [`reduce_to_expr`] but against a caller-supplied (stateful)
+/// interpreter, so env / callee bindings are visible to the reduction.
+fn reduce_with(interp: &mut Interpreter, build: &Build) -> (Body, ExprId) {
+    let (mut body, e) = into_body(build);
+    interp.reduce_in_place_a(&mut body, e);
+    (body, e)
+}
+
+/// Build, apply the single-node `reduce_local_a` rewrite, and return the
+/// `changed` flag plus the arena so the caller can inspect `body.exprs[e]`.
+fn reduce_local_into(interp: &mut Interpreter, build: &Build) -> (bool, Body, ExprId) {
+    let (mut body, e) = into_body(build);
+    let changed = interp.reduce_local_a(&mut body, e);
+    (changed, body, e)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -475,7 +537,7 @@ fn non_literal_operand_is_unreducible() {
     let e = binary(
         NirBinaryOp::Add,
         int_lit(1, TypeTable::I32, "1"),
-        NirExpr::new(NirExprKind::Unit, TypeTable::UNIT, Span::default()),
+        unit_lit(),
         TypeTable::I32,
     );
     assert_eq!(eval(&e), None);
@@ -490,13 +552,12 @@ fn reduce_preserves_literal_repr() {
     // A bare `0xFF` IntLiteral must reduce to itself with the original
     // hex repr intact — fold passes must never round-trip leaf literals
     // through decimal formatting.
-    let table = TypeTable::new();
     let lit = int_lit(0xFF, TypeTable::U8, "0xFF");
-    let reduced = Interpreter::new(&table).reduce(&lit);
-    match reduced.kind {
-        NirExprKind::IntLiteral { repr, value } => {
+    let (body, e) = reduce_to_expr(&lit);
+    match &body.exprs[e].kind {
+        ExprKind::IntLiteral { repr, value } => {
             assert_eq!(repr, "0xFF");
-            assert_eq!(value, 0xFF);
+            assert_eq!(*value, 0xFF);
         }
         other => panic!("expected IntLiteral, got {other:?}"),
     }
@@ -504,16 +565,15 @@ fn reduce_preserves_literal_repr() {
 
 #[test]
 fn reduce_collapses_binary_to_literal() {
-    let table = TypeTable::new();
     let e = binary(
         NirBinaryOp::Add,
         int_lit(20, TypeTable::I32, "20"),
         int_lit(22, TypeTable::I32, "22"),
         TypeTable::I32,
     );
-    let reduced = Interpreter::new(&table).reduce(&e);
-    match reduced.kind {
-        NirExprKind::IntLiteral { value, .. } => assert_eq!(value, 42),
+    let (body, e) = reduce_to_expr(&e);
+    match &body.exprs[e].kind {
+        ExprKind::IntLiteral { value, .. } => assert_eq!(*value, 42),
         other => panic!("expected IntLiteral after fold, got {other:?}"),
     }
 }
@@ -521,15 +581,14 @@ fn reduce_collapses_binary_to_literal() {
 #[test]
 fn reduce_short_circuits_or_false() {
     // `false || X` reduces to `X` even when `X` is non-constant.
-    let table = TypeTable::new();
     let lhs = bool_lit(false);
-    let rhs = NirExpr::new(NirExprKind::Unit, TypeTable::UNIT, Span::default());
+    let rhs = unit_lit();
     let e = binary(NirBinaryOp::Or, lhs, rhs, TypeTable::BOOL);
-    let reduced = Interpreter::new(&table).reduce(&e);
+    let (body, e) = reduce_to_expr(&e);
     assert!(
-        matches!(reduced.kind, NirExprKind::Unit),
+        matches!(body.exprs[e].kind, ExprKind::Unit),
         "false || X should reduce to X, got {:?}",
-        reduced.kind
+        body.exprs[e].kind
     );
 }
 
@@ -539,9 +598,8 @@ fn reduce_short_circuits_or_false() {
 
 #[test]
 fn lattice_const_for_literal() {
-    let table = TypeTable::new();
     let lit = int_lit(42, TypeTable::I32, "42");
-    let lat = Interpreter::new(&table).reduce_to_lattice(&lit);
+    let lat = lattice_of(&lit);
     assert!(matches!(
         lat,
         Lattice::Const(Value::Int {
@@ -555,41 +613,29 @@ fn lattice_const_for_literal() {
 fn lattice_unevaluated_for_unsupported_kind() {
     // A bare `Unit` is outside the engine's model — distinct from
     // `NonConst`, which is reserved for things provably non-constant.
-    let table = TypeTable::new();
-    let e = NirExpr::new(NirExprKind::Unit, TypeTable::UNIT, Span::default());
-    assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&e),
-        Lattice::Unevaluated,
-    );
+    let e = unit_lit();
+    assert_eq!(lattice_of(&e), Lattice::Unevaluated);
 }
 
 #[test]
 fn lattice_unevaluated_for_unbound_local() {
     // No bind_local call → reading the local is "I don't know yet",
     // not "I know it isn't const".
-    let table = TypeTable::new();
     let local = local_expr(0, TypeTable::I32);
-    assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&local),
-        Lattice::Unevaluated,
-    );
+    assert_eq!(lattice_of(&local), Lattice::Unevaluated);
 }
 
 #[test]
 fn lattice_nonconst_for_div_by_zero() {
     // Both operands are Const, but the op evidently fails — that's
     // NonConst, distinct from Unevaluated.
-    let table = TypeTable::new();
     let e = binary(
         NirBinaryOp::Div,
         int_lit(1, TypeTable::I32, "1"),
         int_lit(0, TypeTable::I32, "0"),
         TypeTable::I32,
     );
-    assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&e),
-        Lattice::NonConst,
-    );
+    assert_eq!(lattice_of(&e), Lattice::NonConst);
 }
 
 #[test]
@@ -630,7 +676,7 @@ fn bound_local_folds_in_arithmetic() {
         TypeTable::I32,
     );
     assert_eq!(
-        interp.reduce_to_lattice(&e),
+        reduce_lat(&mut interp, &e),
         Lattice::Const(Value::Int {
             value: 8,
             prim: PrimitiveType::I32,
@@ -651,7 +697,7 @@ fn nonconst_local_blocks_fold() {
         int_lit(3, TypeTable::I32, "3"),
         TypeTable::I32,
     );
-    assert_eq!(interp.reduce_to_lattice(&e), Lattice::NonConst);
+    assert_eq!(reduce_lat(&mut interp, &e), Lattice::NonConst);
 }
 
 #[test]
@@ -669,7 +715,7 @@ fn invalidate_local_overrides_prior_const() {
     );
     interp.invalidate_local(7);
     let e = local_expr(7, TypeTable::I32);
-    assert_eq!(interp.reduce_to_lattice(&e), Lattice::NonConst);
+    assert_eq!(reduce_lat(&mut interp, &e), Lattice::NonConst);
 }
 
 #[test]
@@ -688,7 +734,7 @@ fn enter_function_clears_env() {
     );
     interp.enter_function();
     let e = local_expr(3, TypeTable::I32);
-    assert_eq!(interp.reduce_to_lattice(&e), Lattice::Unevaluated);
+    assert_eq!(reduce_lat(&mut interp, &e), Lattice::Unevaluated);
 }
 
 #[test]
@@ -707,11 +753,11 @@ fn local_node_itself_is_not_rewritten_in_place() {
         }),
     );
     let local = local_expr(0, TypeTable::I32);
-    let reduced = interp.reduce(&local);
+    let (body, e) = reduce_with(&mut interp, &local);
     assert!(
-        matches!(reduced.kind, NirExprKind::Local { index: 0, .. }),
+        matches!(body.exprs[e].kind, ExprKind::Local { index: 0, .. }),
         "Local must stay structurally a Local; env lookup happens at parents only, got {:?}",
-        reduced.kind,
+        body.exprs[e].kind,
     );
 }
 
@@ -748,7 +794,7 @@ fn nested_const_locals_chain() {
         TypeTable::I32,
     );
     assert_eq!(
-        interp.reduce_to_lattice(&e),
+        reduce_lat(&mut interp, &e),
         Lattice::Const(Value::Int {
             value: 16,
             prim: PrimitiveType::I32,
@@ -777,16 +823,9 @@ fn check_env_cast(
             prim: src_prim,
         }),
     );
-    let cast_expr = NirExpr::new(
-        NirExprKind::Cast {
-            expr: Box::new(local_expr(0, src_ty)),
-            target_type: target_ty,
-        },
-        target_ty,
-        Span::default(),
-    );
+    let cast_expr = cast_expr(local_expr(0, src_ty), target_ty);
     assert_eq!(
-        interp.reduce_to_lattice(&cast_expr),
+        reduce_lat(&mut interp, &cast_expr),
         Lattice::Const(Value::Int {
             value: expected_value,
             prim: target_prim,
@@ -929,18 +968,11 @@ fn cast_through_env_local_applies_target_prim() {
             prim: PrimitiveType::U32,
         }),
     );
-    let cast_expr = NirExpr::new(
-        NirExprKind::Cast {
-            expr: Box::new(local_expr(0, TypeTable::U32)),
-            target_type: TypeTable::I32,
-        },
-        TypeTable::I32,
-        Span::default(),
-    );
+    let ce = cast_expr(local_expr(0, TypeTable::U32), TypeTable::I32);
     // u as i32 must equal -1 (sign-extended bit pattern in u64 form).
     let neg_one_bits = i64::from(-1_i32) as u64;
     assert_eq!(
-        interp.reduce_to_lattice(&cast_expr),
+        reduce_lat(&mut interp, &ce),
         Lattice::Const(Value::Int {
             value: neg_one_bits,
             prim: PrimitiveType::I32,
@@ -952,14 +984,7 @@ fn cast_through_env_local_applies_target_prim() {
     // folding to `false` (because the LHS still carried U32 bits at an
     // I32 slot, and the comparator's same-prim eval re-interpreted
     // them as the unsigned 4294967295).
-    let lhs = NirExpr::new(
-        NirExprKind::Cast {
-            expr: Box::new(local_expr(0, TypeTable::U32)),
-            target_type: TypeTable::I32,
-        },
-        TypeTable::I32,
-        Span::default(),
-    );
+    let lhs = cast_expr(local_expr(0, TypeTable::U32), TypeTable::I32);
     let cmp = binary(
         NirBinaryOp::Eq,
         lhs,
@@ -967,7 +992,7 @@ fn cast_through_env_local_applies_target_prim() {
         TypeTable::BOOL,
     );
     assert_eq!(
-        interp.reduce_to_lattice(&cmp),
+        reduce_lat(&mut interp, &cmp),
         Lattice::Const(Value::Bool(true)),
     );
 }
@@ -976,28 +1001,43 @@ fn cast_through_env_local_applies_target_prim() {
 // `Lattice::join` and `if`-expression reduction
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn block_with_tail_expr(e: NirExpr) -> NirBlock {
-    NirBlock::new(
-        vec![NirStmt::new(NirStmtKind::Expr(e), Span::default())],
-        Span::default(),
-    )
+/// A deferred block builder, the block-level counterpart of [`Build`].
+type BlockBuild = Rc<dyn Fn(&mut Body) -> BlockId>;
+
+fn block_with_tail_expr(e: Build) -> BlockBuild {
+    Rc::new(move |b| {
+        let id = e(b);
+        let s = b.stmts.push(StmtNode {
+            kind: StmtKind::Expr(id),
+            span: Span::default(),
+        });
+        b.blocks.push(BlockNode {
+            stmts: vec![s],
+            span: Span::default(),
+        })
+    })
 }
 
 fn if_expr(
-    condition: NirExpr,
-    then_branch: NirBlock,
-    else_branch: Option<NirBlock>,
+    condition: Build,
+    then_branch: BlockBuild,
+    else_branch: Option<BlockBuild>,
     type_id: TypeId,
-) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::If {
-            condition: Box::new(condition),
-            then_branch,
-            else_branch,
-        },
-        type_id,
-        Span::default(),
-    )
+) -> Build {
+    Rc::new(move |b| {
+        let condition = condition(b);
+        let then_branch = then_branch(b);
+        let else_branch = else_branch.as_ref().map(|eb| eb(b));
+        pe(
+            b,
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            },
+            type_id,
+        )
+    })
 }
 
 #[test]
@@ -1078,7 +1118,7 @@ fn if_const_true_picks_then_arm() {
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 10,
             prim: PrimitiveType::I32,
@@ -1096,7 +1136,7 @@ fn if_const_false_picks_else_arm() {
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 20,
             prim: PrimitiveType::I32,
@@ -1119,7 +1159,7 @@ fn if_const_false_no_else_yields_unit() {
         TypeTable::UNIT,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Unevaluated,
     );
 }
@@ -1139,7 +1179,7 @@ fn if_const_true_unreachable_else_does_not_contaminate() {
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 42,
             prim: PrimitiveType::I32,
@@ -1162,7 +1202,7 @@ fn if_nonconst_cond_with_equal_arm_consts_folds() {
         TypeTable::I32,
     );
     assert_eq!(
-        interp.reduce_to_lattice(&expr),
+        reduce_lat(&mut interp, &expr),
         Lattice::Const(Value::Int {
             value: 5,
             prim: PrimitiveType::I32,
@@ -1182,7 +1222,7 @@ fn if_nonconst_cond_with_unequal_arm_consts_is_nonconst() {
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::NonConst,
     );
 }
@@ -1203,7 +1243,7 @@ fn if_nonconst_cond_with_unevaluated_arm_does_not_fold() {
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::NonConst,
     );
 }
@@ -1215,21 +1255,23 @@ fn reduce_local_rewrites_const_true_if_to_block() {
     // subsumes the `if true` case from the legacy `const_branch_prune`.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = if_expr(
+    let expr = if_expr(
         bool_lit(true),
         block_with_tail_expr(int_lit(10, TypeTable::I32, "10")),
         Some(block_with_tail_expr(int_lit(20, TypeTable::I32, "20"))),
         TypeTable::I32,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::Block(b) = &expr.kind else {
-        panic!("expected Block, got {:?}", expr.kind);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::Block(blk) = body.exprs[e].kind else {
+        panic!("expected Block, got {:?}", body.exprs[e].kind);
     };
-    assert_eq!(b.stmts.len(), 1);
-    let NirStmtKind::Expr(tail) = &b.stmts[0].kind else {
+    assert_eq!(body.blocks[blk].stmts.len(), 1);
+    let s0 = body.blocks[blk].stmts[0];
+    let StmtKind::Expr(tail) = body.stmts[s0].kind else {
         panic!("expected Expr stmt");
     };
-    let NirExprKind::IntLiteral { value, .. } = tail.kind else {
+    let ExprKind::IntLiteral { value, .. } = body.exprs[tail].kind else {
         panic!("expected IntLiteral tail");
     };
     assert_eq!(value, 10);
@@ -1239,29 +1281,31 @@ fn reduce_local_rewrites_const_true_if_to_block() {
 fn reduce_local_rewrites_const_false_if_no_else_to_unit() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = if_expr(
+    let expr = if_expr(
         bool_lit(false),
         block_with_tail_expr(int_lit(10, TypeTable::I32, "10")),
         None,
         TypeTable::UNIT,
     );
-    assert!(interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Unit));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Unit));
 }
 
 #[test]
 fn reduce_local_collapses_equal_arm_if_to_literal() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = if_expr(
+    let expr = if_expr(
         local_expr(0, TypeTable::BOOL),
         block_with_tail_expr(int_lit(7, TypeTable::I32, "7")),
         Some(block_with_tail_expr(int_lit(7, TypeTable::I32, "7"))),
         TypeTable::I32,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::IntLiteral { value, .. } = expr.kind else {
-        panic!("expected IntLiteral, got {:?}", expr.kind);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::IntLiteral { value, .. } = body.exprs[e].kind else {
+        panic!("expected IntLiteral, got {:?}", body.exprs[e].kind);
     };
     assert_eq!(value, 7);
 }
@@ -1275,21 +1319,22 @@ fn reduce_local_rewrites_if_true_false_to_cond() {
     // requires does not apply here.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = if_expr(
+    let expr = if_expr(
         local_expr(0, TypeTable::BOOL),
         block_with_tail_expr(bool_lit(true)),
         Some(block_with_tail_expr(bool_lit(false))),
         TypeTable::BOOL,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::Local { index, .. } = expr.kind else {
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::Local { index, .. } = body.exprs[e].kind else {
         panic!(
             "expected Local (the original condition), got {:?}",
-            expr.kind
+            body.exprs[e].kind
         );
     };
     assert_eq!(index, 0);
-    assert_eq!(expr.type_id, TypeTable::BOOL);
+    assert_eq!(body.exprs[e].type_id, TypeTable::BOOL);
 }
 
 #[test]
@@ -1300,22 +1345,26 @@ fn reduce_local_rewrites_if_false_true_to_not_cond() {
     // (cond is evaluated, then negated).
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = if_expr(
+    let expr = if_expr(
         local_expr(0, TypeTable::BOOL),
         block_with_tail_expr(bool_lit(false)),
         Some(block_with_tail_expr(bool_lit(true))),
         TypeTable::BOOL,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::Unary { op, expr: inner } = &expr.kind else {
-        panic!("expected Unary::Not, got {:?}", expr.kind);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::Unary { op, expr: inner } = body.exprs[e].kind else {
+        panic!("expected Unary::Not, got {:?}", body.exprs[e].kind);
     };
     assert!(matches!(op, NirUnaryOp::Not));
-    let NirExprKind::Local { index, .. } = inner.kind else {
-        panic!("expected Local inside Unary::Not, got {:?}", inner.kind);
+    let ExprKind::Local { index, .. } = body.exprs[inner].kind else {
+        panic!(
+            "expected Local inside Unary::Not, got {:?}",
+            body.exprs[inner].kind
+        );
     };
     assert_eq!(index, 0);
-    assert_eq!(expr.type_id, TypeTable::BOOL);
+    assert_eq!(body.exprs[e].type_id, TypeTable::BOOL);
 }
 
 #[test]
@@ -1330,23 +1379,24 @@ fn reduce_local_rewrites_if_true_false_with_non_speculatable_cond() {
         local_expr(0, TypeTable::I32),
         vec![
             arm(lit_pat_i128(0), bool_lit(true)),
-            arm(NirPattern::Wildcard, bool_lit(false)),
+            arm(wildcard_pat(), bool_lit(false)),
         ],
         TypeTable::BOOL,
     );
-    let mut expr = if_expr(
+    let expr = if_expr(
         impure_cond,
         block_with_tail_expr(bool_lit(true)),
         Some(block_with_tail_expr(bool_lit(false))),
         TypeTable::BOOL,
     );
-    assert!(interp.reduce_local(&mut expr));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
     // After rewrite, the if is replaced by the (still-non-speculatable)
     // cond expression itself — the Match.
     assert!(
-        matches!(expr.kind, NirExprKind::Match { .. }),
+        matches!(body.exprs[e].kind, ExprKind::Match { .. }),
         "expected the original Match condition to survive as the result, got {:?}",
-        expr.kind
+        body.exprs[e].kind
     );
 }
 
@@ -1357,7 +1407,7 @@ fn reduce_local_leaves_if_mixed_bool_int_arms_alone() {
     // tuple pattern in the rule guards against this.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = if_expr(
+    let expr = if_expr(
         local_expr(0, TypeTable::BOOL),
         block_with_tail_expr(bool_lit(true)),
         Some(block_with_tail_expr(int_lit(0, TypeTable::I32, "0"))),
@@ -1366,9 +1416,13 @@ fn reduce_local_leaves_if_mixed_bool_int_arms_alone() {
         // regardless.
         TypeTable::BOOL,
     );
-    let before = format!("{:?}", expr.kind);
-    assert!(!interp.reduce_local(&mut expr));
-    assert_eq!(format!("{:?}", expr.kind), before);
+    let before = {
+        let (b, e) = into_body(&expr);
+        format!("{:?}", b.exprs[e].kind)
+    };
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert_eq!(format!("{:?}", body.exprs[e].kind), before);
 }
 
 #[test]
@@ -1376,31 +1430,29 @@ fn reduce_local_block_splices_const_true_if_stmt() {
     // Stmt-form `if true { stmts… }` → splice stmts into the parent.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let inner_stmt = NirStmt::new(
-        NirStmtKind::Expr(int_lit(99, TypeTable::I32, "99")),
-        Span::default(),
-    );
-    let if_stmt = NirStmt::new(
-        NirStmtKind::If {
-            condition: bool_lit(true),
-            then_block: NirBlock::new(vec![inner_stmt], Span::default()),
-            else_block: Some(NirBlock::new(
-                vec![NirStmt::new(
-                    NirStmtKind::Expr(int_lit(0, TypeTable::I32, "0")),
-                    Span::default(),
-                )],
-                Span::default(),
-            )),
+    let mut body = Body::empty();
+    let condition = bool_lit(true)(&mut body);
+    let then_block = block_with_tail_expr(int_lit(99, TypeTable::I32, "99"))(&mut body);
+    let else_block = block_with_tail_expr(int_lit(0, TypeTable::I32, "0"))(&mut body);
+    let if_stmt = ps(
+        &mut body,
+        StmtKind::If {
+            condition,
+            then_block,
+            else_block: Some(else_block),
         },
-        Span::default(),
     );
-    let mut block = NirBlock::new(vec![if_stmt], Span::default());
-    assert!(interp.reduce_local_block(&mut block));
-    assert_eq!(block.stmts.len(), 1);
-    let NirStmtKind::Expr(e) = &block.stmts[0].kind else {
+    let block = body.blocks.push(BlockNode {
+        stmts: vec![if_stmt],
+        span: Span::default(),
+    });
+    assert!(interp.reduce_local_block_a(&mut body, block));
+    assert_eq!(body.blocks[block].stmts.len(), 1);
+    let s0 = body.blocks[block].stmts[0];
+    let StmtKind::Expr(e) = body.stmts[s0].kind else {
         panic!("expected Expr stmt");
     };
-    let NirExprKind::IntLiteral { value, .. } = e.kind else {
+    let ExprKind::IntLiteral { value, .. } = body.exprs[e].kind else {
         panic!("expected IntLiteral");
     };
     assert_eq!(value, 99);
@@ -1410,23 +1462,23 @@ fn reduce_local_block_splices_const_true_if_stmt() {
 fn reduce_local_block_drops_const_false_if_stmt_without_else() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let if_stmt = NirStmt::new(
-        NirStmtKind::If {
-            condition: bool_lit(false),
-            then_block: NirBlock::new(
-                vec![NirStmt::new(
-                    NirStmtKind::Expr(int_lit(99, TypeTable::I32, "99")),
-                    Span::default(),
-                )],
-                Span::default(),
-            ),
+    let mut body = Body::empty();
+    let condition = bool_lit(false)(&mut body);
+    let then_block = block_with_tail_expr(int_lit(99, TypeTable::I32, "99"))(&mut body);
+    let if_stmt = ps(
+        &mut body,
+        StmtKind::If {
+            condition,
+            then_block,
             else_block: None,
         },
-        Span::default(),
     );
-    let mut block = NirBlock::new(vec![if_stmt], Span::default());
-    assert!(interp.reduce_local_block(&mut block));
-    assert!(block.stmts.is_empty());
+    let block = body.blocks.push(BlockNode {
+        stmts: vec![if_stmt],
+        span: Span::default(),
+    });
+    assert!(interp.reduce_local_block_a(&mut body, block));
+    assert!(body.blocks[block].stmts.is_empty());
 }
 
 #[test]
@@ -1435,24 +1487,25 @@ fn reduce_local_block_leaves_nonconst_if_alone() {
     // structurally intact — `reduce_local_block` must not touch it.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let if_stmt = NirStmt::new(
-        NirStmtKind::If {
-            condition: local_expr(0, TypeTable::BOOL),
-            then_block: NirBlock::new(
-                vec![NirStmt::new(
-                    NirStmtKind::Expr(int_lit(99, TypeTable::I32, "99")),
-                    Span::default(),
-                )],
-                Span::default(),
-            ),
+    let mut body = Body::empty();
+    let condition = local_expr(0, TypeTable::BOOL)(&mut body);
+    let then_block = block_with_tail_expr(int_lit(99, TypeTable::I32, "99"))(&mut body);
+    let if_stmt = ps(
+        &mut body,
+        StmtKind::If {
+            condition,
+            then_block,
             else_block: None,
         },
-        Span::default(),
     );
-    let mut block = NirBlock::new(vec![if_stmt], Span::default());
-    assert!(!interp.reduce_local_block(&mut block));
-    assert_eq!(block.stmts.len(), 1);
-    assert!(matches!(block.stmts[0].kind, NirStmtKind::If { .. }));
+    let block = body.blocks.push(BlockNode {
+        stmts: vec![if_stmt],
+        span: Span::default(),
+    });
+    assert!(!interp.reduce_local_block_a(&mut body, block));
+    assert_eq!(body.blocks[block].stmts.len(), 1);
+    let s0 = body.blocks[block].stmts[0];
+    assert!(matches!(body.stmts[s0].kind, StmtKind::If { .. }));
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1961,7 +2014,7 @@ fn cast_bool_to_int_through_env_local() {
     interp.bind_local(0, Lattice::Const(Value::Bool(true)));
     let e = cast_expr(local_expr(0, TypeTable::BOOL), TypeTable::I32);
     assert_eq!(
-        interp.reduce_to_lattice(&e),
+        reduce_lat(&mut interp, &e),
         Lattice::Const(Value::Int {
             value: 1,
             prim: PrimitiveType::I32
@@ -1976,7 +2029,7 @@ fn cast_char_to_int_through_env_local() {
     interp.bind_local(0, Lattice::Const(Value::Char('A')));
     let e = cast_expr(local_expr(0, TypeTable::CHAR), TypeTable::I32);
     assert_eq!(
-        interp.reduce_to_lattice(&e),
+        reduce_lat(&mut interp, &e),
         Lattice::Const(Value::Int {
             value: 65,
             prim: PrimitiveType::I32
@@ -1997,7 +2050,7 @@ fn cast_int_to_float_through_env_local() {
     );
     let e = cast_expr(local_expr(0, TypeTable::I32), TypeTable::F64);
     assert_eq!(
-        interp.reduce_to_lattice(&e),
+        reduce_lat(&mut interp, &e),
         Lattice::Const(Value::Float {
             value: 42.0,
             prim: PrimitiveType::F64
@@ -2009,58 +2062,85 @@ fn cast_int_to_float_through_env_local() {
 // `match` expression reduction (payload-free patterns)
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn match_expr(scrutinee: NirExpr, arms: Vec<NirMatchArm>, type_id: TypeId) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::Match {
-            expr: Box::new(scrutinee),
-            arms,
-        },
-        type_id,
-        Span::default(),
-    )
-}
+/// A deferred pattern builder.
+type PatBuild = Rc<dyn Fn(&mut Body) -> PatId>;
+/// A deferred match-arm builder.
+type ArmBuild = Rc<dyn Fn(&mut Body) -> ArmData>;
 
-fn arm(pattern: NirPattern, body: NirExpr) -> NirMatchArm {
-    NirMatchArm {
-        pattern,
-        guard: None,
-        body,
+fn pp(body: &mut Body, kind: PatKind) -> PatId {
+    body.pats.push(PatNode {
+        kind,
         span: Span::default(),
-    }
+    })
 }
 
-fn arm_with_guard(pattern: NirPattern, guard: NirExpr, body: NirExpr) -> NirMatchArm {
-    NirMatchArm {
-        pattern,
-        guard: Some(guard),
-        body,
-        span: Span::default(),
-    }
+fn match_expr(scrutinee: Build, arms: Vec<ArmBuild>, type_id: TypeId) -> Build {
+    Rc::new(move |b| {
+        let expr = scrutinee(b);
+        let arms = arms.iter().map(|a| a(b)).collect();
+        pe(b, ExprKind::Match { expr, arms }, type_id)
+    })
 }
 
-fn lit_pat_i128(value: i128) -> NirPattern {
-    NirPattern::Literal(NirLiteralPattern::I128(value))
+fn arm(pattern: PatBuild, body: Build) -> ArmBuild {
+    Rc::new(move |b| {
+        let pattern = pattern(b);
+        let body = body(b);
+        ArmData {
+            pattern,
+            guard: None,
+            body,
+            span: Span::default(),
+        }
+    })
 }
 
-fn lit_pat_u128(value: u128) -> NirPattern {
-    NirPattern::Literal(NirLiteralPattern::U128(value))
+fn arm_with_guard(pattern: PatBuild, guard: Build, body: Build) -> ArmBuild {
+    Rc::new(move |b| {
+        let pattern = pattern(b);
+        let guard = Some(guard(b));
+        let body = body(b);
+        ArmData {
+            pattern,
+            guard,
+            body,
+            span: Span::default(),
+        }
+    })
 }
 
-fn lit_pat_bool(value: bool) -> NirPattern {
-    NirPattern::Literal(NirLiteralPattern::Bool(value))
+fn wildcard_pat() -> PatBuild {
+    Rc::new(|b| pp(b, PatKind::Wildcard))
 }
 
-fn lit_pat_char(value: char) -> NirPattern {
-    NirPattern::Literal(NirLiteralPattern::Char(value))
+fn lit_pat_i128(value: i128) -> PatBuild {
+    Rc::new(move |b| pp(b, PatKind::Literal(NirLiteralPattern::I128(value))))
 }
 
-fn range_pat(start: i128, end: i128, inclusive: bool, is_unsigned: bool) -> NirPattern {
-    NirPattern::Range {
-        start,
-        end,
-        inclusive,
-        is_unsigned,
-    }
+fn lit_pat_u128(value: u128) -> PatBuild {
+    Rc::new(move |b| pp(b, PatKind::Literal(NirLiteralPattern::U128(value))))
+}
+
+fn lit_pat_bool(value: bool) -> PatBuild {
+    Rc::new(move |b| pp(b, PatKind::Literal(NirLiteralPattern::Bool(value))))
+}
+
+fn lit_pat_char(value: char) -> PatBuild {
+    Rc::new(move |b| pp(b, PatKind::Literal(NirLiteralPattern::Char(value))))
+}
+
+fn range_pat(start: i128, end: i128, inclusive: bool, is_unsigned: bool) -> PatBuild {
+    Rc::new(move |b| {
+        pp(
+            b,
+            PatKind::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            },
+        )
+    })
 }
 
 #[test]
@@ -2072,12 +2152,12 @@ fn match_const_int_picks_matching_arm() {
         vec![
             arm(lit_pat_i128(1), int_lit(10, TypeTable::I32, "10")),
             arm(lit_pat_i128(2), int_lit(20, TypeTable::I32, "20")),
-            arm(NirPattern::Wildcard, int_lit(30, TypeTable::I32, "30")),
+            arm(wildcard_pat(), int_lit(30, TypeTable::I32, "30")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 20,
             prim: PrimitiveType::I32,
@@ -2093,12 +2173,12 @@ fn match_const_int_falls_through_to_wildcard() {
         int_lit(99, TypeTable::I32, "99"),
         vec![
             arm(lit_pat_i128(1), int_lit(10, TypeTable::I32, "10")),
-            arm(NirPattern::Wildcard, int_lit(30, TypeTable::I32, "30")),
+            arm(wildcard_pat(), int_lit(30, TypeTable::I32, "30")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 30,
             prim: PrimitiveType::I32,
@@ -2119,7 +2199,7 @@ fn match_const_bool_picks_arm() {
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 1,
             prim: PrimitiveType::I32,
@@ -2135,19 +2215,19 @@ fn match_const_char_or_pattern_matches_alt() {
         char_lit('b'),
         vec![
             arm(
-                NirPattern::Or(vec![
+                or_pat(vec![
                     lit_pat_char('a'),
                     lit_pat_char('b'),
                     lit_pat_char('c'),
                 ]),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 1,
             prim: PrimitiveType::I32,
@@ -2163,15 +2243,15 @@ fn match_const_char_or_pattern_misses_all_alts() {
         char_lit('z'),
         vec![
             arm(
-                NirPattern::Or(vec![lit_pat_char('a'), lit_pat_char('b')]),
+                or_pat(vec![lit_pat_char('a'), lit_pat_char('b')]),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 0,
             prim: PrimitiveType::I32,
@@ -2190,12 +2270,12 @@ fn match_const_int_inclusive_range_at_upper_bound() {
                 range_pat(0, 10, true, false),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 1,
             prim: PrimitiveType::I32,
@@ -2214,12 +2294,12 @@ fn match_const_int_exclusive_range_excludes_upper_bound() {
                 range_pat(0, 10, false, false),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 0,
             prim: PrimitiveType::I32,
@@ -2239,12 +2319,12 @@ fn match_const_int_signed_negative_in_range() {
                 range_pat(-5, 5, true, false),
                 int_lit(7, TypeTable::I32, "7"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 7,
             prim: PrimitiveType::I32,
@@ -2263,12 +2343,12 @@ fn match_const_u8_unsigned_range() {
                 range_pat(0, 255, true, true),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 1,
             prim: PrimitiveType::I32,
@@ -2284,12 +2364,12 @@ fn match_const_u128_literal_pattern() {
         int_lit(42, TypeTable::U64, "42"),
         vec![
             arm(lit_pat_u128(42), int_lit(1, TypeTable::I32, "1")),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 1,
             prim: PrimitiveType::I32,
@@ -2312,14 +2392,14 @@ fn match_const_int_unreachable_arm_does_not_contaminate() {
             // expression isn't foldable; under feasible-edge semantics
             // it is dropped from the lattice computation.
             arm(
-                NirPattern::Wildcard,
+                wildcard_pat(),
                 local_expr(0, TypeTable::I32), // unbound → Unevaluated
             ),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 5,
             prim: PrimitiveType::I32,
@@ -2337,12 +2417,12 @@ fn match_nonconst_scrut_all_arms_equal_collapses() {
         vec![
             arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
             arm(lit_pat_i128(2), int_lit(7, TypeTable::I32, "7")),
-            arm(NirPattern::Wildcard, int_lit(7, TypeTable::I32, "7")),
+            arm(wildcard_pat(), int_lit(7, TypeTable::I32, "7")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 7,
             prim: PrimitiveType::I32,
@@ -2357,12 +2437,12 @@ fn match_nonconst_scrut_unequal_arms_is_nonconst() {
         local_expr(0, TypeTable::I32),
         vec![
             arm(lit_pat_i128(1), int_lit(1, TypeTable::I32, "1")),
-            arm(NirPattern::Wildcard, int_lit(2, TypeTable::I32, "2")),
+            arm(wildcard_pat(), int_lit(2, TypeTable::I32, "2")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::NonConst,
     );
 }
@@ -2379,12 +2459,12 @@ fn match_nonconst_scrut_with_unevaluated_arm_does_not_fold() {
         local_expr(0, TypeTable::I32),
         vec![
             arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
-            arm(NirPattern::Wildcard, local_expr(1, TypeTable::I32)),
+            arm(wildcard_pat(), local_expr(1, TypeTable::I32)),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::NonConst,
     );
 }
@@ -2399,7 +2479,7 @@ fn match_with_guard_under_const_scrut_does_not_rewrite() {
     // expression must NOT be rewritten — that would erase the trap.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         int_lit(1, TypeTable::I32, "1"),
         vec![arm_with_guard(
             lit_pat_i128(1),
@@ -2408,8 +2488,9 @@ fn match_with_guard_under_const_scrut_does_not_rewrite() {
         )],
         TypeTable::I32,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 #[test]
@@ -2419,7 +2500,7 @@ fn match_guarded_arm_blocks_rewrite_to_later_definite_arm() {
     // match must be left structurally intact.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         int_lit(1, TypeTable::I32, "1"),
         vec![
             arm_with_guard(
@@ -2427,12 +2508,13 @@ fn match_guarded_arm_blocks_rewrite_to_later_definite_arm() {
                 local_expr(0, TypeTable::BOOL),
                 int_lit(7, TypeTable::I32, "7"),
             ),
-            arm(NirPattern::Wildcard, int_lit(8, TypeTable::I32, "8")),
+            arm(wildcard_pat(), int_lit(8, TypeTable::I32, "8")),
         ],
         TypeTable::I32,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 #[test]
@@ -2449,12 +2531,12 @@ fn match_guarded_arm_two_distinct_arm_bodies_is_nonconst() {
                 local_expr(0, TypeTable::BOOL),
                 int_lit(7, TypeTable::I32, "7"),
             ),
-            arm(NirPattern::Wildcard, int_lit(8, TypeTable::I32, "8")),
+            arm(wildcard_pat(), int_lit(8, TypeTable::I32, "8")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::NonConst,
     );
 }
@@ -2468,16 +2550,17 @@ fn match_const_scrut_unsupported_pattern_does_not_rewrite() {
     // preserved at runtime).
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         int_lit(1, TypeTable::I32, "1"),
         vec![arm(
-            NirPattern::Tuple(vec![], false),
+            tuple_pat(vec![], false),
             int_lit(99, TypeTable::I32, "99"),
         )],
         TypeTable::I32,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 #[test]
@@ -2487,24 +2570,26 @@ fn reduce_local_rewrites_const_match_to_arm_body_block() {
     // expression as a single tail statement.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         int_lit(2, TypeTable::I32, "2"),
         vec![
             arm(lit_pat_i128(1), int_lit(10, TypeTable::I32, "10")),
             arm(lit_pat_i128(2), int_lit(20, TypeTable::I32, "20")),
-            arm(NirPattern::Wildcard, int_lit(30, TypeTable::I32, "30")),
+            arm(wildcard_pat(), int_lit(30, TypeTable::I32, "30")),
         ],
         TypeTable::I32,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::Block(b) = &expr.kind else {
-        panic!("expected Block, got {:?}", expr.kind);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::Block(blk) = body.exprs[e].kind else {
+        panic!("expected Block, got {:?}", body.exprs[e].kind);
     };
-    assert_eq!(b.stmts.len(), 1);
-    let NirStmtKind::Expr(tail) = &b.stmts[0].kind else {
+    assert_eq!(body.blocks[blk].stmts.len(), 1);
+    let s0 = body.blocks[blk].stmts[0];
+    let StmtKind::Expr(tail) = body.stmts[s0].kind else {
         panic!("expected Expr stmt");
     };
-    let NirExprKind::IntLiteral { value, .. } = tail.kind else {
+    let ExprKind::IntLiteral { value, .. } = body.exprs[tail].kind else {
         panic!("expected IntLiteral tail");
     };
     assert_eq!(value, 20);
@@ -2523,37 +2608,37 @@ fn reduce_local_collapses_enum_match_true_false_to_eq() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     let enum_ty = TypeTable::I32; // stand-in; not inspected by the rule
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, enum_ty),
         vec![
             arm(
-                NirPattern::Enum {
-                    enum_type: enum_ty,
-                    case_name: "Case".to_string(),
-                    case_index: 3,
-                },
+                enum_pat(enum_ty, "Case", 3),
                 bool_lit(true),
             ),
-            arm(NirPattern::Wildcard, bool_lit(false)),
+            arm(wildcard_pat(), bool_lit(false)),
         ],
         TypeTable::BOOL,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::Binary { left, op, right } = &expr.kind else {
-        panic!("expected Binary, got {:?}", expr.kind);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::Binary { left, op, right } = body.exprs[e].kind else {
+        panic!("expected Binary, got {:?}", body.exprs[e].kind);
     };
     assert!(matches!(op, NirBinaryOp::Eq));
-    let NirExprKind::Local { index, .. } = left.kind else {
-        panic!("expected Local on left, got {:?}", left.kind);
+    let ExprKind::Local { index, .. } = body.exprs[left].kind else {
+        panic!("expected Local on left, got {:?}", body.exprs[left].kind);
     };
     assert_eq!(index, 0);
-    let NirExprKind::EnumConstruct {
+    let ExprKind::EnumConstruct {
         case_index,
         case_name,
         ..
-    } = &right.kind
+    } = &body.exprs[right].kind
     else {
-        panic!("expected EnumConstruct on right, got {:?}", right.kind);
+        panic!(
+            "expected EnumConstruct on right, got {:?}",
+            body.exprs[right].kind
+        );
     };
     assert_eq!(*case_index, 3);
     assert_eq!(case_name, "Case");
@@ -2569,24 +2654,20 @@ fn reduce_local_leaves_variant_match_alone() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     let scrut_ty = TypeTable::I32;
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, scrut_ty),
         vec![
             arm(
-                NirPattern::Variant {
-                    enum_type: scrut_ty,
-                    variant_name: "Some".to_string(),
-                    bindings: vec![NirPattern::Wildcard],
-                    payload_type: TypeTable::I32,
-                },
+                variant_pat(scrut_ty, "Some", vec![wildcard_pat()], TypeTable::I32),
                 bool_lit(true),
             ),
-            arm(NirPattern::Wildcard, bool_lit(false)),
+            arm(wildcard_pat(), bool_lit(false)),
         ],
         TypeTable::BOOL,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 #[test]
@@ -2597,24 +2678,21 @@ fn reduce_local_leaves_match_with_guard_alone() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     let scrut_ty = TypeTable::I32;
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, scrut_ty),
         vec![
             arm_with_guard(
-                NirPattern::Enum {
-                    enum_type: scrut_ty,
-                    case_name: "Case".to_string(),
-                    case_index: 1,
-                },
+                enum_pat(scrut_ty, "Case", 1),
                 local_expr(2, TypeTable::BOOL),
                 bool_lit(true),
             ),
-            arm(NirPattern::Wildcard, bool_lit(false)),
+            arm(wildcard_pat(), bool_lit(false)),
         ],
         TypeTable::BOOL,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 #[test]
@@ -2626,31 +2704,24 @@ fn reduce_local_leaves_match_with_three_arms_alone() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     let scrut_ty = TypeTable::I32;
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, scrut_ty),
         vec![
             arm(
-                NirPattern::Enum {
-                    enum_type: scrut_ty,
-                    case_name: "A".to_string(),
-                    case_index: 0,
-                },
+                enum_pat(scrut_ty, "A", 0),
                 bool_lit(true),
             ),
             arm(
-                NirPattern::Enum {
-                    enum_type: scrut_ty,
-                    case_name: "B".to_string(),
-                    case_index: 1,
-                },
+                enum_pat(scrut_ty, "B", 1),
                 bool_lit(true),
             ),
-            arm(NirPattern::Wildcard, bool_lit(false)),
+            arm(wildcard_pat(), bool_lit(false)),
         ],
         TypeTable::BOOL,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 #[test]
@@ -2661,23 +2732,20 @@ fn reduce_local_leaves_match_with_non_bool_body_alone() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     let scrut_ty = TypeTable::I32;
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, scrut_ty),
         vec![
             arm(
-                NirPattern::Enum {
-                    enum_type: scrut_ty,
-                    case_name: "Case".to_string(),
-                    case_index: 0,
-                },
+                enum_pat(scrut_ty, "Case", 0),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 #[test]
@@ -2686,17 +2754,18 @@ fn reduce_local_collapses_equal_arm_match_to_literal() {
     // Const collapses to that literal.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, TypeTable::I32),
         vec![
             arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
-            arm(NirPattern::Wildcard, int_lit(7, TypeTable::I32, "7")),
+            arm(wildcard_pat(), int_lit(7, TypeTable::I32, "7")),
         ],
         TypeTable::I32,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::IntLiteral { value, .. } = expr.kind else {
-        panic!("expected IntLiteral, got {:?}", expr.kind);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::IntLiteral { value, .. } = body.exprs[e].kind else {
+        panic!("expected IntLiteral, got {:?}", body.exprs[e].kind);
     };
     assert_eq!(value, 7);
 }
@@ -2707,16 +2776,17 @@ fn reduce_local_leaves_unequal_arm_match_alone() {
     // not rewritten.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, TypeTable::I32),
         vec![
             arm(lit_pat_i128(1), int_lit(1, TypeTable::I32, "1")),
-            arm(NirPattern::Wildcard, int_lit(2, TypeTable::I32, "2")),
+            arm(wildcard_pat(), int_lit(2, TypeTable::I32, "2")),
         ],
         TypeTable::I32,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 #[test]
@@ -2728,7 +2798,7 @@ fn reduce_local_recurses_into_match_arm_body() {
     // observable as the engine's lattice value).
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let folded = interp.reduce(&match_expr(
+    let folded = match_expr(
         int_lit(1, TypeTable::I32, "1"),
         vec![arm(
             lit_pat_i128(1),
@@ -2740,15 +2810,17 @@ fn reduce_local_recurses_into_match_arm_body() {
             ),
         )],
         TypeTable::I32,
-    ));
+    );
+    let (body, e) = reduce_with(&mut interp, &folded);
     // After reduce: the match collapsed to Block([Expr(3)]).
-    let NirExprKind::Block(b) = &folded.kind else {
-        panic!("expected Block, got {:?}", folded.kind);
+    let ExprKind::Block(blk) = body.exprs[e].kind else {
+        panic!("expected Block, got {:?}", body.exprs[e].kind);
     };
-    let NirStmtKind::Expr(tail) = &b.stmts[0].kind else {
+    let s0 = body.blocks[blk].stmts[0];
+    let StmtKind::Expr(tail) = body.stmts[s0].kind else {
         panic!("expected Expr stmt");
     };
-    let NirExprKind::IntLiteral { value, .. } = tail.kind else {
+    let ExprKind::IntLiteral { value, .. } = body.exprs[tail].kind else {
         panic!("expected IntLiteral");
     };
     assert_eq!(value, 3);
@@ -2771,12 +2843,12 @@ fn match_const_char_range_inclusive() {
                 ),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 1,
             prim: PrimitiveType::I32,
@@ -2800,12 +2872,12 @@ fn match_const_char_range_excludes_outside() {
                 ),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 0,
             prim: PrimitiveType::I32,
@@ -2821,17 +2893,15 @@ fn match_constant_value_pattern_against_const_int() {
         int_lit(42, TypeTable::I32, "42"),
         vec![
             arm(
-                NirPattern::ConstantValue {
-                    expr: Box::new(int_lit(42, TypeTable::I32, "42")),
-                },
+                constant_value_pat(int_lit(42, TypeTable::I32, "42")),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 1,
             prim: PrimitiveType::I32,
@@ -2847,17 +2917,15 @@ fn match_constant_value_pattern_misses() {
         int_lit(42, TypeTable::I32, "42"),
         vec![
             arm(
-                NirPattern::ConstantValue {
-                    expr: Box::new(int_lit(99, TypeTable::I32, "99")),
-                },
+                constant_value_pat(int_lit(99, TypeTable::I32, "99")),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 0,
             prim: PrimitiveType::I32,
@@ -2872,18 +2940,17 @@ fn match_constant_value_pattern_unanalyzable_is_unknown() {
     // bails out, keeping the Match intact.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         int_lit(42, TypeTable::I32, "42"),
         vec![arm(
-            NirPattern::ConstantValue {
-                expr: Box::new(local_expr(0, TypeTable::I32)),
-            },
+            constant_value_pat(local_expr(0, TypeTable::I32)),
             int_lit(1, TypeTable::I32, "1"),
         )],
         TypeTable::I32,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 #[test]
@@ -2895,25 +2962,27 @@ fn match_or_pattern_no_match_no_unknowns_is_definite_no() {
     // wildcard's body block.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         int_lit(99, TypeTable::I32, "99"),
         vec![
             arm(
-                NirPattern::Or(vec![lit_pat_i128(1), lit_pat_i128(2)]),
+                or_pat(vec![lit_pat_i128(1), lit_pat_i128(2)]),
                 int_lit(10, TypeTable::I32, "10"),
             ),
-            arm(NirPattern::Wildcard, int_lit(20, TypeTable::I32, "20")),
+            arm(wildcard_pat(), int_lit(20, TypeTable::I32, "20")),
         ],
         TypeTable::I32,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::Block(b) = &expr.kind else {
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::Block(blk) = body.exprs[e].kind else {
         panic!("expected Block");
     };
-    let NirStmtKind::Expr(tail) = &b.stmts[0].kind else {
+    let s0 = body.blocks[blk].stmts[0];
+    let StmtKind::Expr(tail) = body.stmts[s0].kind else {
         panic!("expected Expr stmt");
     };
-    let NirExprKind::IntLiteral { value, .. } = tail.kind else {
+    let ExprKind::IntLiteral { value, .. } = body.exprs[tail].kind else {
         panic!("expected IntLiteral");
     };
     assert_eq!(value, 20);
@@ -2933,12 +3002,12 @@ fn match_signed_negative_against_unsigned_range_is_no() {
                 range_pat(0, 255, true, true),
                 int_lit(1, TypeTable::I32, "1"),
             ),
-            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+            arm(wildcard_pat(), int_lit(0, TypeTable::I32, "0")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 0,
             prim: PrimitiveType::I32,
@@ -2963,7 +3032,7 @@ fn match_const_int_picks_first_of_overlapping_arms() {
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 10,
             prim: PrimitiveType::I32,
@@ -2989,12 +3058,12 @@ fn match_via_env_resolved_local_scrutinee() {
         vec![
             arm(lit_pat_i128(1), int_lit(10, TypeTable::I32, "10")),
             arm(lit_pat_i128(2), int_lit(20, TypeTable::I32, "20")),
-            arm(NirPattern::Wildcard, int_lit(30, TypeTable::I32, "30")),
+            arm(wildcard_pat(), int_lit(30, TypeTable::I32, "30")),
         ],
         TypeTable::I32,
     );
     assert_eq!(
-        interp.reduce_to_lattice(&expr),
+        reduce_lat(&mut interp, &expr),
         Lattice::Const(Value::Int {
             value: 20,
             prim: PrimitiveType::I32,
@@ -3010,7 +3079,7 @@ fn match_const_scrut_with_only_or_pattern_arms_picks_first() {
         int_lit(2, TypeTable::I32, "2"),
         vec![
             arm(
-                NirPattern::Or(vec![lit_pat_i128(1), lit_pat_i128(2)]),
+                or_pat(vec![lit_pat_i128(1), lit_pat_i128(2)]),
                 int_lit(10, TypeTable::I32, "10"),
             ),
             arm(lit_pat_i128(3), int_lit(20, TypeTable::I32, "20")),
@@ -3018,7 +3087,7 @@ fn match_const_scrut_with_only_or_pattern_arms_picks_first() {
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::Const(Value::Int {
             value: 10,
             prim: PrimitiveType::I32,
@@ -3038,19 +3107,81 @@ fn match_const_scrut_with_only_or_pattern_arms_picks_first() {
 // (a downstream `if` collapse could erase the trap on its behalf).
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn binding_pat(name: &str, local_index: u32, type_id: TypeId) -> NirPattern {
-    NirPattern::Binding {
-        name: name.to_string(),
-        local_index,
-        type_id,
-    }
+fn binding_pat(name: &str, local_index: u32, type_id: TypeId) -> PatBuild {
+    let name = name.to_string();
+    Rc::new(move |b| {
+        pp(
+            b,
+            PatKind::Binding {
+                name: name.clone(),
+                local_index,
+                type_id,
+            },
+        )
+    })
+}
+
+fn enum_pat(enum_type: TypeId, case_name: &str, case_index: u32) -> PatBuild {
+    let case_name = case_name.to_string();
+    Rc::new(move |b| {
+        pp(
+            b,
+            PatKind::Enum {
+                enum_type,
+                case_name: case_name.clone(),
+                case_index,
+            },
+        )
+    })
+}
+
+fn variant_pat(
+    enum_type: TypeId,
+    variant_name: &str,
+    bindings: Vec<PatBuild>,
+    payload_type: TypeId,
+) -> PatBuild {
+    let variant_name = variant_name.to_string();
+    Rc::new(move |b| {
+        let bindings = bindings.iter().map(|p| p(b)).collect();
+        pp(
+            b,
+            PatKind::Variant {
+                enum_type,
+                variant_name: variant_name.clone(),
+                bindings,
+                payload_type,
+            },
+        )
+    })
+}
+
+fn constant_value_pat(expr: Build) -> PatBuild {
+    Rc::new(move |b| {
+        let e = expr(b);
+        pp(b, PatKind::ConstantValue { expr: e })
+    })
+}
+
+fn or_pat(alts: Vec<PatBuild>) -> PatBuild {
+    Rc::new(move |b| {
+        let alts = alts.iter().map(|p| p(b)).collect();
+        pp(b, PatKind::Or(alts))
+    })
+}
+
+fn tuple_pat(elems: Vec<PatBuild>, has_rest: bool) -> PatBuild {
+    Rc::new(move |b| {
+        let elems = elems.iter().map(|p| p(b)).collect();
+        pp(b, PatKind::Tuple(elems, has_rest))
+    })
 }
 
 #[test]
 fn match_nonconst_scrut_non_exhaustive_all_arms_equal_does_not_rewrite() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, TypeTable::I32),
         vec![
             arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
@@ -3058,8 +3189,9 @@ fn match_nonconst_scrut_non_exhaustive_all_arms_equal_does_not_rewrite() {
         ],
         TypeTable::I32,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 #[test]
@@ -3074,7 +3206,7 @@ fn match_nonconst_scrut_non_exhaustive_lattice_is_nonconst() {
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::NonConst,
     );
 }
@@ -3085,16 +3217,17 @@ fn match_nonconst_scrut_exhaustive_wildcard_collapses() {
     // so the gate lets the all-arms-equal collapse fire.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, TypeTable::I32),
         vec![
             arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
-            arm(NirPattern::Wildcard, int_lit(7, TypeTable::I32, "7")),
+            arm(wildcard_pat(), int_lit(7, TypeTable::I32, "7")),
         ],
         TypeTable::I32,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::IntLiteral { value, .. } = expr.kind else {
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::IntLiteral { value, .. } = body.exprs[e].kind else {
         panic!("expected IntLiteral");
     };
     assert_eq!(value, 7);
@@ -3111,13 +3244,13 @@ fn match_const_scrut_only_unknown_arms_lattice_is_nonconst() {
     let expr = match_expr(
         int_lit(1, TypeTable::I32, "1"),
         vec![arm(
-            NirPattern::Tuple(vec![], false),
+            tuple_pat(vec![], false),
             int_lit(99, TypeTable::I32, "99"),
         )],
         TypeTable::I32,
     );
     assert_eq!(
-        Interpreter::new(&table).reduce_to_lattice(&expr),
+        reduce_lat(&mut Interpreter::new(&table), &expr),
         Lattice::NonConst,
     );
 }
@@ -3129,16 +3262,17 @@ fn match_nonconst_scrut_or_pattern_with_embedded_wildcard_is_exhaustive() {
     // collapse fire.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, TypeTable::I32),
         vec![arm(
-            NirPattern::Or(vec![lit_pat_i128(1), NirPattern::Wildcard]),
+            or_pat(vec![lit_pat_i128(1), wildcard_pat()]),
             int_lit(7, TypeTable::I32, "7"),
         )],
         TypeTable::I32,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::IntLiteral { value, .. } = expr.kind else {
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::IntLiteral { value, .. } = body.exprs[e].kind else {
         panic!("expected IntLiteral");
     };
     assert_eq!(value, 7);
@@ -3150,7 +3284,7 @@ fn match_nonconst_scrut_binding_pattern_counts_as_exhaustive() {
     // a catch-all by another name.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, TypeTable::I32),
         vec![
             arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
@@ -3161,8 +3295,9 @@ fn match_nonconst_scrut_binding_pattern_counts_as_exhaustive() {
         ],
         TypeTable::I32,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::IntLiteral { value, .. } = expr.kind else {
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::IntLiteral { value, .. } = body.exprs[e].kind else {
         panic!("expected IntLiteral");
     };
     assert_eq!(value, 7);
@@ -3174,20 +3309,21 @@ fn match_nonconst_scrut_guarded_wildcard_does_not_count_as_exhaustive() {
     // control falls through to the implicit trap.
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
-    let mut expr = match_expr(
+    let expr = match_expr(
         local_expr(0, TypeTable::I32),
         vec![
             arm(lit_pat_i128(1), int_lit(7, TypeTable::I32, "7")),
             arm_with_guard(
-                NirPattern::Wildcard,
+                wildcard_pat(),
                 local_expr(1, TypeTable::BOOL),
                 int_lit(7, TypeTable::I32, "7"),
             ),
         ],
         TypeTable::I32,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Match { .. }));
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -3195,14 +3331,72 @@ fn match_nonconst_scrut_guarded_wildcard_does_not_count_as_exhaustive() {
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Build a minimal `NirFunction` with the supplied signature and a
-/// single-statement body. `body_stmt` is normally `NirStmtKind::Return`
-/// or `NirStmtKind::Expr`. The function is module-public, non-async,
+/// single-statement body. `body_stmt` is normally `StmtKind::Return`
+/// or `StmtKind::Expr`. The function is module-public, non-async,
 /// non-CM, non-method, non-generic — i.e. CTFE-eligible by default.
+/// A deferred statement builder.
+type StmtBuild = Rc<dyn Fn(&mut Body) -> StmtId>;
+
+fn ps(body: &mut Body, kind: StmtKind) -> StmtId {
+    body.stmts.push(StmtNode {
+        kind,
+        span: Span::default(),
+    })
+}
+
+fn return_stmt(value: Build) -> StmtBuild {
+    Rc::new(move |b| {
+        let v = value(b);
+        ps(b, StmtKind::Return { value: Some(v) })
+    })
+}
+
+fn expr_stmt_b(e: Build) -> StmtBuild {
+    Rc::new(move |b| {
+        let e = e(b);
+        ps(b, StmtKind::Expr(e))
+    })
+}
+
+fn return_none() -> StmtBuild {
+    Rc::new(|b| ps(b, StmtKind::Return { value: None }))
+}
+
+fn let_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -> StmtBuild {
+    let name = name.to_string();
+    Rc::new(move |b| {
+        let value = value(b);
+        ps(
+            b,
+            StmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value,
+                skip_value_copy: false,
+            },
+        )
+    })
+}
+
+/// Build a root block from `stmts` and install it as `f`'s arena body.
+fn set_arena_body(f: &mut NirFunction, stmts: Vec<StmtBuild>) {
+    let mut body = Body::empty();
+    let ids: Vec<StmtId> = stmts.iter().map(|s| s(&mut body)).collect();
+    body.root = body.blocks.push(BlockNode {
+        stmts: ids,
+        span: Span::default(),
+    });
+    f.body = Some(body);
+}
+
 fn make_pure_fn(
     name: &str,
     params: Vec<(&str, TypeId)>,
     return_type: TypeId,
-    body_stmt: NirStmtKind,
+    body_stmt: StmtBuild,
 ) -> NirFunction {
     let span = Span::default();
     let tir_params: Vec<NirParam> = params
@@ -3227,7 +3421,7 @@ fn make_pure_fn(
         .collect();
     #[allow(clippy::cast_possible_truncation)]
     let local_count = params.len() as u32;
-    NirFunction {
+    let mut f = NirFunction {
         name: name.to_string(),
         module_source: ModuleSource::default(),
         is_pub: true,
@@ -3242,10 +3436,7 @@ fn make_pure_fn(
         task_return_type: None,
         effects: Vec::new(),
         stores: Vec::new(),
-        body: Some(wado_compiler::nir_arena::Body::from_block(&NirBlock::new(
-            vec![NirStmt::new(body_stmt, span)],
-            span,
-        ))),
+        body: None,
         span,
         local_count,
         locals,
@@ -3261,27 +3452,66 @@ fn make_pure_fn(
         allocator_tag: None,
         kind: FunctionKind::Regular,
         return_abi: ReturnAbi::Single,
-    }
+    };
+    set_arena_body(&mut f, vec![body_stmt]);
+    f
 }
 
 /// Build a `Call` expression targeting `func` with the given args.
 /// Mirrors what the elaborator emits for a free function call.
-fn call_expr(func: &NirFunction, args: Vec<NirExpr>) -> NirExpr {
+fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
     let func_ref = FunctionRef {
         module_source: func.module_source.clone(),
         name: func.name.clone(),
         monomorph_info: None,
         method_info: None,
     };
-    let call_args = args.into_iter().map(|e| CallArg::new(e, false)).collect();
-    NirExpr::new(
-        NirExprKind::Call {
+    let return_type = func.return_type;
+    Rc::new(move |b| {
+        let call_args = args
+            .iter()
+            .map(|e| wado_compiler::nir_arena::ArenaCallArg {
+                expr: e(b),
+                is_mut: false,
+            })
+            .collect();
+        pe(
+            b,
+            ExprKind::Call {
+                func: func_ref.clone(),
+                type_args: Vec::new(),
+                args: call_args,
+            },
+            return_type,
+        )
+    })
+}
+
+/// Build a `Call` node directly into `body` from already-built arg ids —
+/// used by the chained-fold tests, which reduce an inner call in place and
+/// then reference its (now-literal) id as an arg to the outer call.
+fn call_into(body: &mut Body, func: &NirFunction, args: Vec<ExprId>) -> ExprId {
+    let func_ref = FunctionRef {
+        module_source: func.module_source.clone(),
+        name: func.name.clone(),
+        monomorph_info: None,
+        method_info: None,
+    };
+    let call_args = args
+        .into_iter()
+        .map(|expr| wado_compiler::nir_arena::ArenaCallArg {
+            expr,
+            is_mut: false,
+        })
+        .collect();
+    pe(
+        body,
+        ExprKind::Call {
             func: func_ref,
             type_args: Vec::new(),
             args: call_args,
         },
         func.return_type,
-        Span::default(),
     )
 }
 
@@ -3303,14 +3533,12 @@ fn build_callee_map_test(funcs: &[NirFunction]) -> CalleeMap {
 fn pure_call_const_args_folds_via_return() {
     // fn double(x: i32) -> i32 { return x * 2; }
     // double(5) → 10
-    let body = NirStmtKind::Return {
-        value: Some(binary(
+    let body = return_stmt(binary(
             NirBinaryOp::Mul,
             local_expr(0, TypeTable::I32),
             int_lit(2, TypeTable::I32, "2"),
             TypeTable::I32,
-        )),
-    };
+        ));
     let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&double));
 
@@ -3318,10 +3546,11 @@ fn pure_call_const_args_folds_via_return() {
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
 
-    let mut expr = call_expr(&double, vec![int_lit(5, TypeTable::I32, "5")]);
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::IntLiteral { value, .. } = expr.kind else {
-        panic!("expected IntLiteral, got {:?}", expr.kind);
+    let expr = call_expr(&double, vec![int_lit(5, TypeTable::I32, "5")]);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::IntLiteral { value, .. } = body.exprs[e].kind else {
+        panic!("expected IntLiteral, got {:?}", body.exprs[e].kind);
     };
     assert_eq!(value, 10);
 }
@@ -3329,7 +3558,7 @@ fn pure_call_const_args_folds_via_return() {
 #[test]
 fn pure_call_const_args_folds_via_tail_expr() {
     // fn add(a: i32, b: i32) -> i32 { a + b }   (expression-bodied)
-    let body = NirStmtKind::Expr(binary(
+    let body = expr_stmt_b(binary(
         NirBinaryOp::Add,
         local_expr(0, TypeTable::I32),
         local_expr(1, TypeTable::I32),
@@ -3347,15 +3576,16 @@ fn pure_call_const_args_folds_via_tail_expr() {
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
 
-    let mut expr = call_expr(
+    let expr = call_expr(
         &add,
         vec![
             int_lit(40, TypeTable::I32, "40"),
             int_lit(2, TypeTable::I32, "2"),
         ],
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::IntLiteral { value, .. } = expr.kind else {
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::IntLiteral { value, .. } = body.exprs[e].kind else {
         panic!("expected IntLiteral");
     };
     assert_eq!(value, 42);
@@ -3366,14 +3596,12 @@ fn pure_call_chained_folds_two_levels() {
     // fn double(x) { return x * 2 }
     // We test bottom-up chaining: fold the inner call first, then
     // the outer wraps the now-literal arg and folds again.
-    let body = NirStmtKind::Return {
-        value: Some(binary(
+    let body = return_stmt(binary(
             NirBinaryOp::Mul,
             local_expr(0, TypeTable::I32),
             int_lit(2, TypeTable::I32, "2"),
             TypeTable::I32,
-        )),
-    };
+        ));
     let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&double));
 
@@ -3381,11 +3609,13 @@ fn pure_call_chained_folds_two_levels() {
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
 
-    let mut inner = call_expr(&double, vec![int_lit(3, TypeTable::I32, "3")]);
-    assert!(interp.reduce_local(&mut inner));
-    let mut outer = call_expr(&double, vec![inner]);
-    assert!(interp.reduce_local(&mut outer));
-    let NirExprKind::IntLiteral { value, .. } = outer.kind else {
+    let mut body = Body::empty();
+    let three = int_lit(3, TypeTable::I32, "3")(&mut body);
+    let inner = call_into(&mut body, &double, vec![three]);
+    assert!(interp.reduce_local_a(&mut body, inner));
+    let outer = call_into(&mut body, &double, vec![inner]);
+    assert!(interp.reduce_local_a(&mut body, outer));
+    let ExprKind::IntLiteral { value, .. } = body.exprs[outer].kind else {
         panic!("expected IntLiteral");
     };
     assert_eq!(value, 12);
@@ -3395,14 +3625,12 @@ fn pure_call_chained_folds_two_levels() {
 fn pure_call_nonconst_arg_left_intact() {
     // double(x) where x has no env binding — arg is Unevaluated, so
     // the call must not be folded.
-    let body = NirStmtKind::Return {
-        value: Some(binary(
+    let body = return_stmt(binary(
             NirBinaryOp::Mul,
             local_expr(0, TypeTable::I32),
             int_lit(2, TypeTable::I32, "2"),
             TypeTable::I32,
-        )),
-    };
+        ));
     let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&double));
 
@@ -3410,18 +3638,17 @@ fn pure_call_nonconst_arg_left_intact() {
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
 
-    let mut expr = call_expr(&double, vec![local_expr(7, TypeTable::I32)]);
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Call { .. }));
+    let expr = call_expr(&double, vec![local_expr(7, TypeTable::I32)]);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
 #[test]
 fn non_pure_call_with_effect_left_intact() {
     // A function carrying any effect is not CTFE-eligible — the
     // CalleeMap excludes it, so the call stays a Call.
-    let body = NirStmtKind::Return {
-        value: Some(int_lit(42, TypeTable::I32, "42")),
-    };
+    let body = return_stmt(int_lit(42, TypeTable::I32, "42"));
     let mut greet = make_pure_fn("greet", vec![], TypeTable::I32, body);
     greet.effects.push(EffectRef::Concrete {
         name: "Stdout".to_string(),
@@ -3434,9 +3661,10 @@ fn non_pure_call_with_effect_left_intact() {
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
 
-    let mut expr = call_expr(&greet, vec![]);
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Call { .. }));
+    let expr = call_expr(&greet, vec![]);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
 #[test]
@@ -3444,41 +3672,29 @@ fn multi_stmt_body_left_intact() {
     // fn f(x) { let y = x * 2; return y; }
     // The recognized body shape is single-stmt only, so the fold
     // declines.
-    let body_block = NirBlock::new(
-        vec![
-            NirStmt::new(
-                NirStmtKind::Let {
-                    name: "y".to_string(),
-                    local_index: 1,
-                    is_mut: false,
-                    is_reactive: false,
-                    type_id: TypeTable::I32,
-                    value: binary(
-                        NirBinaryOp::Mul,
-                        local_expr(0, TypeTable::I32),
-                        int_lit(2, TypeTable::I32, "2"),
-                        TypeTable::I32,
-                    ),
-                    skip_value_copy: false,
-                },
-                Span::default(),
-            ),
-            NirStmt::new(
-                NirStmtKind::Return {
-                    value: Some(local_expr(1, TypeTable::I32)),
-                },
-                Span::default(),
-            ),
-        ],
-        Span::default(),
-    );
     let mut f = make_pure_fn(
         "f",
         vec![("x", TypeTable::I32)],
         TypeTable::I32,
-        NirStmtKind::Return { value: None }, // placeholder, replaced below
+        return_none(), // placeholder, replaced below
     );
-    f.set_body_block(body_block);
+    set_arena_body(
+        &mut f,
+        vec![
+            let_stmt_b(
+                "y",
+                1,
+                TypeTable::I32,
+                binary(
+                    NirBinaryOp::Mul,
+                    local_expr(0, TypeTable::I32),
+                    int_lit(2, TypeTable::I32, "2"),
+                    TypeTable::I32,
+                ),
+            ),
+            return_stmt(local_expr(1, TypeTable::I32)),
+        ],
+    );
     f.local_count = 2;
     f.locals.push(NirLocal {
         name: "y".to_string(),
@@ -3491,9 +3707,10 @@ fn multi_stmt_body_left_intact() {
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
 
-    let mut expr = call_expr(&f, vec![int_lit(3, TypeTable::I32, "3")]);
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Call { .. }));
+    let expr = call_expr(&f, vec![int_lit(3, TypeTable::I32, "3")]);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
 #[test]
@@ -3502,34 +3719,25 @@ fn recursive_call_bails_via_call_stack() {
     // `call_stack` guard refuses re-entry on the same key, so the
     // inner `f` evaluates to Unevaluated and the outer call therefore
     // stays unfolded as well.
-    let body = NirStmtKind::Return {
-        value: Some(NirExpr::new(
-            NirExprKind::Unit,
-            TypeTable::I32,
-            Span::default(),
-        )),
-    };
-    let mut f = make_pure_fn("f", vec![("x", TypeTable::I32)], TypeTable::I32, body);
+    let mut f = make_pure_fn(
+        "f",
+        vec![("x", TypeTable::I32)],
+        TypeTable::I32,
+        return_none(), // placeholder, replaced below
+    );
     let self_call = call_expr(&f, vec![local_expr(0, TypeTable::I32)]);
-    f.set_body_block(NirBlock::new(
-        vec![NirStmt::new(
-            NirStmtKind::Return {
-                value: Some(self_call),
-            },
-            Span::default(),
-        )],
-        Span::default(),
-    ));
+    set_arena_body(&mut f, vec![return_stmt(self_call)]);
 
     let callees = build_callee_map_test(std::slice::from_ref(&f));
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
 
-    let mut expr = call_expr(&f, vec![int_lit(1, TypeTable::I32, "1")]);
+    let expr = call_expr(&f, vec![int_lit(1, TypeTable::I32, "1")]);
     // Must not fold; must terminate.
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Call { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
 #[test]
@@ -3537,9 +3745,7 @@ fn step_budget_zero_bails() {
     // With budget set to 0 up-front, even a trivially-foldable call
     // declines. Verifies the budget gate is reached before the body
     // is touched.
-    let body = NirStmtKind::Return {
-        value: Some(local_expr(0, TypeTable::I32)),
-    };
+    let body = return_stmt(local_expr(0, TypeTable::I32));
     let id = make_pure_fn("id", vec![("x", TypeTable::I32)], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&id));
 
@@ -3547,9 +3753,10 @@ fn step_budget_zero_bails() {
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees).set_step_budget(0);
 
-    let mut expr = call_expr(&id, vec![int_lit(7, TypeTable::I32, "7")]);
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Call { .. }));
+    let expr = call_expr(&id, vec![int_lit(7, TypeTable::I32, "7")]);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
 #[test]
@@ -3557,14 +3764,12 @@ fn body_traps_at_ctfe_left_intact() {
     // fn bad() -> i32 { return 1 / 0; }
     // The body folds to NonConst (div-by-zero), which try_call_fold
     // downgrades to Unevaluated to keep the runtime trap intact.
-    let body = NirStmtKind::Return {
-        value: Some(binary(
+    let body = return_stmt(binary(
             NirBinaryOp::Div,
             int_lit(1, TypeTable::I32, "1"),
             int_lit(0, TypeTable::I32, "0"),
             TypeTable::I32,
-        )),
-    };
+        ));
     let bad = make_pure_fn("bad", vec![], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&bad));
 
@@ -3572,17 +3777,16 @@ fn body_traps_at_ctfe_left_intact() {
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
 
-    let mut expr = call_expr(&bad, vec![]);
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Call { .. }));
+    let expr = call_expr(&bad, vec![]);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
 #[test]
 fn missing_callee_left_intact() {
     // CalleeMap empty → look-up miss → no fold.
-    let body = NirStmtKind::Return {
-        value: Some(int_lit(1, TypeTable::I32, "1")),
-    };
+    let body = return_stmt(int_lit(1, TypeTable::I32, "1"));
     let f = make_pure_fn("f", vec![], TypeTable::I32, body);
     let callees = build_callee_map_test(&[]); // empty
 
@@ -3590,32 +3794,30 @@ fn missing_callee_left_intact() {
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
 
-    let mut expr = call_expr(&f, vec![]);
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Call { .. }));
+    let expr = call_expr(&f, vec![]);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
 #[test]
 fn no_callee_map_means_no_fold() {
     // Without `with_callees`, every Call is Unevaluated.
-    let body = NirStmtKind::Return {
-        value: Some(int_lit(1, TypeTable::I32, "1")),
-    };
+    let body = return_stmt(int_lit(1, TypeTable::I32, "1"));
     let f = make_pure_fn("f", vec![], TypeTable::I32, body);
 
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
 
-    let mut expr = call_expr(&f, vec![]);
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Call { .. }));
+    let expr = call_expr(&f, vec![]);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Call { .. }));
 }
 
 #[test]
 fn ctfe_eligibility_rejects_async() {
-    let body = NirStmtKind::Return {
-        value: Some(int_lit(1, TypeTable::I32, "1")),
-    };
+    let body = return_stmt(int_lit(1, TypeTable::I32, "1"));
     let mut f = make_pure_fn("f", vec![], TypeTable::I32, body);
     f.is_async = true;
     assert!(!is_ctfe_eligible(&f));
@@ -3623,9 +3825,7 @@ fn ctfe_eligibility_rejects_async() {
 
 #[test]
 fn ctfe_eligibility_rejects_inline_never() {
-    let body = NirStmtKind::Return {
-        value: Some(int_lit(1, TypeTable::I32, "1")),
-    };
+    let body = return_stmt(int_lit(1, TypeTable::I32, "1"));
     let mut f = make_pure_fn("f", vec![], TypeTable::I32, body);
     f.inline_hint = InlineHint::Never;
     assert!(!is_ctfe_eligible(&f));
@@ -3633,9 +3833,7 @@ fn ctfe_eligibility_rejects_inline_never() {
 
 #[test]
 fn ctfe_eligibility_rejects_no_body() {
-    let body = NirStmtKind::Return {
-        value: Some(int_lit(1, TypeTable::I32, "1")),
-    };
+    let body = return_stmt(int_lit(1, TypeTable::I32, "1"));
     let mut f = make_pure_fn("f", vec![], TypeTable::I32, body);
     f.body = None;
     assert!(!is_ctfe_eligible(&f));
@@ -3643,9 +3841,7 @@ fn ctfe_eligibility_rejects_no_body() {
 
 #[test]
 fn ctfe_eligibility_accepts_default_pure_fn() {
-    let body = NirStmtKind::Return {
-        value: Some(int_lit(1, TypeTable::I32, "1")),
-    };
+    let body = return_stmt(int_lit(1, TypeTable::I32, "1"));
     let f = make_pure_fn("f", vec![], TypeTable::I32, body);
     assert!(is_ctfe_eligible(&f));
 }
@@ -3657,14 +3853,12 @@ fn pure_call_in_if_arm_folds_via_outer_walk() {
     //   if true { double(5) } else { 0 }
     // With the visitor's bottom-up walk, double(5) folds to 10
     // first; then the if collapses to the then-arm.
-    let body = NirStmtKind::Return {
-        value: Some(binary(
+    let body = return_stmt(binary(
             NirBinaryOp::Mul,
             local_expr(0, TypeTable::I32),
             int_lit(2, TypeTable::I32, "2"),
             TypeTable::I32,
-        )),
-    };
+        ));
     let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&double));
 
@@ -3672,39 +3866,44 @@ fn pure_call_in_if_arm_folds_via_outer_walk() {
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
 
-    let mut inner = call_expr(&double, vec![int_lit(5, TypeTable::I32, "5")]);
-    assert!(interp.reduce_local(&mut inner));
-    assert!(matches!(inner.kind, NirExprKind::IntLiteral { .. }));
+    let mut body = Body::empty();
+    let five = int_lit(5, TypeTable::I32, "5")(&mut body);
+    let inner = call_into(&mut body, &double, vec![five]);
+    assert!(interp.reduce_local_a(&mut body, inner));
+    assert!(matches!(body.exprs[inner].kind, ExprKind::IntLiteral { .. }));
 
-    let mut if_expr = NirExpr::new(
-        NirExprKind::If {
-            condition: Box::new(bool_lit(true)),
-            then_branch: NirBlock::new(
-                vec![NirStmt::new(NirStmtKind::Expr(inner), Span::default())],
-                Span::default(),
-            ),
-            else_branch: Some(NirBlock::new(
-                vec![NirStmt::new(
-                    NirStmtKind::Expr(int_lit(0, TypeTable::I32, "0")),
-                    Span::default(),
-                )],
-                Span::default(),
-            )),
+    let condition = bool_lit(true)(&mut body);
+    let then_stmt = ps(&mut body, StmtKind::Expr(inner));
+    let then_branch = body.blocks.push(BlockNode {
+        stmts: vec![then_stmt],
+        span: Span::default(),
+    });
+    let zero = int_lit(0, TypeTable::I32, "0")(&mut body);
+    let else_stmt = ps(&mut body, StmtKind::Expr(zero));
+    let else_branch = body.blocks.push(BlockNode {
+        stmts: vec![else_stmt],
+        span: Span::default(),
+    });
+    let if_e = pe(
+        &mut body,
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch: Some(else_branch),
         },
         TypeTable::I32,
-        Span::default(),
     );
-    assert!(interp.reduce_local(&mut if_expr));
-    let NirExprKind::Block(block) = &if_expr.kind else {
-        panic!("expected Block, got {:?}", if_expr.kind);
+    assert!(interp.reduce_local_a(&mut body, if_e));
+    let ExprKind::Block(blk) = body.exprs[if_e].kind else {
+        panic!("expected Block, got {:?}", body.exprs[if_e].kind);
     };
-    let [stmt] = block.stmts.as_slice() else {
+    let [stmt] = body.blocks[blk].stmts.as_slice() else {
         panic!("expected single stmt");
     };
-    let NirStmtKind::Expr(e) = &stmt.kind else {
+    let StmtKind::Expr(te) = body.stmts[*stmt].kind else {
         panic!("expected Expr stmt");
     };
-    let NirExprKind::IntLiteral { value, .. } = e.kind else {
+    let ExprKind::IntLiteral { value, .. } = body.exprs[te].kind else {
         panic!("expected IntLiteral");
     };
     assert_eq!(value, 10);
@@ -3714,15 +3913,18 @@ fn pure_call_in_if_arm_folds_via_outer_walk() {
 // Stage 1 (extended): GlobalEnv — `GlobalVarGet` rewriting and lattice lookup
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn global_get(module: ModuleSource, name: &str, type_id: TypeId) -> NirExpr {
-    NirExpr::new(
-        NirExprKind::GlobalVarGet {
-            module_source: module,
-            name: name.to_string(),
-        },
-        type_id,
-        Span::default(),
-    )
+fn global_get(module: ModuleSource, name: &str, type_id: TypeId) -> Build {
+    let name = name.to_string();
+    Rc::new(move |b| {
+        pe(
+            b,
+            ExprKind::GlobalVarGet {
+                module_source: module.clone(),
+                name: name.clone(),
+            },
+            type_id,
+        )
+    })
 }
 
 #[test]
@@ -3742,10 +3944,11 @@ fn global_const_int_folds_via_reduce_local() {
     let mut interp = Interpreter::new(&table);
     interp.with_globals(&globals);
 
-    let mut expr = global_get(module, "X", TypeTable::I32);
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::IntLiteral { value, .. } = expr.kind else {
-        panic!("expected IntLiteral, got {:?}", expr.kind);
+    let expr = global_get(module, "X", TypeTable::I32);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::IntLiteral { value, .. } = body.exprs[e].kind else {
+        panic!("expected IntLiteral, got {:?}", body.exprs[e].kind);
     };
     assert_eq!(value, 42);
 }
@@ -3767,15 +3970,16 @@ fn global_const_threads_into_binary_fold() {
     let mut interp = Interpreter::new(&table);
     interp.with_globals(&globals);
 
-    let mut expr = binary(
+    let expr = binary(
         NirBinaryOp::Add,
         global_get(module, "X", TypeTable::I32),
         int_lit(5, TypeTable::I32, "5"),
         TypeTable::I32,
     );
-    assert!(interp.reduce_local(&mut expr));
-    let NirExprKind::IntLiteral { value, .. } = expr.kind else {
-        panic!("expected IntLiteral, got {:?}", expr.kind);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    let ExprKind::IntLiteral { value, .. } = body.exprs[e].kind else {
+        panic!("expected IntLiteral, got {:?}", body.exprs[e].kind);
     };
     assert_eq!(value, 15);
 }
@@ -3793,17 +3997,18 @@ fn global_mut_recorded_as_nonconst_blocks_fold() {
     let mut interp = Interpreter::new(&table);
     interp.with_globals(&globals);
 
-    let lat = interp.reduce_to_lattice(&global_get(module.clone(), "X", TypeTable::I32));
+    let lat = reduce_lat(&mut interp, &global_get(module.clone(), "X", TypeTable::I32));
     assert_eq!(lat, Lattice::NonConst);
 
-    let mut expr = binary(
+    let expr = binary(
         NirBinaryOp::Add,
         global_get(module, "X", TypeTable::I32),
         int_lit(5, TypeTable::I32, "5"),
         TypeTable::I32,
     );
-    assert!(!interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::Binary { .. }));
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(!changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::Binary { .. }));
 }
 
 #[test]
@@ -3813,14 +4018,14 @@ fn global_absent_stays_unevaluated() {
     let table = TypeTable::new();
     let module = ModuleSource::default();
     let mut interp = Interpreter::new(&table);
-    let lat = interp.reduce_to_lattice(&global_get(module.clone(), "MISSING", TypeTable::I32));
+    let lat = reduce_lat(&mut interp, &global_get(module.clone(), "MISSING", TypeTable::I32));
     assert_eq!(lat, Lattice::Unevaluated);
 
     // With an empty `GlobalEnv` installed, an unknown key still reports
     // `Unevaluated` — no NonConst materializes spuriously.
     let globals = GlobalEnv::default();
     interp.with_globals(&globals);
-    let lat = interp.reduce_to_lattice(&global_get(module, "MISSING", TypeTable::I32));
+    let lat = reduce_lat(&mut interp, &global_get(module, "MISSING", TypeTable::I32));
     assert_eq!(lat, Lattice::Unevaluated);
 }
 
@@ -3838,7 +4043,8 @@ fn global_const_bool_folds_via_reduce_local() {
     let mut interp = Interpreter::new(&table);
     interp.with_globals(&globals);
 
-    let mut expr = global_get(module, "ENABLED", TypeTable::BOOL);
-    assert!(interp.reduce_local(&mut expr));
-    assert!(matches!(expr.kind, NirExprKind::BoolLiteral(true)));
+    let expr = global_get(module, "ENABLED", TypeTable::BOOL);
+    let (changed, body, e) = reduce_local_into(&mut interp, &expr);
+    assert!(changed);
+    assert!(matches!(body.exprs[e].kind, ExprKind::BoolLiteral(true)));
 }

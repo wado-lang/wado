@@ -2295,7 +2295,7 @@ impl<'a> Interpreter<'a> {
     /// (`try_call_fold_a`) to evaluate a callee tail on a cloned scratch body,
     /// where — unlike the const-fold visitor path — no outer walk has
     /// pre-reduced the children.
-    fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+    pub fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         let mut changed = match &body.exprs[e].kind {
             ExprKind::Binary { left, right, .. } => {
                 let (l, r) = (*left, *right);
@@ -2406,6 +2406,16 @@ impl<'a> Interpreter<'a> {
             Lattice::Unevaluated => self.expr_to_lattice_a(body, e),
             other => other,
         }
+    }
+
+    /// Full arena analogue of the tree [`Self::reduce_to_lattice`]: reduce the
+    /// subtree bottom-up in place (so multi-level constant operands fold), then
+    /// project the result to a lattice. The standalone entry point used by the
+    /// `niri` unit tests, which evaluate a freshly-built expression that no
+    /// outer const-fold walk has pre-reduced.
+    pub fn reduce_to_lattice_full_a(&mut self, body: &mut Body, e: ExprId) -> Lattice {
+        self.reduce_in_place_a(body, e);
+        self.reduce_to_lattice_a(body, e)
     }
 
     /// Arena counterpart of [`Self::rewrite_if_expr`].
