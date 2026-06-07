@@ -13,8 +13,9 @@
 //!     copy when elements are provably immutable through the binding.
 //! 5.  `peephole` (pre-inline) — unified engine pass: `string_push`
 //!     (`buf.push_str("short")` → per-byte `push`), `elide_local` (write-only
-//!     local elimination), and env-free `const_fold` (literal arithmetic +
-//!     pure CTFE). See `optimize/peephole.rs`.
+//!     local elimination), env-free `const_fold` (literal arithmetic + pure
+//!     CTFE), and `const_branch_prune` (trivial-block / dead-statement cleanup;
+//!     pre-inline only — see its module docs). See `optimize/peephole.rs`.
 //! 6.  `inline` — function inlining.
 //! 7.  `peephole` (post-inline) — unified engine pass: `array_literal`
 //!     (materialize `ArrayLiteral` from the `array_new + push` window),
@@ -28,8 +29,9 @@
 //! 14. `cse` — Loop-level Common Subexpression Elimination.
 //! 15. `store_load_forward` — store-to-load forwarding.
 //! 16. `const_folding` — partial evaluation via [`crate::niri`] (also drives
-//!     alias-aware field-knowledge tracking; see `alias`).
-//! 17. `const_branch_prune` — constant-condition branch / trivial-block cleanup.
+//!     alias-aware field-knowledge tracking; see `alias`). The flow-sensitive
+//!     half; the env-free folds and trivial-block pruning run in `peephole`
+//!     (`const_branch_prune` in the pre-inline run).
 //! 19. `licm` — Loop-Invariant Code Motion.
 //! 20. `condition_implication` — eliminate conditions implied by dominators.
 //! 21. `tmpl_hoist` — hoist template-string backing buffers out of loops.
@@ -550,8 +552,12 @@ fn run_optimization_passes(
         // and the literal-recognising rewrite can no longer match, leaving
         // short-string formatting paths (e.g. `fpfmt.wado`) paying full
         // per-call allocation cost. Also after value-copy elision/demotion so
-        // the duplicable-receiver check sees the stripped receiver.
-        step!("nir/peephole", peephole::run_peephole);
+        // the duplicable-receiver check sees the stripped receiver. This run
+        // also hosts `const_branch_prune` (trivial-block / dead-statement
+        // cleanup): the pre-inline session sees each body after the previous
+        // iteration's `ref_elim`/`copy_prop`, so the inliner's `__inline:`
+        // wrappers are already cleaned enough for the parameter-copy folds.
+        step!("nir/peephole", peephole::run_peephole_pre_inline);
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
         // case) to take the inner scalar directly. Runs before `nir/inline`
@@ -568,8 +574,11 @@ fn run_optimization_passes(
         // self.field.push` delegation) are inlined into the raw `array_new +
         // push` window, direct or field-rooted. Later `cse` / `const_fold` in
         // this same loop then see the normalized literal. `elide_local` runs
-        // again here over inline's freshly dead bindings.
-        step!("nir/peephole", peephole::run_peephole);
+        // again here over inline's freshly dead bindings. `const_branch_prune`
+        // is excluded from this post-inline run (it would strip `__inline:`
+        // wrappers before their parameter copies are folded); the next
+        // iteration's pre-inline run handles them.
+        step!("nir/peephole", peephole::run_peephole_post_inline);
         // Adjacent-use Box-local elision. After `sroa_param` reshapes
         // `Box<T>` parameters into scalars and `inline` propagates the
         // resulting `FieldAccess(Local(x), "value")` shape into call
@@ -608,7 +617,10 @@ fn run_optimization_passes(
         // value-copy-helper analyses migrated to
         // `optimize::alias`.
         step!("nir/const_fold", fold_constants);
-        step!("nir/branch_prune", prune_constant_branches);
+        // Trivial-block / dead-statement pruning moved into the pre-inline
+        // `nir/peephole` run above; the post-loop `branch_prune_final` and the
+        // post-globalization `const_fold_post_global` keep their own engine
+        // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
         step!("nir/licm", apply_licm);
         step!("nir/condition_implication", eliminate_implied_conditions);
         step!("nir/tmpl_hoist", hoist_template_buffers);

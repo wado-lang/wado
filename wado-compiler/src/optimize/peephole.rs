@@ -2,13 +2,14 @@
 //!
 //! Runs the position-flexible local peephole rewrite rules — short `push_str`
 //! simplification (`string_push`), array-literal materialization
-//! (`array_literal`), write-only local elimination (`elide_local`), and the
+//! (`array_literal`), write-only local elimination (`elide_local`), the
 //! environment-free subset of constant folding (`const_folding::ConstFoldRule`
-//! — literal arithmetic and pure CTFE) — together over one shared worklist per
-//! function. The engine session (parent map, use index, post-order seed) is
-//! built once for all the rules instead of once per rule, and the rules
-//! interleave on a single worklist rather than running as independent whole-body
-//! sweeps.
+//! — literal arithmetic and pure CTFE), and trivial-block / dead-statement
+//! pruning (`const_branch_prune::BranchPruneRule`, pre-inline run only) —
+//! together over one shared worklist per function. The engine session (parent
+//! map, use index, post-order seed) is built once for all the rules instead of
+//! once per rule, and the rules interleave on a single worklist rather than
+//! running as independent whole-body sweeps.
 //!
 //! This is the consolidation step of the worklist rewrite engine: these rules
 //! already ran on the engine, but each rebuilt its own session and ran in
@@ -30,24 +31,48 @@
 //! - `select_lowering` is a terminal post-loop lowering (`If` → `select`) that
 //!   must run after all other transformations.
 //!
-//! The pass is invoked at two points in the fixed-point loop — after value-copy
-//! elision / demotion (so `string_push` sees the stripped receiver) and after
-//! `inline` (so `array_literal` sees the exposed `array_new + push` window).
-//! `array_literal` no-ops in the first run and `string_push` no-ops in the
-//! second; both bail immediately on a non-matching node, so the wasted dispatch
-//! is negligible. `elide_local` runs in both, which only widens its reach.
+//! The pass is invoked at two points in the fixed-point loop — pre-inline
+//! ([`run_peephole_pre_inline`], after value-copy elision / demotion so
+//! `string_push` sees the stripped receiver) and post-inline
+//! ([`run_peephole_post_inline`], so `array_literal` sees the exposed
+//! `array_new + push` window). `array_literal` no-ops in the first run and
+//! `string_push` no-ops in the second; both bail immediately on a non-matching
+//! node, so the wasted dispatch is negligible. `elide_local` and the env-free
+//! `const_fold` run in both, which only widens their reach. `const_branch_prune`
+//! runs in the pre-inline session only — see its module docs for the
+//! phase-ordering reason.
 
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::array_literal::{Collapser, resolve_array_push_names};
+use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map};
 use super::elide_local::ElideRule;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
 
+/// Pre-inline peephole run. Includes `const_branch_prune`: this session sees
+/// each body *after* the previous iteration's `ref_elim`/`copy_prop`/`sroa`, so
+/// the inliner's leading `let self`/scalar bindings are already gone and the
+/// `let index = arg` parameter copies are leading copies the branch-prune rule
+/// can fold before stripping the `__inline:` wrapper.
+pub(super) fn run_peephole_pre_inline(project: &mut NirPackage) -> bool {
+    run_peephole(project, true)
+}
+
+/// Post-inline peephole run. Excludes `const_branch_prune`: directly after
+/// `inline` the freshly-expanded `__inline:` blocks still carry their
+/// `let self = &recv` / scalar parameter bindings, so the label-stripping rules
+/// would collapse the wrapper before those bindings are cleaned up and the
+/// parameter copies could be folded. Leave that to the next iteration's
+/// pre-inline run.
+pub(super) fn run_peephole_post_inline(project: &mut NirPackage) -> bool {
+    run_peephole(project, false)
+}
+
 /// Run the unified peephole rule set over every function body. Returns whether
 /// any rule fired.
-pub(super) fn run_peephole(project: &mut NirPackage) -> bool {
+fn run_peephole(project: &mut NirPackage, branch_prune: bool) -> bool {
     // Whole-package contexts, resolved once before the mutable body walk.
     let push_names = resolve_array_push_names(project);
     let array_rule = Collapser::new(&push_names);
@@ -59,6 +84,7 @@ pub(super) fn run_peephole(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
     let callees = build_callee_map(project);
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
+    let branch_prune_rule = branch_prune.then(|| BranchPruneRule::new(PruneMode::Fixpoint));
 
     let mut changed = false;
     for func_rc in &project.functions {
@@ -73,6 +99,9 @@ pub(super) fn run_peephole(project: &mut NirPackage) -> bool {
         let mut rules: Vec<&dyn Rule> = vec![&array_rule, &elide_rule, &const_fold_rule];
         if let Some(push_rule) = push_rule.as_ref() {
             rules.push(push_rule);
+        }
+        if let Some(branch_prune_rule) = branch_prune_rule.as_ref() {
+            rules.push(branch_prune_rule);
         }
         let mut engine = Engine::new(body);
         changed |= engine.run(&rules);
