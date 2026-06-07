@@ -745,6 +745,313 @@ fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
     return CstNode { name: "", span: Span::new(0, 0), children: [] };
 }
 
+// ===========================================================================
+// Runtime ATN simulator (hybrid ALL(*), SLL phase).
+//
+// Inlined into every generated parser. Invoked only at decision sites the
+// static predictor marked `Ambiguous` (see TODO.md "ATN-class grammars"):
+// the compiled fast path handles everything else, so this never runs on the
+// hot path. The ATN it walks is the serialized `i32` blob produced by
+// `atn.wado::serialize_atn`, decoded once into SoA arrays.
+//
+// Clean-room: closure / move / predict follow the published ALL(*)
+// description, not ANTLR4's implementation (License hygiene, AGENTS.md).
+//
+// NOTE: the wire-format constants below MUST match `src/atn.wado`. The
+// blob carries a version word (`atn_decode` asserts it) so any layout
+// drift fails loudly instead of mis-decoding.
+// ===========================================================================
+
+global ATN_K_RULE_STOP: i32 = 3;
+global ATN_K_TR_EPSILON: i32 = 0;
+global ATN_K_TR_ATOM: i32 = 1;
+global ATN_K_TR_NOT_ATOM: i32 = 2;
+global ATN_K_TR_WILDCARD: i32 = 3;
+global ATN_K_TR_RULE: i32 = 4;
+global ATN_BLOB_MAGIC: i32 = 0x47_41_54_4e;
+global ATN_BLOB_VERSION: i32 = 1;
+
+/// Bounds that keep a pathological closure (deep recursion, config blow-up)
+/// from looping forever. On overflow the predictor bails to the lowest
+/// viable alt — the same conservative answer it gives on a true conflict.
+global ATN_MAX_STACK: i32 = 64;
+global ATN_MAX_CONFIGS: i32 = 4000;
+
+/// The decoded ATN, in struct-of-arrays form. Built once per parser from
+/// the serialized blob and read (never mutated) during prediction.
+pub struct AtnSim {
+    pub state_kind: List<i32>,
+    pub state_decision: List<i32>,
+    pub state_tr_start: List<i32>,
+    pub state_tr_count: List<i32>,
+    pub tr_kind: List<i32>,
+    pub tr_target: List<i32>,
+    pub tr_label: List<i32>,
+    pub tr_follow: List<i32>,
+    pub tr_prec: List<i32>,
+    pub decision_state: List<i32>,
+    pub rule_start: List<i32>,
+    pub rule_stop: List<i32>,
+    pub num_tokens: i32,
+}
+
+/// One ATN configuration: a position (`state`) reached while pursuing
+/// alternative `alt`, with the rule-return `stack` that led there. The
+/// stack top is the last element.
+struct AtnConfig {
+    state: i32,
+    alt: i32,
+    stack: List<i32>,
+}
+
+/// Decode the serialized ATN blob into `AtnSim`. Mirrors the layout of
+/// `atn.wado::serialize_atn`.
+pub fn atn_decode(data: &List<i32>) -> AtnSim {
+    let mut p = 0;
+    let magic = data[p]; p += 1;
+    let version = data[p]; p += 1;
+    assert magic == ATN_BLOB_MAGIC, `ATN blob magic mismatch: {magic}`;
+    assert version == ATN_BLOB_VERSION, `ATN blob version mismatch: {version}`;
+    let num_tokens = data[p]; p += 1;
+
+    let nrules = data[p]; p += 1;
+    let mut rule_start: List<i32> = [];
+    for let mut i = 0; i < nrules; i += 1 {
+        rule_start.push(data[p]); p += 1;
+    }
+    let mut rule_stop: List<i32> = [];
+    for let mut i = 0; i < nrules; i += 1 {
+        rule_stop.push(data[p]); p += 1;
+    }
+    let ndec = data[p]; p += 1;
+    let mut decision_state: List<i32> = [];
+    for let mut i = 0; i < ndec; i += 1 {
+        decision_state.push(data[p]); p += 1;
+    }
+
+    let nstates = data[p]; p += 1;
+    let mut state_kind: List<i32> = [];
+    let mut state_decision: List<i32> = [];
+    let mut state_tr_start: List<i32> = [];
+    let mut state_tr_count: List<i32> = [];
+    let mut tr_kind: List<i32> = [];
+    let mut tr_target: List<i32> = [];
+    let mut tr_label: List<i32> = [];
+    let mut tr_follow: List<i32> = [];
+    let mut tr_prec: List<i32> = [];
+    for let mut i = 0; i < nstates; i += 1 {
+        let kind = data[p]; p += 1;
+        let _rule = data[p]; p += 1;
+        let decision = data[p]; p += 1;
+        let ntrans = data[p]; p += 1;
+        state_kind.push(kind);
+        state_decision.push(decision);
+        state_tr_start.push(tr_kind.len());
+        state_tr_count.push(ntrans);
+        for let mut j = 0; j < ntrans; j += 1 {
+            tr_kind.push(data[p]); p += 1;
+            tr_target.push(data[p]); p += 1;
+            tr_label.push(data[p]); p += 1;
+            tr_follow.push(data[p]); p += 1;
+            tr_prec.push(data[p]); p += 1;
+        }
+    }
+    return AtnSim {
+        state_kind, state_decision, state_tr_start, state_tr_count,
+        tr_kind, tr_target, tr_label, tr_follow, tr_prec,
+        decision_state, rule_start, rule_stop, num_tokens,
+    };
+}
+
+/// True when `state`'s outgoing edges consume a token (atom / wildcard /
+/// not-atom). Such a state is a resting point: closure stops there and
+/// `atn_move` reads the edge. Epsilon / rule states are expanded instead.
+fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
+    let cnt = sim.state_tr_count[state];
+    if cnt == 0 {
+        return false;
+    }
+    let k = sim.tr_kind[sim.state_tr_start[state]];
+    return k == ATN_K_TR_ATOM || k == ATN_K_TR_NOT_ATOM || k == ATN_K_TR_WILDCARD;
+}
+
+/// Expand a seed set to its closure: the resting configs (consuming
+/// states, plus rule-stop-with-empty-stack "at-end" configs that represent
+/// an alt able to return to its caller). Follows epsilon edges and rule
+/// invocations (pushing the return state), pops rule-stops against the
+/// stack, and dedups to break epsilon / left-recursion cycles.
+fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>) -> List<AtnConfig> {
+    let mut result: List<AtnConfig> = [];
+    let mut work: List<AtnConfig> = *seeds;
+    let mut seen: List<AtnConfig> = [];
+    while let Some(c) = work.pop() {
+        if seen.len() > ATN_MAX_CONFIGS {
+            break;
+        }
+        if seen.contains(&c) {
+            continue;
+        }
+        seen.push(c);
+
+        if sim.state_kind[c.state] == ATN_K_RULE_STOP {
+            if c.stack.is_empty() {
+                // At-end: this alt can return to its (unknown-here) caller.
+                result.push(c);
+            } else {
+                let mut ns = c.stack;
+                let ret = ns.pop().unwrap();
+                work.push(AtnConfig { state: ret, alt: c.alt, stack: ns });
+            }
+            continue;
+        }
+
+        if atn_state_consumes(sim, c.state) {
+            result.push(c);
+            continue;
+        }
+
+        // Epsilon / rule state: expand every outgoing edge.
+        let start = sim.state_tr_start[c.state];
+        let cnt = sim.state_tr_count[c.state];
+        for let mut j = 0; j < cnt; j += 1 {
+            let k = sim.tr_kind[start + j];
+            let target = sim.tr_target[start + j];
+            if k == ATN_K_TR_EPSILON {
+                work.push(AtnConfig { state: target, alt: c.alt, stack: c.stack });
+            } else if k == ATN_K_TR_RULE {
+                if c.stack.len() >= ATN_MAX_STACK || target < 0 {
+                    continue;
+                }
+                let mut ns = c.stack;
+                ns.push(sim.tr_follow[start + j]);
+                work.push(AtnConfig { state: target, alt: c.alt, stack: ns });
+            }
+        }
+    }
+    return result;
+}
+
+/// Advance a resting config set by one input token. At-end configs carry
+/// forward unchanged (they remain viable regardless of the token); other
+/// configs follow whichever consuming edge matches `token`.
+fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> List<AtnConfig> {
+    let mut out: List<AtnConfig> = [];
+    for let c of configs {
+        if sim.state_kind[c.state] == ATN_K_RULE_STOP {
+            out.push(*c);
+            continue;
+        }
+        let start = sim.state_tr_start[c.state];
+        let cnt = sim.state_tr_count[c.state];
+        for let mut j = 0; j < cnt; j += 1 {
+            let k = sim.tr_kind[start + j];
+            let label = sim.tr_label[start + j];
+            let matched = if k == ATN_K_TR_ATOM {
+                label == token;
+            } else if k == ATN_K_TR_WILDCARD {
+                token != eof;
+            } else if k == ATN_K_TR_NOT_ATOM {
+                token != label && token != eof;
+            } else {
+                false;
+            };
+            if matched {
+                out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, stack: c.stack });
+            }
+        }
+    }
+    return out;
+}
+
+fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
+    let mut alts: List<i32> = [];
+    for let c of configs {
+        if !alts.contains(&c.alt) {
+            alts.push(c.alt);
+        }
+    }
+    alts.sort();
+    return alts;
+}
+
+fn atn_min_alt(alts: &List<i32>) -> i32 {
+    if alts.is_empty() {
+        return -1;
+    }
+    let mut m = alts[0];
+    for let a of alts {
+        if *a < m {
+            m = *a;
+        }
+    }
+    return m;
+}
+
+fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
+    for let c of configs {
+        if sim.state_kind[c.state] != ATN_K_RULE_STOP {
+            return false;
+        }
+    }
+    return !configs.is_empty();
+}
+
+/// Predict the winning alternative at `decision` against `tokens` from
+/// `start_pos`, seeding closure with `init_stack` (the caller's real
+/// rule-return stack for full-context, or empty for SLL). Returns the
+/// 0-based alternative index (the decision state's edge order), or -1 if
+/// no alternative is viable.
+///
+/// Resolution: simulate until only one alt survives (return it), the
+/// config set empties (return the previous step's lowest alt), or all
+/// surviving alts are at-end together (a genuine conflict — return the
+/// lowest alt, matching ANTLR4's rule-order tie-break; non-greedy repeats
+/// order their exit edge first so this yields the exit).
+pub fn atn_predict_with_stack(sim: &AtnSim, decision: i32, init_stack: &List<i32>, tokens: &List<Token>, start_pos: i32, eof: i32) -> i32 {
+    let dstate = sim.decision_state[decision];
+    let start = sim.state_tr_start[dstate];
+    let cnt = sim.state_tr_count[dstate];
+    let mut seeds: List<AtnConfig> = [];
+    for let mut j = 0; j < cnt; j += 1 {
+        seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, stack: *init_stack });
+    }
+    let mut configs = atn_closure(sim, &seeds);
+    let mut pos = start_pos;
+    let mut prev = atn_unique_alts(&configs);
+    let limit = tokens.len() - start_pos + 8;
+    let mut guard = 0;
+    loop {
+        guard += 1;
+        if guard > limit {
+            return atn_min_alt(&prev);
+        }
+        let alts = atn_unique_alts(&configs);
+        if alts.is_empty() {
+            return atn_min_alt(&prev);
+        }
+        if alts.len() == 1 {
+            return alts[0];
+        }
+        if atn_all_at_end(sim, &configs) {
+            return atn_min_alt(&alts);
+        }
+        prev = alts;
+        let token = if pos < tokens.len() { tokens[pos].kind } else { eof };
+        let moved = atn_move(sim, &configs, token, eof);
+        pos += 1;
+        configs = atn_closure(sim, &moved);
+    }
+}
+
+/// SLL convenience wrapper: predict with an empty initial stack. Correct
+/// for top-level decisions; deeper decisions whose disambiguation depends
+/// on the caller's follow need `atn_predict_with_stack` with the real
+/// rule-return stack (full context).
+pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &List<Token>, start_pos: i32, eof: i32) -> i32 {
+    let empty: List<i32> = [];
+    return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
+}
+
 pub enum TokenKind {
     E1,
     E2,
