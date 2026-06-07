@@ -360,23 +360,37 @@ way (each was also an LSP false positive / under-report):
       bug, fixed by canonicalisation (`check_default_purity` stays on
       TIR and fires again).
 
-Known limitation — async functions are skipped:
+Async effect checking — `task return` requires the Subtask family:
 
-`export async fn handle` CM handlers call CM async-coordination resource
-constructors (`WaitableSet::new()`, …) the Semantics checker flagged as
-`missing resource`, while the TIR check did not. Async functions are
-restructured by synthesis (the async / CM lowering), so the source AST
-the Semantics checker walks does not match the effect semantics the
-post-synthesis TIR check validated. Until the checker models the async
-lowering (or treats locally-created CM async resources as
-capability-free), the Semantics effect check skips `async` functions —
-their bodies are not effect-checked. This keeps every valid program
-compiling (no false positives) at the cost of under-reporting effect
-errors inside `async` bodies; it is the one remaining correctness debt
-of the switch.
+Investigation (temporarily restoring the old TIR check) established that
+this is **not** a pre/post-synthesis artefact: the new check runs
+pre-synthesis and the resource-effect rule is the same one the old check
+applied. `WaitableSet` simply is not reachable in the propagation
+closure from anything an HTTP handler holds — it appears in an operation
+signature only in `Subtask::join(set: &WaitableSet)` (and the explicit
+`with WaitableSet, Subtask` on `internal::wait_for_subtask`). So a
+handler calling `WaitableSet::new()` genuinely lacks the capability, and
+the new check correctly flags it. The old check passed these only
+through a separate `WaitableSet`-specific leniency.
 
-- [ ] Effect-check `async` function bodies (model the async lowering, or
-      a capability-free rule for locally-created CM async resources).
+The accurate failure count with `async` checked (and no new rule) is
+**3 fixtures** (`cm_waitable_set_new`, `cm_waitable_set_poll`,
+`cm_error_context`) — the ones that construct CM async-coordination
+resources directly. The ~75 other `task return` HTTP handlers pass:
+they only touch `Future` / `Response` / `Stream`, which they hold via
+signature propagation.
+
+Decision (A): `task return` is a capability use — it drives the CM
+async ABI (subtasks / waitables) — so it requires `with Subtask`. The
+diagnostic is dedicated: "`task return` requires the Subtask family
+(`with Subtask`)". `with Subtask` propagates to `WaitableSet` through
+the closure, so it also covers direct `WaitableSet::new()` use. Every
+`task return`-using function (≈78 fixtures) declares `with Subtask`.
+
+- [x] Remove the interim `async`-skip; `async` bodies are effect-checked.
+- [ ] Add the `task return` ⇒ `with Subtask` rule with its dedicated
+      diagnostic.
+- [ ] Declare `with Subtask` on the `task return`-using fixtures.
 
 #### Phase 1b design — effect check on `Semantics`
 

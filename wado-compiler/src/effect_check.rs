@@ -1751,15 +1751,6 @@ fn check_function_effects_sem(
     if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_") {
         return;
     }
-    // Async functions are restructured by synthesis (the async/CM lowering),
-    // so the source AST seen here does not match the effect semantics the
-    // (post-synthesis) TIR check validated — e.g. CM async handlers create
-    // `WaitableSet` / `Subtask` locally without a `with` capability. Until the
-    // checker models the async lowering, skip them rather than false-positive.
-    // Trade-off: effect errors inside async bodies are not reported here.
-    if func.is_async {
-        return;
-    }
     let caller_key = SymbolKey::new(module.clone(), func.id);
 
     // Per-module annotations carry the dispatch facts and signature types that
