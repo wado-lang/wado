@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780801468015,
+  "lastUpdate": 1780808953311,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31077,6 +31077,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6a78b8c2678874972eb9705da341d4cde33bd684"
         },
         "date": 1780801467471,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8792,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15896,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437254,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "87daa297226c346af82c1a52d1d28b445ad04855",
+          "message": "Merge pull request #1324 from wado-lang/claude/worklist-rewrite-engine-GQdMD\n\nrefactor(nir): migrate the NIR pipeline from the tree to the arena (Phase 5)",
+          "timestamp": "2026-06-07T14:00:32+09:00",
+          "tree_id": "a701ef2b54be46d5214d83c5250e131fc0bb5a79",
+          "url": "https://github.com/wado-lang/wado/commit/87daa297226c346af82c1a52d1d28b445ad04855"
+        },
+        "date": 1780808952850,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
