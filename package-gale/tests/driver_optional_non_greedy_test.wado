@@ -46,17 +46,17 @@ test "tree: single if with trailing else binds" {
     ");
 }
 
-// Dangling-`else` ambiguity, captured as the CURRENT wrong shape
-// (else binds to the INNER if). ANTLR4's `??` is prefer-skip and
-// binds it to the OUTER if instead — when a fix lands this
-// assertion will fail. The correct expected, ready to swap in:
-//   (start (statement (ifStatement
-//     if y (statement (ifStatement if y (statement x)))
-//     else (statement x))))
-test "tree: dangling else — CURRENT WRONG SHAPE pinned for future fix" {
+// Dangling-`else`: ANTLR4's non-greedy `??` is prefer-skip, so the
+// `else` binds to the OUTER `ifStatement`. The runtime ATN simulator
+// (full context) takes this decision: the inner `??` SKIPS (its real
+// follow, through the outer `??`, accepts `else`, so on the min-alt
+// tie-break exit wins), and the outer `??` ENTERS (its real follow —
+// the `statement+` loop — excludes `else`, killing the skip alt).
+test "tree: dangling else binds to the outer if (non-greedy ??)" {
     assert_tree(&"if y if y x else x", &"
         (start (statement (ifStatement
           if y
-          (statement (ifStatement if y (statement x) else (statement x))))))
+          (statement (ifStatement if y (statement x)))
+          else (statement x))))
     ");
 }

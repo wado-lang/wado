@@ -1417,7 +1417,12 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
     assert str_contains(&output, &"lit_else_statement: Option<");
     assert !str_contains(&output, &"lit_else_statement: List<");
     let body = extract_fn_body(&output, &"fn _parse_if_stmt__inner(");
-    assert str_contains(&body, &"if p.peek_kind() == TK_LIT_ELSE");
+    // The non-greedy `??` enter/skip decision is taken at runtime by the
+    // ATN simulator (full context), not by a static first-set peek — so the
+    // shape is still a single `Option<T>` if (not a `while` loop), but the
+    // condition is the simulator call.
+    assert str_contains(&body, &"if atn_ng_optional_enter(");
+    assert !str_contains(&body, &"if p.peek_kind() == TK_LIT_ELSE");
     assert !str_contains(&body, &"while p.peek_kind() == TK_LIT_ELSE");
 }
 

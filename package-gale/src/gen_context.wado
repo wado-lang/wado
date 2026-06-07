@@ -86,6 +86,13 @@ pub struct GenContext {
     /// paying an extra stack slot per recursive frame (the
     /// `Performance/ExpressionGrammar_2` stack-exhaustion regression).
     caller_follow_gate_seen: bool,
+    /// Set by lowering whenever it lowers a non-greedy repeat (`??`/`*?`/
+    /// `+?`). When set, emit includes the runtime ATN simulator
+    /// infrastructure (the serialized `GALE_ATN_DATA` blob, the
+    /// `Parser.atn`/`Parser.atn_stack` fields, and the rule-entry
+    /// stack push/pop) and routes the non-greedy decision through
+    /// `atn_predict_with_stack`. Gate-free grammars stay byte-identical.
+    needs_atn_seen: bool,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
@@ -113,6 +120,7 @@ impl GenContext {
             tail_greedy_cache: TreeMap::<String, List<String>>::new(),
             diagnostics: [],
             caller_follow_gate_seen: false,
+            needs_atn_seen: false,
             trace: false,
         };
     }
@@ -130,6 +138,19 @@ impl GenContext {
     /// never read, so it is pruned entirely.
     pub fn emit_follow(&self) -> bool {
         return self.caller_follow_gate_seen;
+    }
+
+    /// Record that lowering encountered a non-greedy repeat, so emit must
+    /// include the ATN simulator infrastructure.
+    pub fn mark_needs_atn(&mut self) {
+        self.needs_atn_seen = true;
+    }
+
+    /// Whether the generated parser should emit the ATN simulator
+    /// infrastructure (blob, `Parser.atn`/`atn_stack`, rule-entry
+    /// stack maintenance). True iff lowering saw a non-greedy repeat.
+    pub fn needs_atn(&self) -> bool {
+        return self.needs_atn_seen;
     }
 
     /// Enable trace instrumentation in the generated parser (the
@@ -170,6 +191,16 @@ impl GenContext {
     /// harmless.
     pub fn take_diagnostics(&self) -> List<Diagnostic> {
         return self.diagnostics;
+    }
+
+    /// Index of a parser rule by name (position in `parser_rules`), or -1.
+    /// Matches `atn.wado::build_atn`'s rule indexing, so the generated
+    /// parser can push this onto `atn_stack` for full-context prediction.
+    pub fn rule_index_of(&self, name: &String) -> i32 {
+        if let Some(i) = self.rule_index.get(*name) {
+            return i;
+        }
+        return -1;
     }
 
     pub fn find_rule(&self, name: &String) -> Option<&ParserRule> {

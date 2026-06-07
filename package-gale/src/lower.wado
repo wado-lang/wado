@@ -2935,10 +2935,14 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
         // `??` shares the Option<T> emit shape of greedy `?` — only the
         // prediction layer differs (prefer-skip vs first-set match).
         // Reuse the greedy strategy pipeline so emit's Optional
-        // dispatcher accepts it; the prefer-skip semantics remain
-        // tracked in package-gale/TODO.md. `*?` / `+?` keep the
-        // dedicated non-greedy strategy.
+        // dispatcher accepts it; the prefer-skip decision is taken at
+        // runtime by the ATN simulator. `*?` / `+?` keep the dedicated
+        // non-greedy strategy.
         if let Optional = rep.kind {
+            // A non-greedy `??` routes its enter/skip decision through the
+            // runtime ATN simulator; flag the grammar so emit includes the
+            // ATN infrastructure.
+            ctx.mark_needs_atn();
             pick_greedy_strategy(opt_specialised);
         } else {
             compute_non_greedy_strategy(&rep.element, outer_follow, ctx);

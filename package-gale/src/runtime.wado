@@ -1106,3 +1106,45 @@ pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &List<Token>, s
     let empty: List<i32> = [];
     return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
 }
+
+global ATN_K_BLOCK_START: i32 = 4;
+global ATN_K_BLOCK_END: i32 = 5;
+
+/// Decide whether a non-greedy optional (`(...)?? `) should ENTER (consume
+/// its body) or SKIP, using full-context ATN prediction. The current rule
+/// is the top of `rule_stack` (maintained by the rule-entry wrapper); the
+/// decision is that rule's unique exit-first BlockStart (an optional whose
+/// edge 0 goes straight to BlockEnd — the non-greedy ordering). Returns
+/// true to ENTER.
+///
+/// Falls back to ENTER (the prior greedy behaviour) when context is absent
+/// or the decision can't be uniquely identified (0 or >1 candidates), so a
+/// mapping miss degrades gracefully instead of mispredicting.
+pub fn atn_ng_optional_enter(sim: &AtnSim, rule_stack: &List<i32>, tokens: &List<Token>, pos: i32, eof: i32) -> bool {
+    if rule_stack.is_empty() {
+        return true;
+    }
+    let rule = rule_stack[rule_stack.len() - 1];
+    let mut dec = -1;
+    let mut found = 0;
+    for let mut d = 0; d < sim.decision_state.len(); d += 1 {
+        let ds = sim.decision_state[d];
+        if sim.state_kind[ds] != ATN_K_BLOCK_START || sim.state_rule[ds] != rule {
+            continue;
+        }
+        if sim.state_tr_count[ds] < 1 {
+            continue;
+        }
+        let first_target = sim.tr_target[sim.state_tr_start[ds]];
+        if sim.state_kind[first_target] == ATN_K_BLOCK_END {
+            dec = d;
+            found += 1;
+        }
+    }
+    if found != 1 {
+        return true;
+    }
+    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof);
+    // Non-greedy optional edges are ordered [exit=0, enter=1].
+    return alt == 1;
+}
