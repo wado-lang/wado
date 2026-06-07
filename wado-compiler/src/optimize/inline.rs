@@ -13,7 +13,7 @@ use crate::nir::{
     CallArg, InlineHint, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern,
     NirStmt, NirStmtKind, NirUnaryOp,
 };
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::block_has_break_to;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -26,10 +26,10 @@ use crate::token::Span;
 // - Method calls, binary operations, field accesses all contribute
 
 /// True when an expression is a `builtin::cold_path()` marker call.
-fn is_cold_path_call(expr: &NirExpr) -> bool {
+fn is_cold_path_call(body: &Body, id: ExprId) -> bool {
     matches!(
-        &expr.kind,
-        NirExprKind::Call { func, .. }
+        &body.exprs[id].kind,
+        ExprKind::Call { func, .. }
             if func.builtin_name().as_deref() == Some("builtin::cold_path")
     )
 }
@@ -50,143 +50,140 @@ enum BlockCut {
 
 /// Classify whether a statement cuts off the rest of its block from the inline
 /// cost estimate.
-fn block_cut(stmt: &NirStmt, type_table: &TypeTable) -> BlockCut {
-    match &stmt.kind {
-        NirStmtKind::Expr(e) if is_cold_path_call(e) => BlockCut::Cold,
-        NirStmtKind::Return { .. } | NirStmtKind::Break { .. } | NirStmtKind::Continue => {
-            BlockCut::Diverges
-        }
-        NirStmtKind::Expr(e) if type_table.is_never(e.type_id) => BlockCut::Diverges,
+fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable) -> BlockCut {
+    match &body.stmts[stmt].kind {
+        StmtKind::Expr(e) if is_cold_path_call(body, *e) => BlockCut::Cold,
+        StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => BlockCut::Diverges,
+        StmtKind::Expr(e) if type_table.is_never(body.exprs[*e].type_id) => BlockCut::Diverges,
         _ => BlockCut::None,
     }
 }
 
 /// Inline cost of a single statement (its own expression count).
-fn count_stmt(stmt: &NirStmt, type_table: &TypeTable) -> usize {
-    match &stmt.kind {
-        NirStmtKind::Expr(expr) => count_expr(expr, type_table),
-        NirStmtKind::Let { value, .. } => count_expr(value, type_table),
-        NirStmtKind::LetDestructure { value, .. } => count_expr(value, type_table),
-        NirStmtKind::Return { value } => value.as_ref().map_or(0, |v| count_expr(v, type_table)),
-        NirStmtKind::If {
+fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable) -> usize {
+    match &body.stmts[stmt].kind {
+        StmtKind::Expr(expr) => count_expr(body, *expr, type_table),
+        StmtKind::Let { value, .. } => count_expr(body, *value, type_table),
+        StmtKind::LetDestructure { value, .. } => count_expr(body, *value, type_table),
+        StmtKind::Return { value } => value.map_or(0, |v| count_expr(body, v, type_table)),
+        StmtKind::If {
             condition,
             then_block,
             else_block,
             ..
         } => {
-            count_expr(condition, type_table)
-                + count_block_exprs(then_block, type_table)
-                + else_block
-                    .as_ref()
-                    .map_or(0, |b| count_block_exprs(b, type_table))
+            count_expr(body, *condition, type_table)
+                + count_block_exprs(body, *then_block, type_table)
+                + else_block.map_or(0, |b| count_block_exprs(body, b, type_table))
         }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            count_block_exprs(body, type_table)
+        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
+            count_block_exprs(body, *b, type_table)
         }
-        NirStmtKind::Break { .. } | NirStmtKind::Continue => 0,
+        StmtKind::Break { .. } | StmtKind::Continue => 0,
     }
 }
 
 /// Count expressions in a NIR expression (recursive)
-fn count_expr(expr: &NirExpr, type_table: &TypeTable) -> usize {
-    1 + match &expr.kind {
-        NirExprKind::Binary { left, right, .. } => {
-            count_expr(left, type_table) + count_expr(right, type_table)
+fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
+    1 + match &body.exprs[id].kind {
+        ExprKind::Binary { left, right, .. } => {
+            count_expr(body, *left, type_table) + count_expr(body, *right, type_table)
         }
-        NirExprKind::Unary { expr, .. } => count_expr(expr, type_table),
-        NirExprKind::Call { args, .. } => {
-            args.iter().map(|a| count_expr(&a.expr, type_table)).sum()
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            count_expr(receiver, type_table)
+        ExprKind::Unary { expr, .. } => count_expr(body, *expr, type_table),
+        ExprKind::Call { args, .. } => args
+            .iter()
+            .map(|a| count_expr(body, a.expr, type_table))
+            .sum(),
+        ExprKind::MethodCall { receiver, args, .. } => {
+            count_expr(body, *receiver, type_table)
                 + args
                     .iter()
-                    .map(|a| count_expr(&a.expr, type_table))
+                    .map(|a| count_expr(body, a.expr, type_table))
                     .sum::<usize>()
         }
-        NirExprKind::FieldAccess { expr, .. } => count_expr(expr, type_table),
-        NirExprKind::Index { expr, index, .. } => {
-            count_expr(expr, type_table) + count_expr(index, type_table)
+        ExprKind::FieldAccess { expr, .. } => count_expr(body, *expr, type_table),
+        ExprKind::Index { expr, index, .. } => {
+            count_expr(body, *expr, type_table) + count_expr(body, *index, type_table)
         }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            elements.iter().map(|e| count_expr(e, type_table)).sum()
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            elements.iter().map(|e| count_expr(body, *e, type_table)).sum()
         }
-        NirExprKind::StructLiteral { fields, .. } => fields
+        ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .map(|f| count_expr(&f.value, type_table))
+            .map(|f| count_expr(body, f.value, type_table))
             .sum(),
-        NirExprKind::VariantConstruct { payload, .. } => {
-            payload.as_ref().map_or(0, |p| count_expr(p, type_table))
+        ExprKind::VariantConstruct { payload, .. } => {
+            payload.map_or(0, |p| count_expr(body, p, type_table))
         }
-        NirExprKind::Assign { target, value } => {
-            count_expr(target, type_table) + count_expr(value, type_table)
+        ExprKind::Assign { target, value } => {
+            count_expr(body, *target, type_table) + count_expr(body, *value, type_table)
         }
-        NirExprKind::If {
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
             // Cold branches contribute nothing: `count_block_exprs` stops at a
             // `cold_path()` marker or a diverging statement within each arm.
-            count_expr(condition, type_table)
-                + count_block_exprs(then_branch, type_table)
-                + else_branch
-                    .as_ref()
-                    .map_or(0, |b| count_block_exprs(b, type_table))
+            count_expr(body, *condition, type_table)
+                + count_block_exprs(body, *then_branch, type_table)
+                + else_branch.map_or(0, |b| count_block_exprs(body, b, type_table))
         }
-        NirExprKind::Match { expr, arms } => {
-            count_expr(expr, type_table)
+        ExprKind::Match { expr, arms } => {
+            count_expr(body, *expr, type_table)
                 + arms
                     .iter()
                     .map(|arm| {
-                        arm.guard.as_ref().map_or(0, |g| count_expr(g, type_table))
-                            + count_expr(&arm.body, type_table)
+                        arm.guard.map_or(0, |g| count_expr(body, g, type_table))
+                            + count_expr(body, arm.body, type_table)
                     })
                     .sum::<usize>()
         }
-        NirExprKind::Block(block) => count_block_exprs(block, type_table),
-        NirExprKind::Cast { expr, .. } => count_expr(expr, type_table),
-        NirExprKind::GlobalVarSet { value, .. } => count_expr(value, type_table),
+        ExprKind::Block(block) => count_block_exprs(body, *block, type_table),
+        ExprKind::Cast { expr, .. } => count_expr(body, *expr, type_table),
+        ExprKind::GlobalVarSet { value, .. } => count_expr(body, *value, type_table),
         // Leaf expressions (no children)
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Null => 0,
+        ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::StringLiteral(_)
+        | ExprKind::BytesLiteral(_)
+        | ExprKind::Unit
+        | ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::Null => 0,
         // Closure and effect-related expressions
-        NirExprKind::EnumConstruct { .. } => 0,
-        NirExprKind::CmRawCall { args, .. } => args.iter().map(|a| count_expr(a, type_table)).sum(),
-        NirExprKind::IndirectCall { callee, args } => {
-            count_expr(callee, type_table)
+        ExprKind::EnumConstruct { .. } => 0,
+        ExprKind::CmRawCall { args, .. } => {
+            args.iter().map(|a| count_expr(body, *a, type_table)).sum()
+        }
+        ExprKind::IndirectCall { callee, args } => {
+            count_expr(body, *callee, type_table)
                 + args
                     .iter()
-                    .map(|a| count_expr(a, type_table))
+                    .map(|a| count_expr(body, *a, type_table))
                     .sum::<usize>()
         }
-        NirExprKind::ClosureToCanonical { functor, .. } => count_expr(functor, type_table),
-        NirExprKind::Switch {
+        ExprKind::ClosureToCanonical { functor, .. } => count_expr(body, *functor, type_table),
+        ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            count_expr(scrutinee, type_table)
+            count_expr(body, *scrutinee, type_table)
                 + arms
                     .iter()
-                    .map(|a| count_block_exprs(a, type_table))
+                    .map(|a| count_block_exprs(body, *a, type_table))
                     .sum::<usize>()
-                + count_block_exprs(default, type_table)
+                + count_block_exprs(body, *default, type_table)
         }
         // Lowered pattern matching nodes - count inner expressions
-        NirExprKind::VariantTag { expr }
-        | NirExprKind::VariantTest { expr, .. }
-        | NirExprKind::VariantPayload { expr, .. } => count_expr(expr, type_table),
-        NirExprKind::LabeledBlock { block, .. } => count_block_exprs(block, type_table),
+        ExprKind::VariantTag { expr }
+        | ExprKind::VariantTest { expr, .. }
+        | ExprKind::VariantPayload { expr, .. } => count_expr(body, *expr, type_table),
+        ExprKind::LabeledBlock { block, .. } => count_block_exprs(body, *block, type_table),
     }
 }
 
@@ -196,16 +193,17 @@ fn count_expr(expr: &NirExpr, type_table: &TypeTable) -> usize {
 /// after it, while a diverging statement (`return` / `break` / `continue` or a
 /// `-> !` call such as `panic`) is itself counted but cuts off its unreachable
 /// tail.
-fn count_block_exprs(block: &NirBlock, type_table: &TypeTable) -> usize {
+fn count_block_exprs(body: &Body, block: BlockId, type_table: &TypeTable) -> usize {
     let mut total = 0;
-    for stmt in &block.stmts {
-        match block_cut(stmt, type_table) {
+    for i in 0..body.blocks[block].stmts.len() {
+        let stmt = body.blocks[block].stmts[i];
+        match block_cut(body, stmt, type_table) {
             BlockCut::Cold => break,
             BlockCut::Diverges => {
-                total += count_stmt(stmt, type_table);
+                total += count_stmt(body, stmt, type_table);
                 break;
             }
-            BlockCut::None => total += count_stmt(stmt, type_table),
+            BlockCut::None => total += count_stmt(body, stmt, type_table),
         }
     }
     total
@@ -421,7 +419,7 @@ fn is_inline_eligible(
     }
 
     // Must have a body
-    let Some(body) = &func.body.as_ref().map(crate::nir_arena::Body::to_block) else {
+    let Some(body) = &func.body else {
         return false;
     };
 
@@ -465,7 +463,7 @@ fn is_inline_eligible(
     };
 
     // Small enough (based on expression count)
-    count_block_exprs(body, type_table) <= effective_threshold
+    count_block_exprs(body, body.root, type_table) <= effective_threshold
 }
 
 /// Detect recursive functions using call graph analysis
@@ -497,8 +495,8 @@ fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<
         let full_name = tir_function_full_name(&func);
         if let Some(caller_idx) = name_to_idx.get(&full_name) {
             let mut callee_names: IndexSet<String> = IndexSet::default();
-            if let Some(body) = &func.body.as_ref().map(crate::nir_arena::Body::to_block) {
-                collect_callees_from_block(body, &mut callee_names);
+            if let Some(body) = &func.body {
+                collect_callees_from_block(body, body.root, &mut callee_names);
             }
             let callees: Vec<usize> = callee_names
                 .iter()
@@ -545,173 +543,188 @@ fn can_reach_idx(
     false
 }
 
-fn collect_callees_from_block(block: &NirBlock, callees: &mut IndexSet<String>) {
-    for stmt in &block.stmts {
-        collect_callees_from_stmt(stmt, callees);
+fn collect_callees_from_block(body: &Body, block: BlockId, callees: &mut IndexSet<String>) {
+    for i in 0..body.blocks[block].stmts.len() {
+        let sid = body.blocks[block].stmts[i];
+        collect_callees_from_stmt(body, sid, callees);
     }
 }
 
-fn collect_callees_from_stmt(stmt: &NirStmt, callees: &mut IndexSet<String>) {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. }
-        | NirStmtKind::LetDestructure { value, .. }
-        | NirStmtKind::Expr(value) => {
-            collect_callees_from_expr(value, callees);
+fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<String>) {
+    match &body.stmts[stmt].kind {
+        StmtKind::Let { value, .. }
+        | StmtKind::LetDestructure { value, .. }
+        | StmtKind::Expr(value) => {
+            collect_callees_from_expr(body, *value, callees);
         }
-        NirStmtKind::Return { value } => {
-            if let Some(expr) = value {
-                collect_callees_from_expr(expr, callees);
+        StmtKind::Return { value } => {
+            if let Some(expr) = *value {
+                collect_callees_from_expr(body, expr, callees);
             }
         }
-        NirStmtKind::If {
+        StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            collect_callees_from_expr(condition, callees);
-            collect_callees_from_block(then_block, callees);
+            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
+            collect_callees_from_expr(body, condition, callees);
+            collect_callees_from_block(body, then_block, callees);
             if let Some(else_blk) = else_block {
-                collect_callees_from_block(else_blk, callees);
+                collect_callees_from_block(body, else_blk, callees);
             }
         }
-        NirStmtKind::Loop { body } => {
-            collect_callees_from_block(body, callees);
+        StmtKind::Loop { body: b } => {
+            collect_callees_from_block(body, *b, callees);
         }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            collect_callees_from_block(block, callees);
+        StmtKind::LabeledBlock { block, .. } => {
+            collect_callees_from_block(body, *block, callees);
         }
-        NirStmtKind::Break { .. } | NirStmtKind::Continue => {}
+        StmtKind::Break { .. } | StmtKind::Continue => {}
     }
 }
 
-fn collect_callees_from_expr(expr: &NirExpr, callees: &mut IndexSet<String>) {
-    match &expr.kind {
-        NirExprKind::Call { func, args, .. } => {
+fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<String>) {
+    match &body.exprs[id].kind {
+        ExprKind::Call { func, args, .. } => {
             callees.insert(func_ref_inline_key(func));
-            for arg in args {
-                collect_callees_from_expr(&arg.expr, callees);
+            for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
+                collect_callees_from_expr(body, aid, callees);
             }
         }
-        NirExprKind::MethodCall {
+        ExprKind::MethodCall {
             receiver,
             func,
             args,
             ..
         } => {
             callees.insert(func_ref_inline_key(func));
-            collect_callees_from_expr(receiver, callees);
-            for arg in args {
-                collect_callees_from_expr(&arg.expr, callees);
+            let receiver = *receiver;
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            collect_callees_from_expr(body, receiver, callees);
+            for aid in arg_ids {
+                collect_callees_from_expr(body, aid, callees);
             }
         }
-        NirExprKind::Binary { left, right, .. } => {
-            collect_callees_from_expr(left, callees);
-            collect_callees_from_expr(right, callees);
+        ExprKind::Binary { left, right, .. } => {
+            let (left, right) = (*left, *right);
+            collect_callees_from_expr(body, left, callees);
+            collect_callees_from_expr(body, right, callees);
         }
-        NirExprKind::Unary { expr, .. } => {
-            collect_callees_from_expr(expr, callees);
+        ExprKind::Unary { expr, .. } => {
+            collect_callees_from_expr(body, *expr, callees);
         }
-        NirExprKind::Assign { target, value } => {
-            collect_callees_from_expr(target, callees);
-            collect_callees_from_expr(value, callees);
+        ExprKind::Assign { target, value } => {
+            let (target, value) = (*target, *value);
+            collect_callees_from_expr(body, target, callees);
+            collect_callees_from_expr(body, value, callees);
         }
-        NirExprKind::Cast { expr, .. } => {
-            collect_callees_from_expr(expr, callees);
+        ExprKind::Cast { expr, .. } => {
+            collect_callees_from_expr(body, *expr, callees);
         }
-        NirExprKind::FieldAccess { expr, .. } => {
-            collect_callees_from_expr(expr, callees);
+        ExprKind::FieldAccess { expr, .. } => {
+            collect_callees_from_expr(body, *expr, callees);
         }
-        NirExprKind::Index { expr, index } => {
-            collect_callees_from_expr(expr, callees);
-            collect_callees_from_expr(index, callees);
+        ExprKind::Index { expr, index } => {
+            let (expr, index) = (*expr, *index);
+            collect_callees_from_expr(body, expr, callees);
+            collect_callees_from_expr(body, index, callees);
         }
-        NirExprKind::Block(block) => {
-            collect_callees_from_block(block, callees);
+        ExprKind::Block(block) => {
+            collect_callees_from_block(body, *block, callees);
         }
-        NirExprKind::If {
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            collect_callees_from_expr(condition, callees);
-            collect_callees_from_block(then_branch, callees);
+            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
+            collect_callees_from_expr(body, condition, callees);
+            collect_callees_from_block(body, then_branch, callees);
             if let Some(else_blk) = else_branch {
-                collect_callees_from_block(else_blk, callees);
+                collect_callees_from_block(body, else_blk, callees);
             }
         }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_callees_from_expr(&field.value, callees);
+        ExprKind::StructLiteral { fields, .. } => {
+            for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
+                collect_callees_from_expr(body, fid, callees);
             }
         }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                collect_callees_from_expr(elem, callees);
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            for eid in elements.clone() {
+                collect_callees_from_expr(body, eid, callees);
             }
         }
-        NirExprKind::IndirectCall { callee, args } => {
-            collect_callees_from_expr(callee, callees);
-            for arg in args {
-                collect_callees_from_expr(arg, callees);
+        ExprKind::IndirectCall { callee, args } => {
+            let callee = *callee;
+            let arg_ids = args.clone();
+            collect_callees_from_expr(body, callee, callees);
+            for aid in arg_ids {
+                collect_callees_from_expr(body, aid, callees);
             }
         }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_callees_from_expr(functor, callees);
+        ExprKind::ClosureToCanonical { functor, .. } => {
+            collect_callees_from_expr(body, *functor, callees);
         }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_callees_from_expr(arg, callees);
+        ExprKind::CmRawCall { args, .. } => {
+            for aid in args.clone() {
+                collect_callees_from_expr(body, aid, callees);
             }
         }
-        NirExprKind::Match { expr, arms } => {
-            collect_callees_from_expr(expr, callees);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_callees_from_expr(guard, callees);
+        ExprKind::Match { expr, arms } => {
+            let expr = *expr;
+            let arms = arms.clone();
+            collect_callees_from_expr(body, expr, callees);
+            for arm in &arms {
+                if let Some(guard) = arm.guard {
+                    collect_callees_from_expr(body, guard, callees);
                 }
-                collect_callees_from_expr(&arm.body, callees);
+                collect_callees_from_expr(body, arm.body, callees);
             }
         }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                collect_callees_from_expr(payload_expr, callees);
+        ExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = *payload {
+                collect_callees_from_expr(body, payload_expr, callees);
             }
         }
-        NirExprKind::LabeledBlock { block, .. } => {
-            collect_callees_from_block(block, callees);
+        ExprKind::LabeledBlock { block, .. } => {
+            collect_callees_from_block(body, *block, callees);
         }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            collect_callees_from_expr(value, callees);
+        ExprKind::GlobalVarSet { value, .. } => {
+            collect_callees_from_expr(body, *value, callees);
         }
-        NirExprKind::VariantTag { expr }
-        | NirExprKind::VariantTest { expr, .. }
-        | NirExprKind::VariantPayload { expr, .. } => {
-            collect_callees_from_expr(expr, callees);
+        ExprKind::VariantTag { expr }
+        | ExprKind::VariantTest { expr, .. }
+        | ExprKind::VariantPayload { expr, .. } => {
+            collect_callees_from_expr(body, *expr, callees);
         }
-        NirExprKind::Switch {
+        ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            collect_callees_from_expr(scrutinee, callees);
+            let scrutinee = *scrutinee;
+            let default = *default;
+            let arms = arms.clone();
+            collect_callees_from_expr(body, scrutinee, callees);
             for arm in arms {
-                collect_callees_from_block(arm, callees);
+                collect_callees_from_block(body, arm, callees);
             }
-            collect_callees_from_block(default, callees);
+            collect_callees_from_block(body, default, callees);
         }
         // Leaf nodes
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
+        ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::StringLiteral(_)
+        | ExprKind::BytesLiteral(_)
+        | ExprKind::Null
+        | ExprKind::Unit
+        | ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::EnumConstruct { .. } => {}
     }
 }
 
