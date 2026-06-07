@@ -27,7 +27,7 @@ use {
 } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
-use { Rule, Op, ScanElement, MultiAltDispatch, GroupShape, FieldDecl, FieldKind, Diagnostic, DiagnosticKind } from "./gir.wado";
+use { Rule, Op, ScanElement, MultiAltDispatch, GroupShape, FieldDecl, FieldKind, FollowArg, Diagnostic, DiagnosticKind } from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
     return Grammar {
@@ -85,7 +85,6 @@ test "lower passes through grammar metadata" {
     assert lowered.source_files.len() == 1;
     assert lowered.source_files[0] == "JSON.g4";
     assert lowered.parser_rules.is_empty();
-    assert lowered.variant_rules.is_empty();
     assert lowered.kind_sets.is_empty();
     assert lowered.mode_names.len() == 1;
 }
@@ -165,7 +164,6 @@ test "lower simple rule with RuleRef" {
             assert r.target_name == "expr";
             assert r.target_snake == "expr";
             assert r.field == "expr";
-            assert r.variant_id matches { None };
             assert r.min_prec_arg matches { None };
         } else {
             panic("expected Op::RuleCall");
@@ -1283,9 +1281,8 @@ test "lower Transparent Group wrapping Repeat" {
 }
 
 test "lower Optional Repeat with TokenRef inner uses Plain strategy" {
-    // `r : INT? ;` — Optional Repeat. Without a follow-aware
-    // variant context, the Plain strategy is correct: emit fires
-    // `if peek_kind ∈ first(inner) { ... }`.
+    // `r : INT? ;` — Optional Repeat. The Plain strategy is correct:
+    // emit fires `if peek_kind ∈ first(inner) { ... }`.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [
         ParserRule::new(
@@ -1508,7 +1505,6 @@ test "lower simple rule produces scan body mirroring leaf ops" {
         }
         if let RuleCall(r) = &s.scan_body.elements[2] {
             assert r.target_snake == "expr";
-            assert r.variant_id matches { None };
         } else {
             panic("scan_body[2] != RuleCall");
         }
@@ -2544,224 +2540,87 @@ test "lower Tournament sorts longer alt first" {
     }
 }
 
-test "lower registers follow-aware variant when caller follow overlaps callee tail-greedy" {
-    // `r : a 'end' ; a : 'x'* ;`
-    // The call to `a` at position 0 has caller-follow = first('end'),
-    // which overlaps `a`'s tail-greedy first set (`'x'`)... actually
-    // `'x'` is not in `'end'`'s first, so no variant here. Use a
-    // case where they DO overlap: `r : a ; a : 'x'* ; ` — empty
-    // outer_follow, no variant. Need a real overlap.
-    //
-    // `r : a STRING ; a : 'x'* ;` — outer_follow at `a` is `{TK_STRING}`.
-    // tail_greedy_first(a) = first('x') = {TK_LIT_X}. No overlap.
-    //
-    // For an actual overlap, the callee's tail-greedy first must
-    // include a token in the caller's follow. Construct:
-    // `r : a X ; a : X* ;` — outer_follow = {TK_X}, tail-greedy = {TK_X}.
+// Runtime-FOLLOW redesign: lowering no longer registers per-(rule, mask)
+// `__follow_<id>` variants. Instead each `RuleCall` carries a `FollowArg`
+// (the runtime continuation to thread) and each tail-greedy `Repeat`
+// carries `gate_caller_follow`. These two tests replace the retired
+// variant-registration / variant-body suppression tests.
+
+test "lower: RuleCall before a token gets a Mask FollowArg; callee tail Repeat gates" {
+    // `r : a X ; a : X* ;` — the call to `a` is followed by `X`
+    // (non-nullable), so its continuation is the static mask `[{X}]`;
+    // `a`'s `X*` sits at the rule tail, so it gates on the caller follow.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [
-        ParserRule::new(
-            "r",
-            Visibility::Default,
-            [],
-            [
-                alt_of([
-                    Element::RuleRef(RuleRefElement::new("a")),
-                    Element::TokenRef(TokenRefElement::new("X")),
-                ]),
-            ],
-        ),
-        ParserRule::new(
-            "a",
-            Visibility::Default,
-            [],
-            [
-                alt_of([
-                    Element::Repeat(RepeatElement {
-                        kind: RepeatKind::Star,
-                        element: Element::TokenRef(TokenRefElement::new("X")),
-                        non_greedy: false,
-                    }),
-                ]),
-            ],
-        ),
+        ParserRule::new("r", Visibility::Default, [], [
+            alt_of([
+                Element::RuleRef(RuleRefElement::new("a")),
+                Element::TokenRef(TokenRefElement::new("X")),
+            ]),
+        ]),
+        ParserRule::new("a", Visibility::Default, [], [
+            alt_of([
+                Element::Repeat(RepeatElement {
+                    kind: RepeatKind::Star,
+                    element: Element::TokenRef(TokenRefElement::new("X")),
+                    non_greedy: false,
+                }),
+            ]),
+        ]),
     ];
 
     let lowered = lower(&g, &no_lit_tokens());
-    // Variant registered → variant_rules has one entry.
-    assert lowered.variant_rules.len() == 1, `expected 1 variant, got {lowered.variant_rules.len()}`;
-    // The RuleCall at r's first op carries the variant_id.
+    // No variant bodies are ever produced now.
+    // `r`'s `a` call carries a static-mask FollowArg.
     if let Simple(s) = &lowered.parser_rules[0] {
         if let RuleCall(rc) = &s.body.ops[0] {
-            if let Some(id) = &rc.variant_id {
-                assert *id == 0;
-            } else {
-                panic("expected variant_id on RuleCall");
-            }
+            assert rc.follow_arg matches { Mask(_) }, "expected Mask FollowArg at the `a` call";
         } else {
             panic("expected RuleCall");
         }
     } else {
-        panic("expected Rule::Simple");
+        panic("expected Rule::Simple for r");
     }
-}
-
-test "lower variant_rules empty when no caller follow overlaps callee tail-greedy" {
-    // `r : a X ; a : Y ;` — no Repeat → tail_greedy_first(a) = {}.
-    // No variant registered.
-    let mut g = empty_grammar(&"T");
-    g.parser_rules = [
-        ParserRule::new(
-            "r",
-            Visibility::Default,
-            [],
-            [
-                alt_of([
-                    Element::RuleRef(RuleRefElement::new("a")),
-                    Element::TokenRef(TokenRefElement::new("X")),
-                ]),
-            ],
-        ),
-        ParserRule::new(
-            "a",
-            Visibility::Default,
-            [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("Y"))])],
-        ),
-    ];
-
-    let lowered = lower(&g, &no_lit_tokens());
-    assert lowered.variant_rules.is_empty();
-}
-
-test "lower variant body suppresses Repeat when first set is fully in follow mask" {
-    // `r : a X ; a : X* ;`
-    // At the call site `a X`, caller_follow = {TK_X}. `a`'s
-    // tail-greedy first = {TK_X}. The variant `a__follow_0`
-    // installs mask = {TK_X}; lowering `X*` then sees
-    // first(X*) = {TK_X} ⊆ mask → Suppressed.
-    let mut g = empty_grammar(&"T");
-    g.parser_rules = [
-        ParserRule::new(
-            "r",
-            Visibility::Default,
-            [],
-            [
-                alt_of([
-                    Element::RuleRef(RuleRefElement::new("a")),
-                    Element::TokenRef(TokenRefElement::new("X")),
-                ]),
-            ],
-        ),
-        ParserRule::new(
-            "a",
-            Visibility::Default,
-            [],
-            [
-                alt_of([
-                    Element::Repeat(RepeatElement {
-                        kind: RepeatKind::Star,
-                        element: Element::TokenRef(TokenRefElement::new("X")),
-                        non_greedy: false,
-                    }),
-                ]),
-            ],
-        ),
-    ];
-
-    let lowered = lower(&g, &no_lit_tokens());
-    assert lowered.variant_rules.len() == 1;
-    if let Simple(s) = &lowered.variant_rules[0] {
-        if let Repeat(rep) = &s.body.ops[0] {
-            if let Suppressed = &rep.strategy {
-                assert true;
-            } else {
-                panic("expected RepeatStrategy::Suppressed in variant body");
-            }
-        } else {
-            panic("expected Op::Repeat in variant body");
-        }
-    } else {
-        panic("expected Rule::Simple for variant body");
-    }
-    // The base (non-variant) rule still uses Plain.
+    // `a`'s tail `X*` gates on the caller's continuation.
     if let Simple(s) = &lowered.parser_rules[1] {
         if let Repeat(rep) = &s.body.ops[0] {
-            if let Plain = &rep.strategy {
-                assert true;
-            } else {
-                panic("expected RepeatStrategy::Plain in base rule");
-            }
+            assert rep.gate_caller_follow, "expected gate_caller_follow on a's tail Repeat";
         } else {
-            panic("expected Op::Repeat in base rule");
+            panic("expected Repeat in a");
         }
     } else {
-        panic("expected Rule::Simple for base rule 'a'");
+        panic("expected Rule::Simple for a");
     }
 }
 
-test "lower variant body uses WithFollowSubtraction when mask partially overlaps inner first" {
-    // `t : X | Y ;` — single-token rule whose first set is {X, Y}.
-    // `a : t* ;` — the Repeat's inner is `t`, which IS a single-token
-    //   element (its callee always consumes exactly one token), so
-    //   tail_greedy_first_of_rule(a) = first(t) = {X, Y}.
-    // `r : a X ;` — caller follow at `a` is {X}; mask = {X}.
-    // Variant body re-lowers `a`'s `t*` with mask = {X}; the inner
-    // first = {X, Y}, subtract mask → effective = {Y}.
-    // → WithFollowSubtraction(effective_first = [Y]).
+test "lower: RuleCall at the rule tail forwards the runtime follow" {
+    // `r : a ; a : X* ;` — `a` is the last element of `r`, so its
+    // continuation is whatever `r` was itself called with → Forward.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [
-        ParserRule::new(
-            "r",
-            Visibility::Default,
-            [],
-            [
-                alt_of([
-                    Element::RuleRef(RuleRefElement::new("a")),
-                    Element::TokenRef(TokenRefElement::new("X")),
-                ]),
-            ],
-        ),
-        ParserRule::new(
-            "a",
-            Visibility::Default,
-            [],
-            [
-                alt_of([
-                    Element::Repeat(RepeatElement {
-                        kind: RepeatKind::Star,
-                        element: Element::RuleRef(RuleRefElement::new("t")),
-                        non_greedy: false,
-                    }),
-                ]),
-            ],
-        ),
-        ParserRule::new(
-            "t",
-            Visibility::Default,
-            [],
-            [
-                alt_of([Element::TokenRef(TokenRefElement::new("X"))]),
-                alt_of([Element::TokenRef(TokenRefElement::new("Y"))]),
-            ],
-        ),
+        ParserRule::new("r", Visibility::Default, [], [
+            alt_of([Element::RuleRef(RuleRefElement::new("a"))]),
+        ]),
+        ParserRule::new("a", Visibility::Default, [], [
+            alt_of([
+                Element::Repeat(RepeatElement {
+                    kind: RepeatKind::Star,
+                    element: Element::TokenRef(TokenRefElement::new("X")),
+                    non_greedy: false,
+                }),
+            ]),
+        ]),
     ];
 
     let lowered = lower(&g, &no_lit_tokens());
-    assert lowered.variant_rules.len() == 1, `expected 1 variant, got {lowered.variant_rules.len()}`;
-    if let Simple(s) = &lowered.variant_rules[0] {
-        if let Repeat(rep) = &s.body.ops[0] {
-            if let WithFollowSubtraction(wfs) = &rep.strategy {
-                assert wfs.effective_first.len() == 1;
-                assert wfs.effective_first[0] == "TK_Y", wfs.effective_first[0];
-            } else {
-                panic("expected RepeatStrategy::WithFollowSubtraction");
-            }
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let RuleCall(rc) = &s.body.ops[0] {
+            assert rc.follow_arg matches { Forward }, "expected Forward FollowArg at a tail call";
         } else {
-            panic("expected Op::Repeat in variant body");
+            panic("expected RuleCall");
         }
     } else {
-        panic("expected Rule::Simple for variant body");
+        panic("expected Rule::Simple for r");
     }
 }
 

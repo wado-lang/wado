@@ -1286,13 +1286,15 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
     let index_25: i32;
     let index_27: i32;
     let _licm_buf_29: ref "core:prelude/string.wado//String";
-    let _licm_buf_30: ref "core:prelude/string.wado//String";
+    let _licm_arith_30: i32;
     let _licm_buf_31: ref "core:prelude/string.wado//String";
     let _licm_buf_32: ref "core:prelude/string.wado//String";
-    let _licm_repr_33: ref Array<u8>;
-    let _licm_repr_34: ref Array<u8>;
+    let _licm_arith_33: i32;
+    let _licm_buf_34: ref "core:prelude/string.wado//String";
     let _licm_repr_35: ref Array<u8>;
     let _licm_repr_36: ref Array<u8>;
+    let _licm_repr_37: ref Array<u8>;
+    let _licm_repr_38: ref Array<u8>;
     content_len = self_12 = self.buf; self_12.used - start_pos;
     if (if self.width <= 0 -> i32 {
         1;
@@ -1312,30 +1314,31 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, left_pad);
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
-        _licm_repr_33 = _licm_buf_29.repr;
+        _licm_arith_30 = start_pos + left_pad;
+        _licm_repr_35 = _licm_buf_29.repr;
         b153: block {
             l154: loop {
                 if i_8 < 0 {
                     break b153;
                 }
-                index_14 = (start_pos + left_pad) + i_8;
+                index_14 = _licm_arith_30 + i_8;
                 index_17 = start_pos + i_8;
-                value_15 = builtin::array_get_u8(_licm_repr_33, index_17);
-                builtin::array_set_u8(_licm_repr_33, index_14, value_15);
+                value_15 = builtin::array_get_u8(_licm_repr_35, index_17);
+                builtin::array_set_u8(_licm_repr_35, index_14, value_15);
                 i_8 = i_8 - 1;
                 continue l154;
             };
         };
         j_9 = 0;
-        _licm_buf_30 = self.buf;
-        _licm_repr_34 = _licm_buf_30.repr;
+        _licm_buf_31 = self.buf;
+        _licm_repr_36 = _licm_buf_31.repr;
         b156: block {
             l157: loop {
                 if j_9 >= left_pad {
                     break b156;
                 }
                 index_19 = start_pos + j_9;
-                builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
+                builtin::array_set_u8(_licm_repr_36, index_19, fill_byte);
                 j_9 = j_9 + 1;
                 continue l157;
             };
@@ -1344,31 +1347,32 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
     } else {
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, padding);
         i_10 = content_len - 1;
-        _licm_buf_31 = self.buf;
-        _licm_repr_35 = _licm_buf_31.repr;
+        _licm_buf_32 = self.buf;
+        _licm_arith_33 = start_pos + padding;
+        _licm_repr_37 = _licm_buf_32.repr;
         b159: block {
             l160: loop {
                 if i_10 < 0 {
                     break b159;
                 }
-                index_22 = (start_pos + padding) + i_10;
+                index_22 = _licm_arith_33 + i_10;
                 index_25 = start_pos + i_10;
-                value_23 = builtin::array_get_u8(_licm_repr_35, index_25);
-                builtin::array_set_u8(_licm_repr_35, index_22, value_23);
+                value_23 = builtin::array_get_u8(_licm_repr_37, index_25);
+                builtin::array_set_u8(_licm_repr_37, index_22, value_23);
                 i_10 = i_10 - 1;
                 continue l160;
             };
         };
         j_11 = 0;
-        _licm_buf_32 = self.buf;
-        _licm_repr_36 = _licm_buf_32.repr;
+        _licm_buf_34 = self.buf;
+        _licm_repr_38 = _licm_buf_34.repr;
         b162: block {
             l163: loop {
                 if j_11 >= padding {
                     break b162;
                 }
                 index_27 = start_pos + j_11;
-                builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
+                builtin::array_set_u8(_licm_repr_38, index_27, fill_byte);
                 j_11 = j_11 + 1;
                 continue l163;
             };

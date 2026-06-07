@@ -27,6 +27,8 @@ use {
     peek_dedup_name,
     element_field_info,
     replay_element_names,
+    all_alts_are_single_token,
+    single_token_first,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
@@ -54,6 +56,7 @@ use {
     TokenOp,
     LiteralOp,
     RuleCallOp,
+    FollowArg,
     WildcardOp,
     ExcludedOp,
     RepeatOp,
@@ -83,6 +86,51 @@ use {
 use { unwrap_label } from "./lr_util.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
 
+/// Append the defaulted runtime FOLLOW-continuation argument to a
+/// parse/scan/LR function signature, BEFORE any `min_prec` so a
+/// non-precedence call site can pass `parse_X(p, follow)` uniformly.
+/// Emitted only when the grammar has a caller-FOLLOW gate
+/// (`ctx.emit_follow()`); guarded at every call site so grammars with
+/// no FOLLOW repair pay no per-frame cost. Repair call sites pass a
+/// `FOLLOW_MASK_<id>` constant or forward their own `follow`. See
+/// `follow_yields` in `runtime.wado`.
+fn add_follow_param(f: &mut FnSpec) {
+    f.add_param_spec(ParamSpec {
+        name: "follow",
+        type_str: "&List<List<i32>>",
+        default_value: Option::<String>::Some("&EMPTY_FOLLOW"),
+    });
+}
+
+/// `", follow"` when the grammar emits FOLLOW machinery, else `""`.
+/// Appended after a call's fixed arguments so the forwarded `follow`
+/// is passed only when the callee actually declares the parameter
+/// (`ctx.emit_follow()`). See `GenContext::emit_follow`.
+fn follow_sep(emit_follow: bool) -> String {
+    if emit_follow {
+        return ", follow";
+    }
+    return "";
+}
+
+/// `", <FollowArg expr>"` (e.g. `, &FOLLOW_MASK_3`) when the grammar
+/// emits FOLLOW machinery, else `""`.
+fn follow_arg_sep(emit_follow: bool, arg: &FollowArg) -> String {
+    if emit_follow {
+        return `, {follow_arg_expr(arg)}`;
+    }
+    return "";
+}
+
+/// `", &EMPTY_FOLLOW"` (entry-stub default) when the grammar emits
+/// FOLLOW machinery, else `""`.
+fn empty_follow_sep(emit_follow: bool) -> String {
+    if emit_follow {
+        return ", &EMPTY_FOLLOW";
+    }
+    return "";
+}
+
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
     // by name and order. emit still consumes surface IR for the body
@@ -100,43 +148,12 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
         let lowered_rule = &lowered.parser_rules[i];
         gen_parse_fn(w, rule, lowered_rule, ctx);
     }
-    // Phase 4 — variant emission consumes `lowered.variant_rules`
-    // as its primary source. The follow-variant registry is
-    // populated in lock-step by `lower`'s element walks: every
-    // `RuleRef` arm in `lower::lower_op` / `lower::lower_scan_element`
-    // calls `ctx.intern_follow_variant`, which is idempotent on the
-    // canonical `(rule, mask, k_prefix_mask)` triple — so the same
-    // walk that builds the IR mints the ids, and
-    // `lower::lower_variant_rules` immediately lowers a body for each
-    // registered entry. By the time we get here every registry entry
-    // already has a matching `variant_rules` slot. Nothing in the
-    // emit path registers fresh variants — emit
-    // (`gen_parse_fn_named` / `gen_scan_function_named` / the LR
-    // helpers) only reads ids back through `ctx.follow_variants()`.
-    // The fixed-point loop below is defensive: it iterates the
-    // registry to a stable length so that any future emit-time
-    // registration (or a bug that re-adds one) gets noticed instead
-    // of silently producing a dangling `__follow_<id>` reference.
-    // The assertion captures the invariant explicitly — registry
-    // length must never exceed `variant_rules` length once
-    // `lower_with_ctx` has run.
-    let mut emitted_count = 0;
-    loop {
-        let entries = ctx.follow_variants();
-        let cur = entries.len();
-        if cur == emitted_count {
-            break;
-        }
-        for let mut idx = emitted_count; idx < cur; idx += 1 {
-            let entry = &entries[idx];
-            assert idx < lowered.variant_rules.len(), `gen_parser: follow-variant entry #{idx} ({entry.rule_name} mask=[{join_kinds(
-                &entry.mask,
-            )}]) lives in the registry without a matching lowered.variant_rules entry — lower's RuleRef arms (the only path that mints new entries via ctx.intern_follow_variant) and lower::lower_variant_rules (which lowers one body per entry) ran in lock-step before emit, so this assertion firing means a fresh registration leaked into the emit phase`;
-            emit_follow_variant_from_gir(w, &lowered.variant_rules[idx], ctx);
-        }
-        emitted_count = cur;
-    }
-    gen_parse_entry(w, lowered);
+    // The runtime-FOLLOW redesign retired per-(rule, mask) variant
+    // emission: each rule is emitted exactly once and threads the
+    // caller's continuation at runtime via the `follow` argument (see
+    // `follow_yields` / `FollowArg`). The follow-mask globals are
+    // emitted by `gen_follow_mask_globals` at the end of codegen.
+    gen_parse_entry(w, lowered, ctx.emit_follow());
 }
 
 fn join_kinds(kinds: &List<String>) -> String {
@@ -148,52 +165,6 @@ fn join_kinds(kinds: &List<String>) -> String {
         result.push_str(&kinds[i]);
     }
     return result;
-}
-
-/// Emit one follow-aware rule variant from its lowered `Rule`. The
-/// variant's `FollowVariant` lives on `header.variant_of` (attached
-/// by `lower::attach_variant_header`); we extract it, look the base
-/// surface `ParserRule` up by name, and call the same emit core used
-/// for the regular rule body. ctx state is saved / restored across
-/// the call so subsequent variants and the trailing
-/// `gen_parse_entry` see clean state.
-fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &mut GenContext) {
-    let entry_opt = match *variant_rule {
-        Simple(s) => s.header.variant_of,
-        MultiAlt(m) => m.header.variant_of,
-        LeftRecursive(l) => l.header.variant_of,
-    };
-    let entry = if let Some(v) = entry_opt {
-        v;
-    } else {
-        panic(
-            "emit_follow_variant_from_gir: variant_rule.header.variant_of is null; lower must tag every variant body",
-        );
-    };
-    let rule = if let Some(r) = ctx.find_rule(&entry.rule_name) {
-        r;
-    } else {
-        panic(
-            `emit_follow_variant_from_gir: rule '{entry.rule_name}' not found`,
-        );
-    };
-
-    // The variant's mask is baked at lower time on every
-    // mask-sensitive op (greedy strategies via `RepeatStrategy`,
-    // Optional+RuleCall via `RepeatOp.position_mask` unioned with
-    // the caller-supplied follow at emit time), so emit just runs
-    // the regular function-body emitters; no walker state needs to
-    // be swapped here.
-    let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
-    let parse_name = `_parse_{rule.snake_name}__follow_{entry.id}`;
-    let parse_inner = `{parse_name}__inner`;
-    if entry.scan_used {
-        gen_scan_function_named(w, rule, variant_rule, ctx, &scan_name, /*allow_lr_split=*/ true);
-    }
-    if entry.parse_used {
-        gen_parse_fn_named(w, rule, variant_rule, ctx, &parse_inner, &scan_name, /*emit_visibility=*/ false);
-        gen_rule_entry_wrapper(w, &parse_name, &parse_inner, &rule.type_name, &rule.name, rule_takes_min_prec(variant_rule), ctx.is_trace());
-    }
 }
 
 fn gen_parser_struct(w: &mut CodeWriter, trace: bool) {
@@ -480,6 +451,7 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, lowered_rule: 
     let mut f = FnSpec::new(&scan_name);
     f.add_param(&"tokens", &"&List<Token>");
     f.add_param(&"pos", &"i32");
+    if ctx.emit_follow() { add_follow_param(&mut f); }
     f.set_return_type(&"i32");
     f.emit_begin(w);
     w.line(&"let mut pos = pos;");
@@ -549,6 +521,7 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
     // Accept (and ignore) min_prec so call sites pass it uniformly
     // regardless of whether the target rule is left-recursive. See
     // `GenContext.scan_ruleref_min_prec` for the bt-scan use case.
+    if ctx.emit_follow() { add_follow_param(&mut f); }
     f.add_param_spec(ParamSpec {
         name: "min_prec",
         type_str: "i32",
@@ -558,10 +531,10 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
     f.emit_begin(w);
 
     if rule.alternatives.len() == 1 {
-        // `lower_rule` maps every single-alt surface rule (including its
-        // follow variants) to `Rule::Simple` — multi-alt and LR shapes
-        // require 2+ surface alts. The pattern is therefore total over
-        // the shape we observe here.
+        // `lower_rule` maps every single-alt surface rule to
+        // `Rule::Simple` — multi-alt and LR shapes require 2+ surface
+        // alts. The pattern is therefore total over the shape we observe
+        // here.
         let scan_body = if let Simple(s) = lowered_rule {
             &s.scan_body;
         } else {
@@ -616,36 +589,6 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
     w.blank();
 }
 
-/// Returns true if every alt in `alts` is a single TokenRef or Literal
-/// element. Such rules collapse to a one-token kind check at scan time.
-fn all_alts_are_single_token(alts: &List<Alternative>) -> bool {
-    for let alt of alts {
-        if alt.elements.len() != 1 {
-            return false;
-        }
-        let elem = &alt.elements[0];
-        let is_token = match elem {
-            TokenRef(_) | Literal(_) => true,
-            _ => false,
-        };
-        if !is_token {
-            return false;
-        }
-    }
-    return true;
-}
-
-/// Return the matched token-kind constant for a single TokenRef/Literal
-/// element. Caller is expected to have screened the element via
-/// `all_alts_are_single_token`.
-fn single_token_first(elem: &Element) -> String {
-    return match elem {
-        TokenRef(t) => `TK_{t.name}`,
-        Literal(l) => literal_const_name(&l.text),
-        _ => panic("single_token_first: unexpected element"),
-    };
-}
-
 /// Generate scan functions for a left-recursive rule. Mirrors the parse-side
 /// precedence-climbing infrastructure so that scan success/failure is a
 /// faithful predicate for parse success/failure:
@@ -664,6 +607,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<L
     let mut fa = FnSpec::new(&atom_name);
     fa.add_param(&"tokens", &"&List<Token>");
     fa.add_param(&"pos", &"i32");
+    if ctx.emit_follow() { add_follow_param(&mut fa); }
     fa.set_return_type(&"i32");
     fa.emit_begin(w);
     let mut non_lr_alts: List<Alternative> = [];
@@ -690,6 +634,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<L
     let mut f2 = FnSpec::new(fn_name);
     f2.add_param(&"tokens", &"&List<Token>");
     f2.add_param(&"pos", &"i32");
+    if ctx.emit_follow() { add_follow_param(&mut f2); }
     f2.add_param_spec(ParamSpec {
         name: "min_prec",
         type_str: "i32",
@@ -697,7 +642,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<L
     });
     f2.set_return_type(&"i32");
     f2.emit_begin(w);
-    w.line(&`let mut pos = {atom_name}(tokens, pos);`);
+    w.line(&`let mut pos = {atom_name}(tokens, pos{follow_sep(ctx.emit_follow())});`);
     w.line(&"if pos < 0 { return -1; }");
     gen_scan_lr_suffix_dispatch(w, rule, lr_alts, lr_dispatch, ctx, fn_name);
     w.line(&"return pos;");
@@ -722,6 +667,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &L
         let mut f = FnSpec::new(&suffix_fn);
         f.add_param(&"tokens", &"&List<Token>");
         f.add_param(&"pos", &"i32");
+        if ctx.emit_follow() { add_follow_param(&mut f); }
         f.set_return_type(&"i32");
         f.emit_begin(w);
         w.line(&"let mut pos = pos;");
@@ -778,7 +724,7 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &
             let lr_idx = valid_lr_indices[group[0]];
             let prec = lr_precs[group[0]];
             let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
-            gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
+            gen_scan_lr_call_with_prec(w, &suffix_fn, prec, ctx.emit_follow());
         } else {
             gen_scan_lr_overlap_dispatch(
                 w,
@@ -803,7 +749,7 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &
     w.end();  // loop
 }
 
-fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32) {
+fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32, emit_follow: bool) {
     // The LR loop must always commit to the longest valid prefix it can
     // build. If the suffix scan fails (e.g. the suffix's first token matches
     // but a deeper element does not, as in `statement letterA 'b'` consuming
@@ -814,7 +760,7 @@ fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32)
     // makes the same decision lazily after attempting the suffix.
     w.begin(&`if {prec} >= min_prec`);
     w.line(&`let lr_saved_pos = pos;`);
-    w.line(&`pos = {*suffix_fn}(tokens, pos);`);
+    w.line(&`pos = {*suffix_fn}(tokens, pos{follow_sep(emit_follow)});`);
     w.line(&"if pos < 0 { pos = lr_saved_pos; break; }");
     w.else_begin(&"else");
     w.line(&"break;");
@@ -856,7 +802,7 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
                 } else {
                     w.else_begin(&`else if suffix_kind == {*tk}`);
                 }
-                gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
+                gen_scan_lr_call_with_prec(w, &suffix_fn, prec, ctx.emit_follow());
                 emitted.insert(*tk);
             }
         }
@@ -904,10 +850,10 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
             let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
             if k == last_k {
                 if sub_first {
-                    gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
+                    gen_scan_lr_call_with_prec(w, &suffix_fn, prec, ctx.emit_follow());
                 } else {
                     w.else_begin(&"else");
-                    gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
+                    gen_scan_lr_call_with_prec(w, &suffix_fn, prec, ctx.emit_follow());
                     w.end();
                 }
             } else {
@@ -919,7 +865,7 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
                 } else {
                     w.else_begin(&`else if {sub_cond}`);
                 }
-                gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
+                gen_scan_lr_call_with_prec(w, &suffix_fn, prec, ctx.emit_follow());
             }
         }
         emitted.insert(*shared_tk);
@@ -1206,11 +1152,9 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         return;
     }
     if let RuleCall(rc) = se {
-        let fn_name = if let Some(id) = rc.variant_id {
-            `scan_{rc.target_snake}__follow_{id}`;
-        } else {
-            `scan_{rc.target_snake}`;
-        };
+        // Single scan callee + runtime FOLLOW arg.
+        let fn_name = `scan_{rc.target_snake}`;
+        let follow_sep = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
         // `min_prec_arg`, when set, is the baked precedence for a
         // self-recursive call inside an LR suffix (stamped by
         // `stamp_lr_self_ref_min_prec`). Otherwise fall back to
@@ -1223,7 +1167,7 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         } else {
             min_prec_override;
         };
-        w.line(&`pos = {fn_name}(tokens, pos, {min_prec});`);
+        w.line(&`pos = {fn_name}(tokens, pos{follow_sep}, {min_prec});`);
         w.line(&`if pos < 0 \{ {*fail_stmt} \}`);
         return;
     }
@@ -1271,11 +1215,8 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         return;
     }
     if let RuleCall(rc) = se {
-        let fn_name = if let Some(id) = rc.variant_id {
-            `scan_{rc.target_snake}__follow_{id}`;
-        } else {
-            `scan_{rc.target_snake}`;
-        };
+        let fn_name = `scan_{rc.target_snake}`;
+        let follow_sep = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
         // `_assign` only fires inside Repeat bodies — never reachable
         // from bt-scan's trailing-self-ref site, so `min_prec` here
         // is always the rule's default `0` (or whatever
@@ -1285,7 +1226,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         } else {
             0;
         };
-        w.line(&`pos = {fn_name}(tokens, pos, {min_prec});`);
+        w.line(&`pos = {fn_name}(tokens, pos{follow_sep}, {min_prec});`);
         return;
     }
     if let Wildcard = se {
@@ -1322,65 +1263,8 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
     }
 }
 
-/// Op-driven scan-side Repeat dispatcher. Reads `ScanRepeatStrategy`
-/// to pick the loop guard set and emit the appropriate loop shape.
-/// Per-call-site `variant_id` comes from the lower-baked
-/// `ScanRuleCallElem`, so the dispatcher does not need to thread an
-/// outer call-follow through the body.
-/// Scan-side mirror of [`k_prefix_match_expr`]: builds the K-token
-/// peek expression in the `tokens[pos…]` form scan helpers use.
-/// Returns `""` when the mask is empty so callers skip emission.
-fn k_prefix_match_expr_scan(mask: &List<List<String>>, ctx: &mut GenContext) -> String {
-    if mask.is_empty() {
-        return "";
-    }
-    let mut parts: List<String> = [];
-    for let mut d = 0; d < mask.len(); d += 1 {
-        let depth_set = &mask[d];
-        if depth_set.is_empty() {
-            continue;
-        }
-        // Bounds check at every depth: the variant body's gate ran in a
-        // parse context where `peek_at(d)` returns `TK_EOF` past the
-        // end; the scan form has no such fall-through, so we require
-        // `pos + d < tokens.len()`.
-        let bounds = `pos + {d} < tokens.len()`;
-        let peek_expr = `tokens[pos + {d}].kind`;
-        let depth_check = ctx.kind_check_str(depth_set, &peek_expr);
-        parts.push(`({bounds} && {depth_check})`);
-    }
-    if parts.is_empty() {
-        return "";
-    }
-    let mut condition = String::with_capacity(64);
-    let mut first = true;
-    for let p of &parts {
-        if !first {
-            condition.push_str(&" && ");
-        }
-        first = false;
-        condition.push_str(p);
-    }
-    return condition;
-}
-
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenContext, fail_stmt: &String) {
-    // Suppressed: mask covers all of the inner's first set — no
-    // iterations possible.
-    if let Suppressed = &re.strategy {
-        if let Plus = re.kind {
-            // Plus mandatory — emit one mandatory iteration; the runtime
-            // will fail with the parse error then.
-            gen_scan_op_element(w, &re.body, ctx, fail_stmt);
-        }
-        return;
-    }
-    // Greedy: pick loop_first based on strategy.
-    let loop_first = if let WithFollowSubtraction(s) = &re.strategy {
-        s.effective_first;
-    } else {
-        re.inner_first;
-    };
+    let loop_first = re.inner_first;
 
     // K-prefix yield gate: when the caller's deterministic K-prefix
     // matches at this scan position, the scan must stop (mirroring
@@ -1388,7 +1272,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
     // otherwise the scan tournament that picks the calling rule's alt
     // would over-count this Repeat and reject the alt that actually
     // matches.
-    let k_match_scan = k_prefix_match_expr_scan(&re.k_prefix_mask, ctx);
+    // The scan-side gate reads the runtime FOLLOW continuation
+    // (`follow` param) instead of a baked mask, exactly mirroring the
+    // parse-side `emit_caller_follow_gate`. Inert when `follow` is empty.
+    let k_match_scan = if re.gate_caller_follow {
+        "follow_yields(tokens, pos, follow, TK_EOF)";
+    } else {
+        "";
+    };
 
     if let Optional = re.kind {
         // OptionalLookahead doesn't reach this path (it's a
@@ -1401,10 +1292,8 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
         // the caller-side follow first (the tokens that may appear
         // right after this Optional in the surrounding alt) so we
         // don't fire the Optional on a token that belongs to the
-        // caller's next position. Strategy-subtracted `loop_first`
-        // already accounts for the variant mask; the additional
-        // `caller_follow_first` subtraction matches the surface
-        // emitter's `combined_follow = follow_first ∪ mask`.
+        // caller's next position. The `caller_follow_first` subtraction
+        // matches the surface emitter's `combined_follow = follow_first`.
         let body_is_rulecall = re.body matches { RuleCall(_) };
         let effective_first = if body_is_rulecall && !re.caller_follow_first.is_empty() {
             subtract_sets(&loop_first, &re.caller_follow_first);
@@ -1689,7 +1578,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
             true,
         ),
     }
-    gen_rule_entry_wrapper(w, &canonical, &inner, &rule.type_name, &rule.name, rule_takes_min_prec(lowered_rule), ctx.is_trace());
+    gen_rule_entry_wrapper(w, &canonical, &inner, &rule.type_name, &rule.name, rule_takes_min_prec(lowered_rule), ctx.emit_follow(), ctx.is_trace());
 }
 
 /// Emit a thin entry wrapper named `outer_name` that delegates to
@@ -1775,9 +1664,16 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
-fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool, trace: bool) {
+fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool, emit_follow: bool, trace: bool) {
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
+    // `follow` precedes `min_prec` so a non-precedence call site can pass
+    // just `_parse_X(p, follow)` and let `min_prec` default — uniform for
+    // LR and non-LR targets. Omitted entirely when the grammar has no
+    // caller-FOLLOW gate (`emit_follow`).
+    if emit_follow {
+        add_follow_param(&mut f);
+    }
     if takes_min_prec {
         f.add_param_spec(ParamSpec {
             name: "min_prec",
@@ -1792,10 +1688,13 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
         w.line(&`trace_enter(p, &{lit});`);
         w.line(&"p.trace_depth += 1;");
     }
+    // Forward the runtime FOLLOW continuation to the inner body so its
+    // tail-greedy gate sees the caller's continuation.
+    let fsep = if emit_follow { ", follow" } else { "" };
     if takes_min_prec {
-        w.line(&`let r = {*inner_name}(p, min_prec);`);
+        w.line(&`let r = {*inner_name}(p{fsep}, min_prec);`);
     } else {
-        w.line(&`let r = {*inner_name}(p);`);
+        w.line(&`let r = {*inner_name}(p{fsep});`);
     }
     if trace {
         w.line(&"p.trace_depth -= 1;");
@@ -1815,15 +1714,13 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
     w.blank();
 }
 
-/// Body emitter for a single-alt rule, parameterised by function
-/// name so the follow-aware variant pass can reuse it with
-/// `parse_<rule>__follow_<id>`. No internal classification — the
-/// caller already committed to the Simple shape.
+/// Body emitter for a single-alt rule, parameterised by function name.
+/// No internal classification — the caller already committed to the
+/// Simple shape.
 ///
 /// `lowered_rule` is the corresponding `Rule::Simple` (or a
-/// `Rule::MultiAlt` / `Rule::LeftRecursive` in the variant-emission
-/// path where we still route through `gen_parse_fn_named` and the
-/// alt-len-1 shortcut lands here). `rule_alt_body` resolves the
+/// `Rule::MultiAlt` / `Rule::LeftRecursive` whose alt-len-1 shortcut in
+/// `gen_parse_fn_named` lands here). `rule_alt_body` resolves the
 /// single AltBody whose `fields` drives the struct-literal field
 /// assignments emitted after the alt body.
 fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, emit_visibility: bool) {
@@ -1834,6 +1731,7 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule
 
     let mut f = FnSpec::new(fn_name);
     f.add_param(&"p", &"&mut Parser");
+    if ctx.emit_follow() { add_follow_param(&mut f); }
     f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
     w.line(&"let start = p.peek().span.start;");
@@ -1844,20 +1742,56 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule
 }
 
 
-/// Body emitter shared by `gen_parse_fn` and the follow-aware variant
-/// pass. The variant pass calls this with
-/// `fn_name = parse_<rule>__follow_<id>` against a `variant_rule` that
-/// lower already produced with `variant_mask = entry.mask` threaded
-/// through — so the regular emit path produces the variant's body
-/// unmodified. Tail-greedy suppression is baked on
-/// `RepeatOp.strategy`, the per-outer-position mask emit unions with
-/// the caller-supplied follow at Optional+RuleCall lives on
-/// `RepeatOp.position_mask`, and `RuleCallOp.variant_id` carries the
-/// variant-selection decision at inner `RuleRef` sites.
+/// Compact parser for an all-single-token multi-alt rule. The CST node
+/// is a `{ span, token }` struct (`gen_multi_alt_cst` single-token path),
+/// so parsing reduces to: confirm the lookahead is in the rule's first
+/// set, consume the one token, and build the struct. The no-match path is
+/// the shared `gen_error_fallback`, so the diagnostic matches the cascade's.
+fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, emit_visibility: bool) {
+    let type_name = rule.type_name;
+    if emit_visibility {
+        gen_visibility_comment(w, &rule.visibility);
+    }
+    let mut f = FnSpec::new(fn_name);
+    f.add_param(&"p", &"&mut Parser");
+    if ctx.emit_follow() { add_follow_param(&mut f); }
+    f.set_return_type(&`Result<{type_name}, ParseError>`);
+    f.emit_begin(w);
+    w.line(&"let start = p.peek().span.start;");
+    w.line(&"let kind = p.peek_kind();");
+
+    let mut firsts: List<String> = [];
+    for let alt of &rule.alternatives {
+        let t = single_token_first(&alt.elements[0]);
+        if !first_contains(&firsts, &t) {
+            firsts.push(t);
+        }
+    }
+    let check = ctx.kind_check_str(&firsts, &"kind");
+    w.begin(&`if {check}`);
+    w.line(&"let token = p.expect(kind)?;");
+    w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
+    w.indent();
+    emit_clamped_span_field(w);
+    w.line(&"token,");
+    w.dedent();
+    w.line(&"});");
+    w.end();
+    gen_error_fallback(w, rule, &type_name, ctx);
+    w.end();
+    w.blank();
+}
+
+/// Body emitter for multi-alt and left-recursive rules. The
+/// tail-position caller-FOLLOW repair is threaded at runtime: each
+/// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
+/// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
+/// path needs no per-(rule, mask) specialisation.
 ///
-/// `emit_visibility` is `false` for variant emission to suppress the
-/// `pub`/`export` doc comment on the variant function (variants are
-/// implementation details, not part of the rule's exposed surface).
+/// `emit_visibility` gates the `pub`/`export` doc comment on the
+/// emitted function. It is `true` for every live call site today;
+/// the parameter survives from the retired follow-variant pass, which
+/// emitted implementation-detail clones with it set `false`.
 fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, emit_visibility: bool) {
     // Variant emission and the shared dispatch path route through
     // here. Single-alt rules are handled by the dedicated
@@ -1865,6 +1799,17 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     // below doesn't run for the trivial shape.
     if rule.alternatives.len() == 1 {
         gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, fn_name, emit_visibility);
+        return;
+    }
+
+    // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
+    // `keyword`) use a compact `{ span, token }` struct (see
+    // `gen_multi_alt_cst`); the parser is a single first-set check plus one
+    // construction instead of an N-way `if kind == TK_X` cascade. The scan
+    // side already collapses these (`gen_scan_function_named`); the result is
+    // far smaller and no slower than the cascade.
+    if all_alts_are_single_token(&rule.alternatives) {
+        gen_parse_fn_single_token(w, rule, ctx, fn_name, emit_visibility);
         return;
     }
 
@@ -1933,6 +1878,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
 
                     let mut f = FnSpec::new(&helper_name);
                     f.add_param(&"p", &"&mut Parser");
+                    if ctx.emit_follow() { add_follow_param(&mut f); }
                     f.set_return_type(&`Result<{type_name}, ParseError>`);
                     f.emit_begin(w);
                     w.line(&"let start = p.peek().span.start;");
@@ -1967,6 +1913,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         let atom_name = `{*fn_name}_atom`;
         let mut f = FnSpec::new(&atom_name);
         f.add_param(&"p", &"&mut Parser");
+        if ctx.emit_follow() { add_follow_param(&mut f); }
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
@@ -2001,6 +1948,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         // Callers without a precedence context omit min_prec and get 0.
         let mut f2 = FnSpec::new(fn_name);
         f2.add_param(&"p", &"&mut Parser");
+        if ctx.emit_follow() { add_follow_param(&mut f2); }
         f2.add_param_spec(ParamSpec {
             name: "min_prec",
             type_str: "i32",
@@ -2009,7 +1957,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         f2.set_return_type(&`Result<{type_name}, ParseError>`);
         f2.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
-        w.line(&`let mut result = {*fn_name}_atom(p)?;`);
+        w.line(&`let mut result = {*fn_name}_atom(p{follow_sep(ctx.emit_follow())})?;`);
         gen_lr_suffix_dispatch(w, rule, &type_name, lr_alts, lr_dispatch, ctx, true, fn_name, scan_fn_name);
         w.line(&`return Result::<{type_name}, ParseError>::Ok(result);`);
         w.end();
@@ -2017,6 +1965,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     } else {
         let mut f = FnSpec::new(fn_name);
         f.add_param(&"p", &"&mut Parser");
+        if ctx.emit_follow() { add_follow_param(&mut f); }
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
@@ -2308,9 +2257,8 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &List<Element>, op
 /// overlaps the inner's first by design there (`(= typeParameters?
 /// singleExpression)?` patterns), and applying it would empty the gate
 /// and silently skip the optional. Clearing the follow at inner
-/// positions defers the gate to `rep_op.position_mask` (the
-/// variant-level expectation at the outer alt-position) which emit
-/// unions with the cleared follow inside
+/// positions leaves the tail-position caller-FOLLOW repair to the
+/// runtime `gate_caller_follow` gate emitted by
 /// `gen_op_repeat_optional_rulecall`.
 ///
 /// Star / Plus and non-greedy still need the caller-side follow:
@@ -2338,7 +2286,7 @@ fn inner_walker_follow_for_repeat(rep: &RepeatElement, rep_op: &RepeatOp, elemen
 
 /// True when the lowered op is a leaf shape that emit can render
 /// directly from `op.field` / `op.kind` / `op.target_snake` /
-/// `op.variant_id` / `op.min_prec_arg` — i.e. lower has resolved
+/// `op.follow_arg` / `op.min_prec_arg` — i.e. lower has resolved
 /// every decision and the emit body is a single `let … = …?;` line.
 /// Repeat / Group / ListLabel ops still flow through the surface-IR
 /// helpers in this slice and will migrate in later (2) slices.
@@ -2365,9 +2313,9 @@ fn op_is_rulecall(op: &Op) -> bool {
 }
 
 /// Emit a single leaf-op parse line, reading the deduped field name
-/// and resolved token / variant / min-prec values straight from
+/// and resolved token / follow-arg / min-prec values straight from
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
-/// already baked in dedup, follow-variant interning, and the
+/// already baked in dedup, the per-call-site `FollowArg`, and the
 /// LR-prefix `min_prec` argument — emit does not re-derive any of
 /// it. Counterpart of the leaf arms of `gen_element` for the surface
 /// IR walker; that walker is still in use inside group bodies and
@@ -2389,11 +2337,11 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
         Token(t) => w.line(&`let {t.field} = p.expect({t.kind})?;`),
         Literal(l) => w.line(&`let {l.field} = p.expect({l.kind})?;`),
         RuleCall(r) => {
-            let fn_name = if let Some(id) = r.variant_id {
-                `_parse_{r.target_snake}__follow_{id}`;
-            } else {
-                `_parse_{r.target_snake}`;
-            };
+            // One callee per rule; the caller's continuation is
+            // threaded at runtime via `follow_arg` rather than selecting a
+            // cloned `__follow_<id>`.
+            let fn_name = `_parse_{r.target_snake}`;
+            let follow_sep = follow_arg_sep(ctx.emit_follow(), &r.follow_arg);
             // `RuleCallOp.min_prec_arg` carries the resolved precedence
             // for every self-recursive call that needs one — `lower_lr_alt_suffix`
             // stamps internal LR-suffix self-refs via
@@ -2401,9 +2349,9 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
             // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
             // reads a single source.
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`let {r.field} = {fn_name}(p, {min_prec})?;`);
+                w.line(&`let {r.field} = {fn_name}(p{follow_sep}, {min_prec})?;`);
             } else {
-                w.line(&`let {r.field} = {fn_name}(p)?;`);
+                w.line(&`let {r.field} = {fn_name}(p{follow_sep})?;`);
             }
         },
         Wildcard(wop) => w.line(&`let {wop.field} = p.match_any()?;`),
@@ -2638,12 +2586,9 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
 /// `rep_op.strategy`. The Optional-specialised strategies
 /// (`OptionalLookahead`, `OptionalShapeLookahead`, `OptionalScanGuard`)
 /// are produced by lower's `pick_optional_specialised`; when none
-/// applies, lower falls back to the mask-aware `Plain` /
-/// `WithFollowSubtraction` decision (`Suppressed` is caught earlier
-/// by `gen_op_repeat_with_follow_override` and never reaches here).
-/// `NonGreedy` only fires for `*?` / `+?` and is handled by
-/// `gen_op_repeat_non_greedy`, so this `match` is exhaustive over
-/// the strategies a greedy `?` can carry.
+/// applies, lower falls back to `Plain`. `NonGreedy` only fires for
+/// `*?` / `+?` and is handled by `gen_op_repeat_non_greedy`, so this
+/// `match` is exhaustive over the strategies a greedy `?` can carry.
 ///
 /// In every case the inner parse routes through op-driven helpers
 /// (`gen_op_inner_for_storable_repeat`, `gen_op_dispatch_element` /
@@ -2664,7 +2609,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
-            &gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &s.sig), &rep_op.k_prefix_mask, ctx),
+            &gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), rep_op.gate_caller_follow),
         ),
         OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_storable(
             w,
@@ -2676,7 +2621,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
-            &rep_op.k_prefix_mask,
+            rep_op.gate_caller_follow,
         ),
         OptionalScanGuard => {
             let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
@@ -2688,13 +2633,11 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
                 &opt_field,
                 &inner_type,
                 &inner_field,
-                &gate_cond_with_k_prefix(&`{scan_pos_var} >= 0`, &rep_op.k_prefix_mask, ctx),
+                &gate_cond_with_caller_follow(&`{scan_pos_var} >= 0`, rep_op.gate_caller_follow),
             );
         },
-        // `pick_optional_specialised` returned `null` and lower fell
-        // through to the mask-aware decision: gate on
-        // `body_first_set` (`Plain`) or the mask-subtracted variant
-        // (`WithFollowSubtraction`).
+        // `pick_optional_specialised` returned `null`: gate on
+        // `body_first_set` (`Plain`).
         Plain => emit_op_storable_optional_with_first(
             w,
             rep_op,
@@ -2703,38 +2646,27 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &opt_field,
             &inner_type,
             &inner_field,
-            &gate_cond_with_k_prefix(&ctx.first_check_str(&rep_op.body_first_set), &rep_op.k_prefix_mask, ctx),
+            &gate_cond_with_caller_follow(&ctx.first_check_str(&rep_op.body_first_set), rep_op.gate_caller_follow),
         ),
-        WithFollowSubtraction(s) => emit_op_storable_optional_with_first(
-            w,
-            rep_op,
-            inner_elem,
-            ctx,
-            &opt_field,
-            &inner_type,
-            &inner_field,
-            &gate_cond_with_k_prefix(&ctx.first_check_str(&s.effective_first), &rep_op.k_prefix_mask, ctx),
-        ),
-        // Suppressed / NonGreedy / Suppressed are caught upstream;
+        // `NonGreedy` is caught upstream by `gen_op_repeat_non_greedy`;
         // reaching here is a lower-side bug.
-        Suppressed | NonGreedy(_) => panic(
-            "gen_op_storable_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
+        NonGreedy(_) => panic(
+            "gen_op_storable_optional: NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
         ),
     };
 }
 
-/// Wrap a raw entry condition with the K-prefix yield gate. The result
-/// is `!(K_match) && (cond)` when the mask is non-empty (so the
-/// Optional only fires when the caller's deterministic K-prefix does
-/// NOT match at this position), or the unchanged `cond` otherwise.
-/// Mirrors the parse-side `gen_op_repeat_optional_*` wrapping used for
-/// leaf bodies but for the Group-bodied Optional emit paths.
-fn gate_cond_with_k_prefix(cond: &String, mask: &List<List<String>>, ctx: &mut GenContext) -> String {
-    let k_match = k_prefix_match_expr(mask, ctx);
-    if k_match.is_empty() {
-        return *cond;
+/// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
+/// yield gate: `!(follow_yields(...)) && (cond)` when the Repeat is
+/// tail-position (`gate_caller_follow`), so the Optional fires only when
+/// the caller's continuation does NOT claim the upcoming tokens; the
+/// unchanged `cond` otherwise. The Group-bodied counterpart of
+/// `gen_op_repeat_optional_{leaf,rulecall}`'s gate.
+fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> String {
+    if gate_caller_follow {
+        return `!(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && ({*cond})`;
     }
-    return `!({k_match}) && ({*cond})`;
+    return *cond;
 }
 
 /// Shared body of every storable-Optional + Group arm: emit a single
@@ -2754,9 +2686,8 @@ fn emit_op_storable_optional_with_first(w: &mut CodeWriter, rep_op: &RepeatOp, i
 /// Op-driven emit for Optional + non-storable (Transparent) Group.
 /// Dispatches on `rep_op.strategy`. Strategy coverage mirrors
 /// `gen_op_storable_optional` — Optional-specialised shapes from
-/// `pick_optional_specialised` plus the mask-aware fallback (`Plain`
-/// / `WithFollowSubtraction`). No outer `Option<T>` wrapping; each
-/// branch inlines the inner alt directly.
+/// `pick_optional_specialised` plus the `Plain` fallback. No outer
+/// `Option<T>` wrapping; each branch inlines the inner alt directly.
 fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let _ = dedup_name(&rep_op.field, name_counts);
 
@@ -2768,39 +2699,22 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
             s,
             ctx,
             name_counts,
-            &rep_op.k_prefix_mask,
+            rep_op.gate_caller_follow,
         ),
-        OptionalLookahead(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
-            &gen_lookahead_condition(ctx, &s.sig),
-            &rep_op.k_prefix_mask,
-            ctx,
+        OptionalLookahead(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_caller_follow(
+            &gen_lookahead_condition(ctx, &s.sig), rep_op.gate_caller_follow
         )),
         OptionalScanGuard => {
             let scan_pos_var = emit_op_opt_scan_guard_for_group(w, g_op, g_elem, ctx, name_counts);
-            emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
-                &`{scan_pos_var} >= 0`,
-                &rep_op.k_prefix_mask,
-                ctx,
+            emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_caller_follow(
+                &`{scan_pos_var} >= 0`, rep_op.gate_caller_follow
             ));
         },
-        Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
-            &ctx.first_check_str(&rep_op.body_first_set),
-            &rep_op.k_prefix_mask,
-            ctx,
+        Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_caller_follow(
+            &ctx.first_check_str(&rep_op.body_first_set), rep_op.gate_caller_follow
         )),
-        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(
-            w,
-            g_op,
-            g_elem,
-            ctx,
-            &gate_cond_with_k_prefix(
-                &ctx.first_check_str(&s.effective_first),
-                &rep_op.k_prefix_mask,
-                ctx,
-            ),
-        ),
-        Suppressed | NonGreedy(_) => panic(
-            "gen_op_transparent_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
+        NonGreedy(_) => panic(
+            "gen_op_transparent_optional: NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
         ),
     };
 }
@@ -2825,7 +2739,7 @@ fn emit_op_transparent_optional_with_cond(w: &mut CodeWriter, g_op: &GroupOp, g_
 /// (`gen_op_dispatch_element` / `gen_op_absent_optional_field`), and
 /// the struct construction reads `body.fields` (lower's canonical
 /// field list).
-fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String, k_prefix_mask: &List<List<String>>) {
+fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String, gate_caller_follow: bool) {
     let sa = if let SingleAlt(sas) = &g_op.shape {
         sas;
     } else {
@@ -2839,7 +2753,7 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
         // K-prefix gate: every shape's entry condition must yield to
         // the caller when the deterministic K-prefix matches, so wrap
         // each entry's condition with `!(K_match) && (cond)`.
-        let cond = gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &entry.sig), k_prefix_mask, ctx);
+        let cond = gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &entry.sig), gate_caller_follow);
 
         if is_first {
             w.begin(&`let {*opt_field}: Option<{*inner_type}> = if {cond}`);
@@ -2883,7 +2797,7 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
 /// `unwrap_optional` / `unwrap_optional_op` so the inner parse is
 /// dispatched directly at the unwrapped op shape (the shape already
 /// promised the optional fires). No struct construction.
-fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, k_prefix_mask: &List<List<String>>) {
+fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, gate_caller_follow: bool) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     let elements = &alt.elements;
@@ -2893,7 +2807,7 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
         // K-prefix gate: every shape entry's condition must yield to
         // the caller when the deterministic K-prefix matches, so wrap
         // each entry's condition with `!(K_match) && (cond)`.
-        let cond = gate_cond_with_k_prefix(&gen_lookahead_condition(ctx, &entry.sig), k_prefix_mask, ctx);
+        let cond = gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &entry.sig), gate_caller_follow);
 
         if is_first {
             w.begin(&`if {cond}`);
@@ -3234,13 +3148,13 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     }
     if let RuleRef(r) = elem {
         let field_name = dedup_name(&r.field_name, name_counts);
-        // Per-call-site follow variants are baked on `RuleCallOp.variant_id`
-        // by lower's `compute_call_site_follow` and consumed by the
-        // op-driven walkers; the surface `gen_element` arm only fires for
-        // legacy paths (Label inner / LR-suffix fallback / Consume node)
-        // where the variant is always the regular `parse_X`. Prefix LR
-        // alts' trailing self-ref is reached via `gen_op_leaf` on
-        // `RuleCallOp.min_prec_arg`, so `gen_element` never threads
+        // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
+        // by lower and consumed by the op-driven walkers; the surface
+        // `gen_element` arm only fires for legacy paths (Label inner /
+        // LR-suffix fallback / Consume node) where the call needs no
+        // follow argument and so passes the defaulted `&EMPTY_FOLLOW`.
+        // Prefix LR alts' trailing self-ref is reached via `gen_op_leaf`
+        // on `RuleCallOp.min_prec_arg`, so `gen_element` never threads
         // precedence here either.
         w.line(&`let {field_name} = _parse_{r.snake_name}(p)?;`);
         return;
@@ -3311,9 +3225,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
 /// Op-driven top-level Repeat dispatcher. Walkers reach this with
 /// `rep` (surface) and `rep_op` (lowered, carrying baked follow /
 /// strategy / scannable / has-field). Internally routes to the
-/// existing emit helpers using the baked data, with one specialised
-/// short-circuit for `RepeatStrategy::Suppressed` on `Optional` and
-/// `Star` (mask-suppressed loops emit just the storage decl).
+/// existing emit helpers using the baked data.
 fn gen_op_repeat(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &rep_op.caller_follow_first);
 }
@@ -3325,20 +3237,6 @@ fn gen_op_repeat(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx
 /// `caller_follow_first` computation alone (lower doesn't see the
 /// outer iter_follow at group-alt time).
 fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
-    // Suppressed short-circuit. Plus is mandatory (must consume ≥ 1),
-    // so even with a covering mask its loop must still emit — fall
-    // through to the Star/Plus arm in that case.
-    if let Suppressed = &rep_op.strategy {
-        let is_plus = if let Plus = rep.kind {
-            true;
-        } else {
-            false;
-        };
-        if !is_plus {
-            gen_op_repeat_suppressed(w, rep, rep_op, name_counts);
-            return;
-        }
-    }
     if rep.non_greedy {
         // `??` routes through the greedy Optional emitter because lower
         // already picked a greedy strategy for it (see `lower_repeat_op`).
@@ -3356,28 +3254,6 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     }
     // Star / Plus, greedy.
     gen_op_repeat_star_plus_greedy(w, rep, rep_op, ctx, name_counts, follow);
-}
-
-/// `RepeatStrategy::Suppressed` short-circuit. The enclosing variant's
-/// follow mask covers every iteration's first token, so the loop never
-/// enters at runtime. Emit just allocates the storage (Optional → null;
-/// Star → empty list) when the body contributes a CST field. Plus is
-/// mandatory, so a `Suppressed` strategy on Plus is a lower-side bug
-/// and the caller's later panic will surface it.
-fn gen_op_repeat_suppressed(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, name_counts: &mut List<[String, i32]>) {
-    if !rep_op.body_has_field {
-        return;
-    }
-    let inner_type = op_field_type(&rep_op.body);
-    let _ = dedup_name(&rep_op.field, name_counts);
-    if let Optional = rep.kind {
-        w.line(&`let {rep_op.field}: Option<{inner_type}> = null;`);
-        return;
-    }
-    if let Star = rep.kind {
-        w.line(&`let mut {rep_op.field}: List<{inner_type}> = [];`);
-        return;
-    }
 }
 
 /// Non-greedy `*?` / `+?`. Dispatches on `rep_op.body_shape`:
@@ -3483,8 +3359,7 @@ fn gen_op_repeat_non_greedy_transparent(w: &mut CodeWriter, rep: &RepeatElement,
 /// disambiguation); Group delegates to `gen_op_storable_optional` /
 /// `gen_op_transparent_optional` which consume the baked strategy
 /// variants; other leaves (Token / Literal / Wildcard / Excluded) use
-/// `inner_first` with the mask subtraction baked into
-/// `WithFollowSubtraction`. The `match` is exhaustive — lower asserts
+/// `inner_first` directly. The `match` is exhaustive — lower asserts
 /// at construction time that no other body shape reaches here.
 fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     return match rep_op.body_shape {
@@ -3526,21 +3401,15 @@ fn gen_op_repeat_optional_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op:
 /// is subtracted from the inner's first so a Repeat at e.g.
 /// `selector : simpleSelectorSequence ws (combinator ws)*` doesn't
 /// greedily eat the `Space` that belongs to the next iteration's
-/// `combinator`. The variant-level mask at this Repeat's outer
-/// alt-position is baked on `rep_op.position_mask` (always `[]` for
-/// non-variant bodies); the union with the caller-supplied `follow`
-/// happens here so `inner_walker_follow_for_repeat` can legitimately
-/// clear `follow` to `[]` for inner greedy Optionals where the next
-/// sibling's first overlaps the inner's first by design (e.g.
-/// `accessibilityModifier?` inside `optionalParameter`).
+/// `combinator`. The tail-position caller-FOLLOW repair is emitted
+/// separately as the runtime `gate_caller_follow` gate, so
+/// `inner_walker_follow_for_repeat` can legitimately clear `follow` to
+/// `[]` for inner greedy Optionals where the next sibling's first
+/// overlaps the inner's first by design (e.g. `accessibilityModifier?`
+/// inside `optionalParameter`).
 fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     let raw_first = rep_op.body_first_set;
-    let combined_follow = if rep_op.position_mask.is_empty() {
-        *follow;
-    } else {
-        union_kind_arrays(follow, &rep_op.position_mask);
-    };
-    let first = subtract_sets(&raw_first, &combined_follow);
+    let first = subtract_sets(&raw_first, follow);
     let inner_type = op_field_type(&rep_op.body);
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
@@ -3559,7 +3428,7 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
     // K-prefix matches at this position, yield to caller (null) so the
     // Optional body doesn't swallow tokens the caller needs. Empty
     // mask falls through to the regular `first_check` shape.
-    let k_prefix_match = k_prefix_match_expr(&rep_op.k_prefix_mask, ctx);
+    let k_prefix_match = if rep_op.gate_caller_follow { "follow_yields(&p.tokens, p.pos, follow, TK_EOF)" } else { "" };
     if !k_prefix_match.is_empty() {
         w.begin(&`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
         w.line(&"null");
@@ -3582,18 +3451,11 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
 }
 
 /// Greedy Optional whose body is a non-RuleCall leaf (Token / Literal /
-/// Wildcard / Excluded). Differs from the RuleCall arm: the caller-side
-/// follow legitimately overlaps with the inner's first
-/// (e.g. `K_DATABASE` reappearing inside `expr` via `name → keyword`),
-/// so we gate only on `inner_first - mask`. Lower's `RepeatStrategy`
-/// already bakes the mask subtraction as `WithFollowSubtraction` when
-/// it applies.
+/// Wildcard / Excluded). The tail-position caller-FOLLOW repair is
+/// threaded at runtime (`gate_caller_follow` → `follow_yields`), so the
+/// loop guard is the plain `body_first_set` check.
 fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
-    let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
-        s.effective_first;
-    } else {
-        rep_op.body_first_set;
-    };
+    let loop_first = rep_op.body_first_set;
     let inner_type = op_field_type(&rep_op.body);
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
@@ -3601,7 +3463,7 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 
     // Same K-prefix gate as the RuleCall arm — see
     // `gen_op_repeat_optional_rulecall` for the rationale.
-    let k_prefix_match = k_prefix_match_expr(&rep_op.k_prefix_mask, ctx);
+    let k_prefix_match = if rep_op.gate_caller_follow { "follow_yields(&p.tokens, p.pos, follow, TK_EOF)" } else { "" };
     if !k_prefix_match.is_empty() {
         w.begin(&`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
         w.line(&"null");
@@ -3623,64 +3485,38 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
     w.end_with(&";");
 }
 
-/// Build the boolean expression for the K-token-peek "yield to caller"
-/// gate. `mask[d]` is the set of valid caller tokens at depth `d`;
-/// the resulting expression is the AND of per-depth set-membership
-/// checks. Returns `""` when the mask is empty (so callers can skip
-/// the gate entirely).
-///
-/// Used by both the loop-style emit (`emit_k_prefix_yield_gate`,
-/// which wraps this in `if {expr} { break; }`) and the Optional
-/// emit (`gen_op_repeat_optional_*`, which threads this into the
-/// `if … { Some(...) } else { null }` conditional).
-fn k_prefix_match_expr(mask: &List<List<String>>, ctx: &mut GenContext) -> String {
-    if mask.is_empty() {
-        return "";
+/// Runtime caller-FOLLOW yield gate at a tail-greedy Repeat's
+/// iteration entry. The mask is not compiled into the body; it arrives
+/// at runtime through the function's `follow` argument. Inert when
+/// `follow` is empty (`&EMPTY_FOLLOW`), so non-repair callers see no
+/// behaviour change; a repair caller that threaded in a
+/// `FOLLOW_MASK_<id>` makes the loop yield its caller's continuation.
+/// Emitted only when lower marked the Repeat tail-position
+/// (`gate_caller_follow`).
+fn emit_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp) {
+    if rep_op.gate_caller_follow {
+        w.line(&"if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }");
     }
-    let mut parts: List<String> = [];
-    for let mut d = 0; d < mask.len(); d += 1 {
-        let depth_set = &mask[d];
-        if depth_set.is_empty() {
-            // An empty depth set means "no constraint at this depth";
-            // skipping it keeps the conjunction sound.
-            continue;
-        }
-        let peek_str = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
-        parts.push(ctx.kind_check_str(depth_set, &peek_str));
-    }
-    if parts.is_empty() {
-        return "";
-    }
-    let mut condition = String::with_capacity(64);
-    let mut first = true;
-    for let p of &parts {
-        if !first {
-            condition.push_str(&" && ");
-        }
-        first = false;
-        condition.push_str(p);
-    }
-    return condition;
 }
 
-/// Emit a K-token-peek "yield to caller" gate at a Repeat's per-iter
-/// dispatch site. When non-empty, `mask[d]` is the set of valid caller
-/// tokens at depth `d`; the variant body breaks the loop when the next
-/// `mask.len()` tokens all match (per-depth set membership), letting
-/// the caller's deterministic K-prefix consume them instead.
-///
-/// Generalises the existing single-token mask subtraction
-/// (`subtract_sets(body_first_set, position_mask)`) to multi-token
-/// continuations — closes the multi-token tail-greedy gap (TODO.md)
-/// without disturbing the K=1 path: a `mask` of `[]` skips emission
-/// entirely, and a single-depth mask reduces to the same `peek_kind`
-/// check the existing subtraction encodes implicitly via `if first`.
-fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &List<List<String>>, ctx: &mut GenContext) {
-    let condition = k_prefix_match_expr(mask, ctx);
-    if condition.is_empty() {
-        return;
+/// Scan-side mirror of `emit_caller_follow_gate`. Keeps the
+/// longest-match tournament's yield decision in lockstep with parse.
+fn emit_caller_follow_gate_scan(w: &mut CodeWriter, gate: bool, fail_or_break: &String) {
+    if gate {
+        w.line(&`if follow_yields(tokens, pos, follow, TK_EOF) \{ {*fail_or_break} \}`);
     }
-    w.line(&`if {condition} \{ break; \}`);
+}
+
+/// Render the runtime FOLLOW argument expression for a
+/// `RuleCall` per its `FollowArg`. Passed as the callee's `follow`
+/// parameter (parse and scan share the spelling — both bind `follow`).
+fn follow_arg_expr(arg: &FollowArg) -> String {
+    return match arg {
+        NoFollow => "&EMPTY_FOLLOW",
+        Mask(id) => `&FOLLOW_MASK_{id}`,
+        Forward => "follow",
+        Combined(id) => `&follow_prepend(&FOLLOW_MASK_{id}, follow)`,
+    };
 }
 
 /// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
@@ -3717,11 +3553,7 @@ fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_o
 fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let inner = &rep.element;
     let inner_first = rep_op.body_first_set;
-    let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
-        s.effective_first;
-    } else {
-        inner_first;
-    };
+    let loop_first = inner_first;
     let _ = dedup_name(&rep_op.field, name_counts);
 
     if let Star = rep.kind {
@@ -3730,7 +3562,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             // Mirror `gen_op_repeat_star_plus_storable`'s Star arm: yield
             // to the caller on K-prefix match before the scan guard.
             // No-op for empty mask.
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            emit_caller_follow_gate(w, rep_op);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if {scan_pos} < 0 \{ break; \}`);
             let mut nc: List<[String, i32]> = [];
@@ -3738,7 +3570,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             w.end();
         } else {
             w.begin(&`while {ctx.first_check_str(&loop_first)}`);
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            emit_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
@@ -3753,7 +3585,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             w.begin(&`if !{plus_flag}`);
             // Mandatory first iter is unconditional; subsequent iters
             // get the K-prefix yield gate before the scan guard.
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            emit_caller_follow_gate(w, rep_op);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if {scan_pos} < 0 \{ break; \}`);
             w.end();
@@ -3768,9 +3600,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             // the mandatory first iter ran above).
             gen_op_group(w, g_op, inner, ctx, name_counts);
             w.begin(&`while {ctx.first_check_str(&inner_first)}`);
-            if !rep_op.k_prefix_mask.is_empty() {
-                emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
-            }
+            emit_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
@@ -3790,18 +3620,15 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
 /// malformed deeper in. Returns the call expression (`_parse_R(p)` /
 /// `_parse_R(p, mp)`) used to re-parse it for a precise error, or `null` when
 /// the repeated element is not a single RuleRef (no standalone parse fn).
-fn rep_recovery_call(rep_op: &RepeatOp) -> Option<String> {
+fn rep_recovery_call(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
     if let LeafRuleCall = rep_op.body_shape {
         if let RuleCall(r) = &rep_op.body {
-            let fn_name = if let Some(id) = r.variant_id {
-                `_parse_{r.target_snake}__follow_{id}`;
-            } else {
-                `_parse_{r.target_snake}`;
-            };
+            let fn_name = `_parse_{r.target_snake}`;
+            let follow_sep = follow_arg_sep(emit_follow, &r.follow_arg);
             let call = if let Some(min_prec) = r.min_prec_arg {
-                `{fn_name}(p, {min_prec})`;
+                `{fn_name}(p{follow_sep}, {min_prec})`;
             } else {
-                `{fn_name}(p)`;
+                `{fn_name}(p{follow_sep})`;
             };
             return Option::<String>::Some(call);
         }
@@ -3817,7 +3644,7 @@ fn rep_recovery_call(rep_op: &RepeatOp) -> Option<String> {
 /// parse decision (exit the loop) is unchanged, and the speculative parse runs
 /// only on this already-doomed branch.
 fn emit_rep_break_with_recovery(w: &mut CodeWriter, scan_pos: &String, rep_op: &RepeatOp, ctx: &mut GenContext, loop_first: &List<String>) {
-    let recovery = rep_recovery_call(rep_op);
+    let recovery = rep_recovery_call(rep_op, ctx.emit_follow());
     if let Some(call) = recovery {
         if loop_first.is_empty() {
             // No FIRST tokens to gate the speculative re-parse on. An empty
@@ -3846,11 +3673,7 @@ fn emit_rep_break_with_recovery(w: &mut CodeWriter, scan_pos: &String, rep_op: &
 fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     let inner = &rep.element;
     let inner_first = rep_op.body_first_set;
-    let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
-        s.effective_first;
-    } else {
-        inner_first;
-    };
+    let loop_first = inner_first;
     // Per-iteration follow propagated into a nested non-greedy Repeat
     // inside a SingleAlt body — `first(inner) ∪ outer_follow`.
     let iter_follow = if rep_op.body_is_single_alt_group { union_kind_arrays(&inner_first, follow) } else { *follow };
@@ -3863,11 +3686,11 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
         w.line(&`let mut {list_field}: List<{inner_type}> = [];`);
         if rep_op.body_scannable {
             w.begin(&"loop");
-            // K-prefix yield gate: when the caller's deterministic
-            // K-prefix matches at iter entry, exit the loop so the
-            // caller can consume those tokens. No-op for empty mask
-            // (non-variant body or no K-prefix at this position).
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            // Caller-FOLLOW yield gate: when the upcoming tokens match
+            // the caller's continuation at iter entry, exit the loop so
+            // the caller can consume them. Inert when the runtime
+            // `follow` is empty.
+            emit_caller_follow_gate(w, rep_op);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             emit_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, &loop_first);
             let mut nc: List<[String, i32]> = [];
@@ -3876,8 +3699,8 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             w.end();
         } else {
             w.begin(&`while {ctx.first_check_str(&loop_first)}`);
-            // Same K-prefix gate for the non-scannable while loop.
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            // Same caller-FOLLOW gate for the non-scannable while loop.
+            emit_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(&`{list_field}.push({inner_field});`);
@@ -3893,11 +3716,9 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             w.line(&`let mut {plus_flag} = true;`);
             w.begin(&"loop");
             w.begin(&`if !{plus_flag}`);
-            // Yield to caller if the next K tokens match the caller's
-            // deterministic K-prefix (multi-token follow-mask path).
-            // No-op when `k_prefix_mask` is empty (non-variant body or
-            // caller without a K-prefix at this position).
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            // Yield to the caller when the upcoming tokens match its
+            // continuation. Inert when the runtime `follow` is empty.
+            emit_caller_follow_gate(w, rep_op);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             emit_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, &loop_first);
             w.end();
@@ -3914,9 +3735,9 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             // skip emission while `plus_flag` is still true so the
             // mandatory iter cannot be suppressed. Empty mask emits
             // nothing (the if-block is dead-stripped at codegen).
-            if !rep_op.k_prefix_mask.is_empty() {
+            if rep_op.gate_caller_follow {
                 w.begin(&`if !{plus_flag}`);
-                emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+                emit_caller_follow_gate(w, rep_op);
                 w.end();
             }
             w.line(&`{plus_flag} = false;`);
@@ -4176,21 +3997,18 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &List<i32>
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt_idx = sorted_group[k];
         let is_last = k == last;
-        // Read the lowered `RuleCallOp` so `variant_id` and
+        // Read the lowered `RuleCallOp` so `follow_arg` and
         // `min_prec_arg` (baked at lower time) reach emit. The surface
         // `RuleRef` carries only the source-level name.
         if let RuleCall(rc) = &g_op_alts[alt_idx].ops[0] {
-            let fn_name = if let Some(id) = rc.variant_id {
-                `_parse_{rc.target_snake}__follow_{id}`;
-            } else {
-                `_parse_{rc.target_snake}`;
-            };
+            let fn_name = `_parse_{rc.target_snake}`;
+            let follow_sep = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
             let case_name = group_case_name(&alts[alt_idx]);
             let local_var = rc.target_snake;
             let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                `p, {min_prec}`;
+                `p{follow_sep}, {min_prec}`;
             } else {
-                "p";
+                `p{follow_sep}`;
             };
 
             if k == 0 && !is_last {
@@ -4235,17 +4053,9 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
             }
             let body = &g_op_alts[alt_idx];
             if let RuleCall(rc) = &body.ops[0] {
-                let fn_name = if let Some(id) = rc.variant_id {
-                    `_parse_{rc.target_snake}__follow_{id}`;
-                } else {
-                    `_parse_{rc.target_snake}`;
-                };
+                let fn_name = `_parse_{rc.target_snake}`;
                 let local_var = rc.target_snake;
-                let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                    `p, {min_prec}`;
-                } else {
-                    "p";
-                };
+                let call_args = if let Some(min_prec) = rc.min_prec_arg { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, {min_prec}` } else { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}` };
                 w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{type_name}::{body.case_name}({local_var})`);
             } else {
@@ -4279,17 +4089,9 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                 let alt_idx = group[0];
                 let body = &g_op_alts[alt_idx];
                 if let RuleCall(rc) = &body.ops[0] {
-                    let fn_name = if let Some(id) = rc.variant_id {
-                        `_parse_{rc.target_snake}__follow_{id}`;
-                    } else {
-                        `_parse_{rc.target_snake}`;
-                    };
+                    let fn_name = `_parse_{rc.target_snake}`;
                     let local_var = rc.target_snake;
-                    let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                        `p, {min_prec}`;
-                    } else {
-                        "p";
-                    };
+                    let call_args = if let Some(min_prec) = rc.min_prec_arg { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, {min_prec}` } else { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}` };
                     w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                     w.line(&`{opt_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
                 } else {
@@ -4368,17 +4170,9 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
             let alt_idx = group[0];
             let body = &g_op_alts[alt_idx];
             if let RuleCall(rc) = &body.ops[0] {
-                let fn_name = if let Some(id) = rc.variant_id {
-                    `_parse_{rc.target_snake}__follow_{id}`;
-                } else {
-                    `_parse_{rc.target_snake}`;
-                };
+                let fn_name = `_parse_{rc.target_snake}`;
                 let local_var = rc.target_snake;
-                let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                    `p, {min_prec}`;
-                } else {
-                    "p";
-                };
+                let call_args = if let Some(min_prec) = rc.min_prec_arg { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, {min_prec}` } else { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}` };
                 w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
             }
@@ -4771,6 +4565,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         f.add_param(&"p", &"&mut Parser");
         f.add_param(&"left", type_name);
         f.add_param(&"start", &"i32");
+        if ctx.emit_follow() { add_follow_param(&mut f); }
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
 
@@ -4796,7 +4591,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 if rr.name == rule.name {
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
                     let prec = lookup_baked_min_prec(suffix_op);
-                    w.line(&`let {field_name} = {*fn_name}(p, {prec})?;`);
+                    w.line(&`let {field_name} = {*fn_name}(p{follow_sep(ctx.emit_follow())}, {prec})?;`);
                 } else {
                     let elem_fn = `_parse_{rr.snake_name}`;
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
@@ -4812,7 +4607,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                         let lab_name = dedup_name(&lab.field_name, &mut name_counts);
                         let inner_name = dedup_name(&rr.field_name, &mut name_counts);
                         let prec = lookup_baked_min_prec(suffix_op);
-                        w.line(&`let {inner_name} = {*fn_name}(p, {prec})?;`);
+                        w.line(&`let {inner_name} = {*fn_name}(p{follow_sep(ctx.emit_follow())}, {prec})?;`);
                         if lab.list {
                             // Type-annotate the local so `[inner]` parses as
                             // `List<T>` rather than a 1-tuple `[T]`.
@@ -4956,7 +4751,7 @@ fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx:
     return [];
 }
 
-fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn: &String, prec: i32, use_prec: bool) {
+fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn: &String, prec: i32, use_prec: bool, emit_follow: bool) {
     // First-token dispatch alone can mis-predict an LR continuation when the
     // suffix's first token is shared with the atom (e.g.
     // `statement: letterA | statement letterA 'b'`). In that case the suffix
@@ -4969,7 +4764,7 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn:
         w.begin(&`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
         w.line(&"break;");
         w.end();
-        w.line(&`result = {*suffix_fn}(p, result, start)?;`);
+        w.line(&`result = {*suffix_fn}(p, result, start{follow_sep(emit_follow)})?;`);
         w.else_begin(&"else");
         w.line(&"break;");
         w.end();
@@ -4977,7 +4772,7 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn:
         w.begin(&`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
         w.line(&"break;");
         w.end();
-        w.line(&`result = {*suffix_fn}(p, result, start)?;`);
+        w.line(&`result = {*suffix_fn}(p, result, start{follow_sep(emit_follow)})?;`);
     }
 }
 
@@ -5015,7 +4810,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
                 } else {
                     w.else_begin(&`else if suffix_kind == {*tk}`);
                 }
-                gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
+                gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec, ctx.emit_follow());
                 emitted.insert(*tk);
             }
         }
@@ -5063,10 +4858,10 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
             let scan_suffix_fn = `{*scan_fn_name}_lr_{lr_idx}`;
             if k == last_k {
                 if sub_first {
-                    gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
+                    gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec, ctx.emit_follow());
                 } else {
                     w.else_begin(&"else");
-                    gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
+                    gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec, ctx.emit_follow());
                     w.end();
                 }
             } else {
@@ -5078,7 +4873,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
                 } else {
                     w.else_begin(&`else if {sub_cond}`);
                 }
-                gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
+                gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec, ctx.emit_follow());
             }
         }
         emitted.insert(*shared_tk);
@@ -5137,7 +4932,7 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
             let prec = lr_precs[group[0]];
             let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
             let scan_suffix_fn = `{*scan_fn_name}_lr_{lr_idx}`;
-            gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec);
+            gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, use_prec, ctx.emit_follow());
         } else {
             gen_lr_overlap_dispatch(
                 w,
@@ -5172,7 +4967,7 @@ fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &Stri
 fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut List<[String, i32]>, rule_display: &String) {
     if let Leaf(idx) = node {
         if skip == 0 {
-            w.line(&`return {*fn_name}_bt_{idx}(p);`);
+            w.line(&`return {*fn_name}_bt_{idx}(p{follow_sep(ctx.emit_follow())});`);
         } else {
             // Consumed prefix tokens already — inline the remaining alt body.
             let alt = &alts[*idx];
@@ -5273,14 +5068,14 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
                         w.begin(&`if _sd_best_i == {idx}`);
-                        w.line(&`return {*fn_name}_bt_{idx}(p);`);
+                        w.line(&`return {*fn_name}_bt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                         w.end();
                     }
                     // Fall through: no alt's scan succeeded. Emit error via
                     // the last alt's parse path (which produces a useful
                     // diagnostic).
                     let last_idx = sorted_indices[sorted_indices.len() - 1];
-                    w.line(&`return {*fn_name}_bt_{last_idx}(p);`);
+                    w.line(&`return {*fn_name}_bt_{last_idx}(p{follow_sep(ctx.emit_follow())});`);
                 } else {
                     // Some scans are partial — scan success is a hint,
                     // not a guarantee. Use save/restore with scan guards.
@@ -5292,7 +5087,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                             if ctx.is_trace() {
                                 w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
                             }
-                            w.line(&`return {*fn_name}_bt_{idx}(p);`);
+                            w.line(&`return {*fn_name}_bt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                         } else {
                             let has_scan = alt_has_scan(&alts[idx].elements, ctx);
                             let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
@@ -5302,12 +5097,12 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                                 if ctx.is_trace() {
                                     w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
                                 }
-                                w.line(&`return {*fn_name}_bt_{idx}(p);`);
+                                w.line(&`return {*fn_name}_bt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                                 w.end();
                             } else if has_scan {
                                 // Partial scan: try parse, fall through on failure.
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
-                                w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                                w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
                                 if ctx.is_trace() {
                                     w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
@@ -5322,7 +5117,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                                 w.end();
                             } else {
                                 // No scan: save-and-rewind speculative parse.
-                                w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                                w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
                                 if ctx.is_trace() {
                                     w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
@@ -5348,9 +5143,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                         if ctx.is_trace() {
                             w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
                         }
-                        w.line(&`return {*fn_name}_bt_{idx}(p);`);
+                        w.line(&`return {*fn_name}_bt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                     } else {
-                        w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                        w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                         w.begin(&`if let Err(_) = r_{idx}`);
                         if ctx.is_trace() {
                             w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
@@ -5419,13 +5214,9 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
 
 /// Emit the body of a multi-alt rule whose alts have overlapping
 /// FIRST sets — the prediction codepath. `fn_name` is the name of
-/// the surrounding emit function (`parse_<rule>` for the regular
-/// path, `parse_<rule>__follow_<id>` for follow-aware variants);
-/// it's threaded into `gen_prediction_code` so the dispatcher
-/// references the variant's own `_bt_<n>` / `_scan_<n>` helpers
-/// when emitted from the variant pass. Without this threading the
-/// variant body silently delegates to the non-variant helpers and
-/// the variant's per-element mask never runs.
+/// the surrounding emit function (`parse_<rule>`); it's threaded into
+/// `gen_prediction_code` so the dispatcher references this rule's own
+/// `_bt_<n>` / `_scan_<n>` helpers.
 fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &List<List<i32>>, first_sets: &List<List<String>>, non_lr_indices: &List<i32>, fn_name: &String) {
     w.line(&"let kind = p.peek_kind();");
 
@@ -5494,12 +5285,13 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
 /// is `_parse_<snake>`; LR rules take an extra `min_prec` parameter,
 /// which the public entry pins to `0` (matching `parse`'s historic
 /// behaviour: no precedence threshold at the top of the parse).
-fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, emit_follow: bool) {
     if lowered.parser_rules.len() == 0 {
         return;
     }
+    gen_parse_entry_helpers(w);
     for let rule of &lowered.parser_rules {
-        gen_parse_rule_input_entry(w, rule);
+        gen_parse_rule_input_entry(w, rule, emit_follow);
     }
     let header = rule_header(&lowered.parser_rules[0]);
     let mut f = FnSpec::new("parse");
@@ -5512,21 +5304,25 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
     w.blank();
 }
 
-fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
-    let header = rule_header(rule);
-    let mut f = FnSpec::new(&`parse_{header.snake_name}`);
-    f.set_pub();
-    f.add_param(&"input", &"&String");
-    f.set_return_type(&`Result<{header.type_name}, ParseError>`);
-    f.emit_begin(w);
+/// Emit the two type-independent helpers shared by every per-rule input
+/// entry, once per generated parser. Factoring the prologue (build a
+/// `Parser`) and the error-selection epilogue out of every
+/// `parse_<rule>` wrapper removes ~9 lines of identical boilerplate per
+/// rule (the wrappers differ only in their node type and inner callee).
+/// The helpers are cold — called once per top-level parse — so the extra
+/// call is free; the `_gale_` prefix keeps them clear of any
+/// `parse_<rule>` the grammar might name.
+fn gen_parse_entry_helpers(w: &mut CodeWriter) {
+    let mut np = FnSpec::new("_gale_new_parser");
+    np.add_param(&"input", &"&String");
+    np.set_return_type(&"Parser");
+    np.emit_begin(w);
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let chars: List<char> = input.chars().collect();");
-    w.line(&"let mut parser = Parser::new(tokens, chars);");
-    if rule_takes_min_prec(rule) {
-        w.line(&`let _result = _parse_{header.snake_name}(&mut parser, 0);`);
-    } else {
-        w.line(&`let _result = _parse_{header.snake_name}(&mut parser);`);
-    }
+    w.line(&"return Parser::new(tokens, chars);");
+    w.end();
+    w.blank();
+
     // Prefer a deeper recovery error (a malformed element inside a scan-gated
     // repetition) over the shallower "expected <closer>" error the top-level
     // failure carries — see `emit_rep_break_with_recovery`. The comparison is
@@ -5535,13 +5331,36 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     // repeated `item` and a following `trailer` that share a first token both
     // fail at the same position), and the malformed element is the more useful
     // diagnostic. Regression fixture: tests/grammars/tie_recovery.g4.
+    let mut pe = FnSpec::new("_gale_pick_error");
+    pe.add_param(&"parser", &"&Parser");
+    pe.add_param(&"e", &"ParseError");
+    pe.set_return_type(&"ParseError");
+    pe.emit_begin(w);
+    w.begin(&"if let Some(_d) = &parser.pending");
+    w.begin(&"if _d.span.start >= e.span.start");
+    w.line(&"return *_d;");
+    w.end();
+    w.end();
+    w.line(&"return e;");
+    w.end();
+    w.blank();
+}
+
+fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule, emit_follow: bool) {
+    let header = rule_header(rule);
+    let mut f = FnSpec::new(&`parse_{header.snake_name}`);
+    f.set_pub();
+    f.add_param(&"input", &"&String");
+    f.set_return_type(&`Result<{header.type_name}, ParseError>`);
+    f.emit_begin(w);
+    w.line(&"let mut parser = _gale_new_parser(input);");
+    if rule_takes_min_prec(rule) {
+        w.line(&`let _result = _parse_{header.snake_name}(&mut parser{empty_follow_sep(emit_follow)}, 0);`);
+    } else {
+        w.line(&`let _result = _parse_{header.snake_name}(&mut parser);`);
+    }
     w.begin(&"if let Err(_e) = _result");
-    w.begin(&"if let Some(_d) = parser.pending");
-    w.begin(&"if _d.span.start >= _e.span.start");
-    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_d);`);
-    w.end();
-    w.end();
-    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_e);`);
+    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_gale_pick_error(&parser, _e));`);
     w.end();
     w.line(&"return _result;");
     w.end();
@@ -5590,6 +5409,30 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &
             let entry = &entries[idx];
             gen_kind_set_helper_raw(w, entry.id, &entry.tokens);
         }
+    }
+}
+
+/// Emit `global FOLLOW_MASK_<id>: List<List<i32>> = [[TK_X], …]` for
+/// every interned runtime FOLLOW mask, in `FollowMaskEntry` id order.
+/// Repair call sites pass `&FOLLOW_MASK_<id>` to `follow_yields`. Emits
+/// nothing while the registry is empty (the common case until the
+/// runtime-follow conversion wires call sites).
+pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
+    // No caller-FOLLOW gate anywhere ⇒ no call site references a mask,
+    // so emitting the globals would leave them unused. Skip entirely.
+    if !ctx.emit_follow() {
+        return;
+    }
+    let entries = ctx.follow_masks();
+    for let entry of &entries {
+        let mut depths: List<String> = [];
+        for let depth_set of &entry.mask {
+            depths.push(`[{join_kinds(depth_set)}]`);
+        }
+        w.line(&`global FOLLOW_MASK_{entry.id}: List<List<i32>> = [{join_kinds(&depths)}];`);
+    }
+    if !entries.is_empty() {
+        w.blank();
     }
 }
 

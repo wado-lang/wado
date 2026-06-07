@@ -541,6 +541,7 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/List<wado-compiler/test
     let __match_13: "core:prelude/traits.wado//enum:Ordering";
     let a_13: i32;
     let _licm_repr_20: ref Array<i32>;
+    let _licm_arith_21: i32;
     let __sroa_b_value: i32;
     let __sroa_a_value: i32;
     n = self.used;
@@ -556,6 +557,7 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/List<wado-compiler/test
                 break b50;
             }
             start = 0;
+            _licm_arith_21 = width * 2;
             b53: block {
                 l54: loop {
                     if start >= n {
@@ -563,7 +565,7 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/List<wado-compiler/test
                     }
                     mid = start + width;
                     if mid < n {
-                        a_13 = start + (width * 2);
+                        a_13 = start + _licm_arith_21;
                         end = select i32(a_13 < n, a_13, n);
                         i = start;
                         j = mid;
@@ -607,7 +609,7 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/List<wado-compiler/test
                         };
                         builtin::array_copy<i32>(_licm_repr_20, start, buf, start, end - start);
                     }
-                    start = start + (width * 2);
+                    start = start + _licm_arith_21;
                     continue l54;
                 };
             };

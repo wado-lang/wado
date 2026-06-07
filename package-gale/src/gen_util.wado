@@ -466,6 +466,40 @@ pub fn literal_const_name(text: &String) -> String {
     return result;
 }
 
+/// Returns true if every alt in `alts` is a single TokenRef or Literal
+/// element. Such rules collapse to a one-token kind check at scan time
+/// and to a compact `{ span, token }` struct (instead of an N-arm
+/// variant) at CST / parse / walk time. Labelled single tokens
+/// (`x='+'`) are `Label(...)`, not `TokenRef(...)`, so they are
+/// excluded — the compaction drops the per-alt label name.
+pub fn all_alts_are_single_token(alts: &List<Alternative>) -> bool {
+    for let alt of alts {
+        if alt.elements.len() != 1 {
+            return false;
+        }
+        let elem = &alt.elements[0];
+        let is_token = match elem {
+            TokenRef(_) | Literal(_) => true,
+            _ => false,
+        };
+        if !is_token {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Return the matched token-kind constant for a single TokenRef/Literal
+/// element. Caller is expected to have screened the element via
+/// `all_alts_are_single_token`.
+pub fn single_token_first(elem: &Element) -> String {
+    return match elem {
+        TokenRef(t) => `TK_{t.name}`,
+        Literal(l) => literal_const_name(&l.text),
+        _ => panic("single_token_first: unexpected element"),
+    };
+}
+
 pub fn str_set_insert_all(set: &mut TreeSet<String>, arr: &List<String>) {
     for let item of arr {
         set.insert(*item);

@@ -10,8 +10,8 @@
 //!
 //! `Grammar` mirrors the .g4 syntax. `LoweredGrammar` is the form
 //! parser emit consumes after every analysis decision (rule shape,
-//! multi-alt dispatch, LR precedence, follow variants, group shape,
-//! repeat strategy, field deduplication, scan/parse symmetry) is
+//! multi-alt dispatch, LR precedence, per-call-site FOLLOW args, group
+//! shape, repeat strategy, field deduplication, scan/parse symmetry) is
 //! committed at lower time. emit becomes a structural translation
 //! that does not consult `Grammar`.
 //!
@@ -27,7 +27,7 @@
 //!   help with frequent shapes are allowed; they must not consult
 //!   the original grammar.
 //! * Stable across runs — every collection that influences generated
-//!   identifiers (kind-set ids, follow-variant ids, group indices,
+//!   identifiers (kind-set ids, follow-mask ids, group indices,
 //!   field-name dedup counters) is laid out by `lower` in
 //!   deterministic order.
 //!
@@ -83,14 +83,6 @@ pub struct LoweredGrammar {
     /// Lowered parser rules in source order. `parser_rules[0]` is the
     /// start rule (per ANTLR4 convention) and seeds `gen_parse_entry`.
     pub parser_rules: List<Rule>,
-    /// Follow-aware variant rules registered during lowering.
-    /// Variants are emitted as additional `parse_<rule>__follow_<id>`
-    /// / `scan_<rule>__follow_<id>` functions; their bodies are
-    /// independent `Rule` values whose `mask` field is non-empty.
-    /// Distinct from `parser_rules` so emit can iterate variants
-    /// without filtering and so the regular-rule emission order is
-    /// stable regardless of variant registration.
-    pub variant_rules: List<Rule>,
     /// Interned multi-element token-kind sets. `lower` rewrites every
     /// `<expr> matches { TK_X | TK_Y | ... }` decision into a
     /// `_gale_kind_set_<id>(<expr>)` call; this list drives the
@@ -184,11 +176,6 @@ pub struct RuleHeader {
     /// `Public` affect generated visibility today; the rest are
     /// preserved for round-trip / future tooling.
     pub visibility: Visibility,
-    /// `Some(v)` when this rule is a follow-aware variant of the
-    /// regular rule with the same `name`. The mask in `v` drives
-    /// tail-greedy suppression in the variant body, and `v.id`
-    /// drives the variant's function-name suffix.
-    pub variant_of: Option<FollowVariant>,
     /// Cached `case_names_for_rule(&rule.alternatives)`. Empty for
     /// `Simple`. Indexed by alt position in the original rule body.
     pub case_names: List<String>,
@@ -312,34 +299,6 @@ pub struct LrDispatchData {
     pub groups: List<List<i32>>,
 }
 
-/// Metadata for one follow-aware variant of a rule. Variants exist
-/// to suppress tail-greedy iterations whose first set collides with
-/// the caller's local FOLLOW. The pair `(rule_name, mask)` keys the
-/// `lower`-time interning, and `id` drives the variant-function-name
-/// suffix `__follow_<id>`. See `package-gale/AGENTS.md` for the LL
-/// invariants the variant emit must respect.
-pub struct FollowVariant {
-    /// Variant id, assigned in registration order during lowering.
-    /// Stable across runs because lower walks the grammar in
-    /// deterministic order.
-    pub id: i32,
-    /// The rule this variant specialises. The variant's body shares
-    /// shape with the regular rule's body but applies `mask` as
-    /// additional follow.
-    pub rule_name: String,
-    /// Canonical (sorted, unique) intersection of `caller_follow`
-    /// and `tail_greedy_first(rule)` at the call sites that
-    /// triggered registration. Drives suppression in
-    /// `RepeatStrategy::WithFollowSubtraction` and friends.
-    pub mask: List<String>,
-    /// True when the variant has at least one scan-side caller.
-    /// Drives whether `scan_<rule>__follow_<id>` is emitted.
-    pub scan_used: bool,
-    /// True when the variant has at least one parse-side caller.
-    /// Drives whether `parse_<rule>__follow_<id>` is emitted.
-    pub parse_used: bool,
-}
-
 // ==========================================================================
 // Multi-alt dispatch
 // ==========================================================================
@@ -452,7 +411,7 @@ pub struct AltBody {
 ///
 /// The variant tag selects the emit shape; the payload struct
 /// carries the resolved attributes (token kind, dedupped field name,
-/// follow-variant id, min-prec arg, etc.) that emit needs. Case
+/// follow arg, min-prec arg, etc.) that emit needs. Case
 /// names within `Op` are scoped under the variant so they do not
 /// collide with `ir::Element` cases of the same spelling.
 pub variant Op {
@@ -464,9 +423,9 @@ pub variant Op {
     /// `LIT_<id>` constant assigned by `lower`'s literal collection
     /// pass.
     Literal(LiteralOp),
-    /// Call into another rule. Carries the resolved variant id,
+    /// Call into another rule. Carries the per-call-site `FollowArg`,
     /// min-prec arg, and dedupped binding name so emit doesn't
-    /// reproduce the variant interning logic.
+    /// re-derive the FOLLOW continuation.
     RuleCall(RuleCallOp),
     /// `.` wildcard. Consumes one token of any kind (matches
     /// `match_any` at runtime).
@@ -526,6 +485,32 @@ pub struct LiteralOp {
     pub dedup_base: String,
 }
 
+/// How a `RuleCall` supplies the runtime FOLLOW continuation to the
+/// callee, replacing the per-(rule, mask) `__follow_<id>` variant
+/// selection. Exactly one of four forms:
+///
+/// - `NoFollow` — non-repair call: emit passes nothing, the callee's
+///   defaulted `&EMPTY_FOLLOW` disables its tail-greedy gate.
+/// - `Mask(id)` — the caller's continuation past the callee is a
+///   statically-known K-prefix; emit passes `&FOLLOW_MASK_<id>`.
+/// - `Forward` — the callee sits at THIS rule's tail, so its
+///   continuation is whatever the current rule was itself called with;
+///   emit forwards the current function's `follow` argument unchanged.
+/// - `Combined(id)` — the callee is at this rule's tail but a nullable
+///   local suffix precedes it; emit prepends `FOLLOW_MASK_<id>` to the
+///   forwarded `follow` (see the variant doc below).
+pub variant FollowArg {
+    NoFollow,
+    Mask(i32),
+    Forward,
+    /// The callee sits at this rule's tail but a NULLABLE local suffix
+    /// precedes the tail (e.g. `… callee X? <end>`): the continuation is
+    /// the local prefix `FOLLOW_MASK_<id>` followed by whatever the
+    /// current rule was called with. Emit passes
+    /// `&follow_prepend(&FOLLOW_MASK_<id>, follow)`.
+    Combined(i32),
+}
+
 pub struct RuleCallOp {
     /// Target rule name as it appears in `.g4`. Drives parser-rule
     /// lookup at lower time; emit uses `target_snake` for the
@@ -533,9 +518,10 @@ pub struct RuleCallOp {
     pub target_name: String,
     /// `to_snake_case(target_name)` cached at lowering.
     pub target_snake: String,
-    /// `Some(id)` when this call site selected a follow-aware
-    /// variant; emit appends `__follow_<id>` to the function name.
-    pub variant_id: Option<i32>,
+    /// Runtime FOLLOW continuation passed to the callee. See `FollowArg`.
+    /// Replaces the `variant_id` / `__follow_<id>` mechanism: the mask is
+    /// threaded as data at runtime rather than baked into a cloned callee.
+    pub follow_arg: FollowArg,
     /// `Some(p)` when the call should pass `p` as the `min_prec`
     /// argument. Set for self-recursive calls inside prefix LR alts.
     /// `None` is the default and corresponds to
@@ -610,31 +596,6 @@ pub struct RepeatOp {
     /// non-greedy (continue/exit disambiguation). Empty when the
     /// Repeat is at the alt's tail.
     pub caller_follow_first: List<String>,
-    /// Surrounding variant's mask when this Repeat's outer
-    /// alt-position tail is deep-nullable; `[]` otherwise (and
-    /// always `[]` for non-variant bodies). Mirrors what
-    /// `gen_alt_elements` / `gen_alt_body_skip` used to install in
-    /// `ctx.current_follow_mask` at each iteration. Emit's
-    /// `gen_op_repeat_optional_rulecall` unions this with the
-    /// caller-supplied follow (which `inner_walker_follow_for_repeat`
-    /// can legitimately clear to `[]` for inner greedy Optionals)
-    /// before subtracting from the body first set.
-    pub position_mask: List<String>,
-    /// Multi-token follow mask installed when this `Repeat` sits at a
-    /// position whose surrounding suffix is deep-nullable AND the
-    /// enclosing variant carries a K-prefix mask (see
-    /// `FollowVariantEntry.k_prefix_mask`). Emit's
-    /// `gen_op_repeat_*` family checks the next `k_prefix_mask.len()`
-    /// tokens at iter entry; if every depth-set matches, the iter is
-    /// suppressed (yield to caller).
-    ///
-    /// Empty (`[]`) for non-variant bodies and for variant bodies whose
-    /// caller had no deterministic K-prefix at the call site. Required
-    /// to close the multi-token tail-greedy gap (TODO.md) — the
-    /// soundness invariant from the single-token path is preserved
-    /// structurally by the per-depth check (HTMLParser's nested-tag
-    /// inputs differ from the closing-tag mask at depth ≥ 1).
-    pub k_prefix_mask: List<List<String>>,
     /// True iff the inner element is fully scannable (has a complete
     /// `scan_<rule>` / inline scan equivalent). Drives emit's choice
     /// between `loop` + scan-guard and `while` + first-check loop
@@ -685,6 +646,18 @@ pub struct RepeatOp {
     /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
     /// surface inner.
     pub body_second_position_first: List<String>,
+    /// Emit a runtime caller-FOLLOW yield gate
+    /// (`if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break }`)
+    /// at this iteration's entry. Set by lower when the Repeat sits at a
+    /// deep-nullable-suffix tail position — i.e. exactly where the
+    /// caller's continuation can collide with another iteration. The
+    /// gate is inert when the runtime `follow` is empty (non-repair
+    /// callers), so it is sound to emit unconditionally at such
+    /// positions; it subsumes BOTH the old 1-token follow subtraction
+    /// and the K-prefix `__follow_<id>` variant gate. The actual mask is
+    /// no longer baked here — it arrives at runtime via the `follow`
+    /// argument the caller threads in.
+    pub gate_caller_follow: bool,
 }
 
 pub struct GroupOp {
@@ -709,8 +682,7 @@ pub struct GroupOp {
 /// cascade of `op_is_leaf` / `op_is_rulecall` / `let Group(_) = ...`
 /// probes guarded by an "unhandled body shape" panic. Lower asserts
 /// at construction time that the body op falls into one of the four
-/// variants; ListLabel / Repeat / Suppressed shapes never reach
-/// `lower_repeat_op`.
+/// variants; ListLabel / Repeat shapes never reach `lower_repeat_op`.
 pub variant RepeatBodyShape {
     /// `Op::RuleCall` body. Optional dispatch routes here for the
     /// caller-follow subtraction (`gen_op_repeat_optional_rulecall`),
@@ -739,13 +711,10 @@ pub variant RepeatBodyShape {
 /// fan-out that legacy `gen_repeat_body` performs.
 pub variant RepeatStrategy {
     /// Plain greedy loop. `while peek in first { ... }` for `*` /
-    /// `+`; bare `if peek in first { ... }` for `?`.
+    /// `+`; bare `if peek in first { ... }` for `?`. The tail-position
+    /// caller-FOLLOW repair is threaded at runtime (`follow_yields`),
+    /// so the loop guard itself stays the plain first-set check.
     Plain,
-    /// `?` over a `RuleRef`-shaped inner with a non-empty caller-
-    /// local FOLLOW. The effective first set already has the caller
-    /// follow subtracted at lower time, so emit just guards on the
-    /// reduced set.
-    WithFollowSubtraction(WithFollowSubtractionStrategy),
     /// Non-greedy `*?` / `+?` / `??`. Exit conditions are computed
     /// from the surrounding alt's follow at lower time.
     NonGreedy(NonGreedyStrategy),
@@ -762,18 +731,6 @@ pub variant RepeatStrategy {
     /// `?` whose inner can't be decided by lookahead but IS fully
     /// scannable — emit uses a save-scan-rewind guard.
     OptionalScanGuard,
-    /// The repeat is fully suppressed by the enclosing variant's
-    /// follow mask — emit replaces the whole repeat with a
-    /// `let <field>: Option<T> = null;` (or nothing for non-storable
-    /// inners). Variants register this when every first-token of the
-    /// repeat body lies in the mask.
-    Suppressed,
-}
-
-pub struct WithFollowSubtractionStrategy {
-    /// First-set of the inner, already with the caller-local FOLLOW
-    /// subtracted. emit guards on `peek_kind() ∈ effective_first`.
-    pub effective_first: List<String>,
 }
 
 pub struct NonGreedyStrategy {
@@ -901,7 +858,8 @@ pub struct ScanTokenElem {
 
 pub struct ScanRuleCallElem {
     pub target_snake: String,
-    pub variant_id: Option<i32>,
+    /// Scan-side mirror of `RuleCallOp.follow_arg`. See `FollowArg`.
+    pub follow_arg: FollowArg,
     /// Scan-side mirror of `RuleCallOp.min_prec_arg`. `Some(p)` when
     /// the call should pass `p` as the `min_prec` argument — set by
     /// `stamp_lr_self_ref_min_prec` for self-recursive RuleCalls
@@ -924,8 +882,7 @@ pub struct ScanRepeatElem {
     /// First set of `body` cached at lower time. emit's scan-side
     /// repeat emitter uses this for `while peek_kind ∈ inner_first`
     /// loop guards (Plain strategy) and for Plus's mandatory-first
-    /// iteration condition. WithFollowSubtraction carries the
-    /// effective (mask-subtracted) first separately in its payload.
+    /// iteration condition.
     pub inner_first: List<String>,
     /// Scan-side mirror of `RepeatOp.caller_follow_first`. Default is
     /// the variant-aware `outer_follow` at construction time; alt-level
@@ -936,17 +893,15 @@ pub struct ScanRepeatElem {
     /// pre-Phase-2-F `gen_scan_repeat_optional_with_follow` contract).
     /// Empty when the Repeat is at the alt's tail.
     pub caller_follow_first: List<String>,
-    /// Scan-side mirror of `RepeatOp.k_prefix_mask`. Same semantics:
-    /// when non-empty, the scan-side emit gates iter entry on a K-token
-    /// peek so scan-driven dispatch stays consistent with the parse-side
-    /// variant body's yield decision.
-    pub k_prefix_mask: List<List<String>>,
+    /// Scan-side mirror of `RepeatOp.gate_caller_follow`: emit
+    /// `if follow_yields(tokens, pos, follow, TK_EOF) { ... }` at iter
+    /// entry so the longest-match tournament yields to the caller in
+    /// lockstep with the parse side.
+    pub gate_caller_follow: bool,
 }
 
 pub variant ScanRepeatStrategy {
     Plain,
-    WithFollowSubtraction(WithFollowSubtractionStrategy),
-    Suppressed,
 }
 
 pub struct ScanGroupElem {

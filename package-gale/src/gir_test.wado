@@ -14,7 +14,6 @@ use {
     MultiAltRule,
     LeftRecursiveRule,
     LrDispatchData,
-    FollowVariant,
     MultiAltDispatch,
     DirectDispatch,
     DispatchBranch,
@@ -31,7 +30,6 @@ use {
     RepeatOp,
     RepeatBodyShape,
     RepeatStrategy,
-    WithFollowSubtractionStrategy,
     NonGreedyStrategy,
     OptionalLookaheadStrategy,
     OptionalShapeLookaheadStrategy,
@@ -51,6 +49,7 @@ use {
     FieldDecl,
     FieldKind,
     KindSet,
+    FollowArg,
     rule_header,
 } from "./gir.wado";
 use { Visibility, RepeatKind } from "./ir.wado";
@@ -77,7 +76,6 @@ fn empty_header(name: &String) -> RuleHeader {
         field_name: *name,
         type_name: `{*name}Node`,
         visibility: Visibility::Default,
-        variant_of: null,
         case_names: [],
     };
 }
@@ -100,13 +98,11 @@ test "LoweredGrammar empty construction" {
         channels: [],
         lit_tokens: [],
         parser_rules: [],
-        variant_rules: [],
         kind_sets: [],
         diagnostics: [],
     };
     assert g.name == "Empty";
     assert g.parser_rules.is_empty();
-    assert g.variant_rules.is_empty();
     assert g.kind_sets.is_empty();
     assert g.mode_names.len() == 1;
     assert g.diagnostics.is_empty();
@@ -159,18 +155,18 @@ test "Op::Literal round-trip" {
     }
 }
 
-test "Op::RuleCall preserves variant_id and min_prec" {
+test "Op::RuleCall preserves follow_arg and min_prec" {
     let call = Op::RuleCall(RuleCallOp {
         target_name: "expr",
         target_snake: "expr",
-        variant_id: null,
+        follow_arg: FollowArg::NoFollow,
         min_prec_arg: null,
         field: "expr",
         dedup_base: "expr",
     });
     if let RuleCall(r) = &call {
         assert r.target_snake == "expr";
-        assert r.variant_id matches { None };
+        assert r.follow_arg matches { NoFollow };
         assert r.min_prec_arg matches { None };
     } else {
         panic("RuleCall");
@@ -207,8 +203,6 @@ test "Op::Repeat carries inner element and strategy" {
         strategy: RepeatStrategy::Plain,
         field: "x_list",
         caller_follow_first: [],
-        position_mask: [],
-        k_prefix_mask: [],
         caller_follow_second: [],
         body_scannable: true,
         body_has_field: true,
@@ -216,6 +210,7 @@ test "Op::Repeat carries inner element and strategy" {
         body_is_single_alt_group: false,
         body_second_position_first: [],
         body_shape: RepeatBodyShape::LeafOther,
+        gate_caller_follow: false,
     });
     if let Repeat(r) = &rep {
         if let Star = r.kind {
@@ -230,9 +225,6 @@ test "Op::Repeat carries inner element and strategy" {
 
 test "RepeatStrategy variants round-trip" {
     let plain = RepeatStrategy::Plain;
-    let with_follow = RepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy {
-        effective_first: ["TK_A"],
-    });
     let non_greedy = RepeatStrategy::NonGreedy(NonGreedyStrategy {
         exit_first: ["TK_END"],
         exit_second: [],
@@ -263,17 +255,11 @@ test "RepeatStrategy variants round-trip" {
     };
     let shape_lookahead = RepeatStrategy::OptionalShapeLookahead(shape_strategy);
     let scan_guard = RepeatStrategy::OptionalScanGuard;
-    let suppressed = RepeatStrategy::Suppressed;
 
     if let Plain = &plain {
         assert true;
     } else {
         panic("Plain");
-    }
-    if let WithFollowSubtraction(s) = &with_follow {
-        assert s.effective_first[0] == "TK_A";
-    } else {
-        panic("WithFollowSubtraction");
     }
     if let NonGreedy(s) = &non_greedy {
         assert s.exit_first[0] == "TK_END";
@@ -298,11 +284,6 @@ test "RepeatStrategy variants round-trip" {
         assert true;
     } else {
         panic("OptionalScanGuard");
-    }
-    if let Suppressed = &suppressed {
-        assert true;
-    } else {
-        panic("Suppressed");
     }
 }
 
@@ -398,7 +379,7 @@ test "ScanElement variants round-trip" {
     let token = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
     let call = ScanElement::RuleCall(ScanRuleCallElem {
         target_snake: "expr",
-        variant_id: Option::<i32>::Some(2),
+        follow_arg: FollowArg::NoFollow,
         min_prec_arg: null,
     });
     let any = ScanElement::Wildcard;
@@ -412,7 +393,7 @@ test "ScanElement variants round-trip" {
         strategy: ScanRepeatStrategy::Plain,
         inner_first: [],
         caller_follow_first: [],
-        k_prefix_mask: [],
+        gate_caller_follow: false,
     });
 
     if let Token(t) = &token {
@@ -421,11 +402,7 @@ test "ScanElement variants round-trip" {
         panic("Token");
     }
     if let RuleCall(c) = &call {
-        if let Some(id) = c.variant_id {
-            assert id == 2;
-        } else {
-            panic("variant_id");
-        }
+        assert c.target_snake == "expr";
     } else {
         panic("RuleCall");
     }
@@ -448,20 +425,6 @@ test "ScanElement variants round-trip" {
     } else {
         panic("Repeat");
     }
-}
-
-test "FollowVariant carries scan/parse usage" {
-    let v = FollowVariant {
-        id: 7,
-        rule_name: "ws",
-        mask: ["TK_SPACE"],
-        scan_used: true,
-        parse_used: false,
-    };
-    assert v.id == 7;
-    assert v.scan_used == true;
-    assert v.parse_used == false;
-    assert v.mask.len() == 1;
 }
 
 test "FieldDecl and KindSet" {

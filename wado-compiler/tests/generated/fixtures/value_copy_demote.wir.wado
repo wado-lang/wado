@@ -602,6 +602,7 @@ fn "wado-compiler/tests/fixtures/value_copy_demote.wado/List<core:prelude/string
     let __match_13: "core:prelude/traits.wado//enum:Ordering";
     let a_13: i32;
     let _licm_repr_18: ref "Array<core:prelude/string.wado/String>";
+    let _licm_arith_19: i32;
     n = self.used;
     if n <= 1 {
         return;
@@ -615,6 +616,7 @@ fn "wado-compiler/tests/fixtures/value_copy_demote.wado/List<core:prelude/string
                 break b63;
             }
             start = 0;
+            _licm_arith_19 = width * 2;
             b66: block {
                 l67: loop {
                     if start >= n {
@@ -622,7 +624,7 @@ fn "wado-compiler/tests/fixtures/value_copy_demote.wado/List<core:prelude/string
                     }
                     mid = start + width;
                     if mid < n {
-                        a_13 = start + (width * 2);
+                        a_13 = start + _licm_arith_19;
                         end = select i32(a_13 < n, a_13, n);
                         i = start;
                         j = mid;
@@ -658,7 +660,7 @@ fn "wado-compiler/tests/fixtures/value_copy_demote.wado/List<core:prelude/string
                         };
                         builtin::array_copy<ref "core:prelude/string.wado//String">(_licm_repr_18, start, buf, start, end - start);
                     }
-                    start = start + (width * 2);
+                    start = start + _licm_arith_19;
                     continue l67;
                 };
             };

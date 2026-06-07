@@ -1,5 +1,8 @@
-// Verify that HFS write-backs are not inserted inside inlined labeled blocks.
-// The inner loop should have no struct.set for `self.pos` except at exits.
+// Verify that a call-clean hot field (`self.pos`, never read through the
+// `&mut Scanner` reference inside the loop) writes back only at the loop's
+// exits — never on the `continue` back-edge. The loop should have a
+// `self.pos` struct.set at the guard `break` and the `else` `return`, but
+// none per iteration.
 use { println, Stdout } from "core:cli";
 
 struct Scanner {
@@ -43,9 +46,12 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3\n",
-    "wir_expect:O2": ["b = builtin::array_get_u8(_licm_repr_"],
+    "wir_expect:O2": [
+        "b = builtin::array_get_u8(_licm_repr_",
+        "self.pos = __hfs_pos_8;\n                break"
+    ],
     "wir_not_expect:O2": [
-        "self.pos = __hfs_pos_8;\n                break",
+        "self.pos = __hfs_pos_8;\n            continue",
         "String::get_byte_unchecked\""
     ]
 }
