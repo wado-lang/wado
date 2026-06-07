@@ -139,11 +139,12 @@ fn "wado-compiler/tests/fixtures/value_copy_elide_qmark.wado/run"() with Stdout 
     __match_3 = __inline_extract_2: block -> ref "core:prelude/types.wado//Result<i32,i32>" {
         let __match_scrut_0: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/value_copy_elide_qmark.wado/Pair,i32>";
         __match_scrut_0 = struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/value_copy_elide_qmark.wado/Pair,i32>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/value_copy_elide_qmark.wado//Pair" { a: 10, b: 20 } };
-        p = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/value_copy_elide_qmark.wado/Pair,i32>::Ok"(__match_scrut_0) -> ref "wado-compiler/tests/fixtures/value_copy_elide_qmark.wado//Pair" {
+        p = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/value_copy_elide_qmark.wado/Pair,i32>::Ok"(__match_scrut_0)) -> ref "wado-compiler/tests/fixtures/value_copy_elide_qmark.wado//Pair" {
             __qm_v = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/value_copy_elide_qmark.wado/Pair,i32>::Ok"(__match_scrut_0).payload_0;
             __qm_v;
         } else {
             __qm_e = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/value_copy_elide_qmark.wado/Pair,i32>::Err"(__match_scrut_0).payload_0;
+            cold_path;
             break __inline_extract_2: struct.new "core:prelude/types.wado//Result<i32,i32>::Err" { discriminant: 1, payload_0: __qm_e };
         });
         break __inline_extract_2: struct.new "core:prelude/types.wado//Result<i32,i32>::Ok" { discriminant: 0, payload_0: p.a + p.b };
@@ -318,7 +319,8 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let new_used: i32;
     let start: i32;
     new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -334,7 +336,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -342,7 +345,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {

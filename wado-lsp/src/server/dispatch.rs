@@ -197,8 +197,9 @@ pub async fn dispatch<W: Write>(
         "textDocument/semanticTokens/full" => {
             let engine = &*engine;
             transport::typed_request(writer, id, params, async |p: SemanticTokensParams| {
+                let host = transport::host_for_uri(&p.text_document.uri);
                 SemanticTokens {
-                    data: engine.semantic_tokens(&p.text_document.uri),
+                    data: engine.semantic_tokens(&p.text_document.uri, &host).await,
                 }
             })
             .await?;

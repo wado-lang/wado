@@ -4,7 +4,7 @@
 // and that path equals the pre-if state.
 //
 // Without this, the conservative `clear_fields()` after every if-stmt
-// dropped `arr.used = 16`, so a subsequent `unlikely(1 >= arr.len())`
+// dropped `arr.used = 16`, so a subsequent `1 >= arr.len()`
 // could not const-fold. With this fix plus the literal-bound
 // `condition_implication` extension (so a folded `1 >= 16` doesn't
 // break loop-guard elimination elsewhere), Stage 1.5 lands without
@@ -19,9 +19,9 @@ fn early_exit_preserves_arr_len(force_exit: bool) -> i32 {
         return -1;
     }
     // After the if, `arr.used = 16` should still be in field_env;
-    // `unlikely(1 >= arr.len())` then folds to `unlikely(false)` and
+    // `1 >= arr.len()` then folds to `false` and
     // the panic is pruned at NIR.
-    if builtin::unlikely(1 >= arr.len()) {
+    if 1 >= arr.len() {
         panic("dead_trapping_then_28491");
     }
     return arr.len();

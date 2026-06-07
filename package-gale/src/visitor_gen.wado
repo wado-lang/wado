@@ -13,6 +13,7 @@ use {
     single_alt_group_field_name,
     count_element_groups,
     not_element_field_name,
+    all_alts_are_single_token,
 } from "./gen_util.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
@@ -29,7 +30,16 @@ fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule, rule_name: &String, rule_i
     w.begin(&`pub fn walk_{rule.name}<V: Visitor>(v: &mut V, node: &{type_name})`);
 
     let mut group_counter: i32 = 0;
-    if rule.alternatives.len() == 1 {
+    if rule.alternatives.len() > 1 && all_alts_are_single_token(&rule.alternatives) {
+        // Compact single-token node (`gen_multi_alt_cst` single-token path):
+        // the node is a `{ span, token }` struct, so the walk visits its one
+        // token directly instead of matching N variant arms. Restricted to
+        // multi-alt rules — a single-alt single-token rule stays a `Simple`
+        // struct whose field is named after the rule, not `token`.
+        w.line(&`v.enter_rule({rule_id}, &"{rule.name}", &node.span);`);
+        w.line(&"v.visit_token(&node.token);");
+        w.line(&`v.exit_rule({rule_id}, &"{rule.name}", &node.span);`);
+    } else if rule.alternatives.len() == 1 {
         w.line(&`v.enter_rule({rule_id}, &"{rule.name}", &node.span);`);
         gen_walk_alt_body(w, &rule.alternatives[0], &"node", rule_name, &mut group_counter);
         w.line(&`v.exit_rule({rule_id}, &"{rule.name}", &node.span);`);

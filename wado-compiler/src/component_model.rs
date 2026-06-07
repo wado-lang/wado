@@ -2053,7 +2053,7 @@ impl CmInterfaceRegistry {
                     stores: func_ty.stores.clone(),
                 }))
             }
-            // NamespacedGeneric types (like builtin::array<T>) are passed through
+            // NamespacedGeneric types (like `ns::Type<T>`) are passed through
             Type::NamespacedGeneric(ng) => {
                 let resolved_args: Vec<Type> =
                     ng.args.iter().map(|arg| self.resolve_type(arg)).collect();

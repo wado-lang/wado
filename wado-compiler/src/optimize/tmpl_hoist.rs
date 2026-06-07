@@ -1573,54 +1573,54 @@ fn rename_local_in_expr(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind};
+    use crate::nir_arena::{BlockNode, StmtNode};
     use crate::tir::TypeId;
 
-    /// Lower a single tree expression into a `Body` and return its arena id so
-    /// the arena-side `references_local` can be exercised directly.
-    fn body_of(expr: NirExpr) -> (Body, ExprId) {
-        let block = NirBlock {
-            stmts: vec![NirStmt::new(NirStmtKind::Expr(expr), Span::default())],
+    /// Build a `Body` whose root holds a single expression (built by `build`)
+    /// and return its arena id so the arena-side `references_local` can be
+    /// exercised directly.
+    fn body_of(build: impl FnOnce(&mut Body) -> ExprId) -> (Body, ExprId) {
+        let mut body = Body::empty();
+        let e = build(&mut body);
+        let s = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(e),
             span: Span::default(),
-        };
-        let body = Body::from_block(&block);
-        let s = body.blocks[body.root].stmts[0];
-        let StmtKind::Expr(e) = body.stmts[s].kind else {
-            panic!("expected Expr stmt");
-        };
+        });
+        body.root = body.blocks.push(BlockNode {
+            stmts: vec![s],
+            span: Span::default(),
+        });
         (body, e)
     }
 
-    fn local(idx: u32) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Local {
+    fn local(body: &mut Body, idx: u32) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
                 index: idx,
                 name: format!("__l{idx}"),
             },
-            TypeId(0),
-            Span::default(),
-        )
+            type_id: TypeId(0),
+            span: Span::default(),
+        })
     }
 
-    fn unary(op: NirUnaryOp, inner: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Unary {
-                op,
-                expr: Box::new(inner),
-            },
-            TypeId(0),
-            Span::default(),
-        )
+    fn unary(body: &mut Body, op: NirUnaryOp, inner: ExprId) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind: ExprKind::Unary { op, expr: inner },
+            type_id: TypeId(0),
+            span: Span::default(),
+        })
     }
 
     /// `foo(arg)` — a free-function call carrying `arg`. The result is an
     /// independent value, so the call only *mentions* `arg`, it is not an
     /// alias of it.
-    fn call_with(arg: NirExpr) -> NirExpr {
+    fn call_with(body: &mut Body, arg: ExprId) -> ExprId {
         use crate::module_source::ModuleSource;
-        use crate::nir::{CallArg, FunctionRef};
-        NirExpr::new(
-            NirExprKind::Call {
+        use crate::nir::FunctionRef;
+        use crate::nir_arena::ArenaCallArg;
+        body.exprs.push(ExprNode {
+            kind: ExprKind::Call {
                 func: FunctionRef {
                     module_source: ModuleSource::entry_point_synthetic(),
                     name: "foo".to_string(),
@@ -1628,14 +1628,14 @@ mod tests {
                     method_info: None,
                 },
                 type_args: vec![],
-                args: vec![CallArg {
+                args: vec![ArenaCallArg {
                     expr: arg,
                     is_mut: false,
                 }],
             },
-            TypeId(0),
-            Span::default(),
-        )
+            type_id: TypeId(0),
+            span: Span::default(),
+        })
     }
 
     /// `references_local` decides whether an intermediate `let buf_inner = <e>`
@@ -1654,29 +1654,43 @@ mod tests {
         const IDX: u32 = 7;
 
         // Genuine aliases — must match.
-        let (b, e) = body_of(local(IDX));
+        let (b, e) = body_of(|b| local(b, IDX));
         assert!(references_local(&b, e, IDX));
-        let (b, e) = body_of(unary(NirUnaryOp::MutRef, local(IDX)));
+        let (b, e) = body_of(|b| {
+            let l = local(b, IDX);
+            unary(b, NirUnaryOp::MutRef, l)
+        });
         assert!(references_local(&b, e, IDX));
-        let (b, e) = body_of(unary(
-            NirUnaryOp::MutRef,
-            unary(NirUnaryOp::MutRef, local(IDX)),
-        ));
+        let (b, e) = body_of(|b| {
+            let l = local(b, IDX);
+            let inner = unary(b, NirUnaryOp::MutRef, l);
+            unary(b, NirUnaryOp::MutRef, inner)
+        });
         assert!(references_local(&b, e, IDX));
 
         // A different local is unrelated.
-        let (b, e) = body_of(local(IDX + 1));
+        let (b, e) = body_of(|b| local(b, IDX + 1));
         assert!(!references_local(&b, e, IDX));
 
         // Non-alias *mentions* — must NOT match (this is the guard against
         // `expr_mentions_local`, which would return true for all of these and
         // miscompile the Formatter buffer rewrite).
-        let (b, e) = body_of(call_with(local(IDX)));
+        let (b, e) = body_of(|b| {
+            let l = local(b, IDX);
+            call_with(b, l)
+        });
         assert!(!references_local(&b, e, IDX));
-        let (b, e) = body_of(unary(NirUnaryOp::MutRef, call_with(local(IDX))));
+        let (b, e) = body_of(|b| {
+            let l = local(b, IDX);
+            let c = call_with(b, l);
+            unary(b, NirUnaryOp::MutRef, c)
+        });
         assert!(!references_local(&b, e, IDX));
         // `&buf` (shared ref) is not the `&mut` alias shape the hoist normalizes.
-        let (b, e) = body_of(unary(NirUnaryOp::Ref, local(IDX)));
+        let (b, e) = body_of(|b| {
+            let l = local(b, IDX);
+            unary(b, NirUnaryOp::Ref, l)
+        });
         assert!(!references_local(&b, e, IDX));
     }
 }

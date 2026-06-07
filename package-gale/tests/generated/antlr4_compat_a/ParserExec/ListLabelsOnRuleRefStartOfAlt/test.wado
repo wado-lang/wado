@@ -145,6 +145,75 @@ impl Token {
 // with reference-containing fields triggers a compiler bug
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
+/// Runtime FOLLOW-continuation gate for tail-greedy loops.
+///
+/// `follow` is the caller's deterministic K-prefix continuation:
+/// `follow[d]` is the set of token kinds that may appear at input depth
+/// `d` if control belongs to the caller rather than to another iteration
+/// of the loop. An empty `follow` (the common, non-repair case) disables
+/// the gate. The loop yields to the caller — breaking `*`/`+` or skipping
+/// `?` — exactly when EVERY non-empty depth-set matches the upcoming
+/// input, i.e. when the next tokens are unambiguously the caller's
+/// continuation.
+///
+/// Threaded as a defaulted `&EMPTY_FOLLOW` argument through the generated
+/// `parse_*` / `scan_*` functions; repair call sites pass a `FOLLOW_MASK_*`
+/// constant (or forward their own `follow`). This replaces the previous
+/// per-(rule, mask) cloned `__follow_<id>` variants: the mask is data
+/// carried at runtime, not code baked into a specialised function.
+///
+/// `eof_kind` is the token kind reported past the end of the stream, so a
+/// caller continuation ending in EOF gates correctly. Used by both the
+/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
+/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
+/// lockstep with parse.
+pub global EMPTY_FOLLOW: List<List<i32>> = [];
+
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_MASK_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
+pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+    if follow.is_empty() {
+        return false;
+    }
+    for let mut d = 0; d < follow.len(); d += 1 {
+        let set = &follow[d];
+        if set.is_empty() {
+            // No constraint at this depth — a vacuous match, keep going.
+            continue;
+        }
+        let idx = pos + d;
+        let kind = if idx < tokens.len() { tokens[idx].kind } else { eof_kind };
+        let mut hit = false;
+        for let t of set {
+            if kind == *t {
+                hit = true;
+                break;
+            }
+        }
+        if !hit {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// ParseError represents a parse failure with location and expected tokens.
 ///
 /// `message` is the local "expected X, got Y" description, kept free of
@@ -1020,7 +1089,7 @@ impl Parser {
     }
 }
 
-fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1030,7 +1099,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_NOT { break try_0; }
                 pos += 1;
-                pos = scan_expression(tokens, pos, 0);
+                pos = scan_expression(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -1050,25 +1119,25 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     sg_0_done: {
         sg_0: {
             if pos >= tokens.len() || tokens[pos].kind != TK_AND { break sg_0; }
             pos += 1;
-            pos = scan_expression(tokens, pos, 3);
+            pos = scan_expression(tokens, pos, follow, 3);
             if pos < 0 { break sg_0; }
             break sg_0_done;
         }
         return -1;
     }
-    while pos < tokens.len() && tokens[pos].kind == TK_AND {
+    while pos < tokens.len() && tokens[pos].kind == TK_AND && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_1_done: {
             sg_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_AND { break sg_1; }
                 pos += 1;
-                pos = scan_expression(tokens, pos, 3);
+                pos = scan_expression(tokens, pos, follow, 3);
                 if pos < 0 { break sg_1; }
                 break sg_1_done;
             }
@@ -1080,25 +1149,25 @@ fn scan_expression_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_2(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     sg_2_done: {
         sg_2: {
             if pos >= tokens.len() || tokens[pos].kind != TK_OR { break sg_2; }
             pos += 1;
-            pos = scan_expression(tokens, pos, 2);
+            pos = scan_expression(tokens, pos, follow, 2);
             if pos < 0 { break sg_2; }
             break sg_2_done;
         }
         return -1;
     }
-    while pos < tokens.len() && tokens[pos].kind == TK_OR {
+    while pos < tokens.len() && tokens[pos].kind == TK_OR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_3_done: {
             sg_3: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_OR { break sg_3; }
                 pos += 1;
-                pos = scan_expression(tokens, pos, 2);
+                pos = scan_expression(tokens, pos, follow, 2);
                 if pos < 0 { break sg_3; }
                 break sg_3_done;
             }
@@ -1110,15 +1179,15 @@ fn scan_expression_lr_2(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_expression_atom(tokens, pos);
+fn scan_expression(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_expression_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
         if suffix_kind == TK_AND {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_expression_lr_1(tokens, pos);
+                pos = scan_expression_lr_1(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -1126,7 +1195,7 @@ fn scan_expression(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if suffix_kind == TK_OR {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_expression_lr_2(tokens, pos);
+                pos = scan_expression_lr_2(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -1138,13 +1207,13 @@ fn scan_expression(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_NOT {
         let op = p.expect(TK_NOT)?;
         let mut args: List<ExpressionNode> = [];
-        let expression = _parse_expression(p, 3)?;
+        let expression = _parse_expression(p, follow, 3)?;
         args.push(expression);
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::Alt0(ExpressionAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -1166,11 +1235,12 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
     ));
 }
 
-fn _parse_expression__inner_lr_1(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression__inner_lr_1(p: &mut Parser, left: ExpressionNode, start: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExpressionNode, ParseError> {
     let mut op_args_list: List<OpArgsItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
+            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.tokens;
@@ -1179,7 +1249,7 @@ fn _parse_expression__inner_lr_1(p: &mut Parser, left: ExpressionNode, start: i3
                     sg_4: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_AND { break sg_4; }
                         pos += 1;
-                        pos = scan_expression(tokens, pos, 3);
+                        pos = scan_expression(tokens, pos, follow, 3);
                         if pos < 0 { break sg_4; }
                         break sg_4_done;
                     }
@@ -1193,7 +1263,7 @@ fn _parse_expression__inner_lr_1(p: &mut Parser, left: ExpressionNode, start: i3
         _plus_first = false;
         let op = p.expect(TK_AND)?;
         let mut args: List<ExpressionNode> = [];
-        let expression = _parse_expression(p, 3)?;
+        let expression = _parse_expression(p, follow, 3)?;
         args.push(expression);
         let op_args = OpArgsItem {
             op,
@@ -1208,11 +1278,12 @@ fn _parse_expression__inner_lr_1(p: &mut Parser, left: ExpressionNode, start: i3
     }));
 }
 
-fn _parse_expression__inner_lr_2(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression__inner_lr_2(p: &mut Parser, left: ExpressionNode, start: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExpressionNode, ParseError> {
     let mut op_args_list: List<OpArgsItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
+            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.tokens;
@@ -1221,7 +1292,7 @@ fn _parse_expression__inner_lr_2(p: &mut Parser, left: ExpressionNode, start: i3
                     sg_5: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_OR { break sg_5; }
                         pos += 1;
-                        pos = scan_expression(tokens, pos, 2);
+                        pos = scan_expression(tokens, pos, follow, 2);
                         if pos < 0 { break sg_5; }
                         break sg_5_done;
                     }
@@ -1235,7 +1306,7 @@ fn _parse_expression__inner_lr_2(p: &mut Parser, left: ExpressionNode, start: i3
         _plus_first = false;
         let op = p.expect(TK_OR)?;
         let mut args: List<ExpressionNode> = [];
-        let expression = _parse_expression(p, 2)?;
+        let expression = _parse_expression(p, follow, 2)?;
         args.push(expression);
         let op_args = OpArgsItem {
             op,
@@ -1250,9 +1321,9 @@ fn _parse_expression__inner_lr_2(p: &mut Parser, left: ExpressionNode, start: i3
     }));
 }
 
-fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = _parse_expression__inner_atom(p)?;
+    let mut result = _parse_expression__inner_atom(p, follow)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_AND {
@@ -1260,7 +1331,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
                 if scan_expression_lr_1(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expression__inner_lr_1(p, result, start)?;
+                result = _parse_expression__inner_lr_1(p, result, start, follow)?;
             } else {
                 break;
             }
@@ -1269,7 +1340,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
                 if scan_expression_lr_2(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expression__inner_lr_2(p, result, start)?;
+                result = _parse_expression__inner_lr_2(p, result, start, follow)?;
             } else {
                 break;
             }
@@ -1280,8 +1351,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
     return Result::<ExpressionNode, ParseError>::Ok(result);
 }
 
-fn _parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode, ParseError> {
-    let r = _parse_expression__inner(p, min_prec);
+fn _parse_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<ExpressionNode, ParseError> {
+    let r = _parse_expression__inner(p, follow, min_prec);
     if let Err(mut e) = r {
         e.rule_stack.push("expression");
         return Result::<ExpressionNode, ParseError>::Err(e);
@@ -1289,18 +1360,26 @@ fn _parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode
     return r;
 }
 
-pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
-    let _result = _parse_expression(&mut parser, 0);
-    if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ExpressionNode, ParseError>::Err(_d);
-            }
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
         }
-        return Result::<ExpressionNode, ParseError>::Err(_e);
+    }
+    return e;
+}
+
+pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = _parse_expression(&mut parser, &EMPTY_FOLLOW, 0);
+    if let Err(_e) = _result {
+        return Result::<ExpressionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
@@ -1358,4 +1437,6 @@ pub fn to_tree(node: &ExpressionNode) -> CstNode {
     walk_expression(&mut recorder, node);
     return recorder.build();
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_IDENTIFIER, TK_NOT]];
 

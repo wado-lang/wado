@@ -1,0 +1,31 @@
+// LICM must NOT hoist a float→int cast out of a loop: it lowers to the
+// trapping `i32.trunc_f64_s` (not `trunc_sat`), so hoisting an invariant cast
+// to the pre-header would trap on an out-of-range / NaN value where a
+// zero-iteration loop never evaluates it. Here `n == 0`, so the loop body —
+// and the `x as i32` cast — must never run, even though `1e30` is out of i32
+// range. If the cast were hoisted, this would trap; instead it returns 0.
+
+use { println, Stdout } from "core:cli";
+
+fn sum_up_to(n: i32, x: f64) -> i32 {
+    let mut i = 0;
+    let mut s = 0;
+    while i < n {
+        let lim = x as i32;
+        s = s + lim;
+        i = i + 1;
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    let r = sum_up_to(0, 1.0e30);
+    println(`{r}`);
+}
+
+__DATA__
+{
+    "stdout": "0\n",
+    "trapped": false,
+    "wir_not_expect:O2": ["_licm_arith"]
+}

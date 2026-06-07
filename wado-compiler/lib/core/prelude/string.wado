@@ -34,6 +34,9 @@ struct Utf8Scalar {
 /// overlong / surrogate / out-of-range rejections so the three `from_utf8*`
 /// entry points share one grammar.
 fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
+    // Well-formed input dominates: every `valid: false` rejection below is
+    // marked `cold_path()` so the validator's hot loop is laid out for valid
+    // bytes and the rejections stay off the predicted-taken path.
     let b0 = bytes.get_unchecked(start);
     if b0 < 0x80 {
         // 1-byte (ASCII)
@@ -41,15 +44,18 @@ fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
     }
     if b0 < 0xC2 {
         // Bare continuation byte (0x80–0xBF) or overlong 2-byte lead (0xC0, 0xC1)
+        builtin::cold_path();
         return Utf8Scalar { code: 0, advance: 1, valid: false };
     }
     if b0 < 0xE0 {
         // 2-byte sequence: 110xxxxx 10xxxxxx
         if start + 1 >= len {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let b1 = bytes.get_unchecked(start + 1);
         if b1 < 0x80 || b1 > 0xBF {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let code = (b0 as u32 & 0x1F) << 6 | b1 as u32 & 0x3F;
@@ -58,18 +64,22 @@ fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
     if b0 < 0xF0 {
         // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
         if start + 1 >= len {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let b1 = bytes.get_unchecked(start + 1);
         // Reject bad continuation, overlong (E0 < A0), and surrogates (ED >= A0)
         if b1 < 0x80 || b1 > 0xBF || b0 == 0xE0 && b1 < 0xA0 || b0 == 0xED && b1 >= 0xA0 {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         if start + 2 >= len {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
         let b2 = bytes.get_unchecked(start + 2);
         if b2 < 0x80 || b2 > 0xBF {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
         let code = (b0 as u32 & 0x0F) << 12 | (b1 as u32 & 0x3F) << 6 | b2 as u32 & 0x3F;
@@ -78,25 +88,31 @@ fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
     if b0 < 0xF5 {
         // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
         if start + 1 >= len {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let b1 = bytes.get_unchecked(start + 1);
         // Reject bad continuation, overlong (F0 < 90), and out-of-range (F4 > 8F)
         if b1 < 0x80 || b1 > 0xBF || b0 == 0xF0 && b1 < 0x90 || b0 == 0xF4 && b1 > 0x8F {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         if start + 2 >= len {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
         let b2 = bytes.get_unchecked(start + 2);
         if b2 < 0x80 || b2 > 0xBF {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
         if start + 3 >= len {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 3, valid: false };
         }
         let b3 = bytes.get_unchecked(start + 3);
         if b3 < 0x80 || b3 > 0xBF {
+            builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 3, valid: false };
         }
         let code =
@@ -104,6 +120,7 @@ fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
         return Utf8Scalar { code, advance: 4, valid: true };
     }
     // 0xF5–0xFF: always invalid
+    builtin::cold_path();
     return Utf8Scalar { code: 0, advance: 1, valid: false };
 }
 
@@ -205,7 +222,8 @@ impl String {
             return;
         }
         let new_used = self.used + len;
-        if builtin::unlikely(new_used > builtin::array_len(&self.repr)) {
+        if new_used > builtin::array_len(&self.repr) {
+            builtin::cold_path();
             self.grow(new_used);
         }
         for let mut i = 0; i < len; i += 1 {
@@ -225,7 +243,8 @@ impl String {
     /// a single `array_copy` and do not require the caller to maintain a write offset.
     pub fn internal_reserve_uninit(&mut self, n: i32) -> i32 {
         let new_used = self.used + n;
-        if builtin::unlikely(new_used > builtin::array_len(&self.repr)) {
+        if new_used > builtin::array_len(&self.repr) {
+            builtin::cold_path();
             self.grow(new_used);
         }
         let start = self.used;
@@ -240,7 +259,8 @@ impl String {
             return;
         }
         let new_used = self.used + n;
-        if builtin::unlikely(new_used > builtin::array_len(&self.repr)) {
+        if new_used > builtin::array_len(&self.repr) {
+            builtin::cold_path();
             self.grow(new_used);
         }
         builtin::array_fill(&mut self.repr, self.used, byte, n);
@@ -257,7 +277,8 @@ impl String {
         }
 
         let new_used = self.used + other_len;
-        if builtin::unlikely(new_used > builtin::array_len(&self.repr)) {
+        if new_used > builtin::array_len(&self.repr) {
+            builtin::cold_path();
             self.grow(new_used);
         }
 
@@ -275,7 +296,8 @@ impl String {
             return;
         }
         let new_used = self.used + n;
-        if builtin::unlikely(new_used > builtin::array_len(&self.repr)) {
+        if new_used > builtin::array_len(&self.repr) {
+            builtin::cold_path();
             self.grow(new_used);
         }
         builtin::array_copy(&mut self.repr, self.used, &bytes.internal_raw_data(), 0, n);
@@ -295,7 +317,8 @@ impl String {
             return;
         }
         let new_used = self.used + n;
-        if builtin::unlikely(new_used > builtin::array_len(&self.repr)) {
+        if new_used > builtin::array_len(&self.repr) {
+            builtin::cold_path();
             self.grow(new_used);
         }
         builtin::array_copy(&mut self.repr, self.used, &s.internal_raw_bytes(), start, n);
@@ -524,7 +547,8 @@ impl String {
     pub fn push(&mut self, c: char) {
         let code = c as u32;
 
-        if builtin::unlikely(self.used + 4 > builtin::array_len(&self.repr)) {
+        if self.used + 4 > builtin::array_len(&self.repr) {
+            builtin::cold_path();
             self.grow(self.used + 4);
         }
 
@@ -1178,6 +1202,7 @@ impl String {
         while i < len {
             let scalar = decode_utf8_scalar(bytes, i, len);
             if !scalar.valid {
+                builtin::cold_path();
                 return Result::Err("invalid UTF-8");
             }
             i += scalar.advance;
@@ -1195,6 +1220,7 @@ impl String {
         if let Ok(s) = String::from_utf8_slice(slice) {
             return s;
         }
+        builtin::cold_path();
         // Slow path: rebuild, emitting one U+FFFD per invalid lead. How many
         // bytes a bad sequence consumes before resuming is exactly
         // `decode_utf8_scalar`'s `advance`.

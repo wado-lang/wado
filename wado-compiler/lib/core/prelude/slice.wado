@@ -106,7 +106,8 @@ impl IndexValue<i32> for ArraySlice<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        if builtin::unlikely(index < 0 || index >= self.end - self.start) {
+        if index < 0 || index >= self.end - self.start {
+            builtin::cold_path();
             panic("index out of bounds");
         }
         return builtin::array_get(self.repr, self.start + index);

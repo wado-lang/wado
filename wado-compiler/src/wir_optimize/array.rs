@@ -4,7 +4,7 @@
 //! - **Large array literal splitting**: `array.new_fixed` (>= threshold) → `array.new_default` + sets.
 //!
 //! List literals reach WIR already as `ArrayNewFixed`: the NIR
-//! `optimize::array_literal` pass materializes `NirExprKind::ArrayLiteral` from
+//! `optimize::array_literal` pass materializes `ExprKind::ArrayLiteral` from
 //! the `SequenceLiteralBuilder` push sequence, and `wir_build` lowers it
 //! directly. The former WIR-level `collapse_array_push_sequences` that
 //! reconstructed `ArrayNewFixed` from inlined `List::push` chains is therefore

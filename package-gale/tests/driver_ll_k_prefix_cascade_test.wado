@@ -1,0 +1,48 @@
+use g from "./grammars/ll_k_prefix_cascade.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/ll_k_prefix_cascade",
+        },
+    };
+use { normalize_tree } from "./grammars/ll_k_prefix_cascade.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// K-prefix cascade through a multi-alt RuleRef. The tail-greedy
+// `(X Y)+` lives inside `m`, reached via `a : N m`. The caller's
+// deterministic prefix `[{X}, {Y}, {W}]` (from `c : X Y W`) must flow
+// through `a`'s transparent variant into `m`'s variant so `m`'s loop
+// yields the trailing `X Y W` block to `c` instead of swallowing it.
+test "tree: N K X Y X Y W — cascade yields the caller's prefix through m" {
+    assert_tree(&"N K X Y X Y W", &"
+        (r (a N (m K X Y)) (c X Y W))
+    ");
+}
+
+// Two surplus iters before the caller's prefix: the per-depth gate
+// only matches when `W` actually arrives at depth 2. Earlier in the
+// loop it sees `[X, Y, X]` (mismatch at depth 2) and lets the iter
+// fire, so every full `X Y` block stays inside `m` until the one that
+// exposes `c`'s `X Y W`.
+test "tree: N K X Y X Y X Y W — gate fires on the iter that exposes c's prefix" {
+    assert_tree(&"N K X Y X Y X Y W", &"
+        (r (a N (m K X Y X Y)) (c X Y W))
+    ");
+}
+
+// `m`'s second alt (`K Z`) stays reachable: the variant must not
+// disturb non-loop dispatch. Here there is no trailing `c`-shaped
+// suffix, so the input is just `a` ending in `m K Z`.
+test "tree: N K Z — m's second alt still dispatches" {
+    assert_tree(&"N K Z X Y W", &"
+        (r (a N (m K Z)) (c X Y W))
+    ");
+}

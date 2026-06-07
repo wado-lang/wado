@@ -258,6 +258,13 @@ impl SymbolTable {
         Self::default()
     }
 
+    /// Iterate every symbol with its canonical key, across all modules.
+    /// Order follows insertion (`define` order). Callers that want a single
+    /// module filter on `key.module`.
+    pub fn iter(&self) -> impl Iterator<Item = (&SymbolKey, &Symbol)> {
+        self.symbols.iter()
+    }
+
     /// Check whether a symbol with `name` is already defined directly in
     /// `module_source`.  Unlike [`Self::lookup_in_module`], this does **not**
     /// follow re-export chains — it only inspects symbols registered via

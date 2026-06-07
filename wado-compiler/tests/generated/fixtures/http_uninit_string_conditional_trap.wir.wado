@@ -1026,7 +1026,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -1055,12 +1056,12 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     b83: block {
         l84: loop {
             if __hfs_index_12 >= _licm_used_10 {
+                self.index = __hfs_index_12;
                 break b83;
             }
             byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
             __hfs_index_12 = __hfs_index_12 + 1;
             "core:prelude/list.wado/List<u8>::push"(__b, byte);
-            self.index = __hfs_index_12;
             continue l84;
         };
     };
@@ -1070,7 +1071,8 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
 fn "core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);

@@ -9,7 +9,7 @@
 // `List<T>::len(&self) -> i32 { return self.used; }` is single-tail
 // and CTFE-eligible: when `self` carries `KnownFields { used: 16 }`
 // via field_env, the call folds to `16`. The bounds check
-// `unlikely(1 >= arr.len())` then folds to false and the panic branch
+// `1 >= arr.len()` then folds to false and the panic branch
 // drops at NIR.
 
 use { println, Stdout } from "core:cli";
@@ -20,7 +20,7 @@ fn check_arr_len_loop_invariant() -> i32 {
     for let mut i = 0; i < 5; i += 1 {
         acc += i;
     }
-    if builtin::unlikely(1 >= arr.len()) {
+    if 1 >= arr.len() {
         panic("dead_arr_len_loop_inv_28491");
     }
     return acc + arr.len();

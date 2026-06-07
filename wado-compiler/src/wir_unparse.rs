@@ -1649,8 +1649,11 @@ impl<'a> WirUnparser<'a> {
                 }
             }
             WirInstr::BranchHint { likely, expr } => {
+                // Render the branch-hint annotation as `@likely(...)` /
+                // `@unlikely(...)`. The `@` marks it as a hint on the condition,
+                // distinct from a call — there is no `builtin::likely` function.
                 let hint = if *likely { "likely" } else { "unlikely" };
-                self.write(&format!("builtin::{hint}("));
+                self.write(&format!("@{hint}("));
                 self.unparse_instr_inline(expr);
                 self.write(")");
             }

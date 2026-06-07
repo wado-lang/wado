@@ -13,11 +13,9 @@
 //! The visitor mutates the arena `Body` directly: the per-node rewrites
 //! (`reduce_local_a`) and the block-level branch splice
 //! (`reduce_local_block_a`) operate on arena ids, so const-fold no longer
-//! round-trips the body through the `body_block()` / `set_body_block()`
-//! tree bridge. Globals and the per-function alias / value-copy maps are
-//! still tree-shaped NIR; the alias map is computed from a read-only
-//! materialization of the arena body, and the global env/field env are
-//! read from the (tree) global initializers.
+//! round-trips the body through a tree bridge. Global initializers are arena
+//! `ExprBody`s too, so the global env / field env are read from them via the
+//! arena interpreter path.
 //!
 //! The field-knowledge bookkeeping was originally a separate pass
 //! (`optimize::field_forward`); merging it into const-fold breaks the
@@ -36,7 +34,7 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirExpr, NirExprKind, NirStmtKind, NirUnaryOp};
+use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind,
 };
@@ -45,7 +43,7 @@ use crate::niri::{
     Arm, CalleeMap, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
     Value, is_ctfe_eligible,
 };
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy_a};
 use super::arena_query::has_break_to;
@@ -93,19 +91,11 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
             visitor.interpreter.enter_function();
             // Compute per-function alias annotations (driven by the
             // function's stable address-taken / stores sets plus a
-            // body walk for transient inlined-in copies). The walk is
-            // tree-shaped, so it runs over a read-only materialization
-            // of the arena body. The interpreter consults these every
-            // time the visitor calls `bind_field` / `invalidate_field`
-            // / `invalidate_aliased_fields`.
-            let body_tree = body.to_block();
-            let alias_info = build_alias_info(
-                &body_tree,
-                &locals,
-                &address_taken,
-                &stores_aliased,
-                &type_table,
-            );
+            // body walk for transient inlined-in copies). The interpreter
+            // consults these every time the visitor calls `bind_field` /
+            // `invalidate_field` / `invalidate_aliased_fields`.
+            let alias_info =
+                build_alias_info(body, &locals, &address_taken, &stores_aliased, &type_table);
             visitor.interpreter.set_alias_info(alias_info);
             let root = body.root;
             changed |= visitor.visit_block(body, root);
@@ -145,8 +135,8 @@ fn build_callee_map(project: &NirPackage) -> CalleeMap {
 /// `Unevaluated`. Globals whose initializer doesn't reduce are left
 /// out of the map (absent → `Lattice::Unevaluated` by default).
 ///
-/// Global initializers are tree-shaped NIR, so this stays on the tree
-/// [`Interpreter::reduce_to_lattice`] path.
+/// Global initializers are arena `ExprBody`s, so this reduces them on the
+/// arena [`Interpreter::reduce_to_lattice_a`] path.
 fn build_global_env(
     project: &NirPackage,
     type_table: &TypeTable,
@@ -165,44 +155,13 @@ fn build_global_env(
             let mut interp = Interpreter::new(type_table);
             interp.with_callees(callees);
             interp.with_globals(&env);
-            interp.reduce_to_lattice(&global.initializer)
+            interp.reduce_to_lattice_a(global.initializer.body(), global.initializer.expr())
         };
         if !matches!(lattice, Lattice::Unevaluated) {
             env.insert(key, lattice);
         }
     }
     env
-}
-
-/// The statically-known [`SeqField::Len`] length of a constant `List` /
-/// `String` value: the element count of its backing array literal (directly or
-/// through the `{ let __b = <array>; *__b }` builder block an array literal
-/// leaves) or the explicit `used` field of a `{ repr, used: N }` struct literal.
-///
-/// Operates on the tree-shaped global initializer.
-fn const_seq_len(value: &NirExpr) -> Option<i32> {
-    match &value.kind {
-        NirExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
-        NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } => {
-            b.stmts.iter().rev().find_map(|s| match &s.kind {
-                NirStmtKind::Let { value, .. } => const_seq_len(value),
-                NirStmtKind::Expr(e) => const_seq_len(e),
-                _ => None,
-            })
-        }
-        NirExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
-            if f.name == SeqField::Len.field_name()
-                && let NirExprKind::IntLiteral { value, .. } = &f.value.kind
-            {
-                return i32::try_from(*value).ok();
-            }
-            None
-        }),
-        NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
-            const_seq_len(inner)
-        }
-        _ => None,
-    }
 }
 
 /// Arena counterpart of [`const_seq_len`]: the statically-known
@@ -258,10 +217,10 @@ fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
         return env;
     }
     // A non-placeholder const initializer (a user const sequence global) is a
-    // direct source. Global initializers are tree-shaped.
+    // direct source.
     for global in &project.globals {
         if !global.wado_mutable
-            && let Some(n) = const_seq_len(&global.initializer)
+            && let Some(n) = const_seq_len_a(global.initializer.body(), global.initializer.expr())
         {
             record_seq_len(
                 &mut env,
@@ -642,11 +601,10 @@ impl ConstFoldVisitor<'_> {
         self.walk_children(body, NodeRef::Pat(p))
     }
 
-    /// Recurse into every id-bearing child of `node`, dispatching by
-    /// category. Mirrors `nir_visitor::opt_walk_*`: the const-fold
-    /// special cases (control flow, `Assign`) are handled by the
-    /// callers before they reach this generic walk, so the only nodes
-    /// routed here are the straight-line ones.
+    /// Recurse into every id-bearing child of `node`. The const-fold special
+    /// cases (control flow, `Assign`) are handled by the callers before they
+    /// reach this generic walk, so the only nodes routed here are the
+    /// straight-line ones.
     fn walk_children(&mut self, body: &mut Body, node: NodeRef) -> bool {
         let mut kids = Vec::new();
         body.for_each_child(node, |c| kids.push(c));
@@ -1088,7 +1046,7 @@ fn stmt_falls_through(body: &Body, s: StmtId, type_table: &TypeTable) -> bool {
 /// definitely do not produce a value (`panic(…)`, `unreachable()`,
 /// `loop { }`, calls whose return type is `!`).
 fn is_never_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(type_id), ResolvedType::Never)
+    type_table.is_never(type_id)
 }
 
 /// True when a `Call`'s callee is a compiler builtin that cannot
@@ -1253,8 +1211,8 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
                     effects.mut_borrowed.insert(*index);
                 }
             }
-            // Builtin intrinsics (`array_*`, `select`, `likely` /
-            // `unlikely`, `memory_*`, `store_*`, `load_*`,
+            // Builtin intrinsics (`array_*`, `select`, `cold_path`,
+            // `memory_*`, `store_*`, `load_*`,
             // `copy_value`, the i64-128 helpers, …) never mutate
             // user-level struct fields tracked by `field_env`:
             // `array_set` writes an array element, `memory_grow`

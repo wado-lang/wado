@@ -1832,7 +1832,7 @@ impl DeserializeStruct for JsonStructAccess {
             self.de.pos += 1;
         }
 
-        if builtin::likely(!has_escape) {
+        if !has_escape {
             // Fast path: key has no escapes, compare directly from input buffer
             let key_end = self.de.pos;
             self.de.pos += 1;  // skip closing '"'
@@ -1847,6 +1847,7 @@ impl DeserializeStruct for JsonStructAccess {
             };
             return Result::Ok(Option::Some(idx));
         }
+        builtin::cold_path();
 
         // Slow path: key has escape sequences, must parse fully.
         // Reset position to before the key and use read_json_string.

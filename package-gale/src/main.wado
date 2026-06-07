@@ -158,8 +158,8 @@ fn cmd_dump(paths: List<String>) with Stdout, Stderr, Preopens {
     normalize_caches(&mut merged);
     let lit_tokens = collect_literal_tokens(&merged.parser_rules);
     // Lower through the same ctx render_dump renders with, so the
-    // follow-variant registry (with K-prefix masks) is populated and the
-    // dump reflects the literal ctx that lowered the grammar.
+    // follow-mask registry is populated and the dump reflects the
+    // literal ctx that lowered the grammar.
     let mut ctx = GenContext::new(&merged.parser_rules, &lit_tokens);
     let lowered = lower_with_ctx(&merged, &lit_tokens, &mut ctx);
     print(render_dump(&merged, &lowered, &mut ctx));

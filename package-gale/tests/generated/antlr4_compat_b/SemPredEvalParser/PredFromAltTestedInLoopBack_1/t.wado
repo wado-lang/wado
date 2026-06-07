@@ -145,6 +145,75 @@ impl Token {
 // with reference-containing fields triggers a compiler bug
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
+/// Runtime FOLLOW-continuation gate for tail-greedy loops.
+///
+/// `follow` is the caller's deterministic K-prefix continuation:
+/// `follow[d]` is the set of token kinds that may appear at input depth
+/// `d` if control belongs to the caller rather than to another iteration
+/// of the loop. An empty `follow` (the common, non-repair case) disables
+/// the gate. The loop yields to the caller — breaking `*`/`+` or skipping
+/// `?` — exactly when EVERY non-empty depth-set matches the upcoming
+/// input, i.e. when the next tokens are unambiguously the caller's
+/// continuation.
+///
+/// Threaded as a defaulted `&EMPTY_FOLLOW` argument through the generated
+/// `parse_*` / `scan_*` functions; repair call sites pass a `FOLLOW_MASK_*`
+/// constant (or forward their own `follow`). This replaces the previous
+/// per-(rule, mask) cloned `__follow_<id>` variants: the mask is data
+/// carried at runtime, not code baked into a specialised function.
+///
+/// `eof_kind` is the token kind reported past the end of the stream, so a
+/// caller continuation ending in EOF gates correctly. Used by both the
+/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
+/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
+/// lockstep with parse.
+pub global EMPTY_FOLLOW: List<List<i32>> = [];
+
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_MASK_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
+pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+    if follow.is_empty() {
+        return false;
+    }
+    for let mut d = 0; d < follow.len(); d += 1 {
+        let set = &follow[d];
+        if set.is_empty() {
+            // No constraint at this depth — a vacuous match, keep going.
+            continue;
+        }
+        let idx = pos + d;
+        let kind = if idx < tokens.len() { tokens[idx].kind } else { eof_kind };
+        let mut hit = false;
+        for let t of set {
+            if kind == *t {
+                hit = true;
+                break;
+            }
+        }
+        if !hit {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// ParseError represents a parse failure with location and expected tokens.
 ///
 /// `message` is the local "expected X, got Y" description, kept free of
@@ -931,20 +1000,20 @@ impl Parser {
     }
 }
 
-fn scan_file_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_file_(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_para(tokens, pos, 0);
+    pos = scan_para(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
-    pos = scan_para(tokens, pos, 0);
+    pos = scan_para(tokens, pos, &FOLLOW_MASK_1, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_para(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_para(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_para_content__follow_0(tokens, pos, 0);
+    pos = scan_para_content(tokens, pos, &FOLLOW_MASK_2, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_NL { return -1; }
     pos += 1;
@@ -953,7 +1022,7 @@ fn scan_para(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_para_content(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_para_content(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     sg_0: {
@@ -977,7 +1046,7 @@ fn scan_para_content(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         }
         return -1;
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         let gp_1 = pos;
         sg_1: {
@@ -1007,17 +1076,17 @@ fn scan_para_content(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_s(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_file___inner(p: &mut Parser) -> Result<FileNode, ParseError> {
+fn _parse_file___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FileNode, ParseError> {
     let start = p.peek().span.start;
-    let para = _parse_para(p)?;
-    let para_2 = _parse_para(p)?;
+    let para = _parse_para(p, &FOLLOW_MASK_0)?;
+    let para_2 = _parse_para(p, &FOLLOW_MASK_1)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<FileNode, ParseError>::Ok(FileNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1027,8 +1096,8 @@ fn _parse_file___inner(p: &mut Parser) -> Result<FileNode, ParseError> {
     });
 }
 
-fn _parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
-    let r = _parse_file___inner(p);
+fn _parse_file_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FileNode, ParseError> {
+    let r = _parse_file___inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("file_");
         return Result::<FileNode, ParseError>::Err(e);
@@ -1036,9 +1105,9 @@ fn _parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
     return r;
 }
 
-fn _parse_para__inner(p: &mut Parser) -> Result<ParaNode, ParseError> {
+fn _parse_para__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ParaNode, ParseError> {
     let start = p.peek().span.start;
-    let para_content = _parse_para_content__follow_0(p)?;
+    let para_content = _parse_para_content(p, &FOLLOW_MASK_2)?;
     let nl = p.expect(TK_NL)?;
     let nl_2 = p.expect(TK_NL)?;
     return Result::<ParaNode, ParseError>::Ok(ParaNode {
@@ -1049,8 +1118,8 @@ fn _parse_para__inner(p: &mut Parser) -> Result<ParaNode, ParseError> {
     });
 }
 
-fn _parse_para(p: &mut Parser) -> Result<ParaNode, ParseError> {
-    let r = _parse_para__inner(p);
+fn _parse_para(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ParaNode, ParseError> {
+    let r = _parse_para__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("para");
         return Result::<ParaNode, ParseError>::Err(e);
@@ -1058,12 +1127,13 @@ fn _parse_para(p: &mut Parser) -> Result<ParaNode, ParseError> {
     return r;
 }
 
-fn _parse_para_content__inner(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
+fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ParaContentNode, ParseError> {
     let start = p.peek().span.start;
     let mut lit_s_or_lit_x_or_nl_list: List<Token> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
+            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.tokens;
@@ -1105,8 +1175,8 @@ fn _parse_para_content__inner(p: &mut Parser) -> Result<ParaContentNode, ParseEr
     });
 }
 
-fn _parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
-    let r = _parse_para_content__inner(p);
+fn _parse_para_content(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ParaContentNode, ParseError> {
+    let r = _parse_para_content__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("paraContent");
         return Result::<ParaContentNode, ParseError>::Err(e);
@@ -1114,7 +1184,7 @@ fn _parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
     return r;
 }
 
-fn _parse_s__inner(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
     let lit_s = p.expect(TK_LIT_S)?;
     return Result::<SNode, ParseError>::Ok(SNode {
@@ -1123,8 +1193,8 @@ fn _parse_s__inner(p: &mut Parser) -> Result<SNode, ParseError> {
     });
 }
 
-fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
-    let r = _parse_s__inner(p);
+fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SNode, ParseError> {
+    let r = _parse_s__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("s");
         return Result::<SNode, ParseError>::Err(e);
@@ -1132,177 +1202,53 @@ fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     return r;
 }
 
-fn scan_para_content__follow_0(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    let gp_3 = pos;
-    sg_3: {
-        pos = gp_3;
-        sg_3_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_3_0; }
-            pos += 1;
-            break sg_3;
-        }
-        pos = gp_3;
-        sg_3_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_3_1; }
-            pos += 1;
-            break sg_3;
-        }
-        pos = gp_3;
-        sg_3_2: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_3_2; }
-            pos += 1;
-            break sg_3;
-        }
-        return -1;
-    }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !((pos + 0 < tokens.len() && tokens[pos + 0].kind == TK_NL) && (pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_NL)) {
-        let sp = pos;
-        let gp_4 = pos;
-        sg_4: {
-            pos = gp_4;
-            sg_4_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_4_0; }
-                pos += 1;
-                break sg_4;
-            }
-            pos = gp_4;
-            sg_4_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_4_1; }
-                pos += 1;
-                break sg_4;
-            }
-            pos = gp_4;
-            sg_4_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_4_2; }
-                pos += 1;
-                break sg_4;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
+fn _gale_new_parser(input: &String) -> Parser {
+    let tokens = tokenize(input);
+    let chars: List<char> = input.chars().collect();
+    return Parser::new(tokens, chars);
 }
 
-fn _parse_para_content__follow_0__inner(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
-    let start = p.peek().span.start;
-    let mut lit_s_or_lit_x_or_nl_list: List<Token> = [];
-    let mut _plus_first = true;
-    loop {
-        if !_plus_first {
-            if p.peek_kind() == TK_NL && p.peek_at(1) == TK_NL { break; }
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                let tokens = &p.tokens;
-                let mut pos: i32 = p.pos;
-                let gp_5 = pos;
-                sg_5: {
-                    pos = gp_5;
-                    sg_5_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_5_0; }
-                        pos += 1;
-                        break sg_5;
-                    }
-                    pos = gp_5;
-                    sg_5_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_5_1; }
-                        pos += 1;
-                        break sg_5;
-                    }
-                    pos = gp_5;
-                    sg_5_2: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_5_2; }
-                        pos += 1;
-                        break sg_5;
-                    }
-                    break rep_scan;
-                }
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos < 0 { break; }
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
         }
-        _plus_first = false;
-        let lit_s_or_lit_x_or_nl = p.match_set([TK_LIT_S, TK_LIT_X, TK_NL])?;
-        lit_s_or_lit_x_or_nl_list.push(lit_s_or_lit_x_or_nl);
     }
-    return Result::<ParaContentNode, ParseError>::Ok(ParaContentNode {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        lit_s_or_lit_x_or_nl_list,
-    });
-}
-
-fn _parse_para_content__follow_0(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
-    let r = _parse_para_content__follow_0__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("paraContent");
-        return Result::<ParaContentNode, ParseError>::Err(e);
-    }
-    return r;
+    return e;
 }
 
 pub fn parse_file_(input: &String) -> Result<FileNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_file_(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<FileNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<FileNode, ParseError>::Err(_e);
+        return Result::<FileNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_para(input: &String) -> Result<ParaNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_para(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ParaNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ParaNode, ParseError>::Err(_e);
+        return Result::<ParaNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_para_content(input: &String) -> Result<ParaContentNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_para_content(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ParaContentNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ParaContentNode, ParseError>::Err(_e);
+        return Result::<ParaContentNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_s(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<SNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<SNode, ParseError>::Err(_e);
+        return Result::<SNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
@@ -1350,4 +1296,9 @@ pub fn to_tree(node: &FileNode) -> CstNode {
 fn _gale_kind_set_0(k: i32) -> bool {
     return k matches { TK_LIT_S | TK_LIT_X | TK_NL };
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_S, TK_LIT_X, TK_NL]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_EOF]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_NL], [TK_NL]];
+global FOLLOW_MASK_3: List<List<i32>> = [[TK_NL]];
 

@@ -928,12 +928,19 @@ b : 'y' ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_a(input: &String)");
     assert str_contains(&output, &"pub fn parse_b(input: &String)");
-    // The entry captures the result so a deeper recovery error (recorded in
-    // `parser.pending` by a scan-gated repetition over a malformed element)
-    // can be preferred over the shallow top-level failure.
+    // Per-rule entries share the type-independent prologue/epilogue via two
+    // helpers emitted once (`_gale_new_parser` builds the Parser;
+    // `_gale_pick_error` prefers a deeper recovery error recorded in
+    // `parser.pending` by a scan-gated repetition over a malformed element,
+    // over the shallow top-level failure). The wrapper keeps only the typed
+    // inner call and the typed `Err` reconstruction.
+    assert str_contains(&output, &"let mut parser = _gale_new_parser(input);");
     assert str_contains(&output, &"let _result = _parse_a(&mut parser);");
     assert str_contains(&output, &"let _result = _parse_b(&mut parser);");
-    assert str_contains(&output, &"if let Some(_d) = parser.pending");
+    assert str_contains(&output, &"_gale_pick_error(&parser, _e)");
+    assert str_contains(&output, &"fn _gale_new_parser(input: &String) -> Parser");
+    assert str_contains(&output, &"fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError");
+    assert str_contains(&output, &"if let Some(_d) = &parser.pending");
     assert str_contains(&output, &"return parse_a(input);");
 }
 
@@ -1010,6 +1017,47 @@ C : 'c' ;
     let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
     assert !str_contains(&traced, &"trace_pick(p, &\"tok\",");
     assert str_contains(&traced, &"trace_pick(p, &\"sub\",");
+}
+
+test "all-single-token multi-alt rule compacts to a { span, token } struct" {
+    // `tok : A | B | C` — every alt is one bare token, so the matched
+    // token's kind already records which alt fired. The CST node, parser,
+    // and walk all collapse to the compact single-token shape.
+    let input = "grammar T;
+tok : A | B | C ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"pub struct TokNode {");
+    assert str_contains(&output, &"pub token: Token");
+    assert !str_contains(&output, &"pub variant TokNode");
+    // Parser is a kind-set check + one construction, not an N-way cascade.
+    assert str_contains(&output, &"let token = p.expect(kind)?;");
+    assert str_contains(&output, &"TokNode {");
+    // Walk visits the single token directly.
+    assert str_contains(&output, &"v.visit_token(&node.token);");
+}
+
+test "labeled single-token alts stay a variant (CST/parse/walk in lockstep)" {
+    // `sign : p='+' | m='-'` carries element labels, so the compaction
+    // (which drops the per-alt field name) must NOT fire. All three emitters
+    // screen labels out via the one surface `all_alts_are_single_token`
+    // predicate; if the CST type generator disagreed it would emit a struct
+    // node while parse/walk emit `SignNode::Alt0(...)`, and the generated
+    // parser would not compile.
+    let input = "grammar T;
+sign : p='+' | m='-' ;
+WS : [ \\t]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"pub variant SignNode"), `expected variant SignNode, got:\n{output}`;
+    assert !str_contains(&output, &"pub struct SignNode {");
+    // The parse side constructs the variant arms, so the type must match.
+    assert str_contains(&output, &"SignNode::Alt0(");
 }
 
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {

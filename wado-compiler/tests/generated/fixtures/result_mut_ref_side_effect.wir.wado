@@ -552,44 +552,49 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
     let index_267: i32;
     let index_269: i32;
     let __hfs_pos_270: i32;
-    start_1 = index_257 = p.pos; if builtin::unlikely(index_257 >= p.tokens.used) {
+    start_1 = index_257 = p.pos; if @unlikely(index_257 >= p.tokens.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_257).span.start;
     let __match_scrut_0: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
     tok_192 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance"(p);
     __match_scrut_0 = struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Lit" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P0" { span: tok_192.span, tok: tok_192 } } };
-    result = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_0) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+    result = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_0)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
         __qm_v_2 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_0).payload_0;
         __qm_v_2;
     } else {
         __qm_e_3 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_0).payload_0;
+        cold_path;
         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_3 };
     });
     __hfs_pos_270 = p.pos;
     b2: block {
         l3: loop {
-            suffix_kind = index_195 = __hfs_pos_270; if builtin::unlikely(index_195 >= p.tokens.used) {
+            suffix_kind = index_195 = __hfs_pos_270; if @unlikely(index_195 >= p.tokens.used) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_195).kind;
             if suffix_kind == 4 {
                 let __match_scrut_1: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_1 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 124, 124, 39), used: 4 });
-                tok_8 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_1) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                tok_8 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_1)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     __qm_v_6 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_1).payload_0;
                     __qm_v_6;
                 } else {
                     __qm_e_7 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_1).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_7 };
                 });
                 let __match_scrut_2: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_2 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_11 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_2) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_11 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_2)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_9 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_2).payload_0;
                     __qm_v_9;
                 } else {
                     __qm_e_10 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_2).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_10 };
                 });
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt4" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P4" { span: ref.as_non_null(end_197 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_197 }), expr: result, tok: tok_8, expr2: expr2_11 } };
@@ -602,49 +607,54 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 53;
             }) {
-                grp_kind_12 = index_200 = __hfs_pos_270; if builtin::unlikely(index_200 >= p.tokens.used) {
+                grp_kind_12 = index_200 = __hfs_pos_270; if @unlikely(index_200 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_200).kind;
                 if grp_kind_12 == 51 {
                     let __match_scrut_3: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_3 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 51, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 42, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_3) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_3)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_13 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_3).payload_0;
                         __qm_v_13;
                     } else {
                         __qm_e_14 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_3).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_14 };
                     }));
                 } else if grp_kind_12 == 52 {
                     let __match_scrut_4: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_4 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 52, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 47, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_4) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_4)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_16 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_4).payload_0;
                         __qm_v_16;
                     } else {
                         __qm_e_17 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_4).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_17 };
                     }));
                 } else if grp_kind_12 == 53 {
                     let __match_scrut_5: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_5 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 53, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 37, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_5) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_5)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_19 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_5).payload_0;
                         __qm_v_19;
                     } else {
                         __qm_e_20 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_5).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_20 };
                     }));
                 } else {
                 }
                 let __match_scrut_6: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_6 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_24 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_6) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_24 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_6)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_22 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_6).payload_0;
                     __qm_v_22;
                 } else {
                     __qm_e_23 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_6).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_23 };
                 });
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt5" { discriminant: 2, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P5" { span: ref.as_non_null(end_202 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_202 }), expr: result, expr2: expr2_24 } };
@@ -653,39 +663,43 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 62;
             }) {
-                grp_kind_25 = index_205 = __hfs_pos_270; if builtin::unlikely(index_205 >= p.tokens.used) {
+                grp_kind_25 = index_205 = __hfs_pos_270; if @unlikely(index_205 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_205).kind;
                 if grp_kind_25 == 61 {
                     let __match_scrut_7: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_7 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 61, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 43, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_7) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_7)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_26 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_7).payload_0;
                         __qm_v_26;
                     } else {
                         __qm_e_27 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_7).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_27 };
                     }));
                 } else if grp_kind_25 == 62 {
                     let __match_scrut_8: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_8 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 62, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 45, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_8) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_8)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_29 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_8).payload_0;
                         __qm_v_29;
                     } else {
                         __qm_e_30 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_8).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_30 };
                     }));
                 } else {
                 }
                 let __match_scrut_9: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_9 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_34 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_9) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_34 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_9)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_32 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_9).payload_0;
                     __qm_v_32;
                 } else {
                     __qm_e_33 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_9).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_33 };
                 });
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt6" { discriminant: 3, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P6" { span: ref.as_non_null(end_207 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_207 }), expr: result, expr2: expr2_34 } };
@@ -702,59 +716,65 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 74;
             }) {
-                grp_kind_35 = index_210 = __hfs_pos_270; if builtin::unlikely(index_210 >= p.tokens.used) {
+                grp_kind_35 = index_210 = __hfs_pos_270; if @unlikely(index_210 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_210).kind;
                 if grp_kind_35 == 71 {
                     let __match_scrut_10: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_10 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 71, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 60, 39), used: 4 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_10) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_10)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_36 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_10).payload_0;
                         __qm_v_36;
                     } else {
                         __qm_e_37 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_10).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_37 };
                     }));
                 } else if grp_kind_35 == 72 {
                     let __match_scrut_11: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_11 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 72, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 62, 62, 39), used: 4 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_11) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_11)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_39 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_11).payload_0;
                         __qm_v_39;
                     } else {
                         __qm_e_40 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_11).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_40 };
                     }));
                 } else if grp_kind_35 == 73 {
                     let __match_scrut_12: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_12 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 73, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 38, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_12) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_12)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_42 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_12).payload_0;
                         __qm_v_42;
                     } else {
                         __qm_e_43 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_12).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_43 };
                     }));
                 } else if grp_kind_35 == 74 {
                     let __match_scrut_13: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_13 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 74, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 124, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_13) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_13)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_45 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_13).payload_0;
                         __qm_v_45;
                     } else {
                         __qm_e_46 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_13).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_46 };
                     }));
                 } else {
                 }
                 let __match_scrut_14: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_14 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_50 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_14) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_50 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_14)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_48 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_14).payload_0;
                     __qm_v_48;
                 } else {
                     __qm_e_49 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_14).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_49 };
                 });
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt7" { discriminant: 4, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P7" { span: ref.as_non_null(end_212 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_212 }), expr: result, expr2: expr2_50 } };
@@ -771,59 +791,65 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 84;
             }) {
-                grp_kind_51 = index_215 = __hfs_pos_270; if builtin::unlikely(index_215 >= p.tokens.used) {
+                grp_kind_51 = index_215 = __hfs_pos_270; if @unlikely(index_215 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_215).kind;
                 if grp_kind_51 == 81 {
                     let __match_scrut_15: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_15 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 81, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_15) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_15)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_52 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_15).payload_0;
                         __qm_v_52;
                     } else {
                         __qm_e_53 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_15).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_53 };
                     }));
                 } else if grp_kind_51 == 82 {
                     let __match_scrut_16: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_16 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 82, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 61, 39), used: 4 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_16) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_16)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_55 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_16).payload_0;
                         __qm_v_55;
                     } else {
                         __qm_e_56 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_16).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_56 };
                     }));
                 } else if grp_kind_51 == 83 {
                     let __match_scrut_17: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_17 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 83, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 62, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_17) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_17)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_58 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_17).payload_0;
                         __qm_v_58;
                     } else {
                         __qm_e_59 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_17).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_59 };
                     }));
                 } else if grp_kind_51 == 84 {
                     let __match_scrut_18: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_18 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 84, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 62, 61, 39), used: 4 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_18) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_18)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_61 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_18).payload_0;
                         __qm_v_61;
                     } else {
                         __qm_e_62 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_18).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_62 };
                     }));
                 } else {
                 }
                 let __match_scrut_19: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_19 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_66 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_19) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_66 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_19)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_64 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_19).payload_0;
                     __qm_v_64;
                 } else {
                     __qm_e_65 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_19).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_65 };
                 });
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt8" { discriminant: 5, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P8" { span: ref.as_non_null(end_217 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_217 }), expr: result, expr2: expr2_66 } };
@@ -840,74 +866,82 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 94;
             }) {
-                grp_kind_67 = index_220 = __hfs_pos_270; if builtin::unlikely(index_220 >= p.tokens.used) {
+                grp_kind_67 = index_220 = __hfs_pos_270; if @unlikely(index_220 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_220).kind;
                 if grp_kind_67 == 91 {
                     let __match_scrut_20: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_20 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 91, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 61, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_20) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_20)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_68 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_20).payload_0;
                         __qm_v_68;
                     } else {
                         __qm_e_69 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_20).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_69 };
                     }));
                 } else if grp_kind_67 == 92 {
                     let __match_scrut_21: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_21 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 92, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 61, 61, 39), used: 4 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_21) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_21)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_71 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_21).payload_0;
                         __qm_v_71;
                     } else {
                         __qm_e_72 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_21).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_72 };
                     }));
                 } else if grp_kind_67 == 93 {
                     let __match_scrut_22: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_22 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 93, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 33, 61, 39), used: 4 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_22) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_22)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_74 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_22).payload_0;
                         __qm_v_74;
                     } else {
                         __qm_e_75 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_22).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_75 };
                     }));
                 } else if grp_kind_67 == 94 {
                     let __match_scrut_23: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_23 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 94, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 60, 62, 39), used: 4 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_23) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_23)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_77 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_23).payload_0;
                         __qm_v_77;
                     } else {
                         __qm_e_78 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_23).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_78 };
                     }));
                 } else {
                 }
                 let __match_scrut_24: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_24 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_82 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_24) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_82 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_24)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_80 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_24).payload_0;
                     __qm_v_80;
                 } else {
                     __qm_e_81 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_24).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_81 };
                 });
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt9" { discriminant: 6, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P9" { span: ref.as_non_null(end_222 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_222 }), expr: result, expr2: expr2_82 } };
             } else if suffix_kind == 10 {
-                k_not_86 = (if index_259 = __hfs_pos_270; if builtin::unlikely(index_259 >= p.tokens.used) {
+                k_not_86 = (if index_259 = __hfs_pos_270; if @unlikely(index_259 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_259).kind == 10 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     let __match_scrut_25: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_25 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 10, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
-                    k_not_85 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_25) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    k_not_85 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_25)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_83 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_25).payload_0;
                         __qm_v_83;
                     } else {
                         __qm_e_84 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_25).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_84 };
                     });
                     k_not_85;
@@ -916,14 +950,16 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                 });
                 let __match_scrut_26: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_26 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 110, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(73, 78), used: 2 });
-                tok_89 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_26) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                tok_89 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_26)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     __qm_v_87 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_26).payload_0;
                     __qm_v_87;
                 } else {
                     __qm_e_88 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_26).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_88 };
                 });
-                inner_kind = index_226 = local.tee __hfs_pos_270(p.pos); if builtin::unlikely(index_226 >= p.tokens.used) {
+                inner_kind = index_226 = local.tee __hfs_pos_270(p.pos); if @unlikely(index_226 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_226).kind;
@@ -941,16 +977,18 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                         p.pos = __hfs_pos_270;
                         let __match_scrut_28: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                         __match_scrut_28 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                        drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_28) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                        drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_28)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                             __qm_v_94 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_28).payload_0;
                             __qm_v_94;
                         } else {
                             __qm_e_95 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_28).payload_0;
+                            cold_path;
                             return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_95 };
                         }));
                         b79: block {
                             l80: loop {
-                                if __hfs_pos_270 = p.pos; index_261 = __hfs_pos_270; if builtin::unlikely(index_261 >= p.tokens.used) {
+                                if __hfs_pos_270 = p.pos; index_261 = __hfs_pos_270; if @unlikely(index_261 >= p.tokens.used) {
+                                    cold_path;
                                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                     unreachable;
                                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_261).kind != 130 {
@@ -958,20 +996,22 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                                 }
                                 let __match_scrut_29: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                                 __match_scrut_29 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 130, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 44, 39), used: 3 });
-                                drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_29) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                                drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_29)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                                     __qm_v_97 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_29).payload_0;
                                     __qm_v_97;
                                 } else {
                                     __qm_e_98 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_29).payload_0;
+                                    cold_path;
                                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_98 };
                                 }));
                                 let __match_scrut_30: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                                 __match_scrut_30 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                                drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_30) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                                drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_30)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                                     __qm_v_100 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_30).payload_0;
                                     __qm_v_100;
                                 } else {
                                     __qm_e_101 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_30).payload_0;
+                                    cold_path;
                                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_101 };
                                 }));
                                 continue l80;
@@ -982,11 +1022,12 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     p.pos = __hfs_pos_270;
                     let __match_scrut_31: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_31 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 121, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39, 41, 39), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_31) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_31)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_103 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_31).payload_0;
                         __qm_v_103;
                     } else {
                         __qm_e_104 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_31).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_104 };
                     }));
                 } else {
@@ -1009,11 +1050,12 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     p.pos = __hfs_pos_270;
                     let __match_scrut_34: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_34 = struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok" { discriminant: 0, payload_0: ref.as_non_null("wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance"(p)) };
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_34) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_34)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_109 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_34).payload_0;
                         __qm_v_109;
                     } else {
                         __qm_e_110 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_34).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_110 };
                     }));
                 }
@@ -1021,129 +1063,143 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else if suffix_kind == 111 {
                 let __match_scrut_35: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_35 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 111, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 78, 68), used: 3 });
-                tok_114 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_35) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                tok_114 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_35)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     __qm_v_112 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_35).payload_0;
                     __qm_v_112;
                 } else {
                     __qm_e_113 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_35).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_113 };
                 });
                 let __match_scrut_36: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_36 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_117 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_36) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_117 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_36)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_115 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_36).payload_0;
                     __qm_v_115;
                 } else {
                     __qm_e_116 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_36).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_116 };
                 });
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt11" { discriminant: 8, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P11" { span: ref.as_non_null(end_233 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_233 }), expr: result, tok: tok_114, expr2: expr2_117 } };
             } else if suffix_kind == 112 {
                 let __match_scrut_37: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_37 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 112, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 82), used: 2 });
-                tok_120 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_37) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                tok_120 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_37)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     __qm_v_118 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_37).payload_0;
                     __qm_v_118;
                 } else {
                     __qm_e_119 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_37).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_119 };
                 });
                 let __match_scrut_38: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_38 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_123 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_38) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_123 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_38)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_121 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_38).payload_0;
                     __qm_v_121;
                 } else {
                     __qm_e_122 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_38).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_122 };
                 });
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt12" { discriminant: 9, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P12" { span: ref.as_non_null(end_235 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_235 }), expr: result, tok: tok_120, expr2: expr2_123 } };
             } else if suffix_kind == 116 {
                 let __match_scrut_39: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_39 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 116, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("COLLATE"), used: 7 });
-                tok_126 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_39) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                tok_126 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_39)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     __qm_v_124 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_39).payload_0;
                     __qm_v_124;
                 } else {
                     __qm_e_125 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_39).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_125 };
                 });
                 name_127 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance"(p);
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt16" { discriminant: 10, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P16" { span: ref.as_non_null(end_237 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_237 }), expr: result, tok: tok_126, name: name_127 } };
             } else if suffix_kind == 17 {
-                k_not_131 = (if index_263 = __hfs_pos_270; if builtin::unlikely(index_263 >= p.tokens.used) {
+                k_not_131 = (if index_263 = __hfs_pos_270; if @unlikely(index_263 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_263).kind == 17 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     let __match_scrut_40: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_40 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 17, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
-                    k_not_130 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_40) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    k_not_130 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_40)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_128 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_40).payload_0;
                         __qm_v_128;
                     } else {
                         __qm_e_129 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_40).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_129 };
                     });
                     k_not_130;
                 } else {
                     ref.null none;
                 });
-                grp_kind_132 = index_241 = local.tee __hfs_pos_270(p.pos); if builtin::unlikely(index_241 >= p.tokens.used) {
+                grp_kind_132 = index_241 = local.tee __hfs_pos_270(p.pos); if @unlikely(index_241 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_241).kind;
                 if grp_kind_132 == 171 {
                     let __match_scrut_41: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_41 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 171, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 73, 75, 69), used: 4 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_41) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_41)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_133 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_41).payload_0;
                         __qm_v_133;
                     } else {
                         __qm_e_134 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_41).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_134 };
                     }));
                 } else if grp_kind_132 == 172 {
                     let __match_scrut_42: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_42 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 172, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(71, 76, 79, 66), used: 4 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_42) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_42)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_136 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_42).payload_0;
                         __qm_v_136;
                     } else {
                         __qm_e_137 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_42).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_137 };
                     }));
                 } else if grp_kind_132 == 173 {
                     let __match_scrut_43: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_43 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 173, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("REGEXP"), used: 6 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_43) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_43)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_139 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_43).payload_0;
                         __qm_v_139;
                     } else {
                         __qm_e_140 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_43).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_140 };
                     }));
                 } else if grp_kind_132 == 174 {
                     let __match_scrut_44: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_44 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 174, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("MATCH"), used: 5 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_44) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_44)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_142 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_44).payload_0;
                         __qm_v_142;
                     } else {
                         __qm_e_143 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_44).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_143 };
                     }));
                 } else {
                 }
                 let __match_scrut_45: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_45 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_147 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_45) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_147 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_45)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_145 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_45).payload_0;
                     __qm_v_145;
                 } else {
                     __qm_e_146 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_45).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_146 };
                 });
-                if __hfs_pos_270 = p.pos; index_265 = __hfs_pos_270; if builtin::unlikely(index_265 >= p.tokens.used) {
+                if __hfs_pos_270 = p.pos; index_265 = __hfs_pos_270; if @unlikely(index_265 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_265).kind == 175 {
@@ -1175,47 +1231,52 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 183;
             }) {
-                grp_kind_151 = index_247 = __hfs_pos_270; if builtin::unlikely(index_247 >= p.tokens.used) {
+                grp_kind_151 = index_247 = __hfs_pos_270; if @unlikely(index_247 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_247).kind;
                 if grp_kind_151 == 181 {
                     let __match_scrut_48: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_48 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 181, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ISNULL"), used: 6 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_48) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_48)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_152 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_48).payload_0;
                         __qm_v_152;
                     } else {
                         __qm_e_153 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_48).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_153 };
                     }));
                 } else if grp_kind_151 == 182 {
                     let __match_scrut_49: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_49 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 182, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NOTNULL"), used: 7 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_49) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_49)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_155 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_49).payload_0;
                         __qm_v_155;
                     } else {
                         __qm_e_156 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_49).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_156 };
                     }));
                 } else if grp_kind_151 == 183 {
                     let __match_scrut_50: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_50 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 183, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_50) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_50)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_158 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_50).payload_0;
                         __qm_v_158;
                     } else {
                         __qm_e_159 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_50).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_159 };
                     }));
                     let __match_scrut_51: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_51 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 184, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 85, 76, 76), used: 4 });
-                    drop((if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_51) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    drop((if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_51)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_161 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_51).payload_0;
                         __qm_v_161;
                     } else {
                         __qm_e_162 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_51).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_162 };
                     }));
                 } else {
@@ -1224,24 +1285,27 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else if suffix_kind == 19 {
                 let __match_scrut_52: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_52 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 19, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(73, 83), used: 2 });
-                tok_166 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_52) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                tok_166 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_52)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     __qm_v_164 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_52).payload_0;
                     __qm_v_164;
                 } else {
                     __qm_e_165 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_52).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_165 };
                 });
-                k_not_170 = (if __hfs_pos_270 = p.pos; index_267 = __hfs_pos_270; if builtin::unlikely(index_267 >= p.tokens.used) {
+                k_not_170 = (if __hfs_pos_270 = p.pos; index_267 = __hfs_pos_270; if @unlikely(index_267 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_267).kind == 191 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     let __match_scrut_53: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_53 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 191, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
-                    k_not_169 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_53) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    k_not_169 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_53)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_167 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_53).payload_0;
                         __qm_v_167;
                     } else {
                         __qm_e_168 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_53).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_168 };
                     });
                     k_not_169;
@@ -1250,26 +1314,29 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                 });
                 let __match_scrut_54: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_54 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_173 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_54) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_173 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_54)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_171 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_54).payload_0;
                     __qm_v_171;
                 } else {
                     __qm_e_172 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_54).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_172 };
                 });
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt19" { discriminant: 13, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P19" { span: ref.as_non_null(end_252 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_252 }), expr: result, tok: tok_166, opt: k_not_170, expr2: expr2_173 } };
             } else if suffix_kind == 20 {
-                k_not_177 = (if index_269 = __hfs_pos_270; if builtin::unlikely(index_269 >= p.tokens.used) {
+                k_not_177 = (if index_269 = __hfs_pos_270; if @unlikely(index_269 >= p.tokens.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_269).kind == 20 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     let __match_scrut_55: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_55 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 79, 84), used: 3 });
-                    k_not_176 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_55) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                    k_not_176 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_55)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                         __qm_v_174 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_55).payload_0;
                         __qm_v_174;
                     } else {
                         __qm_e_175 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_55).payload_0;
+                        cold_path;
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_175 };
                     });
                     k_not_176;
@@ -1278,38 +1345,42 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                 });
                 let __match_scrut_56: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_56 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 200, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("BETWEEN"), used: 7 });
-                tok_180 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_56) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                tok_180 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_56)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     __qm_v_178 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_56).payload_0;
                     __qm_v_178;
                 } else {
                     __qm_e_179 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_56).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_179 };
                 });
                 let __match_scrut_57: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_57 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr2_183 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_57) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr2_183 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_57)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_181 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_57).payload_0;
                     __qm_v_181;
                 } else {
                     __qm_e_182 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_57).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_182 };
                 });
                 let __match_scrut_58: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_58 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 201, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 78, 68), used: 3 });
-                tok2_186 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_58) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                tok2_186 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_58)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     __qm_v_184 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_58).payload_0;
                     __qm_v_184;
                 } else {
                     __qm_e_185 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_58).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_185 };
                 });
                 let __match_scrut_59: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_59 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
-                expr3 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_59) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
+                expr3 = (if @likely(ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_59)) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
                     __qm_v_187 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_59).payload_0;
                     __qm_v_187;
                 } else {
                     __qm_e_188 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_59).payload_0;
+                    cold_path;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_188 };
                 });
                 result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt20" { discriminant: 14, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P20" { span: ref.as_non_null(end_255 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_255 }), expr: result, opt: k_not_177, tok: tok_180, expr2: expr2_183, tok2: tok2_186, expr3: expr3 } };
@@ -1352,7 +1423,8 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/run"() {
     } else {
     }
     __cond = local.tee __v0(p.pos) == 3;
-    if __cond == 0 {
+    if @unlikely(__cond == 0) {
+        cold_path;
         "core:internal/panic"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(138), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_10, 114); "core:prelude/string.wado/String::push"(__local_10, 117); "core:prelude/string.wado/String::push"(__local_10, 110); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado"), used: 60 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; f_45 = __local_11; "core:prelude/primitive.wado/i32::fmt_decimal"(267, f_45); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected pos=3, got pos="), used: 24 }); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value_60(p.pos), __local_9); __local_8); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: p.pos == 3
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_10, 112); "core:prelude/string.wado/String::push"(__local_10, 46); "core:prelude/string.wado/String::push"(__local_10, 112); "core:prelude/string.wado/String::push"(__local_10, 111); "core:prelude/string.wado/String::push"(__local_10, 115); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; f_56 = __local_11; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_56); "core:prelude/string.wado/String::push"(__local_10, 10); __local_10);
@@ -1523,7 +1595,8 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let new_used: i32;
     let start: i32;
     new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -1539,7 +1612,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -1547,7 +1621,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
@@ -1576,7 +1651,8 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_en
     if self.pos == 0 {
         return 0;
     }
-    return index = self.pos - 1; if builtin::unlikely(index >= self.tokens.used) {
+    return index = self.pos - 1; if @unlikely(index >= self.tokens.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index).span.end;
@@ -1586,7 +1662,8 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance
     let tok: ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token";
     let index: i32;
     index = self.pos;
-    if builtin::unlikely(index >= self.tokens.used) {
+    if @unlikely(index >= self.tokens.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -1602,14 +1679,16 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"
     let index_7: i32;
     let index_9: i32;
     let span: ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span";
-    if index_7 = self.pos; if builtin::unlikely(index_7 >= self.tokens.used) {
+    if index_7 = self.pos; if @unlikely(index_7 >= self.tokens.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index_7).kind == kind {
         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok" { discriminant: 0, payload_0: ref.as_non_null("wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance"(self)) };
     }
     index_9 = self.pos;
-    if builtin::unlikely(index_9 >= self.tokens.used) {
+    if @unlikely(index_9 >= self.tokens.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }

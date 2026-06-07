@@ -6,7 +6,7 @@
 //!
 //! For struct types the body is a `StructLiteral` with field-by-field
 //! shallow projections, plus `builtin::array_clone::<T>` for raw
-//! `builtin::array<T>` fields — a one-level shallow copy that does not
+//! `Array<T>` fields — a one-level shallow copy that does not
 //! recurse into nested aggregates. For variant / option / fall-through
 //! types the body is `return v;` (identity).
 //!
@@ -238,7 +238,7 @@ fn build_copy_body(
     extra_locals: &mut Vec<TirLocal>,
     address_taken: &mut IndexSet<u32>,
 ) -> TirBlock {
-    // A bare `builtin::array<T>` deep-copies via `array_clone::<T>(&v)`,
+    // A bare `Array<T>` deep-copies via `array_clone::<T>(&v)`,
     // the same intrinsic `make_field_copy` emits for the `repr` field of
     // `List<T>` / `String`. This is what gives the raw array value
     // semantics (WEP-2026-06-02 Phase 2).
@@ -745,7 +745,7 @@ fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
 }
 
 /// Build `builtin::array_clone::<elem_type>(&arr)`, the intrinsic that
-/// deep-copies a raw GC array. `array_ty` is the `builtin::array<elem_type>`
+/// deep-copies a raw GC array. `array_ty` is the `Array<elem_type>`
 /// type of `arr`; the call returns a fresh array of the same type. Codegen
 /// gives the clone a per-element `$value_copy$T` pass when `elem_type` is
 /// itself value-semantic (see `wir_build::calls::array_element_copy_func`).

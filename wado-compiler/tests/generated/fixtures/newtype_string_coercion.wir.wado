@@ -230,7 +230,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -278,7 +279,8 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
@@ -309,6 +311,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let self_10: ref "core:prelude/string.wado//StrCharIter";
     let s: ref "core:prelude/string.wado//String";
     let _licm_buf_38: ref "core:prelude/string.wado//String";
+    let _licm_arith_39: bool;
     limit = (if f.precision == -2 -> i32 {
         256;
     } else {
@@ -319,13 +322,14 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     truncated = 0;
     self_10 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
     _licm_buf_38 = f.buf;
+    _licm_arith_39 = limit >= 0;
     b17: block {
         l18: loop {
             let __sroa___match_7_discriminant: i32;
             let __sroa___match_7_payload_0: char;
             multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self_10);
             if __sroa___match_7_discriminant == 0 {
-                if (if limit >= 0 -> i32 {
+                if (if _licm_arith_39 -> i32 {
                     count >= limit;
                 } else {
                     0;

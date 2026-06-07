@@ -156,7 +156,7 @@ impl BuiltinRegistry {
 
     /// Resolve an AST Type to a `TypeId`
     ///
-    /// Handles primitive types, type parameters, and `builtin::array`<T>.
+    /// Handles primitive types, type parameters, and `Array<T>`.
     fn resolve_type(ty: &Type, type_params: &[String], type_table: &RefCell<TypeTable>) -> TypeId {
         match ty {
             Type::Named(named) => {
@@ -186,17 +186,6 @@ impl BuiltinRegistry {
                     "v128" => TypeTable::V128,
                     "!" => TypeTable::NEVER,
                     _ => TypeTable::UNIT, // Unknown type defaults to UNIT
-                }
-            }
-            Type::NamespacedGeneric(ng) if ng.namespace == "builtin" && ng.name == "array" => {
-                // builtin::array<T> -> BuiltinArray(T)
-                if let Some(first_arg) = ng.args.first() {
-                    let element_type = Self::resolve_type(first_arg, type_params, type_table);
-                    type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::BuiltinArray(element_type))
-                } else {
-                    TypeTable::UNIT
                 }
             }
             // `Array<T>` is the user-facing spelling of the raw GC array

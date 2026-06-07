@@ -1052,7 +1052,7 @@ pub enum TypeNameInfo {
         param_count: usize,
         return_type: String,
     },
-    /// `builtin::array<T>` (raw Wasm GC array, NOT the user-facing `List<T>` struct)
+    /// `Array<T>` (raw Wasm GC array, NOT the user-facing `List<T>` struct)
     BuiltinArray(String),
     /// Reactive<T> with inner type name
     Reactive(String),

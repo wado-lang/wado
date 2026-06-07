@@ -145,6 +145,75 @@ impl Token {
 // with reference-containing fields triggers a compiler bug
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
+/// Runtime FOLLOW-continuation gate for tail-greedy loops.
+///
+/// `follow` is the caller's deterministic K-prefix continuation:
+/// `follow[d]` is the set of token kinds that may appear at input depth
+/// `d` if control belongs to the caller rather than to another iteration
+/// of the loop. An empty `follow` (the common, non-repair case) disables
+/// the gate. The loop yields to the caller — breaking `*`/`+` or skipping
+/// `?` — exactly when EVERY non-empty depth-set matches the upcoming
+/// input, i.e. when the next tokens are unambiguously the caller's
+/// continuation.
+///
+/// Threaded as a defaulted `&EMPTY_FOLLOW` argument through the generated
+/// `parse_*` / `scan_*` functions; repair call sites pass a `FOLLOW_MASK_*`
+/// constant (or forward their own `follow`). This replaces the previous
+/// per-(rule, mask) cloned `__follow_<id>` variants: the mask is data
+/// carried at runtime, not code baked into a specialised function.
+///
+/// `eof_kind` is the token kind reported past the end of the stream, so a
+/// caller continuation ending in EOF gates correctly. Used by both the
+/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
+/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
+/// lockstep with parse.
+pub global EMPTY_FOLLOW: List<List<i32>> = [];
+
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_MASK_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
+pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+    if follow.is_empty() {
+        return false;
+    }
+    for let mut d = 0; d < follow.len(); d += 1 {
+        let set = &follow[d];
+        if set.is_empty() {
+            // No constraint at this depth — a vacuous match, keep going.
+            continue;
+        }
+        let idx = pos + d;
+        let kind = if idx < tokens.len() { tokens[idx].kind } else { eof_kind };
+        let mut hit = false;
+        for let t of set {
+            if kind == *t {
+                hit = true;
+                break;
+            }
+        }
+        if !hit {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// ParseError represents a parse failure with location and expected tokens.
 ///
 /// `message` is the local "expected X, got Y" description, kept free of
@@ -1015,30 +1084,30 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_list(tokens, pos, 0);
+    pos = scan_list(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && tokens[pos].kind == TK_IDENT {
+    if pos < tokens.len() && tokens[pos].kind == TK_IDENT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                pos = scan_arm(tokens, pos, 0);
+                pos = scan_arm(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0; }
-                while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     sg_1_done: {
                         sg_1: {
                             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_1; }
                             pos += 1;
-                            pos = scan_arm(tokens, pos, 0);
+                            pos = scan_arm(tokens, pos, follow, 0);
                             if pos < 0 { break sg_1; }
                             break sg_1_done;
                         }
@@ -1047,7 +1116,7 @@ fn scan_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                if pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
@@ -1061,16 +1130,16 @@ fn scan_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_stmt(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_wrapped(tokens, pos, 0);
+    pos = scan_wrapped(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_wrapped(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_wrapped(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1078,7 +1147,7 @@ fn scan_wrapped(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         if alt_kind == TK_LIT_LBRACE {
             pos = start;
             try_0: {
-                pos = scan_braced(tokens, pos, 0);
+                pos = scan_braced(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -1086,7 +1155,7 @@ fn scan_wrapped(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if alt_kind == TK_IDENT {
             pos = start;
             try_1: {
-                pos = scan_arm(tokens, pos, 0);
+                pos = scan_arm(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -1098,7 +1167,7 @@ fn scan_wrapped(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_braced(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_braced(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -1106,15 +1175,15 @@ fn scan_braced(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         let sp = pos;
         sg_2_done: {
             sg_2: {
-                pos = scan_arm(tokens, pos, 0);
+                pos = scan_arm(tokens, pos, follow, 0);
                 if pos < 0 { break sg_2; }
-                while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     sg_3_done: {
                         sg_3: {
                             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_3; }
                             pos += 1;
-                            pos = scan_arm(tokens, pos, 0);
+                            pos = scan_arm(tokens, pos, follow, 0);
                             if pos < 0 { break sg_3; }
                             break sg_3_done;
                         }
@@ -1123,7 +1192,7 @@ fn scan_braced(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                if pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
@@ -1139,16 +1208,16 @@ fn scan_braced(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_arm(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_arm(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
+fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
-    let list = _parse_list(p)?;
+    let list = _parse_list(p, &FOLLOW_MASK_0)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<ProgNode, ParseError>::Ok(ProgNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1157,8 +1226,8 @@ fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
     });
 }
 
-fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
-    let r = _parse_prog__inner(p);
+fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgNode, ParseError> {
+    let r = _parse_prog__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("prog");
         return Result::<ProgNode, ParseError>::Err(e);
@@ -1166,21 +1235,21 @@ fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     return r;
 }
 
-fn _parse_list__inner(p: &mut Parser) -> Result<ListNode, ParseError> {
+fn _parse_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ListNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        pos = scan_arm(tokens, pos, 0);
+        pos = scan_arm(tokens, pos, follow, 0);
         if pos < 0 { break opt_scan; }
-        while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+        while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
             let sp = pos;
             sg_4_done: {
                 sg_4: {
                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_4; }
                     pos += 1;
-                    pos = scan_arm(tokens, pos, 0);
+                    pos = scan_arm(tokens, pos, follow, 0);
                     if pos < 0 { break sg_4; }
                     break sg_4_done;
                 }
@@ -1189,17 +1258,18 @@ fn _parse_list__inner(p: &mut Parser) -> Result<ListNode, ParseError> {
             if pos < 0 { pos = sp; break; }
             if pos == sp { break; }
         }
-        if pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+        if pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
             let sp = pos;
             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
             if pos < 0 { pos = sp; }
         }
         opt_scan_pos = pos;
     }
-    let arm_item_comma: Option<ArmItemListCommaOptItem> = if opt_scan_pos >= 0 {
-        let arm = _parse_arm(p)?;
+    let arm_item_comma: Option<ArmItemListCommaOptItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
+        let arm = _parse_arm(p, follow)?;
         let mut comma_arm_list: List<CommaArmItem> = [];
         loop {
+            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.tokens;
@@ -1208,7 +1278,7 @@ fn _parse_list__inner(p: &mut Parser) -> Result<ListNode, ParseError> {
                     sg_5: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_5; }
                         pos += 1;
-                        pos = scan_arm(tokens, pos, 0);
+                        pos = scan_arm(tokens, pos, follow, 0);
                         if pos < 0 { break sg_5; }
                         break sg_5_done;
                     }
@@ -1219,14 +1289,16 @@ fn _parse_list__inner(p: &mut Parser) -> Result<ListNode, ParseError> {
             }
             if rep_scan_pos < 0 { break; }
             let comma = p.expect(TK_LIT_COMMA)?;
-            let arm = _parse_arm(p)?;
+            let arm = _parse_arm(p, follow)?;
             let comma_arm = CommaArmItem {
                 comma,
                 arm,
             };
             comma_arm_list.push(comma_arm);
         }
-        let comma: Option<Token> = if p.peek_kind() == TK_LIT_COMMA {
+        let comma: Option<Token> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+            null
+        } else if p.peek_kind() == TK_LIT_COMMA {
             let comma = p.expect(TK_LIT_COMMA)?;
             Option::<Token>::Some(comma)
         } else {
@@ -1247,8 +1319,8 @@ fn _parse_list__inner(p: &mut Parser) -> Result<ListNode, ParseError> {
     });
 }
 
-fn _parse_list(p: &mut Parser) -> Result<ListNode, ParseError> {
-    let r = _parse_list__inner(p);
+fn _parse_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ListNode, ParseError> {
+    let r = _parse_list__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("list");
         return Result::<ListNode, ParseError>::Err(e);
@@ -1256,9 +1328,9 @@ fn _parse_list(p: &mut Parser) -> Result<ListNode, ParseError> {
     return r;
 }
 
-fn _parse_stmt__inner(p: &mut Parser) -> Result<StmtNode, ParseError> {
+fn _parse_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StmtNode, ParseError> {
     let start = p.peek().span.start;
-    let wrapped = _parse_wrapped(p)?;
+    let wrapped = _parse_wrapped(p, &FOLLOW_MASK_0)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<StmtNode, ParseError>::Ok(StmtNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1267,8 +1339,8 @@ fn _parse_stmt__inner(p: &mut Parser) -> Result<StmtNode, ParseError> {
     });
 }
 
-fn _parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
-    let r = _parse_stmt__inner(p);
+fn _parse_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StmtNode, ParseError> {
+    let r = _parse_stmt__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("stmt");
         return Result::<StmtNode, ParseError>::Err(e);
@@ -1276,18 +1348,18 @@ fn _parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
     return r;
 }
 
-fn _parse_wrapped__inner(p: &mut Parser) -> Result<WrappedNode, ParseError> {
+fn _parse_wrapped__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<WrappedNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACE {
-        let braced = _parse_braced(p)?;
+        let braced = _parse_braced(p, follow)?;
         return Result::<WrappedNode, ParseError>::Ok(WrappedNode::Alt0(WrappedAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             braced,
         }));
     }
     if kind == TK_IDENT {
-        let arm = _parse_arm(p)?;
+        let arm = _parse_arm(p, follow)?;
         return Result::<WrappedNode, ParseError>::Ok(WrappedNode::Alt1(WrappedAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             arm,
@@ -1300,8 +1372,8 @@ fn _parse_wrapped__inner(p: &mut Parser) -> Result<WrappedNode, ParseError> {
     ));
 }
 
-fn _parse_wrapped(p: &mut Parser) -> Result<WrappedNode, ParseError> {
-    let r = _parse_wrapped__inner(p);
+fn _parse_wrapped(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<WrappedNode, ParseError> {
+    let r = _parse_wrapped__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("wrapped");
         return Result::<WrappedNode, ParseError>::Err(e);
@@ -1309,22 +1381,22 @@ fn _parse_wrapped(p: &mut Parser) -> Result<WrappedNode, ParseError> {
     return r;
 }
 
-fn _parse_braced__inner(p: &mut Parser) -> Result<BracedNode, ParseError> {
+fn _parse_braced__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BracedNode, ParseError> {
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        pos = scan_arm(tokens, pos, 0);
+        pos = scan_arm(tokens, pos, follow, 0);
         if pos < 0 { break opt_scan; }
-        while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+        while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
             let sp = pos;
             sg_6_done: {
                 sg_6: {
                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_6; }
                     pos += 1;
-                    pos = scan_arm(tokens, pos, 0);
+                    pos = scan_arm(tokens, pos, follow, 0);
                     if pos < 0 { break sg_6; }
                     break sg_6_done;
                 }
@@ -1333,7 +1405,7 @@ fn _parse_braced__inner(p: &mut Parser) -> Result<BracedNode, ParseError> {
             if pos < 0 { pos = sp; break; }
             if pos == sp { break; }
         }
-        if pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+        if pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
             let sp = pos;
             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
             if pos < 0 { pos = sp; }
@@ -1341,9 +1413,10 @@ fn _parse_braced__inner(p: &mut Parser) -> Result<BracedNode, ParseError> {
         opt_scan_pos = pos;
     }
     let arm_item_comma: Option<ArmItemListCommaOptItem> = if opt_scan_pos >= 0 {
-        let arm = _parse_arm(p)?;
+        let arm = _parse_arm(p, follow)?;
         let mut comma_arm_list: List<CommaArmItem> = [];
         loop {
+            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.tokens;
@@ -1352,7 +1425,7 @@ fn _parse_braced__inner(p: &mut Parser) -> Result<BracedNode, ParseError> {
                     sg_7: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_7; }
                         pos += 1;
-                        pos = scan_arm(tokens, pos, 0);
+                        pos = scan_arm(tokens, pos, follow, 0);
                         if pos < 0 { break sg_7; }
                         break sg_7_done;
                     }
@@ -1363,14 +1436,16 @@ fn _parse_braced__inner(p: &mut Parser) -> Result<BracedNode, ParseError> {
             }
             if rep_scan_pos < 0 { break; }
             let comma = p.expect(TK_LIT_COMMA)?;
-            let arm = _parse_arm(p)?;
+            let arm = _parse_arm(p, follow)?;
             let comma_arm = CommaArmItem {
                 comma,
                 arm,
             };
             comma_arm_list.push(comma_arm);
         }
-        let comma: Option<Token> = if p.peek_kind() == TK_LIT_COMMA {
+        let comma: Option<Token> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+            null
+        } else if p.peek_kind() == TK_LIT_COMMA {
             let comma = p.expect(TK_LIT_COMMA)?;
             Option::<Token>::Some(comma)
         } else {
@@ -1394,8 +1469,8 @@ fn _parse_braced__inner(p: &mut Parser) -> Result<BracedNode, ParseError> {
     });
 }
 
-fn _parse_braced(p: &mut Parser) -> Result<BracedNode, ParseError> {
-    let r = _parse_braced__inner(p);
+fn _parse_braced(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BracedNode, ParseError> {
+    let r = _parse_braced__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("braced");
         return Result::<BracedNode, ParseError>::Err(e);
@@ -1403,7 +1478,7 @@ fn _parse_braced(p: &mut Parser) -> Result<BracedNode, ParseError> {
     return r;
 }
 
-fn _parse_arm__inner(p: &mut Parser) -> Result<ArmNode, ParseError> {
+fn _parse_arm__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ArmNode, ParseError> {
     let start = p.peek().span.start;
     let ident = p.expect(TK_IDENT)?;
     return Result::<ArmNode, ParseError>::Ok(ArmNode {
@@ -1412,8 +1487,8 @@ fn _parse_arm__inner(p: &mut Parser) -> Result<ArmNode, ParseError> {
     });
 }
 
-fn _parse_arm(p: &mut Parser) -> Result<ArmNode, ParseError> {
-    let r = _parse_arm__inner(p);
+fn _parse_arm(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ArmNode, ParseError> {
+    let r = _parse_arm__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("arm");
         return Result::<ArmNode, ParseError>::Err(e);
@@ -1421,98 +1496,71 @@ fn _parse_arm(p: &mut Parser) -> Result<ArmNode, ParseError> {
     return r;
 }
 
-pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_prog(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ProgNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ProgNode, ParseError>::Err(_e);
+        return Result::<ProgNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_list(input: &String) -> Result<ListNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_list(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ListNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ListNode, ParseError>::Err(_e);
+        return Result::<ListNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_stmt(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<StmtNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<StmtNode, ParseError>::Err(_e);
+        return Result::<StmtNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_wrapped(input: &String) -> Result<WrappedNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_wrapped(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<WrappedNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<WrappedNode, ParseError>::Err(_e);
+        return Result::<WrappedNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_braced(input: &String) -> Result<BracedNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_braced(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<BracedNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<BracedNode, ParseError>::Err(_e);
+        return Result::<BracedNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_arm(input: &String) -> Result<ArmNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_arm(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ArmNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ArmNode, ParseError>::Err(_e);
+        return Result::<ArmNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
@@ -1593,4 +1641,10 @@ pub fn to_tree(node: &ProgNode) -> CstNode {
     walk_prog(&mut recorder, node);
     return recorder.build();
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_COMMA]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_IDENT]];
+global FOLLOW_MASK_3: List<List<i32>> = [[TK_IDENT, TK_LIT_RBRACE]];
+global FOLLOW_MASK_4: List<List<i32>> = [[TK_LIT_RBRACE]];
 

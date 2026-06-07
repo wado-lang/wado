@@ -15,17 +15,14 @@
 //! it runs as a [`Rule`] over each function's arena `Body`. The arm bodies are
 //! deep-cloned via the engine's edit API because the same arm can appear at
 //! multiple `br_table` offsets, and the arena is a tree (one parent per node).
-//! Param defaults, globals, and struct-field defaults are still tree-shaped
-//! NIR, so they reuse the same rule through a wrap-in-`Body` helper rather than
-//! a second copy of the logic. The rule is confluent under the worklist's
+//! Global initializers are arena `ExprBody`s, so the same rule runs on each
+//! global's body directly. The rule is confluent under the worklist's
 //! bottom-up order: nested `Match`es in arm bodies are converted before the
 //! outer one, so the cloned bodies hold `Switch`es and re-processing them is a
 //! no-op.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    FunctionRef, NirBlock, NirExpr, NirExprKind, NirLiteralPattern, NirStmt, NirStmtKind,
-};
+use crate::nir::{FunctionRef, NirLiteralPattern};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, PatKind, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
@@ -56,50 +53,12 @@ pub fn match_to_switch(project: &mut NirPackage) -> bool {
             let mut engine = Engine::new(body);
             changed |= engine.run(&[&rule]);
         }
-        for param in &mut func.params {
-            if let Some(ref mut default) = param.default_expr {
-                changed |= run_rule_on_tree_expr(default, &rule);
-            }
-        }
     }
     for global in &mut project.globals {
-        changed |= run_rule_on_tree_expr(&mut global.initializer, &rule);
+        // Global initializers are arena bodies; run the rule on each directly.
+        let mut engine = Engine::new(global.initializer.body_mut());
+        changed |= engine.run(&[&rule]);
     }
-    for s in &mut project.structs {
-        for field in &mut s.fields {
-            if let Some(ref mut default) = field.default_expr {
-                changed |= run_rule_on_tree_expr(default, &rule);
-            }
-        }
-    }
-    changed
-}
-
-/// Run an engine rule over a standalone tree-shaped NIR expression by wrapping
-/// it in a temporary single-statement `Body`, running the engine, and
-/// unwrapping the result. Used for the NIR positions that are not yet arena
-/// bodies — param defaults, global initializers, struct-field defaults — so the
-/// rule logic lives in exactly one place.
-fn run_rule_on_tree_expr(expr: &mut NirExpr, rule: &dyn Rule) -> bool {
-    let span = expr.span;
-    let placeholder = NirExpr::new(NirExprKind::Unit, TypeTable::UNIT, span);
-    let owned = std::mem::replace(expr, placeholder);
-    let block = NirBlock::new(vec![NirStmt::new(NirStmtKind::Expr(owned), span)], span);
-    let mut body = Body::from_block(&block);
-    let changed = {
-        let mut engine = Engine::new(&mut body);
-        engine.run(&[rule])
-    };
-    let new_block = body.to_block();
-    let stmt = new_block
-        .stmts
-        .into_iter()
-        .next()
-        .expect("wrapper block has one statement");
-    let NirStmtKind::Expr(new_expr) = stmt.kind else {
-        unreachable!("wrapper statement is an expression statement");
-    };
-    *expr = new_expr;
     changed
 }
 
@@ -252,6 +211,24 @@ fn build_switch(
     let default_block = if let Some(default_idx) = analysis.default_arm {
         arm_body_block(engine, arms[default_idx].body)
     } else {
+        // The default of an exhaustive match is the unreachable arm. Mark it
+        // `cold_path()` so the inliner skips it and codegen hints it unlikely,
+        // matching the other compiler-synthesized cold branches.
+        let cold_call = engine.alloc_expr(
+            ExprKind::Call {
+                func: FunctionRef {
+                    module_source: ModuleSource::builtin(),
+                    name: "cold_path".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                args: vec![],
+                type_args: vec![],
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        let cold_stmt = engine.alloc_stmt(StmtKind::Expr(cold_call), span);
         // Call `builtin::unreachable` rather than
         // `core:internal/unreachable`: the former lowers to
         // `WirInstr::Unreachable` directly in `wir_build::calls.rs`
@@ -273,7 +250,7 @@ fn build_switch(
             span,
         );
         let stmt = engine.alloc_stmt(StmtKind::Expr(call), span);
-        engine.alloc_block(vec![stmt], span)
+        engine.alloc_block(vec![cold_stmt, stmt], span)
     };
 
     ExprKind::Switch {
@@ -284,8 +261,8 @@ fn build_switch(
     }
 }
 
-/// Deep-clone an arm body expression and wrap it in a fresh single-statement
-/// block, mirroring the `NirBlock { stmts: [Expr(body)] }` the tree pass built.
+/// Deep-clone an arm body expression and wrap it in a fresh block holding a
+/// single `Expr` statement.
 fn arm_body_block(engine: &mut Engine, body: ExprId) -> BlockId {
     let clone = engine.clone_expr(body);
     let span = engine.body.exprs[clone].span;

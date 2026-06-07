@@ -266,6 +266,16 @@ impl Semantics {
         self.references.get(key).cloned()
     }
 
+    /// Iterate every declared symbol with its canonical key, across all
+    /// modules. Includes both item-level symbols and the synthetic local
+    /// table (`let` / parameter bindings), mirroring [`Self::symbol_at`].
+    /// Callers that want a single module filter on `key.module`. Used by
+    /// semantic-token highlighting to classify declaration sites in one pass
+    /// instead of a positional lookup per token.
+    pub fn iter_symbols(&self) -> impl Iterator<Item = (&SymbolKey, &Symbol)> {
+        self.symbols.iter().chain(self.locals.iter())
+    }
+
     /// Iterate every recorded use-site `(use_key, def_key)` edge.
     ///
     /// Each `use_key` is typically an [`IdentExpr`] id; `def_key` is the

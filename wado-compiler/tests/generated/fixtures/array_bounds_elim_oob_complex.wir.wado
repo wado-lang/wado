@@ -79,7 +79,8 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/run"() with 
     "core:prelude/list.wado/List<i32>::push"(__b_0, 1);
     "core:prelude/list.wado/List<i32>::push"(__b_0, 2);
     "core:prelude/list.wado/List<i32>::push"(__b_0, 3);
-    if builtin::unlikely(5 >= __b_0.used) {
+    if @unlikely(5 >= __b_0.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -178,7 +179,8 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/list.wado/List<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<i32>::grow"(self);
     }
     builtin::array_set<i32>(self.repr, used, value);

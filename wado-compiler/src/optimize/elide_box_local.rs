@@ -37,22 +37,9 @@
 //!   `Match` / `Switch` / `LabeledBlock` / nested `Block`) blocks
 //!   substitution — those constructs may not execute the use on
 //!   every path.
-//!
-//! ## Arena port
-//!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the body traversal
-//! (stats, the bottom-up driver, candidate detection, substitution) reads and
-//! mutates the arena `Body` directly. The two soundness gates — `ModRef` and
-//! the leftmost-evaluated-subexpression walker — are still tree-shaped and are
-//! invoked on materialized subtrees (`Body::to_tree_{expr,stmt}`); their full
-//! arena port is deferred. Materializing a subtree is bit-identical to the
-//! original, so the soundness decision (and codegen) is unchanged.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{
-    NirBinaryOp, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp,
-};
+use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, PatKind, StmtId, StmtKind,
 };
@@ -319,8 +306,7 @@ fn describe_candidate(
     }
     let inner_value = fields[0].value;
     let field_name = s.field_names.iter().next().unwrap().clone();
-    // ModRef is still a tree analysis; run it on the materialized inner subtree.
-    let inner_mr = ModRef::of_expr(&body.to_tree_expr(inner_value));
+    let inner_mr = ModRef::of_expr(body, inner_value);
     Some((local_index, field_name, inner_mr))
 }
 
@@ -361,16 +347,13 @@ fn find_use_site(
             k += 1;
             continue;
         }
-        // The leftmost-walker and ModRef are still tree analyses; run them on
-        // the materialized statement subtree.
-        let tree = body.to_tree_stmt(stmt);
         if matches!(
-            walk_stmt_for_leftmost(&tree, candidate, field_name),
+            walk_stmt_for_leftmost(body, stmt, candidate, field_name),
             LeftmostWalk::Found
         ) {
             return Some(k);
         }
-        let int_mr = ModRef::of_stmt(&tree);
+        let int_mr = ModRef::of_stmt(body, stmt);
         if !can_move_past(inner_mr, &int_mr, candidate) {
             return None;
         }
@@ -394,218 +377,243 @@ enum LeftmostWalk {
     Blocked,
 }
 
-fn walk_stmt_for_leftmost(stmt: &NirStmt, candidate: u32, field_name: &str) -> LeftmostWalk {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. } => {
-            match walk_expr_for_leftmost(value, candidate, field_name) {
+fn walk_stmt_for_leftmost(
+    body: &Body,
+    stmt: StmtId,
+    candidate: u32,
+    field_name: &str,
+) -> LeftmostWalk {
+    match &body.stmts[stmt].kind {
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+            match walk_expr_for_leftmost(body, *value, candidate, field_name) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
         }
-        NirStmtKind::LetDestructure { value, .. } => {
-            match walk_expr_for_leftmost(value, candidate, field_name) {
+        StmtKind::Expr(e) => walk_expr_for_leftmost(body, *e, candidate, field_name),
+        StmtKind::Return { value: Some(v) } | StmtKind::Break { value: Some(v), .. } => {
+            match walk_expr_for_leftmost(body, *v, candidate, field_name) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
         }
-        NirStmtKind::Expr(e) => walk_expr_for_leftmost(e, candidate, field_name),
-        NirStmtKind::Return { value: Some(v) } | NirStmtKind::Break { value: Some(v), .. } => {
-            match walk_expr_for_leftmost(v, candidate, field_name) {
-                LeftmostWalk::Found => LeftmostWalk::Found,
-                _ => LeftmostWalk::Blocked,
-            }
-        }
-        NirStmtKind::Return { value: None }
-        | NirStmtKind::Break { value: None, .. }
-        | NirStmtKind::Continue
-        | NirStmtKind::If { .. }
-        | NirStmtKind::Loop { .. }
-        | NirStmtKind::LabeledBlock { .. } => LeftmostWalk::Blocked,
+        StmtKind::Return { value: None }
+        | StmtKind::Break { value: None, .. }
+        | StmtKind::Continue
+        | StmtKind::If { .. }
+        | StmtKind::Loop { .. }
+        | StmtKind::LabeledBlock { .. } => LeftmostWalk::Blocked,
     }
 }
 
-fn walk_expr_for_leftmost(expr: &NirExpr, candidate: u32, field_name: &str) -> LeftmostWalk {
-    if let NirExprKind::FieldAccess {
+fn walk_expr_for_leftmost(
+    body: &Body,
+    expr: ExprId,
+    candidate: u32,
+    field_name: &str,
+) -> LeftmostWalk {
+    if let ExprKind::FieldAccess {
         expr: inner,
         field_name: fname,
         ..
-    } = &expr.kind
+    } = &body.exprs[expr].kind
         && fname == field_name
-        && let NirExprKind::Local { index, .. } = &inner.kind
+        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
         && *index == candidate
     {
         return LeftmostWalk::Found;
     }
 
-    match &expr.kind {
-        NirExprKind::If { .. }
-        | NirExprKind::Match { .. }
-        | NirExprKind::Switch { .. }
-        | NirExprKind::LabeledBlock { .. }
-        | NirExprKind::Block(_) => LeftmostWalk::Blocked,
+    match &body.exprs[expr].kind {
+        ExprKind::If { .. }
+        | ExprKind::Match { .. }
+        | ExprKind::Switch { .. }
+        | ExprKind::LabeledBlock { .. }
+        | ExprKind::Block(_) => LeftmostWalk::Blocked,
 
-        NirExprKind::Assign { target, value } => {
-            match walk_assign_target(target, candidate, field_name) {
+        ExprKind::Assign { target, value } => {
+            let (target, value) = (*target, *value);
+            match walk_assign_target(body, target, candidate, field_name) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 LeftmostWalk::Blocked => LeftmostWalk::Blocked,
-                LeftmostWalk::Pure => match walk_expr_for_leftmost(value, candidate, field_name) {
-                    LeftmostWalk::Found => LeftmostWalk::Found,
-                    _ => LeftmostWalk::Blocked,
-                },
+                LeftmostWalk::Pure => {
+                    match walk_expr_for_leftmost(body, value, candidate, field_name) {
+                        LeftmostWalk::Found => LeftmostWalk::Found,
+                        _ => LeftmostWalk::Blocked,
+                    }
+                }
             }
         }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            match walk_expr_for_leftmost(value, candidate, field_name) {
+        ExprKind::GlobalVarSet { value, .. } => {
+            match walk_expr_for_leftmost(body, *value, candidate, field_name) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
         }
-        NirExprKind::Call { args, .. } => {
-            walk_children_observable(args.iter().map(|a| &a.expr), candidate, field_name)
+        ExprKind::Call { args, .. } => {
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            walk_children_observable(body, args.into_iter(), candidate, field_name)
         }
-        NirExprKind::MethodCall { receiver, args, .. } => walk_children_observable(
-            std::iter::once(receiver.as_ref()).chain(args.iter().map(|a| &a.expr)),
-            candidate,
-            field_name,
-        ),
-        NirExprKind::IndirectCall { callee, args } => walk_children_observable(
-            std::iter::once(callee.as_ref()).chain(args.iter()),
-            candidate,
-            field_name,
-        ),
-        NirExprKind::CmRawCall { args, .. } => {
-            walk_children_observable(args.iter(), candidate, field_name)
+        ExprKind::MethodCall { receiver, args, .. } => {
+            let children: Vec<ExprId> = std::iter::once(*receiver)
+                .chain(args.iter().map(|a| a.expr))
+                .collect();
+            walk_children_observable(body, children.into_iter(), candidate, field_name)
+        }
+        ExprKind::IndirectCall { callee, args } => {
+            let children: Vec<ExprId> = std::iter::once(*callee)
+                .chain(args.iter().copied())
+                .collect();
+            walk_children_observable(body, children.into_iter(), candidate, field_name)
+        }
+        ExprKind::CmRawCall { args, .. } => {
+            let args = args.clone();
+            walk_children_observable(body, args.into_iter(), candidate, field_name)
         }
 
-        NirExprKind::Binary { left, right, op } => match op {
-            // `&&` and `||` short-circuit: the right operand is
-            // evaluated only when the left operand permits, so a
-            // candidate use anchored in the right operand would
-            // execute conditionally after substitution while the
-            // original `let` ran unconditionally. Treat the right
-            // operand the same way as an `if` branch — a Found there
-            // must block elision, not anchor it.
-            NirBinaryOp::And | NirBinaryOp::Or => {
-                match walk_expr_for_leftmost(left, candidate, field_name) {
-                    LeftmostWalk::Found => LeftmostWalk::Found,
-                    LeftmostWalk::Blocked => LeftmostWalk::Blocked,
-                    LeftmostWalk::Pure => {
-                        match walk_expr_for_leftmost(right, candidate, field_name) {
-                            LeftmostWalk::Pure => LeftmostWalk::Pure,
-                            _ => LeftmostWalk::Blocked,
+        ExprKind::Binary { left, right, op } => {
+            let (left, right) = (*left, *right);
+            match op {
+                // `&&` and `||` short-circuit: the right operand is
+                // evaluated only when the left operand permits, so a
+                // candidate use anchored in the right operand would
+                // execute conditionally after substitution while the
+                // original `let` ran unconditionally. Treat the right
+                // operand the same way as an `if` branch — a Found there
+                // must block elision, not anchor it.
+                NirBinaryOp::And | NirBinaryOp::Or => {
+                    match walk_expr_for_leftmost(body, left, candidate, field_name) {
+                        LeftmostWalk::Found => LeftmostWalk::Found,
+                        LeftmostWalk::Blocked => LeftmostWalk::Blocked,
+                        LeftmostWalk::Pure => {
+                            match walk_expr_for_leftmost(body, right, candidate, field_name) {
+                                LeftmostWalk::Pure => LeftmostWalk::Pure,
+                                _ => LeftmostWalk::Blocked,
+                            }
                         }
                     }
                 }
+                // `Div` / `Mod` may trap on a zero divisor; the operation
+                // itself is observable, so a Pure subtree below it does
+                // not make the surrounding context Pure.
+                NirBinaryOp::Div | NirBinaryOp::Mod => observable_propagate(walk_children_pure(
+                    body,
+                    [left, right].into_iter(),
+                    candidate,
+                    field_name,
+                )),
+                _ => walk_children_pure(body, [left, right].into_iter(), candidate, field_name),
             }
-            // `Div` / `Mod` may trap on a zero divisor; the operation
-            // itself is observable, so a Pure subtree below it does
-            // not make the surrounding context Pure.
-            NirBinaryOp::Div | NirBinaryOp::Mod => observable_propagate(walk_children_pure(
-                [left.as_ref(), right.as_ref()].into_iter(),
-                candidate,
-                field_name,
-            )),
-            _ => walk_children_pure(
-                [left.as_ref(), right.as_ref()].into_iter(),
-                candidate,
-                field_name,
-            ),
-        },
-        NirExprKind::Unary { expr: inner, op } => match op {
-            // Deref may trap on a null receiver; the op itself is
-            // observable.
-            NirUnaryOp::Deref => {
-                observable_propagate(walk_expr_for_leftmost(inner, candidate, field_name))
+        }
+        ExprKind::Unary { expr: inner, op } => {
+            let inner = *inner;
+            match op {
+                // Deref may trap on a null receiver; the op itself is
+                // observable.
+                NirUnaryOp::Deref => {
+                    observable_propagate(walk_expr_for_leftmost(body, inner, candidate, field_name))
+                }
+                // Arithmetic / logical / address-taking unaries are pure.
+                NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot => {
+                    walk_expr_for_leftmost(body, inner, candidate, field_name)
+                }
+                NirUnaryOp::Ref | NirUnaryOp::MutRef => {
+                    walk_expr_for_leftmost(body, inner, candidate, field_name)
+                }
             }
-            // Arithmetic / logical / address-taking unaries are pure.
-            NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot => {
-                walk_expr_for_leftmost(inner, candidate, field_name)
-            }
-            NirUnaryOp::Ref | NirUnaryOp::MutRef => {
-                walk_expr_for_leftmost(inner, candidate, field_name)
-            }
-        },
+        }
         // `as` lowers to `ref.cast` / numeric narrowing — both may trap.
-        NirExprKind::Cast { expr: inner, .. } => {
-            observable_propagate(walk_expr_for_leftmost(inner, candidate, field_name))
+        ExprKind::Cast { expr: inner, .. } => {
+            observable_propagate(walk_expr_for_leftmost(body, *inner, candidate, field_name))
         }
         // FieldAccess on a non-candidate receiver: a fresh `struct.get`
         // on a possibly-null reference, so the op itself may trap. A
         // Found in the receiver still anchors at the receiver position
         // (the FieldAccess applies AFTER the substituted inner), but
         // a Pure receiver does NOT make this subtree Pure.
-        NirExprKind::FieldAccess { expr: inner, .. } => {
-            observable_propagate(walk_expr_for_leftmost(inner, candidate, field_name))
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            observable_propagate(walk_expr_for_leftmost(body, *inner, candidate, field_name))
         }
         // `List<T>::index_value`-shaped Index may trap on a null base
         // and on OOB; the op itself is observable.
-        NirExprKind::Index { expr: inner, index } => observable_propagate(walk_children_pure(
-            [inner.as_ref(), index.as_ref()].into_iter(),
-            candidate,
-            field_name,
-        )),
-        NirExprKind::StructLiteral { fields, .. } => {
-            walk_children_pure(fields.iter().map(|f| &f.value), candidate, field_name)
+        ExprKind::Index { expr: inner, index } => {
+            let (inner, index) = (*inner, *index);
+            observable_propagate(walk_children_pure(
+                body,
+                [inner, index].into_iter(),
+                candidate,
+                field_name,
+            ))
         }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            walk_children_pure(elements.iter(), candidate, field_name)
+        ExprKind::StructLiteral { fields, .. } => {
+            let fields: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            walk_children_pure(body, fields.into_iter(), candidate, field_name)
         }
-        NirExprKind::VariantConstruct { payload, .. } => match payload {
-            Some(p) => walk_expr_for_leftmost(p, candidate, field_name),
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            let elements = elements.clone();
+            walk_children_pure(body, elements.into_iter(), candidate, field_name)
+        }
+        ExprKind::VariantConstruct { payload, .. } => match *payload {
+            Some(p) => walk_expr_for_leftmost(body, p, candidate, field_name),
             None => LeftmostWalk::Pure,
         },
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            walk_expr_for_leftmost(functor, candidate, field_name)
+        ExprKind::ClosureToCanonical { functor, .. } => {
+            walk_expr_for_leftmost(body, *functor, candidate, field_name)
         }
         // `VariantTag` / `VariantTest` / `VariantPayload` all read the
         // discriminant or payload via `ref.cast` + `struct.get` on a
         // possibly-null receiver; each may trap.
-        NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. } => {
-            observable_propagate(walk_expr_for_leftmost(inner, candidate, field_name))
+        ExprKind::VariantTag { expr: inner }
+        | ExprKind::VariantTest { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. } => {
+            observable_propagate(walk_expr_for_leftmost(body, *inner, candidate, field_name))
         }
 
-        NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::EnumConstruct { .. } => LeftmostWalk::Pure,
+        ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::StringLiteral(_)
+        | ExprKind::BytesLiteral(_)
+        | ExprKind::Null
+        | ExprKind::Unit
+        | ExprKind::EnumConstruct { .. } => LeftmostWalk::Pure,
     }
 }
 
-fn walk_assign_target(target: &NirExpr, candidate: u32, field_name: &str) -> LeftmostWalk {
-    match &target.kind {
-        NirExprKind::Local { .. } => LeftmostWalk::Pure,
-        NirExprKind::FieldAccess { expr, .. } => {
-            walk_expr_for_leftmost(expr, candidate, field_name)
+fn walk_assign_target(
+    body: &Body,
+    target: ExprId,
+    candidate: u32,
+    field_name: &str,
+) -> LeftmostWalk {
+    match &body.exprs[target].kind {
+        ExprKind::Local { .. } => LeftmostWalk::Pure,
+        ExprKind::FieldAccess { expr, .. } => {
+            walk_expr_for_leftmost(body, *expr, candidate, field_name)
         }
-        NirExprKind::Index { expr, index } => walk_children_pure(
-            [expr.as_ref(), index.as_ref()].into_iter(),
-            candidate,
-            field_name,
-        ),
-        NirExprKind::Unary {
+        ExprKind::Index { expr, index } => {
+            let (expr, index) = (*expr, *index);
+            walk_children_pure(body, [expr, index].into_iter(), candidate, field_name)
+        }
+        ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr,
-        } => walk_expr_for_leftmost(expr, candidate, field_name),
-        _ => walk_expr_for_leftmost(target, candidate, field_name),
+        } => walk_expr_for_leftmost(body, *expr, candidate, field_name),
+        _ => walk_expr_for_leftmost(body, target, candidate, field_name),
     }
 }
 
-fn walk_children_pure<'a>(
-    children: impl Iterator<Item = &'a NirExpr>,
+fn walk_children_pure(
+    body: &Body,
+    children: impl Iterator<Item = ExprId>,
     candidate: u32,
     field_name: &str,
 ) -> LeftmostWalk {
     for c in children {
-        match walk_expr_for_leftmost(c, candidate, field_name) {
+        match walk_expr_for_leftmost(body, c, candidate, field_name) {
             LeftmostWalk::Found => return LeftmostWalk::Found,
             LeftmostWalk::Blocked => return LeftmostWalk::Blocked,
             LeftmostWalk::Pure => {}
@@ -628,12 +636,13 @@ fn observable_propagate(child: LeftmostWalk) -> LeftmostWalk {
     }
 }
 
-fn walk_children_observable<'a>(
-    children: impl Iterator<Item = &'a NirExpr>,
+fn walk_children_observable(
+    body: &Body,
+    children: impl Iterator<Item = ExprId>,
     candidate: u32,
     field_name: &str,
 ) -> LeftmostWalk {
-    match walk_children_pure(children, candidate, field_name) {
+    match walk_children_pure(body, children, candidate, field_name) {
         LeftmostWalk::Found => LeftmostWalk::Found,
         _ => LeftmostWalk::Blocked,
     }
@@ -698,8 +707,20 @@ fn substitute_node(
 mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirUnaryOp};
+    use crate::nir_arena::ExprNode;
     use crate::tir::TypeId;
     use crate::token::Span;
+
+    /// Build an expression into a fresh arena and run the leftmost walker on it.
+    fn leftmost(
+        build: impl FnOnce(&mut Body) -> ExprId,
+        candidate: u32,
+        field_name: &str,
+    ) -> LeftmostWalk {
+        let mut body = Body::empty();
+        let id = build(&mut body);
+        walk_expr_for_leftmost(&body, id, candidate, field_name)
+    }
 
     fn ty() -> TypeId {
         TypeId(0)
@@ -707,76 +728,70 @@ mod tests {
     fn sp() -> Span {
         Span::default()
     }
-    fn local(index: u32) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Local {
+    fn push(body: &mut Body, kind: ExprKind) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind,
+            type_id: ty(),
+            span: sp(),
+        })
+    }
+    fn local(body: &mut Body, index: u32) -> ExprId {
+        push(
+            body,
+            ExprKind::Local {
                 index,
                 name: format!("__l{index}"),
             },
-            ty(),
-            sp(),
         )
     }
-    fn int(v: i64) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::IntLiteral {
+    fn int(body: &mut Body, v: i64) -> ExprId {
+        push(
+            body,
+            ExprKind::IntLiteral {
                 value: v as u64,
                 repr: v.to_string(),
             },
-            ty(),
-            sp(),
         )
     }
-    fn field(receiver: NirExpr, name: &str) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::FieldAccess {
-                expr: Box::new(receiver),
+    fn field(body: &mut Body, receiver: ExprId, name: &str) -> ExprId {
+        push(
+            body,
+            ExprKind::FieldAccess {
+                expr: receiver,
                 field_index: 0,
                 field_name: name.to_string(),
             },
-            ty(),
-            sp(),
         )
     }
-    fn index(arr: NirExpr, idx: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Index {
-                expr: Box::new(arr),
-                index: Box::new(idx),
+    fn index(body: &mut Body, arr: ExprId, idx: ExprId) -> ExprId {
+        push(
+            body,
+            ExprKind::Index {
+                expr: arr,
+                index: idx,
             },
-            ty(),
-            sp(),
         )
     }
-    fn binary(op: NirBinaryOp, lhs: NirExpr, rhs: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Binary {
-                left: Box::new(lhs),
-                right: Box::new(rhs),
+    fn binary(body: &mut Body, op: NirBinaryOp, lhs: ExprId, rhs: ExprId) -> ExprId {
+        push(
+            body,
+            ExprKind::Binary {
+                left: lhs,
+                right: rhs,
                 op,
             },
-            ty(),
-            sp(),
         )
     }
-    fn unary(op: NirUnaryOp, e: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Unary {
-                op,
-                expr: Box::new(e),
-            },
-            ty(),
-            sp(),
-        )
+    fn unary(body: &mut Body, op: NirUnaryOp, e: ExprId) -> ExprId {
+        push(body, ExprKind::Unary { op, expr: e })
     }
-    fn cast(e: NirExpr, target: TypeId) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Cast {
-                expr: Box::new(e),
+    fn cast(body: &mut Body, e: ExprId, target: TypeId) -> ExprId {
+        push(
+            body,
+            ExprKind::Cast {
+                expr: e,
                 target_type: target,
             },
-            ty(),
-            sp(),
         )
     }
 
@@ -785,11 +800,13 @@ mod tests {
     /// must return Found.
     #[test]
     fn walker_finds_left_field_access() {
-        let expr = binary(NirBinaryOp::Add, field(local(7), "v"), int(0));
-        assert!(matches!(
-            walk_expr_for_leftmost(&expr, 7, "v"),
-            LeftmostWalk::Found
-        ));
+        let build = |b: &mut Body| {
+            let l = local(b, 7);
+            let f = field(b, l, "v");
+            let i = int(b, 0);
+            binary(b, NirBinaryOp::Add, f, i)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Found));
     }
 
     /// Use site `arr[idx] + boxed.v` — `arr[idx]` is observable
@@ -802,15 +819,15 @@ mod tests {
     /// pass-through" finding.
     #[test]
     fn walker_blocks_when_observable_index_precedes_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            index(local(1), local(2)),
-            field(local(7), "v"),
-        );
-        assert!(matches!(
-            walk_expr_for_leftmost(&expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        let build = |b: &mut Body| {
+            let a1 = local(b, 1);
+            let a2 = local(b, 2);
+            let idx = index(b, a1, a2);
+            let l = local(b, 7);
+            let f = field(b, l, "v");
+            binary(b, NirBinaryOp::Add, idx, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `(other.f) + boxed.v` — non-target `FieldAccess` may
@@ -818,54 +835,55 @@ mod tests {
     /// the surrounding context Pure.
     #[test]
     fn walker_blocks_when_non_target_field_precedes_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            field(local(2), "other"),
-            field(local(7), "v"),
-        );
-        assert!(matches!(
-            walk_expr_for_leftmost(&expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        let build = |b: &mut Body| {
+            let l2 = local(b, 2);
+            let other = field(b, l2, "other");
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            binary(b, NirBinaryOp::Add, other, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `(x as i32) + boxed.v` — `Cast` may trap, observable.
     #[test]
     fn walker_blocks_when_cast_precedes_field() {
-        let expr = binary(NirBinaryOp::Add, cast(local(2), ty()), field(local(7), "v"));
-        assert!(matches!(
-            walk_expr_for_leftmost(&expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        let build = |b: &mut Body| {
+            let l2 = local(b, 2);
+            let c = cast(b, l2, ty());
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            binary(b, NirBinaryOp::Add, c, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `*p + boxed.v` — `Unary::Deref` may trap, observable.
     #[test]
     fn walker_blocks_when_deref_precedes_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            unary(NirUnaryOp::Deref, local(2)),
-            field(local(7), "v"),
-        );
-        assert!(matches!(
-            walk_expr_for_leftmost(&expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        let build = |b: &mut Body| {
+            let l2 = local(b, 2);
+            let d = unary(b, NirUnaryOp::Deref, l2);
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            binary(b, NirBinaryOp::Add, d, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `(a / b) + boxed.v` — `Binary::Div` may trap on zero
     /// divisor, observable.
     #[test]
     fn walker_blocks_when_div_precedes_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            binary(NirBinaryOp::Div, local(1), local(2)),
-            field(local(7), "v"),
-        );
-        assert!(matches!(
-            walk_expr_for_leftmost(&expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        let build = |b: &mut Body| {
+            let l1 = local(b, 1);
+            let l2 = local(b, 2);
+            let div = binary(b, NirBinaryOp::Div, l1, l2);
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            binary(b, NirBinaryOp::Add, div, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `boxed.v + arr[idx]` — observable on RIGHT side
@@ -874,15 +892,15 @@ mod tests {
     /// substituted inner expression.
     #[test]
     fn walker_allows_observable_after_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            field(local(7), "v"),
-            index(local(1), local(2)),
-        );
-        assert!(matches!(
-            walk_expr_for_leftmost(&expr, 7, "v"),
-            LeftmostWalk::Found
-        ));
+        let build = |b: &mut Body| {
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            let a1 = local(b, 1);
+            let a2 = local(b, 2);
+            let idx = index(b, a1, a2);
+            binary(b, NirBinaryOp::Add, f, idx)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Found));
     }
 
     /// Use site `Cast(boxed.v)` — `FieldAccess` inside an observable
@@ -890,11 +908,12 @@ mod tests {
     /// AFTER the substituted inner.
     #[test]
     fn walker_finds_when_field_is_inside_observable() {
-        let expr = cast(field(local(7), "v"), ty());
-        assert!(matches!(
-            walk_expr_for_leftmost(&expr, 7, "v"),
-            LeftmostWalk::Found
-        ));
+        let build = |b: &mut Body| {
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            cast(b, f, ty())
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Found));
     }
 
     /// Use site `cond && boxed.v` — the right operand of `&&` is
@@ -902,10 +921,12 @@ mod tests {
     /// Block, not anchor.
     #[test]
     fn walker_blocks_field_in_right_of_and() {
-        let expr = binary(NirBinaryOp::And, local(2), field(local(7), "v"));
-        assert!(matches!(
-            walk_expr_for_leftmost(&expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        let build = |b: &mut Body| {
+            let l2 = local(b, 2);
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            binary(b, NirBinaryOp::And, l2, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 }

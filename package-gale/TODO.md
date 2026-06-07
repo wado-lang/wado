@@ -4,6 +4,7 @@ Open work towards full ANTLR4 compatibility and the performance budget it implie
 
 - [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility contract, stage layering, descriptor pipeline, and triage workflow.
 - [`AGENTS.md`](./AGENTS.md) — internal architecture (LL prediction design, soundness invariants) and failed approaches.
+- [`perf.md`](./perf.md) — runtime performance: benchmark state, live profile, what would move the needle, and measured perf dead-ends.
 
 This file lists what is **not yet done**. Closed work belongs in commit history.
 
@@ -38,10 +39,6 @@ The K-prefix follow-mask path closes the multi-token tail-greedy gap at the oute
 ### Multi-alt `RuleRef` expansion in `deep_position_first_sets_from`
 
 The K-prefix caller-side mask analysis halts at a multi-alt `RuleRef` because the per-depth union of multi-alt prefixes would over-yield by matching cross-alt sequences no real alt admits. A per-alt sequence representation (`List<List<List<String>>>`) could extend the walk safely — useful when a caller's continuation passes through a multi-alt rule like `expr : literal | name`.
-
-### Multi-alt variant dispatcher — K-prefix cascade relaxation
-
-`tail_greedy_k_prefix_of_element`'s `RuleRef` arm still halts the K-prefix cascade through multi-alt rules out of conservatism. Now that the dispatcher in `parse_<rule>__follow_<id>` routes correctly to the variant's own `_bt_<n>` / `_scan_<n>` helpers (covered by `tests/grammars/ll_multi_alt_overlap.g4`), the `RuleRef` recursion gate can be relaxed so K-prefix flows through multi-alt rules cleanly. Requires its own regression fixture before the guard is loosened.
 
 ### ATN-class grammars
 
@@ -96,37 +93,8 @@ Sketch:
 
 Translating Java/Rust/Python action bodies to Wado is the hard part. A reasonable first cut requires callers to provide hand-written Wado equivalents (a sidecar mapping predicate / action ID → Wado snippet), with automatic translation later. See [`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md).
 
-## Performance — where the 5× gap lives
+## Performance
 
-Investigation against `benchmark/sqlite_parse` (Wado/Gale at `-O2`, ~137 ms/iter on a 13 KB SQL fixture; Rust `sqlparser-rs` at debug for reference is ~6.7 ms/iter — release would be far less).
-
-Profile (guest sampler, 5 ms interval) self-time top:
-
-|   Pct | Symbol                                                   |
-| ----: | -------------------------------------------------------- |
-| 27.9% | `tokenize`                                               |
-| 26.0% | `List<Token>::push` (per-token `struct.new Token`)       |
-| 17.2% | `Parser::last_end` (4-step `Parser→List→Token→Span→end`) |
-|  4.4% | `List<Token>::grow`                                      |
-
-Token-stream construction (`tokenize` + `List<Token>::push` + `grow`) is 58% of self-time; token reads via `Parser` are next.
-
-### What does not work
-
-- **Inlining hot Parser methods / any per-method micro-opt.** Caching `Parser::last_end` as a field or forcing `#[inline]` removes the named function from the profile but does not move wall time — the cost is the actual loads (`Parser→List→Token→Span→end`), not call overhead, and inlining merely redistributes it into the callers. wasmtime + Cranelift handles small Wasm calls cheaply enough that inlinability is not the lever.
-
-### What would actually move the needle
-
-The dominant cost is **Wasm GC `(array (ref Token))` indirection plus per-token `struct.new Token` allocation**. A 5× improvement requires decomposing `List<Token>` into parallel primitive arrays (`kinds` / `starts` / `ends` as `List<i32>`) so that `peek_kind` becomes a single `array.get i32` (not `array.get (ref Token)` + `struct.get`) and per-token struct allocation disappears in the lex loop. Two non-overlapping paths:
-
-1. **Gale-side**: redesign `Token` so hot fields are flat primitives, with an opaque sidecar (or removal) for `text` / `leading_trivia`. Keep the public `Token` API as a view handle if needed.
-2. **Wado-side**: extend `container_sroa` to handle (a) struct fields (currently locals only), (b) inner structs with nested struct/reference fields, (c) cross-function rewrites for the `scan_*(&List<Token>, ...)` parameter pattern (1100+ sites in the SQLite parser pass `&p.tokens` as a bare reference, always escaping). Today the pass fires on zero candidates in Gale-generated parsers.
-
-### Lexer dispatch (independent secondary lever)
-
-Inside the 27.9% `tokenize` self-time, work splits into per-character branch dispatch and keyword classification. Candidate techniques — pick by what profiling on the predicate-correct lexer (after Stage C) says is hottest. None help in isolation; they multiply with the SoA win above, not replace it.
-
-- **Table-driven DFA** for the whole lexer (NFA → DFA → transition table). Replaces both per-character dispatch and `classify_keyword`. `mode` blocks become a DFA per mode plus mode-switch on accept; lexer commands attach as accept-state attributes. Semantic predicates are the only DFA-blocker (need a hybrid prefix + predicate gate once Stage C makes them real).
-- **Trie / nested-switch on bytes** for `classify_keyword` only. Branches share prefixes (`IN` → `INSERT` / `INSTEAD` / `INTERSECT` / `INTO`). Smaller code-size impact than a full DFA.
-- **Compile-time perfect hash** (`gperf`-style) for `classify_keyword`. O(1) lookup, best when keyword count is large.
-- **SIMD-based pre-scan** (Wasm `v128`) for token boundaries / character-class membership in bulk. Effective if per-byte work is tiny but the byte loop is the bound.
+Runtime performance — the benchmark state, the live profile, the
+directions that would move the needle, and measured dead-ends (e.g.
+data-driven scan) — lives in [`perf.md`](./perf.md).

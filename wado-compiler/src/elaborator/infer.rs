@@ -157,7 +157,7 @@ pub(super) fn unify(
                 unify(type_table, expected_args[0], first_elem_type, bindings);
             }
         }
-        // Raw builtin array (`builtin::array<T>`).
+        // Raw builtin array (`Array<T>`).
         (ResolvedType::BuiltinArray(expected_elem), ResolvedType::BuiltinArray(actual_elem)) => {
             unify(type_table, *expected_elem, *actual_elem, bindings);
         }

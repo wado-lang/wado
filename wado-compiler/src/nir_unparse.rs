@@ -5,10 +5,10 @@
 
 use crate::lexer::is_valid_ident;
 use crate::nir::{
-    NirBinaryOp, NirBlock, NirEnum, NirExpr, NirExprKind, NirFlags, NirFunction, NirGlobal,
-    NirLiteralPattern, NirModule, NirParam, NirPattern, NirStmt, NirStmtKind, NirStruct,
-    NirUnaryOp,
+    NirBinaryOp, NirEnum, NirFlags, NirFunction, NirGlobal, NirLiteralPattern, NirModule, NirParam,
+    NirStruct, NirUnaryOp,
 };
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, PatId, PatKind, StmtId, StmtKind};
 use crate::tir::TypeTable;
 
 fn escape_string(s: &str) -> String {
@@ -196,7 +196,7 @@ impl<'a> NirUnparser<'a> {
         self.output.push_str(": ");
         self.output.push_str(&self.type_table.type_name(g.ty));
         self.output.push_str(" = ");
-        self.unparse_expr(&g.initializer);
+        self.unparse_expr(g.initializer.body(), g.initializer.expr());
         self.output.push_str(";\n");
     }
 
@@ -307,8 +307,9 @@ impl<'a> NirUnparser<'a> {
 
         self.unparse_nir_with_clause(&f.effects, &f.stores);
 
-        if let Some(body) = &f.body_block() {
-            self.emit_indented_block(|this| this.unparse_block(body));
+        if let Some(body) = &f.body {
+            let root = body.root;
+            self.emit_indented_block(|this| this.unparse_block(body, root));
             self.output.push('\n');
         } else {
             self.output.push_str(";\n");
@@ -340,15 +341,16 @@ impl<'a> NirUnparser<'a> {
             .push_str(&self.type_table.type_name(param.type_id));
     }
 
-    fn unparse_block(&mut self, block: &NirBlock) {
-        for stmt in &block.stmts {
-            self.unparse_stmt(stmt);
+    fn unparse_block(&mut self, body: &Body, block: BlockId) {
+        for i in 0..body.blocks[block].stmts.len() {
+            let sid = body.blocks[block].stmts[i];
+            self.unparse_stmt(body, sid);
         }
     }
 
-    fn unparse_stmt(&mut self, stmt: &NirStmt) {
-        match &stmt.kind {
-            NirStmtKind::Let {
+    fn unparse_stmt(&mut self, body: &Body, stmt: StmtId) {
+        match &body.stmts[stmt].kind {
+            StmtKind::Let {
                 name,
                 is_mut,
                 is_reactive,
@@ -356,6 +358,7 @@ impl<'a> NirUnparser<'a> {
                 value,
                 ..
             } => {
+                let value = *value;
                 self.write_indent();
                 self.output.push_str("let ");
                 if *is_reactive {
@@ -368,57 +371,62 @@ impl<'a> NirUnparser<'a> {
                 self.output.push_str(": ");
                 self.output.push_str(&self.type_table.type_name(*type_id));
                 self.output.push_str(" = ");
-                self.unparse_expr(value);
+                self.unparse_expr(body, value);
                 self.output.push_str(";\n");
             }
-            NirStmtKind::Expr(expr) => {
+            StmtKind::Expr(expr) => {
+                let expr = *expr;
                 self.write_indent();
-                self.unparse_expr(expr);
+                self.unparse_expr(body, expr);
                 self.output.push_str(";\n");
             }
-            NirStmtKind::Return { value } => {
+            StmtKind::Return { value } => {
+                let value = *value;
                 self.write_indent();
                 self.output.push_str("return");
                 if let Some(v) = value {
                     self.output.push(' ');
-                    self.unparse_expr(v);
+                    self.unparse_expr(body, v);
                 }
                 self.output.push_str(";\n");
             }
-            NirStmtKind::If {
+            StmtKind::If {
                 condition,
                 then_block,
                 else_block,
             } => {
+                let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
                 self.write_indent();
                 self.output.push_str("if ");
-                self.unparse_expr(condition);
+                self.unparse_expr(body, condition);
                 self.output.push_str(" {\n");
                 self.indent_level += 1;
-                self.unparse_block(then_block);
+                self.unparse_block(body, then_block);
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push('}');
                 if let Some(else_blk) = else_block {
                     self.output.push_str(" else {\n");
                     self.indent_level += 1;
-                    self.unparse_block(else_blk);
+                    self.unparse_block(body, else_blk);
                     self.indent_level -= 1;
                     self.write_indent();
                     self.output.push('}');
                 }
                 self.output.push('\n');
             }
-            NirStmtKind::Loop { body } => {
+            StmtKind::Loop { body: loop_body } => {
+                let loop_body = *loop_body;
                 self.write_indent();
                 self.output.push_str("loop {\n");
                 self.indent_level += 1;
-                self.unparse_block(body);
+                self.unparse_block(body, loop_body);
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push_str("}\n");
             }
-            NirStmtKind::Break { label, value } => {
+            StmtKind::Break { label, value } => {
+                let value = *value;
                 self.write_indent();
                 self.output.push_str("break");
                 if let Some(lbl) = label {
@@ -426,52 +434,58 @@ impl<'a> NirUnparser<'a> {
                     self.output.push_str(lbl);
                     if let Some(val) = value {
                         self.output.push_str(": ");
-                        self.unparse_expr(val);
+                        self.unparse_expr(body, val);
                     }
                 }
                 self.output.push_str(";\n");
             }
-            NirStmtKind::Continue => {
+            StmtKind::Continue => {
                 self.write_indent();
                 self.output.push_str("continue;\n");
             }
-            NirStmtKind::LabeledBlock { label, block } => {
+            StmtKind::LabeledBlock { label, block } => {
+                let block = *block;
                 self.write_indent();
                 self.output.push_str(label);
                 self.output.push_str(": {\n");
                 self.indent_level += 1;
-                self.unparse_block(block);
+                self.unparse_block(body, block);
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push_str("}\n");
             }
-            NirStmtKind::LetDestructure {
+            StmtKind::LetDestructure {
                 pattern,
                 is_mut,
                 value,
             } => {
+                let (pattern, value) = (*pattern, *value);
                 self.write_indent();
                 self.output.push_str("let ");
                 if *is_mut {
                     self.output.push_str("mut ");
                 }
-                self.unparse_nir_pattern(pattern);
+                self.unparse_nir_pattern(body, pattern);
                 self.output.push_str(" = ");
-                self.unparse_expr(value);
+                self.unparse_expr(body, value);
                 self.output.push_str(";\n");
             }
         }
     }
 
-    fn unparse_nir_pattern(&mut self, pattern: &NirPattern) {
-        match pattern {
-            NirPattern::Wildcard => self.output.push('_'),
-            NirPattern::Binding { name, .. } => self.output.push_str(name),
-            NirPattern::Literal(lit) => emit_tir_literal_pattern(lit, &mut self.output),
-            NirPattern::Tuple(patterns, has_rest) => {
+    fn unparse_nir_pattern(&mut self, body: &Body, pat: PatId) {
+        match &body.pats[pat].kind {
+            PatKind::Wildcard => self.output.push('_'),
+            PatKind::Binding { name, .. } => self.output.push_str(name),
+            PatKind::Literal(lit) => emit_tir_literal_pattern(lit, &mut self.output),
+            PatKind::Tuple(patterns, has_rest) => {
+                let patterns = patterns.clone();
+                let has_rest = *has_rest;
                 self.output.push('[');
-                self.comma_sep(patterns, NirUnparser::unparse_nir_pattern);
-                if *has_rest {
+                self.comma_sep(patterns.iter().copied(), |s, p| {
+                    s.unparse_nir_pattern(body, p);
+                });
+                if has_rest {
                     if !patterns.is_empty() {
                         self.output.push_str(", ");
                     }
@@ -479,34 +493,44 @@ impl<'a> NirUnparser<'a> {
                 }
                 self.output.push(']');
             }
-            NirPattern::Variant {
+            PatKind::Variant {
                 variant_name,
                 bindings,
                 ..
             } => {
                 self.output.push_str(variant_name);
                 if !bindings.is_empty() {
-                    self.delimited("(", ")", bindings, NirUnparser::unparse_nir_pattern);
+                    let bindings = bindings.clone();
+                    self.delimited("(", ")", bindings.iter().copied(), |s, p| {
+                        s.unparse_nir_pattern(body, p);
+                    });
                 }
             }
-            NirPattern::Enum { case_name, .. } => self.output.push_str(case_name),
-            NirPattern::Struct { fields, .. } => {
+            PatKind::Enum { case_name, .. } => self.output.push_str(case_name),
+            PatKind::Struct { fields, .. } => {
+                let fields = fields.clone();
                 self.output.push_str("{ ");
-                self.comma_sep(fields, |s, field| {
+                self.comma_sep(fields.iter(), |s, field| {
                     s.output.push_str(&field.field_name);
-                    if !matches!(&field.pattern, NirPattern::Binding { name, .. } if name == &field.field_name)
+                    if !matches!(&body.pats[field.pattern].kind, PatKind::Binding { name, .. } if name == &field.field_name)
                     {
                         s.output.push_str(": ");
-                        s.unparse_nir_pattern(&field.pattern);
+                        s.unparse_nir_pattern(body, field.pattern);
                     }
                 });
                 self.output.push_str(" }");
             }
-            NirPattern::Or(alternatives) => {
-                self.comma_sep_with(" | ", alternatives, NirUnparser::unparse_nir_pattern);
+            PatKind::Or(alternatives) => {
+                let alternatives = alternatives.clone();
+                self.comma_sep_with(" | ", alternatives.iter().copied(), |s, p| {
+                    s.unparse_nir_pattern(body, p);
+                });
             }
-            NirPattern::ConstantValue { expr } => self.unparse_expr(expr),
-            NirPattern::Range {
+            PatKind::ConstantValue { expr } => {
+                let expr = *expr;
+                self.unparse_expr(body, expr);
+            }
+            PatKind::Range {
                 start,
                 end,
                 inclusive,
@@ -519,62 +543,64 @@ impl<'a> NirUnparser<'a> {
         }
     }
 
-    fn unparse_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
-            NirExprKind::IntLiteral { repr, .. } => {
+    fn unparse_expr(&mut self, body: &Body, id: ExprId) {
+        let ty = body.exprs[id].type_id;
+        match &body.exprs[id].kind {
+            ExprKind::IntLiteral { repr, .. } => {
                 self.output.push_str(repr);
             }
-            NirExprKind::FloatLiteral { repr, .. } => {
+            ExprKind::FloatLiteral { repr, .. } => {
                 self.output.push_str(repr);
             }
-            NirExprKind::BoolLiteral(b) => {
+            ExprKind::BoolLiteral(b) => {
                 self.output.push_str(if *b { "true" } else { "false" });
             }
-            NirExprKind::CharLiteral(c) => {
+            ExprKind::CharLiteral(c) => {
                 self.output.push('\'');
                 self.output.push_str(&escape_char(*c));
                 self.output.push('\'');
             }
-            NirExprKind::StringLiteral(s) => {
+            ExprKind::StringLiteral(s) => {
                 self.output.push('"');
                 self.output.push_str(&escape_string(s));
                 self.output.push('"');
             }
-            NirExprKind::BytesLiteral(bytes) => {
+            ExprKind::BytesLiteral(bytes) => {
                 self.output
                     .push_str(&format!("#include_bytes(/* {} bytes */)", bytes.len()));
             }
-            NirExprKind::Null => {
+            ExprKind::Null => {
                 self.output.push_str("null");
             }
-            NirExprKind::VariantConstruct {
+            ExprKind::VariantConstruct {
                 case_name, payload, ..
             } => {
+                let payload = *payload;
                 // Get the variant type name from the type_id
-                let type_name = self.type_table.type_name(expr.type_id);
+                let type_name = self.type_table.type_name(ty);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
                 if let Some(payload_expr) = payload {
                     self.output.push('(');
-                    self.unparse_expr(payload_expr);
+                    self.unparse_expr(body, payload_expr);
                     self.output.push(')');
                 }
             }
-            NirExprKind::EnumConstruct { case_name, .. } => {
+            ExprKind::EnumConstruct { case_name, .. } => {
                 // Get the enum type name from the type_id
-                let type_name = self.type_table.type_name(expr.type_id);
+                let type_name = self.type_table.type_name(ty);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
             }
-            NirExprKind::Unit => {
+            ExprKind::Unit => {
                 self.output.push_str("()");
             }
-            NirExprKind::Local { name, .. } => {
+            ExprKind::Local { name, .. } => {
                 self.output.push_str(name);
             }
-            NirExprKind::GlobalVarGet {
+            ExprKind::GlobalVarGet {
                 name,
                 module_source,
             } => {
@@ -584,47 +610,52 @@ impl<'a> NirUnparser<'a> {
                 }
                 self.output.push_str(name);
             }
-            NirExprKind::GlobalVarSet {
+            ExprKind::GlobalVarSet {
                 name,
                 module_source,
                 value,
             } => {
+                let value = *value;
                 if !module_source.is_entry_point() {
                     self.output.push_str(&module_source.to_path().join("::"));
                     self.output.push_str("::");
                 }
                 self.output.push_str(name);
                 self.output.push_str(" = ");
-                self.unparse_expr(value);
+                self.unparse_expr(body, value);
             }
-            NirExprKind::Binary { left, op, right } => {
+            ExprKind::Binary { left, op, right } => {
+                let (left, op, right) = (*left, *op, *right);
                 self.output.push('(');
-                self.unparse_expr(left);
+                self.unparse_expr(body, left);
                 self.output.push(' ');
-                self.output.push_str(nir_binary_op_str(*op));
+                self.output.push_str(nir_binary_op_str(op));
                 self.output.push(' ');
-                self.unparse_expr(right);
+                self.unparse_expr(body, right);
                 self.output.push(')');
             }
-            NirExprKind::Unary { op, expr: inner } => {
-                self.output.push_str(nir_unary_op_str(*op));
-                self.unparse_expr(inner);
+            ExprKind::Unary { op, expr: inner } => {
+                let (op, inner) = (*op, *inner);
+                self.output.push_str(nir_unary_op_str(op));
+                self.unparse_expr(body, inner);
             }
-            NirExprKind::Assign { target, value } => {
-                self.unparse_expr(target);
+            ExprKind::Assign { target, value } => {
+                let (target, value) = (*target, *value);
+                self.unparse_expr(body, target);
                 self.output.push_str(" = ");
-                self.unparse_expr(value);
+                self.unparse_expr(body, value);
             }
-            NirExprKind::Cast {
+            ExprKind::Cast {
                 expr: inner,
                 target_type,
             } => {
-                self.unparse_expr(inner);
+                let (inner, target_type) = (*inner, *target_type);
+                self.unparse_expr(body, inner);
                 self.output.push_str(" as ");
                 self.output
-                    .push_str(&self.type_table.type_name(*target_type));
+                    .push_str(&self.type_table.type_name(target_type));
             }
-            NirExprKind::Call {
+            ExprKind::Call {
                 func,
                 type_args,
                 args,
@@ -637,186 +668,216 @@ impl<'a> NirUnparser<'a> {
                     let module_path = func.module_path();
                     format!("{}::{func_name}", module_path.join("::"))
                 };
+                let type_args = type_args.clone();
+                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
                 self.output.push_str(&Self::quote_if_needed(&full_name));
-                self.unparse_type_args(type_args);
-                self.delimited("(", ")", args, |s, arg| s.unparse_expr(&arg.expr));
+                self.unparse_type_args(&type_args);
+                self.delimited("(", ")", arg_ids, |s, aid| s.unparse_expr(body, aid));
             }
-            NirExprKind::CmRawCall { local_name, args } => {
+            ExprKind::CmRawCall { local_name, args } => {
+                let local_name = local_name.clone();
+                let args = args.clone();
                 self.output.push_str("cm_raw_call ");
-                self.output.push_str(local_name);
-                self.delimited("(", ")", args, NirUnparser::unparse_expr);
+                self.output.push_str(&local_name);
+                self.delimited("(", ")", args, |s, aid| s.unparse_expr(body, aid));
             }
-            NirExprKind::MethodCall {
+            ExprKind::MethodCall {
                 receiver,
                 func,
                 type_args,
                 args,
                 ..
             } => {
-                // The elaborator wraps `self` receivers in `&`/`&mut` automatically;
-                // strip that wrapper so the rendering reflects the source value.
-                let actual_receiver = match &receiver.kind {
-                    NirExprKind::Unary {
+                let receiver = *receiver;
+                let func_name = func.name.clone();
+                let type_args = type_args.clone();
+                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                // The elaborator wraps `self` receivers in `&`/`&mut`
+                // automatically; strip that wrapper so the rendering reflects the
+                // source value.
+                let actual_receiver = match &body.exprs[receiver].kind {
+                    ExprKind::Unary {
                         op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                         expr: inner,
-                    } => inner.as_ref(),
-                    _ => receiver.as_ref(),
+                    } => *inner,
+                    _ => receiver,
                 };
-                self.unparse_expr(actual_receiver);
+                self.unparse_expr(body, actual_receiver);
                 self.output.push('.');
                 // Quote the full resolved method name (e.g. `"Type::method"`) so
                 // the output captures which impl was selected.
-                self.output.push_str(&Self::quote_if_needed(&func.name));
-                self.unparse_type_args(type_args);
-                self.delimited("(", ")", args, |s, arg| s.unparse_expr(&arg.expr));
+                self.output.push_str(&Self::quote_if_needed(&func_name));
+                self.unparse_type_args(&type_args);
+                self.delimited("(", ")", arg_ids, |s, aid| s.unparse_expr(body, aid));
             }
-            NirExprKind::FieldAccess {
+            ExprKind::FieldAccess {
                 expr: inner,
                 field_name,
                 ..
             } => {
-                self.unparse_expr(inner);
+                let inner = *inner;
+                let field_name = field_name.clone();
+                self.unparse_expr(body, inner);
                 self.output.push('.');
-                self.output.push_str(field_name);
+                self.output.push_str(&field_name);
             }
-            NirExprKind::Index { expr: array, index } => {
-                self.unparse_expr(array);
+            ExprKind::Index { expr: array, index } => {
+                let (array, index) = (*array, *index);
+                self.unparse_expr(body, array);
                 self.output.push('[');
-                self.unparse_expr(index);
+                self.unparse_expr(body, index);
                 self.output.push(']');
             }
-            NirExprKind::Block(block) => {
+            ExprKind::Block(block) => {
+                let block = *block;
                 self.output.push_str("{\n");
                 self.indent_level += 1;
-                self.unparse_block(block);
+                self.unparse_block(body, block);
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push('}');
             }
-            NirExprKind::If {
+            ExprKind::If {
                 condition,
                 then_branch,
                 else_branch,
             } => {
+                let (condition, then_branch, else_branch) =
+                    (*condition, *then_branch, *else_branch);
                 self.output.push_str("if ");
-                self.unparse_expr(condition);
+                self.unparse_expr(body, condition);
                 self.output.push_str(" {\n");
                 self.indent_level += 1;
-                self.unparse_block(then_branch);
+                self.unparse_block(body, then_branch);
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push('}');
                 if let Some(else_blk) = else_branch {
                     self.output.push_str(" else {\n");
                     self.indent_level += 1;
-                    self.unparse_block(else_blk);
+                    self.unparse_block(body, else_blk);
                     self.indent_level -= 1;
                     self.write_indent();
                     self.output.push('}');
                 }
             }
-            NirExprKind::Match {
+            ExprKind::Match {
                 expr: scrutinee,
                 arms,
             } => {
+                let scrutinee = *scrutinee;
+                let arms = arms.clone();
                 self.output.push_str("match ");
-                self.unparse_expr(scrutinee);
+                self.unparse_expr(body, scrutinee);
                 self.emit_indented_block(|this| {
-                    for arm in arms {
+                    for arm in &arms {
                         this.write_indent();
-                        this.unparse_nir_pattern(&arm.pattern);
-                        if let Some(guard) = &arm.guard {
+                        this.unparse_nir_pattern(body, arm.pattern);
+                        if let Some(guard) = arm.guard {
                             this.output.push_str(" && ");
-                            this.unparse_expr(guard);
+                            this.unparse_expr(body, guard);
                         }
                         this.output.push_str(" => ");
-                        this.unparse_expr(&arm.body);
+                        this.unparse_expr(body, arm.body);
                         this.output.push_str(",\n");
                     }
                 });
             }
-            NirExprKind::StructLiteral {
+            ExprKind::StructLiteral {
                 struct_name,
                 fields,
                 ..
             } => {
+                let struct_name = struct_name.clone();
+                let field_data: Vec<(String, ExprId)> =
+                    fields.iter().map(|f| (f.name.clone(), f.value)).collect();
                 // Functor structs are rendered as `&Name { ... }` to mirror the
                 // reference type that the elaborator attached.
-                if matches!(
-                    self.type_table.get(expr.type_id),
-                    crate::tir::ResolvedType::Ref(_)
-                ) {
+                if matches!(self.type_table.get(ty), crate::tir::ResolvedType::Ref(_)) {
                     self.output.push('&');
                 }
-                self.output.push_str(struct_name);
+                self.output.push_str(&struct_name);
                 self.output.push_str(" { ");
-                self.comma_sep(fields, |s, field| {
-                    s.output.push_str(&field.name);
+                self.comma_sep(field_data, |s, (name, value)| {
+                    s.output.push_str(&name);
                     s.output.push_str(": ");
-                    s.unparse_expr(&field.value);
+                    s.unparse_expr(body, value);
                 });
                 self.output.push_str(" }");
             }
-            NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-                self.delimited("[", "]", elements, NirUnparser::unparse_expr);
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                let elements = elements.clone();
+                self.delimited("[", "]", elements, |s, e| s.unparse_expr(body, e));
             }
-            NirExprKind::IndirectCall { callee, args } => {
-                self.unparse_expr(callee);
-                self.delimited("(", ")", args, NirUnparser::unparse_expr);
+            ExprKind::IndirectCall { callee, args } => {
+                let callee = *callee;
+                let args = args.clone();
+                self.unparse_expr(body, callee);
+                self.delimited("(", ")", args, |s, e| s.unparse_expr(body, e));
             }
-            NirExprKind::ClosureToCanonical { functor, .. } => {
+            ExprKind::ClosureToCanonical { functor, .. } => {
                 // Just unparse the functor - the canonical wrapper is invisible
-                self.unparse_expr(functor);
+                let functor = *functor;
+                self.unparse_expr(body, functor);
             }
-            NirExprKind::LabeledBlock { label, block, .. } => {
-                self.output.push_str(label);
+            ExprKind::LabeledBlock { label, block, .. } => {
+                let block = *block;
+                let label = label.clone();
+                self.output.push_str(&label);
                 self.output.push_str(": {\n");
                 self.indent_level += 1;
-                self.unparse_block(block);
+                self.unparse_block(body, block);
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push('}');
             }
 
             // Lowered pattern matching nodes
-            NirExprKind::VariantTag { expr } => {
+            ExprKind::VariantTag { expr } => {
+                let expr = *expr;
                 self.output.push_str("__variant_tag(");
-                self.unparse_expr(expr);
+                self.unparse_expr(body, expr);
                 self.output.push(')');
             }
-            NirExprKind::VariantTest {
+            ExprKind::VariantTest {
                 expr,
                 case_index,
                 case_name,
             } => {
+                let (expr, case_index, case_name) = (*expr, *case_index, case_name.clone());
                 self.output.push_str("__variant_test(");
-                self.unparse_expr(expr);
+                self.unparse_expr(body, expr);
                 self.output
                     .push_str(&format!(", case={case_index}, name={case_name})"));
             }
-            NirExprKind::VariantPayload {
+            ExprKind::VariantPayload {
                 expr, case_index, ..
             } => {
+                let (expr, case_index) = (*expr, *case_index);
                 self.output.push_str("__variant_payload(");
-                self.unparse_expr(expr);
+                self.unparse_expr(body, expr);
                 self.output.push_str(&format!(", case={case_index})"));
             }
-            NirExprKind::Switch {
+            ExprKind::Switch {
                 scrutinee,
                 min_value,
                 arms,
                 default,
             } => {
+                let scrutinee = *scrutinee;
+                let min_value = *min_value;
+                let default = *default;
+                let arms = arms.clone();
                 self.output.push_str("switch ");
-                self.unparse_expr(scrutinee);
+                self.unparse_expr(body, scrutinee);
                 self.output.push_str(&format!(" (base={min_value}) {{\n"));
                 self.indent_level += 1;
                 for (i, arm) in arms.iter().enumerate() {
                     self.write_indent();
                     self.output
-                        .push_str(&format!("{} => {{\n", *min_value + i as i64));
+                        .push_str(&format!("{} => {{\n", min_value + i as i64));
                     self.indent_level += 1;
-                    self.unparse_block(arm);
+                    self.unparse_block(body, *arm);
                     self.indent_level -= 1;
                     self.write_indent();
                     self.output.push_str("}\n");
@@ -824,7 +885,7 @@ impl<'a> NirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("_ => {\n");
                 self.indent_level += 1;
-                self.unparse_block(default);
+                self.unparse_block(body, default);
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push_str("}\n");

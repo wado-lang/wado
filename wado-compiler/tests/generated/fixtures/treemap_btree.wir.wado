@@ -626,7 +626,8 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let new_used: i32;
     let start: i32;
     new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -642,7 +643,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -718,7 +720,8 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
@@ -912,7 +915,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
 fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self);
     }
     builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
@@ -947,7 +951,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
         b80: block {
             l81: loop {
                 if (if pos_4 < _licm_used_31 -> i32 {
-                    "core:prelude/string.wado/String^Ord::cmp"(if builtin::unlikely(pos_4 >= _licm_used_31) {
+                    "core:prelude/string.wado/String^Ord::cmp"(if @unlikely(pos_4 >= _licm_used_31) {
+                        cold_path;
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }; builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_32, pos_4), key) == 0;
@@ -961,24 +966,28 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
             };
         };
         if (if pos_4 < node.keys.used -> i32 {
-            "core:prelude/string.wado/String^Eq::eq"(if builtin::unlikely(pos_4 >= node.keys.used) {
+            "core:prelude/string.wado/String^Eq::eq"(if @unlikely(pos_4 >= node.keys.used) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<ref "core:prelude/string.wado//String">(node.keys.repr, pos_4), key);
         } else {
             0;
         }) {
-            if builtin::unlikely(pos_4 >= node.values.used) {
+            if @unlikely(pos_4 >= node.values.used) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             builtin::array_set<i32>(node.values.repr, pos_4, value);
-            if builtin::unlikely(pos_4 >= node.deleted.used) {
+            if @unlikely(pos_4 >= node.deleted.used) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             if builtin::array_get<bool>(node.deleted.repr, pos_4) {
-                if builtin::unlikely(pos_4 >= node.deleted.used) {
+                if @unlikely(pos_4 >= node.deleted.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
@@ -1000,7 +1009,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
         b92: block {
             l93: loop {
                 if (if pos_5 < _licm_used_34 -> i32 {
-                    "core:prelude/string.wado/String^Ord::cmp"(key, if builtin::unlikely(pos_5 >= _licm_used_34) {
+                    "core:prelude/string.wado/String^Ord::cmp"(key, if @unlikely(pos_5 >= _licm_used_34) {
+                        cold_path;
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }; builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_35, pos_5)) == 2;
@@ -1013,17 +1023,20 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
                 continue l93;
             };
         };
-        if "wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>::is_full"(if builtin::unlikely(pos_5 >= node.children.used) {
+        if "wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>::is_full"(if @unlikely(pos_5 >= node.children.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, pos_5), (2 * self.t) - 1) {
             "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::split_child"(self, node, pos_5);
-            pos_5 = pos_5 + ("core:prelude/string.wado/String^Ord::cmp"(key, if builtin::unlikely(pos_5 >= node.keys.used) {
+            pos_5 = pos_5 + ("core:prelude/string.wado/String^Ord::cmp"(key, if @unlikely(pos_5 >= node.keys.used) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<ref "core:prelude/string.wado//String">(node.keys.repr, pos_5)) == 2);
         }
-        "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::insert_non_full"(self, if builtin::unlikely(pos_5 >= node.children.used) {
+        "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::insert_non_full"(self, if @unlikely(pos_5 >= node.children.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, pos_5), key, value);
@@ -1052,7 +1065,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
     let _licm_used_39: i32;
     let _licm_repr_40: ref Array<bool>;
     let _licm_children_41: ref "core:prelude//List<&mut wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>";
-    if builtin::unlikely(child_index >= parent.children.used) {
+    if @unlikely(child_index >= parent.children.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -1080,11 +1094,13 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
                 break b103;
             }
             "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(_licm_keys_30, builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_36, i_6));
-            "core:prelude/list.wado/List<i32>::push"(_licm_values_31, if builtin::unlikely(i_6 >= _licm_used_37) {
+            "core:prelude/list.wado/List<i32>::push"(_licm_values_31, if @unlikely(i_6 >= _licm_used_37) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(_licm_repr_38, i_6));
-            "core:prelude/list.wado/List<bool>::push"(_licm_deleted_33, if builtin::unlikely(i_6 >= _licm_used_39) {
+            "core:prelude/list.wado/List<bool>::push"(_licm_deleted_33, if @unlikely(i_6 >= _licm_used_39) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<bool>(_licm_repr_40, i_6));
@@ -1106,17 +1122,20 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
             };
         };
     }
-    if builtin::unlikely(mid >= full_child.keys.used) {
+    if @unlikely(mid >= full_child.keys.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     promoted_key = builtin::array_get<ref "core:prelude/string.wado//String">(full_child.keys.repr, mid);
-    if builtin::unlikely(mid >= full_child.values.used) {
+    if @unlikely(mid >= full_child.values.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     promoted_value = builtin::array_get<i32>(full_child.values.repr, mid);
-    if builtin::unlikely(mid >= full_child.deleted.used) {
+    if @unlikely(mid >= full_child.deleted.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -1131,7 +1150,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
 fn "core:prelude/list.wado/List<&mut wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<&mut wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>::grow"(self);
     }
     builtin::array_set<ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">(self.repr, used, value);
@@ -1166,7 +1186,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<core:prelude/strin
             if i >= _licm_used_9 {
                 break b116;
             }
-            count = count + (if builtin::unlikely(i >= _licm_used_10) {
+            count = count + (if @unlikely(i >= _licm_used_10) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<bool>(_licm_repr_11, i) == 0);
@@ -1180,7 +1201,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<core:prelude/strin
 fn "core:prelude/list.wado/List<bool>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<bool>::grow"(self);
     }
     builtin::array_set<bool>(self.repr, used, value);
@@ -1190,7 +1212,8 @@ fn "core:prelude/list.wado/List<bool>::push"(self, value) {
 fn "core:prelude/list.wado/List<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<i32>::grow"(self);
     }
     builtin::array_set<i32>(self.repr, used, value);
@@ -1217,7 +1240,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
     b122: block {
         l123: loop {
             if (if i < _licm_used_17 -> i32 {
-                "core:prelude/string.wado/String^Ord::cmp"(key, if builtin::unlikely(i >= _licm_used_17) {
+                "core:prelude/string.wado/String^Ord::cmp"(key, if @unlikely(i >= _licm_used_17) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_18, i)) == 2;
@@ -1231,18 +1255,21 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
         };
     };
     if (if i < node.keys.used -> i32 {
-        "core:prelude/string.wado/String^Eq::eq"(key, if builtin::unlikely(i >= node.keys.used) {
+        "core:prelude/string.wado/String^Eq::eq"(key, if @unlikely(i >= node.keys.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<ref "core:prelude/string.wado//String">(node.keys.repr, i));
     } else {
         0;
     }) {
-        if if builtin::unlikely(i >= node.deleted.used) {
+        if if @unlikely(i >= node.deleted.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<bool>(node.deleted.repr, i) == 0 {
-            return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: if builtin::unlikely(i >= node.values.used) {
+            return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: if @unlikely(i >= node.values.used) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(node.values.repr, i) };
@@ -1252,7 +1279,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
     if node.is_leaf {
         return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     }
-    return "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::search_in_node"(self, if builtin::unlikely(i >= node.children.used) {
+    return "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::search_in_node"(self, if @unlikely(i >= node.children.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, i), key);
@@ -1270,7 +1298,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
     b135: block {
         l136: loop {
             if (if i < _licm_used_18 -> i32 {
-                "core:prelude/string.wado/String^Ord::cmp"(key, if builtin::unlikely(i >= _licm_used_18) {
+                "core:prelude/string.wado/String^Ord::cmp"(key, if @unlikely(i >= _licm_used_18) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_19, i)) == 2;
@@ -1284,18 +1313,21 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
         };
     };
     if (if i < node.keys.used -> i32 {
-        "core:prelude/string.wado/String^Eq::eq"(key, if builtin::unlikely(i >= node.keys.used) {
+        "core:prelude/string.wado/String^Eq::eq"(key, if @unlikely(i >= node.keys.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<ref "core:prelude/string.wado//String">(node.keys.repr, i));
     } else {
         0;
     }) {
-        if if builtin::unlikely(i >= node.deleted.used) {
+        if if @unlikely(i >= node.deleted.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<bool>(node.deleted.repr, i) == 0 {
-            if builtin::unlikely(i >= node.deleted.used) {
+            if @unlikely(i >= node.deleted.used) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -1309,7 +1341,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
     if node.is_leaf {
         return 0;
     }
-    return "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::delete_in_node"(self, if builtin::unlikely(i >= node.children.used) {
+    return "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::delete_in_node"(self, if @unlikely(i >= node.children.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, i), key);
@@ -1328,16 +1361,19 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
             } else {
                 0;
             }) {
-                "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::collect_entries"(self, if builtin::unlikely(i >= node.children.used) {
+                "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::collect_entries"(self, if @unlikely(i >= node.children.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, i), result);
             }
-            if if builtin::unlikely(i >= node.deleted.used) {
+            if if @unlikely(i >= node.deleted.used) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<bool>(node.deleted.repr, i) == 0 {
-                "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push"(result, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: builtin::array_get<ref "core:prelude/string.wado//String">(node.keys.repr, i), 1: if builtin::unlikely(i >= node.values.used) {
+                "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push"(result, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: builtin::array_get<ref "core:prelude/string.wado//String">(node.keys.repr, i), 1: if @unlikely(i >= node.values.used) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<i32>(node.values.repr, i) });
@@ -1351,7 +1387,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
     } else {
         0;
     }) {
-        "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::collect_entries"(self, if builtin::unlikely(i >= node.children.used) {
+        "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::collect_entries"(self, if @unlikely(i >= node.children.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<ref "wado-compiler/tests/fixtures/treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, i), result);
@@ -1391,12 +1428,14 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<core:prelude/strin
             if i_7 >= _licm_used_31 {
                 break b160;
             }
-            if if builtin::unlikely(i_7 >= _licm_used_32) {
+            if if @unlikely(i_7 >= _licm_used_32) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<bool>(_licm_repr_33, i_7) == 0 {
                 "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b_1, builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_34, i_7));
-                "core:prelude/list.wado/List<i32>::push"(__b_3, if builtin::unlikely(i_7 >= _licm_used_35) {
+                "core:prelude/list.wado/List<i32>::push"(__b_3, if @unlikely(i_7 >= _licm_used_35) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<i32>(_licm_repr_36, i_7));
@@ -1427,7 +1466,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/BTreeNode<core:prelude/strin
 fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::grow"(self);
     }
     builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(self.repr, used, value);
@@ -1485,6 +1525,9 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
     let _licm_repr_48: ref Array<i32>;
     let _licm_used_49: i32;
     let _licm_repr_50: ref Array<bool>;
+    let _licm_arith_51: bool;
+    let _licm_arith_52: bool;
+    let _licm_arith_53: bool;
     i = 0;
     _licm_keys_42 = node.keys;
     _licm_values_43 = node.values;
@@ -1501,52 +1544,77 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
                 break b171;
             }
             j = i + 1;
+            _licm_arith_51 = i >= _licm_used_45;
+            _licm_arith_52 = i >= _licm_used_47;
+            _licm_arith_53 = i >= _licm_used_49;
             b174: block {
                 l175: loop {
                     if j >= _licm_used_45 {
                         break b174;
                     }
-                    if "core:prelude/string.wado/String^Ord::cmp"(builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_46, i), builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_46, j)) == 2 {
+                    if "core:prelude/string.wado/String^Ord::cmp"(if @unlikely(_licm_arith_51) {
+                        cold_path;
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    }; builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_46, i), builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_46, j)) == 2 {
+                        if @unlikely(_licm_arith_51) {
+                            cold_path;
+                            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                            unreachable;
+                        }
                         temp_k = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_46, i);
                         value_16 = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_46, j);
+                        if @unlikely(_licm_arith_51) {
+                            cold_path;
+                            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                            unreachable;
+                        }
                         builtin::array_set<ref "core:prelude/string.wado//String">(_licm_repr_46, i, value_16);
                         builtin::array_set<ref "core:prelude/string.wado//String">(_licm_repr_46, j, temp_k);
-                        if builtin::unlikely(i >= _licm_used_47) {
+                        if @unlikely(_licm_arith_52) {
+                            cold_path;
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
                         temp_v = builtin::array_get<i32>(_licm_repr_48, i);
-                        if builtin::unlikely(j >= _licm_used_47) {
+                        if @unlikely(j >= _licm_used_47) {
+                            cold_path;
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
                         value_26 = builtin::array_get<i32>(_licm_repr_48, j);
-                        if builtin::unlikely(i >= _licm_used_47) {
+                        if @unlikely(_licm_arith_52) {
+                            cold_path;
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
                         builtin::array_set<i32>(_licm_repr_48, i, value_26);
-                        if builtin::unlikely(j >= _licm_used_47) {
+                        if @unlikely(j >= _licm_used_47) {
+                            cold_path;
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
                         builtin::array_set<i32>(_licm_repr_48, j, temp_v);
-                        if builtin::unlikely(i >= _licm_used_49) {
+                        if @unlikely(_licm_arith_53) {
+                            cold_path;
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
                         temp_d = builtin::array_get<bool>(_licm_repr_50, i);
-                        if builtin::unlikely(j >= _licm_used_49) {
+                        if @unlikely(j >= _licm_used_49) {
+                            cold_path;
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
                         value_36 = builtin::array_get<bool>(_licm_repr_50, j);
-                        if builtin::unlikely(i >= _licm_used_49) {
+                        if @unlikely(_licm_arith_53) {
+                            cold_path;
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
                         builtin::array_set<bool>(_licm_repr_50, i, value_36);
-                        if builtin::unlikely(j >= _licm_used_49) {
+                        if @unlikely(j >= _licm_used_49) {
+                            cold_path;
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }

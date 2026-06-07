@@ -1,10 +1,10 @@
-// Verify that niri folds `builtin::likely(c)` / `builtin::unlikely(c)`
-// wrappers when the inner condition `c` is a constant.
+// Verify that a `cold_path()` marker inside a guard does not keep a
+// const-foldable bounds check alive: niri folds the bare condition and prunes
+// the dead branch, marker and all.
 //
-// Without this, a const-folded bounds check like `1 >= 16` stays buried
-// inside `builtin::unlikely(...)` and the panic branch survives to WIR
-// codegen. The hot loops in `core:zlib` (e.g. `inflate_table`'s
-// `offs[1] = 0`) leak these dead branches into hot code at -O2.
+// Without const folding, a bounds check like `1 >= 16` and its panic branch
+// survive to WIR codegen. The hot loops in `core:zlib` (e.g. `inflate_table`'s
+// `offs[1] = 0`) would then leak these dead branches into hot code at -O2.
 //
 // Use a unique panic message in each branch so a `wir_not_expect` check
 // confirms the dead branch was actually pruned (not just bypassed at
@@ -12,28 +12,33 @@
 
 use { println, Stdout } from "core:cli";
 
-fn check_unlikely() -> i32 {
-    if builtin::unlikely(1 >= 16) {
-        panic("dead_branch_unlikely_2731");
+// In-branch cold marker: the whole `if` folds away when `1 >= 16` is false.
+fn check_then_cold() -> i32 {
+    if 1 >= 16 {
+        builtin::cold_path();
+        panic("dead_branch_then_cold_2731");
     }
     return 100;
 }
 
-fn check_likely() -> i32 {
-    if builtin::likely(0 < 1) {
+// Fall-through cold marker: the guard is always taken, so the cold
+// fall-through (marker + panic) is pruned.
+fn check_fallthrough_cold() -> i32 {
+    if 0 < 1 {
         return 200;
     }
-    panic("dead_branch_likely_2731");
+    builtin::cold_path();
+    panic("dead_branch_fallthrough_cold_2731");
 }
 
 export fn run() with Stdout {
-    let a = check_unlikely();
-    let b = check_likely();
+    let a = check_then_cold();
+    let b = check_fallthrough_cold();
     println(`{a},{b}`);
 }
 
 __DATA__
 {
     "stdout": "100,200\n",
-    "wir_not_expect:O2": ["dead_branch_unlikely_2731", "dead_branch_likely_2731"]
+    "wir_not_expect:O2": ["dead_branch_then_cold_2731", "dead_branch_fallthrough_cold_2731"]
 }

@@ -1490,7 +1490,7 @@ pub enum WirInstr {
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
-    /// Deep-copy a `builtin::array<T>`: allocates a new array the same
+    /// Deep-copy an `Array<T>`: allocates a new array the same
     /// length as `src` and copies every element. Emitted by codegen as the
     /// same JIT-compiled loop that previously lived inside `emit_value_copy`
     /// for raw array struct fields.
@@ -1552,9 +1552,10 @@ pub enum WirInstr {
         then_body: Vec<WirInstr>,
         else_body: Option<Vec<WirInstr>>,
     },
-    /// Branch hint annotation (from `builtin::likely`/`builtin::unlikely`).
-    /// Wraps a condition expression; consumed by the emitter when it appears
-    /// as the condition of an `If` instruction.
+    /// Branch hint annotation synthesized from `builtin::cold_path()` by
+    /// `apply_cold_path_hints` during WIR finalization. Wraps a condition
+    /// expression; consumed by the emitter when it appears as the condition of
+    /// an `If` instruction, which records a `metadata.code.branch_hint` entry.
     BranchHint {
         likely: bool,
         expr: Box<WirInstr>,
