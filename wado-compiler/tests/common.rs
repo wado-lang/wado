@@ -762,6 +762,28 @@ pub fn compile_source_with_compiler_options_and_filename(
     options: wado_compiler::CompilerOptions,
     display_filename: Option<&str>,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
+    compile_capturing_warnings(path, source, options, display_filename).0
+}
+
+/// Compile and return both the result and the captured compile-time *warning*
+/// messages.
+///
+/// Warnings (e.g. `DeadFunction` / `DeadGlobal`) are emitted to the host during
+/// elaboration; the other helpers surface host diagnostics only on failure.
+/// This variant returns the `Severity::Warning` messages on both success and
+/// failure so fixtures can assert them (`warnings_contains` /
+/// `warnings_not_contains`). Only the message text is returned — matching is
+/// message-based.
+pub fn compile_capturing_warnings(
+    path: &std::path::Path,
+    source: &str,
+    options: wado_compiler::CompilerOptions,
+    display_filename: Option<&str>,
+) -> (
+    Result<wado_compiler::CompileResult, CompileError>,
+    Vec<String>,
+) {
+    use wado_compiler::Severity;
     let base_path = path
         .parent()
         .map(std::path::Path::to_path_buf)
@@ -771,14 +793,23 @@ pub fn compile_source_with_compiler_options_and_filename(
         .map(std::borrow::Cow::Borrowed)
         .unwrap_or_else(|| path.to_string_lossy());
 
-    runtime()
+    let result = runtime()
         .block_on(wado_compiler::compile_with_options(
             source,
             &host,
             Some(&filename),
             options,
         ))
-        .map_err(|_| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
+        .map_err(|_| bail_to_compile_error(&host.diagnostics(), Some(&filename)));
+
+    let warnings = host
+        .diagnostics()
+        .into_iter()
+        .filter(|d| matches!(d.severity, Severity::Warning))
+        .map(|d| d.message)
+        .collect();
+
+    (result, warnings)
 }
 
 /// Compile a file asynchronously (for use within async context)

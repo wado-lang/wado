@@ -1,0 +1,15 @@
+// False-positive guard: a function reached from the entry point must not be
+// reported as dead code.
+fn helper() -> i32 {
+    return 1;
+}
+
+export fn run() {
+    assert helper() == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_not_contains": ["function `helper` is never used"]
+}

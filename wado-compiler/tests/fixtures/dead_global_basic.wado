@@ -1,0 +1,11 @@
+// A global with no reader is reported as dead code. Globals are still reified
+// (their initializers may have effects), so the program compiles and runs.
+global UNUSED: i32 = 42;
+
+export fn run() {}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_contains": ["global `UNUSED` is never used"]
+}
