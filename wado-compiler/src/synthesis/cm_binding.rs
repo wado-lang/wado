@@ -31,7 +31,7 @@ use crate::tir::{ResolvedType, TirFunction, TirModule, TypeTable};
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
     synthesize_async_export_binding, synthesize_general_export_binding,
-    synthesize_result_export_binding, synthesize_void_export_binding,
+    synthesize_result_export_binding, synthesize_void_export_binding, synthesize_void_stub_adapter,
 };
 pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
@@ -278,9 +278,16 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
 
                 // A world export with no function at all is a missing entry
                 // point. The test world handles `test` blocks separately and
-                // never reaches this loop, so in CLI / HTTP / other worlds the
-                // entry must be defined — never silently stubbed.
+                // never reaches this loop. A library (`--lib`) has no command
+                // entry — its `export` items are the API — so stub the absent
+                // export; otherwise (CLI / HTTP command) it must be defined.
                 if found_exported.is_none() {
+                    if project.lib {
+                        let binding_name = export_binding_func_name(&export.name);
+                        let adapter = synthesize_void_stub_adapter(&export.name);
+                        export_adapters.push((export.name.clone(), binding_name, adapter));
+                        continue;
+                    }
                     return Err(format!(
                         "function `{}` is required as a world entry point but is not defined. \
                          Define it with: `export fn {}(...)`",

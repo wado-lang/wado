@@ -110,6 +110,8 @@ pub struct CompileFlags {
     /// Forwarded verbatim to `CompilerOptions::codegen_flags`; the compiler
     /// validates them.
     pub codegen_flags: Vec<String>,
+    /// `--lib`: compiling a library entry, which has no command `run`.
+    pub lib: bool,
 }
 
 impl CompileOptions {
@@ -126,6 +128,7 @@ impl CompileOptions {
             no_cache: self.no_cache,
             test_name_filters: Vec::new(),
             codegen_flags: self.codegen_flags.clone(),
+            lib: self.lib,
         }
     }
 }
@@ -380,6 +383,7 @@ pub async fn try_compile(
         invocations: pipeline_outcome.invocations,
         test_name_filters: flags.test_name_filters.clone(),
         codegen_flags: flags.codegen_flags.clone(),
+        lib: flags.lib,
         ..Default::default()
     };
 
