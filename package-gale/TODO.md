@@ -59,7 +59,7 @@ Pre-release, so no API-compat constraints; the two axes that matter are **ANTLR4
 
 #### Phased plan
 
-- **P1** — ATN data model + builder (parser side) + `i32` serialize/deserialize + `gale dump --atn`. Behaviour-unchanged; driven by a round-trip + structural unit test. (`src/atn.wado`, dump wiring.)
+- **P1** — _(done)_ ATN data model + builder (parser side) + `i32` serialize/deserialize + `gale dump --atn`. Behaviour-unchanged; round-trip + structural unit tests in `src/atn_test.wado`. (`src/atn.wado`, dump wiring in `main.wado`.)
 - **P2** — runtime simulator core (SLL closure / predict + per-`Parser` DFA cache) in `runtime.wado`; unit-tested in isolation against hand-built ATNs.
 - **P3** — wire `adaptive_predict(p, decision)` at `Ambiguous` decision sites; flip the IfIfElse non-greedy `??` parser cases green first (SLL-only vertical slice; `[stage_b_oracle_todo] IfIfElseNonGreedyBinding1/2`).
 - **P4** — full-context (LL) fallback for true SLL conflicts; flip `DropLoopEntryBranchInLRRule_4` (`[stage_a_todo]`).

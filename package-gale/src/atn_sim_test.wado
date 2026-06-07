@@ -1,0 +1,124 @@
+//! Tests for the runtime ATN simulator core (P2).
+//!
+//! Builds ATNs with `atn.wado`, serializes, decodes through the inlined
+//! runtime (`atn_decode`), and drives `atn_adaptive_predict` to prove the
+//! engine mechanics: multi-token lookahead resolution, and the
+//! greedy/non-greedy tie-break that min-alt-on-conflict + edge ordering
+//! produce. Full-context (real-stack) integration is P3.
+
+use {
+    build_atn,
+    build_token_kinds,
+    serialize_atn,
+    Atn,
+    ATN_BLOCK_START,
+    ATN_BLOCK_END,
+} from "./atn.wado";
+use { atn_decode, atn_adaptive_predict, AtnSim, Token, LexerSlice, Span } from "./runtime.wado";
+use { parse } from "./g4/parser.wado";
+
+fn mk(kind: i32) -> Token {
+    return Token::new(kind, LexerSlice::from_string(""), Span::new(0, 0));
+}
+
+/// Decision number of parser rule `rule`'s top-level alternation block.
+fn rule_block_decision(atn: &Atn, rule: i32) -> i32 {
+    for let mut d = 0; d < atn.decision_state.len(); d += 1 {
+        let s = &atn.states[atn.decision_state[d]];
+        if s.kind == ATN_BLOCK_START && s.rule == rule {
+            return d;
+        }
+    }
+    return -1;
+}
+
+/// Decision number of the optional/loop whose decision state has an edge
+/// straight to a BlockEnd (i.e. an EBNF repeat, not an N-way rule body).
+fn optional_decision(atn: &Atn) -> i32 {
+    for let mut d = 0; d < atn.decision_state.len(); d += 1 {
+        let s = &atn.states[atn.decision_state[d]];
+        if s.kind != ATN_BLOCK_START {
+            continue;
+        }
+        for let t of &s.transitions {
+            if atn.states[t.target].kind == ATN_BLOCK_END {
+                return d;
+            }
+        }
+    }
+    return -1;
+}
+
+/// Kind of the state reached by `alt`'s edge out of decision `d`.
+fn alt_target_kind(atn: &Atn, d: i32, alt: i32) -> i32 {
+    let s = &atn.states[atn.decision_state[d]];
+    return atn.states[s.transitions[alt].target].kind;
+}
+
+global K2_G4: String = "
+grammar T;
+a : ID '(' ')' | ID '[' ']' ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+global NG_G4: String = "
+grammar T;
+start : statement+ ;
+statement : 'x' | ifStatement;
+ifStatement : 'if' 'y' statement ('else' statement)?? ;
+ID : 'a'..'z'+ ;
+WS : (' '|'\\n') -> channel(HIDDEN);
+";
+
+global GR_G4: String = "
+grammar T;
+start : statement+ ;
+statement : 'x' | ifStatement;
+ifStatement : 'if' 'y' statement ('else' statement)? ;
+ID : 'a'..'z'+ ;
+WS : (' '|'\\n') -> channel(HIDDEN);
+";
+
+test "predict resolves a two-token shared-prefix decision" {
+    let g = parse(K2_G4).unwrap();
+    let atn = build_atn(&g);
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = rule_block_decision(&atn, 0);
+    assert d >= 0, "rule `a` must have an alternation decision";
+    // kinds: ID=0, WS=1, EOF=2, ERROR=3, '('=4, ')'=5, '['=6, ']'=7.
+    let eof = 2;
+    let paren: List<Token> = [mk(0), mk(4), mk(5)];
+    let brack: List<Token> = [mk(0), mk(6), mk(7)];
+    assert atn_adaptive_predict(&sim, d, &paren, 0, eof) == 0, "ID '(' ')' should pick alt 0";
+    assert atn_adaptive_predict(&sim, d, &brack, 0, eof) == 1, "ID '[' ']' should pick alt 1";
+}
+
+test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
+    let g = parse(NG_G4).unwrap();
+    let atn = build_atn(&g);
+    let tk = build_token_kinds(&g);
+    let eof = tk.0["TK_EOF"];
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = optional_decision(&atn);
+    assert d >= 0, "the `??` must produce an optional decision";
+    // 'else'=7, 'x'=4 — both alts stay viable to EOF (true ambiguity).
+    let toks: List<Token> = [mk(7), mk(4)];
+    let alt = atn_adaptive_predict(&sim, d, &toks, 0, eof);
+    // The chosen alt's edge must lead to BlockEnd: non-greedy prefers EXIT.
+    assert alt_target_kind(&atn, d, alt) == ATN_BLOCK_END, "non-greedy must choose the exit alt";
+}
+
+test "greedy ? picks the enter alt on the same conflict" {
+    let g = parse(GR_G4).unwrap();
+    let atn = build_atn(&g);
+    let tk = build_token_kinds(&g);
+    let eof = tk.0["TK_EOF"];
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = optional_decision(&atn);
+    assert d >= 0, "the `?` must produce an optional decision";
+    let toks: List<Token> = [mk(7), mk(4)];
+    let alt = atn_adaptive_predict(&sim, d, &toks, 0, eof);
+    // Greedy prefers ENTER: the chosen alt's edge must NOT go to BlockEnd.
+    assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "greedy must choose the enter alt";
+}
