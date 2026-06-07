@@ -47,16 +47,15 @@
 //! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the function-body work
 //! (dead-param detection, call-site validation, local renumbering, call-site
-//! rewriting) reads and mutates the arena `Body` directly. Globals are
-//! tree-shaped NIR, so they are wrapped in a temporary `Body` to run the same
-//! arena routines rather than duplicating the logic.
+//! rewriting) reads and mutates the arena `Body` directly. Global initializers
+//! are arena `Body`s too (Phase 5 group 1a), so the same arena routines run on
+//! them directly.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionKind, NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind};
+use crate::nir::{FunctionKind, NirFunction};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::tir::TypeTable;
 
 use super::arena_query;
 
@@ -249,8 +248,7 @@ fn validate_call_sites(
         }
     }
     for global in &project.globals {
-        let body = global_to_body(&global.initializer);
-        validate_in_body(&body, &candidates, &mut rejected);
+        validate_in_body(global.initializer.body(), &candidates, &mut rejected);
     }
     for r in rejected {
         candidates.shift_remove(&r);
@@ -365,9 +363,7 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) {
         }
     }
     for global in &mut project.globals {
-        let mut body = take_global_to_body(&mut global.initializer);
-        rewrite_calls_in_body(&mut body, confirmed);
-        write_back_global(&mut global.initializer, &body);
+        rewrite_calls_in_body(global.initializer.body_mut(), confirmed);
     }
 }
 
@@ -553,38 +549,4 @@ fn remap_locals(body: &mut Body, remap: &[Option<u32>]) {
             *local_index = lookup(*local_index);
         }
     }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Global initializer ↔ temporary Body
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn global_to_body(expr: &NirExpr) -> Body {
-    let span = expr.span;
-    Body::from_block(&NirBlock::new(
-        vec![NirStmt::new(NirStmtKind::Expr(expr.clone()), span)],
-        span,
-    ))
-}
-
-fn take_global_to_body(expr: &mut NirExpr) -> Body {
-    let span = expr.span;
-    let owned = std::mem::replace(expr, NirExpr::new(NirExprKind::Unit, TypeTable::UNIT, span));
-    Body::from_block(&NirBlock::new(
-        vec![NirStmt::new(NirStmtKind::Expr(owned), span)],
-        span,
-    ))
-}
-
-fn write_back_global(expr: &mut NirExpr, body: &Body) {
-    let block = body.to_block();
-    let stmt = block
-        .stmts
-        .into_iter()
-        .next()
-        .expect("wrapper block has one statement");
-    let NirStmtKind::Expr(e) = stmt.kind else {
-        unreachable!("wrapper statement is an expression statement");
-    };
-    *expr = e;
 }

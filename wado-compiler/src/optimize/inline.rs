@@ -9,14 +9,15 @@ use std::rc::Rc;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    CallArg, InlineHint, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern,
-    NirStmt, NirStmtKind, NirUnaryOp,
+use crate::nir::{InlineHint, NirFunction, NirLocal, NirUnaryOp};
+use crate::nir_arena::{
+    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
+    ExprId, ExprKind, ExprNode, NodeRef, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::block_has_break_to;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+
+use super::arena_query;
 use crate::token::Span;
 
 // The inline threshold is based on expression count, which provides a more
@@ -26,10 +27,10 @@ use crate::token::Span;
 // - Method calls, binary operations, field accesses all contribute
 
 /// True when an expression is a `builtin::cold_path()` marker call.
-fn is_cold_path_call(expr: &NirExpr) -> bool {
+fn is_cold_path_call(body: &Body, id: ExprId) -> bool {
     matches!(
-        &expr.kind,
-        NirExprKind::Call { func, .. }
+        &body.exprs[id].kind,
+        ExprKind::Call { func, .. }
             if func.builtin_name().as_deref() == Some("builtin::cold_path")
     )
 }
@@ -50,143 +51,141 @@ enum BlockCut {
 
 /// Classify whether a statement cuts off the rest of its block from the inline
 /// cost estimate.
-fn block_cut(stmt: &NirStmt, type_table: &TypeTable) -> BlockCut {
-    match &stmt.kind {
-        NirStmtKind::Expr(e) if is_cold_path_call(e) => BlockCut::Cold,
-        NirStmtKind::Return { .. } | NirStmtKind::Break { .. } | NirStmtKind::Continue => {
-            BlockCut::Diverges
-        }
-        NirStmtKind::Expr(e) if type_table.is_never(e.type_id) => BlockCut::Diverges,
+fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable) -> BlockCut {
+    match &body.stmts[stmt].kind {
+        StmtKind::Expr(e) if is_cold_path_call(body, *e) => BlockCut::Cold,
+        StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => BlockCut::Diverges,
+        StmtKind::Expr(e) if type_table.is_never(body.exprs[*e].type_id) => BlockCut::Diverges,
         _ => BlockCut::None,
     }
 }
 
 /// Inline cost of a single statement (its own expression count).
-fn count_stmt(stmt: &NirStmt, type_table: &TypeTable) -> usize {
-    match &stmt.kind {
-        NirStmtKind::Expr(expr) => count_expr(expr, type_table),
-        NirStmtKind::Let { value, .. } => count_expr(value, type_table),
-        NirStmtKind::LetDestructure { value, .. } => count_expr(value, type_table),
-        NirStmtKind::Return { value } => value.as_ref().map_or(0, |v| count_expr(v, type_table)),
-        NirStmtKind::If {
+fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable) -> usize {
+    match &body.stmts[stmt].kind {
+        StmtKind::Expr(expr) => count_expr(body, *expr, type_table),
+        StmtKind::Let { value, .. } => count_expr(body, *value, type_table),
+        StmtKind::LetDestructure { value, .. } => count_expr(body, *value, type_table),
+        StmtKind::Return { value } => value.map_or(0, |v| count_expr(body, v, type_table)),
+        StmtKind::If {
             condition,
             then_block,
             else_block,
             ..
         } => {
-            count_expr(condition, type_table)
-                + count_block_exprs(then_block, type_table)
-                + else_block
-                    .as_ref()
-                    .map_or(0, |b| count_block_exprs(b, type_table))
+            count_expr(body, *condition, type_table)
+                + count_block_exprs(body, *then_block, type_table)
+                + else_block.map_or(0, |b| count_block_exprs(body, b, type_table))
         }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            count_block_exprs(body, type_table)
+        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
+            count_block_exprs(body, *b, type_table)
         }
-        NirStmtKind::Break { .. } | NirStmtKind::Continue => 0,
+        StmtKind::Break { .. } | StmtKind::Continue => 0,
     }
 }
 
 /// Count expressions in a NIR expression (recursive)
-fn count_expr(expr: &NirExpr, type_table: &TypeTable) -> usize {
-    1 + match &expr.kind {
-        NirExprKind::Binary { left, right, .. } => {
-            count_expr(left, type_table) + count_expr(right, type_table)
+fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
+    1 + match &body.exprs[id].kind {
+        ExprKind::Binary { left, right, .. } => {
+            count_expr(body, *left, type_table) + count_expr(body, *right, type_table)
         }
-        NirExprKind::Unary { expr, .. } => count_expr(expr, type_table),
-        NirExprKind::Call { args, .. } => {
-            args.iter().map(|a| count_expr(&a.expr, type_table)).sum()
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            count_expr(receiver, type_table)
+        ExprKind::Unary { expr, .. } => count_expr(body, *expr, type_table),
+        ExprKind::Call { args, .. } => args
+            .iter()
+            .map(|a| count_expr(body, a.expr, type_table))
+            .sum(),
+        ExprKind::MethodCall { receiver, args, .. } => {
+            count_expr(body, *receiver, type_table)
                 + args
                     .iter()
-                    .map(|a| count_expr(&a.expr, type_table))
+                    .map(|a| count_expr(body, a.expr, type_table))
                     .sum::<usize>()
         }
-        NirExprKind::FieldAccess { expr, .. } => count_expr(expr, type_table),
-        NirExprKind::Index { expr, index, .. } => {
-            count_expr(expr, type_table) + count_expr(index, type_table)
+        ExprKind::FieldAccess { expr, .. } => count_expr(body, *expr, type_table),
+        ExprKind::Index { expr, index, .. } => {
+            count_expr(body, *expr, type_table) + count_expr(body, *index, type_table)
         }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            elements.iter().map(|e| count_expr(e, type_table)).sum()
-        }
-        NirExprKind::StructLiteral { fields, .. } => fields
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .map(|f| count_expr(&f.value, type_table))
+            .map(|e| count_expr(body, *e, type_table))
             .sum(),
-        NirExprKind::VariantConstruct { payload, .. } => {
-            payload.as_ref().map_or(0, |p| count_expr(p, type_table))
+        ExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .map(|f| count_expr(body, f.value, type_table))
+            .sum(),
+        ExprKind::VariantConstruct { payload, .. } => {
+            payload.map_or(0, |p| count_expr(body, p, type_table))
         }
-        NirExprKind::Assign { target, value } => {
-            count_expr(target, type_table) + count_expr(value, type_table)
+        ExprKind::Assign { target, value } => {
+            count_expr(body, *target, type_table) + count_expr(body, *value, type_table)
         }
-        NirExprKind::If {
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
             // Cold branches contribute nothing: `count_block_exprs` stops at a
             // `cold_path()` marker or a diverging statement within each arm.
-            count_expr(condition, type_table)
-                + count_block_exprs(then_branch, type_table)
-                + else_branch
-                    .as_ref()
-                    .map_or(0, |b| count_block_exprs(b, type_table))
+            count_expr(body, *condition, type_table)
+                + count_block_exprs(body, *then_branch, type_table)
+                + else_branch.map_or(0, |b| count_block_exprs(body, b, type_table))
         }
-        NirExprKind::Match { expr, arms } => {
-            count_expr(expr, type_table)
+        ExprKind::Match { expr, arms } => {
+            count_expr(body, *expr, type_table)
                 + arms
                     .iter()
                     .map(|arm| {
-                        arm.guard.as_ref().map_or(0, |g| count_expr(g, type_table))
-                            + count_expr(&arm.body, type_table)
+                        arm.guard.map_or(0, |g| count_expr(body, g, type_table))
+                            + count_expr(body, arm.body, type_table)
                     })
                     .sum::<usize>()
         }
-        NirExprKind::Block(block) => count_block_exprs(block, type_table),
-        NirExprKind::Cast { expr, .. } => count_expr(expr, type_table),
-        NirExprKind::GlobalVarSet { value, .. } => count_expr(value, type_table),
+        ExprKind::Block(block) => count_block_exprs(body, *block, type_table),
+        ExprKind::Cast { expr, .. } => count_expr(body, *expr, type_table),
+        ExprKind::GlobalVarSet { value, .. } => count_expr(body, *value, type_table),
         // Leaf expressions (no children)
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::Null => 0,
+        ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::StringLiteral(_)
+        | ExprKind::BytesLiteral(_)
+        | ExprKind::Unit
+        | ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::Null => 0,
         // Closure and effect-related expressions
-        NirExprKind::EnumConstruct { .. } => 0,
-        NirExprKind::CmRawCall { args, .. } => args.iter().map(|a| count_expr(a, type_table)).sum(),
-        NirExprKind::IndirectCall { callee, args } => {
-            count_expr(callee, type_table)
+        ExprKind::EnumConstruct { .. } => 0,
+        ExprKind::CmRawCall { args, .. } => {
+            args.iter().map(|a| count_expr(body, *a, type_table)).sum()
+        }
+        ExprKind::IndirectCall { callee, args } => {
+            count_expr(body, *callee, type_table)
                 + args
                     .iter()
-                    .map(|a| count_expr(a, type_table))
+                    .map(|a| count_expr(body, *a, type_table))
                     .sum::<usize>()
         }
-        NirExprKind::ClosureToCanonical { functor, .. } => count_expr(functor, type_table),
-        NirExprKind::Switch {
+        ExprKind::ClosureToCanonical { functor, .. } => count_expr(body, *functor, type_table),
+        ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            count_expr(scrutinee, type_table)
+            count_expr(body, *scrutinee, type_table)
                 + arms
                     .iter()
-                    .map(|a| count_block_exprs(a, type_table))
+                    .map(|a| count_block_exprs(body, *a, type_table))
                     .sum::<usize>()
-                + count_block_exprs(default, type_table)
+                + count_block_exprs(body, *default, type_table)
         }
         // Lowered pattern matching nodes - count inner expressions
-        NirExprKind::VariantTag { expr }
-        | NirExprKind::VariantTest { expr, .. }
-        | NirExprKind::VariantPayload { expr, .. } => count_expr(expr, type_table),
-        NirExprKind::LabeledBlock { block, .. } => count_block_exprs(block, type_table),
+        ExprKind::VariantTag { expr }
+        | ExprKind::VariantTest { expr, .. }
+        | ExprKind::VariantPayload { expr, .. } => count_expr(body, *expr, type_table),
+        ExprKind::LabeledBlock { block, .. } => count_block_exprs(body, *block, type_table),
     }
 }
 
@@ -196,16 +195,17 @@ fn count_expr(expr: &NirExpr, type_table: &TypeTable) -> usize {
 /// after it, while a diverging statement (`return` / `break` / `continue` or a
 /// `-> !` call such as `panic`) is itself counted but cuts off its unreachable
 /// tail.
-fn count_block_exprs(block: &NirBlock, type_table: &TypeTable) -> usize {
+fn count_block_exprs(body: &Body, block: BlockId, type_table: &TypeTable) -> usize {
     let mut total = 0;
-    for stmt in &block.stmts {
-        match block_cut(stmt, type_table) {
+    for i in 0..body.blocks[block].stmts.len() {
+        let stmt = body.blocks[block].stmts[i];
+        match block_cut(body, stmt, type_table) {
             BlockCut::Cold => break,
             BlockCut::Diverges => {
-                total += count_stmt(stmt, type_table);
+                total += count_stmt(body, stmt, type_table);
                 break;
             }
-            BlockCut::None => total += count_stmt(stmt, type_table),
+            BlockCut::None => total += count_stmt(body, stmt, type_table),
         }
     }
     total
@@ -261,149 +261,24 @@ fn func_ref_inline_key(func: &crate::nir::FunctionRef) -> String {
     function_inline_key(&func.module_source, &func.name)
 }
 
-fn collect_inner_labels_from_block(block: &NirBlock, labels: &mut IndexSet<String>) {
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            NirStmtKind::LabeledBlock { label, block } => {
+fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<String>) {
+    match node {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::LabeledBlock { label, .. } = &callee.stmts[s].kind {
                 labels.insert(label.clone());
-                collect_inner_labels_from_block(block, labels);
             }
-            NirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                collect_inner_labels_from_expr(condition, labels);
-                collect_inner_labels_from_block(then_block, labels);
-                if let Some(else_block) = else_block {
-                    collect_inner_labels_from_block(else_block, labels);
-                }
-            }
-            NirStmtKind::Loop { body } => collect_inner_labels_from_block(body, labels),
-            NirStmtKind::Expr(expr)
-            | NirStmtKind::Let { value: expr, .. }
-            | NirStmtKind::LetDestructure { value: expr, .. } => {
-                collect_inner_labels_from_expr(expr, labels);
-            }
-            NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
-                if let Some(value) = value {
-                    collect_inner_labels_from_expr(value, labels);
-                }
-            }
-            NirStmtKind::Continue => {}
         }
+        NodeRef::Expr(e) => {
+            if let ExprKind::LabeledBlock { label, .. } = &callee.exprs[e].kind {
+                labels.insert(label.clone());
+            }
+        }
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
-}
-
-fn collect_inner_labels_from_expr(expr: &NirExpr, labels: &mut IndexSet<String>) {
-    match &expr.kind {
-        NirExprKind::Block(block) => collect_inner_labels_from_block(block, labels),
-        NirExprKind::LabeledBlock { label, block, .. } => {
-            labels.insert(label.clone());
-            collect_inner_labels_from_block(block, labels);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_inner_labels_from_expr(condition, labels);
-            collect_inner_labels_from_block(then_branch, labels);
-            if let Some(else_branch) = else_branch {
-                collect_inner_labels_from_block(else_branch, labels);
-            }
-        }
-        NirExprKind::Match { expr, arms } => {
-            collect_inner_labels_from_expr(expr, labels);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_inner_labels_from_expr(guard, labels);
-                }
-                collect_inner_labels_from_expr(&arm.body, labels);
-            }
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_inner_labels_from_expr(scrutinee, labels);
-            for arm in arms {
-                collect_inner_labels_from_block(arm, labels);
-            }
-            collect_inner_labels_from_block(default, labels);
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            collect_inner_labels_from_expr(left, labels);
-            collect_inner_labels_from_expr(right, labels);
-        }
-        NirExprKind::Unary { expr, .. }
-        | NirExprKind::FieldAccess { expr, .. }
-        | NirExprKind::Cast { expr, .. }
-        | NirExprKind::VariantTag { expr }
-        | NirExprKind::VariantTest { expr, .. }
-        | NirExprKind::VariantPayload { expr, .. } => collect_inner_labels_from_expr(expr, labels),
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_inner_labels_from_expr(&arg.expr, labels);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            collect_inner_labels_from_expr(receiver, labels);
-            for arg in args {
-                collect_inner_labels_from_expr(&arg.expr, labels);
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_inner_labels_from_expr(arg, labels);
-            }
-        }
-        NirExprKind::Index { expr, index } => {
-            collect_inner_labels_from_expr(expr, labels);
-            collect_inner_labels_from_expr(index, labels);
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_inner_labels_from_expr(&field.value, labels);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                collect_inner_labels_from_expr(elem, labels);
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload) = payload {
-                collect_inner_labels_from_expr(payload, labels);
-            }
-        }
-        NirExprKind::Assign { target, value } => {
-            collect_inner_labels_from_expr(target, labels);
-            collect_inner_labels_from_expr(value, labels);
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            collect_inner_labels_from_expr(callee, labels);
-            for arg in args {
-                collect_inner_labels_from_expr(arg, labels);
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_inner_labels_from_expr(functor, labels);
-        }
-        NirExprKind::GlobalVarSet { value, .. } => collect_inner_labels_from_expr(value, labels),
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
+    let mut kids = Vec::new();
+    callee.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        collect_inner_labels(callee, c, labels);
     }
 }
 
@@ -421,7 +296,7 @@ fn is_inline_eligible(
     }
 
     // Must have a body
-    let Some(body) = &func.body.as_ref().map(crate::nir_arena::Body::to_block) else {
+    let Some(body) = &func.body else {
         return false;
     };
 
@@ -465,7 +340,7 @@ fn is_inline_eligible(
     };
 
     // Small enough (based on expression count)
-    count_block_exprs(body, type_table) <= effective_threshold
+    count_block_exprs(body, body.root, type_table) <= effective_threshold
 }
 
 /// Detect recursive functions using call graph analysis
@@ -497,8 +372,8 @@ fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<
         let full_name = tir_function_full_name(&func);
         if let Some(caller_idx) = name_to_idx.get(&full_name) {
             let mut callee_names: IndexSet<String> = IndexSet::default();
-            if let Some(body) = &func.body.as_ref().map(crate::nir_arena::Body::to_block) {
-                collect_callees_from_block(body, &mut callee_names);
+            if let Some(body) = &func.body {
+                collect_callees_from_block(body, body.root, &mut callee_names);
             }
             let callees: Vec<usize> = callee_names
                 .iter()
@@ -545,173 +420,188 @@ fn can_reach_idx(
     false
 }
 
-fn collect_callees_from_block(block: &NirBlock, callees: &mut IndexSet<String>) {
-    for stmt in &block.stmts {
-        collect_callees_from_stmt(stmt, callees);
+fn collect_callees_from_block(body: &Body, block: BlockId, callees: &mut IndexSet<String>) {
+    for i in 0..body.blocks[block].stmts.len() {
+        let sid = body.blocks[block].stmts[i];
+        collect_callees_from_stmt(body, sid, callees);
     }
 }
 
-fn collect_callees_from_stmt(stmt: &NirStmt, callees: &mut IndexSet<String>) {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. }
-        | NirStmtKind::LetDestructure { value, .. }
-        | NirStmtKind::Expr(value) => {
-            collect_callees_from_expr(value, callees);
+fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<String>) {
+    match &body.stmts[stmt].kind {
+        StmtKind::Let { value, .. }
+        | StmtKind::LetDestructure { value, .. }
+        | StmtKind::Expr(value) => {
+            collect_callees_from_expr(body, *value, callees);
         }
-        NirStmtKind::Return { value } => {
-            if let Some(expr) = value {
-                collect_callees_from_expr(expr, callees);
+        StmtKind::Return { value } => {
+            if let Some(expr) = *value {
+                collect_callees_from_expr(body, expr, callees);
             }
         }
-        NirStmtKind::If {
+        StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            collect_callees_from_expr(condition, callees);
-            collect_callees_from_block(then_block, callees);
+            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
+            collect_callees_from_expr(body, condition, callees);
+            collect_callees_from_block(body, then_block, callees);
             if let Some(else_blk) = else_block {
-                collect_callees_from_block(else_blk, callees);
+                collect_callees_from_block(body, else_blk, callees);
             }
         }
-        NirStmtKind::Loop { body } => {
-            collect_callees_from_block(body, callees);
+        StmtKind::Loop { body: b } => {
+            collect_callees_from_block(body, *b, callees);
         }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            collect_callees_from_block(block, callees);
+        StmtKind::LabeledBlock { block, .. } => {
+            collect_callees_from_block(body, *block, callees);
         }
-        NirStmtKind::Break { .. } | NirStmtKind::Continue => {}
+        StmtKind::Break { .. } | StmtKind::Continue => {}
     }
 }
 
-fn collect_callees_from_expr(expr: &NirExpr, callees: &mut IndexSet<String>) {
-    match &expr.kind {
-        NirExprKind::Call { func, args, .. } => {
+fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<String>) {
+    match &body.exprs[id].kind {
+        ExprKind::Call { func, args, .. } => {
             callees.insert(func_ref_inline_key(func));
-            for arg in args {
-                collect_callees_from_expr(&arg.expr, callees);
+            for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
+                collect_callees_from_expr(body, aid, callees);
             }
         }
-        NirExprKind::MethodCall {
+        ExprKind::MethodCall {
             receiver,
             func,
             args,
             ..
         } => {
             callees.insert(func_ref_inline_key(func));
-            collect_callees_from_expr(receiver, callees);
-            for arg in args {
-                collect_callees_from_expr(&arg.expr, callees);
+            let receiver = *receiver;
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            collect_callees_from_expr(body, receiver, callees);
+            for aid in arg_ids {
+                collect_callees_from_expr(body, aid, callees);
             }
         }
-        NirExprKind::Binary { left, right, .. } => {
-            collect_callees_from_expr(left, callees);
-            collect_callees_from_expr(right, callees);
+        ExprKind::Binary { left, right, .. } => {
+            let (left, right) = (*left, *right);
+            collect_callees_from_expr(body, left, callees);
+            collect_callees_from_expr(body, right, callees);
         }
-        NirExprKind::Unary { expr, .. } => {
-            collect_callees_from_expr(expr, callees);
+        ExprKind::Unary { expr, .. } => {
+            collect_callees_from_expr(body, *expr, callees);
         }
-        NirExprKind::Assign { target, value } => {
-            collect_callees_from_expr(target, callees);
-            collect_callees_from_expr(value, callees);
+        ExprKind::Assign { target, value } => {
+            let (target, value) = (*target, *value);
+            collect_callees_from_expr(body, target, callees);
+            collect_callees_from_expr(body, value, callees);
         }
-        NirExprKind::Cast { expr, .. } => {
-            collect_callees_from_expr(expr, callees);
+        ExprKind::Cast { expr, .. } => {
+            collect_callees_from_expr(body, *expr, callees);
         }
-        NirExprKind::FieldAccess { expr, .. } => {
-            collect_callees_from_expr(expr, callees);
+        ExprKind::FieldAccess { expr, .. } => {
+            collect_callees_from_expr(body, *expr, callees);
         }
-        NirExprKind::Index { expr, index } => {
-            collect_callees_from_expr(expr, callees);
-            collect_callees_from_expr(index, callees);
+        ExprKind::Index { expr, index } => {
+            let (expr, index) = (*expr, *index);
+            collect_callees_from_expr(body, expr, callees);
+            collect_callees_from_expr(body, index, callees);
         }
-        NirExprKind::Block(block) => {
-            collect_callees_from_block(block, callees);
+        ExprKind::Block(block) => {
+            collect_callees_from_block(body, *block, callees);
         }
-        NirExprKind::If {
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            collect_callees_from_expr(condition, callees);
-            collect_callees_from_block(then_branch, callees);
+            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
+            collect_callees_from_expr(body, condition, callees);
+            collect_callees_from_block(body, then_branch, callees);
             if let Some(else_blk) = else_branch {
-                collect_callees_from_block(else_blk, callees);
+                collect_callees_from_block(body, else_blk, callees);
             }
         }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_callees_from_expr(&field.value, callees);
+        ExprKind::StructLiteral { fields, .. } => {
+            for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
+                collect_callees_from_expr(body, fid, callees);
             }
         }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                collect_callees_from_expr(elem, callees);
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            for eid in elements.clone() {
+                collect_callees_from_expr(body, eid, callees);
             }
         }
-        NirExprKind::IndirectCall { callee, args } => {
-            collect_callees_from_expr(callee, callees);
-            for arg in args {
-                collect_callees_from_expr(arg, callees);
+        ExprKind::IndirectCall { callee, args } => {
+            let callee = *callee;
+            let arg_ids = args.clone();
+            collect_callees_from_expr(body, callee, callees);
+            for aid in arg_ids {
+                collect_callees_from_expr(body, aid, callees);
             }
         }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_callees_from_expr(functor, callees);
+        ExprKind::ClosureToCanonical { functor, .. } => {
+            collect_callees_from_expr(body, *functor, callees);
         }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_callees_from_expr(arg, callees);
+        ExprKind::CmRawCall { args, .. } => {
+            for aid in args.clone() {
+                collect_callees_from_expr(body, aid, callees);
             }
         }
-        NirExprKind::Match { expr, arms } => {
-            collect_callees_from_expr(expr, callees);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_callees_from_expr(guard, callees);
+        ExprKind::Match { expr, arms } => {
+            let expr = *expr;
+            let arms = arms.clone();
+            collect_callees_from_expr(body, expr, callees);
+            for arm in &arms {
+                if let Some(guard) = arm.guard {
+                    collect_callees_from_expr(body, guard, callees);
                 }
-                collect_callees_from_expr(&arm.body, callees);
+                collect_callees_from_expr(body, arm.body, callees);
             }
         }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                collect_callees_from_expr(payload_expr, callees);
+        ExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = *payload {
+                collect_callees_from_expr(body, payload_expr, callees);
             }
         }
-        NirExprKind::LabeledBlock { block, .. } => {
-            collect_callees_from_block(block, callees);
+        ExprKind::LabeledBlock { block, .. } => {
+            collect_callees_from_block(body, *block, callees);
         }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            collect_callees_from_expr(value, callees);
+        ExprKind::GlobalVarSet { value, .. } => {
+            collect_callees_from_expr(body, *value, callees);
         }
-        NirExprKind::VariantTag { expr }
-        | NirExprKind::VariantTest { expr, .. }
-        | NirExprKind::VariantPayload { expr, .. } => {
-            collect_callees_from_expr(expr, callees);
+        ExprKind::VariantTag { expr }
+        | ExprKind::VariantTest { expr, .. }
+        | ExprKind::VariantPayload { expr, .. } => {
+            collect_callees_from_expr(body, *expr, callees);
         }
-        NirExprKind::Switch {
+        ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            collect_callees_from_expr(scrutinee, callees);
+            let scrutinee = *scrutinee;
+            let default = *default;
+            let arms = arms.clone();
+            collect_callees_from_expr(body, scrutinee, callees);
             for arm in arms {
-                collect_callees_from_block(arm, callees);
+                collect_callees_from_block(body, arm, callees);
             }
-            collect_callees_from_block(default, callees);
+            collect_callees_from_block(body, default, callees);
         }
         // Leaf nodes
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
+        ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::StringLiteral(_)
+        | ExprKind::BytesLiteral(_)
+        | ExprKind::Null
+        | ExprKind::Unit
+        | ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -977,9 +867,9 @@ fn inline_top_level(
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
 ) -> ExprId {
-    let tree = body.to_tree_expr(value);
     let result = try_inline_call_expr(
-        &tree,
+        body,
+        value,
         candidates,
         current_module,
         local_count,
@@ -989,7 +879,8 @@ fn inline_top_level(
     )
     .or_else(|| {
         try_inline_method_call_expr(
-            &tree,
+            body,
+            value,
             candidates,
             current_module,
             local_count,
@@ -998,11 +889,10 @@ fn inline_top_level(
             inline_counter,
         )
     });
-    if let Some((inlined_tree, inlined_key)) = result {
+    if let Some((new_id, inlined_key)) = result {
         if !inlined_funcs.contains(&inlined_key) {
             inlined_funcs.push(inlined_key);
         }
-        let new_id = body.lower_expr(&inlined_tree);
         inline_calls_in_expr(
             body,
             new_id,
@@ -1130,41 +1020,62 @@ fn find_inline_candidate<'a>(
 /// labeled block. Fields carry the information needed without requiring the
 /// shared helper to know whether the call site is a free function or a method.
 struct InlineBinding {
-    /// Original callee-side local index of the parameter being bound.
-    /// Used to build the `param_to_local` remapping for the inlined body.
+    /// The callee-frame local index of the parameter.
     callee_local_index: u32,
-    /// Parameter name (used verbatim as the new `let` name for debuggability).
+    /// Parameter name (kept for the synthesized binding `Let`).
     name: String,
-    /// Whether the synthesized `let` should be mutable. Free function calls
-    /// preserve the original parameter's `is_mut`; method calls always pass
-    /// `false` (the method body cannot rebind `self` or its arguments).
     is_mut: bool,
-    /// Type of the value bound to the new local. This may differ from
-    /// `param.type_id` due to monomorphization (arg type differs from param type)
-    /// or `&mut self` wrapping (receiver gets wrapped in a `MutRef` unary).
+    /// The binding's declared type (the arg's type — handles monomorphization
+    /// variance and `&mut self` ref wrapping).
     local_type: TypeId,
-    /// The value expression bound to the new local.
-    value: NirExpr,
+    /// The argument expression id, already in the caller arena. The call node is
+    /// discarded after inlining, so its argument subtrees are reused directly.
+    value: ExprId,
 }
 
-/// Core inlining routine: builds a labeled block that binds each prepared
-/// parameter value and executes the callee body with locals remapped into the
-/// caller's frame.
-///
-/// Shared by `try_inline_call_expr` and `try_inline_method_call_expr`. The
-/// difference between the two lies entirely in how they prepare `bindings`.
+/// Threaded context for the callee->caller splice: how to remap the callee's
+/// local indices and inner labels, and which label a `return` breaks to.
+struct InlineCtx<'a> {
+    param_to_local: &'a IndexMap<u32, u32>,
+    local_offset: u32,
+    param_count: u32,
+    label: &'a str,
+    label_map: &'a IndexMap<String, String>,
+}
+
+impl InlineCtx<'_> {
+    fn local(&self, idx: u32) -> u32 {
+        remap_local_index(
+            idx,
+            self.param_to_local,
+            self.local_offset,
+            self.param_count,
+        )
+    }
+    fn lbl(&self, l: &str) -> String {
+        self.label_map
+            .get(l)
+            .cloned()
+            .unwrap_or_else(|| l.to_string())
+    }
+}
+
+/// Core inlining routine: builds a labeled block (in the caller arena) that
+/// binds each prepared parameter value and executes the spliced callee body
+/// with locals remapped into the caller's frame and `return`s converted to
+/// `break label`.
+#[allow(clippy::too_many_arguments)]
 fn build_inlined_labeled_block(
+    caller: &mut Body,
     candidate: &NirFunction,
-    body: &NirBlock,
+    callee: &Body,
     func_name: &str,
     bindings: Vec<InlineBinding>,
     call_span: Span,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     inline_counter: &mut u32,
-) -> NirExpr {
-    // Generate unique label for this inline site.
-    // Sanitize function name for use as label (replace non-alphanumeric with _)
+) -> ExprId {
     let sanitized_name: String = func_name
         .chars()
         .map(|c| {
@@ -1178,34 +1089,25 @@ fn build_inlined_labeled_block(
     let label = format!("__inline_{}_{}", sanitized_name, *inline_counter);
     *inline_counter += 1;
 
-    // Calculate local index offset for remapping.
     let local_offset = *local_count;
-
     let callee_param_count = candidate.params.len() as u32;
     let callee_local_count = candidate.local_count;
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
 
-    // IMPORTANT: Push param types first to match index assignment order
-    // (params get indices local_offset+0, local_offset+1, ..., then non-params follow)
-    let mut block_stmts = Vec::with_capacity(bindings.len() + body.stmts.len());
+    let mut block_stmts: Vec<StmtId> = Vec::with_capacity(bindings.len());
     let mut param_to_local: IndexMap<u32, u32> = IndexMap::default();
 
     for (i, binding) in bindings.into_iter().enumerate() {
         let new_local_index = local_offset + i as u32;
         param_to_local.insert(binding.callee_local_index, new_local_index);
-
-        // Extend locals for parameter using the binding's actual local_type
-        // (handles monomorphization type variance and &mut self ref wrapping).
         locals.push(NirLocal {
             name: binding.name.clone(),
             type_id: binding.local_type,
             is_mut: binding.is_mut,
         });
         *local_count += 1;
-
-        // Use original parameter name (not _inline_ prefix).
-        block_stmts.push(NirStmt::new(
-            NirStmtKind::Let {
+        let let_id = caller.stmts.push(StmtNode {
+            kind: StmtKind::Let {
                 name: binding.name,
                 local_index: new_local_index,
                 is_mut: binding.is_mut,
@@ -1214,16 +1116,12 @@ fn build_inlined_labeled_block(
                 value: binding.value,
                 skip_value_copy: false,
             },
-            call_span,
-        ));
+            span: call_span,
+        });
+        block_stmts.push(let_id);
     }
 
-    // param_offset marks where non-param locals start (after all params).
     let param_offset = local_offset + callee_param_count;
-
-    // Now extend locals for the non-parameter locals — keep their original
-    // names from the callee so the inlined body's debug-friendly identity
-    // survives, just renumbered into the caller's index space.
     for i in callee_param_count..callee_local_count {
         if let Some(callee_local) = candidate.locals.get(i as usize) {
             locals.push(callee_local.clone());
@@ -1232,149 +1130,153 @@ fn build_inlined_labeled_block(
     *local_count += new_locals_needed;
 
     let mut inner_labels: IndexSet<String> = IndexSet::default();
-    collect_inner_labels_from_block(body, &mut inner_labels);
+    collect_inner_labels(callee, NodeRef::Block(callee.root), &mut inner_labels);
     let mut label_map: IndexMap<String, String> = IndexMap::default();
     for inner_label in inner_labels {
         label_map.insert(inner_label.clone(), format!("{label}__{inner_label}"));
     }
 
-    // Convert the body, transforming `return` into `break label: expr`.
-    let remapped_stmts = remap_and_convert_returns(
-        body,
-        &param_to_local,
-        param_offset,
-        callee_param_count,
-        &label,
-        &label_map,
-    );
+    let ctx = InlineCtx {
+        param_to_local: &param_to_local,
+        local_offset: param_offset,
+        param_count: callee_param_count,
+        label: &label,
+        label_map: &label_map,
+    };
+    splice_block_into(caller, callee, callee.root, &ctx, &mut block_stmts);
 
-    block_stmts.extend(remapped_stmts);
-
-    // Create a labeled block expression that produces the return value.
-    NirExpr::new(
-        NirExprKind::LabeledBlock {
+    let result_type = candidate.return_type;
+    let bid = caller.blocks.push(BlockNode {
+        stmts: block_stmts,
+        span: call_span,
+    });
+    caller.exprs.push(ExprNode {
+        kind: ExprKind::LabeledBlock {
             label,
-            block: NirBlock::new(block_stmts, call_span),
-            result_type: candidate.return_type,
+            block: bid,
+            result_type,
         },
-        candidate.return_type,
-        call_span,
-    )
+        type_id: result_type,
+        span: call_span,
+    })
 }
 
-/// Try to inline a free function call expression, returning the inlined
-/// expression and the callee's lookup key.
+/// Try to inline a free function call `call_id` in `caller`, splicing the callee
+/// body in place. Returns the new (labeled-block) expression id and the callee
+/// key, or `None` if the call is not an inline candidate.
+#[allow(clippy::too_many_arguments)]
 fn try_inline_call_expr(
-    expr: &NirExpr,
+    caller: &mut Body,
+    call_id: ExprId,
     candidates: &IndexMap<(ModuleSource, String), NirFunction>,
     current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     _type_table: &TypeTable,
     inline_counter: &mut u32,
-) -> Option<(NirExpr, (ModuleSource, String))> {
-    let NirExprKind::Call { func, args, .. } = &expr.kind else {
-        return None;
-    };
-
-    let func_name = func.name.clone();
+) -> Option<(ExprId, (ModuleSource, String))> {
+    let (module_source, func_name, arg_ids): (ModuleSource, String, Vec<ExprId>) =
+        match &caller.exprs[call_id].kind {
+            ExprKind::Call { func, args, .. } => (
+                func.module_source.clone(),
+                func.name.clone(),
+                args.iter().map(|a| a.expr).collect(),
+            ),
+            _ => return None,
+        };
     let (candidate, inlined_key) =
-        find_inline_candidate(candidates, &func.module_source, current_module, &func_name)?;
-    let bb = candidate
-        .body
-        .as_ref()
-        .map(crate::nir_arena::Body::to_block);
-    let body = bb.as_ref()?;
+        find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
+    let callee = candidate.body.as_ref()?;
+    let call_span = caller.exprs[call_id].span;
 
-    // Use argument's type_id to match the actual value being assigned
-    // (handles monomorphization type variance).
     let bindings: Vec<InlineBinding> = candidate
         .params
         .iter()
-        .zip(args.iter())
-        .map(|(param, arg)| InlineBinding {
+        .zip(arg_ids.iter())
+        .map(|(param, &arg)| InlineBinding {
             callee_local_index: param.local_index,
             name: param.name.clone(),
             is_mut: param.is_mut,
-            local_type: arg.expr.type_id,
-            value: arg.expr.clone(),
+            local_type: caller.exprs[arg].type_id,
+            value: arg,
         })
         .collect();
 
-    let inlined_expr = build_inlined_labeled_block(
+    let inlined = build_inlined_labeled_block(
+        caller,
         candidate,
-        body,
+        callee,
         &func_name,
         bindings,
-        expr.span,
+        call_span,
         local_count,
         locals,
         inline_counter,
     );
-
-    Some((inlined_expr, inlined_key))
+    Some((inlined, inlined_key))
 }
 
-/// Try to inline a method call expression, returning the inlined expression
-/// and the callee's lookup key.
+/// Try to inline a method call `call_id` in `caller`.
+#[allow(clippy::too_many_arguments)]
 fn try_inline_method_call_expr(
-    expr: &NirExpr,
+    caller: &mut Body,
+    call_id: ExprId,
     candidates: &IndexMap<(ModuleSource, String), NirFunction>,
     current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     inline_counter: &mut u32,
-) -> Option<(NirExpr, (ModuleSource, String))> {
-    let NirExprKind::MethodCall {
-        receiver,
-        func,
-        args,
-        ..
-    } = &expr.kind
-    else {
-        return None;
+) -> Option<(ExprId, (ModuleSource, String))> {
+    let (module_source, func_name, receiver_id, arg_ids): (
+        ModuleSource,
+        String,
+        ExprId,
+        Vec<ExprId>,
+    ) = match &caller.exprs[call_id].kind {
+        ExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } => (
+            func.module_source.clone(),
+            func.name.clone(),
+            *receiver,
+            args.iter().map(|a| a.expr).collect(),
+        ),
+        _ => return None,
     };
-
-    let func_name = func.name.clone();
     let (candidate, inlined_key) =
-        find_inline_candidate(candidates, &func.module_source, current_module, &func_name)?;
-    let bb = candidate
-        .body
-        .as_ref()
-        .map(crate::nir_arena::Body::to_block);
-    let body = bb.as_ref()?;
+        find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
+    let callee = candidate.body.as_ref()?;
+    let call_span = caller.exprs[call_id].span;
 
-    let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
-
-    // Bind receiver to first parameter (self).
-    // For &mut self receivers, wrap in a MutRef expression so that field
-    // mutations (`self.field = x`) translate to WIR StructSet on the original
-    // receiver rather than on a value copy. A value copy would lose writes.
-    // For &self receivers, a value copy is safe (no mutations) and lets copy
-    // propagation simplify `self.field` → `receiver.field` without a ref level.
     let first_param = &candidate.params[0];
+    let recv_type = caller.exprs[receiver_id].type_id;
+    // Bind receiver to the first parameter (self). For `&mut self`, wrap the
+    // receiver in a `MutRef` so field mutations write back to the original;
+    // for `&self` / by-value, pass the receiver expression directly.
     let (self_type_id, self_value) =
         if matches!(type_table.get(first_param.type_id), ResolvedType::MutRef(_)) {
-            if matches!(type_table.get(receiver.type_id), ResolvedType::MutRef(_)) {
-                // Receiver is already &mut T — pass through without double-wrapping.
-                // This happens when an &mut self method is called on a local whose
-                // type is already &mut T (e.g. after inlining a sequence literal builder).
-                (receiver.type_id, (**receiver).clone())
+            if matches!(type_table.get(recv_type), ResolvedType::MutRef(_)) {
+                (recv_type, receiver_id)
             } else {
-                let ref_expr = NirExpr {
-                    kind: NirExprKind::Unary {
+                let mr = caller.exprs.push(ExprNode {
+                    kind: ExprKind::Unary {
                         op: NirUnaryOp::MutRef,
-                        expr: receiver.clone(),
+                        expr: receiver_id,
                     },
                     type_id: first_param.type_id,
-                    span: expr.span,
-                };
-                (first_param.type_id, ref_expr)
+                    span: call_span,
+                });
+                (first_param.type_id, mr)
             }
         } else {
-            (receiver.type_id, (**receiver).clone())
+            (recv_type, receiver_id)
         };
+
+    let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
     bindings.push(InlineBinding {
         callee_local_index: first_param.local_index,
         name: first_param.name.clone(),
@@ -1382,550 +1284,115 @@ fn try_inline_method_call_expr(
         local_type: self_type_id,
         value: self_value,
     });
-
-    // Bind remaining args to remaining parameters.
-    // Use argument's type_id to handle monomorphization type variance.
-    for (param, arg) in candidate.params.iter().skip(1).zip(args.iter()) {
+    for (param, &arg) in candidate.params.iter().skip(1).zip(arg_ids.iter()) {
         bindings.push(InlineBinding {
             callee_local_index: param.local_index,
             name: param.name.clone(),
             is_mut: param.is_mut,
-            local_type: arg.expr.type_id,
-            value: arg.expr.clone(),
+            local_type: caller.exprs[arg].type_id,
+            value: arg,
         });
     }
 
-    let inlined_expr = build_inlined_labeled_block(
+    let inlined = build_inlined_labeled_block(
+        caller,
         candidate,
-        body,
+        callee,
         &func_name,
         bindings,
-        expr.span,
+        call_span,
         local_count,
         locals,
         inline_counter,
     );
-
-    Some((inlined_expr, inlined_key))
+    Some((inlined, inlined_key))
 }
 
-/// Remap locals and convert returns to break statements with the given label.
-///
-/// Scope blocks (`LabeledBlock` stmts) whose labels are not targeted by any
-/// `break` in their body are flattened into the parent. This is safe because
-/// inlining remaps all locals to unique indices, making variable scoping
-/// irrelevant. Without flattening, intermediate void scope blocks between the
-/// inline label and a `break` targeting it produce invalid Wasm: the void
-/// block's fallthrough leaves nothing on the stack for the outer typed block.
-fn remap_and_convert_returns(
-    block: &NirBlock,
-    param_to_local: &IndexMap<u32, u32>,
-    local_offset: u32,
-    param_count: u32,
-    label: &str,
-    label_map: &IndexMap<String, String>,
-) -> Vec<NirStmt> {
-    let mut stmts = Vec::new();
-
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            NirStmtKind::Return { value } => {
-                // Convert return to break with the inline label.
-                // Use label-aware remapping because the return value expression
-                // may itself contain nested blocks with return statements
-                // (e.g., try-op expansions inside tuple/struct literals).
-                let break_value = value.as_ref().map(|v| {
-                    remap_expr_inner(
-                        v,
-                        param_to_local,
-                        local_offset,
-                        param_count,
-                        Some(label),
-                        label_map,
-                    )
-                });
-                stmts.push(NirStmt::new(
-                    NirStmtKind::Break {
-                        label: Some(label.to_string()),
-                        value: break_value,
-                    },
-                    stmt.span,
-                ));
-            }
-            NirStmtKind::LabeledBlock {
-                label: inner_label,
-                block: inner_block,
-            } if !block_has_break_to(inner_label, inner_block) => {
-                // Flatten: scope block has no breaks targeting its own label,
-                // so just inline its stmts into the parent
-                let inner = remap_and_convert_returns(
-                    inner_block,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    label,
-                    label_map,
-                );
-                stmts.extend(inner);
-            }
-            _ => {
-                stmts.push(remap_stmt_with_label(
-                    stmt,
-                    param_to_local,
-                    local_offset,
-                    param_count,
-                    label,
-                    label_map,
-                ));
-            }
-        }
-    }
-
-    stmts
-}
-
-fn remap_stmt_with_label(
-    stmt: &NirStmt,
-    param_to_local: &IndexMap<u32, u32>,
-    local_offset: u32,
-    param_count: u32,
-    label: &str,
-    label_map: &IndexMap<String, String>,
-) -> NirStmt {
-    remap_stmt_inner(
-        stmt,
-        param_to_local,
-        local_offset,
-        param_count,
-        Some(label),
-        label_map,
-    )
-}
-
-/// Remap local indices in a pattern
-fn remap_pattern(
-    pattern: &NirPattern,
-    param_to_local: &IndexMap<u32, u32>,
-    local_offset: u32,
-    param_count: u32,
-) -> NirPattern {
-    match pattern {
-        NirPattern::Wildcard => NirPattern::Wildcard,
-        NirPattern::Binding {
-            name,
-            local_index,
-            type_id,
-        } => NirPattern::Binding {
-            name: name.clone(),
-            local_index: remap_local_index(*local_index, param_to_local, local_offset, param_count),
-            type_id: *type_id,
-        },
-        NirPattern::Literal(lit) => NirPattern::Literal(lit.clone()),
-        NirPattern::Tuple(patterns, has_rest) => NirPattern::Tuple(
-            patterns
-                .iter()
-                .map(|p| remap_pattern(p, param_to_local, local_offset, param_count))
-                .collect(),
-            *has_rest,
-        ),
-        NirPattern::Variant {
-            enum_type,
-            variant_name,
-            bindings,
-            payload_type,
-        } => NirPattern::Variant {
-            enum_type: *enum_type,
-            variant_name: variant_name.clone(),
-            bindings: bindings
-                .iter()
-                .map(|p| remap_pattern(p, param_to_local, local_offset, param_count))
-                .collect(),
-            payload_type: *payload_type,
-        },
-        NirPattern::Enum {
-            enum_type,
-            case_name,
-            case_index,
-        } => NirPattern::Enum {
-            enum_type: *enum_type,
-            case_name: case_name.clone(),
-            case_index: *case_index,
-        },
-        NirPattern::Struct {
-            struct_type,
-            fields,
-            has_rest,
-        } => NirPattern::Struct {
-            struct_type: *struct_type,
-            fields: fields
-                .iter()
-                .map(|f| crate::nir::NirStructPatternField {
-                    field_name: f.field_name.clone(),
-                    field_index: f.field_index,
-                    pattern: remap_pattern(&f.pattern, param_to_local, local_offset, param_count),
-                })
-                .collect(),
-            has_rest: *has_rest,
-        },
-        NirPattern::Or(alternatives) => NirPattern::Or(
-            alternatives
-                .iter()
-                .map(|p| remap_pattern(p, param_to_local, local_offset, param_count))
-                .collect(),
-        ),
-        NirPattern::ConstantValue { expr } => NirPattern::ConstantValue { expr: expr.clone() },
-        NirPattern::Range {
-            start,
-            end,
-            inclusive,
-            is_unsigned,
-        } => NirPattern::Range {
-            start: *start,
-            end: *end,
-            inclusive: *inclusive,
-            is_unsigned: *is_unsigned,
-        },
-    }
-}
-
-/// Remap a local index
+/// Remap a local index from the callee frame into the caller frame.
 fn remap_local_index(
     index: u32,
     param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
 ) -> u32 {
-    // If it's a parameter, use the param_to_local mapping
     if let Some(&new_index) = param_to_local.get(&index) {
         return new_index;
     }
-    // Otherwise, offset the non-parameter locals
     if index >= param_count {
         local_offset + (index - param_count)
     } else {
-        // This shouldn't happen if param_to_local is complete
         index
     }
 }
 
-/// Remap local indices in an expression, optionally converting `return` to `break`.
-///
-/// When `label` is `Some`, any `return` statement reachable from this expression
-/// (e.g. inside blocks nested in struct literals, tuple literals, variant payloads)
-/// is converted to `break label: value`. This is critical for correct inlining of
-/// functions whose bodies contain early returns inside nested expressions.
-fn remap_expr_inner(
-    expr: &NirExpr,
-    param_to_local: &IndexMap<u32, u32>,
-    local_offset: u32,
-    param_count: u32,
-    label: Option<&str>,
-    label_map: &IndexMap<String, String>,
-) -> NirExpr {
-    let re = |e: &NirExpr| {
-        remap_expr_inner(
-            e,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            label_map,
-        )
-    };
-    let re_box = |e: &NirExpr| Box::new(re(e));
-    let rb = |b: &NirBlock| {
-        remap_block_inner(
-            b,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            label_map,
-        )
-    };
-
-    let kind = match &expr.kind {
-        NirExprKind::Local { index, name } => {
-            let new_index = remap_local_index(*index, param_to_local, local_offset, param_count);
-            NirExprKind::Local {
-                index: new_index,
-                name: name.clone(),
+/// Splice the statements of callee `block` into `out` (caller statement ids),
+/// converting `return` to `break label` and flattening labeled blocks whose
+/// label is never broken to (safe because all locals are uniquely remapped).
+fn splice_block_into(
+    caller: &mut Body,
+    callee: &Body,
+    block: BlockId,
+    ctx: &InlineCtx,
+    out: &mut Vec<StmtId>,
+) {
+    for sid in callee.blocks[block].stmts.clone() {
+        match &callee.stmts[sid].kind {
+            StmtKind::Return { value } => {
+                let v = *value;
+                let span = callee.stmts[sid].span;
+                let value = v.map(|x| splice_expr(caller, callee, x, ctx));
+                out.push(caller.stmts.push(StmtNode {
+                    kind: StmtKind::Break {
+                        label: Some(ctx.label.to_string()),
+                        value,
+                    },
+                    span,
+                }));
             }
-        }
-        NirExprKind::Binary { left, op, right } => NirExprKind::Binary {
-            left: re_box(left),
-            op: *op,
-            right: re_box(right),
-        },
-        NirExprKind::Unary { op, expr: inner } => NirExprKind::Unary {
-            op: *op,
-            expr: re_box(inner),
-        },
-        NirExprKind::Assign { target, value } => NirExprKind::Assign {
-            target: re_box(target),
-            value: re_box(value),
-        },
-        NirExprKind::Cast {
-            expr: inner,
-            target_type,
-        } => NirExprKind::Cast {
-            expr: re_box(inner),
-            target_type: *target_type,
-        },
-        NirExprKind::Call {
-            func,
-            type_args,
-            args,
-        } => NirExprKind::Call {
-            func: func.clone(),
-            type_args: type_args.clone(),
-            args: args
-                .iter()
-                .map(|a| CallArg::new(re(&a.expr), a.is_mut))
-                .collect(),
-        },
-        NirExprKind::MethodCall {
-            receiver,
-            func,
-            type_args,
-            args,
-            ..
-        } => NirExprKind::method_call(
-            re_box(receiver),
-            func.clone(),
-            type_args.clone(),
-            args.iter()
-                .map(|a| CallArg::new(re(&a.expr), a.is_mut))
-                .collect(),
-        ),
-        NirExprKind::CmRawCall { local_name, args } => NirExprKind::CmRawCall {
-            local_name: local_name.clone(),
-            args: args.iter().map(&re).collect(),
-        },
-        NirExprKind::FieldAccess {
-            expr: inner,
-            field_index,
-            field_name,
-        } => NirExprKind::FieldAccess {
-            expr: re_box(inner),
-            field_index: *field_index,
-            field_name: field_name.clone(),
-        },
-        NirExprKind::Index { expr: inner, index } => NirExprKind::Index {
-            expr: re_box(inner),
-            index: re_box(index),
-        },
-        NirExprKind::Block(block) => NirExprKind::Block(rb(block)),
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => NirExprKind::If {
-            condition: re_box(condition),
-            then_branch: rb(then_branch),
-            else_branch: else_branch.as_ref().map(&rb),
-        },
-        NirExprKind::Match { expr: inner, arms } => NirExprKind::Match {
-            expr: re_box(inner),
-            arms: arms
-                .iter()
-                .map(|arm| crate::nir::NirMatchArm {
-                    pattern: remap_pattern(&arm.pattern, param_to_local, local_offset, param_count),
-                    guard: arm.guard.as_ref().map(&re),
-                    body: re(&arm.body),
-                    span: arm.span,
-                })
-                .collect(),
-        },
-        NirExprKind::StructLiteral {
-            struct_type,
-            struct_name,
-            fields,
-        } => NirExprKind::StructLiteral {
-            struct_type: *struct_type,
-            struct_name: struct_name.clone(),
-            fields: fields
-                .iter()
-                .map(|f| crate::nir::NirStructField {
-                    name: f.name.clone(),
-                    value: re(&f.value),
-                    field_index: f.field_index,
-                })
-                .collect(),
-        },
-        NirExprKind::TupleLiteral { elements } => NirExprKind::TupleLiteral {
-            elements: elements.iter().map(&re).collect(),
-        },
-        NirExprKind::ArrayLiteral { elements } => NirExprKind::ArrayLiteral {
-            elements: elements.iter().map(&re).collect(),
-        },
-        NirExprKind::IndirectCall { callee, args } => NirExprKind::IndirectCall {
-            callee: re_box(callee),
-            args: args.iter().map(&re).collect(),
-        },
-        NirExprKind::ClosureToCanonical {
-            functor,
-            functor_id,
-            target_fn_type,
-            closure_module,
-        } => NirExprKind::ClosureToCanonical {
-            functor: re_box(functor),
-            functor_id: *functor_id,
-            target_fn_type: *target_fn_type,
-            closure_module: closure_module.clone(),
-        },
-        NirExprKind::VariantConstruct {
-            variant_type,
-            case_index,
-            case_name,
-            payload,
-        } => NirExprKind::VariantConstruct {
-            variant_type: *variant_type,
-            case_index: *case_index,
-            case_name: case_name.clone(),
-            payload: payload.as_ref().map(|p| Box::new(re(p))),
-        },
-        NirExprKind::LabeledBlock {
-            label: inner_label,
-            block,
-            result_type,
-        } => NirExprKind::LabeledBlock {
-            label: label_map
-                .get(inner_label)
-                .cloned()
-                .unwrap_or_else(|| inner_label.clone()),
-            block: rb(block),
-            result_type: *result_type,
-        },
-        NirExprKind::GlobalVarSet {
-            module_source,
-            name,
-            value,
-        } => NirExprKind::GlobalVarSet {
-            module_source: module_source.clone(),
-            name: name.clone(),
-            value: re_box(value),
-        },
-        NirExprKind::VariantTag { expr } => NirExprKind::VariantTag { expr: re_box(expr) },
-        NirExprKind::VariantTest {
-            expr,
-            case_index,
-            case_name,
-        } => NirExprKind::VariantTest {
-            expr: re_box(expr),
-            case_index: *case_index,
-            case_name: case_name.clone(),
-        },
-        NirExprKind::VariantPayload {
-            expr,
-            case_index,
-            payload_type,
-        } => NirExprKind::VariantPayload {
-            expr: re_box(expr),
-            case_index: *case_index,
-            payload_type: *payload_type,
-        },
-        NirExprKind::Switch {
-            scrutinee,
-            min_value,
-            arms,
-            default,
-        } => NirExprKind::Switch {
-            scrutinee: re_box(scrutinee),
-            min_value: *min_value,
-            arms: arms.iter().map(&rb).collect(),
-            default: rb(default),
-        },
-        // Leaf nodes - no remapping needed
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => expr.kind.clone(),
-    };
-
-    NirExpr::new(kind, expr.type_id, expr.span)
-}
-
-fn remap_block_inner(
-    block: &NirBlock,
-    param_to_local: &IndexMap<u32, u32>,
-    local_offset: u32,
-    param_count: u32,
-    label: Option<&str>,
-    label_map: &IndexMap<String, String>,
-) -> NirBlock {
-    let mut stmts = Vec::new();
-    for stmt in &block.stmts {
-        if let Some(label) = label {
-            match &stmt.kind {
-                NirStmtKind::LabeledBlock {
-                    label: inner_label,
-                    block: inner_block,
-                } if !block_has_break_to(inner_label, inner_block) => {
-                    // Flatten: scope block has no breaks targeting its own label
-                    let inner = remap_and_convert_returns(
-                        inner_block,
-                        param_to_local,
-                        local_offset,
-                        param_count,
-                        label,
-                        label_map,
-                    );
-                    stmts.extend(inner);
-                    continue;
+            StmtKind::LabeledBlock {
+                label: inner_label,
+                block: inner,
+            } => {
+                let inner_label = inner_label.clone();
+                let inner = *inner;
+                if arena_query::has_break_to(callee, NodeRef::Block(inner), &inner_label) {
+                    // The label is broken to, so the block must survive (with its
+                    // label remapped); recurse converting returns inside it.
+                    let span = callee.stmts[sid].span;
+                    let nb = splice_block(caller, callee, inner, ctx);
+                    out.push(caller.stmts.push(StmtNode {
+                        kind: StmtKind::LabeledBlock {
+                            label: ctx.lbl(&inner_label),
+                            block: nb,
+                        },
+                        span,
+                    }));
+                } else {
+                    // No break targets this label: flatten its statements into the
+                    // parent (all locals are uniquely remapped, so scoping is moot).
+                    splice_block_into(caller, callee, inner, ctx, out);
                 }
-                _ => {}
+            }
+            _ => {
+                let s = splice_stmt(caller, callee, sid, ctx);
+                out.push(s);
             }
         }
-        stmts.push(remap_stmt_inner(
-            stmt,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            label_map,
-        ));
     }
-    NirBlock::new(stmts, block.span)
 }
 
-fn remap_stmt_inner(
-    stmt: &NirStmt,
-    param_to_local: &IndexMap<u32, u32>,
-    local_offset: u32,
-    param_count: u32,
-    label: Option<&str>,
-    label_map: &IndexMap<String, String>,
-) -> NirStmt {
-    let re = |e: &NirExpr| {
-        remap_expr_inner(
-            e,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            label_map,
-        )
-    };
-    let rb = |b: &NirBlock| {
-        remap_block_inner(
-            b,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            label_map,
-        )
-    };
+/// Splice a callee block into a fresh caller block id (return-converting).
+fn splice_block(caller: &mut Body, callee: &Body, block: BlockId, ctx: &InlineCtx) -> BlockId {
+    let span = callee.blocks[block].span;
+    let mut out = Vec::new();
+    splice_block_into(caller, callee, block, ctx, &mut out);
+    caller.blocks.push(BlockNode { stmts: out, span })
+}
 
-    let kind = match &stmt.kind {
-        NirStmtKind::Let {
+fn splice_stmt(caller: &mut Body, callee: &Body, sid: StmtId, ctx: &InlineCtx) -> StmtId {
+    let span = callee.stmts[sid].span;
+    let kind = match &callee.stmts[sid].kind {
+        StmtKind::Let {
             name,
             local_index,
             is_mut,
@@ -1934,77 +1401,506 @@ fn remap_stmt_inner(
             value,
             skip_value_copy,
         } => {
-            let new_index =
-                remap_local_index(*local_index, param_to_local, local_offset, param_count);
-            NirStmtKind::Let {
-                name: name.clone(),
-                local_index: new_index,
-                is_mut: *is_mut,
-                is_reactive: *is_reactive,
-                type_id: *type_id,
-                value: re(value),
-                skip_value_copy: *skip_value_copy,
+            let (li, v) = (*local_index, *value);
+            let (name, is_mut, is_reactive, type_id, scv) = (
+                name.clone(),
+                *is_mut,
+                *is_reactive,
+                *type_id,
+                *skip_value_copy,
+            );
+            StmtKind::Let {
+                name,
+                local_index: ctx.local(li),
+                is_mut,
+                is_reactive,
+                type_id,
+                value: splice_expr(caller, callee, v, ctx),
+                skip_value_copy: scv,
             }
         }
-        NirStmtKind::Expr(expr) => NirStmtKind::Expr(re(expr)),
-        NirStmtKind::Return { value } => {
-            if let Some(label) = label {
-                // Convert return to break with the inline label
-                NirStmtKind::Break {
-                    label: Some(label.to_string()),
-                    value: value.as_ref().map(&re),
-                }
-            } else {
-                NirStmtKind::Return {
-                    value: value.as_ref().map(&re),
-                }
+        StmtKind::Expr(e) => StmtKind::Expr(splice_expr(caller, callee, *e, ctx)),
+        StmtKind::Return { value } => {
+            let v = *value;
+            StmtKind::Break {
+                label: Some(ctx.label.to_string()),
+                value: v.map(|x| splice_expr(caller, callee, x, ctx)),
             }
         }
-        NirStmtKind::If {
+        StmtKind::If {
             condition,
             then_block,
             else_block,
-        } => NirStmtKind::If {
-            condition: re(condition),
-            then_block: rb(then_block),
-            else_block: else_block.as_ref().map(&rb),
-        },
-        NirStmtKind::Loop { body } => NirStmtKind::Loop { body: rb(body) },
-        NirStmtKind::LabeledBlock {
-            label: inner_label,
-            block,
-        } => NirStmtKind::LabeledBlock {
-            label: label_map
-                .get(inner_label)
-                .cloned()
-                .unwrap_or_else(|| inner_label.clone()),
-            block: rb(block),
-        },
-        NirStmtKind::Break {
-            label: break_label,
-            value,
-        } => NirStmtKind::Break {
-            label: break_label.as_ref().map(|break_label| {
-                label_map
-                    .get(break_label)
-                    .cloned()
-                    .unwrap_or_else(|| break_label.clone())
-            }),
-            value: value.as_ref().map(&re),
-        },
-        NirStmtKind::Continue => NirStmtKind::Continue,
-        NirStmtKind::LetDestructure {
+        } => {
+            let (c, t, e) = (*condition, *then_block, *else_block);
+            StmtKind::If {
+                condition: splice_expr(caller, callee, c, ctx),
+                then_block: splice_block(caller, callee, t, ctx),
+                else_block: e.map(|b| splice_block(caller, callee, b, ctx)),
+            }
+        }
+        StmtKind::Loop { body } => {
+            let b = *body;
+            StmtKind::Loop {
+                body: splice_block(caller, callee, b, ctx),
+            }
+        }
+        StmtKind::LabeledBlock { label, block } => {
+            let (l, b) = (label.clone(), *block);
+            StmtKind::LabeledBlock {
+                label: ctx.lbl(&l),
+                block: splice_block(caller, callee, b, ctx),
+            }
+        }
+        StmtKind::Break { label, value } => {
+            let (l, v) = (label.clone(), *value);
+            StmtKind::Break {
+                label: l.map(|x| ctx.lbl(&x)),
+                value: v.map(|x| splice_expr(caller, callee, x, ctx)),
+            }
+        }
+        StmtKind::Continue => StmtKind::Continue,
+        StmtKind::LetDestructure {
             pattern,
             is_mut,
             value,
-        } => NirStmtKind::LetDestructure {
-            pattern: remap_pattern(pattern, param_to_local, local_offset, param_count),
-            is_mut: *is_mut,
-            value: re(value),
+        } => {
+            let (p, m, v) = (*pattern, *is_mut, *value);
+            StmtKind::LetDestructure {
+                pattern: splice_pat(caller, callee, p, ctx),
+                is_mut: m,
+                value: splice_expr(caller, callee, v, ctx),
+            }
+        }
+    };
+    caller.stmts.push(StmtNode { kind, span })
+}
+
+fn splice_pat(caller: &mut Body, callee: &Body, pid: PatId, ctx: &InlineCtx) -> PatId {
+    let span = callee.pats[pid].span;
+    let kind = match &callee.pats[pid].kind {
+        PatKind::Binding {
+            name,
+            local_index,
+            type_id,
+        } => PatKind::Binding {
+            name: name.clone(),
+            local_index: ctx.local(*local_index),
+            type_id: *type_id,
+        },
+        PatKind::Tuple(ps, rest) => {
+            let (ps, rest) = (ps.clone(), *rest);
+            PatKind::Tuple(
+                ps.into_iter()
+                    .map(|p| splice_pat(caller, callee, p, ctx))
+                    .collect(),
+                rest,
+            )
+        }
+        PatKind::Or(ps) => {
+            let ps = ps.clone();
+            PatKind::Or(
+                ps.into_iter()
+                    .map(|p| splice_pat(caller, callee, p, ctx))
+                    .collect(),
+            )
+        }
+        PatKind::Variant {
+            enum_type,
+            variant_name,
+            bindings,
+            payload_type,
+        } => {
+            let (et, vn, bs, pt) = (
+                *enum_type,
+                variant_name.clone(),
+                bindings.clone(),
+                *payload_type,
+            );
+            PatKind::Variant {
+                enum_type: et,
+                variant_name: vn,
+                bindings: bs
+                    .into_iter()
+                    .map(|p| splice_pat(caller, callee, p, ctx))
+                    .collect(),
+                payload_type: pt,
+            }
+        }
+        PatKind::Struct {
+            struct_type,
+            fields,
+            has_rest,
+        } => {
+            let (st, fs, hr) = (*struct_type, fields.clone(), *has_rest);
+            PatKind::Struct {
+                struct_type: st,
+                fields: fs
+                    .into_iter()
+                    .map(|f| ArenaStructPatternField {
+                        field_name: f.field_name,
+                        field_index: f.field_index,
+                        pattern: splice_pat(caller, callee, f.pattern, ctx),
+                    })
+                    .collect(),
+                has_rest: hr,
+            }
+        }
+        PatKind::ConstantValue { expr } => {
+            let e = *expr;
+            PatKind::ConstantValue {
+                expr: splice_expr(caller, callee, e, ctx),
+            }
+        }
+        PatKind::Wildcard => PatKind::Wildcard,
+        PatKind::Literal(l) => PatKind::Literal(l.clone()),
+        PatKind::Enum {
+            enum_type,
+            case_name,
+            case_index,
+        } => PatKind::Enum {
+            enum_type: *enum_type,
+            case_name: case_name.clone(),
+            case_index: *case_index,
+        },
+        PatKind::Range {
+            start,
+            end,
+            inclusive,
+            is_unsigned,
+        } => PatKind::Range {
+            start: *start,
+            end: *end,
+            inclusive: *inclusive,
+            is_unsigned: *is_unsigned,
         },
     };
+    caller.pats.push(PatNode { kind, span })
+}
 
-    NirStmt::new(kind, stmt.span)
+fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) -> ExprId {
+    let span = callee.exprs[id].span;
+    let type_id = callee.exprs[id].type_id;
+    let kind = match &callee.exprs[id].kind {
+        ExprKind::Local { index, name } => ExprKind::Local {
+            index: ctx.local(*index),
+            name: name.clone(),
+        },
+        ExprKind::GlobalVarSet {
+            module_source,
+            name,
+            value,
+        } => {
+            let (ms, n, v) = (module_source.clone(), name.clone(), *value);
+            ExprKind::GlobalVarSet {
+                module_source: ms,
+                name: n,
+                value: splice_expr(caller, callee, v, ctx),
+            }
+        }
+        ExprKind::Binary { left, op, right } => {
+            let (l, o, r) = (*left, *op, *right);
+            ExprKind::Binary {
+                left: splice_expr(caller, callee, l, ctx),
+                op: o,
+                right: splice_expr(caller, callee, r, ctx),
+            }
+        }
+        ExprKind::Unary { op, expr } => {
+            let (o, e) = (*op, *expr);
+            ExprKind::Unary {
+                op: o,
+                expr: splice_expr(caller, callee, e, ctx),
+            }
+        }
+        ExprKind::Assign { target, value } => {
+            let (t, v) = (*target, *value);
+            ExprKind::Assign {
+                target: splice_expr(caller, callee, t, ctx),
+                value: splice_expr(caller, callee, v, ctx),
+            }
+        }
+        ExprKind::Cast { expr, target_type } => {
+            let (e, tt) = (*expr, *target_type);
+            ExprKind::Cast {
+                expr: splice_expr(caller, callee, e, ctx),
+                target_type: tt,
+            }
+        }
+        ExprKind::Call {
+            func,
+            type_args,
+            args,
+        } => {
+            let (func, type_args) = (func.clone(), type_args.clone());
+            let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
+            ExprKind::Call {
+                func,
+                type_args,
+                args: arg_data
+                    .into_iter()
+                    .map(|(e, m)| ArenaCallArg {
+                        expr: splice_expr(caller, callee, e, ctx),
+                        is_mut: m,
+                    })
+                    .collect(),
+            }
+        }
+        ExprKind::CmRawCall { local_name, args } => {
+            let (ln, args) = (local_name.clone(), args.clone());
+            ExprKind::CmRawCall {
+                local_name: ln,
+                args: args
+                    .into_iter()
+                    .map(|a| splice_expr(caller, callee, a, ctx))
+                    .collect(),
+            }
+        }
+        ExprKind::MethodCall {
+            receiver,
+            func,
+            type_args,
+            args,
+        } => {
+            let (rcv, func, type_args) = (*receiver, func.clone(), type_args.clone());
+            let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
+            ExprKind::MethodCall {
+                receiver: splice_expr(caller, callee, rcv, ctx),
+                func,
+                type_args,
+                args: arg_data
+                    .into_iter()
+                    .map(|(e, m)| ArenaCallArg {
+                        expr: splice_expr(caller, callee, e, ctx),
+                        is_mut: m,
+                    })
+                    .collect(),
+            }
+        }
+        ExprKind::FieldAccess {
+            expr,
+            field_index,
+            field_name,
+        } => {
+            let (e, fi, fname) = (*expr, *field_index, field_name.clone());
+            ExprKind::FieldAccess {
+                expr: splice_expr(caller, callee, e, ctx),
+                field_index: fi,
+                field_name: fname,
+            }
+        }
+        ExprKind::Index { expr, index } => {
+            let (e, i) = (*expr, *index);
+            ExprKind::Index {
+                expr: splice_expr(caller, callee, e, ctx),
+                index: splice_expr(caller, callee, i, ctx),
+            }
+        }
+        ExprKind::Block(b) => ExprKind::Block(splice_block(caller, callee, *b, ctx)),
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let (c, t, e) = (*condition, *then_branch, *else_branch);
+            ExprKind::If {
+                condition: splice_expr(caller, callee, c, ctx),
+                then_branch: splice_block(caller, callee, t, ctx),
+                else_branch: e.map(|b| splice_block(caller, callee, b, ctx)),
+            }
+        }
+        ExprKind::Match { expr, arms } => {
+            let e = *expr;
+            let arms = arms.clone();
+            ExprKind::Match {
+                expr: splice_expr(caller, callee, e, ctx),
+                arms: arms
+                    .into_iter()
+                    .map(|a| ArmData {
+                        pattern: splice_pat(caller, callee, a.pattern, ctx),
+                        guard: a.guard.map(|g| splice_expr(caller, callee, g, ctx)),
+                        body: splice_expr(caller, callee, a.body, ctx),
+                        span: a.span,
+                    })
+                    .collect(),
+            }
+        }
+        ExprKind::StructLiteral {
+            struct_type,
+            struct_name,
+            fields,
+        } => {
+            let (st, sn) = (*struct_type, struct_name.clone());
+            let field_data: Vec<(String, ExprId, u32)> = fields
+                .iter()
+                .map(|f| (f.name.clone(), f.value, f.field_index))
+                .collect();
+            ExprKind::StructLiteral {
+                struct_type: st,
+                struct_name: sn,
+                fields: field_data
+                    .into_iter()
+                    .map(|(name, value, field_index)| ArenaStructField {
+                        name,
+                        value: splice_expr(caller, callee, value, ctx),
+                        field_index,
+                    })
+                    .collect(),
+            }
+        }
+        ExprKind::TupleLiteral { elements } => {
+            let elements = elements.clone();
+            ExprKind::TupleLiteral {
+                elements: elements
+                    .into_iter()
+                    .map(|e| splice_expr(caller, callee, e, ctx))
+                    .collect(),
+            }
+        }
+        ExprKind::ArrayLiteral { elements } => {
+            let elements = elements.clone();
+            ExprKind::ArrayLiteral {
+                elements: elements
+                    .into_iter()
+                    .map(|e| splice_expr(caller, callee, e, ctx))
+                    .collect(),
+            }
+        }
+        ExprKind::IndirectCall { callee: c, args } => {
+            let (c, args) = (*c, args.clone());
+            ExprKind::IndirectCall {
+                callee: splice_expr(caller, callee, c, ctx),
+                args: args
+                    .into_iter()
+                    .map(|a| splice_expr(caller, callee, a, ctx))
+                    .collect(),
+            }
+        }
+        ExprKind::ClosureToCanonical {
+            functor,
+            functor_id,
+            target_fn_type,
+            closure_module,
+        } => {
+            let (f, fid, tft, cm) = (
+                *functor,
+                *functor_id,
+                *target_fn_type,
+                closure_module.clone(),
+            );
+            ExprKind::ClosureToCanonical {
+                functor: splice_expr(caller, callee, f, ctx),
+                functor_id: fid,
+                target_fn_type: tft,
+                closure_module: cm,
+            }
+        }
+        ExprKind::VariantConstruct {
+            variant_type,
+            case_index,
+            case_name,
+            payload,
+        } => {
+            let (vt, ci, cn, p) = (*variant_type, *case_index, case_name.clone(), *payload);
+            ExprKind::VariantConstruct {
+                variant_type: vt,
+                case_index: ci,
+                case_name: cn,
+                payload: p.map(|x| splice_expr(caller, callee, x, ctx)),
+            }
+        }
+        ExprKind::EnumConstruct {
+            enum_type,
+            case_index,
+            case_name,
+        } => ExprKind::EnumConstruct {
+            enum_type: *enum_type,
+            case_index: *case_index,
+            case_name: case_name.clone(),
+        },
+        ExprKind::LabeledBlock {
+            label,
+            block,
+            result_type,
+        } => {
+            let (l, b, rt) = (label.clone(), *block, *result_type);
+            ExprKind::LabeledBlock {
+                label: ctx.lbl(&l),
+                block: splice_block(caller, callee, b, ctx),
+                result_type: rt,
+            }
+        }
+        ExprKind::VariantTag { expr } => ExprKind::VariantTag {
+            expr: splice_expr(caller, callee, *expr, ctx),
+        },
+        ExprKind::VariantTest {
+            expr,
+            case_index,
+            case_name,
+        } => {
+            let (e, ci, cn) = (*expr, *case_index, case_name.clone());
+            ExprKind::VariantTest {
+                expr: splice_expr(caller, callee, e, ctx),
+                case_index: ci,
+                case_name: cn,
+            }
+        }
+        ExprKind::VariantPayload {
+            expr,
+            case_index,
+            payload_type,
+        } => {
+            let (e, ci, pt) = (*expr, *case_index, *payload_type);
+            ExprKind::VariantPayload {
+                expr: splice_expr(caller, callee, e, ctx),
+                case_index: ci,
+                payload_type: pt,
+            }
+        }
+        ExprKind::Switch {
+            scrutinee,
+            min_value,
+            arms,
+            default,
+        } => {
+            let (s, mv, arms, d) = (*scrutinee, *min_value, arms.clone(), *default);
+            ExprKind::Switch {
+                scrutinee: splice_expr(caller, callee, s, ctx),
+                min_value: mv,
+                arms: arms
+                    .into_iter()
+                    .map(|b| splice_block(caller, callee, b, ctx))
+                    .collect(),
+                default: splice_block(caller, callee, d, ctx),
+            }
+        }
+        ExprKind::IntLiteral { value, repr } => ExprKind::IntLiteral {
+            value: *value,
+            repr: repr.clone(),
+        },
+        ExprKind::FloatLiteral { value, repr } => ExprKind::FloatLiteral {
+            value: *value,
+            repr: repr.clone(),
+        },
+        ExprKind::BoolLiteral(b) => ExprKind::BoolLiteral(*b),
+        ExprKind::CharLiteral(c) => ExprKind::CharLiteral(*c),
+        ExprKind::StringLiteral(s) => ExprKind::StringLiteral(s.clone()),
+        ExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
+        ExprKind::Null => ExprKind::Null,
+        ExprKind::Unit => ExprKind::Unit,
+        ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } => ExprKind::GlobalVarGet {
+            module_source: module_source.clone(),
+            name: name.clone(),
+        },
+    };
+    caller.exprs.push(ExprNode {
+        kind,
+        type_id,
+        span,
+    })
 }
 
 /// Recursively inline calls within an expression
@@ -2049,9 +1945,9 @@ fn inline_calls_in_expr(
                     inline_counter,
                 );
             }
-            let tree = body.to_tree_expr(e);
-            if let Some((inlined_tree, inlined_key)) = try_inline_call_expr(
-                &tree,
+            if let Some((new_id, inlined_key)) = try_inline_call_expr(
+                body,
+                e,
                 candidates,
                 current_module,
                 local_count,
@@ -2062,9 +1958,21 @@ fn inline_calls_in_expr(
                 if !inlined_funcs.contains(&inlined_key) {
                     inlined_funcs.push(inlined_key);
                 }
-                let new_id = body.lower_expr(&inlined_tree);
-                let node = body.exprs[new_id].clone();
-                body.exprs[e] = node;
+                // Move the inlined labeled-block node into the call slot and
+                // null out the now-dead `new_id`, so the inner block is owned
+                // by exactly one node (`e`). Cloning would leave `new_id` as an
+                // orphan sharing the same `BlockId`, violating the arena's
+                // one-parent-per-node invariant.
+                let span = body.exprs[new_id].span;
+                let moved = std::mem::replace(
+                    &mut body.exprs[new_id],
+                    ExprNode {
+                        kind: ExprKind::Unit,
+                        type_id: TypeTable::UNIT,
+                        span,
+                    },
+                );
+                body.exprs[e] = moved;
             }
         }
         Call::Method => {
@@ -2098,9 +2006,9 @@ fn inline_calls_in_expr(
                     inline_counter,
                 );
             }
-            let tree = body.to_tree_expr(e);
-            if let Some((inlined_tree, inlined_key)) = try_inline_method_call_expr(
-                &tree,
+            if let Some((new_id, inlined_key)) = try_inline_method_call_expr(
+                body,
+                e,
                 candidates,
                 current_module,
                 local_count,
@@ -2111,9 +2019,21 @@ fn inline_calls_in_expr(
                 if !inlined_funcs.contains(&inlined_key) {
                     inlined_funcs.push(inlined_key);
                 }
-                let new_id = body.lower_expr(&inlined_tree);
-                let node = body.exprs[new_id].clone();
-                body.exprs[e] = node;
+                // Move the inlined labeled-block node into the call slot and
+                // null out the now-dead `new_id`, so the inner block is owned
+                // by exactly one node (`e`). Cloning would leave `new_id` as an
+                // orphan sharing the same `BlockId`, violating the arena's
+                // one-parent-per-node invariant.
+                let span = body.exprs[new_id].span;
+                let moved = std::mem::replace(
+                    &mut body.exprs[new_id],
+                    ExprNode {
+                        kind: ExprKind::Unit,
+                        type_id: TypeTable::UNIT,
+                        span,
+                    },
+                );
+                body.exprs[e] = moved;
             }
         }
         Call::Other => {

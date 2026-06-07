@@ -347,10 +347,12 @@ pub struct Body {
 }
 
 impl Body {
-    /// Build a `Body` from a standalone block (e.g. a global initializer or a
-    /// test fixture); function-level fact sets are left empty.
-    pub fn from_block(block: &NirBlock) -> Self {
-        let mut body = Self {
+    /// An empty body: no nodes and a placeholder `root` (set by the caller once
+    /// the root block is built). Used by `lower::translate` as the canonical
+    /// builder it pushes nodes into, and as the scratch arena behind
+    /// tree-typed NIR positions.
+    pub fn empty() -> Self {
+        Self {
             exprs: PrimaryMap::new(),
             stmts: PrimaryMap::new(),
             blocks: PrimaryMap::new(),
@@ -359,7 +361,13 @@ impl Body {
             locals: Vec::new(),
             address_taken_locals: IndexSet::default(),
             stores_aliased_locals: IndexSet::default(),
-        };
+        }
+    }
+
+    /// Build a `Body` from a standalone block (e.g. a global initializer or a
+    /// test fixture); function-level fact sets are left empty.
+    pub fn from_block(block: &NirBlock) -> Self {
+        let mut body = Self::empty();
         body.root = body.lower().block(block);
         body
     }
@@ -398,6 +406,94 @@ impl Body {
     /// Reconstruct the owned-tree block from the arena.
     pub fn to_block(&self) -> NirBlock {
         self.block_to_tree(self.root)
+    }
+
+    /// Build a global-initializer-shaped body: one fresh expression node of
+    /// `kind`, wrapped in a root block holding a single `Expr` statement.
+    pub fn wrapping_expr(kind: ExprKind, type_id: TypeId, span: Span) -> Self {
+        let mut body = Self::empty();
+        let e = body.exprs.push(ExprNode {
+            kind,
+            type_id,
+            span,
+        });
+        let s = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(e),
+            span,
+        });
+        body.root = body.blocks.push(BlockNode {
+            stmts: vec![s],
+            span,
+        });
+        body
+    }
+
+    /// The expression id of a body that wraps a single expression — the form
+    /// global initializers take, whose root block holds exactly one `Expr`
+    /// statement. Panics if the body is not in that shape.
+    pub fn sole_expr(&self) -> ExprId {
+        let block = &self.blocks[self.root];
+        assert_eq!(
+            block.stmts.len(),
+            1,
+            "expr-wrapper body must hold exactly one statement"
+        );
+        match self.stmts[block.stmts[0]].kind {
+            StmtKind::Expr(e) => e,
+            _ => panic!("expr-wrapper body statement must be an Expr"),
+        }
+    }
+}
+
+/// A NIR expression stored as an arena [`Body`] whose root block holds exactly
+/// one `Expr` statement. This is how single-expression NIR positions (global
+/// initializers) are represented so the optimizer engine and the arena passes
+/// can operate on them uniformly, while the wrapped expression stays directly
+/// reachable via [`ExprBody::expr`].
+///
+/// The newtype localizes the "root block = one `Expr` statement" invariant:
+/// it is established at construction (`from_body` / `wrapping`) and read
+/// through `expr()`, instead of every consumer rediscovering it via a bare
+/// `Body::sole_expr` on a plain `Body`. Passes that need to run the rewrite
+/// engine or mutate the body in place go through `body_mut()`, which keeps the
+/// single-`Expr`-statement shape (engine rules at a global are expr-local).
+#[derive(Debug, Clone)]
+pub struct ExprBody {
+    body: Body,
+}
+
+impl ExprBody {
+    /// Wrap a `Body` that is already in single-`Expr`-statement form.
+    pub fn from_body(body: Body) -> Self {
+        debug_assert_eq!(
+            body.blocks[body.root].stmts.len(),
+            1,
+            "ExprBody requires a single-statement root block"
+        );
+        Self { body }
+    }
+
+    /// Build an `ExprBody` from a single fresh expression node of `kind`.
+    pub fn wrapping(kind: ExprKind, type_id: TypeId, span: Span) -> Self {
+        Self {
+            body: Body::wrapping_expr(kind, type_id, span),
+        }
+    }
+
+    /// The wrapped expression's id.
+    pub fn expr(&self) -> ExprId {
+        self.body.sole_expr()
+    }
+
+    /// The underlying `Body` (for read-only arena traversal / lattice eval).
+    pub fn body(&self) -> &Body {
+        &self.body
+    }
+
+    /// The underlying `Body` for in-place rewrites (engine runs, call-site
+    /// rewriting). Callers must preserve the single-`Expr`-statement root.
+    pub fn body_mut(&mut self) -> &mut Body {
+        &mut self.body
     }
 }
 
@@ -1142,14 +1238,15 @@ impl Body {
         }
     }
 
-    /// Materialize a single expression subtree to its tree form. Used by passes
-    /// whose leaf analyses (e.g. `mod_ref::ModRef`) are still tree-shaped and
-    /// are invoked on a materialized subtree pending a full arena port.
+    /// Materialize a single expression subtree to its tree form (the per-node
+    /// counterpart of [`Body::to_block`]). Part of the `to_tree` bridge that
+    /// remains for the not-yet-ported tree-shaped passes; currently unused.
     pub fn to_tree_expr(&self, id: ExprId) -> NirExpr {
         self.expr_to_tree(id)
     }
 
-    /// Materialize a single statement subtree to its tree form.
+    /// Materialize a single statement subtree to its tree form; currently
+    /// unused (see [`Body::to_tree_expr`]).
     pub fn to_tree_stmt(&self, id: StmtId) -> NirStmt {
         self.stmt_to_tree(id)
     }

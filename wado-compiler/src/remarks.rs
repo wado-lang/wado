@@ -25,9 +25,9 @@
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::nir::{NirExpr, NirExprKind, NirStmt, NirUnaryOp};
+use crate::nir::NirUnaryOp;
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
@@ -56,17 +56,17 @@ pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
         if func.module_source != package.entry_module_source || func.is_value_copy() {
             continue;
         }
-        let Some(body) = &func.body_block() else {
+        let Some(body) = &func.body else {
             continue;
         };
         let mut collector = Collector {
             value_copy_set: &value_copy_set,
             type_table,
             remarks: &mut remarks,
-            current_span: body.span,
+            current_span: body.blocks[body.root].span,
             in_value_block: false,
         };
-        collector.visit_block(body);
+        collector.scan_node(body, NodeRef::Block(body.root));
     }
     remarks
 }
@@ -85,10 +85,11 @@ struct Collector<'a> {
 }
 
 impl Collector<'_> {
-    /// If `expr` is a surviving value-copy operation, return the type whose
-    /// value is copied.
-    fn copied_type(&self, expr: &NirExpr) -> Option<TypeId> {
-        let NirExprKind::Call { func, args, .. } = &expr.kind else {
+    /// If the expression `id` is a surviving value-copy operation, return the
+    /// type whose value is copied.
+    fn copied_type(&self, body: &Body, id: ExprId) -> Option<TypeId> {
+        let node = &body.exprs[id];
+        let ExprKind::Call { func, args, .. } = &node.kind else {
             return None;
         };
         // Deep `$value_copy$T` helper call.
@@ -105,45 +106,60 @@ impl Collector<'_> {
             // `array_clone(&agg.repr)` copies a `List<T>` / `String` backing
             // array; recover the owning aggregate type from the argument.
             Some("builtin::array_clone" | "builtin::array_clone_shallow") => {
-                args.first().map(|a| clone_source_type(&a.expr))
+                args.first().map(|a| clone_source_type(body, a.expr))
             }
             // `copy_value(v)` deep-copies a value directly, so the call's result
             // type is the copied type.
-            Some("builtin::copy_value") => Some(expr.type_id),
+            Some("builtin::copy_value") => Some(node.type_id),
             _ => None,
         }
     }
-}
 
-impl NirRefVisitor for Collector<'_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        if self.in_value_block {
-            // Inside a block-as-value: keep the enclosing real statement's span
-            // rather than the synthesized inner statement's placeholder span.
-            self.walk_stmt(stmt);
-            return;
+    /// Walk the arena body parent-before-children, mirroring the previous tree
+    /// visitor: a real statement sets the current span, a block-as-value freezes
+    /// it (its synthesized inner statements carry placeholder spans), and a
+    /// surviving copy expression is reported against the current span.
+    fn scan_node(&mut self, body: &Body, node: NodeRef) {
+        match node {
+            NodeRef::Stmt(s) => {
+                if self.in_value_block {
+                    // Inside a block-as-value: keep the enclosing real
+                    // statement's span rather than the synthesized inner
+                    // statement's placeholder span.
+                    self.scan_children(body, node);
+                } else {
+                    let prev = self.current_span;
+                    self.current_span = body.stmts[s].span;
+                    self.scan_children(body, node);
+                    self.current_span = prev;
+                }
+            }
+            NodeRef::Expr(e) => {
+                if let Some(type_id) = self.copied_type(body, e) {
+                    let type_name = self.type_table.type_name(type_id);
+                    self.remarks.push(Remark {
+                        message: format!("a copy of `{type_name}` survives optimization"),
+                        span: self.current_span,
+                    });
+                }
+                if is_value_block(body, e) {
+                    let prev = self.in_value_block;
+                    self.in_value_block = true;
+                    self.scan_children(body, node);
+                    self.in_value_block = prev;
+                } else {
+                    self.scan_children(body, node);
+                }
+            }
+            NodeRef::Block(_) | NodeRef::Pat(_) => self.scan_children(body, node),
         }
-        let prev = self.current_span;
-        self.current_span = stmt.span;
-        self.walk_stmt(stmt);
-        self.current_span = prev;
     }
 
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        if let Some(type_id) = self.copied_type(expr) {
-            let type_name = self.type_table.type_name(type_id);
-            self.remarks.push(Remark {
-                message: format!("a copy of `{type_name}` survives optimization"),
-                span: self.current_span,
-            });
-        }
-        if is_value_block(expr) {
-            let prev = self.in_value_block;
-            self.in_value_block = true;
-            self.walk_expr(expr);
-            self.in_value_block = prev;
-        } else {
-            self.walk_expr(expr);
+    fn scan_children(&mut self, body: &Body, node: NodeRef) {
+        let mut kids = Vec::new();
+        body.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            self.scan_node(body, c);
         }
     }
 }
@@ -152,30 +168,30 @@ impl NirRefVisitor for Collector<'_> {
 /// from lowering / SROA reconstruction and carry placeholder spans, so the
 /// remark anchors to the enclosing real statement instead of descending into
 /// them.
-fn is_value_block(expr: &NirExpr) -> bool {
+fn is_value_block(body: &Body, id: ExprId) -> bool {
     matches!(
-        expr.kind,
-        NirExprKind::Block(_)
-            | NirExprKind::If { .. }
-            | NirExprKind::Match { .. }
-            | NirExprKind::Switch { .. }
-            | NirExprKind::LabeledBlock { .. }
+        body.exprs[id].kind,
+        ExprKind::Block(_)
+            | ExprKind::If { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Switch { .. }
+            | ExprKind::LabeledBlock { .. }
     )
 }
 
 /// For an `array_clone(&agg.repr)` call, recover the aggregate type (`List<T>`
 /// or `String`) that owns the cloned `repr`, peeling the `&`/`&mut` reference
 /// and the `.repr` field access. Falls back to the argument's own type.
-fn clone_source_type(arg: &NirExpr) -> TypeId {
-    let inner = match &arg.kind {
-        NirExprKind::Unary {
+fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
+    let inner = match &body.exprs[arg].kind {
+        ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr,
-        } => expr,
+        } => *expr,
         _ => arg,
     };
-    match &inner.kind {
-        NirExprKind::FieldAccess { expr, .. } => expr.type_id,
-        _ => inner.type_id,
+    match &body.exprs[inner].kind {
+        ExprKind::FieldAccess { expr, .. } => body.exprs[*expr].type_id,
+        _ => body.exprs[inner].type_id,
     }
 }

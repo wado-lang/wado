@@ -1566,17 +1566,8 @@ fn populate_type_reachability(
             }
             collect_type_transitive(global.ty, &type_table, &mut analysis.types);
             let mut walker = DceWalker::new(&type_table, &global.module_source);
-            // Globals stay tree-shaped NIR; wrap the initializer in a one-stmt
-            // `Body` so the arena walker can traverse it.
-            let init_span = global.initializer.span;
-            let init_body = Body::from_block(&crate::nir::NirBlock {
-                stmts: vec![crate::nir::NirStmt::new(
-                    crate::nir::NirStmtKind::Expr(global.initializer.clone()),
-                    init_span,
-                )],
-                span: init_span,
-            });
-            walker.walk_node(&init_body, NodeRef::Block(init_body.root));
+            let init_body = global.initializer.body();
+            walker.walk_node(init_body, NodeRef::Block(init_body.root));
             for id in walker.analysis.used_types {
                 analysis.types.insert(id);
             }

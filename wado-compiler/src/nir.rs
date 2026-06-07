@@ -672,7 +672,11 @@ pub struct MonomorphInfo {
 pub struct NirGlobal {
     pub name: String,
     pub ty: TypeId,
-    pub initializer: NirExpr,
+    /// Initializer expression, wrapped in an [`crate::nir_arena::ExprBody`]
+    /// (a single-`Expr`-statement arena `Body`; read it via `.expr()`).
+    /// Arena-shaped like function bodies so the optimizer passes share one
+    /// representation.
+    pub initializer: crate::nir_arena::ExprBody,
     pub mutable: bool,
     /// Whether the user declared this global as `global mut`.
     /// Preserved across lowering so the optimizer can promote lazy-init globals
@@ -900,16 +904,9 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
-    /// Read-only tree view of the function body (`Body` → `NirBlock`). The
-    /// optimizer operates on the arena `Body` directly; the remaining callers
-    /// are the diagnostics that still walk a tree (`nir_unparse`, `remarks`).
-    pub fn body_block(&self) -> Option<NirBlock> {
-        self.body.as_ref().map(crate::nir_arena::Body::to_block)
-    }
-
-    /// Build the function body from a tree (`NirBlock` → `Body`). Counterpart
-    /// of [`Self::body_block`]; used by tests and tree-shaped body builders to
-    /// install an arena body from a constructed `NirBlock`.
+    /// Build the function body from a tree (`NirBlock` → `Body`). Used only by
+    /// tests to install an arena body from a constructed `NirBlock`; production
+    /// code builds the `Body` directly in `lower`.
     pub fn set_body_block(&mut self, block: NirBlock) {
         self.body = Some(crate::nir_arena::Body::from_block(&block));
     }
@@ -1021,9 +1018,6 @@ pub struct NirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// Resolved default expression for trailing parameters with `= expr`.
-    /// Used by the elaborator to synthesize arguments at call sites.
-    pub default_expr: Option<Box<NirExpr>>,
     pub span: Span,
 }
 
@@ -1055,9 +1049,6 @@ pub struct NirField {
     pub serde_rename: Option<String>,
     /// `#[serde(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
-    /// Resolved default expression for `struct S { x: T = expr }`.
-    /// Inserted by the elaborator when the field is omitted in a struct literal.
-    pub default_expr: Option<Box<NirExpr>>,
 }
 
 #[derive(Debug, Clone)]

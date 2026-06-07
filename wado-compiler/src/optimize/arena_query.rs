@@ -1,21 +1,16 @@
 //! Arena-side structural queries shared by the rewrite-engine rules.
 //!
-//! These mirror the tree-shaped structural helpers (`is_local`,
-//! `expr_mentions_local`, `stmt_mentions_local`, `is_pure_expr`, …) but read
-//! the [`Body`] arena directly, so the ported passes need no `Body ↔ tree`
-//! bridge. The tree versions that are still consumed elsewhere (`is_local`,
-//! `expr_mentions_local`, `stmt_mentions_local` in `nir_visitor`) stay for
-//! those callers; the purely-arena ones (`is_pure_expr`, `collect_reads`) have
-//! no tree counterpart left.
+//! `is_local`, `expr_mentions_local`, `stmt_mentions_local`, `is_pure_expr`,
+//! `collect_reads`, … read the [`Body`] arena directly, so the ported passes
+//! need no `Body ↔ tree` bridge.
 
 use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 
-/// Whether the subtree at `node` contains a `Break` targeting `label`. Arena
-/// counterpart of `nir_visitor::{block,stmt,expr}_has_break_to` (a full subtree
-/// search, so nested blocks that rebind the same label are still searched — the
-/// conservative behaviour the tree helpers have).
+/// Whether the subtree at `node` contains a `Break` targeting `label`. A full
+/// subtree search, so nested blocks that rebind the same label are still
+/// searched — the conservative behaviour the sync-placement passes rely on.
 pub(super) fn has_break_to(body: &Body, node: NodeRef, label: &str) -> bool {
     if let NodeRef::Stmt(s) = node
         && let StmtKind::Break { label: Some(l), .. } = &body.stmts[s].kind

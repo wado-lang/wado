@@ -251,46 +251,16 @@ impl Value {
         }
     }
 
-    /// Project a [`NirExpr`] to a `Value` when it's a primitive
-    /// literal whose type id resolves to a tracked primitive. Returns
-    /// `None` for non-literal shapes (`Local`, `Call`, `Binary`, …),
-    /// for `String` / `Bytes` / `Null` / `Unit` (no `Value` carrier),
-    /// for the bignum primitives `i128` / `u128` (intentionally
-    /// out-of-scope for niri folding), and for any literal whose
-    /// `type_id` doesn't resolve to a primitive (defensive — the
-    /// elaborator shouldn't produce these).
+    /// Project an arena expression to a `Value` when it's a primitive literal
+    /// whose `type_id` resolves to a tracked primitive. Returns `None` for
+    /// non-literal shapes (`Local`, `Call`, `Binary`, …), for `String` /
+    /// `Bytes` / `Null` / `Unit` (no `Value` carrier), for the bignum
+    /// primitives `i128` / `u128` (out of scope for niri folding), and for any
+    /// literal whose `type_id` doesn't resolve to a primitive.
     ///
     /// Used by the const-fold visitor to turn struct-field literals
-    /// (`StructLiteral { f: 5, … }`) and direct field stores
-    /// (`obj.f = 5`) into [`Interpreter::bind_field`] /
-    /// [`Interpreter::field_env`] entries.
-    #[must_use]
-    pub fn from_literal_expr(expr: &NirExpr, type_table: &TypeTable) -> Option<Self> {
-        match &expr.kind {
-            NirExprKind::IntLiteral { value, .. } => {
-                let prim = prim_of(expr.type_id, type_table).filter(|p| is_int_prim(*p))?;
-                Some(Self::Int {
-                    value: *value,
-                    prim,
-                })
-            }
-            NirExprKind::FloatLiteral { value, .. } => {
-                let prim = prim_of(expr.type_id, type_table)
-                    .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
-                Some(Self::Float {
-                    value: *value,
-                    prim,
-                })
-            }
-            NirExprKind::BoolLiteral(b) => Some(Self::Bool(*b)),
-            NirExprKind::CharLiteral(c) => Some(Self::Char(*c)),
-            _ => None,
-        }
-    }
-
-    /// Arena counterpart of [`Value::from_literal_expr`]: project an arena
-    /// expression to a `Value` when it's a primitive literal whose type id
-    /// resolves to a tracked primitive.
+    /// (`StructLiteral { f: 5, … }`) and direct field stores (`obj.f = 5`) into
+    /// `Interpreter::bind_field` / `field_env` entries.
     #[must_use]
     pub fn from_arena_literal(body: &Body, e: ExprId, type_table: &TypeTable) -> Option<Self> {
         let node = &body.exprs[e];
