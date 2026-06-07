@@ -733,28 +733,24 @@ pub(super) fn can_move_past(expr_mr: &ModRef, int_mr: &ModRef, candidate: u32) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nir::{
-        CallArg, FunctionRef, NirBlock, NirExpr, NirExprKind, NirMatchArm, NirPattern, NirStmt,
-        NirStmtKind, NirStructField,
+    use crate::nir::{FunctionRef, NirBinaryOp, NirUnaryOp};
+    use crate::nir_arena::{
+        ArenaCallArg, ArenaStructField, ArmData, BlockNode, Body, ExprNode, PatNode, StmtNode,
     };
-    use crate::nir_arena::Body;
     use crate::tir::TypeId;
     use crate::token::Span;
 
-    /// Lower a tree expression into a fresh arena and summarise it. The tree
-    /// builders below stay readable while the production analysis runs on the
-    /// arena; these bridges retire with the tree enums (Phase 5, group 6).
-    fn mr_expr(e: NirExpr) -> ModRef {
+    /// Build an expression into a fresh arena and summarise it.
+    fn mr_expr(build: impl FnOnce(&mut Body) -> ExprId) -> ModRef {
         let mut body = Body::empty();
-        let id = body.lower_expr(&e);
+        let id = build(&mut body);
         ModRef::of_expr(&body, id)
     }
 
-    /// Lower a tree statement into a fresh arena and summarise it.
-    fn mr_stmt(s: NirStmt) -> ModRef {
+    /// Build a statement into a fresh arena and summarise it.
+    fn mr_stmt(build: impl FnOnce(&mut Body) -> StmtId) -> ModRef {
         let mut body = Body::empty();
-        let bid = body.lower_block(&block(vec![s]));
-        let sid = body.blocks[bid].stmts[0];
+        let sid = build(&mut body);
         ModRef::of_stmt(&body, sid)
     }
 
@@ -764,29 +760,53 @@ mod tests {
     fn sp() -> Span {
         Span::default()
     }
-    fn local(index: u32) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Local {
+    fn pe(body: &mut Body, kind: ExprKind) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind,
+            type_id: ty(),
+            span: sp(),
+        })
+    }
+    fn ps(body: &mut Body, kind: StmtKind) -> StmtId {
+        body.stmts.push(StmtNode { kind, span: sp() })
+    }
+    fn pblock(body: &mut Body, stmts: Vec<StmtId>) -> BlockId {
+        body.blocks.push(BlockNode { stmts, span: sp() })
+    }
+    fn local(body: &mut Body, index: u32) -> ExprId {
+        pe(
+            body,
+            ExprKind::Local {
                 index,
                 name: format!("__l{index}"),
             },
-            ty(),
-            sp(),
         )
     }
-    fn int(v: i64) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::IntLiteral {
+    fn int(body: &mut Body, v: i64) -> ExprId {
+        pe(
+            body,
+            ExprKind::IntLiteral {
                 value: v as u64,
                 repr: v.to_string(),
             },
-            ty(),
-            sp(),
         )
     }
-    fn let_stmt(index: u32, value: NirExpr) -> NirStmt {
-        NirStmt::new(
-            NirStmtKind::Let {
+    fn bin(body: &mut Body, left: ExprId, op: NirBinaryOp, right: ExprId) -> ExprId {
+        pe(body, ExprKind::Binary { left, op, right })
+    }
+    fn deref(body: &mut Body, expr: ExprId) -> ExprId {
+        pe(
+            body,
+            ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                expr,
+            },
+        )
+    }
+    fn let_stmt(body: &mut Body, index: u32, value: ExprId) -> StmtId {
+        ps(
+            body,
+            StmtKind::Let {
                 name: format!("__l{index}"),
                 local_index: index,
                 is_mut: false,
@@ -795,71 +815,72 @@ mod tests {
                 value,
                 skip_value_copy: false,
             },
-            sp(),
         )
     }
-    fn assign(target: NirExpr, value: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Assign {
-                target: Box::new(target),
-                value: Box::new(value),
+    fn assign(body: &mut Body, target: ExprId, value: ExprId) -> ExprId {
+        pe(body, ExprKind::Assign { target, value })
+    }
+    fn expr_stmt(body: &mut Body, e: ExprId) -> StmtId {
+        ps(body, StmtKind::Expr(e))
+    }
+    fn ret_none(body: &mut Body) -> StmtId {
+        ps(body, StmtKind::Return { value: None })
+    }
+    fn break_stmt(body: &mut Body, label: Option<&str>) -> StmtId {
+        ps(
+            body,
+            StmtKind::Break {
+                label: label.map(str::to_string),
+                value: None,
             },
-            ty(),
-            sp(),
         )
     }
-    fn expr_stmt(e: NirExpr) -> NirStmt {
-        NirStmt::new(NirStmtKind::Expr(e), sp())
-    }
-    fn global_get(name: &str) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::GlobalVarGet {
+    fn global_get(body: &mut Body, name: &str) -> ExprId {
+        pe(
+            body,
+            ExprKind::GlobalVarGet {
                 module_source: ModuleSource::prelude(),
                 name: name.to_string(),
             },
-            ty(),
-            sp(),
         )
     }
-    fn global_set(name: &str, value: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::GlobalVarSet {
+    fn global_set(body: &mut Body, name: &str, value: ExprId) -> ExprId {
+        pe(
+            body,
+            ExprKind::GlobalVarSet {
                 module_source: ModuleSource::prelude(),
                 name: name.to_string(),
-                value: Box::new(value),
+                value,
             },
-            ty(),
-            sp(),
         )
     }
-    fn field_access(expr: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::FieldAccess {
-                expr: Box::new(expr),
+    fn field_access(body: &mut Body, expr: ExprId) -> ExprId {
+        pe(
+            body,
+            ExprKind::FieldAccess {
+                expr,
                 field_index: 0,
                 field_name: "value".to_string(),
             },
-            ty(),
-            sp(),
         )
     }
-    fn struct_literal(fields: Vec<NirExpr>) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::StructLiteral {
+    fn struct_literal(body: &mut Body, fields: Vec<ExprId>) -> ExprId {
+        let fields = fields
+            .into_iter()
+            .enumerate()
+            .map(|(i, value)| ArenaStructField {
+                name: format!("f{i}"),
+                value,
+                field_index: i as u32,
+            })
+            .collect();
+        pe(
+            body,
+            ExprKind::StructLiteral {
                 struct_type: ty(),
                 struct_name: "T".to_string(),
-                fields: fields
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, value)| NirStructField {
-                        name: format!("f{i}"),
-                        value,
-                        field_index: i as u32,
-                    })
-                    .collect(),
+                fields,
             },
-            ty(),
-            sp(),
         )
     }
     fn func_ref(name: &str) -> FunctionRef {
@@ -870,19 +891,22 @@ mod tests {
             method_info: None,
         }
     }
-    fn call(args: Vec<NirExpr>) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Call {
+    fn call(body: &mut Body, args: Vec<ExprId>) -> ExprId {
+        let args = args
+            .into_iter()
+            .map(|expr| ArenaCallArg {
+                expr,
+                is_mut: false,
+            })
+            .collect();
+        pe(
+            body,
+            ExprKind::Call {
                 func: func_ref("f"),
                 type_args: vec![],
-                args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+                args,
             },
-            ty(),
-            sp(),
         )
-    }
-    fn block(stmts: Vec<NirStmt>) -> NirBlock {
-        NirBlock::new(stmts, sp())
     }
 
     // -----------------------------------------------------------------
@@ -891,28 +915,40 @@ mod tests {
 
     #[test]
     fn local_read_records_index() {
-        let mr = mr_expr(local(3));
+        let mr = mr_expr(|b| local(b, 3));
         assert!(mr.local_reads.contains(&3));
         assert!(mr.local_writes.is_empty());
     }
 
     #[test]
     fn let_writes_local_and_inherits_rhs_reads() {
-        let mr = mr_stmt(let_stmt(7, local(3)));
+        let mr = mr_stmt(|b| {
+            let v = local(b, 3);
+            let_stmt(b, 7, v)
+        });
         assert!(mr.local_writes.contains(&7));
         assert!(mr.local_reads.contains(&3));
     }
 
     #[test]
     fn assign_to_local_writes_local() {
-        let mr = mr_expr(assign(local(7), local(3)));
+        let mr = mr_expr(|b| {
+            let t = local(b, 7);
+            let v = local(b, 3);
+            assign(b, t, v)
+        });
         assert!(mr.local_writes.contains(&7));
         assert!(mr.local_reads.contains(&3));
     }
 
     #[test]
     fn assign_to_field_is_heap_write() {
-        let mr = mr_expr(assign(field_access(local(3)), int(0)));
+        let mr = mr_expr(|b| {
+            let l = local(b, 3);
+            let f = field_access(b, l);
+            let v = int(b, 0);
+            assign(b, f, v)
+        });
         assert!(mr.heap.writes);
         assert!(mr.local_writes.is_empty());
         assert!(mr.may_trap);
@@ -920,7 +956,7 @@ mod tests {
 
     #[test]
     fn global_get_records_module_qualified_name() {
-        let mr = mr_expr(global_get("G"));
+        let mr = mr_expr(|b| global_get(b, "G"));
         assert!(
             mr.global_reads
                 .contains(&(ModuleSource::prelude(), "G".to_string()))
@@ -929,7 +965,10 @@ mod tests {
 
     #[test]
     fn global_set_records_write_and_rhs() {
-        let mr = mr_expr(global_set("G", local(3)));
+        let mr = mr_expr(|b| {
+            let v = local(b, 3);
+            global_set(b, "G", v)
+        });
         assert!(
             mr.global_writes
                 .contains(&(ModuleSource::prelude(), "G".to_string()))
@@ -943,7 +982,10 @@ mod tests {
 
     #[test]
     fn field_access_is_heap_read_and_may_trap() {
-        let mr = mr_expr(field_access(local(0)));
+        let mr = mr_expr(|b| {
+            let l = local(b, 0);
+            field_access(b, l)
+        });
         assert!(mr.heap.reads);
         assert!(!mr.heap.writes);
         assert!(mr.may_trap);
@@ -952,21 +994,20 @@ mod tests {
 
     #[test]
     fn struct_literal_allocates_but_does_not_write_heap() {
-        let mr = mr_expr(struct_literal(vec![local(0)]));
+        let mr = mr_expr(|b| {
+            let l = local(b, 0);
+            struct_literal(b, vec![l])
+        });
         assert!(mr.allocates);
         assert!(!mr.heap.writes);
     }
 
     #[test]
     fn deref_is_heap_read_and_may_trap() {
-        let mr = mr_expr(NirExpr::new(
-            NirExprKind::Unary {
-                op: NirUnaryOp::Deref,
-                expr: Box::new(local(0)),
-            },
-            ty(),
-            sp(),
-        ));
+        let mr = mr_expr(|b| {
+            let l = local(b, 0);
+            deref(b, l)
+        });
         assert!(mr.heap.reads);
         assert!(mr.may_trap);
     }
@@ -977,7 +1018,10 @@ mod tests {
 
     #[test]
     fn call_sets_calls_and_inherits_arg_reads() {
-        let mr = mr_expr(call(vec![local(0)]));
+        let mr = mr_expr(|b| {
+            let l = local(b, 0);
+            call(b, vec![l])
+        });
         assert!(mr.calls);
         assert!(mr.local_reads.contains(&0));
     }
@@ -988,29 +1032,21 @@ mod tests {
 
     #[test]
     fn integer_divide_may_trap() {
-        let mr = mr_expr(NirExpr::new(
-            NirExprKind::Binary {
-                left: Box::new(int(1)),
-                op: NirBinaryOp::Div,
-                right: Box::new(int(0)),
-            },
-            ty(),
-            sp(),
-        ));
+        let mr = mr_expr(|b| {
+            let l = int(b, 1);
+            let r = int(b, 0);
+            bin(b, l, NirBinaryOp::Div, r)
+        });
         assert!(mr.may_trap);
     }
 
     #[test]
     fn integer_add_does_not_trap() {
-        let mr = mr_expr(NirExpr::new(
-            NirExprKind::Binary {
-                left: Box::new(int(1)),
-                op: NirBinaryOp::Add,
-                right: Box::new(int(2)),
-            },
-            ty(),
-            sp(),
-        ));
+        let mr = mr_expr(|b| {
+            let l = int(b, 1);
+            let r = int(b, 2);
+            bin(b, l, NirBinaryOp::Add, r)
+        });
         assert!(!mr.may_trap);
     }
 
@@ -1020,61 +1056,71 @@ mod tests {
 
     #[test]
     fn return_is_non_local() {
-        let mr = mr_stmt(NirStmt::new(NirStmtKind::Return { value: None }, sp()));
+        let mr = mr_stmt(ret_none);
         assert_eq!(mr.control, Control::NonLocal);
     }
 
     #[test]
     fn break_is_non_local() {
-        let mr = mr_stmt(NirStmt::new(
-            NirStmtKind::Break {
-                label: None,
-                value: None,
-            },
-            sp(),
-        ));
+        let mr = mr_stmt(|b| break_stmt(b, None));
         assert_eq!(mr.control, Control::NonLocal);
     }
 
     #[test]
     fn if_stmt_with_linear_arms_is_conditional() {
-        let mr = mr_stmt(NirStmt::new(
-            NirStmtKind::If {
-                condition: int(1),
-                then_block: block(vec![expr_stmt(int(0))]),
-                else_block: Some(block(vec![expr_stmt(int(1))])),
-            },
-            sp(),
-        ));
+        let mr = mr_stmt(|b| {
+            let cond = int(b, 1);
+            let t0 = int(b, 0);
+            let ts = expr_stmt(b, t0);
+            let then_block = pblock(b, vec![ts]);
+            let e1 = int(b, 1);
+            let es = expr_stmt(b, e1);
+            let else_block = pblock(b, vec![es]);
+            ps(
+                b,
+                StmtKind::If {
+                    condition: cond,
+                    then_block,
+                    else_block: Some(else_block),
+                },
+            )
+        });
         assert_eq!(mr.control, Control::Conditional);
     }
 
     #[test]
     fn loop_with_pure_body_is_conditional() {
-        let mr = mr_stmt(NirStmt::new(
-            NirStmtKind::Loop {
-                body: block(vec![expr_stmt(int(0))]),
-            },
-            sp(),
-        ));
+        let mr = mr_stmt(|b| {
+            let e0 = int(b, 0);
+            let s0 = expr_stmt(b, e0);
+            let body = pblock(b, vec![s0]);
+            ps(b, StmtKind::Loop { body })
+        });
         assert_eq!(mr.control, Control::Conditional);
     }
 
     #[test]
     fn match_is_conditional() {
-        let mr = mr_expr(NirExpr::new(
-            NirExprKind::Match {
-                expr: Box::new(local(0)),
-                arms: vec![NirMatchArm {
-                    pattern: NirPattern::Wildcard,
-                    guard: None,
-                    body: int(0),
-                    span: sp(),
-                }],
-            },
-            ty(),
-            sp(),
-        ));
+        let mr = mr_expr(|b| {
+            let scrut = local(b, 0);
+            let arm_body = int(b, 0);
+            let pattern = b.pats.push(PatNode {
+                kind: PatKind::Wildcard,
+                span: sp(),
+            });
+            pe(
+                b,
+                ExprKind::Match {
+                    expr: scrut,
+                    arms: vec![ArmData {
+                        pattern,
+                        guard: None,
+                        body: arm_body,
+                        span: sp(),
+                    }],
+                },
+            )
+        });
         assert_eq!(mr.control, Control::Conditional);
     }
 
@@ -1084,63 +1130,81 @@ mod tests {
 
     #[test]
     fn pure_expression_is_re_evaluation_safe() {
-        let mr = mr_expr(NirExpr::new(
-            NirExprKind::Binary {
-                left: Box::new(int(5)),
-                op: NirBinaryOp::Add,
-                right: Box::new(local(0)),
-            },
-            ty(),
-            sp(),
-        ));
+        let mr = mr_expr(|b| {
+            let l = int(b, 5);
+            let r = local(b, 0);
+            bin(b, l, NirBinaryOp::Add, r)
+        });
         assert!(mr.is_re_evaluation_safe());
     }
 
     #[test]
     fn heap_read_is_not_re_evaluation_safe() {
-        let mr = mr_expr(field_access(local(0)));
+        let mr = mr_expr(|b| {
+            let l = local(b, 0);
+            field_access(b, l)
+        });
         assert!(!mr.is_re_evaluation_safe());
     }
 
     #[test]
     fn may_clobber_local_write_vs_local_read() {
-        let writer = mr_expr(assign(local(1), int(0)));
-        let reader = mr_expr(local(1));
+        let writer = mr_expr(|b| {
+            let t = local(b, 1);
+            let v = int(b, 0);
+            assign(b, t, v)
+        });
+        let reader = mr_expr(|b| local(b, 1));
         assert!(writer.may_clobber(&reader));
     }
 
     #[test]
     fn may_clobber_unrelated_locals_is_false() {
-        let writer = mr_expr(assign(local(2), int(0)));
-        let reader = mr_expr(local(1));
+        let writer = mr_expr(|b| {
+            let t = local(b, 2);
+            let v = int(b, 0);
+            assign(b, t, v)
+        });
+        let reader = mr_expr(|b| local(b, 1));
         assert!(!writer.may_clobber(&reader));
     }
 
     #[test]
     fn may_clobber_heap_write_vs_heap_read() {
-        let writer = mr_expr(assign(field_access(local(1)), int(0)));
-        let reader = mr_expr(field_access(local(2)));
+        let writer = mr_expr(|b| {
+            let l = local(b, 1);
+            let f = field_access(b, l);
+            let v = int(b, 0);
+            assign(b, f, v)
+        });
+        let reader = mr_expr(|b| {
+            let l = local(b, 2);
+            field_access(b, l)
+        });
         assert!(writer.may_clobber(&reader));
     }
 
     #[test]
     fn may_clobber_call_clobbers_heap_read() {
-        let writer = mr_expr(call(vec![]));
-        let reader = mr_expr(field_access(local(0)));
+        let writer = mr_expr(|b| call(b, vec![]));
+        let reader = mr_expr(|b| {
+            let l = local(b, 0);
+            field_access(b, l)
+        });
         assert!(writer.may_clobber(&reader));
     }
 
     #[test]
     fn may_clobber_call_clobbers_global_read() {
-        let writer = mr_expr(call(vec![]));
-        let reader = mr_expr(global_get("G"));
+        let writer = mr_expr(|b| call(b, vec![]));
+        let reader = mr_expr(|b| global_get(b, "G"));
         assert!(writer.may_clobber(&reader));
     }
 
     #[test]
     fn may_clobber_call_does_not_clobber_local_only_read() {
-        let writer = mr_expr(call(vec![]));
-        let reader = mr_expr(local(0));
+        let writer = mr_expr(|b| call(b, vec![]));
+        let reader = mr_expr(|b| local(b, 0));
         assert!(!writer.may_clobber(&reader));
     }
 
@@ -1150,64 +1214,95 @@ mod tests {
 
     #[test]
     fn can_move_past_pure_local_copy() {
-        let expr = mr_expr(field_access(local(0)));
-        let intervening = mr_stmt(let_stmt(5, local(6)));
+        let expr = mr_expr(|b| {
+            let l = local(b, 0);
+            field_access(b, l)
+        });
+        let intervening = mr_stmt(|b| {
+            let v = local(b, 6);
+            let_stmt(b, 5, v)
+        });
         assert!(can_move_past(&expr, &intervening, 1));
     }
 
     #[test]
     fn cannot_move_past_when_intervening_writes_inner_read() {
-        let expr = mr_expr(field_access(local(0)));
-        let intervening = mr_expr(assign(local(0), int(0)));
+        let expr = mr_expr(|b| {
+            let l = local(b, 0);
+            field_access(b, l)
+        });
+        let intervening = mr_expr(|b| {
+            let t = local(b, 0);
+            let v = int(b, 0);
+            assign(b, t, v)
+        });
         assert!(!can_move_past(&expr, &intervening, 1));
     }
 
     #[test]
     fn cannot_move_past_heap_write_when_expr_reads_heap() {
-        let expr = mr_expr(field_access(local(0)));
-        let intervening = mr_expr(assign(field_access(local(2)), int(0)));
+        let expr = mr_expr(|b| {
+            let l = local(b, 0);
+            field_access(b, l)
+        });
+        let intervening = mr_expr(|b| {
+            let l = local(b, 2);
+            let f = field_access(b, l);
+            let v = int(b, 0);
+            assign(b, f, v)
+        });
         assert!(!can_move_past(&expr, &intervening, 1));
     }
 
     #[test]
     fn cannot_move_heap_read_past_call() {
-        let expr = mr_expr(field_access(local(0)));
-        let intervening = mr_expr(call(vec![]));
+        let expr = mr_expr(|b| {
+            let l = local(b, 0);
+            field_access(b, l)
+        });
+        let intervening = mr_expr(|b| call(b, vec![]));
         assert!(!can_move_past(&expr, &intervening, 1));
     }
 
     #[test]
     fn can_move_local_only_read_past_call() {
-        let expr = mr_expr(local(0));
-        let intervening = mr_expr(call(vec![]));
+        let expr = mr_expr(|b| local(b, 0));
+        let intervening = mr_expr(|b| call(b, vec![]));
         assert!(can_move_past(&expr, &intervening, 1));
     }
 
     #[test]
     fn cannot_move_past_return() {
-        let expr = mr_expr(local(0));
-        let intervening = mr_stmt(NirStmt::new(NirStmtKind::Return { value: None }, sp()));
+        let expr = mr_expr(|b| local(b, 0));
+        let intervening = mr_stmt(ret_none);
         assert!(!can_move_past(&expr, &intervening, 1));
     }
 
     #[test]
     fn cannot_move_past_if_even_with_linear_body() {
-        let expr = mr_expr(local(0));
-        let intervening = mr_stmt(NirStmt::new(
-            NirStmtKind::If {
-                condition: int(1),
-                then_block: block(vec![]),
-                else_block: None,
-            },
-            sp(),
-        ));
+        let expr = mr_expr(|b| local(b, 0));
+        let intervening = mr_stmt(|b| {
+            let cond = int(b, 1);
+            let then_block = pblock(b, vec![]);
+            ps(
+                b,
+                StmtKind::If {
+                    condition: cond,
+                    then_block,
+                    else_block: None,
+                },
+            )
+        });
         assert!(!can_move_past(&expr, &intervening, 1));
     }
 
     #[test]
     fn cannot_move_when_intervening_reads_candidate() {
-        let expr = mr_expr(int(0));
-        let intervening = mr_stmt(let_stmt(5, local(7)));
+        let expr = mr_expr(|b| int(b, 0));
+        let intervening = mr_stmt(|b| {
+            let v = local(b, 7);
+            let_stmt(b, 5, v)
+        });
         assert!(!can_move_past(&expr, &intervening, 7));
     }
 
@@ -1220,8 +1315,11 @@ mod tests {
         // direction (expr.may_clobber(int)) must return true because a
         // call can mutate any global, and reordering would expose the
         // wrong value at the read.
-        let expr = mr_expr(call(vec![]));
-        let intervening = mr_stmt(let_stmt(5, global_get("g")));
+        let expr = mr_expr(|b| call(b, vec![]));
+        let intervening = mr_stmt(|b| {
+            let v = global_get(b, "g");
+            let_stmt(b, 5, v)
+        });
         assert!(!can_move_past(&expr, &intervening, 99));
     }
 
@@ -1229,26 +1327,29 @@ mod tests {
     fn cannot_move_when_expr_writes_global_intervening_reads_same_global() {
         // Even without a call, a direct global write in the expression
         // must block a move past a read of the same global.
-        let expr = mr_expr(global_set("g", int(1)));
-        let intervening = mr_stmt(let_stmt(5, global_get("g")));
+        let expr = mr_expr(|b| {
+            let v = int(b, 1);
+            global_set(b, "g", v)
+        });
+        let intervening = mr_stmt(|b| {
+            let v = global_get(b, "g");
+            let_stmt(b, 5, v)
+        });
         assert!(!can_move_past(&expr, &intervening, 99));
     }
 
     #[test]
     fn cannot_move_when_both_may_trap() {
-        let expr = mr_expr(field_access(local(0)));
-        let intervening = mr_stmt(let_stmt(
-            5,
-            NirExpr::new(
-                NirExprKind::Binary {
-                    left: Box::new(local(1)),
-                    op: NirBinaryOp::Div,
-                    right: Box::new(local(2)),
-                },
-                ty(),
-                sp(),
-            ),
-        ));
+        let expr = mr_expr(|b| {
+            let l = local(b, 0);
+            field_access(b, l)
+        });
+        let intervening = mr_stmt(|b| {
+            let l = local(b, 1);
+            let r = local(b, 2);
+            let div = bin(b, l, NirBinaryOp::Div, r);
+            let_stmt(b, 5, div)
+        });
         assert!(!can_move_past(&expr, &intervening, 99));
     }
 
@@ -1256,16 +1357,16 @@ mod tests {
     // GC-allocating literals (String / Bytes / Null) — see B1 finding
     // -----------------------------------------------------------------
 
-    fn string_lit(s: &str) -> NirExpr {
-        NirExpr::new(NirExprKind::StringLiteral(s.to_string()), ty(), sp())
+    fn string_lit(body: &mut Body, s: &str) -> ExprId {
+        pe(body, ExprKind::StringLiteral(s.to_string()))
     }
 
-    fn bytes_lit() -> NirExpr {
-        NirExpr::new(NirExprKind::BytesLiteral(vec![1, 2, 3]), ty(), sp())
+    fn bytes_lit(body: &mut Body) -> ExprId {
+        pe(body, ExprKind::BytesLiteral(vec![1, 2, 3]))
     }
 
-    fn null_lit() -> NirExpr {
-        NirExpr::new(NirExprKind::Null, ty(), sp())
+    fn null_lit(body: &mut Body) -> ExprId {
+        pe(body, ExprKind::Null)
     }
 
     #[test]
@@ -1273,7 +1374,7 @@ mod tests {
         // Lowered to struct.new String { repr: array.new_data<u8>(...), used: N }
         // (wir_build/primitive_ops.rs:82) — produces a fresh GC object with a
         // distinct identity. is_re_evaluation_safe must therefore reject.
-        let mr = mr_expr(string_lit("hello"));
+        let mr = mr_expr(|b| string_lit(b, "hello"));
         assert!(mr.allocates);
         assert!(!mr.is_re_evaluation_safe());
     }
@@ -1281,7 +1382,7 @@ mod tests {
     #[test]
     fn bytes_literal_allocates() {
         // Lowered to array.new_data<u8>("..."). Distinct heap identity.
-        let mr = mr_expr(bytes_lit());
+        let mr = mr_expr(bytes_lit);
         assert!(mr.allocates);
         assert!(!mr.is_re_evaluation_safe());
     }
@@ -1292,7 +1393,7 @@ mod tests {
         // The Option-typed `None` lowering goes through VariantConstruct,
         // which is already covered by struct_literal_allocates_*. So Null
         // proper stays pure.
-        let mr = mr_expr(null_lit());
+        let mr = mr_expr(null_lit);
         assert!(!mr.allocates);
         assert!(mr.is_re_evaluation_safe());
     }
@@ -1301,25 +1402,18 @@ mod tests {
     // VariantTag / VariantTest are heap reads that may trap — see D2
     // -----------------------------------------------------------------
 
-    fn variant_tag(expr: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::VariantTag {
-                expr: Box::new(expr),
-            },
-            ty(),
-            sp(),
-        )
+    fn variant_tag(body: &mut Body, expr: ExprId) -> ExprId {
+        pe(body, ExprKind::VariantTag { expr })
     }
 
-    fn variant_test(expr: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::VariantTest {
-                expr: Box::new(expr),
+    fn variant_test(body: &mut Body, expr: ExprId) -> ExprId {
+        pe(
+            body,
+            ExprKind::VariantTest {
+                expr,
                 case_index: 0,
                 case_name: "Some".to_string(),
             },
-            ty(),
-            sp(),
         )
     }
 
@@ -1328,7 +1422,10 @@ mod tests {
         // VariantTag lowers to `struct.get $variant_base discriminant`
         // (wir_build/translate.rs:2032) — a heap read on a possibly-null
         // receiver. Must surface both `heap.reads` and `may_trap`.
-        let mr = mr_expr(variant_tag(local(0)));
+        let mr = mr_expr(|b| {
+            let l = local(b, 0);
+            variant_tag(b, l)
+        });
         assert!(mr.heap.reads);
         assert!(mr.may_trap);
     }
@@ -1337,7 +1434,10 @@ mod tests {
     fn variant_test_is_heap_read_and_may_trap() {
         // Same lowering shape as VariantTag — touches the variant's
         // discriminant field, traps on null receiver.
-        let mr = mr_expr(variant_test(local(0)));
+        let mr = mr_expr(|b| {
+            let l = local(b, 0);
+            variant_test(b, l)
+        });
         assert!(mr.heap.reads);
         assert!(mr.may_trap);
     }
@@ -1352,24 +1452,30 @@ mod tests {
         // ModRef must record that write so motion / CSE consumers see the
         // matching pattern's bindings as effects, matching the documented
         // contract that `local_writes` is the union of all writes.
-        let arm = NirMatchArm {
-            pattern: NirPattern::Binding {
-                name: "y".to_string(),
-                local_index: 42,
-                type_id: ty(),
-            },
-            guard: None,
-            body: int(0),
-            span: sp(),
-        };
-        let mr = mr_expr(NirExpr::new(
-            NirExprKind::Match {
-                expr: Box::new(local(0)),
-                arms: vec![arm],
-            },
-            ty(),
-            sp(),
-        ));
+        let mr = mr_expr(|b| {
+            let scrut = local(b, 0);
+            let arm_body = int(b, 0);
+            let pattern = b.pats.push(PatNode {
+                kind: PatKind::Binding {
+                    name: "y".to_string(),
+                    local_index: 42,
+                    type_id: ty(),
+                },
+                span: sp(),
+            });
+            pe(
+                b,
+                ExprKind::Match {
+                    expr: scrut,
+                    arms: vec![ArmData {
+                        pattern,
+                        guard: None,
+                        body: arm_body,
+                        span: sp(),
+                    }],
+                },
+            )
+        });
         assert!(
             mr.local_writes.contains(&42),
             "match arm pattern Binding{{42}} must be in local_writes"
@@ -1389,15 +1495,12 @@ mod tests {
     // The test exercises an `i32 -> i64` widening which is provably
     // non-trapping in Wasm; ModRef must reflect that.
 
-    fn cast(expr: NirExpr, target_type: TypeId) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Cast {
-                expr: Box::new(expr),
-                target_type,
-            },
-            target_type,
-            sp(),
-        )
+    fn cast(body: &mut Body, expr: ExprId, target_type: TypeId) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind: ExprKind::Cast { expr, target_type },
+            type_id: target_type,
+            span: sp(),
+        })
     }
 
     #[test]
@@ -1421,26 +1524,21 @@ mod tests {
         // from outside. The inner bare `break;` (label = None) targets the
         // loop itself, so its NonLocal contribution must NOT propagate
         // past the Loop boundary.
-        let inner = NirStmt::new(
-            NirStmtKind::If {
-                condition: NirExpr::new(NirExprKind::BoolLiteral(true), ty(), sp()),
-                then_block: block(vec![NirStmt::new(
-                    NirStmtKind::Break {
-                        label: None,
-                        value: None,
-                    },
-                    sp(),
-                )]),
-                else_block: None,
-            },
-            sp(),
-        );
-        let mr = mr_stmt(NirStmt::new(
-            NirStmtKind::Loop {
-                body: block(vec![inner]),
-            },
-            sp(),
-        ));
+        let mr = mr_stmt(|b| {
+            let cond = pe(b, ExprKind::BoolLiteral(true));
+            let brk = break_stmt(b, None);
+            let then_block = pblock(b, vec![brk]);
+            let inner = ps(
+                b,
+                StmtKind::If {
+                    condition: cond,
+                    then_block,
+                    else_block: None,
+                },
+            );
+            let body = pblock(b, vec![inner]);
+            ps(b, StmtKind::Loop { body })
+        });
         assert_eq!(
             mr.control,
             Control::Conditional,
@@ -1455,18 +1553,11 @@ mod tests {
         // analyzer can prove the label resolves to an enclosing
         // `LabeledBlock` within the same accumulate scope, it must keep
         // the conservative NonLocal classification for safety.
-        let mr = mr_stmt(NirStmt::new(
-            NirStmtKind::Loop {
-                body: block(vec![NirStmt::new(
-                    NirStmtKind::Break {
-                        label: Some("OUTER".to_string()),
-                        value: None,
-                    },
-                    sp(),
-                )]),
-            },
-            sp(),
-        ));
+        let mr = mr_stmt(|b| {
+            let brk = break_stmt(b, Some("OUTER"));
+            let body = pblock(b, vec![brk]);
+            ps(b, StmtKind::Loop { body })
+        });
         assert_eq!(mr.control, Control::NonLocal);
     }
 
@@ -1476,20 +1567,46 @@ mod tests {
 
     #[test]
     fn known_effectful_variants_are_explicit() {
-        assert!(mr_expr(local(0)).local_reads.contains(&0));
-        assert!(mr_stmt(let_stmt(0, int(0))).local_writes.contains(&0));
+        assert!(mr_expr(|b| local(b, 0)).local_reads.contains(&0));
         assert!(
-            mr_expr(global_get("G"))
+            mr_stmt(|b| {
+                let v = int(b, 0);
+                let_stmt(b, 0, v)
+            })
+            .local_writes
+            .contains(&0)
+        );
+        assert!(
+            mr_expr(|b| global_get(b, "G"))
                 .global_reads
                 .contains(&(ModuleSource::prelude(), "G".to_string()))
         );
-        assert!(mr_expr(field_access(local(0))).heap.reads);
-        assert!(mr_expr(assign(field_access(local(0)), int(0))).heap.writes);
-        assert!(mr_expr(struct_literal(vec![int(0)])).allocates);
-        assert!(mr_expr(call(vec![])).calls);
-        assert_eq!(
-            mr_stmt(NirStmt::new(NirStmtKind::Return { value: None }, sp())).control,
-            Control::NonLocal
+        assert!(
+            mr_expr(|b| {
+                let l = local(b, 0);
+                field_access(b, l)
+            })
+            .heap
+            .reads
         );
+        assert!(
+            mr_expr(|b| {
+                let l = local(b, 0);
+                let f = field_access(b, l);
+                let v = int(b, 0);
+                assign(b, f, v)
+            })
+            .heap
+            .writes
+        );
+        assert!(
+            mr_expr(|b| {
+                let v = int(b, 0);
+                struct_literal(b, vec![v])
+            })
+            .allocates
+        );
+        assert!(mr_expr(|b| call(b, vec![])).calls);
+        assert_eq!(mr_stmt(ret_none).control, Control::NonLocal);
     }
 }
