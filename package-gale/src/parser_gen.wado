@@ -1742,16 +1742,6 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule
 }
 
 
-/// Body emitter for multi-alt and left-recursive rules. The
-/// tail-position caller-FOLLOW repair is threaded at runtime: each
-/// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
-/// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
-/// path needs no per-(rule, mask) specialisation.
-///
-/// `emit_visibility` gates the `pub`/`export` doc comment on the
-/// emitted function. It is `true` for every live call site today;
-/// the parameter survives from the retired follow-variant pass, which
-/// emitted implementation-detail clones with it set `false`.
 /// Compact parser for an all-single-token multi-alt rule. The CST node
 /// is a `{ span, token }` struct (`gen_multi_alt_cst` single-token path),
 /// so parsing reduces to: confirm the lookahead is in the rule's first
@@ -1792,6 +1782,16 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     w.blank();
 }
 
+/// Body emitter for multi-alt and left-recursive rules. The
+/// tail-position caller-FOLLOW repair is threaded at runtime: each
+/// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
+/// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
+/// path needs no per-(rule, mask) specialisation.
+///
+/// `emit_visibility` gates the `pub`/`export` doc comment on the
+/// emitted function. It is `true` for every live call site today;
+/// the parameter survives from the retired follow-variant pass, which
+/// emitted implementation-detail clones with it set `false`.
 fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, emit_visibility: bool) {
     // Variant emission and the shared dispatch path route through
     // here. Single-alt rules are handled by the dedicated

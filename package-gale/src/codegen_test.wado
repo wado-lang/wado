@@ -1019,6 +1019,47 @@ C : 'c' ;
     assert str_contains(&traced, &"trace_pick(p, &\"sub\",");
 }
 
+test "all-single-token multi-alt rule compacts to a { span, token } struct" {
+    // `tok : A | B | C` — every alt is one bare token, so the matched
+    // token's kind already records which alt fired. The CST node, parser,
+    // and walk all collapse to the compact single-token shape.
+    let input = "grammar T;
+tok : A | B | C ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"pub struct TokNode {");
+    assert str_contains(&output, &"pub token: Token");
+    assert !str_contains(&output, &"pub variant TokNode");
+    // Parser is a kind-set check + one construction, not an N-way cascade.
+    assert str_contains(&output, &"let token = p.expect(kind)?;");
+    assert str_contains(&output, &"TokNode {");
+    // Walk visits the single token directly.
+    assert str_contains(&output, &"v.visit_token(&node.token);");
+}
+
+test "labeled single-token alts stay a variant (CST/parse/walk in lockstep)" {
+    // `sign : p='+' | m='-'` carries element labels, so the compaction
+    // (which drops the per-alt field name) must NOT fire: the parse and
+    // walk generators screen labels out via the surface `all_alts_are_single_token`,
+    // and the CST type generator must agree or the emitted parser won't
+    // compile (struct node vs `SignNode::Alt0(...)` construction). Regression
+    // for the surface/lowered detection divergence.
+    let input = "grammar T;
+sign : p='+' | m='-' ;
+WS : [ \\t]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"pub variant SignNode"), `expected variant SignNode, got:\n{output}`;
+    assert !str_contains(&output, &"pub struct SignNode {");
+    // The parse side constructs the variant arms, so the type must match.
+    assert str_contains(&output, &"SignNode::Alt0(");
+}
+
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
     // LR rules' internal helper takes a `min_prec: i32` parameter
     // (see `lr_util.compute_prefix_self_ref_min_prec`); the public
