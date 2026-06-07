@@ -1,22 +1,17 @@
 //! NIR Interpreter (niri).
 //!
-//! Compile-time partial evaluator for Wado NIR. The public entry point is
-//! [`Interpreter::reduce`], which takes a [`NirExpr`] and returns the most
-//! reduced form possible (a literal node when the expression is fully
-//! known, the original tree otherwise). Constant folding is the first
-//! consumer; future passes (branch pruning, constant propagation,
-//! compile-time function evaluation) will reuse the same engine.
+//! Compile-time partial evaluator for Wado NIR, operating on the arena `Body`.
+//! [`Interpreter::reduce_local_a`] rewrites one node in place toward literal
+//! form, [`Interpreter::reduce_to_lattice_a`] projects a node to a [`Lattice`],
+//! and [`Interpreter::reduce_in_place_a`] reduces a whole subtree bottom-up.
+//! Constant folding is the primary consumer; branch pruning, constant
+//! propagation, and compile-time function evaluation reuse the same engine.
 //!
-//! ```text
-//! Interpreter::new(type_table).reduce(&expr) -> NirExpr
-//! ```
+//! Reduction is **monotone** — it only moves expressions toward literal form,
+//! never the reverse — and **idempotent**. Literal leaves are preserved as-is
+//! so the original lexical repr (e.g. `0xFF`) survives a no-op pass.
 //!
-//! `reduce` is **idempotent** — `reduce(reduce(e))` is structurally equal
-//! to `reduce(e)` — and **monotone** — it only moves expressions toward
-//! literal form, never the reverse. Literal leaves are preserved as-is so
-//! the original lexical repr (e.g. `0xFF`) survives a no-op pass.
-//!
-//! Today the engine handles:
+//! The engine handles:
 //!
 //! - Integer arithmetic: Add, Sub, Mul, Div, Mod
 //! - Integer comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
@@ -105,13 +100,10 @@ use std::rc::Rc;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirLiteralPattern, NirMatchArm,
-    NirPattern, NirStmt, NirStmtKind, NirUnaryOp,
-};
+use crate::nir::{NirBinaryOp, NirFunction, NirLiteralPattern, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, StmtKind,
-    StmtNode,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, StmtId,
+    StmtKind, StmtNode,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -321,7 +313,7 @@ pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<NirFunction>>>;
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Identity of a global variable in the [`GlobalEnv`]. Mirrors the
-/// `(module_source, name)` shape carried by `NirExprKind::GlobalVarGet`
+/// `(module_source, name)` shape carried by `ExprKind::GlobalVarGet`
 /// so the interpreter can look up a `GlobalVarGet` node directly.
 pub type GlobalKey = (ModuleSource, String);
 
@@ -718,7 +710,7 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
 // Interpreter
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Partial evaluator over [`NirExpr`].
+/// Partial evaluator over the arena `Body`.
 ///
 /// Holds the type table needed to resolve operand widths, a per-function
 /// `env` mapping local indices to lattice values, an optional
@@ -729,7 +721,7 @@ pub struct Interpreter<'a> {
     /// Lattice values for `let`-bound locals in the *current function*.
     /// Populated by the driving visitor via [`bind_local`] /
     /// [`invalidate_local`]; cleared via [`enter_function`]. Reads of
-    /// `NirExprKind::Local` consult this map during folding.
+    /// `ExprKind::Local` consult this map during folding.
     ///
     /// Locals not present in the map default to [`Lattice::Unevaluated`].
     ///
@@ -1056,869 +1048,8 @@ impl<'a> Interpreter<'a> {
         self.field_env.clear();
     }
 
-    /// Reduce `expr` as far as possible.
-    ///
-    /// Always returns a (possibly structurally-identical) [`NirExpr`].
-    /// Literal leaves are preserved verbatim so their lexical repr
-    /// (e.g. `0xFF`) survives a no-op pass.
-    pub fn reduce(&mut self, expr: &NirExpr) -> NirExpr {
-        let mut owned = expr.clone();
-        self.reduce_in_place(&mut owned);
-        owned
-    }
-
-    /// Recursively reduce `expr` in place over the subtree the engine
-    /// currently understands (Binary / Unary / Cast / If). Returns
-    /// `true` when anything changed.
-    ///
-    /// Internal: the only public entry points are [`reduce`] and
-    /// [`reduce_local`]. `reduce` clones into `reduce_in_place`; visitor
-    /// drivers that already walk every NIR node should call `reduce_local`
-    /// directly.
-    ///
-    /// [`reduce`]: Self::reduce
-    /// [`reduce_local`]: Self::reduce_local
-    fn reduce_in_place(&mut self, expr: &mut NirExpr) -> bool {
-        // Bottom-up: recurse into children first so the local rewrite
-        // step at this node sees fully-reduced operands.
-        let mut changed = match &mut expr.kind {
-            NirExprKind::Binary { left, right, .. } => {
-                let l = self.reduce_in_place(left);
-                let r = self.reduce_in_place(right);
-                l || r
-            }
-            NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
-                self.reduce_in_place(inner)
-            }
-            NirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                let mut c = self.reduce_in_place(condition);
-                c |= self.reduce_in_place_block(then_branch);
-                if let Some(eb) = else_branch {
-                    c |= self.reduce_in_place_block(eb);
-                }
-                c
-            }
-            NirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                let mut c = self.reduce_in_place(scrutinee);
-                for arm in arms {
-                    if let Some(g) = &mut arm.guard {
-                        c |= self.reduce_in_place(g);
-                    }
-                    c |= self.reduce_in_place(&mut arm.body);
-                }
-                c
-            }
-            _ => false,
-        };
-
-        changed |= self.reduce_local(expr);
-        changed
-    }
-
-    /// Recursively reduce every expression inside `block` in place.
-    /// Used by [`reduce_in_place`] to walk into `if` arms when the
-    /// engine is invoked through the owning [`reduce`] entry point
-    /// (the visitor-driven path walks blocks itself).
-    fn reduce_in_place_block(&mut self, block: &mut NirBlock) -> bool {
-        let mut changed = false;
-        for stmt in &mut block.stmts {
-            changed |= self.reduce_in_place_stmt(stmt);
-        }
-        changed |= self.reduce_local_block(block);
-        changed
-    }
-
-    fn reduce_in_place_stmt(&mut self, stmt: &mut NirStmt) -> bool {
-        match &mut stmt.kind {
-            NirStmtKind::Expr(e) => self.reduce_in_place(e),
-            NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
-                self.reduce_in_place(value)
-            }
-            NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
-                value.as_mut().is_some_and(|v| self.reduce_in_place(v))
-            }
-            NirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                let mut c = self.reduce_in_place(condition);
-                c |= self.reduce_in_place_block(then_block);
-                if let Some(eb) = else_block {
-                    c |= self.reduce_in_place_block(eb);
-                }
-                c
-            }
-            NirStmtKind::Loop { body } => self.reduce_in_place_block(body),
-            NirStmtKind::LabeledBlock { block, .. } => self.reduce_in_place_block(block),
-            NirStmtKind::Continue => false,
-        }
-    }
-
-    /// Apply the engine's rewrite rules to `expr` only — without recursing
-    /// into children. Returns `true` when `expr` was rewritten.
-    ///
-    /// This is the right entry point when the caller is already driving a
-    /// NIR walk and wants to slot niri's local rewrites into each visited
-    /// node. The rules
-    /// are constant folding for Binary / Unary / Cast, short-circuit
-    /// identity simplifications for `&&` / `||`, pure-call inlining,
-    /// constant-condition or both-arms-equal `if` collapse, and the
-    /// matching `match`-expression collapse.
-    ///
-    /// `Local` nodes themselves are never rewritten in place: their env
-    /// values are read transparently when computing the parent
-    /// expression's fold (`x + 1` → fold by reading `x` from env, no
-    /// in-place mutation of the `Local` node). This keeps assignment
-    /// targets (`x = …`, `obj.f = …`, `arr[i] = …`) safely opaque.
-    /// `GlobalVarGet` and `FieldAccess(Local, _)` are the exceptions:
-    /// the dedicated leaf-rewrite arms below replace the read with the
-    /// recorded `Const(v)` literal when one is available. The driving
-    /// visitor must avoid calling `reduce_local` on the lvalue side of
-    /// an `Assign` (i.e. on the OUTER `FieldAccess` / `Index` node of
-    /// `target`) — only its sub-expressions are read positions. See
-    /// `optimize::const_folding::ConstFoldVisitor::visit_expr` for the
-    /// concrete guard.
-    pub fn reduce_local(&mut self, expr: &mut NirExpr) -> bool {
-        if let Lattice::Const(v) = self.try_fold(expr) {
-            expr.kind = value_to_expr_kind(v);
-            return true;
-        }
-        if let NirExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } = &expr.kind
-            && let Lattice::Const(v) = self.global_lattice(module_source, name)
-        {
-            expr.kind = value_to_expr_kind(v);
-            return true;
-        }
-        if let NirExprKind::FieldAccess {
-            expr: inner,
-            field_name,
-            ..
-        } = &expr.kind
-            && let NirExprKind::Local { index, .. } = &inner.kind
-            && let Some(v) = self
-                .field_env
-                .get(index)
-                .and_then(|m| m.get(field_name.as_str()))
-                .copied()
-        {
-            expr.kind = value_to_expr_kind(v);
-            return true;
-        }
-        // try_call_fold returns Const only when the whole call collapses
-        // to a literal; Unevaluated / NonConst leave the Call intact so
-        // any runtime trap inside the body survives.
-        if let Lattice::Const(v) = self.try_call_fold(expr) {
-            expr.kind = value_to_expr_kind(v);
-            return true;
-        }
-        if rewrite_short_circuit(expr) {
-            return true;
-        }
-        if self.rewrite_if_expr(expr) {
-            return true;
-        }
-        self.rewrite_match_expr(expr)
-    }
-
-    /// Apply stmt-level rewrites that may expand or contract the stmt
-    /// list of `block`. Currently the only such rewrite is constant-
-    /// condition `if`-statement folding: an `if true { … } else { … }`
-    /// stmt is replaced by the chosen branch's stmts in the parent
-    /// block; an `if false { … }` with no else is dropped entirely.
-    ///
-    /// Returns `true` when the block was rewritten. The caller (driving
-    /// visitor) is expected to have walked into each stmt's children
-    /// before calling this so the conditions are already folded.
-    pub fn reduce_local_block(&mut self, block: &mut NirBlock) -> bool {
-        let has_constant_if = block.stmts.iter().any(|s| {
-            matches!(
-                &s.kind,
-                NirStmtKind::If { condition, .. }
-                    if matches!(condition.kind, NirExprKind::BoolLiteral(_))
-            )
-        });
-        if !has_constant_if {
-            return false;
-        }
-        let old_stmts = std::mem::take(&mut block.stmts);
-        for stmt in old_stmts {
-            if let NirStmtKind::If { ref condition, .. } = stmt.kind
-                && let NirExprKind::BoolLiteral(value) = condition.kind
-            {
-                let NirStmtKind::If {
-                    then_block,
-                    else_block,
-                    ..
-                } = stmt.kind
-                else {
-                    unreachable!();
-                };
-                if value {
-                    block.stmts.extend(then_block.stmts);
-                } else if let Some(eb) = else_block {
-                    block.stmts.extend(eb.stmts);
-                }
-                continue;
-            }
-            block.stmts.push(stmt);
-        }
-        true
-    }
-
-    /// Rewrite an `if` expression. Three reductions:
-    ///
-    /// 1. **Const condition splice** — `if true { A } else { B }` → `A`,
-    ///    `if false { A } else { B }` → `B` (or `()` when no else).
-    /// 2. **Bool-arms collapse** — `if cond { true } else { false }` →
-    ///    `cond`, and `if cond { false } else { true }` → `!cond`.
-    ///    Preserves `cond`'s evaluation, so no speculatable-ness gate
-    ///    applies. Common shape from `match X { V => true, _ => false }`
-    ///    lowering and from explicit user-written bool selection.
-    /// 3. **Both-arms-equal collapse** — `if cond { K } else { K }` →
-    ///    `K`. Drops `cond`, so requires `cond` to be speculatable.
-    fn rewrite_if_expr(&mut self, expr: &mut NirExpr) -> bool {
-        let NirExprKind::If {
-            condition,
-            then_branch: _,
-            else_branch: _,
-        } = &expr.kind
-        else {
-            return false;
-        };
-        let cond_lat = self.expr_to_lattice(condition);
-
-        // (1) Constant condition → splice the chosen arm. The
-        // unreachable arm is dropped without ever being asked for a
-        // lattice value, so a trapping `else { panic(…) }` does not
-        // contaminate the result — this is the SCCP "infeasible edge"
-        // treatment.
-        if let Lattice::Const(Value::Bool(b)) = cond_lat {
-            let NirExprKind::If {
-                then_branch,
-                else_branch,
-                ..
-            } = std::mem::replace(&mut expr.kind, NirExprKind::Unit)
-            else {
-                unreachable!();
-            };
-            if b {
-                expr.kind = NirExprKind::Block(then_branch);
-            } else if let Some(eb) = else_branch {
-                expr.kind = NirExprKind::Block(eb);
-            }
-            // false without else: NirExprKind::Unit is already in place.
-            return true;
-        }
-
-        // The remaining rules require both arms to fold to `Const(_)`.
-        // Using `Lattice::join` here would be tempting but unsound:
-        // join's `Unevaluated ⊔ Const(v) → Const(v)` rule encodes an
-        // SCCP infeasible-edge semantic that does not apply when both
-        // edges are feasible (an `Unevaluated` arm here means "reachable
-        // but value not known", not "unreachable"). Match `Const(_)` on
-        // both sides explicitly so an arm we couldn't analyze never
-        // erases the surrounding `if`.
-        let NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } = &expr.kind
-        else {
-            unreachable!();
-        };
-        let Lattice::Const(t) = self.block_lattice(then_branch) else {
-            return false;
-        };
-        let Some(eb) = else_branch else {
-            return false;
-        };
-        let Lattice::Const(e) = self.block_lattice(eb) else {
-            return false;
-        };
-
-        // (2) Bool-arms collapse. The condition is preserved (under
-        // `Not` in the inverted case), so no `is_speculatable` gate is
-        // required — runtime evaluation order matches the original
-        // `if`. The `t != e` precondition for the inverted case follows
-        // from t and e being distinct Bool literals, which is handled
-        // by the `t_b != e_b` pattern below.
-        if let (Value::Bool(t_b), Value::Bool(e_b)) = (t, e)
-            && t_b != e_b
-        {
-            let NirExprKind::If { condition, .. } =
-                std::mem::replace(&mut expr.kind, NirExprKind::Unit)
-            else {
-                unreachable!();
-            };
-            if t_b {
-                // `if cond { true } else { false }` → `cond`. Unwrap
-                // the box and replace `expr.kind` with the condition's.
-                // `expr.type_id` stays as the if-expression's bool type,
-                // which equals `condition.type_id` (the elaborator always
-                // types an `if` condition as bool).
-                let inner = *condition;
-                expr.kind = inner.kind;
-            } else {
-                // `if cond { false } else { true }` → `!cond`. Wrap in
-                // Unary::Not; bool stays bool.
-                expr.kind = NirExprKind::Unary {
-                    op: NirUnaryOp::Not,
-                    expr: condition,
-                };
-            }
-            return true;
-        }
-
-        // (3) Both-arms-equal collapse. Drops `cond`, so requires
-        // `is_speculatable(cond)` — anything observable in `cond`
-        // (calls, traps, mutations) cannot be erased.
-        if t != e {
-            return false;
-        }
-        if !is_speculatable(condition) {
-            return false;
-        }
-        expr.kind = value_to_expr_kind(t);
-        true
-    }
-
-    /// Rewrite a `match` expression. Three reductions:
-    ///
-    /// 1. **Const scrutinee**: pick the first arm whose pattern provably
-    ///    matches (no guard, definite `Yes`) and replace the `Match`
-    ///    with `Block { stmts: [Expr(arm.body)] }`. An earlier `Unknown`
-    ///    arm prevents us from proving a definite arm fires first; bail.
-    /// 2. **`match X { Pat => true, _ => false }` collapse**: shrinks
-    ///    the two-arm boolean-discriminator shape produced by
-    ///    `x matches { Pat }` to the direct discriminator expression.
-    ///    Today covers `NirPattern::Enum` (replaced with
-    ///    `Binary { Eq, X, EnumConstruct(case) }`) — `NirPattern::Variant`
-    ///    is left intact because synthesising the matching `VariantTest`
-    ///    requires a variant→case-index lookup the interpreter doesn't
-    ///    yet carry. Preserves `X`'s evaluation, so no
-    ///    speculatable-ness gate applies. Fires before `match_to_switch`
-    ///    so the synthesised expression reaches subsequent passes.
-    /// 3. **Non-const speculatable scrutinee, all-arms-equal collapse**:
-    ///    when every arm has no guard and reduces to the same
-    ///    `Const(v)`, rewrite the whole match to that literal. The
-    ///    same `is_speculatable` gate as the `if` rule applies, since
-    ///    we're dropping the scrutinee's evaluation.
-    fn rewrite_match_expr(&mut self, expr: &mut NirExpr) -> bool {
-        let NirExprKind::Match {
-            expr: scrutinee,
-            arms,
-        } = &expr.kind
-        else {
-            return false;
-        };
-        if arms.is_empty() {
-            return false;
-        }
-
-        // Rule 1: const scrutinee → splice the chosen arm.
-        if let Lattice::Const(scrut_v) = self.expr_to_lattice(scrutinee) {
-            // Walk arms; bail at first Unknown without committing.
-            let mut chosen: Option<usize> = None;
-            for (i, arm) in arms.iter().enumerate() {
-                if arm.guard.is_some() {
-                    return false;
-                }
-                match self.pattern_matches(&scrut_v, &arm.pattern) {
-                    PatternMatch::Yes => {
-                        chosen = Some(i);
-                        break;
-                    }
-                    PatternMatch::No => {}
-                    PatternMatch::Unknown => return false,
-                }
-            }
-            let Some(idx) = chosen else {
-                return false;
-            };
-            let NirExprKind::Match { arms, .. } =
-                std::mem::replace(&mut expr.kind, NirExprKind::Unit)
-            else {
-                unreachable!();
-            };
-            let body = arms
-                .into_iter()
-                .nth(idx)
-                .expect("chosen index in range")
-                .body;
-            let span = body.span;
-            expr.kind = NirExprKind::Block(NirBlock::new(
-                vec![NirStmt::new(NirStmtKind::Expr(body), span)],
-                span,
-            ));
-            return true;
-        }
-
-        // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
-        // Scrutinee is preserved (inside the synthesised Binary / VariantTest),
-        // so no speculatable-ness gate is needed.
-        if let Some(replacement) = try_match_bool_discriminator(arms) {
-            let NirExprKind::Match {
-                expr: scrut_box, ..
-            } = std::mem::replace(&mut expr.kind, NirExprKind::Unit)
-            else {
-                unreachable!();
-            };
-            expr.kind = replacement.into_kind(scrut_box);
-            return true;
-        }
-
-        // Rule 3: non-const speculatable scrutinee, all-arms-equal.
-        if !is_speculatable(scrutinee) {
-            return false;
-        }
-        if arms.iter().any(|a| a.guard.is_some()) {
-            return false;
-        }
-        // The match must be provably exhaustive — otherwise an unmatched
-        // scrutinee value would trap (the lowering inserts an
-        // Unreachable fallback), and rewriting the whole expression to
-        // a literal would silently drop that trap. Wado's elaborator
-        // skips exhaustiveness checks for some scrutinee types
-        // (struct, string, tuple, …); without an unguarded catch-all
-        // we cannot prove the fallback is unreachable.
-        if !is_provably_exhaustive(arms) {
-            return false;
-        }
-        let mut common: Option<Value> = None;
-        for arm in arms {
-            let Lattice::Const(v) = self.expr_to_lattice(&arm.body) else {
-                return false;
-            };
-            match common {
-                None => common = Some(v),
-                Some(c) if c != v => return false,
-                Some(_) => {}
-            }
-        }
-        let v = common.expect("at least one arm");
-        expr.kind = value_to_expr_kind(v);
-        true
-    }
-
-    /// Reduce `expr` to a [`Lattice`] value without mutating the
-    /// caller's tree.
-    ///
-    /// This is the engine's canonical query API. Returns:
-    ///
-    /// - [`Lattice::Const(v)`] when `expr` evaluates to a known value
-    ///   (literal leaf, fully-reduced Binary/Unary/Cast, or a `Local`
-    ///   bound to `Const(_)` in env)
-    /// - [`Lattice::NonConst`] when `expr` is a `Local` known to be
-    ///   non-constant, has a `NonConst` operand, or is a fold that
-    ///   meets `Const` operands but evidently fails (e.g. div-by-zero,
-    ///   NaN-producing float op, `i32::MIN / -1`)
-    /// - [`Lattice::Unevaluated`] when the engine can't yet decide
-    ///   (un-bound `Local`, unsupported kind such as `Call` or `Block`)
-    pub fn reduce_to_lattice(&mut self, expr: &NirExpr) -> Lattice {
-        // First reduce children in place — a Const-Const fold inside a
-        // child is observable as a literal at the parent. This may turn
-        // a Binary into a literal (Const) or leave it as Binary if the
-        // fold failed.
-        let mut owned = expr.clone();
-        self.reduce_in_place(&mut owned);
-        // Compute the lattice of the (possibly partially-reduced)
-        // expression. `try_fold` handles Binary / Unary / Cast directly,
-        // so a Const/Const op whose runtime would trap reports
-        // `NonConst` rather than collapsing to `Unevaluated` because the
-        // node is structurally still a Binary. For every other kind
-        // `try_fold` returns `Unevaluated`; fall through to the literal
-        // / Local-env lookup.
-        match self.try_fold(&owned) {
-            Lattice::Unevaluated => self.expr_to_lattice(&owned),
-            other => other,
-        }
-    }
-
-    /// Map a (possibly already-reduced) `NirExpr` to a `Lattice`. For
-    /// literal leaves this is straightforward; for a `Local` node the
-    /// env is consulted; for an `if` node the SCCP-style join over the
-    /// arm lattices is taken (with the unreachable arm of a
-    /// constant-condition `if` excluded — `feasible_edge`); for a `Block`
-    /// only the simple case of a single tail expression is modelled
-    /// (anything richer falls through to `Unevaluated`); for everything
-    /// else the result is `Unevaluated`.
-    fn expr_to_lattice(&self, expr: &NirExpr) -> Lattice {
-        match &expr.kind {
-            NirExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
-            NirExprKind::CharLiteral(c) => Lattice::Const(Value::Char(*c)),
-            NirExprKind::IntLiteral { value, .. } => {
-                let Some(prim) = prim_of(expr.type_id, self.type_table).filter(|p| is_int_prim(*p))
-                else {
-                    return Lattice::Unevaluated;
-                };
-                Lattice::Const(Value::Int {
-                    value: *value,
-                    prim,
-                })
-            }
-            NirExprKind::FloatLiteral { value, .. } => {
-                let prim = if is_f32_type(expr.type_id, self.type_table) {
-                    PrimitiveType::F32
-                } else {
-                    PrimitiveType::F64
-                };
-                Lattice::Const(Value::Float {
-                    value: *value,
-                    prim,
-                })
-            }
-            NirExprKind::Local { index, .. } => {
-                self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
-            }
-            NirExprKind::FieldAccess {
-                expr: inner,
-                field_name,
-                ..
-            } => match &inner.kind {
-                // `outer.f` where `outer` is a plain local is the only
-                // shape `field_env` indexes; nested field access
-                // (`outer.inner.f`) and `(*p).f` stay `Unevaluated`.
-                NirExprKind::Local { index, .. } => self
-                    .field_env
-                    .get(index)
-                    .and_then(|m| m.get(field_name.as_str()))
-                    .copied()
-                    .map_or(Lattice::Unevaluated, Lattice::Const),
-                // `global:X.f` for an immutable global with a known constant
-                // `f` field — the global analogue of the local field-env path
-                // above, indexed by [`GlobalFieldEnv`].
-                NirExprKind::GlobalVarGet {
-                    module_source,
-                    name,
-                } => self
-                    .global_fields
-                    .and_then(|m| m.get(&(module_source.clone(), name.clone())))
-                    .and_then(|m| m.get(field_name.as_str()))
-                    .copied()
-                    .map_or(Lattice::Unevaluated, Lattice::Const),
-                _ => Lattice::Unevaluated,
-            },
-            NirExprKind::GlobalVarGet {
-                module_source,
-                name,
-            } => self.global_lattice(module_source, name),
-            NirExprKind::Block(b) => self.block_lattice(b),
-            NirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                let cond = self.expr_to_lattice(condition);
-                match cond {
-                    // Feasible edge: only the chosen arm contributes.
-                    // The unchosen arm is unreachable and its value
-                    // (whatever it is) does not enter the join.
-                    Lattice::Const(Value::Bool(true)) => self.block_lattice(then_branch),
-                    Lattice::Const(Value::Bool(false)) => match else_branch {
-                        Some(eb) => self.block_lattice(eb),
-                        None => Lattice::Unevaluated,
-                    },
-                    // Non-constant / unevaluated / non-bool condition:
-                    // both edges are feasible, so the result is the join
-                    // of the arms' values. An arm whose `block_lattice`
-                    // came back as `Unevaluated` is *not* an infeasible
-                    // edge here — the arm IS reachable, we just couldn't
-                    // analyze it. Promote Unevaluated → NonConst before
-                    // joining so the absent information correctly pushes
-                    // the merged lattice up to Top.
-                    _ => {
-                        let then_lat =
-                            arm_lattice_for_feasible_join(self.block_lattice(then_branch));
-                        let else_lat = match else_branch {
-                            Some(eb) => arm_lattice_for_feasible_join(self.block_lattice(eb)),
-                            // No else arm: the if has type Unit, which
-                            // has no representable Const value but the
-                            // arm IS reachable.
-                            None => Lattice::NonConst,
-                        };
-                        then_lat.join(else_lat)
-                    }
-                }
-            }
-            NirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => self.match_lattice(scrutinee, arms),
-            _ => Lattice::Unevaluated,
-        }
-    }
-
-    /// Lattice value of a `match` expression, mirroring the [`If`] rules:
-    ///
-    /// - When the scrutinee is `Const(v)`, walk arms in source order. The
-    ///   first arm whose pattern provably matches (and has no guard, since
-    ///   guards inspect bindings niri does not yet model) contributes its
-    ///   body's lattice to the result; later arms are SCCP-infeasible
-    ///   edges and never participate.
-    /// - When an earlier arm is `Unknown` (an unmodelled pattern, an
-    ///   unanalyzable `ConstantValue`, or a guarded arm), we cannot prove
-    ///   it doesn't fire — so we conservatively treat every later arm
-    ///   from that point on as also feasible, and join them all.
-    /// - When the scrutinee is non-constant, every arm body is feasible:
-    ///   join all of them, promoting `Unevaluated` arm values to
-    ///   `NonConst` first (the same fix as the `If` non-const-condition
-    ///   path — an arm we couldn't analyze is reachable, not infeasible).
-    fn match_lattice(&self, scrutinee: &NirExpr, arms: &[NirMatchArm]) -> Lattice {
-        let scrut_const = self.expr_to_lattice(scrutinee).as_const();
-
-        // No-arm match shouldn't be syntactically possible, but guard
-        // defensively: nothing reachable, nothing to say.
-        if arms.is_empty() {
-            return Lattice::Unevaluated;
-        }
-
-        if let Some(scrut_v) = scrut_const {
-            // Const scrutinee: walk arms collecting candidates from
-            // the first Unknown onward (which is also the first
-            // arm we can't rule out) until we hit a definite Yes (or
-            // run out of arms).
-            let mut candidates = Vec::<Lattice>::new();
-            let mut yes_found = false;
-            for arm in arms {
-                let pm = if arm.guard.is_some() {
-                    // A guard's outcome depends on bindings we don't
-                    // model; even if the pattern's structural match is
-                    // definite, the arm's firing isn't. Treat as
-                    // Unknown.
-                    PatternMatch::Unknown
-                } else {
-                    self.pattern_matches(&scrut_v, &arm.pattern)
-                };
-                let body_lat = arm_lattice_for_feasible_join(self.expr_to_lattice(&arm.body));
-                match pm {
-                    PatternMatch::No => {}
-                    PatternMatch::Yes => {
-                        if candidates.is_empty() {
-                            // Clean feasible-edge: only this arm's body
-                            // value flows out. Use the un-promoted
-                            // lattice — `Unevaluated` here means the
-                            // body really is unanalyzable, mirroring
-                            // the `If` const-cond rule.
-                            return self.expr_to_lattice(&arm.body);
-                        }
-                        // Earlier Unknown arms could also fire; this
-                        // Yes arm is the last possibility. Include it
-                        // in the join and stop — no later arm is
-                        // reachable past a guaranteed match.
-                        candidates.push(body_lat);
-                        yes_found = true;
-                        break;
-                    }
-                    PatternMatch::Unknown => candidates.push(body_lat),
-                }
-            }
-            // Without a proven Yes, the runtime may fall through every
-            // arm and trap on the lowering's Unreachable fallback. The
-            // SCCP value lattice over only the arm bodies would silently
-            // drop that observable trap when a caller (e.g. the `if`
-            // both-arms-equal collapse) acts on the resulting `Const`.
-            // Bail to NonConst so downstream rewrites stay safe.
-            if !yes_found {
-                return Lattice::NonConst;
-            }
-            join_all(&candidates)
-        } else {
-            // Non-const scrutinee: every arm body is reachable. The
-            // implicit Unreachable fallback is reachable too unless the
-            // match is provably exhaustive — without an unguarded
-            // catch-all (or pattern set covering the type's domain) we
-            // cannot prove the trap is dead, and a `Const(v)` lattice
-            // here would let other passes drop it. Stay conservative.
-            if !is_provably_exhaustive(arms) {
-                return Lattice::NonConst;
-            }
-            let mut acc = Lattice::Unevaluated;
-            for arm in arms {
-                let body_lat = arm_lattice_for_feasible_join(self.expr_to_lattice(&arm.body));
-                // A guard makes the arm's *firing* uncertain, but if it
-                // does fire, its body is what flows out — so the body
-                // lattice still participates in the join.
-                acc = acc.join(body_lat);
-            }
-            acc
-        }
-    }
-
-    /// Decide whether `pat` matches the constant scrutinee `value`.
-    /// Returns `Unknown` for any pattern shape Phase A doesn't model.
-    fn pattern_matches(&self, value: &Value, pat: &NirPattern) -> PatternMatch {
-        match pat {
-            NirPattern::Wildcard => PatternMatch::Yes,
-            NirPattern::Literal(lit) => match (lit, value) {
-                (NirLiteralPattern::I128(p), Value::Int { value: v, prim }) => {
-                    bool_to_match(int_value_matches_i128(*v, *prim, *p))
-                }
-                (NirLiteralPattern::U128(p), Value::Int { value: v, prim }) => {
-                    bool_to_match(int_value_matches_u128(*v, *prim, *p))
-                }
-                (NirLiteralPattern::Bool(p), Value::Bool(v)) => bool_to_match(p == v),
-                (NirLiteralPattern::Char(p), Value::Char(v)) => bool_to_match(p == v),
-                // Type mismatch between pattern and value: definite No.
-                // (The elaborator should already reject ill-typed
-                // patterns; if one slips through, returning No is safe
-                // since the arm cannot fire at runtime either.)
-                (
-                    NirLiteralPattern::I128(_)
-                    | NirLiteralPattern::U128(_)
-                    | NirLiteralPattern::Bool(_)
-                    | NirLiteralPattern::Char(_),
-                    _,
-                ) => PatternMatch::No,
-                // String / Null patterns: niri's `Value` doesn't carry
-                // string/null info, so we can't decide. Unknown leaves
-                // the arm in play.
-                (NirLiteralPattern::String(_) | NirLiteralPattern::Null, _) => {
-                    PatternMatch::Unknown
-                }
-            },
-            NirPattern::Or(alts) => {
-                let mut any_unknown = false;
-                for alt in alts {
-                    match self.pattern_matches(value, alt) {
-                        PatternMatch::Yes => return PatternMatch::Yes,
-                        PatternMatch::No => {}
-                        PatternMatch::Unknown => any_unknown = true,
-                    }
-                }
-                if any_unknown {
-                    PatternMatch::Unknown
-                } else {
-                    PatternMatch::No
-                }
-            }
-            NirPattern::Range {
-                start,
-                end,
-                inclusive,
-                is_unsigned,
-            } => match value {
-                Value::Int { value: v, prim } => bool_to_match(range_matches_int(
-                    *v,
-                    *prim,
-                    *start,
-                    *end,
-                    *inclusive,
-                    *is_unsigned,
-                )),
-                Value::Char(c) => {
-                    let cp = i128::from(u32::from(*c));
-                    bool_to_match(if *inclusive {
-                        cp >= *start && cp <= *end
-                    } else {
-                        cp >= *start && cp < *end
-                    })
-                }
-                _ => PatternMatch::No,
-            },
-            NirPattern::ConstantValue { expr } => match self.expr_to_lattice(expr).as_const() {
-                Some(v) if &v == value => PatternMatch::Yes,
-                Some(_) => PatternMatch::No,
-                None => PatternMatch::Unknown,
-            },
-            // Phase A out-of-scope patterns. Treat as Unknown so they
-            // never wrongly commit a match (Yes) and never wrongly drop
-            // a later arm (No).
-            NirPattern::Binding { .. }
-            | NirPattern::Tuple(_, _)
-            | NirPattern::Variant { .. }
-            | NirPattern::Enum { .. }
-            | NirPattern::Struct { .. } => PatternMatch::Unknown,
-        }
-    }
-
-    /// Lattice value of a block: only the simple shape — a block whose
-    /// sole stmt is a tail `Expr(e)` — is modelled. Such a block
-    /// evaluates to whatever `e` evaluates to, so we recurse through
-    /// `expr_to_lattice`. Empty blocks evaluate to `()`, which has no
-    /// representable [`Value`], so they map to `Unevaluated` (the join
-    /// with any other arm then carries the other arm's value out,
-    /// matching the desired SCCP feasible-edge behavior). Everything
-    /// else (intermediate `let` / `Assign` / `Loop` / function calls)
-    /// is conservatively `Unevaluated` rather than `NonConst` so that
-    /// the surrounding `if` stays foldable when the *other* arm is a
-    /// constant — an arm we couldn't evaluate is treated like an
-    /// infeasible edge, not a contradicting Const.
-    fn block_lattice(&self, block: &NirBlock) -> Lattice {
-        match block.stmts.as_slice() {
-            [] => Lattice::Unevaluated,
-            [single] => match &single.kind {
-                NirStmtKind::Expr(e) => self.expr_to_lattice(e),
-                _ => Lattice::Unevaluated,
-            },
-            _ => Lattice::Unevaluated,
-        }
-    }
-
-    /// Try to fold a Binary / Unary / Cast node by looking up each
-    /// operand's lattice value (literal or env-resolved local). The
-    /// returned lattice mirrors operand state: any `Unevaluated` /
-    /// `NonConst` operand short-circuits the result, and an op-level
-    /// failure (div-by-zero, NaN, unsupported pair) is `NonConst`.
-    fn try_fold(&self, expr: &NirExpr) -> Lattice {
-        match &expr.kind {
-            NirExprKind::Binary { left, op, right } => {
-                let l = match self.expr_to_lattice(left) {
-                    Lattice::Const(v) => v,
-                    other => return other,
-                };
-                let r = match self.expr_to_lattice(right) {
-                    Lattice::Const(v) => v,
-                    other => return other,
-                };
-                option_to_lattice(eval_binary(l, *op, r))
-            }
-            NirExprKind::Unary { op, expr: inner } => {
-                let v = match self.expr_to_lattice(inner) {
-                    Lattice::Const(v) => v,
-                    other => return other,
-                };
-                option_to_lattice(eval_unary(*op, v))
-            }
-            NirExprKind::Cast { expr: inner, .. } => {
-                let Some(target) = prim_of(expr.type_id, self.type_table) else {
-                    return Lattice::Unevaluated;
-                };
-                // Resolve the cast input via the lattice; literal leaves
-                // collapse to `Const(_)` directly, env-resolved locals
-                // fall through the same path. `eval_cast` decides which
-                // (source, target) pairs are foldable; unsupported pairs
-                // (e.g. casts targeting i128/v128, or a target the
-                // elaborator should already have rejected) return `None`
-                // and surface as `NonConst` rather than fabricating a
-                // bogus payload.
-                match self.expr_to_lattice(inner) {
-                    Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
-                    other => other,
-                }
-            }
-            _ => Lattice::Unevaluated,
-        }
-    }
-
-    // ───────────────────────────────────────────────────────────────────────
-    // Arena evaluator (read-only). The arena counterparts of `expr_to_lattice`
-    // / `try_fold` / `block_lattice` / `match_lattice` / `pattern_matches`,
-    // operating on a `Body` the const-fold visitor walks. CTFE (`try_call_fold`)
-    // keeps using the tree path on a materialized callee tail.
-    // ───────────────────────────────────────────────────────────────────────
-
-    /// Arena counterpart of [`Self::expr_to_lattice`].
+    /// Reads the bound env for locals/fields and takes the SCCP join over
+    /// `if` / `match` arms.
     pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];
         match &node.kind {
@@ -2008,7 +1139,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of [`Self::try_fold`].
+    /// Fold a `Binary` / `Unary` / `Cast` of constant operands to a value;
+    /// `NonConst` (not `Unevaluated`) when the op would trap, so the node survives.
     pub fn try_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];
         match &node.kind {
@@ -2043,7 +1175,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of [`Self::block_lattice`].
+    /// The lattice of a block: its single tail `Expr`, else `Unevaluated`.
     fn block_lattice_a(&self, body: &Body, b: BlockId) -> Lattice {
         match body.blocks[b].stmts.as_slice() {
             [] => Lattice::Unevaluated,
@@ -2055,7 +1187,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of [`Self::match_lattice`].
+    /// The lattice of a `match`: the chosen arm under a constant scrutinee,
+    /// else the join over the feasible arms.
     fn match_lattice_a(&self, body: &Body, scrutinee: ExprId, arms: &[ArmData]) -> Lattice {
         let scrut_const = self.expr_to_lattice_a(body, scrutinee).as_const();
         if arms.is_empty() {
@@ -2103,7 +1236,6 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of [`Self::pattern_matches`].
     fn pattern_matches_a(&self, body: &Body, value: &Value, pat: PatId) -> PatternMatch {
         match &body.pats[pat].kind {
             PatKind::Wildcard => PatternMatch::Yes,
@@ -2187,7 +1319,7 @@ impl<'a> Interpreter<'a> {
     // `try_call_fold`, mutating the `Body` the const-fold visitor walks.
     // ───────────────────────────────────────────────────────────────────────
 
-    /// Arena counterpart of [`Self::reduce_local`].
+    /// The single-node rewrites at `e` (no recursion into children).
     pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
             body.exprs[e].kind = value_to_arena_kind(v);
@@ -2245,7 +1377,7 @@ impl<'a> Interpreter<'a> {
         self.rewrite_match_expr_a(body, e)
     }
 
-    /// Arena counterpart of [`Self::reduce_local_block`].
+    /// Splice a constant-condition `if` statement into its parent block.
     pub fn reduce_local_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
         let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
             matches!(
@@ -2288,12 +1420,112 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Arena counterpart of [`Self::reduce_to_lattice`]. Unlike the tree
-    /// version, the const-fold visitor has already reduced every child of
-    /// `e` bottom-up before this is called, so there is no separate
-    /// `reduce_in_place` step: `try_fold_a` sees the already-folded
-    /// children directly, and a non-foldable node falls through to
-    /// `expr_to_lattice_a`.
+    /// Bottom-up reduce the subtree rooted at `e` over the kinds the engine
+    /// understands (Binary / Unary / Cast / If / Match), applying
+    /// [`Self::reduce_local_a`] at each node so a child fold is observable at
+    /// its parent. Used by CTFE (`try_call_fold_a`) to evaluate a callee tail
+    /// whose children no outer walk has pre-reduced.
+    pub fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+        let mut changed = match &body.exprs[e].kind {
+            ExprKind::Binary { left, right, .. } => {
+                let (l, r) = (*left, *right);
+                let a = self.reduce_in_place_a(body, l);
+                let b = self.reduce_in_place_a(body, r);
+                a || b
+            }
+            ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
+                let i = *inner;
+                self.reduce_in_place_a(body, i)
+            }
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let (c, t, e2) = (*condition, *then_branch, *else_branch);
+                let mut ch = self.reduce_in_place_a(body, c);
+                ch |= self.reduce_in_place_block_a(body, t);
+                if let Some(eb) = e2 {
+                    ch |= self.reduce_in_place_block_a(body, eb);
+                }
+                ch
+            }
+            ExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                let scrutinee = *scrutinee;
+                let arm_data: Vec<(Option<ExprId>, ExprId)> =
+                    arms.iter().map(|a| (a.guard, a.body)).collect();
+                let mut ch = self.reduce_in_place_a(body, scrutinee);
+                for (guard, arm_body) in arm_data {
+                    if let Some(g) = guard {
+                        ch |= self.reduce_in_place_a(body, g);
+                    }
+                    ch |= self.reduce_in_place_a(body, arm_body);
+                }
+                ch
+            }
+            _ => false,
+        };
+        changed |= self.reduce_local_a(body, e);
+        changed
+    }
+
+    /// Block-level recursion for [`Self::reduce_in_place_a`].
+    fn reduce_in_place_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
+        let stmts = body.blocks[block].stmts.clone();
+        let mut changed = false;
+        for s in stmts {
+            changed |= self.reduce_in_place_stmt_a(body, s);
+        }
+        changed |= self.reduce_local_block_a(body, block);
+        changed
+    }
+
+    /// Statement-level recursion for [`Self::reduce_in_place_a`].
+    fn reduce_in_place_stmt_a(&mut self, body: &mut Body, s: StmtId) -> bool {
+        match &body.stmts[s].kind {
+            StmtKind::Expr(e) => {
+                let e = *e;
+                self.reduce_in_place_a(body, e)
+            }
+            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+                let v = *value;
+                self.reduce_in_place_a(body, v)
+            }
+            StmtKind::Return { value } | StmtKind::Break { value, .. } => match *value {
+                Some(v) => self.reduce_in_place_a(body, v),
+                None => false,
+            },
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let (c, t, e2) = (*condition, *then_block, *else_block);
+                let mut ch = self.reduce_in_place_a(body, c);
+                ch |= self.reduce_in_place_block_a(body, t);
+                if let Some(eb) = e2 {
+                    ch |= self.reduce_in_place_block_a(body, eb);
+                }
+                ch
+            }
+            StmtKind::Loop { body: b } => {
+                let b = *b;
+                self.reduce_in_place_block_a(body, b)
+            }
+            StmtKind::LabeledBlock { block, .. } => {
+                let b = *block;
+                self.reduce_in_place_block_a(body, b)
+            }
+            StmtKind::Continue => false,
+        }
+    }
+
+    /// Project `e` to a lattice, assuming its children are already reduced (the
+    /// const-fold visitor walks bottom-up): `try_fold_a` sees folded children
+    /// directly, and a non-foldable node falls through to `expr_to_lattice_a`.
     pub fn reduce_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         match self.try_fold_a(body, e) {
             Lattice::Unevaluated => self.expr_to_lattice_a(body, e),
@@ -2301,7 +1533,15 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of [`Self::rewrite_if_expr`].
+    /// Reduce the subtree bottom-up in place (so multi-level constant operands
+    /// fold), then project to a lattice. The standalone entry point for callers
+    /// with an unreduced expression — the `niri` unit tests.
+    pub fn reduce_to_lattice_full_a(&mut self, body: &mut Body, e: ExprId) -> Lattice {
+        self.reduce_in_place_a(body, e);
+        self.reduce_to_lattice_a(body, e)
+    }
+
+    /// Collapse an `if` with a constant condition or equal arms.
     fn rewrite_if_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         let (condition, then_branch, else_branch) = match &body.exprs[e].kind {
             ExprKind::If {
@@ -2363,7 +1603,7 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Arena counterpart of [`Self::rewrite_match_expr`].
+    /// Collapse a `match` with a constant scrutinee or a bool-discriminator shape.
     fn rewrite_match_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         let scrutinee = match &body.exprs[e].kind {
             ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
@@ -2413,8 +1653,7 @@ impl<'a> Interpreter<'a> {
 
         // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
         // The scrutinee is preserved inside the synthesised `Binary`, and the
-        // `Match` node `e` keeps its own span — only its `kind` is replaced —
-        // mirroring the tree `EnumEqReplacement::into_kind`.
+        // `Match` node `e` keeps its own span — only its `kind` is replaced.
         if let Some(replacement) = try_match_bool_discriminator_a(body, &arms_data) {
             let right = body.exprs.push(ExprNode {
                 kind: ExprKind::EnumConstruct {
@@ -2463,8 +1702,11 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Arena counterpart of [`Self::try_call_fold`]: reads the caller's args
-    /// from the arena and evaluates the callee's tail on a materialized tree.
+    /// Fold a pure call whose args are all constant: bind the params, evaluate
+    /// the callee's single tail expression, and return `Const(v)` only when it
+    /// reduces to a value. `Unevaluated` on any miss (non-call, unknown or
+    /// recursive callee, non-const arg, unrecognized body, exhausted budget),
+    /// so the original call — and any runtime trap inside it — survives.
     fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
         let Some(callees) = self.callees else {
             return Lattice::Unevaluated;
@@ -2495,7 +1737,10 @@ impl<'a> Interpreter<'a> {
         if bound.len() != callee.params.len() {
             return Lattice::Unevaluated;
         }
-        let Some(tail) = single_tail_expression(&callee) else {
+        let Some(callee_body) = callee.body.as_ref() else {
+            return Lattice::Unevaluated;
+        };
+        let Some(tail) = single_tail_expression_a(callee_body) else {
             return Lattice::Unevaluated;
         };
         if self.step_budget == 0 {
@@ -2508,7 +1753,14 @@ impl<'a> Interpreter<'a> {
             #[allow(clippy::cast_possible_truncation)]
             self.env.insert(i as u32, Lattice::Const(*v));
         }
-        let result = self.reduce_to_lattice(&tail);
+        // Reduce the tail on a scratch copy of the callee's nodes so the shared
+        // callee body (held under an immutable `Ref`) is not mutated. Only the
+        // node maps are cloned (`nodes_only_clone`) — reduction reads no
+        // function-level metadata, so cloning the callee's `locals` would be
+        // pure waste.
+        let mut scratch = callee_body.nodes_only_clone();
+        self.reduce_in_place_a(&mut scratch, tail);
+        let result = self.reduce_to_lattice_a(&scratch, tail);
         self.env = saved_env;
         self.call_stack.pop();
         match result {
@@ -2537,151 +1789,17 @@ impl<'a> Interpreter<'a> {
             .copied()
             .unwrap_or(Lattice::Unevaluated)
     }
-
-    /// Pure-call inlining. Attempts to fold a `Call` node whose args
-    /// all reduce to constants and whose callee is registered in the
-    /// [`CalleeMap`].
-    ///
-    /// Returns `Const(v)` only when the callee body's tail expression
-    /// fully reduces to a primitive [`Value`] under the bound args.
-    /// Every other outcome — non-`Call` node, missing callee, non-const
-    /// arg, recognized-but-unfoldable body, recursion, budget
-    /// exhaustion — returns `Unevaluated` so the caller leaves the
-    /// original Call in place. `NonConst` is intentionally avoided
-    /// here: the call may still trap at runtime (a body whose tail
-    /// folds to `NonConst` because of, say, runtime div-by-zero), and
-    /// representing that as `NonConst` would let some surrounding
-    /// rewrite (e.g. an `if` both-arms-equal collapse rooted on the
-    /// other arm) drop the Call's evaluation.
-    ///
-    /// The recognized body shape is intentionally minimal — a single
-    /// statement that is either `Return { Some(expr) }` or `Expr(expr)`.
-    /// This covers the high-value targets (`fn double(x) { return x*2 }`,
-    /// expression-bodied helpers, single-tail-`if` bodies). Multi-stmt
-    /// bodies (let-sequences, multi-return) are out of scope today;
-    /// bailing here costs an optimization, not correctness.
-    ///
-    /// Recursion is bounded by two complementary guards:
-    /// `try_borrow` on the callee `RefCell` blocks the case where the
-    /// visitor is currently holding `borrow_mut` (the function being
-    /// walked); `call_stack` blocks CTFE-internal re-entry into a
-    /// callee whose body we are already evaluating, since `try_borrow`
-    /// permits concurrent immutable borrows.
-    fn try_call_fold(&mut self, expr: &NirExpr) -> Lattice {
-        let Some(callees) = self.callees else {
-            return Lattice::Unevaluated;
-        };
-        let NirExprKind::Call { func, args, .. } = &expr.kind else {
-            return Lattice::Unevaluated;
-        };
-        // Synthesise the lookup key only after we know a CalleeMap is
-        // installed and the node is actually a Call — `full_name()`
-        // formats a fresh String, so the order saves an allocation
-        // per visited non-Call expression on the no-fold paths.
-        let key: CalleeKey = (func.module_source.clone(), func.full_name());
-        let Some(callee_rc) = callees.get(&key) else {
-            return Lattice::Unevaluated;
-        };
-
-        // Recursion guard: refuse re-entry to a callee already being
-        // evaluated. Cheaper than the borrow attempt and catches CTFE
-        // recursion that `try_borrow` doesn't (multiple immutable
-        // borrows are allowed).
-        if self.call_stack.iter().any(|k| k == &key) {
-            return Lattice::Unevaluated;
-        }
-
-        // `try_borrow` failing means the function is currently held
-        // under the visitor's outer `borrow_mut`. Bail rather than
-        // panic.
-        let Ok(callee) = callee_rc.try_borrow() else {
-            return Lattice::Unevaluated;
-        };
-
-        // Reduce every arg to a Value. We only attempt the fold when
-        // every parameter has a known constant — partial constant
-        // propagation into a callee is a future extension.
-        let mut bound: Vec<Value> = Vec::with_capacity(args.len());
-        for arg in args {
-            match self.expr_to_lattice(&arg.expr).as_const() {
-                Some(v) => bound.push(v),
-                None => return Lattice::Unevaluated,
-            }
-        }
-
-        // Param/arg arity must agree. The elaborator enforces this, but
-        // an arity mismatch here would silently bind the wrong locals.
-        if bound.len() != callee.params.len() {
-            return Lattice::Unevaluated;
-        }
-
-        // Recognize the body shape. A miss here is the engine declining
-        // to model anything more involved, not a hard failure.
-        let Some(tail) = single_tail_expression(&callee) else {
-            return Lattice::Unevaluated;
-        };
-
-        // Charge one step per call entry. Bail (without consuming
-        // anything) when exhausted so a chain that exactly hits the
-        // ceiling still has its outermost result left intact rather
-        // than half-folded.
-        if self.step_budget == 0 {
-            return Lattice::Unevaluated;
-        }
-        self.step_budget -= 1;
-
-        // Push call frame, swap env to a fresh one bound to the
-        // arguments. Local indices `0..params.len()` shadow the
-        // parameters — the same convention the rest of the compiler
-        // uses (`NirFunction::locals[0..params.len()]`).
-        self.call_stack.push(key);
-        let saved_env = std::mem::take(&mut self.env);
-        for (i, v) in bound.iter().enumerate() {
-            // u32 cast is safe: param counts are bounded by Wasm local
-            // index limits, well under u32::MAX.
-            #[allow(clippy::cast_possible_truncation)]
-            self.env.insert(i as u32, Lattice::Const(*v));
-        }
-
-        // Reduce the tail. We use `reduce_to_lattice`, not the bare
-        // `expr_to_lattice` projection, so Binary / Unary / Cast
-        // inside the body actually fold against the bound env (the
-        // projection alone returns Unevaluated for those kinds — only
-        // `try_fold` walks them). `reduce_to_lattice` clones internally,
-        // so the body inside the still-held `Ref` is not mutated.
-        let result = self.reduce_to_lattice(&tail);
-
-        // Restore. The `Ref` (and its dynamic borrow on the callee
-        // RefCell) drops when this scope ends.
-        self.env = saved_env;
-        self.call_stack.pop();
-
-        // Only Const(v) is exposed to the caller. NonConst from the
-        // tail (e.g. a Const/Const op that hit a runtime trap like
-        // div-by-zero inside the body) is downgraded to Unevaluated
-        // so the original Call expression is left intact and the
-        // runtime trap survives.
-        match result {
-            c @ Lattice::Const(_) => c,
-            Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
-        }
-    }
 }
 
-/// Recognize a callee body shape the engine can evaluate: a single
-/// statement that is either `Return { Some(expr) }` or `Expr(expr)`.
-/// Returns the tail expression in either case.
-///
-/// Anything else (zero or multiple stmts, intermediate Let / If / Loop /
-/// Break / Return without value, …) reports `None`. The caller treats
-/// `None` as "do not fold this call", preserving the runtime call.
-fn single_tail_expression(func: &NirFunction) -> Option<NirExpr> {
-    let body = func.body.as_ref().map(crate::nir_arena::Body::to_block)?;
-    let [single] = body.stmts.as_slice() else {
+/// The tail expression of a body whose root block is a single statement —
+/// `Return { Some(e) }` or `Expr(e)`. `None` for any other shape, which the
+/// caller treats as "do not fold this call".
+fn single_tail_expression_a(body: &Body) -> Option<ExprId> {
+    let [single] = body.blocks[body.root].stmts.as_slice() else {
         return None;
     };
-    match &single.kind {
-        NirStmtKind::Return { value: Some(e) } | NirStmtKind::Expr(e) => Some(e.clone()),
+    match body.stmts[*single].kind {
+        StmtKind::Return { value: Some(e) } | StmtKind::Expr(e) => Some(e),
         _ => None,
     }
 }
@@ -2697,7 +1815,7 @@ fn option_to_lattice(opt: Option<Value>) -> Lattice {
     }
 }
 
-/// Outcome of testing a [`NirPattern`] against a constant scrutinee
+/// Outcome of testing a pattern against a constant scrutinee
 /// [`Value`]. The three states mirror the pattern's contribution to
 /// SCCP feasibility in [`Interpreter::match_lattice`]:
 ///
@@ -2721,27 +1839,6 @@ fn bool_to_match(b: bool) -> PatternMatch {
         PatternMatch::Yes
     } else {
         PatternMatch::No
-    }
-}
-
-/// Conservatively decide whether a `match`'s arm set is exhaustive
-/// — i.e. whether the lowering's implicit `Unreachable` fallback is
-/// provably dead. Mirrors the elaborator's [`is_catch_all_pattern`]
-/// rule: at least one unguarded `Wildcard` / `Binding` arm (or an
-/// `Or` pattern containing one) is sufficient. Variant-set / range-set
-/// coverage proofs are deferred until niri models those pattern shapes
-/// structurally; treating them as non-exhaustive here is the safe
-/// answer (it costs an optimization, not correctness).
-fn is_provably_exhaustive(arms: &[NirMatchArm]) -> bool {
-    arms.iter()
-        .any(|a| a.guard.is_none() && pattern_is_catch_all(&a.pattern))
-}
-
-fn pattern_is_catch_all(pat: &NirPattern) -> bool {
-    match pat {
-        NirPattern::Wildcard | NirPattern::Binding { .. } => true,
-        NirPattern::Or(alts) => alts.iter().any(pattern_is_catch_all),
-        _ => false,
     }
 }
 
@@ -2859,66 +1956,10 @@ fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
     }
 }
 
-/// Conservative effect-free check for an expression that we may want
-/// to drop entirely (specifically, the condition of an `if` whose two
-/// arms reduce to the same lattice constant). "Effect-free" here means
-/// "evaluating this neither traps, mutates, nor calls a function that
-/// might do either". The check is structural and only admits a small
-/// allow-list — when in doubt, stay conservative and refuse the rewrite.
-///
-/// Notes:
-///
-/// - `Binary { Div | Mod, … }` is excluded because integer
-///   division-by-zero traps; `Unary { Deref, … }` is excluded for the
-///   same reason (a null/invalid reference would trap).
-/// - `FieldAccess` over speculatable receivers is allowed: a non-null
-///   GC reference's field load cannot trap once we have the reference.
-/// - Calls of any flavor are rejected — even pure callees may return
-///   different values across invocations (e.g. `random.next()` is
-///   marked pure-by-effect in Wado but is not idempotent in the SCCP
-///   sense), and niri does not yet inline pure calls.
-fn is_speculatable(expr: &NirExpr) -> bool {
-    match &expr.kind {
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::Local { .. }
-        | NirExprKind::Unit => true,
-        NirExprKind::Binary { left, op, right } => {
-            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_speculatable(left)
-                && is_speculatable(right)
-        }
-        NirExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Deref) && is_speculatable(inner)
-        }
-        NirExprKind::Cast { expr: inner, .. } => is_speculatable(inner),
-        NirExprKind::FieldAccess { expr: inner, .. } => is_speculatable(inner),
-        _ => false,
-    }
-}
-
 // ──────────────────────────────────────────────────────────────────────────────
-// NirExpr <-> Value bridge
+// Value <-> ExprKind bridge
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn value_to_expr_kind(v: Value) -> NirExprKind {
-    match v {
-        Value::Int { value, prim } => NirExprKind::IntLiteral {
-            repr: format_int_repr(value, prim),
-            value,
-        },
-        Value::Float { value, .. } => NirExprKind::FloatLiteral {
-            repr: format_float_repr(value),
-            value,
-        },
-        Value::Bool(b) => NirExprKind::BoolLiteral(b),
-        Value::Char(c) => NirExprKind::CharLiteral(c),
-    }
-}
-
-/// Arena counterpart of [`value_to_expr_kind`].
 fn value_to_arena_kind(v: Value) -> ExprKind {
     match v {
         Value::Int { value, prim } => ExprKind::IntLiteral {
@@ -2934,7 +1975,7 @@ fn value_to_arena_kind(v: Value) -> ExprKind {
     }
 }
 
-/// Arena counterpart of [`is_provably_exhaustive`].
+/// Whether the arms cover every scrutinee (a guardless catch-all exists).
 fn is_provably_exhaustive_a(body: &Body, arms: &[ArmData]) -> bool {
     arms.iter()
         .any(|a| a.guard.is_none() && pattern_is_catch_all_a(body, a.pattern))
@@ -2948,7 +1989,7 @@ fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
     }
 }
 
-/// Arena counterpart of [`rewrite_short_circuit`].
+/// Simplify `false && x` / `true || x` and their mirror forms.
 fn rewrite_short_circuit_a(body: &mut Body, e: ExprId) -> bool {
     enum Pick {
         Left,
@@ -2973,7 +2014,7 @@ fn rewrite_short_circuit_a(body: &mut Body, e: ExprId) -> bool {
     true
 }
 
-/// Arena counterpart of [`try_match_bool_discriminator`], reading arena arm data.
+/// Recognize `match X { Case => true, _ => false }` as an equality test.
 fn try_match_bool_discriminator_a(
     body: &Body,
     arms: &[(Option<ExprId>, PatId, ExprId, crate::token::Span)],
@@ -3009,7 +2050,7 @@ fn try_match_bool_discriminator_a(
     })
 }
 
-/// Arena counterpart of [`is_speculatable`].
+/// Whether `e` can be evaluated out of order (side-effect-free, cannot trap).
 fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::IntLiteral { .. }
@@ -3032,47 +2073,6 @@ fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
     }
 }
 
-/// Identity simplifications for short-circuit operators that *preserve*
-/// every subexpression. `false || X → X`, `true && X → X`, and the RHS
-/// counterparts (`X || false → X`, `X && true → X`). Returns `true`
-/// when `expr` was rewritten.
-///
-/// The reverse direction (`true || X → true`, `false && X → false`)
-/// would drop `X`. Even though Wado's `||`/`&&` short-circuit at runtime
-/// — so dropping a side that wouldn't have been evaluated is
-/// semantically defensible — this engine stays conservative and leaves
-/// those rewrites to a future side-effect-aware pass. Mirrors the
-/// previous in-visitor behaviour.
-fn rewrite_short_circuit(expr: &mut NirExpr) -> bool {
-    enum Pick {
-        Left,
-        Right,
-    }
-    let pick = match &expr.kind {
-        NirExprKind::Binary { left, op, right } => match (&left.kind, *op, &right.kind) {
-            (NirExprKind::BoolLiteral(false), NirBinaryOp::Or, _)
-            | (NirExprKind::BoolLiteral(true), NirBinaryOp::And, _) => Pick::Right,
-            (_, NirBinaryOp::Or, NirExprKind::BoolLiteral(false))
-            | (_, NirBinaryOp::And, NirExprKind::BoolLiteral(true)) => Pick::Left,
-            _ => return false,
-        },
-        _ => return false,
-    };
-    // Take ownership of the Binary by swapping its `kind` out. The
-    // placeholder is local to this function and overwritten before we
-    // return, so no caller observes a partially-updated `expr`.
-    let NirExprKind::Binary { left, right, .. } =
-        std::mem::replace(&mut expr.kind, NirExprKind::Unit)
-    else {
-        unreachable!("matched Binary above");
-    };
-    *expr = match pick {
-        Pick::Left => *left,
-        Pick::Right => *right,
-    };
-    true
-}
-
 // ──────────────────────────────────────────────────────────────────────────────
 // `match X { Pat => true, _ => false }` discriminator collapse
 // ──────────────────────────────────────────────────────────────────────────────
@@ -3081,7 +2081,7 @@ fn rewrite_short_circuit(expr: &mut NirExpr) -> bool {
 /// scrutinee box is plugged in by the caller once it has taken ownership
 /// of the original `Match` expression.
 ///
-/// Only the `EnumEq` shape exists today; `NirPattern::Variant` is left
+/// Only the `EnumEq` shape exists today; `PatKind::Variant` is left
 /// intact because synthesising the matching `VariantTest` requires a
 /// variant→case-index lookup that the pattern itself doesn't carry
 /// (the WIR builder resolves it via the variant decl's case list,
@@ -3095,74 +2095,7 @@ struct EnumEqReplacement {
     span: crate::token::Span,
 }
 
-impl EnumEqReplacement {
-    fn into_kind(self, scrut: Box<NirExpr>) -> NirExprKind {
-        let right = Box::new(NirExpr::new(
-            NirExprKind::EnumConstruct {
-                enum_type: self.enum_type,
-                case_index: self.case_index,
-                case_name: self.case_name,
-            },
-            self.enum_type,
-            self.span,
-        ));
-        NirExprKind::Binary {
-            left: scrut,
-            op: NirBinaryOp::Eq,
-            right,
-        }
-    }
-}
-
-/// Recognise the `match X { Enum::Case => true, _ => false }` shape and,
-/// if it matches, return the discriminator replacement that subsumes the
-/// match's boolean meaning.
-///
-/// Accepts:
-/// - Exactly two arms, no guards.
-/// - First arm pattern is `NirPattern::Enum`.
-/// - Second arm pattern is `NirPattern::Wildcard`.
-/// - First arm body is `BoolLiteral(true)`, second arm body is
-///   `BoolLiteral(false)`. The inverted polarity is intentionally not
-///   handled here — the natural source for it is `!(x matches Pat)`,
-///   which already emits the negation outside the (non-inverted)
-///   match.
-fn try_match_bool_discriminator(arms: &[NirMatchArm]) -> Option<EnumEqReplacement> {
-    let [yes_arm, no_arm] = arms else {
-        return None;
-    };
-    if yes_arm.guard.is_some() || no_arm.guard.is_some() {
-        return None;
-    }
-    if !matches!(no_arm.pattern, NirPattern::Wildcard) {
-        return None;
-    }
-    if !matches!(yes_arm.body.kind, NirExprKind::BoolLiteral(true)) {
-        return None;
-    }
-    if !matches!(no_arm.body.kind, NirExprKind::BoolLiteral(false)) {
-        return None;
-    }
-    let NirPattern::Enum {
-        enum_type,
-        case_name,
-        case_index,
-    } = &yes_arm.pattern
-    else {
-        return None;
-    };
-    // Anchor the synthesised `EnumConstruct`'s span on the whole arm
-    // (which covers the pattern that names the case) rather than the
-    // arm's body span (which would point at the `true` literal — a
-    // location with no relation to the case name the construct now
-    // stands in for).
-    Some(EnumEqReplacement {
-        enum_type: *enum_type,
-        case_index: *case_index,
-        case_name: case_name.clone(),
-        span: yes_arm.span,
-    })
-}
+impl EnumEqReplacement {}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Pure value evaluation (Bool / Int / Float)
@@ -3717,7 +2650,7 @@ pub(crate) fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
 
 /// Render a `char` as a Wado-friendly literal repr (`'A'`, `'\n'`,
 /// `'\u{1F600}'`, …). Used when re-emitting a folded `char` value as a
-/// `NirExprKind::CharLiteral`.
+/// `ExprKind::CharLiteral`.
 #[must_use]
 pub(crate) fn format_char_repr(c: char) -> String {
     match c {

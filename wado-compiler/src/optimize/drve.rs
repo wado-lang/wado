@@ -19,7 +19,7 @@
 //!   so we never have to reason about an implicit trailing-value return.
 //! - Requires every other `Return` in the body to also carry a pure value.
 //! - Requires every call site to appear as a top-level statement
-//!   (`NirStmtKind::Expr(Call(f, ...))` or `NirStmtKind::Expr(MethodCall(f,
+//!   (`StmtKind::Expr(Call(f, ...))` or `StmtKind::Expr(MethodCall(f,
 //!   ...))`); any nested or `Let`-bound use disqualifies the candidate.
 //! - Requires at least one observed call site (otherwise DCE will delete
 //!   the function anyway and there is nothing to optimise).
