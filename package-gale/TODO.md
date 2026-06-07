@@ -42,14 +42,30 @@ The K-prefix caller-side mask analysis halts at a multi-alt `RuleRef` because th
 
 ### ATN-class grammars
 
-Grammars whose alt selection needs arbitrary-length lookahead through ambiguous prefixes cannot be decided by static FOLLOW + K-prefix. ANTLR4 handles them with a runtime ATN simulator (closure / predict / DFA cache; out of scope to inspect — see License hygiene in `AGENTS.md`). Gale's static path will always have edges.
+Grammars whose alt selection needs arbitrary-length lookahead through ambiguous prefixes cannot be decided by static FOLLOW + K-prefix. The static path will always have edges — this is not a tuning gap but a decidability one: the lookahead language of a recursive ambiguous prefix is non-regular, so the per-decision lookahead DFA built by subset construction over the ATN does not converge to a finite machine. ANTLR3's static LL(\*) failed here; ANTLR4 replaced it with a **runtime** simulator that builds the decision DFA lazily, driven by the actual input (ALL(\*)). Runtime-ness is what makes the answer complete.
 
 Concrete ATN-class cases already on the board (each with a pinned fixture, see "Gale bugs surfaced by Stage A drivers" below): the LR operator-precedence chain (`DropLoopEntryBranchInLRRule_4`), non-greedy `??` binding (`IfIfElseNonGreedyBinding1/2`), and recursive lexer wildcard (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`).
 
-Two complementary directions, neither scoped yet:
+#### Decided design — hybrid runtime ATN simulator (2026-06)
 
-- **Runtime ATN simulator** in Gale. Large investment; matches ANTLR4 one-for-one. Must stay clean-room (do not read ANTLR4's `ParserATNSimulator.java` etc.).
-- **Lean on the Stage B′ JVM oracle as the measurement axis.** Already landed (see below); each ATN-class fix flips its pinned `[stage_b_oracle_todo]` test green.
+Pre-release, so no API-compat constraints; the two axes that matter are **ANTLR4 behavioural compatibility** and **runtime speed** (perf.md). Design locked in after the trade-off discussion:
+
+- **Hybrid, not full-ATN.** Keep the static compiled fast path for every decision static prediction already resolves (the decidable majority). Replace **only** the `Ambiguous` decision sites — today's longest-match scan tournament — with a call to a runtime ATN simulator. This is a strict superset of both extremes: complete (no static edges) like full-ATN, yet leaves the hot path (`scan_*`, `follow_yields`, leaf rules) untouched, so it sidesteps the measured data-driven-VM-scan dead-end in perf.md (that regressed +24% by interpreting the *hot* leaf scanners; the simulator runs only at *cold*, currently-broken sites).
+- **Clean-room.** Implement from the published ALL(\*) algorithm (closure / SLL predict / DFA cache / full-context fallback). Do **not** read ANTLR4's `ParserATNSimulator.java`, `ATNConfig.java`, `LL1Analyzer.java`, etc. (License hygiene, `AGENTS.md`).
+- **ATN embedding: serialized `i32` blob → SoA.** Emit the reachable-whole-grammar ATN as one compact `i32` array `global`, decoded once at parser construction into flat parallel `List<i32>` arrays (state kind/rule/decision, transition from/to/kind/label). Smallest artifact, cheapest init, `array.get i32` walk on cache-miss — aligns with perf.md's SoA direction. Readability is covered by `gale dump --atn` plus a serialize/deserialize round-trip test. (Rejected: typed-struct globals — thousands of `struct.new` at init; per-decision specialised code — cannot express recursive closure / DFA caching.)
+- **DFA cache: per-`Parser` instance.** Cache lives on the `Parser` struct, fresh per `parse()` call. Within a single parse the same decision (e.g. a deep `expr` recursion's loop-entry) is hit repeatedly and hits the cache, capturing most of the benefit with no statefulness/mutable-global concerns. A persistent cross-parse global cache is a later perf lever, not the first cut.
+- **Conflict resolution: ANTLR4-compatible.** On a genuine prediction conflict pick the minimum alt index; non-greedy subrules (`??`/`*?`/`+?`) prefer the exit transition. The ATN is built so this falls out of transition ordering.
+- **Trigger.** The simulator is invoked exactly where `build_prediction` returns a tree containing `Ambiguous`; everything else keeps emitting the existing compiled path.
+
+#### Phased plan
+
+- **P1** — ATN data model + builder (parser side) + `i32` serialize/deserialize + `gale dump --atn`. Behaviour-unchanged; driven by a round-trip + structural unit test. (`src/atn.wado`, dump wiring.)
+- **P2** — runtime simulator core (SLL closure / predict + per-`Parser` DFA cache) in `runtime.wado`; unit-tested in isolation against hand-built ATNs.
+- **P3** — wire `adaptive_predict(p, decision)` at `Ambiguous` decision sites; flip the IfIfElse non-greedy `??` parser cases green first (SLL-only vertical slice; `[stage_b_oracle_todo] IfIfElseNonGreedyBinding1/2`).
+- **P4** — full-context (LL) fallback for true SLL conflicts; flip `DropLoopEntryBranchInLRRule_4` (`[stage_a_todo]`).
+- **P5** — lexer ATN + non-greedy wildcard; flip `RecursiveLexerRuleRefWithWildcard{Plus,Star}_1` (`[stage_a_todo]`).
+
+The Stage B′ JVM oracle (already landed, see below) is the measurement axis: each ATN-class fix flips its pinned `[stage_b_oracle_todo]` / `[stage_a_todo]` test green.
 
 To triage which static edge a concrete fix must close, `gale dump` surfaces each unresolvable decision as `Ambiguous([alt N, alt M]) — <reason>` (`AmbiguityReason` in `prediction.wado`), with the per-site LR `loop-entry:` dispatch (`conflict-min` + suffix-first overlap groups) and follow-variant `k-prefix=` masks alongside. Example: `DropLoopEntryBranchInLRRule_4`'s `stat` → `Ambiguous([alt 0, alt 1]) — opaque rule-ref prefix` (its two alts share the entire `expr` prefix).
 
