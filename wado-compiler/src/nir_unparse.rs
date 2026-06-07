@@ -8,7 +8,7 @@ use crate::nir::{
     NirBinaryOp, NirEnum, NirFlags, NirFunction, NirGlobal, NirLiteralPattern, NirModule, NirParam,
     NirStruct, NirUnaryOp,
 };
-use crate::nir_arena::{Body, BlockId, ExprId, ExprKind, PatId, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, PatId, PatKind, StmtId, StmtKind};
 use crate::tir::TypeTable;
 
 fn escape_string(s: &str) -> String {
@@ -652,7 +652,8 @@ impl<'a> NirUnparser<'a> {
                 let (inner, target_type) = (*inner, *target_type);
                 self.unparse_expr(body, inner);
                 self.output.push_str(" as ");
-                self.output.push_str(&self.type_table.type_name(target_type));
+                self.output
+                    .push_str(&self.type_table.type_name(target_type));
             }
             ExprKind::Call {
                 func,
