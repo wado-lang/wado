@@ -37,14 +37,6 @@
 //!   `Match` / `Switch` / `LabeledBlock` / nested `Block`) blocks
 //!   substitution — those constructs may not execute the use on
 //!   every path.
-//!
-//! ## Arena port
-//!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the body traversal
-//! (stats, the bottom-up driver, candidate detection, substitution) and both
-//! soundness gates — `ModRef` and the leftmost-evaluated-subexpression walker —
-//! read the arena `Body` directly. No subtree materialization remains.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};

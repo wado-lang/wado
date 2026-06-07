@@ -25,7 +25,7 @@ use crate::token::Span;
 /// - Rewrite `IndirectCall { callee: Local(param), .. }` into
 ///   `MethodCall` on the functor's `__call` method.
 /// - Wrap `Local(param)` args to `Call` / `MethodCall` slots that
-///   still expect `fn(...)` in `NirExprKind::ClosureToCanonical`,
+///   still expect `fn(...)` in `ExprKind::ClosureToCanonical`,
 ///   converting the specialized value back to its canonical
 ///   function-shaped view.
 pub struct SpecializedLocal {
@@ -60,7 +60,7 @@ pub struct ClosurePlan {
 /// `IndirectCall` nodes in place, generates `__Closure_N` functor
 /// structs and `__call` methods, and produces specialized callees for
 /// fn-typed parameters. Remaining `Closure` nodes survive in TIR until
-/// the translator emits `NirExprKind::ClosureToCanonical` from them.
+/// the translator emits `ExprKind::ClosureToCanonical` from them.
 pub fn plan(flat: &mut FlatPackage) -> ClosurePlan {
     let mut closure_lowerer = ClosureLowerer::new(&flat.entry_module_source);
     closure_lowerer.lower_module(flat);
@@ -363,7 +363,7 @@ impl ClosureLowerer {
         // `StructLiteral` at a specialized `Let` site) are now
         // rewritten by the TIR → NIR translator's `Closure` arm using
         // `ClosurePlan::functor_infos`, which produces
-        // `NirExprKind::ClosureToCanonical` directly.
+        // `ExprKind::ClosureToCanonical` directly.
 
         // Functor metadata stays on `self.functor_infos`; the planner
         // moves it directly into `ClosurePlan` instead of staging it
@@ -1000,7 +1000,7 @@ impl ClosureLowerer {
             // Capture the original `fn(...)` type before we overwrite
             // the local's declared type — the translator needs it as
             // `target_fn_type` when re-wrapping a fn-param `Local`
-            // into `NirExprKind::ClosureToCanonical` at a Call/MethodCall
+            // into `ExprKind::ClosureToCanonical` at a Call/MethodCall
             // arg slot that still expects `fn(...)`.
             let original_fn_type = new_locals
                 .get(slot)
@@ -1030,7 +1030,7 @@ impl ClosureLowerer {
         // The body is cloned as-is. The TIR → NIR translator handles
         // the per-function rewrites (`Local` retag, `IndirectCall` →
         // `MethodCall` on `__call`, fn-param-`Local` arg-slot wrap in
-        // `NirExprKind::ClosureToCanonical`) by consulting
+        // `ExprKind::ClosureToCanonical`) by consulting
         // `ClosurePlan::specialized_locals` keyed on
         // `(self.module_source, specialized_name)`.
         let new_body = callee.body.clone();

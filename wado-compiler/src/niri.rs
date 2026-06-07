@@ -1,22 +1,17 @@
 //! NIR Interpreter (niri).
 //!
-//! Compile-time partial evaluator for Wado NIR. The public entry point is
-//! [`Interpreter::reduce`], which takes a `NirExpr` and returns the most
-//! reduced form possible (a literal node when the expression is fully
-//! known, the original tree otherwise). Constant folding is the first
-//! consumer; future passes (branch pruning, constant propagation,
-//! compile-time function evaluation) will reuse the same engine.
+//! Compile-time partial evaluator for Wado NIR, operating on the arena `Body`.
+//! [`Interpreter::reduce_local_a`] rewrites one node in place toward literal
+//! form, [`Interpreter::reduce_to_lattice_a`] projects a node to a [`Lattice`],
+//! and [`Interpreter::reduce_in_place_a`] reduces a whole subtree bottom-up.
+//! Constant folding is the primary consumer; branch pruning, constant
+//! propagation, and compile-time function evaluation reuse the same engine.
 //!
-//! ```text
-//! Interpreter::new(type_table).reduce(&expr) -> NirExpr
-//! ```
+//! Reduction is **monotone** — it only moves expressions toward literal form,
+//! never the reverse — and **idempotent**. Literal leaves are preserved as-is
+//! so the original lexical repr (e.g. `0xFF`) survives a no-op pass.
 //!
-//! `reduce` is **idempotent** — `reduce(reduce(e))` is structurally equal
-//! to `reduce(e)` — and **monotone** — it only moves expressions toward
-//! literal form, never the reverse. Literal leaves are preserved as-is so
-//! the original lexical repr (e.g. `0xFF`) survives a no-op pass.
-//!
-//! Today the engine handles:
+//! The engine handles:
 //!
 //! - Integer arithmetic: Add, Sub, Mul, Div, Mod
 //! - Integer comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
@@ -318,7 +313,7 @@ pub type CalleeMap = IndexMap<CalleeKey, Rc<RefCell<NirFunction>>>;
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Identity of a global variable in the [`GlobalEnv`]. Mirrors the
-/// `(module_source, name)` shape carried by `NirExprKind::GlobalVarGet`
+/// `(module_source, name)` shape carried by `ExprKind::GlobalVarGet`
 /// so the interpreter can look up a `GlobalVarGet` node directly.
 pub type GlobalKey = (ModuleSource, String);
 
@@ -715,7 +710,7 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
 // Interpreter
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Partial evaluator over `NirExpr`.
+/// Partial evaluator over the arena `Body`.
 ///
 /// Holds the type table needed to resolve operand widths, a per-function
 /// `env` mapping local indices to lattice values, an optional
@@ -726,7 +721,7 @@ pub struct Interpreter<'a> {
     /// Lattice values for `let`-bound locals in the *current function*.
     /// Populated by the driving visitor via [`bind_local`] /
     /// [`invalidate_local`]; cleared via [`enter_function`]. Reads of
-    /// `NirExprKind::Local` consult this map during folding.
+    /// `ExprKind::Local` consult this map during folding.
     ///
     /// Locals not present in the map default to [`Lattice::Unevaluated`].
     ///
@@ -1053,14 +1048,8 @@ impl<'a> Interpreter<'a> {
         self.field_env.clear();
     }
 
-    // ───────────────────────────────────────────────────────────────────────
-    // Arena evaluator (read-only). The arena counterparts of `expr_to_lattice`
-    // / `try_fold` / `block_lattice` / `match_lattice` / `pattern_matches`,
-    // operating on a `Body` the const-fold visitor walks. CTFE (`try_call_fold`)
-    // keeps using the tree path on a materialized callee tail.
-    // ───────────────────────────────────────────────────────────────────────
-
-    /// Arena counterpart of `expr_to_lattice`.
+    /// Project an expression to its lattice value, consulting the bound env
+    /// for locals/fields and taking the SCCP join over `if` / `match` arms.
     pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];
         match &node.kind {
@@ -1150,7 +1139,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of `try_fold`.
+    /// Fold a `Binary` / `Unary` / `Cast` of constant operands to a value;
+    /// `NonConst` (not `Unevaluated`) when the op would trap, so the node survives.
     pub fn try_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];
         match &node.kind {
@@ -1185,7 +1175,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of `block_lattice`.
+    /// The lattice of a block: its single tail `Expr`, else `Unevaluated`.
     fn block_lattice_a(&self, body: &Body, b: BlockId) -> Lattice {
         match body.blocks[b].stmts.as_slice() {
             [] => Lattice::Unevaluated,
@@ -1197,7 +1187,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of `match_lattice`.
+    /// The lattice of a `match`: the chosen arm under a constant scrutinee,
+    /// else the join over the feasible arms.
     fn match_lattice_a(&self, body: &Body, scrutinee: ExprId, arms: &[ArmData]) -> Lattice {
         let scrut_const = self.expr_to_lattice_a(body, scrutinee).as_const();
         if arms.is_empty() {
@@ -1245,7 +1236,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of `pattern_matches`.
+    /// Whether `value` matches `pat` (`Yes` / `No` / `Unknown`).
     fn pattern_matches_a(&self, body: &Body, value: &Value, pat: PatId) -> PatternMatch {
         match &body.pats[pat].kind {
             PatKind::Wildcard => PatternMatch::Yes,
@@ -1329,7 +1320,7 @@ impl<'a> Interpreter<'a> {
     // `try_call_fold`, mutating the `Body` the const-fold visitor walks.
     // ───────────────────────────────────────────────────────────────────────
 
-    /// Arena counterpart of `reduce_local`.
+    /// Apply every single-node rewrite at `e`; returns whether it changed.
     pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
             body.exprs[e].kind = value_to_arena_kind(v);
@@ -1387,7 +1378,7 @@ impl<'a> Interpreter<'a> {
         self.rewrite_match_expr_a(body, e)
     }
 
-    /// Arena counterpart of `reduce_local_block`.
+    /// Splice a constant-condition `if` statement into its parent block.
     pub fn reduce_local_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
         let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
             matches!(
@@ -1430,13 +1421,11 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Arena counterpart of `reduce_in_place`. Bottom-up reduces the
-    /// subtree rooted at `e` over the kinds the engine understands (Binary /
-    /// Unary / Cast / If / Match), applying [`Self::reduce_local_a`] at each
-    /// node so a child fold is observable at its parent. Used by CTFE
-    /// (`try_call_fold_a`) to evaluate a callee tail on a cloned scratch body,
-    /// where — unlike the const-fold visitor path — no outer walk has
-    /// pre-reduced the children.
+    /// Bottom-up reduce the subtree rooted at `e` over the kinds the engine
+    /// understands (Binary / Unary / Cast / If / Match), applying
+    /// [`Self::reduce_local_a`] at each node so a child fold is observable at
+    /// its parent. Used by CTFE (`try_call_fold_a`) to evaluate a callee tail
+    /// whose children no outer walk has pre-reduced.
     pub fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         let mut changed = match &body.exprs[e].kind {
             ExprKind::Binary { left, right, .. } => {
@@ -1484,8 +1473,7 @@ impl<'a> Interpreter<'a> {
         changed
     }
 
-    /// Block-level counterpart of [`Self::reduce_in_place_a`], mirroring the
-    /// tree `reduce_in_place_block`.
+    /// Block-level recursion for [`Self::reduce_in_place_a`].
     fn reduce_in_place_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
         let stmts = body.blocks[block].stmts.clone();
         let mut changed = false;
@@ -1496,8 +1484,7 @@ impl<'a> Interpreter<'a> {
         changed
     }
 
-    /// Statement-level counterpart of [`Self::reduce_in_place_a`], mirroring
-    /// the tree `reduce_in_place_stmt`.
+    /// Statement-level recursion for [`Self::reduce_in_place_a`].
     fn reduce_in_place_stmt_a(&mut self, body: &mut Body, s: StmtId) -> bool {
         match &body.stmts[s].kind {
             StmtKind::Expr(e) => {
@@ -1537,12 +1524,9 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of `reduce_to_lattice`. Unlike the tree
-    /// version, the const-fold visitor has already reduced every child of
-    /// `e` bottom-up before this is called, so there is no separate
-    /// `reduce_in_place` step: `try_fold_a` sees the already-folded
-    /// children directly, and a non-foldable node falls through to
-    /// `expr_to_lattice_a`.
+    /// Project `e` to a lattice, assuming its children are already reduced (the
+    /// const-fold visitor walks bottom-up): `try_fold_a` sees folded children
+    /// directly, and a non-foldable node falls through to `expr_to_lattice_a`.
     pub fn reduce_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         match self.try_fold_a(body, e) {
             Lattice::Unevaluated => self.expr_to_lattice_a(body, e),
@@ -1550,17 +1534,15 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Full arena analogue of the tree `reduce_to_lattice`: reduce the
-    /// subtree bottom-up in place (so multi-level constant operands fold), then
-    /// project the result to a lattice. The standalone entry point used by the
-    /// `niri` unit tests, which evaluate a freshly-built expression that no
-    /// outer const-fold walk has pre-reduced.
+    /// Reduce the subtree bottom-up in place (so multi-level constant operands
+    /// fold), then project to a lattice. The standalone entry point for callers
+    /// with an unreduced expression — the `niri` unit tests.
     pub fn reduce_to_lattice_full_a(&mut self, body: &mut Body, e: ExprId) -> Lattice {
         self.reduce_in_place_a(body, e);
         self.reduce_to_lattice_a(body, e)
     }
 
-    /// Arena counterpart of `rewrite_if_expr`.
+    /// Collapse an `if` with a constant condition or equal arms.
     fn rewrite_if_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         let (condition, then_branch, else_branch) = match &body.exprs[e].kind {
             ExprKind::If {
@@ -1622,7 +1604,7 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Arena counterpart of `rewrite_match_expr`.
+    /// Collapse a `match` with a constant scrutinee or a bool-discriminator shape.
     fn rewrite_match_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         let scrutinee = match &body.exprs[e].kind {
             ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
@@ -1672,8 +1654,7 @@ impl<'a> Interpreter<'a> {
 
         // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
         // The scrutinee is preserved inside the synthesised `Binary`, and the
-        // `Match` node `e` keeps its own span — only its `kind` is replaced —
-        // mirroring the tree `EnumEqReplacement::into_kind`.
+        // `Match` node `e` keeps its own span — only its `kind` is replaced.
         if let Some(replacement) = try_match_bool_discriminator_a(body, &arms_data) {
             let right = body.exprs.push(ExprNode {
                 kind: ExprKind::EnumConstruct {
@@ -1722,8 +1703,11 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Arena counterpart of `try_call_fold`: reads the caller's args
-    /// from the arena and evaluates the callee's tail on a materialized tree.
+    /// Fold a pure call whose args are all constant: bind the params, evaluate
+    /// the callee's single tail expression, and return `Const(v)` only when it
+    /// reduces to a value. `Unevaluated` on any miss (non-call, unknown or
+    /// recursive callee, non-const arg, unrecognized body, exhausted budget),
+    /// so the original call — and any runtime trap inside it — survives.
     fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
         let Some(callees) = self.callees else {
             return Lattice::Unevaluated;
@@ -1774,8 +1758,7 @@ impl<'a> Interpreter<'a> {
         // callee body (held under an immutable `Ref`) is not mutated. Only the
         // node maps are cloned (`nodes_only_clone`) — reduction reads no
         // function-level metadata, so cloning the callee's `locals` would be
-        // pure waste. `reduce_in_place_a` then folds children bottom-up — the
-        // arena analogue of the tree path's `reduce_to_lattice`.
+        // pure waste.
         let mut scratch = callee_body.nodes_only_clone();
         self.reduce_in_place_a(&mut scratch, tail);
         let result = self.reduce_to_lattice_a(&scratch, tail);
@@ -1809,10 +1792,9 @@ impl<'a> Interpreter<'a> {
     }
 }
 
-/// Arena counterpart of `single_tail_expression`: the callee body's
-/// single-statement tail expression id, read directly from the arena without
-/// materializing a tree. Recognizes the same shapes (`Return { Some(e) }` or
-/// `Expr(e)`); anything else reports `None`.
+/// The tail expression of a body whose root block is a single statement —
+/// `Return { Some(e) }` or `Expr(e)`. `None` for any other shape, which the
+/// caller treats as "do not fold this call".
 fn single_tail_expression_a(body: &Body) -> Option<ExprId> {
     let [single] = body.blocks[body.root].stmts.as_slice() else {
         return None;
@@ -1834,7 +1816,7 @@ fn option_to_lattice(opt: Option<Value>) -> Lattice {
     }
 }
 
-/// Outcome of testing a `NirPattern` against a constant scrutinee
+/// Outcome of testing a pattern against a constant scrutinee
 /// [`Value`]. The three states mirror the pattern's contribution to
 /// SCCP feasibility in [`Interpreter::match_lattice`]:
 ///
@@ -1976,10 +1958,10 @@ fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// NirExpr <-> Value bridge
+// Value <-> ExprKind bridge
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Arena counterpart of [`value_to_expr_kind`].
+/// Build the literal `ExprKind` for a constant `Value`.
 fn value_to_arena_kind(v: Value) -> ExprKind {
     match v {
         Value::Int { value, prim } => ExprKind::IntLiteral {
@@ -1995,7 +1977,7 @@ fn value_to_arena_kind(v: Value) -> ExprKind {
     }
 }
 
-/// Arena counterpart of [`is_provably_exhaustive`].
+/// Whether the arms cover every scrutinee (a guardless catch-all exists).
 fn is_provably_exhaustive_a(body: &Body, arms: &[ArmData]) -> bool {
     arms.iter()
         .any(|a| a.guard.is_none() && pattern_is_catch_all_a(body, a.pattern))
@@ -2009,7 +1991,7 @@ fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
     }
 }
 
-/// Arena counterpart of [`rewrite_short_circuit`].
+/// Simplify `false && x` / `true || x` and their mirror forms.
 fn rewrite_short_circuit_a(body: &mut Body, e: ExprId) -> bool {
     enum Pick {
         Left,
@@ -2034,7 +2016,7 @@ fn rewrite_short_circuit_a(body: &mut Body, e: ExprId) -> bool {
     true
 }
 
-/// Arena counterpart of [`try_match_bool_discriminator`], reading arena arm data.
+/// Recognize `match X { Case => true, _ => false }` as an equality test.
 fn try_match_bool_discriminator_a(
     body: &Body,
     arms: &[(Option<ExprId>, PatId, ExprId, crate::token::Span)],
@@ -2070,7 +2052,7 @@ fn try_match_bool_discriminator_a(
     })
 }
 
-/// Arena counterpart of [`is_speculatable`].
+/// Whether `e` can be evaluated out of order (side-effect-free, cannot trap).
 fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::IntLiteral { .. }
@@ -2101,7 +2083,7 @@ fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
 /// scrutinee box is plugged in by the caller once it has taken ownership
 /// of the original `Match` expression.
 ///
-/// Only the `EnumEq` shape exists today; `NirPattern::Variant` is left
+/// Only the `EnumEq` shape exists today; `PatKind::Variant` is left
 /// intact because synthesising the matching `VariantTest` requires a
 /// variant→case-index lookup that the pattern itself doesn't carry
 /// (the WIR builder resolves it via the variant decl's case list,
@@ -2670,7 +2652,7 @@ pub(crate) fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
 
 /// Render a `char` as a Wado-friendly literal repr (`'A'`, `'\n'`,
 /// `'\u{1F600}'`, …). Used when re-emitting a folded `char` value as a
-/// `NirExprKind::CharLiteral`.
+/// `ExprKind::CharLiteral`.
 #[must_use]
 pub(crate) fn format_char_repr(c: char) -> String {
     match c {

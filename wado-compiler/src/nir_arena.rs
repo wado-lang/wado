@@ -1,10 +1,9 @@
 //! NIR skeleton arena (Layer 1).
 //!
-//! A per-function arena representation of a NIR body. Where `nir.rs` nests
-//! children through `Box<NirExpr>` / `Vec<NirStmt>`, this stores every node in
-//! a `PrimaryMap` keyed by a typed id (`ExprId` / `StmtId` / `BlockId` /
-//! `PatId`) and references children by id. This is the substrate the
-//! worklist rewrite engine needs: stable handles that survive in-place edits.
+//! A per-function arena representation of a NIR body: every node lives in a
+//! `PrimaryMap` keyed by a typed id (`ExprId` / `StmtId` / `BlockId` / `PatId`)
+//! and references its children by id. This is the substrate the worklist
+//! rewrite engine needs: stable handles that survive in-place edits.
 //!
 //! This module owns the representation, structural traversal
 //! (`for_each_child`), and structural cloning (`clone_expr` / `clone_block`).
@@ -47,7 +46,7 @@ pub enum NodeRef {
     Pat(PatId),
 }
 
-/// An expression node: the arena counterpart of `NirExpr`.
+/// An expression node.
 #[derive(Debug, Clone)]
 pub struct ExprNode {
     pub kind: ExprKind,
@@ -55,36 +54,35 @@ pub struct ExprNode {
     pub span: Span,
 }
 
-/// A statement node: the arena counterpart of `NirStmt`.
+/// A statement node.
 #[derive(Debug, Clone)]
 pub struct StmtNode {
     pub kind: StmtKind,
     pub span: Span,
 }
 
-/// A block node: the arena counterpart of `NirBlock`.
+/// A block node.
 #[derive(Debug, Clone)]
 pub struct BlockNode {
     pub stmts: Vec<StmtId>,
     pub span: Span,
 }
 
-/// A pattern node: the arena counterpart of `NirPattern`.
+/// A pattern node.
 #[derive(Debug, Clone)]
 pub struct PatNode {
     pub kind: PatKind,
     pub span: Span,
 }
 
-/// A call argument with its parameter mutability flag (arena form of
-/// `CallArg`).
+/// A call argument with its parameter mutability flag.
 #[derive(Debug, Clone)]
 pub struct ArenaCallArg {
     pub expr: ExprId,
     pub is_mut: bool,
 }
 
-/// A struct-literal field (arena form of `NirStructField`).
+/// A struct-literal field.
 #[derive(Debug, Clone)]
 pub struct ArenaStructField {
     pub name: String,
@@ -92,7 +90,7 @@ pub struct ArenaStructField {
     pub field_index: u32,
 }
 
-/// A match arm (arena form of `NirMatchArm`).
+/// A match arm.
 #[derive(Debug, Clone)]
 pub struct ArmData {
     pub pattern: PatId,
@@ -101,7 +99,7 @@ pub struct ArmData {
     pub span: Span,
 }
 
-/// A struct destructuring field (arena form of `NirStructPatternField`).
+/// A struct destructuring field.
 #[derive(Debug, Clone)]
 pub struct ArenaStructPatternField {
     pub field_name: String,
@@ -109,7 +107,7 @@ pub struct ArenaStructPatternField {
     pub pattern: PatId,
 }
 
-/// Arena counterpart of `NirExprKind`: identical leaf data, children by id.
+/// Expression kinds: leaf data is stored inline, children by id.
 #[derive(Debug, Clone)]
 pub enum ExprKind {
     IntLiteral {
@@ -248,7 +246,7 @@ pub enum ExprKind {
     },
 }
 
-/// Arena counterpart of `NirStmtKind`.
+/// Statement kinds.
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Let {
@@ -288,9 +286,8 @@ pub enum StmtKind {
     },
 }
 
-/// Arena counterpart of `NirPattern`. Leaf payloads (`NirLiteralPattern`,
-/// range bounds) are reused as-is; nested patterns and the `ConstantValue`
-/// expression become ids.
+/// Pattern kinds. Leaf payloads (`NirLiteralPattern`, range bounds) are
+/// stored inline; nested patterns and the `ConstantValue` expression are ids.
 #[derive(Debug, Clone)]
 pub enum PatKind {
     Wildcard,

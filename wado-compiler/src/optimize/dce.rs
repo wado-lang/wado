@@ -476,7 +476,7 @@ pub fn filter_string_literals(project: &mut NirPackage) {
 /// Filter bytes literals to only include bytes referenced by surviving functions.
 ///
 /// Unlike string literals (which have a `function_strings` map for per-function
-/// tracking), bytes literals are stored inline as `NirExprKind::BytesLiteral(Vec<u8>)`.
+/// tracking), bytes literals are stored inline as `ExprKind::BytesLiteral(Vec<u8>)`.
 /// This function scans all surviving function bodies to collect referenced bytes,
 /// then retains only matching entries in `project.bytes_literals`.
 pub fn filter_bytes_literals(project: &mut NirPackage) {
@@ -779,8 +779,8 @@ fn scan_inspect_signatures_block(
 /// pending inspect edges, used globals, used types) in one traversal of a
 /// function body. Replaces three hand-rolled walkers (`analyze_block`,
 /// `collect_global_reads_block`, `collect_types_from_block`) that all
-/// rediscovered the same NIR shape independently — new `NirStmtKind` /
-/// `NirExprKind` variants now only need to be considered in the visitor
+/// rediscovered the same NIR shape independently — new `StmtKind` /
+/// `ExprKind` variants now only need to be considered in the visitor
 /// trait, not in three places.
 struct DceWalker<'a> {
     type_table: &'a TypeTable,
@@ -896,7 +896,7 @@ impl<'a> DceWalker<'a> {
             // Free function call.
             debug_assert!(
                 !func_name.contains("::") || func_name.starts_with("builtin::"),
-                "NirExprKind::Call should not have method-style names: {func_name}"
+                "ExprKind::Call should not have method-style names: {func_name}"
             );
 
             let callee_module = original_callee_module.clone();

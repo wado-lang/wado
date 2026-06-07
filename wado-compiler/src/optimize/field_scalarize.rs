@@ -372,10 +372,8 @@ struct HfsAnalysis<'a> {
     aliased_in_function: &'a IndexSet<u32>,
 }
 
-/// Arena driver: walk the function body finding loops, recursing into nested
-/// blocks first, then scalarizing each loop. The per-loop transform runs on a
-/// materialized tree of the loop body (the battle-tested tree state machine),
-/// lowered back into the arena afterward.
+/// Walk the function body finding loops, recursing into nested blocks first,
+/// then scalarizing each loop in place.
 fn scalarize_block(
     body: &mut Body,
     block: BlockId,
@@ -2521,7 +2519,7 @@ fn accumulate_call_sync(
             // CmRawCall is a lowered Wasm import — its args are primitive
             // Wasm types, never struct refs.
         }
-        // The remaining NirExprKind variants are not call sites. Both callers
+        // The remaining `ExprKind` variants are not call sites. Both callers
         // (`compute_call_field_effects` via `walk_call_expr`, and
         // `compute_deferrable_candidates`' `CallTouchVisitor`) gate on the
         // `Call` / `MethodCall` / `IndirectCall` / `CmRawCall` shape before
@@ -2797,7 +2795,7 @@ fn walk_expr_branches_switch(
     *states = target;
 }
 
-/// Walk a Match expression: each arm.body is a `NirExpr` (NOT a `NirBlock`).
+/// Walk a Match expression: each `arm.body` is an expression id, not a block.
 /// The guard (if any) and the body each get their own per-expression
 /// sync wrapper so that pre-stmts emitted while walking the guard run
 /// BEFORE the guard's evaluation (not after — which would let the

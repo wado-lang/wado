@@ -518,10 +518,9 @@ impl NirFunction {
 ///
 /// * `NirFunction::locals` and `NirGlobal::locals` — the function/global's
 ///   absolute local table, keyed by Wasm local index.
-/// * `NirExprKind::Closure { body_locals, .. }` — the closure's
-///   body-level let-bindings (params live in `params` so they aren't
-///   duplicated). Pattern lowering reconstructs the closure-scope local
-///   table from `params + body_locals` while descending in.
+/// * A closure's `params + body_locals` — pattern lowering reconstructs the
+///   closure-scope local table from these while descending into a closure
+///   body (params are not duplicated in `body_locals`).
 #[derive(Debug, Clone)]
 pub struct NirLocal {
     /// Source-level name of the binding (or a synthesised `__name` for

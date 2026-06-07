@@ -1,7 +1,7 @@
 //! Per-expression mod/ref summary for Wado NIR.
 //!
-//! A [`ModRef`] is a coarse, conservative summary of what a [`NirExpr`]
-//! or [`NirStmt`] (together with its sub-tree) does to machine state:
+//! A [`ModRef`] is a coarse, conservative summary of what an expression
+//! or statement (together with its sub-tree) does to machine state:
 //! which locals/globals it reads and writes, whether it touches the GC
 //! heap or linear memory, whether it may transfer control non-locally,
 //! whether it can call into arbitrary user code, and whether it may
@@ -50,7 +50,7 @@
 //!   lets pure float→float / int-widening casts ride past
 //!   trap-conflicting intervening stmts.
 //!
-//! ## Discipline for extending [`NirExprKind`] / [`NirStmtKind`]
+//! ## Discipline for extending [`ExprKind`] / [`StmtKind`]
 //!
 //! [`ModRef::accumulate_expr`] / [`ModRef::accumulate_stmt`] enumerate
 //! every effectful variant explicitly. Pure value-producing variants
@@ -116,7 +116,7 @@ impl Control {
     }
 }
 
-/// Modifies / references summary of a [`NirExpr`] or [`NirStmt`] and
+/// Modifies / references summary of an expression or statement and
 /// its sub-tree.
 ///
 /// All fields are conservatively monotonic: once a flag is `true` or a
