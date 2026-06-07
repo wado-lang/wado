@@ -1635,30 +1635,6 @@ pub(super) fn synthesize_general_export_binding(
     binding
 }
 
-/// Synthesize a stub export binding that just calls `task-return(0)`.
-///
-/// Used for a library (`--lib`) compile: the target command world declares an
-/// export (`run`) that a library does not define, so the binding is stubbed to
-/// keep the produced component valid. Command/HTTP compiles error instead.
-pub(super) fn synthesize_void_stub_adapter(export_name: &str) -> Rc<RefCell<TirFunction>> {
-    let binding_name = export_binding_func_name(export_name);
-
-    // Just call task-return(0) — Ok discriminant for result<_, _>
-    let body = block(vec![expr_stmt(cm_raw_call(
-        "task-return",
-        vec![i32_const(0)],
-        TypeTable::UNIT,
-    ))]);
-
-    let binding = make_binding_function(binding_name, vec![], TypeTable::UNIT, body, 0, vec![]);
-    {
-        let mut b = binding.borrow_mut();
-        b.is_export = true;
-        b.is_cm_export = true;
-    }
-    binding
-}
-
 /// Synthesize an export binding for `export async fn` functions.
 ///
 /// The user function calls `task-return` internally via `task return expr` stmts

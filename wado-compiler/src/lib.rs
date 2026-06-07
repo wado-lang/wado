@@ -211,11 +211,6 @@ pub struct CompilerOptions {
     /// default; the CLI's `--no-unused` flag turns it off. Gates only the
     /// diagnostic emission, never the liveness analysis itself.
     pub unused_diagnostics: bool,
-    /// Compiling a library entry (`wado compile --lib`). A library has no
-    /// command entry point, so a missing required world export (`run`) is not
-    /// an error — its `export` items are the API. Stubs the absent export
-    /// instead of bailing.
-    pub lib: bool,
 }
 
 impl Default for CompilerOptions {
@@ -233,7 +228,6 @@ impl Default for CompilerOptions {
             test_name_filters: Vec::new(),
             codegen_flags: Vec::new(),
             unused_diagnostics: true,
-            lib: false,
         }
     }
 }
@@ -582,7 +576,6 @@ fn compile_after_load<H: CompilerHost>(
         package.target_world = world;
     }
     package.skip_validation = options.skip_validation;
-    package.lib = options.lib;
     package.test_name_filters = options.test_name_filters;
     package.wasm_assets = wasm_assets;
     package.codegen_flags = match codegen_flags::CodegenFlags::parse(&options.codegen_flags) {

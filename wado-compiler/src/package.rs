@@ -55,10 +55,6 @@ pub struct Package {
     /// When true, skip Wasm validation after code generation.
     /// Returns raw bytes even if invalid — useful for debugging codegen.
     pub skip_validation: bool,
-    /// Compiling a library entry (`wado compile --lib`). A library has no
-    /// command entry point, so a required world export the entry does not
-    /// define (`run`) is stubbed rather than an error.
-    pub lib: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
     pub target_world: String,
     /// `--test-name` substring filters (test world only). When non-empty, only
@@ -156,7 +152,6 @@ impl Package {
             strip_names: false,
             codegen_flags: crate::codegen_flags::CodegenFlags::default(),
             skip_validation: false,
-            lib: false,
             target_world: "wasi:cli/command".to_string(),
             test_name_filters: Vec::new(),
             // CM export adapter mapping

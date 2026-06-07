@@ -228,37 +228,6 @@ lib = "src/lib.wado"
 }
 
 #[test]
-fn test_compile_lib_flag() {
-    let tmp = tempfile::tempdir().unwrap();
-
-    let src_dir = tmp.path().join("src");
-    fs::create_dir_all(&src_dir).unwrap();
-
-    let toml = r#"[package]
-name = "test-lib"
-version = "0.1.0"
-lib = "src/lib.wado"
-"#;
-    fs::write(tmp.path().join("wado.toml"), toml).unwrap();
-
-    let source = r"
-export fn add(a: i32, b: i32) -> i32 {
-    return a + b;
-}
-";
-    fs::write(src_dir.join("lib.wado"), source).unwrap();
-
-    let output_path = tmp.path().join("out.wasm");
-
-    wado_in(tmp.path())
-        .args(["compile", "--lib", "-o", output_path.to_str().unwrap()])
-        .assert()
-        .success();
-
-    assert!(output_path.exists());
-}
-
-#[test]
 fn test_serve_manifest_missing_service() {
     let tmp = tempfile::tempdir().unwrap();
 

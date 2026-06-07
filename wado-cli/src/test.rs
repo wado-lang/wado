@@ -70,7 +70,6 @@ impl TestOptions {
             no_cache: self.no_cache,
             test_name_filters: self.test_name_filters.clone(),
             codegen_flags: Vec::new(),
-            lib: false,
         }
     }
 }

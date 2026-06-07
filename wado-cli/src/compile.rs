@@ -78,7 +78,6 @@ pub struct CompileOptions {
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
-    pub lib: bool,
     pub no_cache: bool,
     pub codegen_flags: Vec<String>,
 }
@@ -110,8 +109,6 @@ pub struct CompileFlags {
     /// Forwarded verbatim to `CompilerOptions::codegen_flags`; the compiler
     /// validates them.
     pub codegen_flags: Vec<String>,
-    /// `--lib`: compiling a library entry, which has no command `run`.
-    pub lib: bool,
 }
 
 impl CompileOptions {
@@ -128,7 +125,6 @@ impl CompileOptions {
             no_cache: self.no_cache,
             test_name_filters: Vec::new(),
             codegen_flags: self.codegen_flags.clone(),
-            lib: self.lib,
         }
     }
 }
@@ -147,7 +143,6 @@ enum Opt {
     NoCache,
     Allocator,
     Feature,
-    Lib,
     Help,
 }
 
@@ -165,7 +160,6 @@ impl Opt {
         Self::NoCache,
         Self::Allocator,
         Self::Feature,
-        Self::Lib,
         Self::Help,
     ];
 
@@ -198,12 +192,6 @@ impl Opt {
             Self::NoCache => args::NO_CACHE_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Feature => args::FEATURE_SPEC,
-            Self::Lib => args::OptSpec {
-                long: Some("lib"),
-                short: None,
-                value: None,
-                desc: "Compile the library entry point from wado.toml ([package].lib)",
-            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -238,7 +226,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
     let mut codegen_flags: Vec<String> = Vec::new();
-    let mut lib = false;
     let mut no_cache = false;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -272,7 +259,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                     allocator = Some(args::require_string(&mut parser)?);
                 }
                 Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
-                Opt::Lib => lib = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -283,11 +269,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         }
     }
 
-    let entry_kind = if lib {
-        manifest::EntryPointKind::Lib
-    } else {
-        manifest::EntryPointKind::Command
-    };
+    // `--lib` is abolished pending a world model that fits libraries; every
+    // `wado compile` resolves the command entry point.
+    let entry_kind = manifest::EntryPointKind::Command;
 
     Ok(CompileOptions {
         input: manifest::resolve_input(input, entry_kind, &usage)?,
@@ -301,7 +285,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         inline_threshold,
         opt_iterations,
         allocator,
-        lib,
         no_cache,
         codegen_flags,
     })
@@ -383,7 +366,6 @@ pub async fn try_compile(
         invocations: pipeline_outcome.invocations,
         test_name_filters: flags.test_name_filters.clone(),
         codegen_flags: flags.codegen_flags.clone(),
-        lib: flags.lib,
         ..Default::default()
     };
 
