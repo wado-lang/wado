@@ -346,8 +346,8 @@ pub struct Body {
 impl Body {
     /// An empty body: no nodes and a placeholder `root` (set by the caller once
     /// the root block is built). Used by `lower::translate` as the canonical
-    /// builder it pushes nodes into, and as the scratch arena behind
-    /// tree-typed NIR positions.
+    /// builder it pushes nodes into, and as a scratch arena for passes that
+    /// build a working body of their own.
     pub fn empty() -> Self {
         Self {
             exprs: PrimaryMap::new(),
@@ -355,6 +355,27 @@ impl Body {
             blocks: PrimaryMap::new(),
             pats: PrimaryMap::new(),
             root: BlockId::from_u32(0),
+            locals: Vec::new(),
+            address_taken_locals: IndexSet::default(),
+            stores_aliased_locals: IndexSet::default(),
+        }
+    }
+
+    /// A working copy that clones the node maps (`exprs` / `stmts` / `blocks` /
+    /// `pats`) and `root` but drops the function-level metadata (`locals`,
+    /// `address_taken_locals`, `stores_aliased_locals`). For read-only or
+    /// in-place-reduce scratch use where that metadata is never consulted — e.g.
+    /// niri's CTFE evaluator, which mutates the cloned node maps but reads only
+    /// nodes. Node ids are preserved, so an id taken from `self` stays valid in
+    /// the returned body. Cheaper than a full `clone()` when the dropped
+    /// metadata is non-trivial (a real function body's `locals`) and unused.
+    pub fn nodes_only_clone(&self) -> Self {
+        Self {
+            exprs: self.exprs.clone(),
+            stmts: self.stmts.clone(),
+            blocks: self.blocks.clone(),
+            pats: self.pats.clone(),
+            root: self.root,
             locals: Vec::new(),
             address_taken_locals: IndexSet::default(),
             stores_aliased_locals: IndexSet::default(),

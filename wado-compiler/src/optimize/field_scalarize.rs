@@ -180,7 +180,7 @@ fn analyze_function_field_usage(
         conservative_params: &mut conservative_locals,
         type_table,
     };
-    collect_param_field_usage_in_block(arena, arena.root, &mut cx);
+    collect_param_field_usage_node(arena, NodeRef::Block(arena.root), &mut cx);
 
     // Convert from local_index-keyed to position-keyed
     let mut result: IndexMap<u32, ParamFieldUsage> = IndexMap::default();
@@ -205,213 +205,74 @@ struct ParamUsageCtx<'a> {
     type_table: &'a TypeTable,
 }
 
-fn collect_param_field_usage_in_block(body: &Body, block: BlockId, cx: &mut ParamUsageCtx) {
-    for sid in body.blocks[block].stmts.clone() {
-        collect_param_field_usage_in_stmt(body, sid, cx);
-    }
-}
-
-fn collect_param_field_usage_in_stmt(body: &Body, stmt: StmtId, cx: &mut ParamUsageCtx) {
-    match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. }
-        | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Expr(value) => {
-            collect_param_field_usage_in_expr(body, *value, cx);
-        }
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            if let Some(v) = *value {
-                collect_param_field_usage_in_expr(body, v, cx);
-            }
-        }
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            collect_param_field_usage_in_expr(body, condition, cx);
-            collect_param_field_usage_in_block(body, then_block, cx);
-            if let Some(eb) = else_block {
-                collect_param_field_usage_in_block(body, eb, cx);
-            }
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            collect_param_field_usage_in_block(body, *b, cx);
-        }
-        StmtKind::Continue => {}
-    }
-}
-
-fn collect_param_field_usage_in_expr(body: &Body, e: ExprId, cx: &mut ParamUsageCtx) {
-    match &body.exprs[e].kind {
-        ExprKind::FieldAccess {
-            expr: inner,
-            field_index,
-            ..
-        } => {
-            // Track field access on struct param: `self.field` or `(&mut self).field`
-            let (inner, field_index) = (*inner, *field_index);
-            if let Some(idx) = extract_local_index(body, inner)
-                && cx.struct_params.contains(&idx)
-            {
-                cx.field_sets.entry(idx).or_default().insert(field_index);
-                return;
-            }
-            collect_param_field_usage_in_expr(body, inner, cx);
-        }
-        ExprKind::Assign { target, value } => {
-            let (target, value) = (*target, *value);
-            // Check for `self.field = val` (field assignment)
-            if let ExprKind::FieldAccess {
+/// Walk every node under `node`, recording which fields of each struct
+/// parameter the function accesses. Only a handful of node shapes carry
+/// param-usage signal — a `local.field` access, a whole-`param` assignment or
+/// pass-to-callee — so those are special-cased and every other node falls
+/// through to a generic `for_each_child` descent (the same shape as
+/// `arena_query::collect_reads_node`). Patterns are not descended into: the old
+/// scan never looked inside them, and a `param.field` cannot appear in pattern
+/// position anyway.
+fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsageCtx) {
+    if let NodeRef::Expr(e) = node {
+        match &body.exprs[e].kind {
+            // `param.field` (or `(&mut param).field`): record the field and
+            // stop — the receiver place is not a value-position read.
+            ExprKind::FieldAccess {
                 expr: inner,
                 field_index,
                 ..
-            } = &body.exprs[target].kind
-            {
+            } => {
                 let (inner, field_index) = (*inner, *field_index);
                 if let Some(idx) = extract_local_index(body, inner)
                     && cx.struct_params.contains(&idx)
                 {
                     cx.field_sets.entry(idx).or_default().insert(field_index);
-                    collect_param_field_usage_in_expr(body, value, cx);
                     return;
                 }
             }
-            // Check for full local assignment `param = val` → conservative
-            if let ExprKind::Local { index, .. } = &body.exprs[target].kind
-                && cx.struct_params.contains(index)
-            {
-                cx.conservative_params.insert(*index);
-            }
-            collect_param_field_usage_in_expr(body, target, cx);
-            collect_param_field_usage_in_expr(body, value, cx);
-        }
-        ExprKind::Call { args, .. } => {
-            // If a struct param is passed as argument → conservative
-            for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                mark_if_param_passed(body, aid, cx);
-                collect_param_field_usage_in_expr(body, aid, cx);
-            }
-        }
-        ExprKind::MethodCall { receiver, args, .. } => {
-            // If a struct param is the receiver → conservative (self passed to another method)
-            let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            mark_if_param_passed(body, receiver, cx);
-            collect_param_field_usage_in_expr(body, receiver, cx);
-            for aid in arg_ids {
-                mark_if_param_passed(body, aid, cx);
-                collect_param_field_usage_in_expr(body, aid, cx);
-            }
-        }
-        ExprKind::IndirectCall { callee, args, .. } => {
-            let callee = *callee;
-            let arg_ids = args.clone();
-            collect_param_field_usage_in_expr(body, callee, cx);
-            for aid in arg_ids {
-                mark_if_param_passed(body, aid, cx);
-                collect_param_field_usage_in_expr(body, aid, cx);
-            }
-        }
-        ExprKind::CmRawCall { args, .. } => {
-            for aid in args.clone() {
-                collect_param_field_usage_in_expr(body, aid, cx);
-            }
-        }
-        ExprKind::Binary { left, right, .. } => {
-            let (left, right) = (*left, *right);
-            collect_param_field_usage_in_expr(body, left, cx);
-            collect_param_field_usage_in_expr(body, right, cx);
-        }
-        ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => {
-            collect_param_field_usage_in_expr(body, *expr, cx);
-        }
-        ExprKind::Index { expr, index } => {
-            let (expr, index) = (*expr, *index);
-            collect_param_field_usage_in_expr(body, expr, cx);
-            collect_param_field_usage_in_expr(body, index, cx);
-        }
-        ExprKind::Block(block) => {
-            collect_param_field_usage_in_block(body, *block, cx);
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            collect_param_field_usage_in_expr(body, condition, cx);
-            collect_param_field_usage_in_block(body, then_branch, cx);
-            if let Some(eb) = else_branch {
-                collect_param_field_usage_in_block(body, eb, cx);
-            }
-        }
-        ExprKind::StructLiteral { fields, .. } => {
-            for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                collect_param_field_usage_in_expr(body, fid, cx);
-            }
-        }
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            for eid in elements.clone() {
-                collect_param_field_usage_in_expr(body, eid, cx);
-            }
-        }
-        ExprKind::ClosureToCanonical { functor, .. } => {
-            collect_param_field_usage_in_expr(body, *functor, cx);
-        }
-        ExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = *payload {
-                collect_param_field_usage_in_expr(body, p, cx);
-            }
-        }
-        ExprKind::LabeledBlock { block, .. } => {
-            collect_param_field_usage_in_block(body, *block, cx);
-        }
-        ExprKind::GlobalVarSet { value, .. } => {
-            collect_param_field_usage_in_expr(body, *value, cx);
-        }
-        ExprKind::VariantTag { expr }
-        | ExprKind::VariantTest { expr, .. }
-        | ExprKind::VariantPayload { expr, .. } => {
-            collect_param_field_usage_in_expr(body, *expr, cx);
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            let scrutinee = *scrutinee;
-            let arms = arms.clone();
-            let default = *default;
-            collect_param_field_usage_in_expr(body, scrutinee, cx);
-            for arm in arms {
-                collect_param_field_usage_in_block(body, arm, cx);
-            }
-            collect_param_field_usage_in_block(body, default, cx);
-        }
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
-        | ExprKind::StringLiteral(_)
-        | ExprKind::BytesLiteral(_)
-        | ExprKind::Null
-        | ExprKind::Unit
-        | ExprKind::Local { .. }
-        | ExprKind::GlobalVarGet { .. }
-        | ExprKind::EnumConstruct { .. } => {}
-        ExprKind::Match { expr, arms } => {
-            let expr = *expr;
-            let arms = arms.clone();
-            collect_param_field_usage_in_expr(body, expr, cx);
-            for arm in &arms {
-                if let Some(guard) = arm.guard {
-                    collect_param_field_usage_in_expr(body, guard, cx);
+            // `param = val` reassigns the whole struct → conservative. (A
+            // `param.field = val` field-assign is recorded when the generic
+            // descent reaches its `FieldAccess` target.)
+            ExprKind::Assign { target, .. } => {
+                if let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+                    && cx.struct_params.contains(index)
+                {
+                    cx.conservative_params.insert(*index);
                 }
-                collect_param_field_usage_in_expr(body, arm.body, cx);
             }
+            // A struct param passed to a callee escapes → conservative for
+            // every field. `IndirectCall`'s callee position is not an argument,
+            // so it is left to the generic descent (never marked).
+            ExprKind::Call { args, .. } => {
+                for arg in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
+                    mark_if_param_passed(body, arg, cx);
+                }
+            }
+            ExprKind::MethodCall { receiver, args, .. } => {
+                let receiver = *receiver;
+                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                mark_if_param_passed(body, receiver, cx);
+                for arg in arg_ids {
+                    mark_if_param_passed(body, arg, cx);
+                }
+            }
+            ExprKind::IndirectCall { args, .. } => {
+                for arg in args.clone() {
+                    mark_if_param_passed(body, arg, cx);
+                }
+            }
+            _ => {}
         }
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| {
+        if !matches!(c, NodeRef::Pat(_)) {
+            kids.push(c);
+        }
+    });
+    for c in kids {
+        collect_param_field_usage_node(body, c, cx);
     }
 }
 

@@ -1770,12 +1770,13 @@ impl<'a> Interpreter<'a> {
             #[allow(clippy::cast_possible_truncation)]
             self.env.insert(i as u32, Lattice::Const(*v));
         }
-        // Reduce the tail on a cloned scratch body so the shared callee body
-        // (held under an immutable `Ref`) is not mutated. The callee passed the
-        // single-tail-expression shape check, so its body is one statement and
-        // the clone is small. `reduce_in_place_a` then folds children bottom-up
-        // — the arena analogue of the tree path's `reduce_to_lattice`.
-        let mut scratch = callee_body.clone();
+        // Reduce the tail on a scratch copy of the callee's nodes so the shared
+        // callee body (held under an immutable `Ref`) is not mutated. Only the
+        // node maps are cloned (`nodes_only_clone`) — reduction reads no
+        // function-level metadata, so cloning the callee's `locals` would be
+        // pure waste. `reduce_in_place_a` then folds children bottom-up — the
+        // arena analogue of the tree path's `reduce_to_lattice`.
+        let mut scratch = callee_body.nodes_only_clone();
         self.reduce_in_place_a(&mut scratch, tail);
         let result = self.reduce_to_lattice_a(&scratch, tail);
         self.env = saved_env;
