@@ -1,5 +1,5 @@
 ---
-name: profile-compiler
+name: profiling-wado-compiler
 description: Profile the native Rust `wado` binary (compile/serve/run) with a sampling profiler to find host-side bottlenecks. Use for native CPU profiling, not guest wasm (see profiling-wado for that).
 ---
 

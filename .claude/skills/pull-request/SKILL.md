@@ -1,6 +1,6 @@
 ---
 name: pull-request
-description: Conventions and best practices for pull requests to the project
+description: Conventions and best practices for creating a pull request (PR)
 ---
 
 ## Title
@@ -16,8 +16,12 @@ Use the Conventional Commits style for pull request titles:
 - `refactor`: code change that neither fixes a bug nor adds a feature
 - `chore`: anything else (e.g. build process, dependencies)
 
+It may include a scope, e.g. `feat(optimizer)`.
+
 ## Description
 
-Describe the branch's changes as a whole, not commit by commit. Do not include trial-and-error history.
+Describe the outcome of the whole branch.
 
-No need to include a test plan; CI runs the full test suite.
+Do not include trial-and-error history; the commits does.
+
+No need to include a test section. CI runs the full test suite.
