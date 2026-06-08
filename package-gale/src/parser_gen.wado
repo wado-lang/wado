@@ -138,7 +138,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `LoweredGrammar` is threaded through so we can dispatch on
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
-    gen_parser_struct(w, ctx.is_trace());
+    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn());
     if ctx.is_trace() {
         gen_trace_helpers(w);
     }
@@ -167,7 +167,7 @@ fn join_kinds(kinds: &List<String>) -> String {
     return result;
 }
 
-fn gen_parser_struct(w: &mut CodeWriter, trace: bool) {
+fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"List<Token>");
     s.add_field(&"pos", &"i32");
@@ -185,6 +185,14 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool) {
     if trace {
         s.add_field(&"trace_depth", &"i32");
     }
+    // Runtime ATN simulator state (only when a non-greedy decision needs
+    // it). `atn` is decoded once from the `GALE_ATN_DATA` blob; `atn_stack`
+    // is the live rule-invocation stack (rule indices) the rule-entry
+    // wrapper maintains for full-context prediction.
+    if needs_atn {
+        s.add_field(&"atn", &"AtnSim");
+        s.add_field(&"atn_stack", &"List<i32>");
+    }
     s.emit(w);
     w.blank();
 
@@ -195,11 +203,14 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool) {
     f.add_param(&"chars", &"List<char>");
     f.set_return_type(&"Parser");
     f.emit_begin(w);
+    let mut init = String::from("tokens, pos: 0, chars, pending: null");
     if trace {
-        w.line(&"return Parser { tokens, pos: 0, chars, pending: null, trace_depth: 0 };");
-    } else {
-        w.line(&"return Parser { tokens, pos: 0, chars, pending: null };");
+        init.push_str(&", trace_depth: 0");
     }
+    if needs_atn {
+        init.push_str(&", atn: atn_decode(&GALE_ATN_DATA), atn_stack: []");
+    }
+    w.line(&`return Parser \{ {init} \};`);
     w.end();
     w.blank();
 
@@ -1578,7 +1589,8 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
             true,
         ),
     }
-    gen_rule_entry_wrapper(w, &canonical, &inner, &rule.type_name, &rule.name, rule_takes_min_prec(lowered_rule), ctx.emit_follow(), ctx.is_trace());
+    let atn_rule_idx = if ctx.needs_atn() { ctx.rule_index_of(&rule.name) } else { -1 };
+    gen_rule_entry_wrapper(w, &canonical, &inner, &rule.type_name, &rule.name, rule_takes_min_prec(lowered_rule), ctx.emit_follow(), ctx.is_trace(), atn_rule_idx);
 }
 
 /// Emit a thin entry wrapper named `outer_name` that delegates to
@@ -1664,7 +1676,7 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
-fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool, emit_follow: bool, trace: bool) {
+fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool, emit_follow: bool, trace: bool, atn_rule_idx: i32) {
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
     // `follow` precedes `min_prec` so a non-precedence call site can pass
@@ -1688,6 +1700,13 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
         w.line(&`trace_enter(p, &{lit});`);
         w.line(&"p.trace_depth += 1;");
     }
+    // Maintain the rule-invocation stack the ATN simulator reads for
+    // full-context prediction: push this rule's index on entry, pop on
+    // every exit (both success and failure). Only emitted for grammars
+    // that need the ATN.
+    if atn_rule_idx >= 0 {
+        w.line(&`p.atn_stack.push({atn_rule_idx});`);
+    }
     // Forward the runtime FOLLOW continuation to the inner body so its
     // tail-greedy gate sees the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
@@ -1695,6 +1714,9 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
         w.line(&`let r = {*inner_name}(p{fsep}, min_prec);`);
     } else {
         w.line(&`let r = {*inner_name}(p{fsep});`);
+    }
+    if atn_rule_idx >= 0 {
+        w.line(&"p.atn_stack.pop();");
     }
     if trace {
         w.line(&"p.trace_depth -= 1;");
@@ -2600,6 +2622,13 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
     let _ = dedup_name(&opt_field, name_counts);
     let inner_elem = &rep.element;
 
+    // Non-greedy `??`: the enter/skip decision is taken at runtime by the
+    // ATN simulator (full context), not by the static first-set check.
+    if rep.non_greedy && ctx.needs_atn() {
+        emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &atn_optional_enter_cond());
+        return;
+    }
+
     return match &rep_op.strategy {
         OptionalLookahead(s) => emit_op_storable_optional_with_first(
             w,
@@ -2662,6 +2691,14 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
 /// the caller's continuation does NOT claim the upcoming tokens; the
 /// unchanged `cond` otherwise. The Group-bodied counterpart of
 /// `gen_op_repeat_optional_{leaf,rulecall}`'s gate.
+/// Runtime entry condition for a non-greedy `??`: the ATN simulator
+/// decides enter vs skip with full context. The current rule is read from
+/// `p.atn_stack`'s top at runtime, so no compile-time decision number is
+/// needed.
+fn atn_optional_enter_cond() -> String {
+    return String::from("atn_ng_optional_enter(&p.atn, &p.atn_stack, &p.tokens, p.pos, TK_EOF)");
+}
+
 fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> String {
     if gate_caller_follow {
         return `!(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && ({*cond})`;
@@ -2690,6 +2727,12 @@ fn emit_op_storable_optional_with_first(w: &mut CodeWriter, rep_op: &RepeatOp, i
 /// `Option<T>` wrapping; each branch inlines the inner alt directly.
 fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let _ = dedup_name(&rep_op.field, name_counts);
+
+    // Non-greedy `??`: runtime ATN decision (see gen_op_storable_optional).
+    if rep.non_greedy && ctx.needs_atn() {
+        emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &atn_optional_enter_cond());
+        return;
+    }
 
     return match &rep_op.strategy {
         OptionalShapeLookahead(s) => emit_op_optional_with_shape_lookahead_transparent(

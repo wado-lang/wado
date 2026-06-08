@@ -204,6 +204,47 @@ compiled scanner stays and dev-cycle wins should come from the build
 pipeline (subset/lower-opt inner-loop builds), not from interpreting
 scan.
 
+### `core:cbor`/`core:serde` for the ATN blob codec — NO-GO (2026-06)
+
+**Goal.** Replace the hand-written ATN wire-format codec (`serialize_atn`
+in `atn.wado` + `atn_decode` in `runtime.wado`) with derived
+`Serialize`/`Deserialize` + `core:cbor` `to_bytes`/`from_bytes`, so the
+field layout is generated from the struct (maximal DRY — no hand codec,
+no shared constants) instead of two hand-kept-in-lockstep functions.
+
+**Spike.** Measured the wasm-size cost in isolation (the codec linked for
+a `List<i32>`-heavy struct), -O2:
+
+| variant                                   |     wasm |
+| ----------------------------------------- | -------: |
+| hand `i32`-array decode (isolated)        |  7,740 B |
+| `cbor` encode+decode + `serde` (isolated) | 20,622 B |
+
+⇒ the cbor+serde codec adds **~+12.9 KB** (decode-only is less,
+est. +6–9 KB net per parser). For reference the whole Binding2
+parser+driver is **~33.6 KB** at -O2, so this is a **+18–40%** size hit
+on every ATN-using parser. `report-wasm-size` is a tracked budget.
+
+**Other costs.** (1) Decode runs once per `parse()` (per-`Parser`); a
+generic `Deserializer` + base64/byte parse is structurally slower than a
+single linear `array.get i32` walk — the wrong direction for parse speed.
+(2) `runtime.wado` is `#include_str`'d and cannot import, so
+`impl Deserialize for AtnSim` can't live with the struct; codegen would
+have to emit the `core:serde`/`core:cbor` imports + impls into every
+generated parser.
+
+**Decision.** Keep the hand-written codec. After the wire-format DRY
+refactor it is one writer (`serialize_atn`) + one reader (`atn_decode`)
+
+- one shared constant set in `runtime.wado` — fast, zero-dependency, and
+  round-trip-tested (`atn_test.wado` drives `serialize_atn` → `atn_decode`
+  field-for-field). The codec/reader pair is the irreducible minimum;
+  serde would trade ~95 LOC for a heavyweight per-parser dependency.
+  (Separable, still open: embedding the blob as base64/`#data` rather than
+  an `i32`-array literal — a source-size/compile-time lever, codec-agnostic,
+  worth revisiting only once a _large_ grammar's ATN literal is a measured
+  problem. Today only small grammars carry an ATN.)
+
 ## Correctness items with a performance flavor
 
 These are ATN-class prediction gaps tracked for compatibility, but each

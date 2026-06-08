@@ -15,8 +15,6 @@ use t from "../../grammars/ParserExec/IfIfElseNonGreedyBinding2.g4"
     };
 use { normalize_tree } from "../../grammars/ParserExec/IfIfElseNonGreedyBinding2.g4";
 
-#[TODO]
-// triage: Same ATN-class non-greedy `??` decision as IfIfElseNonGreedyBinding1 — Gale's static prediction binds the `else` to the inner ifStatement; the oracle binds it to the outer. Both Binding1 and Binding2 flip green together when non-greedy `??` prediction lands.
 test "stage_b_oracle: ParserExec/IfIfElseNonGreedyBinding2" {
     let input = "if y if y x else x";
     let expected = "(start (statement (ifStatement if y (statement (ifStatement if y (statement x))) else (statement x))))";

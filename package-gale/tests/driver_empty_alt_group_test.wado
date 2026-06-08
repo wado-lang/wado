@@ -1,0 +1,50 @@
+//! Regression fixture for the empty-alt-first group `( | X)`
+//! (ANTLR4 `ParserExec/IfIfElseNonGreedyBinding2`).
+//!
+//! `( | 'else' statement)` is the EBNF equivalent of the non-greedy
+//! optional `('else' statement)??` — the empty alternative is first,
+//! so the decision prefers to skip. Gale canonicalizes the two-alt
+//! empty-first group to a non-greedy Optional during grammar
+//! normalization, so it reuses the runtime ATN simulator path that
+//! already handles Binding1. The dangling-`else` must therefore bind
+//! to the OUTER ifStatement, exactly like Binding1.
+
+use g from "./grammars/ll_empty_alt_group.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/ll_empty_alt_group",
+        },
+    };
+use { normalize_tree } from "./grammars/ll_empty_alt_group.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// Sanity: a lone if with a trailing else must consume it (no outer
+// taker, so the empty alt cannot win).
+test "tree: single if with trailing else binds" {
+    assert_tree(&"if y x else x", &"
+        (start (statement (ifStatement if y (statement x) else (statement x))))
+    ");
+}
+
+// Dangling-`else`: empty-first group prefers to skip, so the `else`
+// binds to the OUTER ifStatement (the inner skips; its real follow,
+// through the outer group, accepts `else`, so exit wins on the
+// min-alt tie-break; the outer enters because its follow — the
+// `statement+` loop — excludes `else`).
+test "tree: dangling else binds to the outer if (empty-alt group)" {
+    assert_tree(&"if y if y x else x", &"
+        (start (statement (ifStatement
+          if y
+          (statement (ifStatement if y (statement x)))
+          else (statement x))))
+    ");
+}
