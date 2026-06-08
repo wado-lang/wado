@@ -3418,8 +3418,6 @@ fn make_pure_fn(
             is_mut: false,
         })
         .collect();
-    #[allow(clippy::cast_possible_truncation)]
-    let local_count = params.len() as u32;
     let mut f = NirFunction {
         name: name.to_string(),
         module_source: ModuleSource::default(),
@@ -3437,7 +3435,6 @@ fn make_pure_fn(
         stores: Vec::new(),
         body: None,
         span,
-        local_count,
         locals,
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
@@ -3694,7 +3691,7 @@ fn multi_stmt_body_left_intact() {
             return_stmt(local_expr(1, TypeTable::I32)),
         ],
     );
-    f.local_count = 2;
+    // local 1 = `y`; pushing it makes `f.local_count()` (== locals.len()) 2.
     f.locals.push(NirLocal {
         name: "y".to_string(),
         type_id: TypeTable::I32,

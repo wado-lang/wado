@@ -96,9 +96,14 @@ impl Rule for ElideBoxLocalRule {
             else {
                 continue;
             };
-            // Move the single-field initializer into its one `r.field` use, then
-            // drop the now-dead binding.
-            engine.become_expr(use_site, inner);
+            // Move the single-field initializer's kind into its one `r.field`
+            // use, then drop the now-dead binding. The use site keeps its own
+            // `type_id` / `span` (the field-access node's), matching the old
+            // `substitute_node` — `become_expr` would instead adopt the
+            // initializer's, which only coincides because value semantics force
+            // the field type to equal the initializer's.
+            let inner_kind = std::mem::replace(&mut engine.body.exprs[inner].kind, ExprKind::Unit);
+            engine.replace_expr_kind(use_site, inner_kind);
             let kept: Vec<StmtId> = stmts
                 .iter()
                 .enumerate()

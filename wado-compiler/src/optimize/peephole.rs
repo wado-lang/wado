@@ -104,14 +104,16 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate, pr
             .flatten();
         // Adjacent-use box-local elision runs post-inline only (it collapses the
         // `Box<T>` shells `sroa_param` / `inline` expose). Its stats come from
-        // the pristine post-inline body; the escape sets are read off the
-        // function before its body is borrowed.
-        let address_taken = func.address_taken_locals.clone();
+        // the pristine post-inline body; the escape sets (`address_taken` here,
+        // `stores_aliased` above) are read off the function before its body is
+        // borrowed — `build_elide_box_local` copies them, so they pass by
+        // reference (no per-function clone, and none at all in the pre-inline
+        // phase where this rule is absent).
         let elide_box_rule = (!pre_inline)
             .then(|| {
-                func.body
-                    .as_ref()
-                    .map(|b| build_elide_box_local(b, &address_taken, &stores_aliased))
+                func.body.as_ref().map(|b| {
+                    build_elide_box_local(b, &func.address_taken_locals, &stores_aliased)
+                })
             })
             .flatten();
         // Disjoint borrow of the body arena and the local list so rules can
