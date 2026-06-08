@@ -1,0 +1,41 @@
+//! Regression: a *partial* turbofish — explicit leading type argument(s)
+//! with the remaining type params left to inference — must infer the trailing
+//! params from the call arguments instead of leaving them unsubstituted.
+//!
+//! Before the fix, providing any explicit type argument skipped inference
+//! entirely, so a trailing param stayed an unbound `TypeParam`. For a
+//! current-module call that surfaced as a spurious "type mismatch: expected
+//! 'B'" error; for a cross-module generic (e.g. `core:cbor`'s
+//! `from_bytes::<T, B>`) the unsubstituted param reached codegen and tripped
+//! the `unsubstituted TypeParam B reached codegen` panic in
+//! `wir_build/context.rs`.
+
+use { to_bytes, from_bytes } from "core:cbor";
+use { Serialize, Deserialize } from "core:serde";
+
+struct Blob { a: List<i32>, n: i32 }
+impl Serialize for Blob;
+impl Deserialize for Blob;
+
+fn pick_second<A, B>(a: A, b: B) -> B {
+    return b;
+}
+
+test "partial turbofish infers the trailing param from an argument" {
+    // `A` is given explicitly; `B` must be inferred from the second argument.
+    let r = pick_second::<i32>(1, 2);
+    assert r == 2;
+}
+
+test "partial turbofish on a cross-module generic (cbor from_bytes)" {
+    // `from_bytes::<T, B>`: `T` is given explicitly; `B` (the byte-container
+    // type) must be inferred from the `bytes` argument.
+    let x = Blob { a: [1, 2, 3], n: 7 };
+    let bytes = to_bytes(&x).unwrap();
+    let y = from_bytes::<Blob>(bytes).unwrap();
+    assert y.n == 7;
+    assert y.a.len() == 3;
+}
+
+__DATA__
+{"test": {}}

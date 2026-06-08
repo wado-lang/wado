@@ -1056,9 +1056,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-        // If no explicit type args, try to infer from argument types
+        // If no explicit type args, try to infer from argument types.
         if type_args.is_empty() {
             type_args = self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
+        } else {
+            // Partial turbofish: the explicit args give a leading prefix and
+            // the remaining type params are left to inference (e.g.
+            // `from_bytes::<Blob>(bytes)` where `B` is the byte-container
+            // type). Infer the trailing params from the arguments and adopt
+            // only the inferred tail — the explicit prefix wins.
+            // `infer_fn_type_args` returns a full param-length vec (unbound
+            // params stay as `TypeParam`). Without this the missing trailing
+            // params stay unsubstituted and reach codegen
+            // (`unsubstituted TypeParam` panic).
+            let type_param_count = self
+                .lookup_function_type_params(&callee)
+                .iter()
+                .filter(|p| !p.is_effect)
+                .count();
+            if type_args.len() < type_param_count {
+                let inferred =
+                    self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
+                if inferred.len() > type_args.len() {
+                    type_args.extend_from_slice(&inferred[type_args.len()..]);
+                }
+            }
         }
 
         // Check trait bounds on function type arguments
