@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780920771731,
+  "lastUpdate": 1780921366321,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31429,6 +31429,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/27dd6747566fd64ffa5e9da29c68f1f039084f24"
         },
         "date": 1780920771178,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437035,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "735b9b61d02e03033b7aea96e09da28fda41234b",
+          "message": "Merge pull request #1334 from wado-lang/claude/atn-class-grammars-2OQer\n\nfeat(gale): hybrid runtime ATN simulator (P1–P3b) — non-greedy `??` / empty-alt groups",
+          "timestamp": "2026-06-08T21:01:35+09:00",
+          "tree_id": "14519250314a0a6f87beb798bf5475dd8c7d13f3",
+          "url": "https://github.com/wado-lang/wado/commit/735b9b61d02e03033b7aea96e09da28fda41234b"
+        },
+        "date": 1780921365820,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
