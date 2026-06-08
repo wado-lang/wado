@@ -375,13 +375,15 @@ API above.
 
 Typed timestamps map to [`core:temporal`](./wep-2026-06-05-core-temporal.md):
 
-- CBOR tag 1 (epoch-based, numeric) ↔ `Instant`.
-- CBOR tag 0 (RFC 3339 text) ↔ `ZonedDateTime`.
-- In JSON, both serialize as an RFC 3339 string.
+- Encode: both serialize as an RFC 3339 text string, wrapped in the standard
+  date/time tag 0 (RFC 8949 §3.4.1) under CBOR and emitted bare under JSON.
+- Decode: both accept an RFC 3339 string (tag 0 / JSON string) or an
+  epoch-seconds number (tag 1 / JSON number, read as UTC). Tag passthrough
+  (§6.1) makes the tag number advisory, so either tag decodes into either type.
 
-These serde impls live in `core:cbor`/`core:json` and depend on the
-`core:temporal` MVP types. Because `core:temporal` ships definitions first, the
-impls are tracked as TODO here rather than blocking the format work.
+The impls are format-agnostic and live in `core:temporal` itself, shared by
+`core:cbor` and `core:json` through a `Serializer::serialize_tag` hook (a no-op
+for tagless formats).
 
 ### Module/source layout
 
@@ -416,14 +418,14 @@ already share code.
 - `to_bytes_canonical` is deterministic for integers, lengths, and map order but
   not byte-identical to a reference encoder for floats (no `f16`) — a documented
   COSE caveat.
-- This WEP specifies the design; `core:cbor`/`core:temporal` serde
-  implementations are deferred (see TODO).
+- This WEP specifies the design; the format and its typed date/time mapping are
+  implemented. Lossy CBOR→JSON via `Value` remains deferred (see TODO).
 
 ## TODO
 
-The groundwork and the `core:cbor` format itself (encoder, decoder, canonical
-encoding) are complete. The remaining items are the typed `core:temporal`
-date/time mapping and lossy CBOR↔JSON conversion.
+The groundwork, the `core:cbor` format itself (encoder, decoder, canonical
+encoding), and the typed `core:temporal` date/time mapping are complete. The
+remaining item is lossy CBOR→JSON conversion.
 
 - [x] Vendor RFC 8949 at `wado-compiler/ref/rfc8949.txt`
 - [x] prelude: `AsByteSlice` trait — new, since Wado has only `From`/`TryFrom`
@@ -468,9 +470,9 @@ date/time mapping and lossy CBOR↔JSON conversion.
       return; (2) `[..T].len()` in a generic body now yields the monomorphized
       arity rather than the unsubstituted pack count of 1 (deferred via a new
       `TirExprKind::TupleLen`, mirroring `TupleZip`).
-- [ ] typed date/time mapping: emit tag 0/1 on encode and read CBOR tag 1
-      (numeric epoch) into `Instant` — needs a tag hook on `Serializer` and a
-      numeric path in `Instant`'s `Deserialize`; deferred (the format layer is
-      tag-tolerant on decode today).
+- [x] typed date/time mapping: `Instant`/`ZonedDateTime` emit tag 0 (RFC 3339
+      text) via a `Serializer::serialize_tag` hook, and decode a string (tag 0)
+      or a numeric epoch (tag 1) through a `deserialize_any` visitor. The impls
+      live in `core:temporal`.
 - [ ] lossy CBOR→JSON via `Value` (RFC 8949 §6.1 substitution: bytes→base64,
       `undefined`/non-finite→`null`); the default still errors.

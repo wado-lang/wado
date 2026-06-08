@@ -122,6 +122,12 @@ impl Deserialize for Config;
 
 #### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
 
+#### `fn serialize_tag(&mut self, _tag: u64) -> Result<(), SerializeError>`
+
+Tag the next value with a CBOR semantic tag (major type 6, RFC 8949
+§3.4). Formats with no tag concept ignore it; the default no-op means
+only tag-aware serializers (CBOR) need to implement it.
+
 #### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
 
 Serialize a byte string. Self-describing binary formats (CBOR) emit a
