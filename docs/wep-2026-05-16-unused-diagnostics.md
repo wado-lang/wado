@@ -87,7 +87,8 @@ optimize-time and silent.
 
 - `unused_mut`, `unused_type_param`, `unused_assignment`
 - `dead_type`, `dead_trait_impl`, `unreachable_pattern`, `dead_closure_functor`
-- `#[allow(unused)]` / `#[deny(unused)]` attribute mechanism
+- The `unused` lint group and `#[deny(...)]` (only `#[allow(dead_code)]`,
+  item- and module-level, is implemented — see Suppression)
 - Per-`UseItem::InterfaceFunctions` granularity (function-level inside
   an interface import)
 - Workspace-aware multi-package root computation
@@ -149,8 +150,17 @@ user's build output.
   `wado format` is expected to produce when auto-fixing.
 - `Wildcard` imports (`use _ from "..."`) are silent — they exist for
   side effects.
-- No attribute-based suppression in MVP; deferred to a follow-up that
-  reuses the existing `#[...]` attribute machinery.
+- `#[allow(dead_code)]` on a function or global waives its
+  `DeadFunction` / `DeadGlobal` / `TestOnlyFunction` / `TestOnlyGlobal`
+  lint — for unavoidable unused items (e.g. a library module being built
+  up ahead of the export that will reach it). The attribute name matches
+  rustc's `dead_code` lint. `#![allow(dead_code)]` as a module inner
+  attribute waives the lint for every item in the file — the idiom for
+  test-helper files whose functions exist only to back `test` blocks. The
+  liveness pass still records the item's call-graph edges; only its
+  candidacy for the lint is dropped. The broader `unused` lint group (and
+  `#[deny(...)]`) is deferred to the follow-up that lands the reference
+  pass.
 
 ## Implementation
 

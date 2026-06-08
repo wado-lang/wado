@@ -221,6 +221,84 @@ test "also uses helper" {
 }
 
 #[test]
+fn allow_dead_code_attr_silences_dead_function() {
+    // `#[allow(dead_code)]` on an otherwise-dead function suppresses the lint,
+    // matching Rust's `dead_code` lint name.
+    let diags = unused_for(
+        r#"
+#[allow(dead_code)]
+fn helper() -> i32 { return 1; }
+
+export fn run() {}
+"#,
+    );
+    assert!(
+        !has_dead_function(&diags, "helper"),
+        "`#[allow(dead_code)]` must silence DeadFunction, got {diags:?}"
+    );
+}
+
+#[test]
+fn allow_dead_code_attr_silences_dead_global() {
+    let diags = unused_for(
+        r#"
+#[allow(dead_code)]
+global UNUSED: i32 = 42;
+
+export fn run() {}
+"#,
+    );
+    assert!(
+        !has_dead_global(&diags, "UNUSED"),
+        "`#[allow(dead_code)]` must silence DeadGlobal, got {diags:?}"
+    );
+}
+
+#[test]
+fn allow_dead_code_attr_silences_test_only_function() {
+    // The attribute covers the test-only classification too: an item the user
+    // has explicitly marked dead-code-allowed should raise no unused lint at
+    // all, whether it is reached by tests or by no one.
+    let diags = unused_for(
+        r#"
+#[allow(dead_code)]
+fn helper() -> i32 { return 1; }
+
+export fn run() {}
+
+test "uses helper" {
+    assert helper() == 1;
+}
+"#,
+    );
+    assert!(
+        !has_test_only_function(&diags, "helper") && !has_dead_function(&diags, "helper"),
+        "`#[allow(dead_code)]` must silence the test-only lint, got {diags:?}"
+    );
+}
+
+#[test]
+fn module_allow_dead_code_silences_every_item() {
+    // A file-level `#![allow(dead_code)]` suppresses the lint for every item in
+    // the module — the idiom for test-helper files whose functions exist only
+    // to support `test` blocks.
+    let diags = unused_for(
+        r#"
+#![allow(dead_code)]
+
+fn helper() -> i32 { return 1; }
+global UNUSED: i32 = 42;
+
+export fn run() {}
+"#,
+    );
+    assert!(
+        diags.is_empty(),
+        "module-level `#![allow(dead_code)]` silences all dead diagnostics, got {diags:?}"
+    );
+}
+
+#[test]
 fn function_used_by_neither_is_dead_not_test_only() {
     // No production and no test reference → `DeadFunction`.
     let diags = unused_for(
