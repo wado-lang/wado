@@ -59,11 +59,10 @@ pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut Functio
     if candidates.is_empty() {
         return false;
     }
-    // Interprocedural but not gate-skipped; report the functions it touched
+    // Interprocedural and scans all functions, but reports the ones it touched
     // (param-scalarized callees + callers whose call sites were rewritten) so
-    // the gated passes re-examine only those instead of every function via
-    // `bump_all`. The call graph is unaffected: arg rewrites and the
-    // `MethodCall` → `Call` collapse keep the same callee, so no refresh.
+    // the gated passes re-examine only those. The call graph is unaffected: arg
+    // rewrites and the `MethodCall` → `Call` collapse keep the same callee.
     let mut touched: IndexSet<usize> = IndexSet::default();
     rewrite_callees(project, &candidates, &mut touched);
     rewrite_call_sites(project, &candidates, &mut touched);

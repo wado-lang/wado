@@ -694,13 +694,10 @@ pub fn inline_functions(
 
             if !inlined_funcs.is_empty() {
                 changed = true;
-                // Only this caller's body changed (the callee bodies are copied,
-                // not modified). Reporting it dirties the gated passes for this
-                // function and its call-graph neighbours, instead of `bump_all`.
-                // The caller gains the inlined callee's edges, but that staleness
-                // only affects 1-hop propagation precision (quality), never
-                // correctness, and the interprocedural passes (dae/drve) rescan
-                // all functions regardless.
+                // Only this caller's body changed (callee bodies are copied,
+                // not modified), so report just the caller. The caller's
+                // call-graph edges shift, but stale edges only cost 1-hop
+                // propagation precision (quality), not correctness.
                 gate.mark_changed(FunctionId::new(caller_idx));
             }
 

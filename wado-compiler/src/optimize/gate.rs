@@ -28,12 +28,11 @@
 //! callees (a callee shrinking enables inlining / constant folding in callers; a
 //! call site appearing or vanishing changes a callee's dead-argument analysis).
 //!
-//! Every fixed-point loop pass is gate-aware: a per-function pass skips
-//! functions it has already processed at their current revision (via
-//! [`FunctionGate::run_gated`]); an interprocedural pass scans all functions but
-//! reports exactly the ones it touched (via [`FunctionGate::mark_changed`]).
-//! There is no whole-package `bump_all` fallback — every change is reported at
-//! function granularity.
+//! Every fixed-point loop pass is gate-aware, so every change is reported at
+//! function granularity: a per-function pass skips functions it has already
+//! processed at their current revision (via [`FunctionGate::run_gated`]); an
+//! interprocedural pass scans all functions but reports exactly the ones it
+//! touched (via [`FunctionGate::mark_changed`]).
 //!
 //! # Safety
 //!

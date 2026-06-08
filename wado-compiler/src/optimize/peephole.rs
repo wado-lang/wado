@@ -5,24 +5,18 @@
 //! (`array_literal`), write-only local elimination (`elide_local`), the
 //! environment-free subset of constant folding (`const_folding::ConstFoldRule`
 //! — literal arithmetic and pure CTFE), and trivial-block / dead-statement
-//! pruning (`const_branch_prune::BranchPruneRule`) — together over one shared
-//! worklist per function. The engine session (parent
-//! map, use index, post-order seed) is built once for all the rules instead of
-//! once per rule, and the rules interleave on a single worklist rather than
-//! running as independent whole-body sweeps.
-//!
-//! This is the consolidation step of the worklist rewrite engine: these rules
-//! already ran on the engine, but each rebuilt its own session and ran in
-//! isolation. See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
+//! pruning (`const_branch_prune::BranchPruneRule`) — over one shared worklist
+//! per function: a single engine session (parent map, use index, post-order
+//! seed) on which all the rules interleave.
+//! See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
 //!
 //! Constant folding is only partly here. Its flow-sensitive folds — env-bound
 //! locals, forwarded struct fields, immutable-global reads, and constant-branch
 //! collapse — need the driving visitor's per-function dataflow state and stay
-//! with the standalone `const_folding::fold_constants` walker, which still runs
-//! once per fixed-point iteration. The engine rule handles only the folds that
-//! depend on a node and its (already-folded) children plus the program-wide
-//! CTFE callee map, applied through the engine's edit API so the worklist and
-//! use index stay coherent.
+//! with the standalone `const_folding::fold_constants` walker. The engine rule
+//! handles only the folds that depend on a node and its already-folded children
+//! plus the program-wide CTFE callee map, applied through the engine's edit API
+//! so the worklist and use index stay coherent.
 //!
 //! Two rules keep their own standalone engine passes:
 //!
@@ -36,8 +30,7 @@
 //! receiver) and after `inline` (so `array_literal` sees the exposed
 //! `array_new + push` window). `array_literal` no-ops in the first run and
 //! `string_push` no-ops in the second; both bail immediately on a non-matching
-//! node, so the wasted dispatch is negligible. The remaining rules run in both,
-//! which only widens their reach.
+//! node, so the wasted dispatch is negligible.
 
 use cranelift_entity::EntityRef;
 

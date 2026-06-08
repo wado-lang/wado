@@ -71,10 +71,9 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
         return false;
     }
 
-    // drve is interprocedural but not gate-skipped; it reports exactly the
-    // functions it touched (converted callees + retyped callers) so the gated
-    // passes re-examine only those instead of every function via `bump_all`.
-    // The call graph is unaffected, so no refresh is needed.
+    // drve is interprocedural and scans all functions, but reports exactly the
+    // ones it touched (converted callees + retyped callers) so the gated passes
+    // re-examine only those. The call graph is unaffected, so no refresh.
     let touched = apply_drve(project, &confirmed);
     for idx in touched {
         gate.mark_changed(FunctionId::new(idx));

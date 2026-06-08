@@ -93,10 +93,9 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
         return false;
     }
 
-    // Phase 3: rewrite signatures and call sites. dae is interprocedural but
-    // not gate-skipped — it scans all functions — yet it reports exactly the
-    // functions it touched so the gated passes re-examine only those (and their
-    // call-graph neighbours) instead of every function via `bump_all`.
+    // Phase 3: rewrite signatures and call sites. dae is interprocedural and
+    // scans all functions, but reports exactly the ones it touched so the gated
+    // passes re-examine only those and their call-graph neighbours.
     let touched = apply_dae(project, &confirmed);
     for idx in touched {
         gate.mark_changed(FunctionId::new(idx));

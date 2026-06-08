@@ -172,10 +172,9 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     }
     project.functions.extend(new_funcs);
     // Report the retargeted callers; the appended shallow specializations get a
-    // fresh (dirty) gate slot via the gate's auto-grow on next access. The
-    // retarget only redirects a `$value_copy$` call to its shallow twin, so the
-    // caller's edge shifts but — as with `inline` — the staleness is quality,
-    // not correctness.
+    // fresh dirty gate slot via the gate's auto-grow on first access. Retarget
+    // shifts a caller's call edges (a `$value_copy$` call → its shallow twin),
+    // which only costs propagation precision, not correctness.
     for fi in touched {
         gate.mark_changed(FunctionId::new(fi));
     }

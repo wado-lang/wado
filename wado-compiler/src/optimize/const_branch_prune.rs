@@ -183,8 +183,8 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
                 unreachable!();
             };
             // A value-less `label: { break label }` yields unit but carries no
-            // value to promote; the original pass left it untouched, so do the
-            // same (returning `false` keeps the engine from spinning on it).
+            // value to promote, so leave it untouched (return `false` so the
+            // engine does not spin on it).
             if let Some(inner) = value
                 && !expr_has_break_to(engine.body, inner, &label)
             {
@@ -275,11 +275,9 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
 }
 
 /// Rebuild `block`'s statement list, dropping code after a terminator and
-/// flattening unused-label / void wrapper blocks into it. Inner blocks whose
-/// statements are flattened in are emptied so that — unlike the original
-/// tree-walk, which never revisited a consumed block — the engine re-seeing the
-/// now-orphaned inner block cannot re-parent the shared statement ids back to
-/// it.
+/// flattening unused-label / void wrapper blocks into it. A flattened-in inner
+/// block is emptied: the engine may later pop that now-orphaned block, and
+/// emptying it prevents re-parenting the (now shared) statement ids back to it.
 fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) -> bool {
     let stmts = engine.body.blocks[block].stmts.clone();
     let has_dead_after_terminator = stmts.iter().enumerate().any(|(i, &s)| {

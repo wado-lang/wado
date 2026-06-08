@@ -280,12 +280,11 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     // `collect_candidates` to expand `List<UserStruct>` element types.
     let struct_index = build_struct_index(&project.structs);
 
-    // Per-function rewrite, gate-skipped. It only mutates the current function's
-    // body (and adds SoA types to the shared `type_table`); it does retarget
-    // some `List<Tuple>::m` calls to per-field `List<F>::m` callees, so the
-    // rewritten function's call edges shift, but — as with `inline` — that only
-    // affects 1-hop propagation precision (quality), never correctness, and the
-    // interprocedural passes rescan all functions regardless.
+    // Per-function rewrite, gate-skipped. It mutates only the current function's
+    // body (and adds SoA types to the shared `type_table`). Retargeting some
+    // `List<Tuple>::m` calls to per-field `List<F>::m` callees shifts the
+    // function's call edges, which only costs propagation precision, not
+    // correctness.
     let type_table_rc = project.type_table.clone();
     let len = project.functions.len();
     gate.run_gated(GatedPass::ContainerSroa, len, |fid| {

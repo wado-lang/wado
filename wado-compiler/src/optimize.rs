@@ -493,8 +493,8 @@ fn run_optimization_passes(
         let mut changed = false;
         let mut iter_changed: Vec<&'static str> = Vec::new();
         // A gate-aware pass: receives `&mut gate`, skips functions it has
-        // already processed at their current revision, and reports per-function
-        // change itself (no `bump_all`).
+        // already processed at their current revision, and reports its own
+        // per-function changes.
         macro_rules! gated {
             ($name:expr, $pass:expr) => {{
                 let c = run_pass($name, project, profiler, |p| $pass(p, &mut gate));
@@ -543,10 +543,10 @@ fn run_optimization_passes(
         // re-examine the bodies they rewrote), not to the convergence `changed`
         // flag — keeping the original convergence behaviour where they never
         // kept the loop alive on their own.
-        // Both self-report to the gate (no `bump_all`) and stay out of the
-        // convergence `changed` flag — preserving the behaviour where they never
-        // keep the loop alive on their own (the gated passes they dirty drive
-        // convergence within the same iteration).
+        // Both report their touched functions to the gate but stay out of the
+        // convergence `changed` flag: they never keep the loop alive on their
+        // own; the gated passes they dirty drive convergence in the same
+        // iteration.
         run_pass("nir/value_copy_elide", project, profiler, |p| {
             elide_synthesized_value_copies(p, &mut gate)
         });
@@ -624,11 +624,11 @@ fn run_optimization_passes(
         gated!("nir/drve", eliminate_dead_return_values);
         gated!("nir/cse", eliminate_common_subexprs);
         gated!("nir/store_load_forward", forward_stores_to_loads);
-        // The flow-sensitive half of constant folding. The env-free half
-        // (literal arithmetic + pure CTFE) already ran on the worklist in the
-        // `nir/peephole` passes above; this walker handles the folds that need
-        // per-function dataflow state — env-bound locals, forwarded struct
-        // fields, immutable-global reads, and constant-branch collapse.
+        // The flow-sensitive half of constant folding; the env-free half
+        // (literal arithmetic + pure CTFE) runs in the `nir/peephole` passes.
+        // This walker handles the folds that need per-function dataflow state —
+        // env-bound locals, forwarded struct fields, immutable-global reads, and
+        // constant-branch collapse.
         //
         // `field_forward`'s rewrite responsibilities are absorbed by
         // `const_fold` (see `optimize::const_folding::ConstFoldVisitor`).

@@ -419,9 +419,7 @@ fn can_propagate_copy(
             // the target (the target's reads are confined to the binding's
             // scope), so the coarse whole-function source gates below — which
             // would otherwise reject e.g. a loop counter copied inside the loop
-            // — do not apply. This is the precise in-block check that the former
-            // `const_branch_prune::inline_labeled_block_copies` performed,
-            // folded into copy propagation and no longer keyed on a block label.
+            // — do not apply.
             if binding.source_scope_stable {
                 return true;
             }
