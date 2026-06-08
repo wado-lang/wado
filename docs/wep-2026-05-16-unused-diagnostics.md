@@ -87,7 +87,8 @@ optimize-time and silent.
 
 - `unused_mut`, `unused_type_param`, `unused_assignment`
 - `dead_type`, `dead_trait_impl`, `unreachable_pattern`, `dead_closure_functor`
-- `#[allow(unused)]` / `#[deny(unused)]` attribute mechanism
+- The `unused` lint group and `#[deny(...)]` (only `#[allow(dead_code)]`,
+  item- and module-level, is implemented — see Suppression)
 - Per-`UseItem::InterfaceFunctions` granularity (function-level inside
   an interface import)
 - Workspace-aware multi-package root computation
@@ -142,6 +143,16 @@ Functions, imports, and locals whose `ModuleSource` is `Core`, `Wasi`,
 module is user-authored. Stdlib never emits unused diagnostics into the
 user's build output.
 
+### Generated-module exclusion
+
+A module carrying the `#![generated]` inner attribute (Gale parser output,
+`wado-from-idl` bindings, and any other machine-emitted source) is excluded
+from the lint entirely: it is never hand-edited, so flagging its unused items
+is pure noise. The module still seeds the liveness closure, so items it calls
+stay live. This is the principled alternative to embedding `#[allow(dead_code)]`
+in inlined runtime support — generated parsers carry the marker already, so no
+attribute is baked into every emitted file.
+
 ### Suppression
 
 - Variables and parameters whose source name begins with `_` are
@@ -149,8 +160,17 @@ user's build output.
   `wado format` is expected to produce when auto-fixing.
 - `Wildcard` imports (`use _ from "..."`) are silent — they exist for
   side effects.
-- No attribute-based suppression in MVP; deferred to a follow-up that
-  reuses the existing `#[...]` attribute machinery.
+- `#[allow(dead_code)]` on a function or global waives its
+  `DeadFunction` / `DeadGlobal` / `TestOnlyFunction` / `TestOnlyGlobal`
+  lint — for unavoidable unused items (e.g. a library module being built
+  up ahead of the export that will reach it). The attribute name matches
+  rustc's `dead_code` lint. `#![allow(dead_code)]` as a module inner
+  attribute waives the lint for every item in the file — the idiom for
+  test-helper files whose functions exist only to back `test` blocks. The
+  liveness pass still records the item's call-graph edges; only its
+  candidacy for the lint is dropped. The broader `unused` lint group (and
+  `#[deny(...)]`) is deferred to the follow-up that lands the reference
+  pass.
 
 ## Implementation
 

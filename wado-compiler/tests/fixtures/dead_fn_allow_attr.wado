@@ -1,0 +1,19 @@
+// `#[allow(dead_code)]` (Rust's lint name) waives the unused lint for an item
+// that has no caller, while a sibling without the attribute is still reported.
+#[allow(dead_code)]
+fn intentionally_unused() -> i32 {
+    return 1;
+}
+
+fn truly_unused() -> i32 {
+    return 2;
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_contains": ["function `truly_unused` is never used"],
+    "warnings_not_contains": ["function `intentionally_unused` is never used"]
+}
