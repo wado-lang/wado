@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780881703824,
+  "lastUpdate": 1780884061502,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31253,6 +31253,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/197ad6419e83a8ffe4b6d539e365d92a7139165d"
         },
         "date": 1780881703277,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8792,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15896,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437254,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "93ebe1d9a2ef2d2517d84ecd99261f53b14ad568",
+          "message": "Merge pull request #1329 from wado-lang/claude/fix-astid-synth-collision-ice\n\nfix(compiler): attribute method-signature use→def edges to the owning module",
+          "timestamp": "2026-06-08T10:51:50+09:00",
+          "tree_id": "22e904e4ef380b124e1ae879d2709813cf48b128",
+          "url": "https://github.com/wado-lang/wado/commit/93ebe1d9a2ef2d2517d84ecd99261f53b14ad568"
+        },
+        "date": 1780884061268,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
