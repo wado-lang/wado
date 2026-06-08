@@ -79,7 +79,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         w.blank();
     }
     gen_grammar_metadata(&mut w, grammar);
-    gen_runtime(&mut w);
+    gen_runtime(&mut w, &ctx, options.highlight);
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_cst_types(&mut w, &lowered, grammar);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
@@ -154,9 +154,44 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
     w.blank();
 }
 
-fn gen_runtime(w: &mut CodeWriter) {
-    w.raw(&#include_str("./runtime.wado"));
-    w.raw(&"\n");
+/// Emit the inlined runtime, split across `src/runtime/*.wado` and gated so
+/// a generated parser carries only the fragments it actually needs:
+///
+/// - `lex` / `cst` / `tools` are always emitted (core vocabulary, the
+///   generic tree + `Visitor`, and the consumer-facing tree/token utilities).
+/// - `follow` only when lowering built a caller-FOLLOW gate (`emit_follow`).
+/// - `highlight` only when the `highlight` generator option is on.
+/// - `atn` only when lowering needs the runtime simulator (`needs_atn`).
+///
+/// Each fragment is a real module for dev/test, importing its siblings via
+/// `use { ... } from "./lex.wado"` etc.; `emit_runtime_fragment` drops those
+/// relative imports because every fragment is concatenated into the single
+/// generated module (with `lex` first), where such imports are both
+/// redundant and unresolvable.
+fn gen_runtime(w: &mut CodeWriter, ctx: &GenContext, highlight: bool) {
+    emit_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
+    emit_runtime_fragment(w, &#include_str("./runtime/cst.wado"));
+    emit_runtime_fragment(w, &#include_str("./runtime/tools.wado"));
+    if ctx.emit_follow() {
+        emit_runtime_fragment(w, &#include_str("./runtime/follow.wado"));
+    }
+    if highlight {
+        emit_runtime_fragment(w, &#include_str("./runtime/highlight.wado"));
+    }
+    if ctx.needs_atn() {
+        emit_runtime_fragment(w, &#include_str("./runtime/atn.wado"));
+    }
+}
+
+fn emit_runtime_fragment(w: &mut CodeWriter, src: &String) {
+    for let line of src.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("use ") && line.contains("from \"./") {
+            continue;
+        }
+        w.raw(&line);
+        w.raw(&"\n");
+    }
 }
 
 /// Surface grammar-level options and named actions from the .g4 prequel as

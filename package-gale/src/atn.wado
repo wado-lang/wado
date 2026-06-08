@@ -13,9 +13,9 @@
 //!
 //! Embedding (decided design): the ATN is serialized to one flat `i32`
 //! blob (`serialize_atn`) that the generated parser decodes once at
-//! construction (`runtime.wado::atn_decode`) into SoA arrays. The blob
+//! construction (`runtime/atn.wado::atn_decode`) into SoA arrays. The blob
 //! layout's constants (magic/version, state kinds, transition kinds) are
-//! the single source of truth in `runtime.wado` — that module is embedded
+//! the single source of truth in `runtime/atn.wado` — that module is embedded
 //! verbatim into every parser and so cannot import from here, whereas this
 //! compiler-side module freely `use`s it. `atn_test.wado` pins the
 //! `serialize_atn` -> `atn_decode` round-trip.
@@ -46,11 +46,11 @@ use {
     ATN_TR_NOT_ATOM,
     ATN_TR_WILDCARD,
     ATN_TR_RULE,
-} from "./runtime.wado";
+} from "./runtime/atn.wado";
 use { TreeMap } from "core:collections";
 
 // ATN state kinds, transition kinds, and the blob magic/version are the
-// wire-format protocol shared with the decoder; they live in `runtime.wado`
+// wire-format protocol shared with the decoder; they live in `runtime/atn.wado`
 // (imported above) so there is one numbering authority. A state is a
 // *decision* iff its `decision` field is >= 0 (the simulator keys on that,
 // not on the kind); the kind tells the closure how to traverse (`RuleStop`

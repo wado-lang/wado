@@ -1,20 +1,13 @@
+use { Span, Token, LexerSlice, ParseError } from "./runtime/lex.wado";
+use { CstNode, CstChild, TreeRecorder, Visitor } from "./runtime/cst.wado";
+use { normalize_tree, to_lexer_string } from "./runtime/tools.wado";
 use {
-    Span,
-    Token,
-    LexerSlice,
-    ParseError,
-    CstNode,
-    CstChild,
-    TreeRecorder,
-    Visitor,
-    normalize_tree,
     HighlightMapping,
     HighlightOverride,
     HighlightCapture,
     HighlightVisitor,
     highlight_html,
-    to_lexer_string,
-} from "./runtime.wado";
+} from "./runtime/highlight.wado";
 
 fn ls(text: String) -> LexerSlice {
     return LexerSlice::from_string(text);

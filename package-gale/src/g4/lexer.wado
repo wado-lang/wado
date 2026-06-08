@@ -1,4 +1,4 @@
-use { Span, Token, LexerSlice } from "../runtime.wado";
+use { Span, Token, LexerSlice } from "../runtime/lex.wado";
 use { G4Token, make_token } from "./token.wado";
 
 pub struct G4Lexer {
@@ -315,7 +315,7 @@ pub fn tokenize_chars(chars: &List<char>) -> List<Token> {
 /// Wrap an owned char buffer as a `LexerSlice` over its full extent, without
 /// the `String` round-trip + re-`collect` that `LexerSlice::from_string`
 /// performs. Kept local to the g4 frontend so it is not inlined into every
-/// generated parser through `runtime.wado`.
+/// generated parser through the runtime (`runtime/lex.wado`).
 fn owned_slice(buf: List<char>) -> LexerSlice {
     let n = buf.len();
     return LexerSlice { chars: &buf, start: 0, end: n };
