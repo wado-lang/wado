@@ -79,7 +79,11 @@ pub(crate) fn compute(
     let mut graph = Graph::default();
 
     for (source, module) in modules {
-        let user = is_user_authored(source);
+        // `#![generated]` modules are machine-emitted (e.g. Gale's parser
+        // output), not hand-edited source — linting them is pure noise, so they
+        // are never report candidates. They still seed exports / edges below, so
+        // they keep the items they call live.
+        let user = is_user_authored(source) && !module.has_generated();
         // A file-level `#![allow(dead_code)]` waives the lint for every item in
         // the module — the idiom for test-helper files whose functions exist
         // only to back `test` blocks.

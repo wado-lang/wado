@@ -278,6 +278,27 @@ test "uses helper" {
 }
 
 #[test]
+fn generated_module_is_not_linted() {
+    // `#![generated]` marks machine-emitted code (Gale's parser output, etc.).
+    // It is never hand-edited, so linting it is pure noise — no unused
+    // diagnostic fires regardless of reachability.
+    let diags = unused_for(
+        r#"
+#![generated(by = "gale", sources = ["X.g4"])]
+
+fn helper() -> i32 { return 1; }
+global UNUSED: i32 = 42;
+
+export fn run() {}
+"#,
+    );
+    assert!(
+        diags.is_empty(),
+        "a `#![generated]` module must not be linted, got {diags:?}"
+    );
+}
+
+#[test]
 fn module_allow_dead_code_silences_every_item() {
     // A file-level `#![allow(dead_code)]` suppresses the lint for every item in
     // the module — the idiom for test-helper files whose functions exist only

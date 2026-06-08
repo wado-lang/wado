@@ -143,6 +143,16 @@ Functions, imports, and locals whose `ModuleSource` is `Core`, `Wasi`,
 module is user-authored. Stdlib never emits unused diagnostics into the
 user's build output.
 
+### Generated-module exclusion
+
+A module carrying the `#![generated]` inner attribute (Gale parser output,
+`wado-from-idl` bindings, and any other machine-emitted source) is excluded
+from the lint entirely: it is never hand-edited, so flagging its unused items
+is pure noise. The module still seeds the liveness closure, so items it calls
+stay live. This is the principled alternative to embedding `#[allow(dead_code)]`
+in inlined runtime support — generated parsers carry the marker already, so no
+attribute is baked into every emitted file.
+
 ### Suppression
 
 - Variables and parameters whose source name begins with `_` are
