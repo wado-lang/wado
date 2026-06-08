@@ -121,8 +121,9 @@ concern.
 
 ## Consequences
 
-- Unblocks `core:cbor`'s typed timestamp mapping: tag 1 (epoch) ↔ `Instant`,
-  tag 0 (RFC 3339) ↔ `ZonedDateTime`. Those serde impls live in `core:cbor`.
+- Carries the serde timestamp mapping: both types serialize as an RFC 3339
+  string under CBOR date/time tag 0, and decode a string (tag 0) or a numeric
+  epoch (tag 1, as UTC). The impls are format-agnostic and live here.
 - The MVP has no methods, so the types are data-only until follow-ups land.
   This is intentional: it is the smallest thing that removes the `core:cbor`
   blocker.
@@ -133,10 +134,10 @@ concern.
 ## TODO
 
 - [x] Type definitions: `Instant`, `ZonedDateTime` (this WEP)
-- [ ] Conversions to/from `wasi:clocks` `instant` (host bridge)
+- [x] Conversions to/from `wasi:clocks` `instant` (host bridge)
 - [ ] `now()` via `wasi:clocks` system-clock
-- [ ] RFC 3339 parse/format (`ZonedDateTime` ↔ string)
-- [ ] Civil field accessors (year/month/day/hour/… from `instant` + `time_zone`)
+- [x] RFC 3339 parse/format (`ZonedDateTime` ↔ string)
+- [x] Civil field accessors (year/month/day/hour/… from `instant` + `time_zone`)
 - [ ] `Duration` type and instant arithmetic
-- [ ] serde impls — owned by [`core:cbor`](./wep-2026-06-05-core-cbor.md)
-      (tag 0/1) and `core:json` (RFC 3339 string)
+- [x] serde impls — RFC 3339 string under CBOR tag 0, or a numeric epoch
+      (tag 1 / JSON number); format-agnostic, defined here

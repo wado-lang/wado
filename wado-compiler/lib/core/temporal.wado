@@ -6,8 +6,9 @@
 //! exact point on the timeline (`Instant`) and that instant paired with a
 //! time-zone interpretation (`ZonedDateTime`). They carry ISO 8601 / RFC 3339
 //! formatting (`Display`), civil field accessors, RFC 3339 parsing, epoch
-//! constructors, and serde `Serialize`/`Deserialize` (as RFC 3339 strings, the
-//! idiomatic timestamp form in both JSON and CBOR); arithmetic, `now()`, and
+//! constructors, and serde `Serialize`/`Deserialize` (an RFC 3339 string under
+//! CBOR's date/time tag 0, a bare string in JSON; an epoch-seconds number is
+//! also accepted on decode); arithmetic, `now()`, and
 //! `Duration` are deferred to follow-up work. The types exist so a serde format
 //! such as `core:json` or `core:cbor` has a concrete Wado type for timestamps.
 //!
@@ -33,7 +34,17 @@
 //! let zoned = ZonedDateTime { instant: epoch, time_zone: "UTC" };
 //! ```
 
-use { Serialize, Serializer, SerializeError, Deserialize, Deserializer, DeserializeError } from "core:serde";
+use {
+    Serialize,
+    Serializer,
+    SerializeError,
+    Deserialize,
+    Deserializer,
+    DeserializeError,
+    Visitor,
+    DeserializeSeq,
+    DeserializeMap,
+} from "core:serde";
 use { Instant as ClockInstant } from "wasi:clocks";
 
 /// An exact point on the timeline, as the offset from the Unix epoch
@@ -689,35 +700,141 @@ fn fraction_digits_for(nanoseconds: u32) -> i32 {
     return 9;
 }
 
-// serde — `Instant` and `ZonedDateTime` round-trip as RFC 3339 strings, the
-// idiomatic timestamp form in both JSON (a string) and CBOR (a text string).
+// serde — `Instant` and `ZonedDateTime` serialize as an RFC 3339 string under
+// the CBOR standard date/time tag 0 (RFC 8949 §3.4.1); JSON ignores the tag and
+// emits the bare string. Deserialization accepts either an RFC 3339 string
+// (tag 0 / JSON string) or an epoch-seconds number (tag 1 / JSON number), so a
+// numeric epoch timestamp from any encoder is read as UTC.
 
 impl Serialize for Instant {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        s.serialize_tag(0)?;
         let text = self.to_rfc3339();
         return s.serialize_string(&text);
+    }
+}
+
+/// Accepts an RFC 3339 text string or an epoch-seconds number.
+struct InstantVisitor {
+}
+
+impl Visitor for InstantVisitor {
+    type Value = Instant;
+
+    fn visit_string(&mut self, v: String) -> Result<Instant, DeserializeError> {
+        let zdt = ZonedDateTime::parse_rfc3339(v)?;
+        return Result::Ok(zdt.instant);
+    }
+
+    fn visit_i64(&mut self, v: i64) -> Result<Instant, DeserializeError> {
+        return Result::Ok(Instant::from_epoch_seconds(v));
+    }
+
+    fn visit_u64(&mut self, v: u64) -> Result<Instant, DeserializeError> {
+        return Result::Ok(Instant::from_epoch_seconds(v as i64));
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<Instant, DeserializeError> {
+        return Result::Err(DeserializeError::overflow("epoch seconds out of range", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<Instant, DeserializeError> {
+        return Result::Err(DeserializeError::overflow("epoch seconds out of range", -1));
+    }
+
+    fn visit_f64(&mut self, v: f64) -> Result<Instant, DeserializeError> {
+        let whole = v as i64;
+        let nanos = ((v - whole as f64) * 1_000_000_000.0) as i64;
+        return Result::Ok(Instant::new(whole, nanos));
+    }
+
+    fn visit_null(&mut self) -> Result<Instant, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected datetime string or epoch number", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<Instant, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected datetime string or epoch number", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<Instant, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected datetime, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<Instant, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected datetime, found map", -1));
     }
 }
 
 impl Deserialize for Instant {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Instant, DeserializeError> {
-        let text = d.deserialize_string()?;
-        let zdt = ZonedDateTime::parse_rfc3339(text)?;
-        return Result::Ok(zdt.instant);
+        let mut v = InstantVisitor {};
+        return d.deserialize_any::<InstantVisitor>(&mut v);
     }
 }
 
 impl Serialize for ZonedDateTime {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        s.serialize_tag(0)?;
         let text = self.to_rfc3339();
         return s.serialize_string(&text);
     }
 }
 
+/// Accepts an RFC 3339 text string (offset preserved) or an epoch-seconds
+/// number (interpreted as UTC).
+struct ZonedDateTimeVisitor {
+}
+
+impl Visitor for ZonedDateTimeVisitor {
+    type Value = ZonedDateTime;
+
+    fn visit_string(&mut self, v: String) -> Result<ZonedDateTime, DeserializeError> {
+        return ZonedDateTime::parse_rfc3339(v);
+    }
+
+    fn visit_i64(&mut self, v: i64) -> Result<ZonedDateTime, DeserializeError> {
+        return Result::Ok(ZonedDateTime { instant: Instant::from_epoch_seconds(v), time_zone: "UTC" });
+    }
+
+    fn visit_u64(&mut self, v: u64) -> Result<ZonedDateTime, DeserializeError> {
+        return Result::Ok(ZonedDateTime { instant: Instant::from_epoch_seconds(v as i64), time_zone: "UTC" });
+    }
+
+    fn visit_i128(&mut self, _v: i128) -> Result<ZonedDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::overflow("epoch seconds out of range", -1));
+    }
+
+    fn visit_u128(&mut self, _v: u128) -> Result<ZonedDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::overflow("epoch seconds out of range", -1));
+    }
+
+    fn visit_f64(&mut self, v: f64) -> Result<ZonedDateTime, DeserializeError> {
+        let whole = v as i64;
+        let nanos = ((v - whole as f64) * 1_000_000_000.0) as i64;
+        return Result::Ok(ZonedDateTime { instant: Instant::new(whole, nanos), time_zone: "UTC" });
+    }
+
+    fn visit_null(&mut self) -> Result<ZonedDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected datetime string or epoch number", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<ZonedDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected datetime string or epoch number", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<ZonedDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected datetime, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<ZonedDateTime, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected datetime, found map", -1));
+    }
+}
+
 impl Deserialize for ZonedDateTime {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<ZonedDateTime, DeserializeError> {
-        let text = d.deserialize_string()?;
-        return ZonedDateTime::parse_rfc3339(text);
+        let mut v = ZonedDateTimeVisitor {};
+        return d.deserialize_any::<ZonedDateTimeVisitor>(&mut v);
     }
 }
 

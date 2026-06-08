@@ -369,6 +369,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Tuple.len() is a compile-time constant — return immediately without a function call.
         if method_name == "len" && self.tysys.type_table.borrow().is_tuple(base_type_id) {
+            // A tuple whose type still contains a `..T` pack has an arity that is
+            // only known after monomorphization. Defer folding to a literal so it
+            // is not frozen at the (wrong) unsubstituted pack count.
+            if self.type_contains_pack(base_type_id) {
+                return TirExpr::new(
+                    TirExprKind::TupleLen {
+                        expr: Box::new(receiver),
+                    },
+                    TypeTable::I32,
+                    span,
+                );
+            }
             let len = self
                 .tysys
                 .type_table

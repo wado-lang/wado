@@ -414,6 +414,7 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TupleLen { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }

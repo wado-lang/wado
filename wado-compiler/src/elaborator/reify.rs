@@ -7098,6 +7098,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if is_tuple_receiver {
                 return match method_call.method.as_str() {
                     "len" => {
+                        // A tuple type still carrying a `..T` pack has an arity
+                        // unknown until monomorphization; defer folding to a
+                        // literal via `TupleLen` so it is not frozen at the
+                        // unsubstituted pack count (mirrors the `zip` deferral).
+                        if self.type_contains_pack(base_type_id) {
+                            return TirExpr::new(
+                                TirExprKind::TupleLen {
+                                    expr: Box::new(receiver),
+                                },
+                                TypeTable::I32,
+                                method_call.span,
+                            );
+                        }
                         let len = self
                             .tysys
                             .type_table

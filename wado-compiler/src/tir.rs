@@ -2817,6 +2817,16 @@ pub enum TirExprKind {
         expr: Box<TirExpr>,
     },
 
+    /// Compile-time arity of a tuple whose type still contains a type pack
+    /// (`[..T].len()`). For a fully concrete tuple the elaborator folds `.len()`
+    /// to an integer literal immediately; when a `..T` pack is present the arity
+    /// is unknown until monomorphization, so it is deferred here and expanded to
+    /// an `IntLiteral` once the concrete arity is known. The `expr` is evaluated
+    /// only for its type (tuples are value types with no side effects in `len`).
+    TupleLen {
+        expr: Box<TirExpr>,
+    },
+
     /// Type pack expansion: `[..T::method()]` inside a `TupleLiteral`.
     /// Expands at monomorphization to one call per concrete type in the pack:
     /// `[T_0::method(), T_1::method(), ...]`.

@@ -1,0 +1,53 @@
+// Regression: variant-return SROA must rewrite `Return`s that hide inside an
+// `if`/`while` *condition* (e.g. `if expr? == x { … }`, where the `?` desugar
+// puts a `return Err(…)` in the condition). `core:cbor`'s synthesized
+// `DeserializeStruct::next_field` has exactly this shape; previously the SROA
+// pass changed the function's signature to a multi-value return but left the
+// condition's boxed `Return` unrewritten, producing invalid core Wasm
+// ("expected (ref null …), found (ref (exact …))").
+//
+// It also exercises CBOR decode of derived structs end to end.
+
+use { to_bytes, from_bytes } from "core:cbor";
+use { Serialize, Deserialize } from "core:serde";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+impl Serialize for Point;
+impl Deserialize for Point;
+
+test "decode struct from a CBOR map" {
+    // {"x": 1, "y": 2}
+    let bytes: ByteList = [0xa2, 0x61, 0x78, 0x01, 0x61, 0x79, 0x02];
+    let p: Point = match from_bytes::<Point, ByteList>(bytes) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("decode failed");
+        },
+    };
+    assert p.x == 1;
+    assert p.y == 2;
+}
+
+test "round-trip a derived struct through CBOR" {
+    let p = Point { x: -5, y: 100 };
+    let bytes = match to_bytes::<Point>(&p) {
+        Ok(b) => b,
+        Err(_) => {
+            panic("encode failed");
+        },
+    };
+    let back: Point = match from_bytes::<Point, ByteList>(bytes) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("decode failed");
+        },
+    };
+    assert back.x == -5;
+    assert back.y == 100;
+}
+
+__DATA__
+{"test": {}}

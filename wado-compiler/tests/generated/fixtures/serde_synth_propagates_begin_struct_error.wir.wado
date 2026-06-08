@@ -2487,8 +2487,8 @@ fn "core:prelude/slice.wado/ArraySlice<u8>::to_array"(self) {
 fn "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let __result: ref "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>";
     let __local_2: ref "core:json//JsonStructAccess";
-    let __local_3: u32;
-    let __local_4: i32;
+    let __local_3: i32;
+    let __local_4: bool;
     let __local_6: ref "core:prelude/types.wado//Option<i32>";
     let __local_7: i32;
     let __qm_e: ref "core:serde//DeserializeError";
@@ -2506,8 +2506,8 @@ fn "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/
     };
     if ref.test "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>::Ok"(__result) {
         __local_2 = ref.cast "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>::Ok"(__result).payload_0;
-        __local_3 = 0;
         __local_4 = 0;
+        __local_3 = 0;
         b353: block {
             l354: loop {
                 let __sroa___local_5_5_discriminant: i32;
@@ -2525,8 +2525,8 @@ fn "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/
                             d_17 = __local_2.de;
                             multivalue_bind [__sroa___local_8_discriminant, __sroa___local_8_case0_payload_0, __sroa___local_8_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_17);
                             if __sroa___local_8_discriminant == 0 {
-                                __local_4 = __sroa___local_8_case0_payload_0;
-                                __local_3 = __local_3 | 1;
+                                __local_3 = __sroa___local_8_case0_payload_0;
+                                __local_4 = 1;
                             } else {
                                 return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__sroa___local_8_case1_payload_0) };
                             }
@@ -2542,11 +2542,11 @@ fn "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/
                 continue l354;
             };
         };
-        if (__local_3 & 1) != 1 {
+        if __local_4 == 0 {
             return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("required field missing"), used: 22 }, offset: -1_i64 } };
         }
         drop("core:json/JsonDeserializer::expect_char"(__local_2.de, 125));
-        return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado//Foo" { bar: __local_4 } };
+        return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado//Foo" { bar: __local_3 } };
     } else {
         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.cast "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>::Err"(__result).payload_0 };
     }

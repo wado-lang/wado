@@ -183,6 +183,26 @@ echo "=== Wado ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 json_twitter/json_twitter.wado
 """
 
+[tasks.cbor]
+description = "Run cbor ser/de benchmark (serde_cbor vs @msgpack/msgpack vs Wado core:cbor)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling Rust serde_cbor benchmark ==="
+cargo build --release --manifest-path cbor/Cargo.toml --quiet
+
+echo "=== Rust serde_cbor ==="
+./cbor/target/release/cbor_twitter_bench
+
+echo "=== JavaScript @msgpack/msgpack (Node.js) ==="
+npm install --prefix cbor --silent --no-audit --no-fund
+node cbor/cbor.js
+
+echo "=== Wado core:cbor ==="
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 cbor/cbor.wado
+"""
+
 [tasks.json-canada]
 description = "Run json-canada benchmark (JSON deserialization)"
 run = """

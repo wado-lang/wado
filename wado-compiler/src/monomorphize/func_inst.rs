@@ -2070,6 +2070,27 @@ impl Monomorphizer {
             TirExprKind::TupleSpread { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }
+            TirExprKind::TupleLen { expr: len_inner } => {
+                self.substitute_types_in_expr(
+                    len_inner,
+                    substitution,
+                    type_table,
+                    local_count,
+                    locals,
+                );
+                // After substitution the tuple arity is concrete; fold to a
+                // literal. The receiver may be behind a `&`/`&mut` (e.g. a
+                // `self: &[..T]` impl), so peel refs before reading the arity.
+                let peeled = type_table.peel_refs(len_inner.type_id);
+                if let Some(elems) = type_table.as_tuple(peeled) {
+                    let len = elems.len() as u64;
+                    expr.kind = TirExprKind::IntLiteral {
+                        value: len,
+                        repr: len.to_string(),
+                    };
+                    expr.type_id = TypeTable::I32;
+                }
+            }
             TirExprKind::TupleZip { expr: zip_inner } => {
                 self.substitute_types_in_expr(
                     zip_inner,
