@@ -1075,8 +1075,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter(|p| !p.is_effect)
                 .count();
             if type_args.len() < type_param_count {
-                let inferred =
-                    self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
+                let inferred = self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
                 if inferred.len() > type_args.len() {
                     type_args.extend_from_slice(&inferred[type_args.len()..]);
                 }
