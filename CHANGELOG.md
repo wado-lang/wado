@@ -1,5 +1,149 @@
 # Changelog
 
+## [v0.0.7](https://github.com/wado-lang/wado/compare/v0.0.6...v0.0.7) - 2026-06-08
+
+- chore: align wasm-tools crates with wasmtime's generation by @gfx in https://github.com/wado-lang/wado/pull/1171
+- refactor(desugar): dismantle assert / matches / comparison-chain via AstFolder by @gfx in https://github.com/wado-lang/wado/pull/1165
+- chore(mise): raise `test` threads from 2 to nproc-1 by @gfx in https://github.com/wado-lang/wado/pull/1173
+- gale: collapse Stage E / L buckets into Stage A claim (b/c/d) by @gfx in https://github.com/wado-lang/wado/pull/1174
+- test(e2e): surface the wasmtime Trap kind on test-world trap by @gfx in https://github.com/wado-lang/wado/pull/1177
+- refactor(optimize): tidy NIR optimizer (docs, TODOs, visitor reuse) by @gfx in https://github.com/wado-lang/wado/pull/1178
+- refactor: dismantle desugar phase, move all rewrites into resolver by @gfx in https://github.com/wado-lang/wado/pull/1182
+- feat(gale): per-rule parse_<rule>(input) entries and token-only group kind-check by @gfx in https://github.com/wado-lang/wado/pull/1183
+- fix(resolver): enforce fn mut root-mutability for non-identifier callees by @gfx in https://github.com/wado-lang/wado/pull/1185
+- fix(gale): close every stage_a_skip codegen blocker by @gfx in https://github.com/wado-lang/wado/pull/1189
+- perf(optimizer): niri bool/match collapses + select_lowering on leaf-pure arms by @gfx in https://github.com/wado-lang/wado/pull/1188
+- fix(resolver): lower for-of iterator path directly into TIR by @gfx in https://github.com/wado-lang/wado/pull/1186
+- fix(optimize): field_scalarize must not propagate post-sync state past a labeled break (#1187) by @gfx in https://github.com/wado-lang/wado/pull/1190
+- refactor(resolver): hoist Self::/T:: rewriting out of resolve_call by @gfx in https://github.com/wado-lang/wado/pull/1191
+- refactor(lsp): partial-result Annotated, snapshot cache, position-encoding negotiation by @gfx in https://github.com/wado-lang/wado/pull/1193
+- perf(optimizer): dead-code cleanups for issue #1184 (C1, C2, C3) by @gfx in https://github.com/wado-lang/wado/pull/1192
+- refactor(cli): make subcommands testable in-process by @gfx in https://github.com/wado-lang/wado/pull/1194
+- refactor(lsp): dedupe test fixtures, codepoint helpers, enum repr, query plumbing, and dispatch by @gfx in https://github.com/wado-lang/wado/pull/1196
+- perf(gale): speed up `gale gen` on large grammars by @gfx in https://github.com/wado-lang/wado/pull/1195
+- refactor(dce): unify reachability into one analyze-then-mutate pass by @gfx in https://github.com/wado-lang/wado/pull/1197
+- perf(kiln): resolve generators once per pipeline and cache compiled Components by @gfx in https://github.com/wado-lang/wado/pull/1198
+- perf(wir-optimize): D1 from #1184 — skip safe intervening stmts in adjacent struct elision by @gfx in https://github.com/wado-lang/wado/pull/1199
+- refactor(wado-lsp): rename annotate → semantics and unify compiler frontend as composable stages by @gfx in https://github.com/wado-lang/wado/pull/1200
+- refactor(elaborator): rename resolver phase to elaborator by @gfx in https://github.com/wado-lang/wado/pull/1201
+- feat(lsp): textDocument/inlayHint with type and parameter-name hints by @gfx in https://github.com/wado-lang/wado/pull/1202
+- docs(wep): elaborator re-architecture + align unused-diagnostics by @gfx in https://github.com/wado-lang/wado/pull/1203
+- fix(optimize): address branch-review findings in NIR mod_ref / sroa_param / elide_box_local by @gfx in https://github.com/wado-lang/wado/pull/1204
+- Variant-return SROA: tail-call propagation, HFS-temp elision, prefix call-site recursion by @gfx in https://github.com/wado-lang/wado/pull/1205
+- elaborator: introduce TypeSystem / ModuleSemantics (Stage 1 + Stage 2) by @gfx in https://github.com/wado-lang/wado/pull/1206
+- chore: update deps 2026/05/27 by @gfx in https://github.com/wado-lang/wado/pull/1207
+- elaborator: move per-module state to ModuleSemantics (Stage 3) by @gfx in https://github.com/wado-lang/wado/pull/1210
+- chore(logger): name previously-unmeasured spans in loader / semantics by @gfx in https://github.com/wado-lang/wado/pull/1209
+- chore(deps-dev): bump tmp from 0.2.5 to 0.2.6 in /wado-vscode in the npm_and_yarn group across 1 directory by @dependabot[bot] in https://github.com/wado-lang/wado/pull/1208
+- wado-compiler: parse stdlib modules lazily by @gfx in https://github.com/wado-lang/wado/pull/1211
+- refactor: elaborator Stage 4 — per-AstId annotation storage by @gfx in https://github.com/wado-lang/wado/pull/1212
+- feat(wit): Phase 0 groundwork for WIT producer-side by @gfx in https://github.com/wado-lang/wado/pull/1214
+- ci(tidy): parallelize, fail on diff, short-circuit bot commits by @gfx in https://github.com/wado-lang/wado/pull/1213
+- fix(gale): stamp min_prec / variant_id on LR self-refs nested in containers by @gfx in https://github.com/wado-lang/wado/pull/1215
+- docs(agents): note that the dev profile is tuned; avoid `--release` in the inner loop by @gfx in https://github.com/wado-lang/wado/pull/1220
+- refactor(gale): replace wildcard arms with explicit variant enumeration on IR transforms by @gfx in https://github.com/wado-lang/wado/pull/1221
+- fix(kiln): demote per-file regeneration notice to debug by @gfx in https://github.com/wado-lang/wado/pull/1222
+- fix(zlib): decode gzip FNAME/FCOMMENT as UTF-8 by @gfx in https://github.com/wado-lang/wado/pull/1223
+- feat(cli): wado test --test-name to filter by test-case name by @gfx in https://github.com/wado-lang/wado/pull/1224
+- elaborator: reify — Stage 5 progress, 1757/2654 (878.5 per level, +106.5 from baseline) by @gfx in https://github.com/wado-lang/wado/pull/1225
+- feat: cap long String/Array operands in power-assert output by @gfx in https://github.com/wado-lang/wado/pull/1226
+- ci(tidy): apply parallel-job patches with --3way by @gfx in https://github.com/wado-lang/wado/pull/1227
+- perf: track wasmtime main, default to the copying GC collector by @gfx in https://github.com/wado-lang/wado/pull/1175
+- test: cover nested expr and turbofish in template interpolation by @gfx in https://github.com/wado-lang/wado/pull/1228
+- bench: denominate light benchmarks; refresh results (best-of-three, whole-ms) and skill by @gfx in https://github.com/wado-lang/wado/pull/1231
+- perf(json): enable wasm branch hinting and mark cold deserialize branches by @gfx in https://github.com/wado-lang/wado/pull/1232
+- perf(gale): halve g4 lexer allocation to de-flake TypeScript grammar test by @gfx in https://github.com/wado-lang/wado/pull/1235
+- Fix fixed-point formatting under-rounding of small-magnitude values by @gfx in https://github.com/wado-lang/wado/pull/1237
+- fix(compiler): enable Rust-compatible Peekable; restore bounds-check elimination by @gfx in https://github.com/wado-lang/wado/pull/1238
+- fix(synthesis): cm_binding boundary bug fixes + migrate walkers to TirVisitor by @gfx in https://github.com/wado-lang/wado/pull/1240
+- feat(format): fix long-import wrapping (#1234), unify literal layout, add `[format]` config by @gfx in https://github.com/wado-lang/wado/pull/1239
+- fix(ci): keep the tagpr release branch buildable and tidy by @gfx in https://github.com/wado-lang/wado/pull/1241
+- fix(gale): two Stage A lexer bugs (EOF-suffix rule priority, channel tokens) by @gfx in https://github.com/wado-lang/wado/pull/1242
+- Stage 5: drive reify toward production TIR parity (→ 2614/2664) by @gfx in https://github.com/wado-lang/wado/pull/1243
+- feat: recover from parser syntax errors for the LSP by @gfx in https://github.com/wado-lang/wado/pull/1244
+- example: Wado.g4 grammar + syntax-highlight driver (and two Gale LL fixes) by @gfx in https://github.com/wado-lang/wado/pull/1245
+- fix: audit core:zlib decoder against RFC 1950/1951/1952 by @gfx in https://github.com/wado-lang/wado/pull/1247
+- bench(sieve): reuse buffer across iterations for stable timings by @gfx in https://github.com/wado-lang/wado/pull/1249
+- test: make WASI filesystem fixtures hermetic to fix flaky dir_ops by @gfx in https://github.com/wado-lang/wado/pull/1250
+- ci(tidy): move format-md to tidy-wado to drop a redundant compile by @gfx in https://github.com/wado-lang/wado/pull/1248
+- feat(gale): add position and rule context to parse errors by @gfx in https://github.com/wado-lang/wado/pull/1251
+- Regenerate golden fixtures without wiping them mid-run by @gfx in https://github.com/wado-lang/wado/pull/1252
+- Potential fix for code scanning alert no. 3: Workflow does not contain permissions by @gfx in https://github.com/wado-lang/wado/pull/1255
+- perf(serde): static FieldSchema dispatch + identity field naming by @gfx in https://github.com/wado-lang/wado/pull/1254
+- feat(gale): prediction-strategy diagnostics and a per-rule `gale dump` report (#1246 parts 3 & 4) by @gfx in https://github.com/wado-lang/wado/pull/1256
+- fix(optimize): reference-aliasing soundness across LICM / sroa_param / const-fold by @gfx in https://github.com/wado-lang/wado/pull/1257
+- gale: zero-length lexer tokens + ANTLR4 token numbering; formatter signature wrapping by @gfx in https://github.com/wado-lang/wado/pull/1258
+- chore: wasmtime upstream sync; build the CLI from vendor by @gfx in https://github.com/wado-lang/wado/pull/1253
+- Constant object globalization: WEP + recursive emit_const_expr by @gfx in https://github.com/wado-lang/wado/pull/1260
+- elaborator: complete reify parity for user modules; make reify the default by @gfx in https://github.com/wado-lang/wado/pull/1259
+- ci(tidy): exit green after pushing a tidy commit on internal PRs by @gfx in https://github.com/wado-lang/wado/pull/1261
+- feat(nir): materialize NirExprKind::ArrayLiteral and retire the WIR collapse by @gfx in https://github.com/wado-lang/wado/pull/1262
+- benchmark: throughput metrics with ~1s auto-calibration by @gfx in https://github.com/wado-lang/wado/pull/1264
+- docs: point the runtime benchmark link at the throughput series by @gfx in https://github.com/wado-lang/wado/pull/1265
+- elaborator: Stage 7-A — reify reads recorded signature facts instead of re-resolving by @gfx in https://github.com/wado-lang/wado/pull/1266
+- feat(gale): Stage B' — JVM-oracle-derived expected trees by @gfx in https://github.com/wado-lang/wado/pull/1268
+- feat(lexer): resilient tokenisation with bundled LexResult and per-error recovery by @gfx in https://github.com/wado-lang/wado/pull/1267
+- refactor(elaborator): finish Stage 7-A and complete Stage 5 (reify is the sole TIR producer) by @gfx in https://github.com/wado-lang/wado/pull/1269
+- optimizer(niri): smarter field-env tracking + dead-bounds-check elimination by @gfx in https://github.com/wado-lang/wado/pull/1270
+- fix(hooks): reconcile vendor/wasmtime to pinned commit every session by @gfx in https://github.com/wado-lang/wado/pull/1271
+- refactor(wir_build): tabulate mechanical builtin lowering and drop redundant literal copies by @gfx in https://github.com/wado-lang/wado/pull/1272
+- Richer type/trait diagnostics: symmetric operator errors and trait-bound reason chains by @gfx in https://github.com/wado-lang/wado/pull/1274
+- feat: make the wado-compiler parser error-recovering by @gfx in https://github.com/wado-lang/wado/pull/1275
+- Lower once on gale gen; surface prediction diagnostics on the Kiln path by @gfx in https://github.com/wado-lang/wado/pull/1273
+- Promote constant struct/array globals to eager Wasm constants by @gfx in https://github.com/wado-lang/wado/pull/1276
+- elaborator: Stage 7-B — make the call / operator surface record-only by @gfx in https://github.com/wado-lang/wado/pull/1277
+- Rename growable Array&lt;T&gt; → List&lt;T&gt; (Phase 0) + builtin::array redesign WEP by @gfx in https://github.com/wado-lang/wado/pull/1278
+- feat(compiler): builtin::array_* take &/&mut references (WEP Phase 1) by @gfx in https://github.com/wado-lang/wado/pull/1279
+- feat(effect): add #[benign(E)] for observationally-pure effects by @gfx in https://github.com/wado-lang/wado/pull/1280
+- refactor(sroa): migrate hand-written IR walks to visitor traits by @gfx in https://github.com/wado-lang/wado/pull/1281
+- Constant object globalization + eager short-string globals + const-global dedup by @gfx in https://github.com/wado-lang/wado/pull/1283
+- feat(stdlib): add core:uuid (v4/v7), with two effect/SIMD compiler fixes by @gfx in https://github.com/wado-lang/wado/pull/1285
+- feat(compiler): expose raw GC array as first-class `Array<T>` (WEP Phase 2) by @gfx in https://github.com/wado-lang/wado/pull/1282
+- SHA-256 example + core:digest, and inherent/trait impls on concrete generic instantiations by @gfx in https://github.com/wado-lang/wado/pull/1284
+- Optimizer remarks: surface residual value-semantic copies for coding agents by @gfx in https://github.com/wado-lang/wado/pull/1286
+- Unified zero-copy Slice/iterators over &Array<T> (builtin-array-redesign Phase 3) by @gfx in https://github.com/wado-lang/wado/pull/1287
+- Gale: parser trace instrumentation + sharper parse errors by @gfx in https://github.com/wado-lang/wado/pull/1290
+- refactor(optimizer): unify NIR traversals behind NirRefVisitor; harden const-globalization by @gfx in https://github.com/wado-lang/wado/pull/1289
+- feat: iterate references by reference in for-of, including tuples by @gfx in https://github.com/wado-lang/wado/pull/1291
+- docs: clarify the development test cycle and tidy AGENTS.md by @gfx in https://github.com/wado-lang/wado/pull/1292
+- Add builtin::cold_path branch-hint intrinsic by @gfx in https://github.com/wado-lang/wado/pull/1294
+- elaborator(7-B): combined walk stops building TIR — reify becomes the sole producer (Phase 1) by @gfx in https://github.com/wado-lang/wado/pull/1293
+- revert(ci): drop the tagpr CHANGELOG-format workaround by @gfx in https://github.com/wado-lang/wado/pull/1295
+- perf(compiler): speed up debug-build compilation (~20% on wado_syntax_highlight) by @gfx in https://github.com/wado-lang/wado/pull/1297
+- fix(jco): run example/hello.wado on upstream jco b1f93c27 by @gfx in https://github.com/wado-lang/wado/pull/1299
+- refactor(compiler): elaborator stage 7-B — annotate records facts, reify is the sole TIR producer by @gfx in https://github.com/wado-lang/wado/pull/1301
+- feat(codegen): lower array.copy to the native Wasm instruction, add generic -f flag by @gfx in https://github.com/wado-lang/wado/pull/1302
+- core:cbor design + byte-buffer/serde groundwork by @gfx in https://github.com/wado-lang/wado/pull/1300
+- Improve benchmark dashboard HTML and workflow by @gfx in https://github.com/wado-lang/wado/pull/1303
+- fix(benchmark): fixed header/legend/axis on combined benchmark pages by @gfx in https://github.com/wado-lang/wado/pull/1307
+- compiler: fix cross-module struct-literal default synthesis (#1263) by @gfx in https://github.com/wado-lang/wado/pull/1306
+- gale: refresh TODO — correct stale Stage B' status, tighten prose by @gfx in https://github.com/wado-lang/wado/pull/1304
+- elaborator: index-driven, cache-free method resolution (+ cross-module inherent fix) by @gfx in https://github.com/wado-lang/wado/pull/1305
+- Make namespace imports robust across all symbol kinds by @gfx in https://github.com/wado-lang/wado/pull/1310
+- feat(wir-optimize): Wasm-instruction-level peephole rewrites by @gfx in https://github.com/wado-lang/wado/pull/1311
+- Bytes-primary serde groundwork for core:cbor (+ P0 codegen fix) by @gfx in https://github.com/wado-lang/wado/pull/1309
+- feat(core:temporal): Instant and ZonedDateTime with formatting, parsing, and serde by @gfx in https://github.com/wado-lang/wado/pull/1312
+- fix(benchmark): render wasm-size graphs and serialize gh-pages writes by @gfx in https://github.com/wado-lang/wado/pull/1313
+- elaborator/monomorphize: coverage cleanup, soundness audit, and variadic for-of P0 fixes by @gfx in https://github.com/wado-lang/wado/pull/1314
+- perf(zlib): speed up inflate by removing redundant sliding window by @gfx in https://github.com/wado-lang/wado/pull/1316
+- perf(nir): run the optimizer on the arena Body, removing the per-pass tree bridge by @gfx in https://github.com/wado-lang/wado/pull/1315
+- feat(core:temporal): bridge wasi:clocks Instant with From, fixing cross-module same-name dispatch by @gfx in https://github.com/wado-lang/wado/pull/1317
+- LSP: classify semantic tokens by resolved symbol kind; unify keyword/operator registry by @gfx in https://github.com/wado-lang/wado/pull/1318
+- Remove legacy `builtin::array` type spelling in favor of `Array<T>` by @gfx in https://github.com/wado-lang/wado/pull/1319
+- Remove builtin::likely/unlikely; consolidate on builtin::cold_path by @gfx in https://github.com/wado-lang/wado/pull/1321
+- gale: thread the LL FOLLOW repair at runtime instead of cloning callees by @gfx in https://github.com/wado-lang/wado/pull/1320
+- opt: speed up JSON deserialization via HFS deferred write-back and LICM arithmetic hoisting by @gfx in https://github.com/wado-lang/wado/pull/1322
+- Gale: shrink generated parsers ~10% (parse-entry helpers + single-token CST compaction) by @gfx in https://github.com/wado-lang/wado/pull/1323
+- refactor(nir): migrate the NIR pipeline from the tree to the arena (Phase 5) by @gfx in https://github.com/wado-lang/wado/pull/1324
+- refactor(nir): retire the NIR tree representation (arena-only) by @gfx in https://github.com/wado-lang/wado/pull/1325
+- Unused diagnostics: Design-B semantic checks, reify gating, and 3-way liveness by @gfx in https://github.com/wado-lang/wado/pull/1326
+- feat(stdlib): add core:cbor — RFC 8949 binary serialization by @gfx in https://github.com/wado-lang/wado/pull/1330
+- fix(compiler): attribute method-signature use→def edges to the owning module by @gfx in https://github.com/wado-lang/wado/pull/1329
+- fix(compiler): infer trailing type params on a partial turbofish by @gfx in https://github.com/wado-lang/wado/pull/1331
+- perf(optimize): worklist rewrite engine + per-function dirty-set gating by @gfx in https://github.com/wado-lang/wado/pull/1332
+- chore: cleanup skills by @gfx in https://github.com/wado-lang/wado/pull/1335
+- feat(gale): hybrid runtime ATN simulator (P1–P3b) — non-greedy `??` / empty-alt groups by @gfx in https://github.com/wado-lang/wado/pull/1334
+
 ## [v0.0.6](https://github.com/wado-lang/wado/compare/v0.0.5...v0.0.6) - 2026-05-24
 
 - refactor(cli): rebuild `wado test` as a 3-stage pipeline; add `--no-run` by @gfx in https://github.com/wado-lang/wado/pull/1162
