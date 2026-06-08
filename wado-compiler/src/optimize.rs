@@ -620,7 +620,7 @@ fn run_optimization_passes(
         // signatures on the next iteration and lets `dce` clean up the freshly
         // dead computation in the same fixed-point loop. (Write-only local
         // elimination moved into the unified `nir/peephole` pass above.)
-        step!("nir/dae", eliminate_dead_arguments);
+        gated!("nir/dae", eliminate_dead_arguments);
         step!("nir/drve", eliminate_dead_return_values);
         gated!("nir/cse", eliminate_common_subexprs);
         step!("nir/store_load_forward", forward_stores_to_loads);
