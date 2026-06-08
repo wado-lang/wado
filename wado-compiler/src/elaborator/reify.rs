@@ -2288,7 +2288,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::LabeledBlock(lb) => {
+            ast::Expr::LabeledBlock(lb) => self.with_defaults_suppressed(|s| {
                 // Match `Elaborator::resolve_expr`'s `LabeledBlock`
                 // arm (expr.rs:234–305): push a `LabeledBlockTarget`
                 // so any `break label: expr` inside lowers via this
@@ -2307,7 +2307,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     expected_type: expected_type.or(Some(recorded_type)),
                 });
                 ctx.active_labels.push(lb.label.clone());
-                let tir_block = self.reify_block(&lb.block, ctx, expected_type);
+                let tir_block = s.reify_block(&lb.block, ctx, expected_type);
                 ctx.active_labels.pop();
                 let _target = ctx.labeled_block_targets.pop();
                 TirExpr::new(
@@ -2319,7 +2319,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     recorded_type,
                     span,
                 )
-            }
+            }),
             ast::Expr::Spread(_, _) => {
                 // `Spread` is only valid inside a tuple literal; the
                 // elaborator panics if it sees one at top level.
