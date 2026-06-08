@@ -751,9 +751,9 @@ fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
 // ===========================================================================
 // Runtime ATN simulator (hybrid ALL(*)) — full-context SLL prediction.
 //
-// Inlined into every generated parser. Invoked only at decision sites the
-// static predictor marked `Ambiguous` / a non-greedy repeat — the compiled
-// fast path handles everything else, so this never runs on the hot path.
+// Inlined into every generated parser. Invoked only at the cold decisions
+// that need it (today, non-greedy `??`) — the compiled fast path handles
+// everything else, so this never runs on the hot path.
 //
 // Full context without a per-call-site GIR<->ATN mapping: the caller passes
 // its current *rule-invocation stack* (a list of rule indices, cheaply
@@ -765,18 +765,42 @@ fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
 // SLL (rule-stop = wildcard follow).
 //
 // Clean-room: follows the published ALL(*) description, not ANTLR4 sources
-// (License hygiene, AGENTS.md). Wire-format constants MUST match
-// `src/atn.wado`; the blob carries a version word `atn_decode` asserts.
+// (License hygiene, AGENTS.md). The wire-format constants below are the
+// single source of truth; `atn.wado`'s builder imports them. The blob
+// carries a version word `atn_decode` asserts.
 // ===========================================================================
 
-global ATN_K_RULE_STOP: i32 = 3;
-global ATN_K_TR_EPSILON: i32 = 0;
-global ATN_K_TR_ATOM: i32 = 1;
-global ATN_K_TR_NOT_ATOM: i32 = 2;
-global ATN_K_TR_WILDCARD: i32 = 3;
-global ATN_K_TR_RULE: i32 = 4;
-global ATN_BLOB_MAGIC: i32 = 0x47_41_54_4e;
-global ATN_BLOB_VERSION: i32 = 1;
+// ATN wire-format constants — the single source of truth for the serialized
+// blob layout, shared by the builder/serializer in `src/atn.wado` (which
+// `use`s these) and the decoder/simulator below. They live here, not in
+// `atn.wado`, because this runtime is `#include_str`'d verbatim into every
+// generated parser and so cannot import from the compiler crate — whereas
+// the compiler crate is free to `use` the runtime. Bump `ATN_BLOB_VERSION`
+// on any layout change so a stale committed blob fails loudly.
+pub global ATN_BLOB_MAGIC: i32 = 0x47_41_54_4e;
+pub global ATN_BLOB_VERSION: i32 = 1;
+
+// State kinds. `atn_decode` copies every state's kind through verbatim and
+// the simulator only interprets `RULE_STOP` / `BLOCK_START` / `BLOCK_END`,
+// but the builder writes the full enumeration, so the whole set lives here
+// to keep one numbering authority (no split-numbering hazard across files).
+pub global ATN_BASIC: i32 = 1;
+pub global ATN_RULE_START: i32 = 2;
+pub global ATN_RULE_STOP: i32 = 3;
+pub global ATN_BLOCK_START: i32 = 4;
+pub global ATN_BLOCK_END: i32 = 5;
+pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
+pub global ATN_STAR_LOOP_BACK: i32 = 7;
+pub global ATN_PLUS_LOOP_BACK: i32 = 8;
+pub global ATN_LOOP_END: i32 = 9;
+
+// Transition kinds. `label`/`follow`/`prec` carry kind-specific data
+// (see `AtnTransition` in `atn.wado`).
+pub global ATN_TR_EPSILON: i32 = 0;
+pub global ATN_TR_ATOM: i32 = 1;
+pub global ATN_TR_NOT_ATOM: i32 = 2;
+pub global ATN_TR_WILDCARD: i32 = 3;
+pub global ATN_TR_RULE: i32 = 4;
 
 /// Sentinel "state": a config that has returned past the real stack bottom
 /// and is viable only if the next token is EOF (the start rule's follow).
@@ -888,7 +912,7 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
 fn atn_call_return_states(sim: &AtnSim, caller: i32, callee: i32) -> List<i32> {
     let mut out: List<i32> = [];
     for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
-        if sim.tr_kind[j] == ATN_K_TR_RULE && sim.tr_label[j] == callee && sim.state_rule[sim.tr_src[j]] == caller {
+        if sim.tr_kind[j] == ATN_TR_RULE && sim.tr_label[j] == callee && sim.state_rule[sim.tr_src[j]] == caller {
             out.push(sim.tr_follow[j]);
         }
     }
@@ -904,7 +928,7 @@ fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
         return false;
     }
     let k = sim.tr_kind[sim.state_tr_start[state]];
-    return k == ATN_K_TR_ATOM || k == ATN_K_TR_NOT_ATOM || k == ATN_K_TR_WILDCARD;
+    return k == ATN_TR_ATOM || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
 }
 
 /// Expand a seed set to its closure: resting configs (consuming states;
@@ -930,7 +954,7 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
             continue;
         }
 
-        if sim.state_kind[c.state] == ATN_K_RULE_STOP {
+        if sim.state_kind[c.state] == ATN_RULE_STOP {
             if !c.stack.is_empty() {
                 let mut ns = c.stack;
                 let ret = ns.pop().unwrap();
@@ -966,9 +990,9 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
         for let mut j = 0; j < cnt; j += 1 {
             let k = sim.tr_kind[start + j];
             let target = sim.tr_target[start + j];
-            if k == ATN_K_TR_EPSILON {
+            if k == ATN_TR_EPSILON {
                 work.push(AtnConfig { state: target, alt: c.alt, stack: c.stack, rs: c.rs });
-            } else if k == ATN_K_TR_RULE {
+            } else if k == ATN_TR_RULE {
                 if c.stack.len() >= ATN_MAX_STACK || target < 0 {
                     continue;
                 }
@@ -993,7 +1017,7 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
             }
             continue;
         }
-        if sim.state_kind[c.state] == ATN_K_RULE_STOP {
+        if sim.state_kind[c.state] == ATN_RULE_STOP {
             out.push(*c);
             continue;
         }
@@ -1002,11 +1026,11 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
         for let mut j = 0; j < cnt; j += 1 {
             let k = sim.tr_kind[start + j];
             let label = sim.tr_label[start + j];
-            let matched = if k == ATN_K_TR_ATOM {
+            let matched = if k == ATN_TR_ATOM {
                 label == token;
-            } else if k == ATN_K_TR_WILDCARD {
+            } else if k == ATN_TR_WILDCARD {
                 token != eof;
-            } else if k == ATN_K_TR_NOT_ATOM {
+            } else if k == ATN_TR_NOT_ATOM {
                 token != label && token != eof;
             } else {
                 false;
@@ -1048,7 +1072,7 @@ fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
         return false;
     }
     for let c of configs {
-        if c.state != ATN_ACCEPT_EOF && sim.state_kind[c.state] != ATN_K_RULE_STOP {
+        if c.state != ATN_ACCEPT_EOF && sim.state_kind[c.state] != ATN_RULE_STOP {
             return false;
         }
     }
@@ -1112,9 +1136,6 @@ pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &List<Token>, s
     return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
 }
 
-global ATN_K_BLOCK_START: i32 = 4;
-global ATN_K_BLOCK_END: i32 = 5;
-
 /// Decide whether a non-greedy optional (`(...)?? `) should ENTER (consume
 /// its body) or SKIP, using full-context ATN prediction. The current rule
 /// is the top of `rule_stack` (maintained by the rule-entry wrapper); the
@@ -1134,14 +1155,14 @@ pub fn atn_ng_optional_enter(sim: &AtnSim, rule_stack: &List<i32>, tokens: &List
     let mut found = 0;
     for let mut d = 0; d < sim.decision_state.len(); d += 1 {
         let ds = sim.decision_state[d];
-        if sim.state_kind[ds] != ATN_K_BLOCK_START || sim.state_rule[ds] != rule {
+        if sim.state_kind[ds] != ATN_BLOCK_START || sim.state_rule[ds] != rule {
             continue;
         }
         if sim.state_tr_count[ds] < 1 {
             continue;
         }
         let first_target = sim.tr_target[sim.state_tr_start[ds]];
-        if sim.state_kind[first_target] == ATN_K_BLOCK_END {
+        if sim.state_kind[first_target] == ATN_BLOCK_END {
             dec = d;
             found += 1;
         }

@@ -215,9 +215,9 @@ no shared constants) instead of two hand-kept-in-lockstep functions.
 **Spike.** Measured the wasm-size cost in isolation (the codec linked for
 a `List<i32>`-heavy struct), -O2:
 
-| variant                                   |   wasm |
-| ----------------------------------------- | -----: |
-| hand `i32`-array decode (isolated)        | 7,740 B |
+| variant                                   |     wasm |
+| ----------------------------------------- | -------: |
+| hand `i32`-array decode (isolated)        |  7,740 B |
 | `cbor` encode+decode + `serde` (isolated) | 20,622 B |
 
 ⇒ the cbor+serde codec adds **~+12.9 KB** (decode-only is less,
@@ -235,14 +235,15 @@ generated parser.
 
 **Decision.** Keep the hand-written codec. After the wire-format DRY
 refactor it is one writer (`serialize_atn`) + one reader (`atn_decode`)
-+ one shared constant set in `runtime.wado` — fast, zero-dependency, and
-round-trip-tested (`atn_test.wado` drives `serialize_atn` → `atn_decode`
-field-for-field). The codec/reader pair is the irreducible minimum;
-serde would trade ~95 LOC for a heavyweight per-parser dependency.
-(Separable, still open: embedding the blob as base64/`#data` rather than
-an `i32`-array literal — a source-size/compile-time lever, codec-agnostic,
-worth revisiting only once a *large* grammar's ATN literal is a measured
-problem. Today only small grammars carry an ATN.)
+
+- one shared constant set in `runtime.wado` — fast, zero-dependency, and
+  round-trip-tested (`atn_test.wado` drives `serialize_atn` → `atn_decode`
+  field-for-field). The codec/reader pair is the irreducible minimum;
+  serde would trade ~95 LOC for a heavyweight per-parser dependency.
+  (Separable, still open: embedding the blob as base64/`#data` rather than
+  an `i32`-array literal — a source-size/compile-time lever, codec-agnostic,
+  worth revisiting only once a _large_ grammar's ATN literal is a measured
+  problem. Today only small grammars carry an ATN.)
 
 ## Correctness items with a performance flavor
 
