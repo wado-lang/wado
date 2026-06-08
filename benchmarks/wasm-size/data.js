@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780884061502,
+  "lastUpdate": 1780908962515,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31297,6 +31297,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/93ebe1d9a2ef2d2517d84ecd99261f53b14ad568"
         },
         "date": 1780884061268,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8792,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15896,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437254,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c55b346a787593d383bb03f399eccf1f14be7e3c",
+          "message": "Merge pull request #1331 from wado-lang/claude/fix-partial-turbofish-ice\n\nfix(compiler): infer trailing type params on a partial turbofish",
+          "timestamp": "2026-06-08T17:46:50+09:00",
+          "tree_id": "bd34d41f061a537bfcf5e934e2fe7f37935b7455",
+          "url": "https://github.com/wado-lang/wado/commit/c55b346a787593d383bb03f399eccf1f14be7e3c"
+        },
+        "date": 1780908962030,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
