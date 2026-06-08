@@ -918,6 +918,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
 fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
+    let index: i32;
     let value: u8;
     let _licm_repr_9: ref Array<u8>;
     v = val;
@@ -928,8 +929,9 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
             if idx < offset {
                 break b98;
             }
+            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, idx, value);
+            builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l99;
@@ -1624,8 +1626,8 @@ fn "core:benchmark/Benchmark::ensure_header"(self) with Stdout {
     let __local_14: ref "core:prelude/string.wado//String";
     let __local_15: ref "core:prelude/format.wado//Formatter";
     let __match_16: ref "core:prelude/types.wado//Option<i32>";
-    let __sroa_self_value_50: i32;
-    let __sroa_self_value_51: i32;
+    let self_27: i32;
+    let self_33: i32;
     if self.header_printed {
         return;
     }
@@ -1664,7 +1666,7 @@ fn "core:benchmark/Benchmark::ensure_header"(self) with Stdout {
             "core:prelude/string.wado/String::push"(__local_8, 120);
             "core:prelude/string.wado/String::push"(__local_8, 32);
             __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 };
-            "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value_51(self.iterations), __local_9);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_27(self.iterations), __local_9);
             "core:prelude/string.wado/String::push"(__local_8, 32);
             "core:prelude/string.wado/String::push"(__local_8, 105);
             "core:prelude/string.wado/String::push"(__local_8, 116);
@@ -1677,7 +1679,7 @@ fn "core:benchmark/Benchmark::ensure_header"(self) with Stdout {
             "core:prelude/string.wado/String::push"(__local_10, 58);
             "core:prelude/string.wado/String::push"(__local_10, 32);
             __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 };
-            "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value_50(self.iterations), __local_11);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_33(self.iterations), __local_11);
             "core:prelude/string.wado/String::push"(__local_10, 32);
             "core:prelude/string.wado/String::push"(__local_10, 105);
             "core:prelude/string.wado/String::push"(__local_10, 116);

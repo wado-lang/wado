@@ -68,13 +68,12 @@ fn "wado-compiler/tests/fixtures/effect_propagation_signature_transitive.wado/__
 }
 
 fn "wado-compiler/tests/fixtures/effect_propagation_signature_transitive.wado/__cm_export__run"() {
-    let tx_2: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    "wasi/stream-drop-writable"(local.tee tx_2(__mv_hi_1));
+    "wasi/stream-drop-writable"(__mv_hi_1);
     "wasi/stream-drop-readable"(__mv_lo_1);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
     "wasi/task-return"(0);

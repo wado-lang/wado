@@ -153,7 +153,7 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_array_append_minimal"()
     let i: i32;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
-    let __sroa_self_value: i32;
+    let self_13: i32;
     __b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     i = 0;
     b0: block {
@@ -166,7 +166,7 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_array_append_minimal"()
             continue l1;
         };
     };
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; "core:prelude/string.wado/String::push"(__local_3, 108); "core:prelude/string.wado/String::push"(__local_3, 101); "core:prelude/string.wado/String::push"(__local_3, 110); "core:prelude/string.wado/String::push"(__local_3, 61); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value(__b.used), __local_4); __local_3);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; "core:prelude/string.wado/String::push"(__local_3, 108); "core:prelude/string.wado/String::push"(__local_3, 101); "core:prelude/string.wado/String::push"(__local_3, 110); "core:prelude/string.wado/String::push"(__local_3, 61); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_13(__b.used), __local_4); __local_3);
 }
 
 fn "wado-compiler/tests/fixtures/inline_merged.wado/test_early_return"() with Stdout {
@@ -188,21 +188,21 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref"() w
     let i: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let __sroa_self_value: i32;
-    let _licm_used_24: i32;
-    let _licm_repr_25: ref "Array<&mut wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>";
+    let self_21: i32;
+    let _licm_used_23: i32;
+    let _licm_repr_24: ref "Array<&mut wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>";
     a = struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem" { value: 10 };
     b = struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem" { value: 20 };
     __b = struct.new "core:prelude//List<&mut wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(a, b), used: 2 };
     i = 0;
-    _licm_used_24 = 2;
-    _licm_repr_25 = __b.repr;
+    _licm_used_23 = 2;
+    _licm_repr_24 = __b.repr;
     b3: block {
         l4: loop {
-            if i >= _licm_used_24 {
+            if i >= _licm_used_23 {
                 break b3;
             }
-            "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value(builtin::array_get<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(_licm_repr_25, i).value), __local_6); __local_5);
+            "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_21(builtin::array_get<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(_licm_repr_24, i).value), __local_6); __local_5);
             i = i + 1;
             continue l4;
         };

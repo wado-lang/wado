@@ -1684,6 +1684,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
 fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
+    let index: i32;
     let value: u8;
     let _licm_repr_9: ref Array<u8>;
     v = val;
@@ -1694,8 +1695,9 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
             if idx < offset {
                 break b147;
             }
+            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, idx, value);
+            builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l148;
@@ -2760,9 +2762,9 @@ fn "wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado/__Closure_7::__call
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let f_6: ref "core:prelude/format.wado//Formatter";
+    let self_7: i32;
     let f_11: ref "core:prelude/format.wado//Formatter";
-    let __sroa_self_value: i32;
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }, __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, __sroa_self_value = self.__capture_0, f_6 = __local_2, "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, f_6), "core:prelude/string.wado/String::push"(__local_1, 44), "core:prelude/string.wado/String::push"(__local_1, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, f_11 = __local_2, "core:prelude/primitive.wado/f64::fmt_into"(self.__capture_1, f_11), __local_1;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }, __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, f_6 = __local_2, "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_7(self.__capture_0), f_6), "core:prelude/string.wado/String::push"(__local_1, 44), "core:prelude/string.wado/String::push"(__local_1, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, f_11 = __local_2, "core:prelude/primitive.wado/f64::fmt_into"(self.__capture_1, f_11), __local_1;
 }
 
 export fn "wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado/__cm_export__run" as "run"

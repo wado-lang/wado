@@ -959,6 +959,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
 fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
+    let index: i32;
     let value: u8;
     let _licm_repr_9: ref Array<u8>;
     v = val;
@@ -969,8 +970,9 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
             if idx < offset {
                 break b108;
             }
+            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, idx, value);
+            builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l109;
@@ -1502,8 +1504,10 @@ fn "wado-compiler/tests/fixtures/match_or_pattern_iflet_1.wado/Shape^Inspect::in
         s_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_16);
     } else {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape::Point"), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_18);
+        block {
+            s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape::Point"), used: 12 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_18);
+        };
     }
 }
 
@@ -1532,8 +1536,10 @@ fn "wado-compiler/tests/fixtures/match_or_pattern_iflet_1.wado/Expr^Inspect::ins
         s_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_20);
     } else {
-        s_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr::Zero"), used: 10 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_22);
+        block {
+            s_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr::Zero"), used: 10 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_22);
+        };
     }
 }
 

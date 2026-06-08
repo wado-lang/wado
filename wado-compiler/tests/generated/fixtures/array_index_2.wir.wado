@@ -206,34 +206,34 @@ fn "wado-compiler/tests/fixtures/array_index_2.wado/array_index_inline_nested"()
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
+    let _licm_used_53: i32;
     let _licm_used_54: i32;
-    let _licm_used_55: i32;
-    let _licm_repr_56: ref Array<bool>;
-    let _licm_used_57: i32;
-    let _licm_repr_58: ref Array<i32>;
+    let _licm_repr_55: ref Array<bool>;
+    let _licm_used_56: i32;
+    let _licm_repr_57: ref Array<i32>;
     __b_0 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cherry"), used: 6 }), used: 3 };
     sum = 0;
     i = 0;
-    _licm_used_54 = __b_0.used;
-    _licm_used_55 = global:__const_obj_1.used;
-    _licm_repr_56 = global:__const_obj_1.repr;
-    _licm_used_57 = global:__const_obj_0.used;
-    _licm_repr_58 = global:__const_obj_0.repr;
+    _licm_used_53 = __b_0.used;
+    _licm_used_54 = global:__const_obj_1.used;
+    _licm_repr_55 = global:__const_obj_1.repr;
+    _licm_used_56 = global:__const_obj_0.used;
+    _licm_repr_57 = global:__const_obj_0.repr;
     b7: block {
         l8: loop {
-            if i >= _licm_used_54 {
+            if i >= _licm_used_53 {
                 break b7;
             }
-            if if @unlikely(i >= _licm_used_55) {
+            if if @unlikely(i >= _licm_used_54) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            }; builtin::array_get<bool>(_licm_repr_56, i) == 0 {
-                sum = sum + if @unlikely(i >= _licm_used_57) {
+            }; builtin::array_get<bool>(_licm_repr_55, i) == 0 {
+                sum = sum + if @unlikely(i >= _licm_used_56) {
                     cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }; builtin::array_get<i32>(_licm_repr_58, i);
+                }; builtin::array_get<i32>(_licm_repr_57, i);
             }
             i = i + 1;
             continue l8;

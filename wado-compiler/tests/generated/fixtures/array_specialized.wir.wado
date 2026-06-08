@@ -739,9 +739,9 @@ fn "wado-compiler/tests/fixtures/array_specialized.wado/array_specialized_tuple"
     let repr: ref "Array<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>";
     let end: i32;
     let f_17: ref "core:prelude/format.wado//Formatter";
+    let self_18: bool;
     let f_22: ref "core:prelude/format.wado//Formatter";
-    let __sroa_self_value_25: i32;
-    let __sroa_self_value_26: bool;
+    let self_23: i32;
     __b = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(0), used: 0 };
     "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::push"(__b, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 } });
     "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::push"(__b, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 0, 1: 2, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 119, 111), used: 3 } });
@@ -754,11 +754,11 @@ fn "wado-compiler/tests/fixtures/array_specialized.wado/array_specialized_tuple"
             __match_6 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>^Iterator::next"(__iter_2);
             if ref.is_null(__match_6) == 0 {
                 x = ref.as_non_null(__match_6);
-                "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; __sroa_self_value_26 = x.0; f_17 = __local_5; "core:prelude/format.wado/Formatter::pad"(f_17, (if __sroa_self_value_26 -> ref "core:prelude/string.wado//String" {
+                "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_17 = __local_5; self_18 = x.0; "core:prelude/format.wado/Formatter::pad"(f_17, (if self_18 -> ref "core:prelude/string.wado//String" {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
                 } else {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-                })); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; __sroa_self_value_25 = x.1; f_22 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_25, f_22); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, x.2); __local_4);
+                })); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_22 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_23(x.1), f_22); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, x.2); __local_4);
             } else {
                 break b28;
             }
@@ -1621,6 +1621,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
 fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
+    let index: i32;
     let value: u8;
     let _licm_repr_9: ref Array<u8>;
     v = val;
@@ -1631,8 +1632,9 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
             if idx < offset {
                 break b139;
             }
+            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, idx, value);
+            builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l140;
