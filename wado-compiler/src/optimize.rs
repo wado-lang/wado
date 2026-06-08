@@ -534,7 +534,7 @@ fn run_optimization_passes(
         // also means we see the `SequenceLiteralBuilder` desugaring for `[]`
         // while its inner `Constructor` call is still a plain `Call` node,
         // which `recognize_init` can match structurally.
-        step!("nir/container_sroa", scalarize_containers);
+        gated!("nir/container_sroa", scalarize_containers);
         // Run value-copy elision *before* inlining: the inliner expands
         // every reachable `$value_copy$T<id>` body into a labeled
         // block, after which the `Call($value_copy$T, [arg])` shape the

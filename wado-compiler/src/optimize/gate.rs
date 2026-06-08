@@ -69,10 +69,11 @@ pub enum GatedPass {
     TmplHoist,
     ElideBoxLocal,
     RefElim,
+    ContainerSroa,
 }
 
 impl GatedPass {
-    const COUNT: usize = 11;
+    const COUNT: usize = 12;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.
