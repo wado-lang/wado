@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780908962515,
+  "lastUpdate": 1780919883959,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31361,6 +31361,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 437254,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e06f3ff13a0bbae4f6d7591561680c30505066ed",
+          "message": "Merge pull request #1332 from wado-lang/claude/nir-rewrite-engine-cont-sTf6r\n\nperf(optimize): worklist rewrite engine + per-function dirty-set gating",
+          "timestamp": "2026-06-08T20:46:52+09:00",
+          "tree_id": "50968db7a9bd3e36658a5437bc46e266a9061503",
+          "url": "https://github.com/wado-lang/wado/commit/e06f3ff13a0bbae4f6d7591561680c30505066ed"
+        },
+        "date": 1780919883738,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437035,
             "unit": "bytes"
           }
         ]
