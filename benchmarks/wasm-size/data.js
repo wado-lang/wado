@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780833904506,
+  "lastUpdate": 1780881703824,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31209,6 +31209,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/77a93b5e4dccc67cf3b016e9040c82892ebe1c86"
         },
         "date": 1780833904042,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8792,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15896,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437254,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "197ad6419e83a8ffe4b6d539e365d92a7139165d",
+          "message": "Merge pull request #1330 from wado-lang/claude/core-cbor-wep-review-P7KOY\n\nfeat(stdlib): add core:cbor — RFC 8949 binary serialization",
+          "timestamp": "2026-06-08T10:11:45+09:00",
+          "tree_id": "8e5a547e4a991c3388b9831b9884ede4ee013c21",
+          "url": "https://github.com/wado-lang/wado/commit/197ad6419e83a8ffe4b6d539e365d92a7139165d"
+        },
+        "date": 1780881703277,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
