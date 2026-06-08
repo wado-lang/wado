@@ -1,0 +1,9 @@
+// A CLI-world program with no `run` entry point must error, not silently
+// compile to a no-op via a void stub. Test-only files belong in the test
+// world (`wado test`), so running them in the CLI world is a clear mistake.
+fn helper() -> i32 {
+    return 1;
+}
+
+__DATA__
+{"compile_error": "function `run` is required as a world entry point but is not defined"}

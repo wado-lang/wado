@@ -135,6 +135,18 @@ struct TestSpec {
     #[serde(default)]
     stderr_contains: Vec<String>,
 
+    /// Substrings that must each appear in some compile-time warning message
+    /// (e.g. `DeadFunction` / `DeadGlobal`). Warnings are emitted during
+    /// elaboration (pre-optimize), so they are identical across optimization
+    /// levels and checked uniformly.
+    #[serde(default)]
+    warnings_contains: Vec<String>,
+
+    /// Substrings that must NOT appear in any compile-time warning message —
+    /// a false-positive guard (e.g. a used item must not be reported dead).
+    #[serde(default)]
+    warnings_not_contains: Vec<String>,
+
     /// Whether the program is expected to trap — CLI world
     #[serde(default)]
     trapped: bool,
@@ -779,9 +791,25 @@ fn run_normal_test(
         ..Default::default()
     };
 
-    // Try to compile the fixture
-    let compile_result =
-        common::compile_source_with_compiler_options(fixture_path, source, options);
+    // Try to compile the fixture, capturing compile-time warnings.
+    let (compile_result, warnings) =
+        common::compile_capturing_warnings(fixture_path, source, options, None);
+
+    // Assert compile-time warnings (e.g. DeadFunction / DeadGlobal). These are
+    // emitted during elaboration, so they are identical across optimization
+    // levels; match on the message text only.
+    for expected in &spec.warnings_contains {
+        assert!(
+            warnings.iter().any(|w| w.contains(expected)),
+            "[{test_id}] expected a warning containing {expected:?}\n  warnings: {warnings:?}"
+        );
+    }
+    for unexpected in &spec.warnings_not_contains {
+        assert!(
+            !warnings.iter().any(|w| w.contains(unexpected)),
+            "[{test_id}] warning must not contain {unexpected:?}\n  warnings: {warnings:?}"
+        );
+    }
 
     // Handle expected compile errors (works for any world)
     if let Some(expected_error) = &spec.compile_error {

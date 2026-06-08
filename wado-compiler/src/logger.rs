@@ -230,6 +230,23 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
     }
 
+    /// Log a warning carrying a source span.
+    ///
+    /// Used by span-bearing lints (unused diagnostics). The span's `file`
+    /// is taken as-is when set; otherwise the logger's current-file context
+    /// is applied, matching [`Self::error`].
+    pub fn warn_at(&self, code: Code, message: impl Into<String>, span: DiagnosticSpan) {
+        if self.should_log(Severity::Warning) {
+            let diag = self.apply_file_context(Diagnostic {
+                severity: Severity::Warning,
+                code,
+                message: message.into(),
+                span: Some(span),
+            });
+            self.host.emit_diagnostic(diag);
+        }
+    }
+
     /// Log an info message
     pub fn info(&self, message: impl Into<String>) {
         if self.should_log(Severity::Info) {

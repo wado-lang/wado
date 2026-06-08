@@ -1024,7 +1024,7 @@ impl FunctionTranslator<'_, '_> {
     /// Convert a `Call` / `MethodCall` argument. When the argument is
     /// a specialized fn-param `Local` and the slot still expects
     /// `fn(...)`, wrap the converted `Local` in
-    /// `NirExprKind::ClosureToCanonical` so the callee sees the
+    /// `ExprKind::ClosureToCanonical` so the callee sees the
     /// original function-shaped view.
     fn convert_specialized_arg_expr(&self, arg: &TirExpr) -> ExprId {
         if let TirExprKind::Local { index, .. } = &arg.kind

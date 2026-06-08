@@ -261,8 +261,8 @@ fn build_switch(
     }
 }
 
-/// Deep-clone an arm body expression and wrap it in a fresh single-statement
-/// block, mirroring the `NirBlock { stmts: [Expr(body)] }` the tree pass built.
+/// Deep-clone an arm body expression and wrap it in a fresh block holding a
+/// single `Expr` statement.
 fn arm_body_block(engine: &mut Engine, body: ExprId) -> BlockId {
     let clone = engine.clone_expr(body);
     let span = engine.body.exprs[clone].span;

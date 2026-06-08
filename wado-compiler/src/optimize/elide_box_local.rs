@@ -37,14 +37,6 @@
 //!   `Match` / `Switch` / `LabeledBlock` / nested `Block`) blocks
 //!   substitution — those constructs may not execute the use on
 //!   every path.
-//!
-//! ## Arena port
-//!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the body traversal
-//! (stats, the bottom-up driver, candidate detection, substitution) and both
-//! soundness gates — `ModRef` and the leftmost-evaluated-subexpression walker —
-//! read the arena `Body` directly. No subtree materialization remains.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
@@ -714,16 +706,19 @@ fn substitute_node(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nir::{NirBinaryOp, NirExpr, NirExprKind, NirUnaryOp};
+    use crate::nir::{NirBinaryOp, NirUnaryOp};
+    use crate::nir_arena::ExprNode;
     use crate::tir::TypeId;
     use crate::token::Span;
 
-    /// Lower a tree expression into a fresh arena and run the leftmost walker
-    /// on it. The tree builders below stay readable while the production walker
-    /// runs on the arena; this bridge retires with the tree enums (group 6).
-    fn leftmost(e: NirExpr, candidate: u32, field_name: &str) -> LeftmostWalk {
+    /// Build an expression into a fresh arena and run the leftmost walker on it.
+    fn leftmost(
+        build: impl FnOnce(&mut Body) -> ExprId,
+        candidate: u32,
+        field_name: &str,
+    ) -> LeftmostWalk {
         let mut body = Body::empty();
-        let id = body.lower_expr(&e);
+        let id = build(&mut body);
         walk_expr_for_leftmost(&body, id, candidate, field_name)
     }
 
@@ -733,76 +728,70 @@ mod tests {
     fn sp() -> Span {
         Span::default()
     }
-    fn local(index: u32) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Local {
+    fn push(body: &mut Body, kind: ExprKind) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind,
+            type_id: ty(),
+            span: sp(),
+        })
+    }
+    fn local(body: &mut Body, index: u32) -> ExprId {
+        push(
+            body,
+            ExprKind::Local {
                 index,
                 name: format!("__l{index}"),
             },
-            ty(),
-            sp(),
         )
     }
-    fn int(v: i64) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::IntLiteral {
+    fn int(body: &mut Body, v: i64) -> ExprId {
+        push(
+            body,
+            ExprKind::IntLiteral {
                 value: v as u64,
                 repr: v.to_string(),
             },
-            ty(),
-            sp(),
         )
     }
-    fn field(receiver: NirExpr, name: &str) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::FieldAccess {
-                expr: Box::new(receiver),
+    fn field(body: &mut Body, receiver: ExprId, name: &str) -> ExprId {
+        push(
+            body,
+            ExprKind::FieldAccess {
+                expr: receiver,
                 field_index: 0,
                 field_name: name.to_string(),
             },
-            ty(),
-            sp(),
         )
     }
-    fn index(arr: NirExpr, idx: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Index {
-                expr: Box::new(arr),
-                index: Box::new(idx),
+    fn index(body: &mut Body, arr: ExprId, idx: ExprId) -> ExprId {
+        push(
+            body,
+            ExprKind::Index {
+                expr: arr,
+                index: idx,
             },
-            ty(),
-            sp(),
         )
     }
-    fn binary(op: NirBinaryOp, lhs: NirExpr, rhs: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Binary {
-                left: Box::new(lhs),
-                right: Box::new(rhs),
+    fn binary(body: &mut Body, op: NirBinaryOp, lhs: ExprId, rhs: ExprId) -> ExprId {
+        push(
+            body,
+            ExprKind::Binary {
+                left: lhs,
+                right: rhs,
                 op,
             },
-            ty(),
-            sp(),
         )
     }
-    fn unary(op: NirUnaryOp, e: NirExpr) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Unary {
-                op,
-                expr: Box::new(e),
-            },
-            ty(),
-            sp(),
-        )
+    fn unary(body: &mut Body, op: NirUnaryOp, e: ExprId) -> ExprId {
+        push(body, ExprKind::Unary { op, expr: e })
     }
-    fn cast(e: NirExpr, target: TypeId) -> NirExpr {
-        NirExpr::new(
-            NirExprKind::Cast {
-                expr: Box::new(e),
+    fn cast(body: &mut Body, e: ExprId, target: TypeId) -> ExprId {
+        push(
+            body,
+            ExprKind::Cast {
+                expr: e,
                 target_type: target,
             },
-            ty(),
-            sp(),
         )
     }
 
@@ -811,8 +800,13 @@ mod tests {
     /// must return Found.
     #[test]
     fn walker_finds_left_field_access() {
-        let expr = binary(NirBinaryOp::Add, field(local(7), "v"), int(0));
-        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Found));
+        let build = |b: &mut Body| {
+            let l = local(b, 7);
+            let f = field(b, l, "v");
+            let i = int(b, 0);
+            binary(b, NirBinaryOp::Add, f, i)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Found));
     }
 
     /// Use site `arr[idx] + boxed.v` — `arr[idx]` is observable
@@ -825,12 +819,15 @@ mod tests {
     /// pass-through" finding.
     #[test]
     fn walker_blocks_when_observable_index_precedes_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            index(local(1), local(2)),
-            field(local(7), "v"),
-        );
-        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
+        let build = |b: &mut Body| {
+            let a1 = local(b, 1);
+            let a2 = local(b, 2);
+            let idx = index(b, a1, a2);
+            let l = local(b, 7);
+            let f = field(b, l, "v");
+            binary(b, NirBinaryOp::Add, idx, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `(other.f) + boxed.v` — non-target `FieldAccess` may
@@ -838,42 +835,55 @@ mod tests {
     /// the surrounding context Pure.
     #[test]
     fn walker_blocks_when_non_target_field_precedes_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            field(local(2), "other"),
-            field(local(7), "v"),
-        );
-        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
+        let build = |b: &mut Body| {
+            let l2 = local(b, 2);
+            let other = field(b, l2, "other");
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            binary(b, NirBinaryOp::Add, other, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `(x as i32) + boxed.v` — `Cast` may trap, observable.
     #[test]
     fn walker_blocks_when_cast_precedes_field() {
-        let expr = binary(NirBinaryOp::Add, cast(local(2), ty()), field(local(7), "v"));
-        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
+        let build = |b: &mut Body| {
+            let l2 = local(b, 2);
+            let c = cast(b, l2, ty());
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            binary(b, NirBinaryOp::Add, c, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `*p + boxed.v` — `Unary::Deref` may trap, observable.
     #[test]
     fn walker_blocks_when_deref_precedes_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            unary(NirUnaryOp::Deref, local(2)),
-            field(local(7), "v"),
-        );
-        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
+        let build = |b: &mut Body| {
+            let l2 = local(b, 2);
+            let d = unary(b, NirUnaryOp::Deref, l2);
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            binary(b, NirBinaryOp::Add, d, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `(a / b) + boxed.v` — `Binary::Div` may trap on zero
     /// divisor, observable.
     #[test]
     fn walker_blocks_when_div_precedes_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            binary(NirBinaryOp::Div, local(1), local(2)),
-            field(local(7), "v"),
-        );
-        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
+        let build = |b: &mut Body| {
+            let l1 = local(b, 1);
+            let l2 = local(b, 2);
+            let div = binary(b, NirBinaryOp::Div, l1, l2);
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            binary(b, NirBinaryOp::Add, div, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `boxed.v + arr[idx]` — observable on RIGHT side
@@ -882,12 +892,15 @@ mod tests {
     /// substituted inner expression.
     #[test]
     fn walker_allows_observable_after_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            field(local(7), "v"),
-            index(local(1), local(2)),
-        );
-        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Found));
+        let build = |b: &mut Body| {
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            let a1 = local(b, 1);
+            let a2 = local(b, 2);
+            let idx = index(b, a1, a2);
+            binary(b, NirBinaryOp::Add, f, idx)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Found));
     }
 
     /// Use site `Cast(boxed.v)` — `FieldAccess` inside an observable
@@ -895,8 +908,12 @@ mod tests {
     /// AFTER the substituted inner.
     #[test]
     fn walker_finds_when_field_is_inside_observable() {
-        let expr = cast(field(local(7), "v"), ty());
-        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Found));
+        let build = |b: &mut Body| {
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            cast(b, f, ty())
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Found));
     }
 
     /// Use site `cond && boxed.v` — the right operand of `&&` is
@@ -904,7 +921,12 @@ mod tests {
     /// Block, not anchor.
     #[test]
     fn walker_blocks_field_in_right_of_and() {
-        let expr = binary(NirBinaryOp::And, local(2), field(local(7), "v"));
-        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
+        let build = |b: &mut Body| {
+            let l2 = local(b, 2);
+            let l7 = local(b, 7);
+            let f = field(b, l7, "v");
+            binary(b, NirBinaryOp::And, l2, f)
+        };
+        assert!(matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked));
     }
 }

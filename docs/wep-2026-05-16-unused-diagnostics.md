@@ -53,9 +53,9 @@ existing `CompilerHost`. Two passes contribute, both consuming
 2. Liveness pass — the elaborate-time DCE pass introduced by
    [elaborator rearchitecture](./wep-2026-05-26-elaborator-rearchitecture.md).
    Computes source-level reachability from world-export roots over
-   the cross-module call graph that `bindings` already encodes.
-   Emits `DeadFunction` and `DeadGlobal` for source items the
-   computation does not reach.
+   the cross-module call graph encoded in `bindings` and the dispatch
+   facts. Emits `DeadFunction` and `DeadGlobal` for the source items
+   the computation does not reach (its `Liveness::dead_items`).
 
 Both passes are guarded by `CompilerOptions::unused_diagnostics` (on
 by default). No package-kind toggle is needed: `export` already names
@@ -73,13 +73,15 @@ optimize-time and silent.
 
 ### What is in scope (MVP)
 
-| Lint              | Pass      | Code              |
-| ----------------- | --------- | ----------------- |
-| `UnusedImport`    | Reference | `UnusedImport`    |
-| `UnusedVariable`  | Reference | `UnusedVariable`  |
-| `UnusedParameter` | Reference | `UnusedParameter` |
-| `DeadFunction`    | Liveness  | `DeadFunction`    |
-| `DeadGlobal`      | Liveness  | `DeadGlobal`      |
+| Lint               | Pass      | Code               |
+| ------------------ | --------- | ------------------ |
+| `UnusedImport`     | Reference | `UnusedImport`     |
+| `UnusedVariable`   | Reference | `UnusedVariable`   |
+| `UnusedParameter`  | Reference | `UnusedParameter`  |
+| `DeadFunction`     | Liveness  | `DeadFunction`     |
+| `DeadGlobal`       | Liveness  | `DeadGlobal`       |
+| `TestOnlyFunction` | Liveness  | `TestOnlyFunction` |
+| `TestOnlyGlobal`   | Liveness  | `TestOnlyGlobal`   |
 
 ### What is out of scope (deferred to follow-up WEPs / PRs)
 
@@ -92,16 +94,32 @@ optimize-time and silent.
 
 ### Reachability roots (package-external boundary)
 
-The liveness pass treats these source-level items as always-live:
+The pass runs two independent reachability closures over the same call graph:
 
-| Root                                      | Source                                                                                                                  |
+- `E` — the **production** closure, seeded by the roots below.
+- `T` — the **test** closure, seeded by `test` blocks only.
+
+| Production root (seeds `E`)               | Source                                                                                                                  |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Items satisfying world-export contracts   | Functions whose name and signature satisfy a world export (`command` / `service` / `lib`); identified during `annotate` |
 | `#[export]`-attributed items              | Raw Wasm exports                                                                                                        |
 | Items in `wasm_module_sources` re-exports | Bridged Wasm module exports                                                                                             |
-| `test` items in the test world            | Test discovery roots                                                                                                    |
+| impl / trait methods                      | Seeded live as call-graph intermediaries (method-level dead detection deferred)                                         |
 
-The root set matches the existing optimize-time DCE root set in
+Each user-authored free function / global is classified by membership:
+
+- `∈ E` → **live** (no diagnostic).
+- `∈ T \ E` → **test-only**: used by tests but not production → `TestOnlyFunction` /
+  `TestOnlyGlobal`. Reported in non-test builds only (during `wado test` the
+  reaching `test` blocks are the point, so it would be noise).
+- `∉ E ∧ ∉ T` → **dead** → `DeadFunction` / `DeadGlobal`.
+
+`test` blocks are world-independent roots of `T`, never `E`: a function reached
+only from a test is therefore reported, not silently kept alive — the behaviour
+Rust's test-build masks. Reify still gates emission on `live_items = E ∪ T`, so
+test-reachable code compiles (in non-test worlds the optimize-time DCE drops it).
+
+The production root set matches the existing optimize-time DCE root set in
 `optimize/dce.rs` (`compute_reachable_from_entries`); the liveness
 pass restates them at the source level so reachability can be
 computed before TIR is emitted. Synthesised items — CM binding
@@ -195,17 +213,20 @@ Walk `Semantics::locals`. For each `(key, sym)` whose kind is
 
 The elaborate-time `liveness` pass computes the closure of reachable
 source items from the root set (see Reachability roots) over the
-call-graph encoded in `ModuleSemantics.bindings`. The closure is
-computed once over source-level `SymbolKey`s, so there is no
-fixed-point loop and no per-iteration dedup. Globals reference
-functions through their initialiser, functions reference globals and
-other functions through their bodies; both edge kinds are already
-present in `bindings`.
+source-level call graph. The graph mechanism — node set, the
+per-module enclosing-item index, the edge sources
+(`ModuleBindings.references` plus the dispatch facts in
+`TypeAnnotations`), precise `FunctionRef` resolution, and the
+fail-loud treatment of generic trait dispatch — is owned by the
+[elaborator rearchitecture](./wep-2026-05-26-elaborator-rearchitecture.md)
+(see its DCE / Liveness section). The closure is a single BFS over a
+static graph, so there is no fixed-point loop and no per-iteration
+dedup.
 
-For each user-authored module, the emitter walks the module's
-function and global declarations and reports any whose `SymbolKey` is
-absent from `Liveness::live_items`. Stdlib modules and synthesised
-items (which are not in `Semantics` at all) cannot appear.
+The emitter walks `Liveness::dead_items` and reports `DeadFunction`
+or `DeadGlobal` for each user-authored entry. Stdlib modules and
+synthesised items (which are not in `Semantics` at all) never enter
+`dead_items`.
 
 Span: `Semantics::name_span_of(key)`, with fallback to the item's
 `span` for declarations without a narrow name span.
@@ -257,10 +278,12 @@ land with stage 6 of the rearchitecture (see
 
 #### Phase 1 — diagnostic plumbing
 
-- [ ] Add `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` strings.
-- [ ] Add `Logger::warn_at(code, message, span, file)`.
-- [ ] Add `CompilerOptions::unused_diagnostics` (default `true`).
-- [ ] Add `AstIndex::is_param(id)` and tests.
+- [x] Add `Code::DeadFunction`, `DeadGlobal` and their `Display` strings.
+      (`UnusedImport` / `UnusedVariable` / `UnusedParameter` land with the
+      reference pass.)
+- [x] Add `Logger::warn_at(code, message, span)`.
+- [x] Add `CompilerOptions::unused_diagnostics` (default `true`).
+- [ ] Add `AstIndex::is_param(id)` and tests (reference pass).
 
 #### Phase 2 — reference pass
 
@@ -269,17 +292,197 @@ land with stage 6 of the rearchitecture (see
 - [ ] Wire into `compile_with_options` and `Engine::diagnostics`.
 - [ ] Add fixtures under `tests/fixtures/unused_*.wado`; touch `tests/e2e.rs`.
 
-#### Phase 3 — liveness pass (lands with elaborator rearchitecture stage 6)
+#### Phase 3 — liveness pass and DeadFunction / DeadGlobal
 
-- [ ] Land `elaborator/liveness.rs` per the rearchitecture WEP.
-- [ ] Implement the liveness-pass emitter (`DeadFunction`, `DeadGlobal`) consuming `Liveness::live_items`.
-- [ ] Wire `reify` to skip items absent from `live_items`.
-- [ ] Retire the optimize-time DCE's diagnostic role (it remains as silent cleanup).
-- [ ] Add fixtures under `tests/fixtures/dead_fn_*.wado` and `tests/fixtures/dead_global_*.wado`.
+- [x] Land `elaborator/liveness.rs`: the enclosing-item index (an AST
+      id-collector), edge collection over `references`, the BFS, and the
+      `Liveness` field on `Semantics`. Free functions and globals are
+      precise; every method is seeded live as an intermediary (so the
+      free-function reachability stays sound without the operator / `?` /
+      for-of dispatch edges).
+- [x] Implement the emitter (`DeadFunction`, `DeadGlobal`) consuming
+      `Liveness::dead_items`; tests in `tests/unused_diagnostics.rs`.
+- [x] Two-closure 3-way classification (`live` / `test-only` / `dead`): test
+      blocks seed `T` only, never `E`; `live_items = E ∪ T` (reify gating
+      unchanged). Adds `TestOnlyFunction` / `TestOnlyGlobal`, emitted in
+      non-test builds. Unit tests in `tests/unused_diagnostics.rs`.
+- [x] E2E warning assertions: `warnings_contains` / `warnings_not_contains`
+      fixture-spec fields (`compile_capturing_warnings` in the harness);
+      `dead_fn_*` / `dead_global_*` fixtures cover dead and test-only.
+- [ ] Package-wide analysis so `T` is populated outside the entry module
+      (load the whole package via `wado test` discovery; `wado check`
+      package mode). Until then `test-only` only surfaces for `test` blocks
+      in the compiled entry's own module graph.
 
-#### Phase 4 — CLI wiring
+#### Phase 3b — reify gating (Design B)
+
+Reify gating is the input-shrinking win (`monomorphize` / `lower` /
+`optimize` see only the reachable closure). The first attempt gated
+inside reify and broke two contracts, both now understood:
+
+1. Diagnostics in dead code. Wado reports errors in unreachable code
+   (effect / stores / purity / world-conformance). Those checks run on
+   the emitted TIR _after_ reify, so dropping a dead function suppressed
+   its error. The fix is structural — produce those diagnostics from
+   `Semantics` (AST + recorded facts) so they see the whole program
+   regardless of what reify emits. This also lets the LSP surface them
+   (it builds no TIR). See the rearchitecture WEP's DCE / Liveness note.
+2. A cross-module reachability gap — a dropped-live function the
+   source-level graph missed (`cross_module_type_identity` ICE'd at WIR
+   build). The graph must be a sound over-approximation of reachable.
+
+Gating is therefore disabled until both are addressed:
+
+- [x] 1b. `check_effects_semantic(&Semantics)` (AST + facts) landed and
+      wired into the LSP (`Engine::diagnostics`). Covers free / method /
+      static / indirect calls, declared effects, signature resources
+      (incl. struct-nested), resource injection, the propagation
+      closure, effect-parameter resolution, and `#[benign]`. Batch still
+      runs the TIR `check_effects` (see "Batch switch — blocked" below).
+- [ ] 1c. Port `check_stores` likewise.
+- [ ] 1d. Port `check_default_purity` likewise.
+- [ ] 1a. Move the world-export conformance check (`export`-required,
+      param / return mismatch) off the gated TIR — read the entry
+      module's AST / `Semantics` in `compile_with_options` (where the
+      target world is known). Record the world-export root set on
+      `Semantics` for the liveness roots.
+-
+  2. [ ] Close the liveness graph's cross-module gaps (foreign-keyed
+         `references` from `with_module_perspective`, inlined-foreign-AST,
+         namespace imports, test-world roots).
+-
+  3. [ ] Re-enable reify gating on `Liveness::live_items` and validate
+         the full E2E suite green (fail-loud: a dropped-live item ICEs).
+- [ ] The optimize-time DCE never carried a user-facing diagnostic role,
+      so there is nothing to retire — it stays as silent cleanup as
+      designed.
+
+Batch switch — landed (Semantics effect check), 3 fixtures still red:
+
+`compile_with_options` now runs `check_effects_semantic` on the whole
+program and the TIR `check_effects` is removed. The full E2E suite is at
+**2836 / 2842** (6 failures = 3 fixtures × 2 opt levels). Resolved on the
+way (each was also an LSP false positive / under-report):
+
+- [x] Stdlib per-module facts (`effect_ops`, `function_effects`,
+      `fn_param_types`, …) were not seeded from the snapshot, so the
+      propagation closure missed stdlib effect→resource propagation
+      (`Stdout → Stream → StreamWritable`). The snapshot now clones each
+      stdlib module's `types`.
+- [x] Bundled stdlib `.wado` files load as `ModuleSource::Local` with a
+      `wasi:` / `core:` scheme path; `is_user_authored` now excludes them.
+- [x] Effect identity is non-canonical: `EffectRef::Concrete.module_source`
+      reflects the recording module's import perspective (user `with
+      Stdout` → entry module; stdlib → `wasi:cli`). Effects are now
+      canonicalised by name through the declaration index before
+      comparison / closure lookup.
+- [x] Effect-handler scopes: `with H => … do { … }` grants `H` to the
+      do-block body (pushed / popped around the body walk).
+- [x] Indirect calls through a function-typed parameter resolve the
+      callee via the enclosing function's parameter types.
+- [x] Variant-payload-nested resources: a `(module, variant) → payload
+      types` map feeds the closure and `signature_resources`.
+- [x] Default-expression purity was a side effect of the non-canonical
+      bug, fixed by canonicalisation (`check_default_purity` stays on
+      TIR and fires again).
+
+Async effect checking — resolved with no new rule:
+
+Investigation (temporarily restoring the old TIR check) established that
+the `async` failures were **not** a pre/post-synthesis artefact: the new
+check runs pre-synthesis and applies the same resource-effect rule the
+old check did. `WaitableSet` / `ErrorContext` are simply real
+capabilities the failing handlers used (`WaitableSet::new()`,
+`ErrorContext::new()`) without holding — true positives. They are not
+reachable in the propagation closure from anything an HTTP handler holds
+(`WaitableSet` appears in an operation signature only in
+`Subtask::join(set: &WaitableSet)`), so the new check correctly flagged
+them. The old check passed them only through a resource-specific
+leniency.
+
+The accurate failure count with `async` checked is **3 fixtures**
+(`cm_waitable_set_new`, `cm_waitable_set_poll`, `cm_error_context`). The
+~75 other `task return` handlers pass: they only touch `Future` /
+`Response` / `Stream`, held via signature propagation. So no
+`task return` rule is needed — the fix is just to declare the capability
+the three handlers actually use.
+
+- [x] Remove the interim `async`-skip; `async` bodies are effect-checked.
+- [x] Declare the used capability on the three handlers (`with
+      WaitableSet` / `with ErrorContext`); HTTP handlers accept a `with`
+      clause. Full E2E green.
+
+#### Phase 1b design — effect check on `Semantics`
+
+`effect_check.rs` today walks the emitted TIR. The port reimplements
+the same logic over the parsed AST plus the facts `annotate` already
+records, so it runs after `annotate_bodies` and sees every function —
+dead or live — for both batch and LSP. To keep every commit green, land
+it incrementally:
+
+- First wire the new checker into the LSP path (`Engine::diagnostics`)
+  only; the batch path keeps the TIR-based `check_effects`. No double
+  emission (LSP builds no TIR), existing fixtures unchanged, and the LSP
+  gains effect diagnostics immediately.
+- Once it reaches diagnostic parity (validated against the
+  `effect_check_*` fixtures), switch the batch path over and delete the
+  TIR-based checker. Reify gating (Phase 3b.3) can then turn on.
+
+Data mapping (TIR read → `Semantics` source):
+
+| TIR read (today)                         | `Semantics` source                                          |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `func.effects`                           | `TypeAnnotations.function_effects[fn_key]`                  |
+| `func.benign_effects`                    | `#[benign(E)]` on the AST `Function.attrs`                  |
+| `func.is_ambient`                        | `#[ambient]` on the AST `Function.attrs`                    |
+| `func.task_return_type`                  | `function_task_returns[fn_key]`                             |
+| `param.type_id`                          | `fn_param_types[fn_key]`                                    |
+| `func.return_type`                       | `fn_return_types[fn_key]`                                   |
+| `is_cm_binding` / `is_dispatch_wrapper`  | n/a — synthesised, not in `Semantics`; skip rule disappears |
+| struct field / variant payload `TypeId`s | `struct_field_types[struct_key]`, variant decls             |
+| resource decls                           | AST `Item::Resource` per module                             |
+| call-site `FunctionRef`                  | the dispatch facts (below)                                  |
+| `ResolvedType` lookups                   | the `TypeTable` snapshot on `Semantics`                     |
+
+Call-site callee resolution (the body walk visits the AST; each call
+kind maps to the fact that names its callee):
+
+| AST call site                 | Fact → callee                                       |
+| ----------------------------- | --------------------------------------------------- |
+| free call `f()`               | `references[callee_ident_id]` → fn `SymbolKey`      |
+| `recv.m()`                    | `method_dispatch[call_id].function_ref`             |
+| `T::m()` / `Self::m()`        | `static_method_dispatch[call_id].function_ref`      |
+| operator / index              | `operator_dispatch` / `index_assign_dispatch`       |
+| `?` / `From`                  | `from_call_facts[expr_id]`                          |
+| `for x of e`                  | `for_of_iterator[for_id]` (`into_iter` / `next`)    |
+| indirect call (closure value) | `ResolvedType::Function.effects` of the callee type |
+
+Algorithm (unchanged from the TIR version, restated on facts):
+
+1. Build the effect index keyed by `(module, mangled_name)` —
+   `mangled_name` from `method_names[method_key].mangled` for methods,
+   the source name for free functions — carrying effects, `is_ambient`,
+   `benign`, `is_method`, and param `TypeId`s.
+2. Build `resource_names`, `struct_fields`, `variant_payloads`, and the
+   propagation closure (`build_propagation_closure`) from the same decl
+   and type data, now read off `Semantics` rather than `TirModule`.
+3. For each user function: `current_effects = expand(declared effects +
+   signature_resources(param/return/task-return types) + benign)`.
+4. Walk the AST body; at each call site resolve the callee via the table
+   above, compute `get_function_effects` (callee effects + resource
+   effect for direct resource methods − benign, with effect-param
+   resolution), and report `EffectError` for any effect not in
+   `current_effects`.
+
+Stores (1c) and purity (1d) follow the same data mapping; stores reuses
+the ref-parameter detection (`ResolvedType::Ref` / `MutRef` over
+`fn_param_types`).
+
+#### Phase 4 — CLI wiring and reference pass
 
 - [ ] `wado-cli`: add `--no-unused` flag for `compile` / `run` / `serve` / `dump`.
+- [ ] Reference pass: `UnusedImport` / `UnusedVariable` / `UnusedParameter`.
+- [ ] Method-level dead detection (the dispatch edges; stop seeding every method live).
 
 ### Test plan
 

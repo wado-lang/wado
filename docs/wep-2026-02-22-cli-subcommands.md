@@ -264,10 +264,20 @@ wado serve file.wado
 wado run                           # uses [package].command
 wado serve                         # uses [package].service
 wado compile -o out.wasm           # compiles the command entry point
-wado compile --lib -o out.wasm     # compiles the lib entry point
 ```
 
 When a file argument is provided, it overrides the entry point from `wado.toml`.
+
+#### `--lib` — pending
+
+`wado compile --lib` (compile the `[package].lib` entry as a library) is
+abolished pending a world model that fits libraries. A library has no command
+entry point, so it does not map onto `wasi:cli/command`; the previous
+implementation compiled the lib into that world and stubbed the absent `run`,
+which never surfaced the library's `export` API as component exports. The
+`[package].lib` manifest field and `EntryPointKind::Lib` resolution are retained
+as the data model; the CLI flag and its compile path return once a proper
+library/component-export world is designed.
 
 ### `wado exec`
 

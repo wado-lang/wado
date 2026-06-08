@@ -35,10 +35,10 @@ pub(crate) struct StructFieldInfo {
 
 /// Variant case info: case name and payload type
 #[derive(Clone)]
-pub(super) struct VariantCaseData {
+pub(crate) struct VariantCaseData {
     pub(super) name: String,
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
-    pub(super) payload: TypeId,
+    pub(crate) payload: TypeId,
     /// `AstId` of the case declaration (`VariantCase::id`) in the owning module.
     pub(super) ast_id: AstId,
 }
@@ -50,7 +50,9 @@ pub(crate) struct VariantInfo {
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
     pub(super) type_params: Vec<String>,
-    pub(super) cases: Vec<VariantCaseData>,
+    /// Per-case data. `pub(crate)` so the Semantics-based effect checker can
+    /// follow resources nested in variant case payloads.
+    pub(crate) cases: Vec<VariantCaseData>,
     /// `TypeIds` of the variant's own type parameters in declaration order.
     /// Used by `infer_variant_type_args` to fill type params from payload args
     /// and expected type context.

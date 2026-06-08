@@ -30,7 +30,6 @@ pub mod nir_arena;
 pub mod nir_engine;
 pub mod nir_package;
 pub mod nir_unparse;
-pub mod nir_visitor;
 pub mod optimize;
 pub mod package;
 pub mod parser;
@@ -75,7 +74,10 @@ pub use semantics::{
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
-pub use effect_check::{EffectError, check_default_purity, check_effects, check_stores};
+pub use effect_check::{
+    DefaultPurityError, EffectError, SemanticDiagnostics, StoresError,
+    check_default_purity_semantic, check_effects_semantic, check_semantics, check_stores_semantic,
+};
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
 pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_with_line};
@@ -164,7 +166,7 @@ pub struct DumpResult {
 }
 
 /// Compilation options for the compiler
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct CompilerOptions {
     /// Optimization level
     pub opt_level: OptLevel,
@@ -204,6 +206,29 @@ pub struct CompilerOptions {
     /// option (e.g. `["array-copy"]`). Parsed into [`CodegenFlags`] during
     /// compilation; an unrecognized flag is a hard error. Empty by default.
     pub codegen_flags: Vec<String>,
+    /// Emit unused diagnostics (`DeadFunction` / `DeadGlobal`, …). On by
+    /// default; the CLI's `--no-unused` flag turns it off. Gates only the
+    /// diagnostic emission, never the liveness analysis itself.
+    pub unused_diagnostics: bool,
+}
+
+impl Default for CompilerOptions {
+    fn default() -> Self {
+        Self {
+            opt_level: OptLevel::default(),
+            target_world: None,
+            skip_validation: false,
+            retain_wir: false,
+            inline_threshold: None,
+            opt_iterations: None,
+            log_level: None,
+            allocator: None,
+            invocations: kiln::InvocationIndex::default(),
+            test_name_filters: Vec::new(),
+            codegen_flags: Vec::new(),
+            unused_diagnostics: true,
+        }
+    }
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -241,6 +266,70 @@ pub async fn compile_with_host<H: CompilerHost>(
 /// This is the main compilation entry point with all options. It runs the full compilation pipeline:
 /// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
 ///
+/// Emit unused-item warnings for the user-authored items the liveness pass
+/// classified: `DeadFunction` / `DeadGlobal` for items reachable from neither
+/// production nor tests, and `TestOnlyFunction` / `TestOnlyGlobal` for items
+/// reachable only from `test` blocks.
+fn emit_unused_diagnostics<H: CompilerHost>(
+    sem: &semantics::Semantics,
+    logger: &Logger<'_, H>,
+    is_test_world: bool,
+) {
+    use crate::ast::Item;
+    use crate::compiler_host::{Code, DiagnosticSpan};
+
+    let emit = |keys: &[crate::symbol::SymbolKey],
+                fn_code: Code,
+                global_code: Code,
+                reason: &str| {
+        for key in keys {
+            let Some(module) = sem.modules.get(&key.module) else {
+                continue;
+            };
+            let filename = key.module.diagnostic_filename();
+            for item in &module.items {
+                match item {
+                    Item::Function(func) if func.id == key.ast_id => {
+                        logger.warn_at(
+                            fn_code,
+                            format!("function `{}` {reason}", func.name),
+                            DiagnosticSpan::from_span(&func.name_span, Some(filename.as_str())),
+                        );
+                    }
+                    Item::Global(global) if global.id == key.ast_id => {
+                        logger.warn_at(
+                            global_code,
+                            format!("global `{}` {reason}", global.name),
+                            DiagnosticSpan::from_span(&global.name_span, Some(filename.as_str())),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        }
+    };
+
+    emit(
+        &sem.liveness.dead_items,
+        Code::DeadFunction,
+        Code::DeadGlobal,
+        "is never used",
+    );
+
+    // A test-only item is production dead code, but flagging it during a
+    // `wado test` run — where the `test` blocks that reach it are the whole
+    // point — would be noise. Report it only in non-test builds (`wado
+    // compile` / `wado check`).
+    if !is_test_world {
+        emit(
+            &sem.liveness.test_only_items,
+            Code::TestOnlyFunction,
+            Code::TestOnlyGlobal,
+            "is only used by tests",
+        );
+    }
+}
+
 /// # Arguments
 /// * `source` - The entry module source code
 /// * `host` - `CompilerHost` for loading imported modules and emitting diagnostics
@@ -372,6 +461,35 @@ fn compile_after_load<H: CompilerHost>(
     let sem = semantics::semantics_with_logger(load_result, logger, true);
     if !sem.is_complete() {
         return Err(Bail);
+    }
+
+    // Source-level unused diagnostics. Reads the liveness computed during
+    // `semantics_with_logger`; gated on the option (CLI `--no-unused`).
+    if options.unused_diagnostics {
+        let is_test_world = options.target_world.as_deref() == Some("test");
+        emit_unused_diagnostics(&sem, logger, is_test_world);
+    }
+
+    // === Phase 6b: Effect, Stores, and Default-Purity Checks (Design B) ===
+    // All three are produced from `Semantics` (AST + recorded facts), not the
+    // emitted TIR, so they see every source function regardless of what reify
+    // emits and share their logic with the LSP.
+    {
+        let _span = logger.span("effect-check");
+        let diags = effect_check::check_semantics(&sem);
+        let had_error = !diags.is_empty();
+        for error in diags.effects {
+            let _ = logger.error(error);
+        }
+        for error in diags.stores {
+            let _ = logger.error(error);
+        }
+        for error in diags.purity {
+            let _ = logger.error(error);
+        }
+        if had_error {
+            return Err(Bail);
+        }
     }
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
@@ -566,17 +684,6 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    // === Phase 7b: Default-Value Purity Check ===
-    // Every `param: T = expr` and `field: T = expr` must be pure. Runs before
-    // synthesis so that auto-derived `Default::default()` bodies (which clone
-    // the field default expressions) are only emitted for structs whose
-    // defaults have already cleared the purity gate — otherwise the effect
-    // checker would fire on the synthetic body with a misleading location.
-    {
-        let _span = logger.span("default-purity-check");
-        check_default_purity(&package.tir_modules, logger)?;
-    }
-
     // === Phase 8: Synthesis (Package -> Package) ===
     let package = {
         let _span = logger.span("synthesis");
@@ -590,23 +697,6 @@ fn compile_after_load<H: CompilerHost>(
             Bail
         })?
     };
-
-    // === Phase 8a: Effect Check ===
-    // Runs after synthesis so synthesized functions (trait impls, Inspect, Display, serde, etc.)
-    // are also validated. Runs before monomorphize so effect params are still present.
-    // CM bindings are skipped (they are boundary code with special effect semantics).
-    {
-        let _span = logger.span("effect-check");
-        check_effects(&package.tir_modules, logger)?;
-    }
-
-    // === Phase 8b: Stores Check ===
-    // Runs after synthesis so synthesized functions are also checked.
-    // Runs before monomorphize/optimize so stores info is available for escape analysis.
-    {
-        let _span = logger.span("stores-check");
-        check_stores(&package.tir_modules, logger)?;
-    }
 
     // === Phase 8c: Effect Dispatch Synthesis ===
     // Lowers `WithHandler` / `Resume` and generates per-effect dispatch

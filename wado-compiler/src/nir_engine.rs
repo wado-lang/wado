@@ -723,46 +723,85 @@ pub trait Rule {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nir::{NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind};
+    use crate::nir::NirBinaryOp;
+    use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::tir::TypeTable;
     use crate::token::Span;
 
-    /// `{ let x = 1 + 2; return x; }`
-    fn sample_body() -> Body {
-        let sp = Span::default();
-        let ty = TypeTable::UNIT;
-        let mk = |k| NirExpr::new(k, ty, sp);
-        let one = mk(NirExprKind::IntLiteral {
-            value: 1,
-            repr: "1".to_string(),
+    /// Build a `Body` whose root block holds the statements `build` produces.
+    fn mk_body(build: impl FnOnce(&mut Body) -> Vec<StmtId>) -> Body {
+        let mut body = Body::empty();
+        let stmts = build(&mut body);
+        body.root = body.blocks.push(BlockNode {
+            stmts,
+            span: Span::default(),
         });
-        let two = mk(NirExprKind::IntLiteral {
-            value: 2,
-            repr: "2".to_string(),
-        });
-        let add = mk(NirExprKind::Binary {
-            left: Box::new(one),
-            op: NirBinaryOp::Add,
-            right: Box::new(two),
-        });
-        let let_stmt = NirStmt::new(
-            NirStmtKind::Let {
+        body
+    }
+
+    fn e(body: &mut Body, kind: ExprKind) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind,
+            type_id: TypeTable::UNIT,
+            span: Span::default(),
+        })
+    }
+    fn lit(body: &mut Body, n: u64) -> ExprId {
+        e(
+            body,
+            ExprKind::IntLiteral {
+                value: n,
+                repr: n.to_string(),
+            },
+        )
+    }
+    fn bin(body: &mut Body, left: ExprId, op: NirBinaryOp, right: ExprId) -> ExprId {
+        e(body, ExprKind::Binary { left, op, right })
+    }
+    fn local0(body: &mut Body) -> ExprId {
+        e(
+            body,
+            ExprKind::Local {
+                index: 0,
+                name: "x".to_string(),
+            },
+        )
+    }
+    fn s(body: &mut Body, kind: StmtKind) -> StmtId {
+        body.stmts.push(StmtNode {
+            kind,
+            span: Span::default(),
+        })
+    }
+    fn let_x(body: &mut Body, value: ExprId, is_mut: bool) -> StmtId {
+        s(
+            body,
+            StmtKind::Let {
                 name: "x".to_string(),
                 local_index: 0,
-                is_mut: false,
+                is_mut,
                 is_reactive: false,
-                type_id: ty,
-                value: add,
+                type_id: TypeTable::UNIT,
+                value,
                 skip_value_copy: false,
             },
-            sp,
-        );
-        let xref = mk(NirExprKind::Local {
-            index: 0,
-            name: "x".to_string(),
-        });
-        let ret = NirStmt::new(NirStmtKind::Return { value: Some(xref) }, sp);
-        Body::from_block(&NirBlock::new(vec![let_stmt, ret], sp))
+        )
+    }
+    fn ret_x(body: &mut Body) -> StmtId {
+        let xref = local0(body);
+        s(body, StmtKind::Return { value: Some(xref) })
+    }
+
+    /// `{ let x = 1 + 2; return x; }`
+    fn sample_body() -> Body {
+        mk_body(|b| {
+            let one = lit(b, 1);
+            let two = lit(b, 2);
+            let add = bin(b, one, NirBinaryOp::Add, two);
+            let let_stmt = let_x(b, add, false);
+            let ret = ret_x(b);
+            vec![let_stmt, ret]
+        })
     }
 
     #[test]
@@ -828,36 +867,15 @@ mod tests {
     /// `{ let x = (1 + 2) * 4; return x; }` folds to `let x = 12;`.
     #[test]
     fn engine_folds_nested_arith_bottom_up() {
-        let sp = Span::default();
-        let ty = TypeTable::UNIT;
-        let mk = |k| NirExpr::new(k, ty, sp);
-        let lit = |n: u64| NirExprKind::IntLiteral {
-            value: n,
-            repr: n.to_string(),
-        };
-        let inner = mk(NirExprKind::Binary {
-            left: Box::new(mk(lit(1))),
-            op: NirBinaryOp::Add,
-            right: Box::new(mk(lit(2))),
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let two = lit(b, 2);
+            let inner = bin(b, one, NirBinaryOp::Add, two);
+            let four = lit(b, 4);
+            let outer = bin(b, inner, NirBinaryOp::Mul, four);
+            let let_stmt = let_x(b, outer, false);
+            vec![let_stmt]
         });
-        let outer = mk(NirExprKind::Binary {
-            left: Box::new(inner),
-            op: NirBinaryOp::Mul,
-            right: Box::new(mk(lit(4))),
-        });
-        let let_stmt = NirStmt::new(
-            NirStmtKind::Let {
-                name: "x".to_string(),
-                local_index: 0,
-                is_mut: false,
-                is_reactive: false,
-                type_id: ty,
-                value: outer,
-                skip_value_copy: false,
-            },
-            sp,
-        );
-        let mut body = Body::from_block(&NirBlock::new(vec![let_stmt], sp));
         {
             let mut eng = Engine::new(&mut body);
             eng.run(&[&FoldAddMulConst]);
@@ -930,43 +948,16 @@ mod tests {
     /// `{ let x = 1 + 2; (); return x; }` drops the bare `()` statement.
     #[test]
     fn block_rule_splices_statement_list() {
-        let sp = Span::default();
-        let ty = TypeTable::UNIT;
-        let mk = |k| NirExpr::new(k, ty, sp);
-        let add = mk(NirExprKind::Binary {
-            left: Box::new(mk(NirExprKind::IntLiteral {
-                value: 1,
-                repr: "1".to_string(),
-            })),
-            op: NirBinaryOp::Add,
-            right: Box::new(mk(NirExprKind::IntLiteral {
-                value: 2,
-                repr: "2".to_string(),
-            })),
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let two = lit(b, 2);
+            let add = bin(b, one, NirBinaryOp::Add, two);
+            let let_stmt = let_x(b, add, false);
+            let unit = e(b, ExprKind::Unit);
+            let unit_stmt = s(b, StmtKind::Expr(unit));
+            let ret = ret_x(b);
+            vec![let_stmt, unit_stmt, ret]
         });
-        let let_stmt = NirStmt::new(
-            NirStmtKind::Let {
-                name: "x".to_string(),
-                local_index: 0,
-                is_mut: false,
-                is_reactive: false,
-                type_id: ty,
-                value: add,
-                skip_value_copy: false,
-            },
-            sp,
-        );
-        let unit_stmt = NirStmt::new(NirStmtKind::Expr(mk(NirExprKind::Unit)), sp);
-        let ret = NirStmt::new(
-            NirStmtKind::Return {
-                value: Some(mk(NirExprKind::Local {
-                    index: 0,
-                    name: "x".to_string(),
-                })),
-            },
-            sp,
-        );
-        let mut body = Body::from_block(&NirBlock::new(vec![let_stmt, unit_stmt, ret], sp));
         let root = body.root;
         assert_eq!(body.blocks[root].stmts.len(), 3);
         {
@@ -984,70 +975,35 @@ mod tests {
     fn is_local_read_ignores_bare_assign_targets() {
         // `{ let x = 1 + 2; x = 7; }` — local 0 is written but never read, so
         // `is_local_read(0)` is false (its only mention is the assign target).
-        let sp = Span::default();
-        let ty = TypeTable::UNIT;
-        let mk = |k| NirExpr::new(k, ty, sp);
-        let lit = |n: u64| NirExprKind::IntLiteral {
-            value: n,
-            repr: n.to_string(),
-        };
-        let add = mk(NirExprKind::Binary {
-            left: Box::new(mk(lit(1))),
-            op: NirBinaryOp::Add,
-            right: Box::new(mk(lit(2))),
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let two = lit(b, 2);
+            let add = bin(b, one, NirBinaryOp::Add, two);
+            let let_stmt = let_x(b, add, true);
+            let target = local0(b);
+            let seven = lit(b, 7);
+            let assign = e(
+                b,
+                ExprKind::Assign {
+                    target,
+                    value: seven,
+                },
+            );
+            let assign_stmt = s(b, StmtKind::Expr(assign));
+            vec![let_stmt, assign_stmt]
         });
-        let let_stmt = NirStmt::new(
-            NirStmtKind::Let {
-                name: "x".to_string(),
-                local_index: 0,
-                is_mut: true,
-                is_reactive: false,
-                type_id: ty,
-                value: add,
-                skip_value_copy: false,
-            },
-            sp,
-        );
-        let assign = mk(NirExprKind::Assign {
-            target: Box::new(mk(NirExprKind::Local {
-                index: 0,
-                name: "x".to_string(),
-            })),
-            value: Box::new(mk(lit(7))),
-        });
-        let assign_stmt = NirStmt::new(NirStmtKind::Expr(assign), sp);
-        let mut body = Body::from_block(&NirBlock::new(vec![let_stmt, assign_stmt], sp));
         let eng = Engine::new(&mut body);
         assert!(!eng.is_local_read(0));
 
         // The same body with a trailing `return x` makes local 0 read.
-        let add2 = mk(NirExprKind::Binary {
-            left: Box::new(mk(lit(1))),
-            op: NirBinaryOp::Add,
-            right: Box::new(mk(lit(2))),
+        let mut body2 = mk_body(|b| {
+            let one = lit(b, 1);
+            let two = lit(b, 2);
+            let add2 = bin(b, one, NirBinaryOp::Add, two);
+            let let2 = let_x(b, add2, true);
+            let ret = ret_x(b);
+            vec![let2, ret]
         });
-        let let2 = NirStmt::new(
-            NirStmtKind::Let {
-                name: "x".to_string(),
-                local_index: 0,
-                is_mut: true,
-                is_reactive: false,
-                type_id: ty,
-                value: add2,
-                skip_value_copy: false,
-            },
-            sp,
-        );
-        let ret = NirStmt::new(
-            NirStmtKind::Return {
-                value: Some(mk(NirExprKind::Local {
-                    index: 0,
-                    name: "x".to_string(),
-                })),
-            },
-            sp,
-        );
-        let mut body2 = Body::from_block(&NirBlock::new(vec![let2, ret], sp));
         let eng2 = Engine::new(&mut body2);
         assert!(eng2.is_local_read(0));
     }

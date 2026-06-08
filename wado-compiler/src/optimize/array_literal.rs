@@ -1,4 +1,4 @@
-//! Materialize `NirExprKind::ArrayLiteral` from an `Array<T>` builder
+//! Materialize `ExprKind::ArrayLiteral` from an `Array<T>` builder
 //! sequence — an `array_new(N)` allocation followed by `N` `List::push`
 //! calls.
 //!
@@ -18,7 +18,7 @@
 //! `List<T>` (e.g. `SeqVec { items: List<T> }`, `Bag { keys, values }`).
 //! This pass recognizes that window — the `List<T> { repr: array_new(N),
 //! used: 0 }` struct plus its `N` trailing `List::push` calls — and rewrites
-//! the struct to `NirExprKind::ArrayLiteral { elements }`, dropping the
+//! the struct to `ExprKind::ArrayLiteral { elements }`, dropping the
 //! pushes. The pushes need not be contiguous: inlining `push_literal` leaves
 //! single-use element temps between them (see `pure_temp_binding`), and
 //! pushes to distinct array fields may interleave (see `try_collapse_at`).
