@@ -593,7 +593,20 @@ fn run_optimization_passes(
         // scalar through call chains. NIR analog of WIR's `sroa_param`; see
         // `optimize/sroa_param.rs`.
         step!("nir/sroa_param", sroa_single_field_parameters);
-        step!("nir/inline", |p| inline_functions(p, threshold));
+        // `inline` self-reports the callers it modified to the gate (no
+        // `bump_all`); it only mutates caller bodies, so the gated passes need
+        // re-examine just those (and their neighbours).
+        {
+            let c = run_pass("nir/inline", project, profiler, |p| {
+                inline_functions(p, threshold, &mut gate)
+            });
+            if c {
+                changed = true;
+                if trace_loop {
+                    iter_changed.push("nir/inline");
+                }
+            }
+        }
         // Unified peephole engine pass, post-inline run. Now `array_literal`
         // fires: it materializes `ArrayLiteral` from the `List<T> {
         // array_new(N) } + N × List::push` builder window, which inline must

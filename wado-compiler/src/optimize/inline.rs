@@ -17,7 +17,10 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
+use cranelift_entity::EntityRef;
+
 use super::arena_query;
+use super::gate::{FunctionGate, FunctionId};
 use crate::token::Span;
 
 // The inline threshold is based on expression count, which provides a more
@@ -609,7 +612,11 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
 ///
 /// The `inline_threshold` parameter controls the maximum number of statements
 /// a function can have to be considered for inlining.
-pub fn inline_functions(project: &mut NirPackage, inline_threshold: usize) -> bool {
+pub fn inline_functions(
+    project: &mut NirPackage,
+    inline_threshold: usize,
+    gate: &mut FunctionGate,
+) -> bool {
     let recursive_functions = find_recursive_functions(&project.functions);
 
     // Collect inline candidates from all modules
@@ -654,7 +661,7 @@ pub fn inline_functions(project: &mut NirPackage, inline_threshold: usize) -> bo
     let mut changed = false;
 
     // Inline at call sites
-    for func_rc in &project.functions {
+    for (caller_idx, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let caller_module_source = func.module_source.clone();
         let func_name = func.name.clone();
@@ -687,6 +694,14 @@ pub fn inline_functions(project: &mut NirPackage, inline_threshold: usize) -> bo
 
             if !inlined_funcs.is_empty() {
                 changed = true;
+                // Only this caller's body changed (the callee bodies are copied,
+                // not modified). Reporting it dirties the gated passes for this
+                // function and its call-graph neighbours, instead of `bump_all`.
+                // The caller gains the inlined callee's edges, but that staleness
+                // only affects 1-hop propagation precision (quality), never
+                // correctness, and the interprocedural passes (dae/drve) rescan
+                // all functions regardless.
+                gate.mark_changed(FunctionId::new(caller_idx));
             }
 
             // Update function_strings: add strings from inlined functions to the caller
