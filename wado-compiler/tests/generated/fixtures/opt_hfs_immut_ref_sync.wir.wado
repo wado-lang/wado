@@ -114,7 +114,6 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado/run"() {
     let c: ref "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado//Counter";
     let total: i32;
     let i: i32;
-    let __v0_3: i32;
     let __cond_4: bool;
     let __v0_5: i32;
     let __cond_6: bool;
@@ -132,31 +131,31 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado/run"() {
     let f_35: ref "core:prelude/format.wado//Formatter";
     let f_41: ref "core:prelude/format.wado//Formatter";
     let f_46: ref "core:prelude/format.wado//Formatter";
-    let __hfs_x_55: i32;
+    let __hfs_x_49: i32;
     c = struct.new "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado//Counter" { x: 0, y: 0 };
     total = 0;
     i = 0;
-    __hfs_x_55 = 0;
+    __hfs_x_49 = 0;
     b0: block {
         l1: loop {
             if i >= 5 {
                 break b0;
             }
-            __hfs_x_55 = __hfs_x_55 + 1;
-            total = local.tee total(total + __hfs_x_55) + __hfs_x_55;
-            c.x = __hfs_x_55;
+            __hfs_x_49 = __hfs_x_49 + 1;
+            total = local.tee total(total + __hfs_x_49) + __hfs_x_49;
+            c.x = __hfs_x_49;
             total = total + "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado/read_x"(c);
             "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado/bump_y"(c);
             i = i + 1;
             continue l1;
         };
     };
-    __cond_4 = local.tee __v0_3(total) == 45;
+    __cond_4 = total == 45;
     if @unlikely(__cond_4 == 0) {
         cold_path;
         "core:internal/panic"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(121), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_9, 114); "core:prelude/string.wado/String::push"(__local_9, 117); "core:prelude/string.wado/String::push"(__local_9, 110); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push"(__local_9, 97); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_9, 58); __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; f_19 = __local_10; "core:prelude/primitive.wado/i32::fmt_decimal"(37, f_19); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: total == 45
-"), used: 24 }); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 111); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 97); "core:prelude/string.wado/String::push"(__local_9, 108); "core:prelude/string.wado/String::push"(__local_9, 58); "core:prelude/string.wado/String::push"(__local_9, 32); __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; f_24 = __local_10; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_3, f_24); "core:prelude/string.wado/String::push"(__local_9, 10); __local_9);
+"), used: 24 }); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 111); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 97); "core:prelude/string.wado/String::push"(__local_9, 108); "core:prelude/string.wado/String::push"(__local_9, 58); "core:prelude/string.wado/String::push"(__local_9, 32); __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; f_24 = __local_10; "core:prelude/primitive.wado/i32::fmt_decimal"(total, f_24); "core:prelude/string.wado/String::push"(__local_9, 10); __local_9);
         unreachable;
     }
     __cond_6 = local.tee __v0_5(c.x) == 5;

@@ -113,40 +113,40 @@ fn "wado-compiler/tests/fixtures/hfs_nested_loop_iter_n_back_edge.wado/run"() wi
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let f_10: ref "core:prelude/format.wado//Formatter";
     let f_15: ref "core:prelude/format.wado//Formatter";
-    let __sroa_self_value_18: i32;
-    let __hfs_pos_20: i32;
+    let self_16: i32;
+    let __hfs_pos_18: i32;
     state = struct.new "wado-compiler/tests/fixtures/hfs_nested_loop_iter_n_back_edge.wado//State" { pos: 0, pad: 0 };
     sum = 0;
     outer = 0;
-    __hfs_pos_20 = 0;
+    __hfs_pos_18 = 0;
     b0: block {
         l1: loop {
             if outer >= 3 {
                 break b0;
             }
-            sum = sum + __hfs_pos_20;
-            __hfs_pos_20 = __hfs_pos_20 + 100;
-            sum = sum + __hfs_pos_20;
+            sum = sum + __hfs_pos_18;
+            __hfs_pos_18 = __hfs_pos_18 + 100;
+            sum = sum + __hfs_pos_18;
             inner = 0;
-            state.pos = __hfs_pos_20;
+            state.pos = __hfs_pos_18;
             b3: block {
                 l4: loop {
                     if inner >= 2 {
                         break b3;
                     }
-                    sum = sum + __hfs_pos_20;
+                    sum = sum + __hfs_pos_18;
                     "wado-compiler/tests/fixtures/hfs_nested_loop_iter_n_back_edge.wado/bump"(state);
                     inner = inner + 1;
-                    __hfs_pos_20 = state.pos;
+                    __hfs_pos_18 = state.pos;
                     continue l4;
                 };
             };
             outer = outer + 1;
-            __hfs_pos_20 = state.pos;
+            __hfs_pos_18 = state.pos;
             continue l1;
         };
     };
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_10 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, f_10); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; __sroa_self_value_18 = state.pos; f_15 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_18, f_15); __local_4);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_10 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, f_10); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_15 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_16(state.pos), f_15); __local_4);
 }
 
 fn "wado-compiler/tests/fixtures/hfs_nested_loop_iter_n_back_edge.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

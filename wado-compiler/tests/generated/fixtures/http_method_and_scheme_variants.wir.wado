@@ -1680,11 +1680,15 @@ fn "wasi:http/types.wado/Scheme^Inspect::inspect"(self, f) {
     let s_11: ref "core:prelude/string.wado//String";
     __match_3 = self.value;
     if __match_3.discriminant == 0 {
-        s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Scheme::Http"), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+        block {
+            s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Scheme::Http"), used: 12 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+        };
     } else if __match_3.discriminant == 1 {
-        s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Scheme::Https"), used: 13 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_7);
+        block {
+            s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Scheme::Https"), used: 13 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_7);
+        };
     } else {
         __inspect_Other_2 = ref.cast "wasi:http/types.wado//Scheme::Other"(__match_3).payload_0;
         s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Scheme::Other("), used: 14 };

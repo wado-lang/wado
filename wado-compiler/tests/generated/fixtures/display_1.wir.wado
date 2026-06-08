@@ -3446,6 +3446,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
 fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
+    let index: i32;
     let value: u8;
     let _licm_repr_9: ref Array<u8>;
     v = val;
@@ -3456,8 +3457,9 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
             if idx < offset {
                 break b260;
             }
+            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, idx, value);
+            builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l261;
@@ -5262,8 +5264,10 @@ fn "core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>^Inspect:
         s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_7);
     } else {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::None"), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_9);
+        block {
+            s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::None"), used: 12 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_9);
+        };
     }
 }
 
@@ -5282,8 +5286,10 @@ fn "core:prelude/types.wado/Option<core:prelude/string.wado/String>^Inspect::ins
         s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_7);
     } else {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::None"), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_9);
+        block {
+            s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::None"), used: 12 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_9);
+        };
     }
 }
 
@@ -5302,8 +5308,10 @@ fn "core:prelude/types.wado/Option<i32>^Inspect::inspect"(self, f) {
         s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_11);
     } else {
-        s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::None"), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_13);
+        block {
+            s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::None"), used: 12 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_13);
+        };
     }
 }
 

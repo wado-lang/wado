@@ -212,12 +212,12 @@ fn "wado-compiler/tests/fixtures/opt_const.wado/opt_const_prop"() with Stdout {
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
-    let __sroa_self_value_33: i32;
+    let self_31: i32;
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 61); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(30, __local_4); __local_3);
     "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_5, 98); "core:prelude/string.wado/String::push"(__local_5, 61); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/f64::fmt_into"(3.14, __local_6); __local_5);
     "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_7, 99); "core:prelude/string.wado/String::push"(__local_7, 61); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/format.wado/Formatter::pad"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 }); __local_7);
     global:COUNTER = global:COUNTER + 1;
-    "core:cli/println"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }; "core:prelude/string.wado/String::push"(__local_9, 67); "core:prelude/string.wado/String::push"(__local_9, 79); "core:prelude/string.wado/String::push"(__local_9, 85); "core:prelude/string.wado/String::push"(__local_9, 78); "core:prelude/string.wado/String::push"(__local_9, 84); "core:prelude/string.wado/String::push"(__local_9, 69); "core:prelude/string.wado/String::push"(__local_9, 82); "core:prelude/string.wado/String::push"(__local_9, 61); __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value_33(global:COUNTER), __local_10); __local_9);
+    "core:cli/println"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }; "core:prelude/string.wado/String::push"(__local_9, 67); "core:prelude/string.wado/String::push"(__local_9, 79); "core:prelude/string.wado/String::push"(__local_9, 85); "core:prelude/string.wado/String::push"(__local_9, 78); "core:prelude/string.wado/String::push"(__local_9, 84); "core:prelude/string.wado/String::push"(__local_9, 69); "core:prelude/string.wado/String::push"(__local_9, 82); "core:prelude/string.wado/String::push"(__local_9, 61); __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_31(global:COUNTER), __local_10); __local_9);
 }
 
 fn "wado-compiler/tests/fixtures/opt_const.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -854,6 +854,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
 fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
+    let index: i32;
     let value: u8;
     let _licm_repr_9: ref Array<u8>;
     v = val;
@@ -864,8 +865,9 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
             if idx < offset {
                 break b88;
             }
+            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, idx, value);
+            builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l89;

@@ -1131,6 +1131,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
 fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
+    let index: i32;
     let value: u8;
     let _licm_repr_9: ref Array<u8>;
     v = val;
@@ -1141,8 +1142,9 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
             if idx < offset {
                 break b95;
             }
+            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, idx, value);
+            builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l96;

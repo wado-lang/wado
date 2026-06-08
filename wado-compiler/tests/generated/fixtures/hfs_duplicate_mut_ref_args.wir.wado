@@ -114,29 +114,29 @@ fn "wado-compiler/tests/fixtures/hfs_duplicate_mut_ref_args.wado/run"() with Std
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let f_9: ref "core:prelude/format.wado//Formatter";
     let f_14: ref "core:prelude/format.wado//Formatter";
-    let __sroa_self_value_17: i32;
-    let __hfs_v_19: i32;
+    let self_15: i32;
+    let __hfs_v_17: i32;
     b = struct.new "wado-compiler/tests/fixtures/hfs_duplicate_mut_ref_args.wado//Buf" { v: 0, pad: 0 };
     sum = 0;
     i = 0;
-    __hfs_v_19 = 0;
+    __hfs_v_17 = 0;
     b0: block {
         l1: loop {
             if i >= 4 {
                 break b0;
             }
-            __hfs_v_19 = local.tee __hfs_v_19(local.tee __hfs_v_19(__hfs_v_19 + 0) + 0) + 1;
-            b.v = __hfs_v_19;
+            __hfs_v_17 = local.tee __hfs_v_17(local.tee __hfs_v_17(__hfs_v_17 + 0) + 0) + 1;
+            b.v = __hfs_v_17;
             "wado-compiler/tests/fixtures/hfs_duplicate_mut_ref_args.wado/double_via_two_refs"(b, b);
-            __hfs_v_19 = b.v;
-            sum = sum + __hfs_v_19;
-            __hfs_v_19 = __hfs_v_19 + 0;
+            __hfs_v_17 = b.v;
+            sum = sum + __hfs_v_17;
+            __hfs_v_17 = __hfs_v_17 + 0;
             i = i + 1;
-            b.v = __hfs_v_19;
+            b.v = __hfs_v_17;
             continue l1;
         };
     };
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_9 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, f_9); "core:prelude/string.wado/String::push"(__local_3, 32); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; __sroa_self_value_17 = b.v; f_14 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_17, f_14); __local_3);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_9 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, f_9); "core:prelude/string.wado/String::push"(__local_3, 32); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_14 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_15(b.v), f_14); __local_3);
 }
 
 fn "wado-compiler/tests/fixtures/hfs_duplicate_mut_ref_args.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

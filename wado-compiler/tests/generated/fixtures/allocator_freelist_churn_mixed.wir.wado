@@ -144,14 +144,14 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
     let f_82: ref "core:prelude/format.wado//Formatter";
     let f_87: ref "core:prelude/format.wado//Formatter";
     let f_92: ref "core:prelude/format.wado//Formatter";
+    let _licm_used_95: i32;
+    let _licm_used_96: i32;
+    let _licm_repr_97: ref Array<i32>;
+    let _licm_repr_98: ref Array<i32>;
+    let _licm_repr_99: ref Array<i32>;
     let _licm_used_100: i32;
     let _licm_used_101: i32;
     let _licm_repr_102: ref Array<i32>;
-    let _licm_repr_103: ref Array<i32>;
-    let _licm_repr_104: ref Array<i32>;
-    let _licm_used_105: i32;
-    let _licm_used_106: i32;
-    let _licm_repr_107: ref Array<i32>;
     __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(24, 200, 56, 512, 8, 96, 312, 40), used: 8 };
     __b_2 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     repr_48 = __b_0.repr;
@@ -171,35 +171,35 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
         };
     };
     i_6 = 0;
-    _licm_used_100 = 8;
-    _licm_used_101 = __b_2.used;
-    _licm_repr_102 = __b_2.repr;
-    _licm_repr_103 = __b_0.repr;
+    _licm_used_95 = 8;
+    _licm_used_96 = __b_2.used;
+    _licm_repr_97 = __b_2.repr;
+    _licm_repr_98 = __b_0.repr;
     b3: block {
         l4: loop {
-            if i_6 >= _licm_used_100 {
+            if i_6 >= _licm_used_95 {
                 break b3;
             }
-            drop("mem/realloc"(if @unlikely(i_6 >= _licm_used_101) {
+            drop("mem/realloc"(if @unlikely(i_6 >= _licm_used_96) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            }; builtin::array_get<i32>(_licm_repr_102, i_6), builtin::array_get<i32>(_licm_repr_103, i_6), 8, 0));
+            }; builtin::array_get<i32>(_licm_repr_97, i_6), builtin::array_get<i32>(_licm_repr_98, i_6), 8, 0));
             i_6 = i_6 + 1;
             continue l4;
         };
     };
     drop("mem/realloc"(local.tee before("mem/realloc"(0, 0, 8, 1024)), 1024, 8, 0));
     i_8 = 0;
-    _licm_repr_104 = __b_0.repr;
-    _licm_used_105 = 8;
+    _licm_repr_99 = __b_0.repr;
+    _licm_used_100 = 8;
     b7: block {
         l8: loop {
             if i_8 >= 1000 {
                 break b7;
             }
             __b_9 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-            __iter_11 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: _licm_repr_104, index: 0, end: _licm_used_105 };
+            __iter_11 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: _licm_repr_99, index: 0, end: _licm_used_100 };
             b10: block {
                 l11: loop {
                     let __sroa___match_23_discriminant: i32;
@@ -214,22 +214,22 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
                 };
             };
             k = __b_9.used - 1;
-            _licm_used_106 = __b_9.used;
-            _licm_repr_107 = __b_9.repr;
+            _licm_used_101 = __b_9.used;
+            _licm_repr_102 = __b_9.repr;
             b13: block {
                 l14: loop {
                     if k < 0 {
                         break b13;
                     }
-                    drop("mem/realloc"(if @unlikely(k >= _licm_used_106) {
+                    drop("mem/realloc"(if @unlikely(k >= _licm_used_101) {
                         cold_path;
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    }; builtin::array_get<i32>(_licm_repr_107, k), if @unlikely(k >= _licm_used_105) {
+                    }; builtin::array_get<i32>(_licm_repr_102, k), if @unlikely(k >= _licm_used_100) {
                         cold_path;
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    }; builtin::array_get<i32>(_licm_repr_104, k), 8, 0));
+                    }; builtin::array_get<i32>(_licm_repr_99, k), 8, 0));
                     k = k - 1;
                     continue l14;
                 };

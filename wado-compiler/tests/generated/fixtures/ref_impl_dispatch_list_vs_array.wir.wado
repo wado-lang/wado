@@ -128,9 +128,8 @@ fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/run"() wit
     let __match_4: ref null "core:prelude/types.wado//Box<i32>";
     let repr_31: ref Array<i32>;
     let end_33: i32;
+    let end_56: i32;
     let n: i32;
-    let end_58: i32;
-    let __sroa_self_value_66: i32;
     let __sroa_c_total: i32;
     __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4), used: 4 };
     __sroa_c_total = 0;
@@ -142,22 +141,24 @@ fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/run"() wit
             __match_4 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_2);
             if ref.is_null(__match_4) == 0 {
                 item = ref.as_non_null(__match_4);
-                n = item.value;
-                __sroa_c_total = __sroa_c_total + n;
+                block {
+                    n = item.value;
+                    __sroa_c_total = __sroa_c_total + n;
+                };
             } else {
                 break b0;
             }
             continue l1;
         };
     };
-    "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value_66(__sroa_c_total), __local_8); __local_7);
+    "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_c_total, __local_8); __local_7);
     a = builtin::array_new<i32>(3);
     builtin::array_set<i32>(a, 0, 10);
     builtin::array_set<i32>(a, 1, 20);
     builtin::array_set<i32>(a, 2, 30);
     asum = 0;
-    end_58 = builtin::array_len(a);
-    __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: a, index: 0, end: end_58 };
+    end_56 = builtin::array_len(a);
+    __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: a, index: 0, end: end_56 };
     b3: block {
         l4: loop {
             __match_11 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_5);
