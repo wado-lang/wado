@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780919883959,
+  "lastUpdate": 1780920771731,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31385,6 +31385,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e06f3ff13a0bbae4f6d7591561680c30505066ed"
         },
         "date": 1780919883738,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437035,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "27dd6747566fd64ffa5e9da29c68f1f039084f24",
+          "message": "Merge pull request #1335 from wado-lang/gfx/pr_skills\n\nchore: cleanup skills",
+          "timestamp": "2026-06-08T20:59:20+09:00",
+          "tree_id": "54994a1b77cf5c1ff44faaf87b67cd634dd4418d",
+          "url": "https://github.com/wado-lang/wado/commit/27dd6747566fd64ffa5e9da29c68f1f039084f24"
+        },
+        "date": 1780920771178,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
