@@ -22,7 +22,7 @@
 //! no-op.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirLiteralPattern};
+use crate::nir::{FunctionRef, NirFunction, NirLiteralPattern};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, PatKind, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -48,8 +48,10 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
-        if let Some(body) = func_rc.borrow_mut().body.as_mut() {
-            changed |= Engine::new(body, &mut buffers).run(&[&rule]);
+        let mut func = func_rc.borrow_mut();
+        let NirFunction { body, locals, .. } = &mut *func;
+        if let Some(body) = body.as_mut() {
+            changed |= Engine::new(body, &mut buffers, locals).run(&[&rule]);
         }
     }
     changed | run_globals(&mut project.globals, &rule, &mut buffers)
@@ -73,8 +75,13 @@ fn run_globals(
     buffers: &mut EngineBuffers,
 ) -> bool {
     let mut changed = false;
+    // Global initializer bodies have no owning function — and no locals (any
+    // runtime-computed local is hoisted into `__initialize_module`). Lend an
+    // empty scratch list, reused across globals; `MatchToSwitchRule` never
+    // allocates, so it stays empty.
+    let mut no_locals: Vec<crate::nir::NirLocal> = Vec::new();
     for global in globals {
-        let mut engine = Engine::new(global.initializer.body_mut(), buffers);
+        let mut engine = Engine::new(global.initializer.body_mut(), buffers, &mut no_locals);
         changed |= engine.run(&[rule]);
     }
     changed

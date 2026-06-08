@@ -20,6 +20,7 @@ use std::collections::VecDeque;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::nir::NirLocal;
 use crate::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, PatId, PatKind,
     PatNode, StmtId, StmtKind, StmtNode,
@@ -80,24 +81,50 @@ impl EngineBuffers {
 }
 
 /// An engine session over one function body: the arena plus the [`EngineBuffers`]
-/// scratch (parent map, use index, and worklist) the worklist discipline needs.
+/// scratch (parent map, use index, and worklist) the worklist discipline needs,
+/// and the function's `locals` list so rules can allocate fresh locals.
 pub struct Engine<'a> {
     pub body: &'a mut Body,
     buf: &'a mut EngineBuffers,
+    /// The function's local list — the single source of truth for the local
+    /// count, so `alloc_local` appends here and returns the new index. Sessions
+    /// over a body with no owning function (a global initializer, a unit test)
+    /// pass a scratch `Vec`; those bodies have no locals and their rules never
+    /// allocate, so it stays empty.
+    locals: &'a mut Vec<NirLocal>,
 }
 
 impl<'a> Engine<'a> {
     /// Build a session over `body`, reusing the caller-owned `buf`: one O(n)
     /// pass populates the parent map and use index, then the worklist is seeded
     /// with every node in post-order (children before parents) so leaf
-    /// reductions are seen before the contexts that might fold them.
-    pub fn new(body: &'a mut Body, buf: &'a mut EngineBuffers) -> Self {
+    /// reductions are seen before the contexts that might fold them. `locals` is
+    /// the owning function's local list (see [`Engine::alloc_local`]).
+    pub fn new(
+        body: &'a mut Body,
+        buf: &'a mut EngineBuffers,
+        locals: &'a mut Vec<NirLocal>,
+    ) -> Self {
         buf.reset_for(body);
-        let mut engine = Self { body, buf };
+        let mut engine = Self { body, buf, locals };
         engine.build_parents();
         engine.build_uses();
         engine.seed_post_order();
         engine
+    }
+
+    /// Allocate a fresh function local, returning its index. `locals.len()` is
+    /// the local count (there is no separate counter — see
+    /// [`crate::nir::NirFunction::local_count`]), so the new local takes the
+    /// index `locals.len()` and the push makes it the next free index.
+    pub fn alloc_local(&mut self, name: String, type_id: TypeId, is_mut: bool) -> u32 {
+        let index = self.locals.len() as u32;
+        self.locals.push(NirLocal {
+            name,
+            type_id,
+            is_mut,
+        });
+        index
     }
 
     /// Set `parent[child] = node` for every id-bearing child of every node.
@@ -869,7 +896,8 @@ mod tests {
     fn use_index_tracks_def_and_reads() {
         let mut body = sample_body();
         let mut __buf_eng = EngineBuffers::default();
-        let eng = Engine::new(&mut body, &mut __buf_eng);
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // local 0 is read once (the `return x`) and defined once (the `let`).
         assert_eq!(eng.local_reads(0).len(), 1);
         assert!(eng.local_def(0).is_some());
@@ -880,7 +908,8 @@ mod tests {
         let mut body = sample_body();
         let root = body.root;
         let mut __buf_eng = EngineBuffers::default();
-        let eng = Engine::new(&mut body, &mut __buf_eng);
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // Every statement of the root block has the root block as its parent.
         for &s in &eng.body.blocks[root].stmts {
             assert_eq!(eng.parent_of(NodeRef::Stmt(s)), Some(NodeRef::Block(root)));
@@ -941,7 +970,8 @@ mod tests {
         });
         {
             let mut __buf_eng = EngineBuffers::default();
-            let mut eng = Engine::new(&mut body, &mut __buf_eng);
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.run(&[&FoldAddMulConst]);
         }
         // The let's value is now a single IntLiteral(12).
@@ -973,7 +1003,8 @@ mod tests {
         let before = body.exprs.len();
         let clone = {
             let mut __buf_eng = EngineBuffers::default();
-            let mut eng = Engine::new(&mut body, &mut __buf_eng);
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.clone_expr(original)
         };
         // A Binary plus its two literal operands were allocated.
@@ -1027,7 +1058,8 @@ mod tests {
         assert_eq!(body.blocks[root].stmts.len(), 3);
         {
             let mut __buf_eng = EngineBuffers::default();
-            let mut eng = Engine::new(&mut body, &mut __buf_eng);
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             assert!(eng.run(&[&DropUnitStmts]));
         }
         // The `()` statement is gone; the `let` and `return` remain in order.
@@ -1059,7 +1091,8 @@ mod tests {
             vec![let_stmt, assign_stmt]
         });
         let mut __buf_eng = EngineBuffers::default();
-        let eng = Engine::new(&mut body, &mut __buf_eng);
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         assert!(!eng.is_local_read(0));
 
         // The same body with a trailing `return x` makes local 0 read.
@@ -1072,7 +1105,8 @@ mod tests {
             vec![let2, ret]
         });
         let mut __buf_eng2 = EngineBuffers::default();
-        let eng2 = Engine::new(&mut body2, &mut __buf_eng2);
+        let mut __locals_eng2: Vec<NirLocal> = Vec::new();
+        let eng2 = Engine::new(&mut body2, &mut __buf_eng2, &mut __locals_eng2);
         assert!(eng2.is_local_read(0));
     }
 
@@ -1097,7 +1131,8 @@ mod tests {
         };
         {
             let mut __buf_eng = EngineBuffers::default();
-            let mut eng = Engine::new(&mut body, &mut __buf_eng);
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             // Before: local 0 is read only by the `x` node.
             assert_eq!(eng.local_reads(0), &[lx]);
             eng.become_expr(add, lx);
@@ -1117,7 +1152,8 @@ mod tests {
         let mut body = sample_body();
         let total = body.exprs.len() + body.stmts.len() + body.blocks.len() + body.pats.len();
         let mut __buf_eng = EngineBuffers::default();
-        let mut eng = Engine::new(&mut body, &mut __buf_eng);
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         let mut popped = 0;
         while eng.pop().is_some() {
             popped += 1;

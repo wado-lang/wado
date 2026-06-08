@@ -37,6 +37,7 @@
 
 use cranelift_entity::EntityRef;
 
+use crate::nir::NirFunction;
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
@@ -113,7 +114,10 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate, pr
                     .map(|b| build_elide_box_local(b, &address_taken, &stores_aliased))
             })
             .flatten();
-        let Some(body) = func.body.as_mut() else {
+        // Disjoint borrow of the body arena and the local list so rules can
+        // both rewrite the body and allocate fresh locals via the engine.
+        let NirFunction { body, locals, .. } = &mut *func;
+        let Some(body) = body.as_mut() else {
             return false;
         };
         let mut rules: Vec<&dyn Rule> = Vec::with_capacity(9);
@@ -138,7 +142,7 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate, pr
         if let Some(push_rule) = push_rule.as_ref() {
             rules.push(push_rule);
         }
-        let mut engine = Engine::new(body, &mut buffers);
+        let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&rules)
     })
 }

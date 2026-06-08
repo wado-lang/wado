@@ -28,6 +28,7 @@
 //! flatten after the fixpoint converges).
 
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir::NirFunction;
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
@@ -60,8 +61,9 @@ fn run_rule(project: &mut NirPackage, mode: PruneMode) -> bool {
     let mut buffers = EngineBuffers::default();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = func.body.as_mut() {
-            let mut engine = Engine::new(body, &mut buffers);
+        let NirFunction { body, locals, .. } = &mut *func;
+        if let Some(body) = body.as_mut() {
+            let mut engine = Engine::new(body, &mut buffers, locals);
             changed |= engine.run(&[&rule]);
         }
     }
