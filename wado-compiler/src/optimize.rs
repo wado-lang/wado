@@ -592,7 +592,7 @@ fn run_optimization_passes(
         // so the inliner sees post-SROA signatures and can propagate the
         // scalar through call chains. NIR analog of WIR's `sroa_param`; see
         // `optimize/sroa_param.rs`.
-        step!("nir/sroa_param", sroa_single_field_parameters);
+        gated!("nir/sroa_param", sroa_single_field_parameters);
         // `inline` self-reports the callers it modified to the gate (no
         // `bump_all`); it only mutates caller bodies, so the gated passes need
         // re-examine just those (and their neighbours).

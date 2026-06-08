@@ -34,6 +34,10 @@ use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, ExprNode, NodeRef};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, FunctionId};
+
 type FnKey = (ModuleSource, String);
 
 /// Per-candidate metadata captured during Phase 1.
@@ -49,13 +53,22 @@ struct SroaInfo {
     field_name: String,
 }
 
-pub fn sroa_single_field_parameters(project: &mut NirPackage) -> bool {
+pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let candidates = collect_and_validate(project);
     if candidates.is_empty() {
         return false;
     }
-    rewrite_callees(project, &candidates);
-    rewrite_call_sites(project, &candidates);
+    // Interprocedural but not gate-skipped; report the functions it touched
+    // (param-scalarized callees + callers whose call sites were rewritten) so
+    // the gated passes re-examine only those instead of every function via
+    // `bump_all`. The call graph is unaffected: arg rewrites and the
+    // `MethodCall` → `Call` collapse keep the same callee, so no refresh.
+    let mut touched: IndexSet<usize> = IndexSet::default();
+    rewrite_callees(project, &candidates, &mut touched);
+    rewrite_call_sites(project, &candidates, &mut touched);
+    for idx in touched {
+        gate.mark_changed(FunctionId::new(idx));
+    }
     true
 }
 
@@ -353,8 +366,12 @@ fn place_root_local(body: &Body, target: ExprId) -> Option<u32> {
 // Phase 3a: callee body rewrite (arena)
 // -----------------------------------------------------------------------
 
-fn rewrite_callees(project: &mut NirPackage, candidates: &IndexMap<(FnKey, usize), SroaInfo>) {
-    for func_rc in &project.functions {
+fn rewrite_callees(
+    project: &mut NirPackage,
+    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
+    touched: &mut IndexSet<usize>,
+) {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let key: FnKey = (func.module_source.clone(), func.name.clone());
         let mut affected: Vec<(u32, String)> = Vec::new();
@@ -375,6 +392,7 @@ fn rewrite_callees(project: &mut NirPackage, candidates: &IndexMap<(FnKey, usize
             let root = body.root;
             rewrite_param_reads(body, NodeRef::Block(root), &affected);
         }
+        touched.insert(i);
     }
 }
 
@@ -415,7 +433,11 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)
 // Phase 3b: call-site rewrite (arena)
 // -----------------------------------------------------------------------
 
-fn rewrite_call_sites(project: &mut NirPackage, candidates: &IndexMap<(FnKey, usize), SroaInfo>) {
+fn rewrite_call_sites(
+    project: &mut NirPackage,
+    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
+    touched: &mut IndexSet<usize>,
+) {
     let mut sroa_positions: IndexMap<FnKey, IndexMap<usize, SroaInfo>> = IndexMap::default();
     for ((key, pi), info) in candidates {
         sroa_positions
@@ -425,7 +447,7 @@ fn rewrite_call_sites(project: &mut NirPackage, candidates: &IndexMap<(FnKey, us
     }
 
     let type_table_rc = project.type_table.clone();
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let key: FnKey = (func.module_source.clone(), func.name.clone());
         let mut scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = IndexMap::default();
@@ -437,13 +459,15 @@ fn rewrite_call_sites(project: &mut NirPackage, candidates: &IndexMap<(FnKey, us
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
             let type_table = type_table_rc.borrow();
-            rewrite_calls_node(
+            if rewrite_calls_node(
                 body,
                 NodeRef::Block(root),
                 &sroa_positions,
                 &scalar_param_struct,
                 &type_table,
-            );
+            ) {
+                touched.insert(i);
+            }
         }
     }
     let empty = IndexMap::default();
@@ -468,15 +492,17 @@ fn rewrite_calls_node(
     sroa_positions: &IndexMap<FnKey, IndexMap<usize, SroaInfo>>,
     scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
     type_table: &TypeTable,
-) {
+) -> bool {
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));
+    let mut changed = false;
     for c in kids {
-        rewrite_calls_node(body, c, sroa_positions, scalar_param_struct, type_table);
+        changed |= rewrite_calls_node(body, c, sroa_positions, scalar_param_struct, type_table);
     }
     if let NodeRef::Expr(id) = node {
-        rewrite_call_expr(body, id, sroa_positions, scalar_param_struct, type_table);
+        changed |= rewrite_call_expr(body, id, sroa_positions, scalar_param_struct, type_table);
     }
+    changed
 }
 
 fn rewrite_call_expr(
@@ -485,12 +511,12 @@ fn rewrite_call_expr(
     sroa_positions: &IndexMap<FnKey, IndexMap<usize, SroaInfo>>,
     scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
     type_table: &TypeTable,
-) {
+) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Call { func, args, .. } => {
             let key: FnKey = (func.module_source.clone(), func.name.clone());
             let Some(positions) = sroa_positions.get(&key).cloned() else {
-                return;
+                return false;
             };
             let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
             for (pi, info) in &positions {
@@ -498,11 +524,12 @@ fn rewrite_call_expr(
                     rewrite_arg(body, args[*pi], info, scalar_param_struct, type_table);
                 }
             }
+            true
         }
         ExprKind::MethodCall { func, .. } => {
             let key: FnKey = (func.module_source.clone(), func.name.clone());
             let Some(positions) = sroa_positions.get(&key).cloned() else {
-                return;
+                return false;
             };
             if positions.contains_key(&0) {
                 // Receiver SROA'd: collapse `MethodCall` → `Call`.
@@ -557,8 +584,9 @@ fn rewrite_call_expr(
                     }
                 }
             }
+            true
         }
-        _ => {}
+        _ => false,
     }
 }
 
