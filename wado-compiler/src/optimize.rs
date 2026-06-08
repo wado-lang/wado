@@ -621,7 +621,7 @@ fn run_optimization_passes(
         // dead computation in the same fixed-point loop. (Write-only local
         // elimination moved into the unified `nir/peephole` pass above.)
         gated!("nir/dae", eliminate_dead_arguments);
-        step!("nir/drve", eliminate_dead_return_values);
+        gated!("nir/drve", eliminate_dead_return_values);
         gated!("nir/cse", eliminate_common_subexprs);
         step!("nir/store_load_forward", forward_stores_to_loads);
         // The flow-sensitive half of constant folding. The env-free half
