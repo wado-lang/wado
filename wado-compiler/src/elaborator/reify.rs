@@ -210,6 +210,17 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// the liveness pass found unreachable from the export boundary, which
     /// downstream phases would discard anyway. `None` reifies everything.
     pub(crate) live_items: Option<&'a IndexSet<crate::symbol::SymbolKey>>,
+    /// Active parameter-name → already-reified-argument substitutions for
+    /// the default-argument expression currently being reified. A
+    /// cross-module default is reified under the *callee's* module
+    /// perspective (so its own items resolve), but a default may reference
+    /// an earlier parameter, whose substituted value is the *caller's*
+    /// argument expression — already reified under the caller's
+    /// perspective in the surrounding call. `reify_ident` returns the
+    /// pre-reified TIR for such names instead of re-resolving the spliced
+    /// caller AST under the wrong perspective. Empty outside a default
+    /// walk. See [`Self::reify_pad_args_with_defaults`].
+    pub(crate) default_arg_overrides: IndexMap<String, TirExpr>,
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
@@ -251,6 +262,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
             live_items,
+            default_arg_overrides: IndexMap::default(),
         }
     }
 
@@ -6311,7 +6323,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_pad_args_with_defaults(
         &mut self,
         callee: &ast::Expr,
-        call_args_ast: &[ast::Expr],
         args: &mut Vec<crate::tir::CallArg>,
         callee_module: &ModuleSource,
         callee_name: &str,
@@ -6327,23 +6338,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if func_params.is_empty() || args.len() >= func_params.len() {
             return;
         }
-        let mut subs: IndexMap<String, ast::Expr> = IndexMap::default();
-        for (i, arg_ast) in call_args_ast.iter().enumerate() {
+        // A default may reference an earlier parameter. The substituted
+        // value is the caller's argument, already reified under the
+        // caller's perspective in `args[i]` (and, for later defaults,
+        // the synthesized value reified below). Map parameter name →
+        // reified TIR so `reify_ident` returns it directly: re-resolving
+        // the spliced caller AST under the callee's swapped perspective
+        // (below) would key its AstIds against the wrong module's
+        // annotations and mis-type the node. Save / restore so nested
+        // defaults compose.
+        let mut overrides: IndexMap<String, TirExpr> = IndexMap::default();
+        for (i, arg) in args.iter().enumerate() {
             if let Some((name, _)) = func_params.get(i) {
-                subs.insert(name.clone(), arg_ast.clone());
+                overrides.insert(name.clone(), arg.expr.clone());
             }
         }
-        // A default expression resolves in the *callee's* lexical scope:
-        // it may reference items private to the callee module that the
-        // caller cannot see (`paint(c = DEFAULT_VALUE)` where
-        // `DEFAULT_VALUE` is a callee-module-private global). Production
-        // routes this through `default_scope_module`, consulted during
-        // ident resolution (expr.rs:914). Reify's `reify_ident` reads
-        // globals from `self.sem.decls.current_module_globals` keyed to the
-        // module-context triple, so swap that triple to the callee module
-        // around the default walk when the callee is a different, loaded
-        // module. The caller's `ctx` (locals) stays — earlier positional
-        // args were already AST-substituted into `subs`.
+        let saved_overrides = std::mem::replace(&mut self.default_arg_overrides, overrides);
+
+        // A default expression otherwise resolves in the *callee's*
+        // lexical scope: it may reference items private to the callee
+        // module that the caller cannot see (`paint(c = DEFAULT_VALUE)`
+        // where `DEFAULT_VALUE` is a callee-module-private global).
+        // Production routes this through `default_scope_module`, consulted
+        // during ident resolution (expr.rs:914). Reify reads recorded
+        // facts keyed by `AstId` from `self.sem`, so swap the module
+        // triple to the callee around the default walk when the callee is
+        // a different, loaded module. The caller's `ctx` (locals) stays so
+        // any earlier-param substitutions resolved above keep their
+        // bindings.
         let loaded = self.loaded_modules;
         let all_sem = self.all_module_semantics;
         let callee_ctx: Option<(&[Item], &ModuleSemantics)> =
@@ -6368,11 +6390,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some((n, Some(d))) => (n.clone(), d.clone()),
                 _ => break,
             };
-            let mut default_expr = default_ast;
-            default_expr.substitute_idents(&subs);
-            let resolved = self.reify_expr(&default_expr, ctx, None);
+            let resolved = self.reify_expr(&default_ast, ctx, None);
+            // Later defaults may reference this one's parameter.
+            self.default_arg_overrides.insert(name, resolved.clone());
             args.push(crate::tir::CallArg::new(resolved, false));
-            subs.insert(name, default_expr);
         }
 
         if let Some((src, items, sem)) = saved {
@@ -6380,6 +6401,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.current_module_items = items;
             self.sem = sem;
         }
+        self.default_arg_overrides = saved_overrides;
     }
 
     /// Wrap `Ord::cmp` into a `bool`: `<` → `cmp == Less`, `>` →
@@ -6590,7 +6612,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .collect();
             self.reify_pad_args_with_defaults(
                 &call.callee,
-                &call.args,
                 &mut arg_exprs,
                 &dispatch.function_ref.module_source,
                 &dispatch.function_ref.name,
@@ -7490,6 +7511,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         use crate::tir::TirExprKind;
+
+        // Default-argument parameter substitution: while reifying a
+        // cross-module default expression, references to an earlier
+        // parameter resolve to the caller's already-reified argument
+        // (kept under the caller's perspective). This must precede the
+        // local / global / item lookups below, which run under the
+        // callee's (swapped) perspective and would mis-type the spliced
+        // caller node. See `reify_pad_args_with_defaults`.
+        if !self.default_arg_overrides.is_empty()
+            && let Some(tir) = self.default_arg_overrides.get(&ident.name)
+        {
+            return tir.clone();
+        }
 
         // Canonicalize `ns::member` to its `ns$member` alias, matching
         // `resolve_ident` at annotate time (expr.rs) so reify consults the
