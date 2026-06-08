@@ -88,9 +88,14 @@ impl GatedPass {
 /// outside the package have no static edge and are simply absent — conservative
 /// for propagation, which only risks under-optimizing.
 ///
-/// The graph is not refreshed as bodies change: a pass that restructures calls
-/// (notably `inline`) is not yet gate-aware, so it forces `bump_all`, which
-/// dominates any staleness. Incremental refresh can come with those passes.
+/// The graph is built once and not refreshed as bodies change. A pass that
+/// restructures calls (`inline` copies a callee body in; `container_sroa` /
+/// `value_copy_demote` retarget calls to per-field / shallow-copy callees)
+/// leaves the rewritten function's out-edges stale. That only reduces the
+/// precision of 1-hop dirty propagation — a quality knob, never correctness,
+/// since every loop pass is optional (see the module safety note) — and the
+/// rewritten function is itself reported dirty regardless. Incremental refresh
+/// could improve propagation precision but is not needed for soundness.
 struct CallGraph {
     callees: Vec<Vec<FunctionId>>,
     callers: Vec<Vec<FunctionId>>,
@@ -160,10 +165,12 @@ impl FunctionGate {
     }
 
     /// Grow the side-tables to cover `len` functions. A pass may add functions
-    /// mid-loop (`value_copy_demote` specializes shallow copies), so the gate
-    /// cannot assume a fixed count. New functions start dirty (`revision = 1`,
-    /// watermark `0`) with no known call-graph edges; the adding pass is not
-    /// gate-aware and `bump_all`s, which covers the missing edges conservatively.
+    /// mid-loop (`value_copy_demote` appends shallow-copy specializations), so
+    /// the gate cannot assume a fixed count. New functions start dirty
+    /// (`revision = 1`, watermark `0`) with no known call-graph edges, so every
+    /// gated pass processes them at least once; their missing edges only reduce
+    /// 1-hop propagation precision (quality, not correctness — see the module
+    /// safety note).
     fn ensure(&mut self, len: usize) {
         while self.revision.len() < len {
             self.revision.push(1);
@@ -233,6 +240,52 @@ impl FunctionGate {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `GatedPass::COUNT` is hand-maintained and sizes the watermark table
+    /// (`[Vec<u64>; COUNT]` indexed by `pass as usize`), so a variant added
+    /// without bumping COUNT would panic at runtime. The exhaustive `match`
+    /// forces this test to be updated when a variant is added (compile error),
+    /// and the assert then catches a stale COUNT.
+    #[test]
+    fn gated_pass_count_matches_variants() {
+        let all = [
+            GatedPass::Peephole,
+            GatedPass::CopyProp,
+            GatedPass::ConstFold,
+            GatedPass::Sroa,
+            GatedPass::Cse,
+            GatedPass::Licm,
+            GatedPass::ConditionImplication,
+            GatedPass::StoreLoadForward,
+            GatedPass::TmplHoist,
+            GatedPass::ElideBoxLocal,
+            GatedPass::RefElim,
+            GatedPass::ContainerSroa,
+            GatedPass::MatchToSwitch,
+            GatedPass::LabeledBlockFusion,
+            GatedPass::ValueCopyElide,
+        ];
+        for p in all {
+            match p {
+                GatedPass::Peephole
+                | GatedPass::CopyProp
+                | GatedPass::ConstFold
+                | GatedPass::Sroa
+                | GatedPass::Cse
+                | GatedPass::Licm
+                | GatedPass::ConditionImplication
+                | GatedPass::StoreLoadForward
+                | GatedPass::TmplHoist
+                | GatedPass::ElideBoxLocal
+                | GatedPass::RefElim
+                | GatedPass::ContainerSroa
+                | GatedPass::MatchToSwitch
+                | GatedPass::LabeledBlockFusion
+                | GatedPass::ValueCopyElide => {}
+            }
+        }
+        assert_eq!(all.len(), GatedPass::COUNT);
+    }
 
     /// Build a gate with `n` functions and an explicit call graph, bypassing
     /// `NirPackage` so the propagation algebra can be tested in isolation.

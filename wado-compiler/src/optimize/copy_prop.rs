@@ -164,23 +164,33 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
     })
 }
 
+/// If `expr` is a place rooted at a local (`x`, `x.f`, `x[i]`, `x.f[i].g`, …),
+/// return that root local index. Used to detect mutation of `local` through any
+/// field/index projection, not just a one-level `x.f`.
+fn place_root_local(body: &Body, mut expr: ExprId) -> Option<u32> {
+    loop {
+        match &body.exprs[expr].kind {
+            ExprKind::Local { index, .. } => return Some(*index),
+            ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
+                expr = *inner;
+            }
+            _ => return None,
+        }
+    }
+}
+
 /// Whether `local`'s value is mutated anywhere in the subtree at `node`:
-/// re-assignment, field assignment, `&mut` borrow, mutable method receiver, or
-/// a mutable call argument. Conservative (treats any method call on `local` as
-/// a mutation), matching the in-block copy-inlining check this subsumes.
+/// re-assignment, field/element assignment, `&mut` borrow, mutable method
+/// receiver, or a mutable call argument — through any field/index projection
+/// (`local.f.g = …`, `local[i] = …`, `local.f.method()`), not just one level.
+/// Conservative (treats any method call on a place rooted at `local` as a
+/// mutation), matching and generalizing the in-block copy-inlining check this
+/// subsumes.
 fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
     if let NodeRef::Expr(id) = node {
         match &body.exprs[id].kind {
             ExprKind::Assign { target, .. } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-                    && *index == local
-                {
-                    return true;
-                }
-                if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[*target].kind
-                    && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
-                    && *index == local
-                {
+                if place_root_local(body, *target) == Some(local) {
                     return true;
                 }
             }
@@ -188,25 +198,18 @@ fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
-                    && *index == local
-                {
+                if place_root_local(body, *inner) == Some(local) {
                     return true;
                 }
             }
             ExprKind::MethodCall { receiver, .. } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind
-                    && *index == local
-                {
+                if place_root_local(body, *receiver) == Some(local) {
                     return true;
                 }
             }
             ExprKind::Call { args, .. } => {
                 for arg in args {
-                    if arg.is_mut
-                        && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
-                        && *index == local
-                    {
+                    if arg.is_mut && place_root_local(body, arg.expr) == Some(local) {
                         return true;
                     }
                 }
