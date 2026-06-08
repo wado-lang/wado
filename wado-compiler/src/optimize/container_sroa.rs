@@ -426,7 +426,7 @@ fn scalarize_in_function(
     {
         let mut type_table = type_table_rc.borrow_mut();
         for c in &safe_candidates {
-            let base = func.local_count;
+            let base = func.local_count();
             for (k, &elem_ty) in c.element_types.iter().enumerate() {
                 let arr_ty = type_table.make_list(elem_ty);
                 let new_index = base + k as u32;
@@ -439,7 +439,6 @@ fn scalarize_in_function(
                     is_mut: false,
                 });
             }
-            func.local_count += c.element_types.len() as u32;
             decomposed.insert(c.local_index);
         }
     }

@@ -341,7 +341,7 @@ fn scalarize_function(
     let analysis = HfsAnalysis {
         aliased_in_function: &aliased_in_function,
     };
-    let mut local_count = func.local_count;
+    let mut local_count = func.local_count();
     let mut locals = func.locals.clone();
     let changed = {
         let body = func.body.as_mut().unwrap();
@@ -356,7 +356,6 @@ fn scalarize_function(
             &analysis,
         )
     };
-    func.local_count = local_count;
     func.locals = locals;
     changed
 }
