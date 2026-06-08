@@ -24,7 +24,7 @@
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirLiteralPattern};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, PatKind, StmtKind};
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
 use crate::token::Span;
@@ -63,29 +63,33 @@ fn match_to_switch_impl(project: &mut NirPackage, gate: Option<&mut FunctionGate
     let rule = MatchToSwitchRule {
         type_table: &type_table,
     };
-    let run_one = |func: &mut crate::nir::NirFunction| -> bool {
+    let run_one = |func: &mut crate::nir::NirFunction, buf: &mut EngineBuffers| -> bool {
         if let Some(body) = func.body.as_mut() {
-            Engine::new(body).run(&[&rule])
+            Engine::new(body, buf).run(&[&rule])
         } else {
             false
         }
     };
+    let mut buffers = EngineBuffers::default();
     let mut changed = if let Some(gate) = gate {
         let len = project.functions.len();
         gate.run_gated(GatedPass::MatchToSwitch, len, |fid| {
-            run_one(&mut project.functions[fid.index()].borrow_mut())
+            run_one(
+                &mut project.functions[fid.index()].borrow_mut(),
+                &mut buffers,
+            )
         })
     } else {
         let mut c = false;
         for func_rc in &project.functions {
-            c |= run_one(&mut func_rc.borrow_mut());
+            c |= run_one(&mut func_rc.borrow_mut(), &mut buffers);
         }
         c
     };
     for global in &mut project.globals {
         // Global initializers are arena bodies; run the rule on each directly.
         // Globals are not gated (the gated passes operate on functions only).
-        let mut engine = Engine::new(global.initializer.body_mut());
+        let mut engine = Engine::new(global.initializer.body_mut(), &mut buffers);
         changed |= engine.run(&[&rule]);
     }
     changed

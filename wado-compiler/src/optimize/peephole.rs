@@ -34,7 +34,7 @@
 
 use cranelift_entity::EntityRef;
 
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
 use super::array_literal::{Collapser, resolve_array_push_names};
@@ -61,6 +61,7 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate) ->
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
 
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::Peephole, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the elide rule is rebuilt
@@ -79,7 +80,7 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate) ->
         if let Some(push_rule) = push_rule.as_ref() {
             rules.push(push_rule);
         }
-        let mut engine = Engine::new(body);
+        let mut engine = Engine::new(body, &mut buffers);
         engine.run(&rules)
     })
 }

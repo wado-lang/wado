@@ -28,7 +28,7 @@
 //! flatten after the fixpoint converges).
 
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
 use super::arena_query::has_break_to;
@@ -57,10 +57,11 @@ pub fn prune_template_block_wrappers(project: &mut NirPackage) -> bool {
 fn run_rule(project: &mut NirPackage, mode: PruneMode) -> bool {
     let rule = BranchPruneRule::new(mode);
     let mut changed = false;
+    let mut buffers = EngineBuffers::default();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
-            let mut engine = Engine::new(body);
+            let mut engine = Engine::new(body, &mut buffers);
             changed |= engine.run(&[&rule]);
         }
     }
