@@ -43,6 +43,7 @@ use crate::nir_package::NirPackage;
 use super::array_literal::{Collapser, resolve_array_push_names};
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map};
+use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
 use super::match_to_switch::MatchToSwitchRule;
@@ -100,10 +101,22 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate, pr
         let ref_elim_rule = (!pre_inline)
             .then(|| func.body.as_ref().map(build_ref_elim))
             .flatten();
+        // Adjacent-use box-local elision runs post-inline only (it collapses the
+        // `Box<T>` shells `sroa_param` / `inline` expose). Its stats come from
+        // the pristine post-inline body; the escape sets are read off the
+        // function before its body is borrowed.
+        let address_taken = func.address_taken_locals.clone();
+        let elide_box_rule = (!pre_inline)
+            .then(|| {
+                func.body
+                    .as_ref()
+                    .map(|b| build_elide_box_local(b, &address_taken, &stores_aliased))
+            })
+            .flatten();
         let Some(body) = func.body.as_mut() else {
             return false;
         };
-        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(8);
+        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(9);
         if pre_inline {
             rules.push(&match_rule);
         }
@@ -112,6 +125,9 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate, pr
         }
         if let Some(ref_elim_rule) = ref_elim_rule.as_ref() {
             rules.push(ref_elim_rule);
+        }
+        if let Some(elide_box_rule) = elide_box_rule.as_ref() {
+            rules.push(elide_box_rule);
         }
         rules.extend([
             &array_rule as &dyn Rule,

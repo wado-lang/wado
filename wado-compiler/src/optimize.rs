@@ -99,7 +99,6 @@ use dce::{
     remove_unreachable_types,
 };
 use drve::eliminate_dead_return_values;
-use elide_box_local::elide_adjacent_box_locals;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
@@ -602,7 +601,6 @@ fn run_optimization_passes(
         // resulting `FieldAccess(Local(x), "value")` shape into call
         // sites, this pass collapses the surrounding `let x = Box{value:
         // inner}; … x.value …` shells. See `optimize/elide_box_local.rs`.
-        gated!("nir/elide_box_local", elide_adjacent_box_locals);
         gated!("nir/labeled_block_fusion", fuse_labeled_blocks);
         gated!("nir/sroa", scalar_replace_aggregates);
         gated!("nir/copy_prop", propagate_copies);

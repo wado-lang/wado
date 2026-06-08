@@ -39,88 +39,118 @@
 //!   every path.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
-use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, PatKind, StmtId, StmtKind,
-};
-use crate::nir_package::NirPackage;
-use crate::tir::TypeTable;
+use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatKind, StmtId, StmtKind};
+use crate::nir_engine::{Engine, Rule};
 
-use super::gate::{FunctionGate, GatedPass};
 use super::mod_ref::{ModRef, can_move_past};
-use cranelift_entity::EntityRef;
 
-pub fn elide_adjacent_box_locals(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let len = project.functions.len();
-    gate.run_gated(GatedPass::ElideBoxLocal, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
-        elide_in_function(&mut func)
-    })
+/// Adjacent-use single-field struct local elimination as a rule on the unified
+/// post-inline peephole session (combine migration; formerly the standalone
+/// `nir/elide_box_local` pass). `build_elide_box_local` computes the same
+/// whole-function read/def `stats` the standalone pass did, plus the
+/// escape-safety `blacklist` (`address_taken` + `stores_aliased` locals), once
+/// per function from the pristine body. The `stats` are read-only oracles: a
+/// peephole rewrite can only remove a read, so a stale entry can only refuse an
+/// otherwise-valid elision (safe), never enable an unsound one. Each
+/// `apply_block` performs at most one elision — move the single-field
+/// initializer into its one `r.field` use via `become_expr` and drop the
+/// binding `Let` via `set_block_stmts` — then the worklist re-runs for the next.
+pub(super) struct ElideBoxLocalRule {
+    stats: IndexMap<u32, LocalStats>,
+    blacklist: IndexSet<u32>,
 }
 
-fn elide_in_function(func: &mut NirFunction) -> bool {
-    // Identity / aliasing safety: locals whose reference could escape via
-    // callee-side storage are off-limits.
+/// Build an [`ElideBoxLocalRule`] for one function from its pristine body and
+/// the function's escape-analysis sets.
+pub(super) fn build_elide_box_local(
+    body: &Body,
+    address_taken: &IndexSet<u32>,
+    stores_aliased: &IndexSet<u32>,
+) -> ElideBoxLocalRule {
     let mut blacklist: IndexSet<u32> = IndexSet::default();
-    blacklist.extend(func.address_taken_locals.iter().copied());
-    blacklist.extend(func.stores_aliased_locals.iter().copied());
-
-    let Some(body) = func.body.as_mut() else {
-        return false;
-    };
-    let stats = collect_local_stats(body);
-    let mut changed = false;
-    let root = body.root;
-    while elide_block(body, root, &stats, &blacklist) {
-        changed = true;
+    blacklist.extend(address_taken.iter().copied());
+    blacklist.extend(stores_aliased.iter().copied());
+    ElideBoxLocalRule {
+        stats: collect_local_stats(body),
+        blacklist,
     }
-    changed
 }
 
-/// Visit nested blocks bottom-up (inner first), then sibling-scan this block —
-/// the old `Elider`'s bottom-up-then-scan order.
-fn elide_block(
-    body: &mut Body,
-    block: BlockId,
-    stats: &IndexMap<u32, LocalStats>,
-    blacklist: &IndexSet<u32>,
-) -> bool {
-    let mut changed = false;
-    let mut kids = Vec::new();
-    body.for_each_child(NodeRef::Block(block), |c| kids.push(c));
-    for c in kids {
-        changed |= elide_descend(body, c, stats, blacklist);
-    }
-    let stmts = body.blocks[block].stmts.clone();
-    for i in 0..stmts.len() {
-        if try_elide_at(body, &stmts, i, stats, blacklist) {
-            changed = true;
+impl Rule for ElideBoxLocalRule {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        let stmts = engine.body.blocks[block].stmts.clone();
+        for i in 0..stmts.len() {
+            let Some((candidate, field_name, inner_mr)) =
+                describe_candidate(engine.body, stmts[i], &self.stats, &self.blacklist)
+            else {
+                continue;
+            };
+            let Some(j) = find_use_site(engine.body, &stmts, i + 1, candidate, &field_name, &inner_mr)
+            else {
+                continue;
+            };
+            let inner = candidate_inner(engine.body, stmts[i]);
+            let Some(use_site) =
+                find_subst_target(engine.body, NodeRef::Stmt(stmts[j]), candidate, &field_name)
+            else {
+                continue;
+            };
+            // Move the single-field initializer into its one `r.field` use, then
+            // drop the now-dead binding.
+            engine.become_expr(use_site, inner);
+            let kept: Vec<StmtId> = stmts
+                .iter()
+                .enumerate()
+                .filter(|(k, _)| *k != i)
+                .map(|(_, s)| *s)
+                .collect();
+            engine.set_block_stmts(block, kept);
+            return true;
         }
+        false
     }
-    changed
 }
 
-fn elide_descend(
-    body: &mut Body,
+/// The single-field initializer expression of a candidate `let x = Struct { f }`.
+fn candidate_inner(body: &Body, stmt: StmtId) -> ExprId {
+    let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
+        unreachable!("guarded by describe_candidate");
+    };
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[*value].kind else {
+        unreachable!("guarded by describe_candidate");
+    };
+    fields[0].value
+}
+
+/// The leftmost `candidate.field_name` field-access expression reachable from
+/// `node`, in the same pre-order the old `substitute_node` replaced.
+fn find_subst_target(
+    body: &Body,
     node: NodeRef,
-    stats: &IndexMap<u32, LocalStats>,
-    blacklist: &IndexSet<u32>,
-) -> bool {
-    if let NodeRef::Block(b) = node {
-        return elide_block(body, b, stats, blacklist);
+    candidate: u32,
+    field_name: &str,
+) -> Option<ExprId> {
+    if let NodeRef::Expr(id) = node
+        && let ExprKind::FieldAccess {
+            expr: fa_inner,
+            field_name: fname,
+            ..
+        } = &body.exprs[id].kind
+        && fname == field_name
+        && matches!(&body.exprs[*fa_inner].kind, ExprKind::Local { index, .. } if *index == candidate)
+    {
+        return Some(id);
     }
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));
-    let mut changed = false;
     for c in kids {
-        changed |= elide_descend(body, c, stats, blacklist);
+        if let Some(found) = find_subst_target(body, c, candidate, field_name) {
+            return Some(found);
+        }
     }
-    changed
+    None
 }
-
-// -----------------------------------------------------------------------
-// Stats collection
-// -----------------------------------------------------------------------
 
 #[derive(Default)]
 struct LocalStats {
@@ -252,27 +282,6 @@ fn record_pattern_defs(
 // Candidate detection & substitution
 // -----------------------------------------------------------------------
 
-fn try_elide_at(
-    body: &mut Body,
-    stmts: &[StmtId],
-    i: usize,
-    stats: &IndexMap<u32, LocalStats>,
-    blacklist: &IndexSet<u32>,
-) -> bool {
-    let Some((candidate, field_name, inner_mr)) =
-        describe_candidate(body, stmts[i], stats, blacklist)
-    else {
-        return false;
-    };
-
-    let Some(j) = find_use_site(body, stmts, i + 1, candidate, &field_name, &inner_mr) else {
-        return false;
-    };
-
-    let inner = take_candidate_inner(body, stmts[i]);
-    substitute_first_use(body, stmts[j], candidate, &field_name, inner);
-    true
-}
 
 fn describe_candidate(
     body: &Body,
@@ -307,28 +316,6 @@ fn describe_candidate(
     let field_name = s.field_names.iter().next().unwrap().clone();
     let inner_mr = ModRef::of_expr(body, inner_value);
     Some((local_index, field_name, inner_mr))
-}
-
-/// Extract the candidate's single-field initializer (returning its expr id) and
-/// replace the `let` with a void `Expr(Unit)` placeholder. The placeholder must
-/// carry the actual Unit type so downstream passes recognise it as void.
-fn take_candidate_inner(body: &mut Body, stmt: StmtId) -> ExprId {
-    let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
-        unreachable!("guarded by describe_candidate");
-    };
-    let value = *value;
-    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value].kind else {
-        unreachable!("guarded by describe_candidate");
-    };
-    let inner = fields[0].value;
-    let span = body.stmts[stmt].span;
-    let unit = body.exprs.push(ExprNode {
-        kind: ExprKind::Unit,
-        type_id: TypeTable::UNIT,
-        span,
-    });
-    body.stmts[stmt].kind = StmtKind::Expr(unit);
-    inner
 }
 
 fn find_use_site(
@@ -657,50 +644,6 @@ fn walk_children_observable(
 /// are keyed by the field-access node's `type_id`). The candidate has exactly
 /// one such use (guaranteed by `fieldaccess_reads == 1` / `total_reads == 1`),
 /// so the first pre-order match is the only one.
-fn substitute_first_use(
-    body: &mut Body,
-    use_stmt: StmtId,
-    candidate: u32,
-    field_name: &str,
-    inner: ExprId,
-) {
-    substitute_node(body, NodeRef::Stmt(use_stmt), candidate, field_name, inner);
-}
-
-fn substitute_node(
-    body: &mut Body,
-    node: NodeRef,
-    candidate: u32,
-    field_name: &str,
-    inner: ExprId,
-) -> bool {
-    if let NodeRef::Expr(id) = node {
-        let is_match = if let ExprKind::FieldAccess {
-            expr: fa_inner,
-            field_name: fname,
-            ..
-        } = &body.exprs[id].kind
-        {
-            fname == field_name
-                && matches!(&body.exprs[*fa_inner].kind, ExprKind::Local { index, .. } if *index == candidate)
-        } else {
-            false
-        };
-        if is_match {
-            let kind = std::mem::replace(&mut body.exprs[inner].kind, ExprKind::Unit);
-            body.exprs[id].kind = kind;
-            return true;
-        }
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        if substitute_node(body, c, candidate, field_name, inner) {
-            return true;
-        }
-    }
-    false
-}
 
 #[cfg(test)]
 mod tests {

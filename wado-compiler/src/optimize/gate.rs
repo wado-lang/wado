@@ -67,13 +67,12 @@ pub enum GatedPass {
     ConditionImplication,
     StoreLoadForward,
     TmplHoist,
-    ElideBoxLocal,
     ContainerSroa,
     LabeledBlockFusion,
 }
 
 impl GatedPass {
-    const COUNT: usize = 12;
+    const COUNT: usize = 11;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.
@@ -254,7 +253,6 @@ mod tests {
             GatedPass::ConditionImplication,
             GatedPass::StoreLoadForward,
             GatedPass::TmplHoist,
-            GatedPass::ElideBoxLocal,
             GatedPass::ContainerSroa,
             GatedPass::LabeledBlockFusion,
         ];
@@ -269,7 +267,6 @@ mod tests {
                 | GatedPass::ConditionImplication
                 | GatedPass::StoreLoadForward
                 | GatedPass::TmplHoist
-                | GatedPass::ElideBoxLocal
                 | GatedPass::ContainerSroa
                 | GatedPass::LabeledBlockFusion => {}
             }
