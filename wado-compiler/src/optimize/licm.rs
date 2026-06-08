@@ -20,6 +20,10 @@ use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, GatedPass};
+
 /// Tracks which variables and fields are modified within a loop.
 ///
 /// Distinguishes between full-object modification (e.g., `buf = new_string`, `&mut buf`)
@@ -126,14 +130,13 @@ impl ModifiedVars {
 }
 
 /// Apply Loop-Invariant Code Motion to all functions in the project.
-pub fn apply_licm(project: &mut NirPackage) -> bool {
-    let mut changed = false;
+pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        changed |= licm_function(&mut func, &type_table);
-    }
-    changed
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::Licm, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
+        licm_function(&mut func, &type_table)
+    })
 }
 
 /// Apply LICM to a function

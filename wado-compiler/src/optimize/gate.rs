@@ -63,10 +63,16 @@ pub enum GatedPass {
     ConstFold,
     Sroa,
     Cse,
+    Licm,
+    ConditionImplication,
+    StoreLoadForward,
+    TmplHoist,
+    ElideBoxLocal,
+    RefElim,
 }
 
 impl GatedPass {
-    const COUNT: usize = 5;
+    const COUNT: usize = 11;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.

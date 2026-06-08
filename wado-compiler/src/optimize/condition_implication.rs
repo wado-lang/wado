@@ -21,6 +21,10 @@ use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, GatedPass};
+
 struct LoopGuard {
     /// Local index of the induction variable (e.g., `i`)
     var: u32,
@@ -85,13 +89,12 @@ enum FieldSource {
 
 type DefMap = IndexMap<u32, Def>;
 
-pub fn eliminate_implied_conditions(project: &mut NirPackage) -> bool {
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        changed |= process_function(&mut func);
-    }
-    changed
+pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::ConditionImplication, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
+        process_function(&mut func)
+    })
 }
 
 fn process_function(func: &mut NirFunction) -> bool {

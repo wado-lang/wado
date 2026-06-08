@@ -622,9 +622,9 @@ fn run_optimization_passes(
         // resulting `FieldAccess(Local(x), "value")` shape into call
         // sites, this pass collapses the surrounding `let x = Box{value:
         // inner}; … x.value …` shells. See `optimize/elide_box_local.rs`.
-        step!("nir/elide_box_local", elide_adjacent_box_locals);
+        gated!("nir/elide_box_local", elide_adjacent_box_locals);
         step!("nir/labeled_block_fusion", fuse_labeled_blocks);
-        step!("nir/ref_elim", eliminate_unnecessary_refs);
+        gated!("nir/ref_elim", eliminate_unnecessary_refs);
         gated!("nir/sroa", scalar_replace_aggregates);
         gated!("nir/copy_prop", propagate_copies);
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
@@ -636,7 +636,7 @@ fn run_optimization_passes(
         gated!("nir/dae", eliminate_dead_arguments);
         gated!("nir/drve", eliminate_dead_return_values);
         gated!("nir/cse", eliminate_common_subexprs);
-        step!("nir/store_load_forward", forward_stores_to_loads);
+        gated!("nir/store_load_forward", forward_stores_to_loads);
         // The flow-sensitive half of constant folding. The env-free half
         // (literal arithmetic + pure CTFE) already ran on the worklist in the
         // `nir/peephole` passes above; this walker handles the folds that need
@@ -659,9 +659,9 @@ fn run_optimization_passes(
         // `nir/peephole` run above; the post-loop `branch_prune_final` and the
         // post-globalization `const_fold_post_global` keep their own engine
         // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
-        step!("nir/licm", apply_licm);
-        step!("nir/condition_implication", eliminate_implied_conditions);
-        step!("nir/tmpl_hoist", hoist_template_buffers);
+        gated!("nir/licm", apply_licm);
+        gated!("nir/condition_implication", eliminate_implied_conditions);
+        gated!("nir/tmpl_hoist", hoist_template_buffers);
         profiler.span_end(&format!("nir/iteration {}", i + 1));
         if trace_loop {
             crate::compiler_trace!(
