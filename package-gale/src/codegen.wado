@@ -183,13 +183,55 @@ fn gen_runtime(w: &mut CodeWriter, ctx: &GenContext, highlight: bool) {
     }
 }
 
+/// Append a runtime fragment, dropping its sibling-module imports. A `use`
+/// statement may span multiple lines, so a sibling import is stripped from the
+/// `use` keyword through its terminating `;` (semicolons are mandatory).
+/// Fragments must import only sibling `runtime/*.wado` files — nothing that
+/// needs to survive into generated output passes through this strip.
 fn emit_runtime_fragment(w: &mut CodeWriter, src: &String) {
+    // Lines of an open `use ...;` statement whose siblingness is not yet known.
+    let mut block: List<String> = [];
+    let mut in_use = false;
     for let line of src.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("use ") && line.contains("from \"./") {
-            continue;
+        if in_use {
+            block.push(line);
+            if line.contains(";") {
+                flush_use_block(w, &block);
+                block = [];
+                in_use = false;
+            }
+        } else if line.trim_start().starts_with("use ") {
+            block.push(line);
+            if line.contains(";") {
+                flush_use_block(w, &block);
+                block = [];
+            } else {
+                in_use = true;
+            }
+        } else {
+            w.raw(&line);
+            w.raw(&"\n");
         }
-        w.raw(&line);
+    }
+    // A well-formed fragment never ends mid-`use`; emit any stray buffer
+    // verbatim rather than silently dropping it.
+    for let l of &block {
+        w.raw(l);
+        w.raw(&"\n");
+    }
+}
+
+/// Emit a complete (possibly multi-line) `use ...;` statement unless it is a
+/// sibling import (`from "./..."`), which is dropped because the symbols are
+/// already inlined ahead of this fragment.
+fn flush_use_block(w: &mut CodeWriter, block: &List<String>) {
+    for let l of block {
+        if l.contains("from \"./") {
+            return;
+        }
+    }
+    for let l of block {
+        w.raw(l);
         w.raw(&"\n");
     }
 }

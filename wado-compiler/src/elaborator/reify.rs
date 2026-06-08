@@ -1979,6 +1979,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// Run `f` with the default-argument override map suppressed. Mirrors
+    /// `Expr::substitute_idents` leaving binder / control forms (closure,
+    /// block, `if`, `match`, …) untouched on the annotate side: a reference
+    /// shadowed by a binding introduced *inside* such a form must resolve to
+    /// that binding, not to an outer parameter's substituted argument. No-op
+    /// outside a default-argument walk. See `reify_pad_args_with_defaults`.
+    fn with_defaults_suppressed<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        if self.default_arg_overrides.is_empty() {
+            return f(self);
+        }
+        let saved = std::mem::take(&mut self.default_arg_overrides);
+        let r = f(self);
+        self.default_arg_overrides = saved;
+        r
+    }
+
     /// Reify an expression. Reads `sem.types.expression_types` for the
     /// type, `sem.types.coercions` for any coercion wrap,
     /// `sem.types.method_dispatch` for method calls,
@@ -2025,10 +2041,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         match expr {
             ast::Expr::Literal(lit) => self.reify_literal(lit, recorded_type, ctx),
-            ast::Expr::Block(block) => {
-                let block_tir = self.reify_block(block, ctx, expected_type);
+            ast::Expr::Block(block) => self.with_defaults_suppressed(|s| {
+                let block_tir = s.reify_block(block, ctx, expected_type);
                 TirExpr::new(TirExprKind::Block(block_tir), recorded_type, span)
-            }
+            }),
             ast::Expr::Ident(ident) => self.reify_ident(ident, recorded_type, ctx),
             ast::Expr::TupleLiteral(tuple_lit) => {
                 // SequenceLiteralBuilder coercion: when the elaborator
@@ -2230,9 +2246,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
-            ast::Expr::Match(match_expr) => {
-                self.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
-            }
+            ast::Expr::Match(match_expr) => self.with_defaults_suppressed(|s| {
+                s.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
+            }),
             ast::Expr::StructLiteral(struct_lit) => {
                 self.reify_struct_literal(struct_lit, ctx, recorded_type)
             }
@@ -2240,14 +2256,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::TemplateString(template) => {
                 self.reify_template_string(template, ctx, recorded_type)
             }
-            ast::Expr::Matches(m) => self.reify_matches(m, ctx),
+            ast::Expr::Matches(m) => self.with_defaults_suppressed(|s| s.reify_matches(m, ctx)),
             ast::Expr::CompoundAssign(compound) => {
                 self.reify_compound_assign(compound, ctx, recorded_type)
             }
             ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx, recorded_type),
-            ast::Expr::Closure(closure) => {
-                self.reify_closure(closure, ctx, recorded_type, expected_type)
-            }
+            ast::Expr::Closure(closure) => self.with_defaults_suppressed(|s| {
+                s.reify_closure(closure, ctx, recorded_type, expected_type)
+            }),
             ast::Expr::Index(index) => self.reify_index(index, ctx, recorded_type),
             ast::Expr::ComparisonChain(chain) => self.reify_comparison_chain(chain, ctx),
             ast::Expr::StaticMethodCall(static_call) => {
@@ -2311,9 +2327,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // diagnosed a stray spread.
                 panic!("reify_expr: bare Spread is invalid outside TupleLiteral")
             }
-            ast::Expr::If(if_expr) => {
-                self.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
-            }
+            ast::Expr::If(if_expr) => self.with_defaults_suppressed(|s| {
+                s.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
+            }),
             ast::Expr::Assign(assign) => {
                 // IndexAssign rewrite: `arr[i] = v` lowers to
                 // `arr.index_assign(i, v)`. The elaborator's
@@ -7512,13 +7528,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::TirExprKind;
 
-        // Default-argument parameter substitution: while reifying a
-        // cross-module default expression, references to an earlier
-        // parameter resolve to the caller's already-reified argument
-        // (kept under the caller's perspective). This must precede the
-        // local / global / item lookups below, which run under the
-        // callee's (swapped) perspective and would mis-type the spliced
-        // caller node. See `reify_pad_args_with_defaults`.
+        // Default-argument parameter substitution: while reifying a default
+        // expression, a free reference to an earlier parameter resolves to the
+        // caller's already-reified argument (kept under the caller's
+        // perspective). `reify_expr` clears this map before descending into a
+        // binder / control form (closure, block, …) — exactly the forms
+        // `Expr::substitute_idents` leaves untouched on the annotate side — so
+        // a reference shadowed by an inner binding is never reached here. See
+        // `reify_pad_args_with_defaults`.
         if !self.default_arg_overrides.is_empty()
             && let Some(tir) = self.default_arg_overrides.get(&ident.name)
         {

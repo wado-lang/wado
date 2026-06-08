@@ -1,0 +1,27 @@
+// Regression: a closure used as a default value may bind a parameter whose
+// name shadows an EARLIER parameter of the enclosing function. Inside the
+// closure body that name must resolve to the closure parameter, not to the
+// earlier parameter's substituted argument.
+//
+// `Expr::substitute_idents` (annotate side) leaves closures untouched, so `n`
+// in the closure body resolves to the closure parameter there. Reify must
+// agree: before the fix, reify's default-argument override map (keyed by
+// parameter name) hijacked `n` inside the closure and returned the outer
+// argument, so the defaulted closure ignored its own parameter.
+fn apply(n: i32, f: fn(i32) -> i32 = |n| n + 1) -> i32 {
+    // Call the closure with a value distinct from `n` so a hijacked body
+    // (which would ignore its parameter) produces an observably wrong result.
+    return f(n * 100);
+}
+
+export fn run() {
+    // f defaults to `|n| n + 1`; apply(10) = f(1000) = 1001.
+    // With the bug, the closure body's `n` resolves to the outer argument 10,
+    // so f would ignore its parameter and return 10 + 1 = 11.
+    assert apply(10) == 1001;
+    // An explicit closure argument still works.
+    assert apply(10, |n| n * 2) == 2000;
+}
+
+__DATA__
+{"stdout": ""}
