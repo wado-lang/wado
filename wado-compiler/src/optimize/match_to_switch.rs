@@ -29,6 +29,10 @@ use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
 use crate::token::Span;
 
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, GatedPass};
+
 /// Minimum number of literal arms required for the `br_table` rewrite
 /// to be worthwhile.
 const SWITCH_MIN_CASES: usize = 8;
@@ -41,21 +45,24 @@ const SWITCH_MAX_RANGE: i64 = 1024;
 
 /// Rewrite dense-int / dense-enum `Match` expressions to `Switch`, driven by
 /// the rewrite engine. Returns `true` if any rewrite fired.
-pub fn match_to_switch(project: &mut NirPackage) -> bool {
+pub fn match_to_switch(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
     let rule = MatchToSwitchRule {
         type_table: &type_table,
     };
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
+    let len = project.functions.len();
+    let mut changed = gate.run_gated(GatedPass::MatchToSwitch, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
         if let Some(body) = func.body.as_mut() {
             let mut engine = Engine::new(body);
-            changed |= engine.run(&[&rule]);
+            engine.run(&[&rule])
+        } else {
+            false
         }
-    }
+    });
     for global in &mut project.globals {
         // Global initializers are arena bodies; run the rule on each directly.
+        // Globals are not gated (the gated passes operate on functions only).
         let mut engine = Engine::new(global.initializer.body_mut());
         changed |= engine.run(&[&rule]);
     }

@@ -225,7 +225,10 @@ pub fn optimize(
             // `unreachable` directly and is never DCE'd, so ordering
             // around DCE is irrelevant.
             run_pass("nir/match_to_switch", &mut project, profiler, |p| {
-                match_to_switch(p)
+                // O0 runs the lowering once with no loop; a fresh gate marks
+                // every function dirty so all are processed.
+                let mut gate = gate::FunctionGate::new(p);
+                match_to_switch(p, &mut gate)
             });
         }
         OptLevel::O1 => {
@@ -491,20 +494,6 @@ fn run_optimization_passes(
         profiler.span_start(&format!("nir/iteration {}", i + 1));
         let mut changed = false;
         let mut iter_changed: Vec<&'static str> = Vec::new();
-        // A pass that is not gate-aware: runs over all functions and, on change,
-        // dirties every function for the gated passes.
-        macro_rules! step {
-            ($name:expr, $body:expr) => {{
-                let c = run_pass($name, project, profiler, $body);
-                if c {
-                    changed = true;
-                    gate.bump_all();
-                    if trace_loop {
-                        iter_changed.push($name);
-                    }
-                }
-            }};
-        }
         // A gate-aware pass: receives `&mut gate`, skips functions it has
         // already processed at their current revision, and reports per-function
         // change itself (no `bump_all`).
@@ -526,7 +515,7 @@ fn run_optimization_passes(
         // already handle. Subsequent iterations only see fresh `Match`
         // shapes if `inline` (or a future shape-rewriting pass) plants
         // them, in which case this pass reconverges on iteration N+1.
-        step!("nir/match_to_switch", match_to_switch);
+        gated!("nir/match_to_switch", match_to_switch);
         // Container SROA must run *before* inline in each iteration: inline
         // expands trait methods like `IndexValue::index_value` into raw
         // `builtin::array_get` + field-access pairs, after which the
@@ -623,7 +612,7 @@ fn run_optimization_passes(
         // sites, this pass collapses the surrounding `let x = Box{value:
         // inner}; … x.value …` shells. See `optimize/elide_box_local.rs`.
         gated!("nir/elide_box_local", elide_adjacent_box_locals);
-        step!("nir/labeled_block_fusion", fuse_labeled_blocks);
+        gated!("nir/labeled_block_fusion", fuse_labeled_blocks);
         gated!("nir/ref_elim", eliminate_unnecessary_refs);
         gated!("nir/sroa", scalar_replace_aggregates);
         gated!("nir/copy_prop", propagate_copies);

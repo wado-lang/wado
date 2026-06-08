@@ -70,10 +70,12 @@ pub enum GatedPass {
     ElideBoxLocal,
     RefElim,
     ContainerSroa,
+    MatchToSwitch,
+    LabeledBlockFusion,
 }
 
 impl GatedPass {
-    const COUNT: usize = 12;
+    const COUNT: usize = 14;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.
