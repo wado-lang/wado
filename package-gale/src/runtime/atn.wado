@@ -59,12 +59,15 @@ pub global ATN_TR_RULE: i32 = 4;
 
 /// Sentinel "state": a config that has returned past the real stack bottom
 /// and is viable only if the next token is EOF (the start rule's follow).
+#[allow(dead_code)]
 global ATN_ACCEPT_EOF: i32 = -2;
 
 /// Bounds that keep a pathological closure (deep recursion, config blow-up)
 /// from looping forever. On overflow the predictor bails to the lowest
 /// viable alt — the same conservative answer it gives on a true conflict.
+#[allow(dead_code)]
 global ATN_MAX_STACK: i32 = 64;
+#[allow(dead_code)]
 global ATN_MAX_CONFIGS: i32 = 6000;
 
 /// The decoded ATN, in struct-of-arrays form. Built once per parser from
@@ -100,6 +103,7 @@ struct AtnConfig {
 
 /// Decode the serialized ATN blob into `AtnSim`. Mirrors the layout of
 /// `atn.wado::serialize_atn`.
+#[allow(dead_code)]
 pub fn atn_decode(data: &List<i32>) -> AtnSim {
     let mut p = 0;
     let magic = data[p]; p += 1;
@@ -164,6 +168,7 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
 /// Return states at which `caller` rule invokes `callee` rule. Used to
 /// continue a config into its real caller on rule exit (cold path; a linear
 /// transition scan is fine).
+#[allow(dead_code)]
 fn atn_call_return_states(sim: &AtnSim, caller: i32, callee: i32) -> List<i32> {
     let mut out: List<i32> = [];
     for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
@@ -177,6 +182,7 @@ fn atn_call_return_states(sim: &AtnSim, caller: i32, callee: i32) -> List<i32> {
 /// True when `state`'s outgoing edges consume a token (atom / wildcard /
 /// not-atom). Such a state is a resting point: closure stops there and
 /// `atn_move` reads the edge. Epsilon / rule states are expanded instead.
+#[allow(dead_code)]
 fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
     let cnt = sim.state_tr_count[state];
     if cnt == 0 {
@@ -191,6 +197,7 @@ fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
 /// rule invocations (precise `stack`), pops rule-stops against `stack`,
 /// and on a fully-exhausted rule branches into the caller via `rstk` (the
 /// pre-existing rule-invocation stack). Dedups to break cycles.
+#[allow(dead_code)]
 fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<AtnConfig> {
     let mut result: List<AtnConfig> = [];
     let mut work: List<AtnConfig> = *seeds;
@@ -263,6 +270,7 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
 /// Advance a resting config set by one input token. At-end and accept-EOF
 /// configs carry only when still viable; consuming configs follow whichever
 /// edge matches `token`.
+#[allow(dead_code)]
 fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> List<AtnConfig> {
     let mut out: List<AtnConfig> = [];
     for let c of configs {
@@ -298,6 +306,7 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
     return out;
 }
 
+#[allow(dead_code)]
 fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
     let mut alts: List<i32> = [];
     for let c of configs {
@@ -309,6 +318,7 @@ fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
     return alts;
 }
 
+#[allow(dead_code)]
 fn atn_min_alt(alts: &List<i32>) -> i32 {
     if alts.is_empty() {
         return -1;
@@ -322,6 +332,7 @@ fn atn_min_alt(alts: &List<i32>) -> i32 {
     return m;
 }
 
+#[allow(dead_code)]
 fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
     if configs.is_empty() {
         return false;
@@ -346,6 +357,7 @@ fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
 /// at-end together (a genuine conflict — return the lowest alt, matching
 /// ANTLR4's rule-order tie-break; non-greedy repeats order their exit edge
 /// first so this yields the exit).
+#[allow(dead_code)]
 pub fn atn_predict_with_stack(sim: &AtnSim, decision: i32, rule_stack: &List<i32>, tokens: &List<Token>, start_pos: i32, eof: i32) -> i32 {
     let dstate = sim.decision_state[decision];
     let start = sim.state_tr_start[dstate];
@@ -386,6 +398,7 @@ pub fn atn_predict_with_stack(sim: &AtnSim, decision: i32, rule_stack: &List<i32
 /// SLL convenience wrapper: predict with an empty rule stack. Correct for
 /// top-level decisions; deeper decisions whose disambiguation depends on the
 /// caller's follow need `atn_predict_with_stack` with the real rule stack.
+#[allow(dead_code)]
 pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &List<Token>, start_pos: i32, eof: i32) -> i32 {
     let empty: List<i32> = [];
     return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
@@ -401,6 +414,7 @@ pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &List<Token>, s
 /// Falls back to ENTER (the prior greedy behaviour) when context is absent
 /// or the decision can't be uniquely identified (0 or >1 candidates), so a
 /// mapping miss degrades gracefully instead of mispredicting.
+#[allow(dead_code)]
 pub fn atn_ng_optional_enter(sim: &AtnSim, rule_stack: &List<i32>, tokens: &List<Token>, pos: i32, eof: i32) -> bool {
     if rule_stack.is_empty() {
         return true;
