@@ -6,7 +6,7 @@ use { gen_visitor } from "./visitor_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
-use { lower_with_ctx } from "./lower.wado";
+use { lower } from "./lower.wado";
 use { build_atn, serialize_atn } from "./atn.wado";
 use {
     LoweredGrammar,
@@ -71,7 +71,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     ctx.set_trace(options.trace);
-    let lowered = lower_with_ctx(grammar, &lit_tokens, &mut ctx);
+    let lowered = lower(grammar, &lit_tokens, &mut ctx);
     gen_header(&mut w, grammar);
     if options.trace {
         // Trace logging writes to stderr via the ambient logger.

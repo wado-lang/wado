@@ -197,16 +197,13 @@ fn compute_gate_caller_follow(ctx: &mut GenContext, elements: &List<Element>, i:
 /// `lit_tokens` is computed by `lexer_gen::collect_literal_tokens`
 /// before lowering and threaded in so a single literal-collection
 /// pass serves both the lexer and parser sides.
-/// Convenience entry for callers that don't share a `GenContext`
-/// with downstream emit (e.g. `lower_test.wado` smoke tests). Real
-/// codegen calls `lower_with_ctx` instead so the follow-mask and
-/// kind-set registries land in the ctx emit later consumes.
-pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>) -> LoweredGrammar {
-    let mut ctx = GenContext::new(&grammar.parser_rules, lit_tokens);
-    return lower_with_ctx(grammar, lit_tokens, &mut ctx);
-}
-
-pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContext) -> LoweredGrammar {
+/// Translate the surface IR to GIR. `ctx` is shared with downstream
+/// emit: the follow-mask and kind-set registries lower writes into it
+/// are the same ones emit reads later, so real codegen threads its own
+/// ctx in. Callers that don't share a ctx (e.g. `lower_test.wado`
+/// smoke tests) omit it and lowering builds a fresh one from the
+/// grammar.
+pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContext = &mut GenContext::new(&grammar.parser_rules, lit_tokens)) -> LoweredGrammar {
     // `ctx` is shared with downstream emit. The follow-mask and
     // kind-set registries lower writes into ctx are the same ones
     // emit reads from later: the per-rule lower walk below interns a
@@ -3063,7 +3060,7 @@ fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> L
 /// asserts on anything else so emit's exhaustive dispatch can drop
 /// the "did not cover this body shape" panics.
 ///
-/// Mirrors emit's pre-shape probes (`op_is_rulecall`, `op_is_leaf`,
+/// Mirrors emit's pre-shape probes (`is RuleCall(_)`, `op_is_leaf`,
 /// `let Group(g_op) = body && body_has_field`).
 fn classify_repeat_body_shape(body: &Op) -> RepeatBodyShape {
     return match body {

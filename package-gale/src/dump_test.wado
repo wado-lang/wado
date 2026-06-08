@@ -21,7 +21,7 @@ use {
     normalize_caches,
 } from "./ir.wado";
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
-use { lower_with_ctx } from "./lower.wado";
+use { lower } from "./lower.wado";
 use { GenContext } from "./gen_context.wado";
 use { render_dump } from "./dump.wado";
 use { parse } from "./g4/parser.wado";
@@ -35,7 +35,7 @@ fn dump_source(input: &String) -> String {
     normalize_caches(&mut merged);
     let lit = collect_literal_tokens(&merged.parser_rules);
     let mut ctx = GenContext::new(&merged.parser_rules, &lit);
-    let lowered = lower_with_ctx(&merged, &lit, &mut ctx);
+    let lowered = lower(&merged, &lit, &mut ctx);
     return render_dump(&merged, &lowered, &mut ctx);
 }
 
@@ -44,7 +44,7 @@ fn dump_grammar(g: &Grammar) -> String {
     // Lower through the render ctx (mirrors cmd_dump) so the
     // follow-mask registry is populated for the dump.
     let mut ctx = GenContext::new(&g.parser_rules, &lit_tokens);
-    let lowered = lower_with_ctx(g, &lit_tokens, &mut ctx);
+    let lowered = lower(g, &lit_tokens, &mut ctx);
     return render_dump(g, &lowered, &mut ctx);
 }
 
