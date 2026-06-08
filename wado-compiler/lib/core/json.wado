@@ -37,12 +37,8 @@ use { encode_with as base64_encode_with, decode as base64_decode, Encoding } fro
 /// Writes a byte string as a base64url (no padding) JSON string into buf.
 /// Matches RFC 8949 §6.1 advice for representing binary data as JSON text.
 fn write_base64_string(buf: &mut String, v: ByteSlice) {
-    let mut bytes: List<u8> = [];
-    let mut i = 0;
-    while i < v.len() {
-        bytes.push(v[i]);
-        i += 1;
-    }
+    let mut bytes: List<u8> = List::with_capacity(v.len());
+    bytes.extend_from_slice(v as ArraySlice<u8>);
     buf.push('"');
     buf.push_str(&base64_encode_with(&bytes, Encoding::UrlSafe | Encoding::NoPadding));
     buf.push('"');
@@ -319,12 +315,22 @@ impl Serializer for JsonSerializer {
         });
     }
 
-    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+    fn serialize_unit_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
         write_escaped_string(self.buf, variant_name);
         return Result::Ok(());
     }
 
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> {
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<JsonVariantSerializer, SerializeError> {
         self.buf.push_str(&"{");
         write_escaped_string(self.buf, variant_name);
         self.buf.push_str(&":");
@@ -620,12 +626,22 @@ impl Serializer for PrettyJsonSerializer {
         });
     }
 
-    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+    fn serialize_unit_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
         write_escaped_string(self.buf, variant_name);
         return Result::Ok(());
     }
 
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<PrettyJsonVariantSerializer, SerializeError> {
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<PrettyJsonVariantSerializer, SerializeError> {
         self.buf.push_str(&"{");
         write_pretty_newline_and_indent(self.buf, self.indent, self.depth + 1);
         write_escaped_string(self.buf, variant_name);
@@ -864,7 +880,7 @@ impl JsonDeserializer {
                 Result::Err(DeserializeError::malformed(
                     "invalid unicode codepoint",
                     start as i64,
-                ))
+                ));
             },
         };
     }
@@ -930,11 +946,14 @@ impl JsonDeserializer {
                 }
             }
         }
-        let mut raw = String::with_capacity(self.pos - start);
-        for let mut i = start; i < self.pos; i += 1 {
-            raw.push(self.input.get_unchecked(i) as char);
-        }
-        return Result::Ok(raw);
+        // A number token is ASCII (digits, sign, '.', 'e'/'E'), so it is valid
+        // UTF-8 by construction. Build it in one bulk copy and skip the UTF-8
+        // validation that `from_utf8_slice` would do — number-heavy input makes
+        // that validation a measurable cost.
+        return Result::Ok(String::internal_from_utf8_raw(
+            self.input.slice(start, self.pos).to_array(),
+            self.pos - start,
+        ));
     }
 
     pub fn has_exp_or_dot(&self, raw: &String) -> bool {
@@ -957,18 +976,18 @@ impl JsonDeserializer {
                     Result::Err(DeserializeError::unexpected_type(
                         "expected integer, got float",
                         start,
-                    ))
+                    ));
                 },
                 Ok(v) && v < -2147483648.0 || v > 2147483647.0 => {
                     builtin::cold_path();
                     Result::Err(
                         DeserializeError::overflow("value out of range for i32", start),
-                    )
+                    );
                 },
                 Ok(v) => Result::Ok(v as i32),
                 Err(_) => {
                     builtin::cold_path();
-                    Result::Err(DeserializeError::invalid_value("invalid number", start))
+                    Result::Err(DeserializeError::invalid_value("invalid number", start));
                 },
             };
         }
@@ -982,7 +1001,7 @@ impl JsonDeserializer {
                         start,
                     ),
                     _ => DeserializeError::invalid_value("invalid digit in number", start),
-                })
+                });
             },
         };
     }
@@ -996,13 +1015,13 @@ impl JsonDeserializer {
                     Result::Err(DeserializeError::unexpected_type(
                         "expected integer, got float",
                         start,
-                    ))
+                    ));
                 },
                 // f64 can represent integers exactly up to 2^53
                 Ok(v) => Result::Ok(v as i64),
                 Err(_) => {
                     builtin::cold_path();
-                    Result::Err(DeserializeError::invalid_value("invalid number", start))
+                    Result::Err(DeserializeError::invalid_value("invalid number", start));
                 },
             };
         }
@@ -1016,7 +1035,7 @@ impl JsonDeserializer {
                         start,
                     ),
                     _ => DeserializeError::invalid_value("invalid digit in number", start),
-                })
+                });
             },
         };
     }
@@ -1034,19 +1053,19 @@ impl JsonDeserializer {
                     Result::Err(DeserializeError::overflow(
                         "negative value for u64",
                         start,
-                    ))
+                    ));
                 },
                 Ok(v) && v != f64::floor(v) => {
                     builtin::cold_path();
                     Result::Err(DeserializeError::unexpected_type(
                         "expected integer, got float",
                         start,
-                    ))
+                    ));
                 },
                 Ok(v) => Result::Ok(v as u64),
                 Err(_) => {
                     builtin::cold_path();
-                    Result::Err(DeserializeError::invalid_value("invalid number", start))
+                    Result::Err(DeserializeError::invalid_value("invalid number", start));
                 },
             };
         }
@@ -1060,7 +1079,7 @@ impl JsonDeserializer {
                         start,
                     ),
                     _ => DeserializeError::invalid_value("invalid digit", start),
-                })
+                });
             },
         };
     }
@@ -1740,7 +1759,7 @@ impl DeserializeSeq for JsonSeqAccess {
             Ok(v) => Result::Ok(Option::Some(v)),
             Err(e) => {
                 builtin::cold_path();
-                Result::Err(e)
+                Result::Err(e);
             },
         };
     }
@@ -1809,8 +1828,7 @@ impl DeserializeStruct for JsonStructAccess {
         // Fast path: scan JSON string key without allocating.
         // For unescaped keys (the common case), we pass the byte range
         // directly to S::lookup, avoiding String allocation entirely.
-        if self.de.pos >= self.de.input.len()
-            || self.de.input.get_unchecked(self.de.pos) as i32 != '"' as i32 {
+        if self.de.pos >= self.de.input.len() || self.de.input.get_unchecked(self.de.pos) as i32 != '"' as i32 {
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type(
                 "expected string key",
@@ -2098,7 +2116,7 @@ impl Deserializer for JsonDeserializer {
                 Result::Err(DeserializeError::invalid_value(
                     "empty string for char",
                     self.pos as i64,
-                ))
+                ));
             },
         };
     }
@@ -2110,11 +2128,15 @@ impl Deserializer for JsonDeserializer {
     fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
         let s = self.read_json_string()?;
         match base64_decode(s) {
-            Some(bytes) => return Result::Ok(bytes as ByteList),
-            None => return Result::Err(DeserializeError::invalid_value(
-                "invalid base64 byte string",
-                self.pos as i64,
-            )),
+            Some(bytes) => {
+                return Result::Ok(bytes as ByteList);
+            },
+            None => {
+                return Result::Err(DeserializeError::invalid_value(
+                    "invalid base64 byte string",
+                    self.pos as i64,
+                ));
+            },
         }
     }
 
@@ -2148,7 +2170,11 @@ impl Deserializer for JsonDeserializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<JsonStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        num_fields: i32,
+    ) -> Result<JsonStructAccess, DeserializeError> with stores[self] {
         self.expect_char('{' as i32)?;
         return Result::Ok(JsonStructAccess {
             de: self,
@@ -2156,7 +2182,11 @@ impl Deserializer for JsonDeserializer {
         });
     }
 
-    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError> with stores[self] {
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        num_cases: i32,
+    ) -> Result<JsonVariantAccess, DeserializeError> with stores[self] {
         self.skip_whitespace();
         if self.pos >= self.input.len() {
             builtin::cold_path();
@@ -2478,12 +2508,22 @@ impl Serializer for CanonicalJsonSerializer {
         });
     }
 
-    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+    fn serialize_unit_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
         write_escaped_string(self.buf, variant_name);
         return Result::Ok(());
     }
 
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<CanonicalVariantSerializer, SerializeError> {
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<CanonicalVariantSerializer, SerializeError> {
         self.buf.push('{');
         write_escaped_string(self.buf, variant_name);
         self.buf.push(':');

@@ -1,0 +1,334 @@
+//! Source-level liveness / dead-code analysis.
+//!
+//! Implements the `liveness` pass described in
+//! [`wep-2026-05-16-unused-diagnostics.md`] (policy) and
+//! [`wep-2026-05-26-elaborator-rearchitecture.md`] (mechanism). The pass
+//! runs after `annotate_bodies` and before `reify`, computing source-level
+//! reachability from the export boundary over the call graph the elaborator
+//! recorded in `references`.
+//!
+//! # Current scope
+//!
+//! The pass classifies **free functions and globals** as live / test-only /
+//! dead (see [`Liveness`]) and reports `DeadFunction` / `DeadGlobal` /
+//! `TestOnlyFunction` / `TestOnlyGlobal` accordingly. Reify gates emission of
+//! those two item kinds on `live_items` (`E ∪ T`). Every impl/trait method is
+//! seeded as a production root, so it serves as a live intermediary in the call
+//! graph without itself being a report or gating candidate. This keeps the
+//! analysis sound against false positives (the failure the WEP optimises
+//! against) while deferring method-level dead detection — which needs the
+//! operator / `?` / for-of dispatch edges that leave no `references` entry — to
+//! a follow-up slice.
+//!
+//! The graph traces every site where reify can emit a call: function and
+//! method bodies, global initializers, parameter defaults, and struct field
+//! defaults. A callee reachable only through one of those still stays live.
+
+use crate::ast::{self, AstId, AstVisitor, Block, Expr, Function, Item, Module};
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::module_source::ModuleSource;
+use crate::symbol::SymbolKey;
+use crate::token::Span;
+
+/// Result of the source-level liveness analysis.
+///
+/// Reachability is computed from two independent root sets over the same call
+/// graph: `E` = reachable from production roots (world exports, `#[export]`,
+/// methods, struct-field defaults), `T` = reachable from `test` blocks. Each
+/// user-authored free function / global is then classified:
+///
+/// - **live** (`∈ E`): used by production. Not reported.
+/// - **test-only** (`∈ T \ E`): used by tests but not production → `test_only_items`.
+/// - **dead** (`∉ E ∧ ∉ T`): used by neither → `dead_items`.
+///
+/// `live_items = E ∪ T` is the set reify gates emission on (a test-reachable
+/// item is still kept so test code compiles); the split only affects which
+/// diagnostic the emitter raises.
+#[derive(Default, Clone)]
+pub(crate) struct Liveness {
+    /// Reachable from production roots ∪ tests (`E ∪ T`). Reify gates
+    /// free-function / global emission on this set.
+    pub(crate) live_items: IndexSet<SymbolKey>,
+    /// Candidates reachable from neither production nor tests (`∉ E ∧ ∉ T`),
+    /// in source order. `DeadFunction` / `DeadGlobal`.
+    pub(crate) dead_items: Vec<SymbolKey>,
+    /// Candidates reachable from tests but not production (`∈ T \ E`), in
+    /// source order. `TestOnlyFunction` / `TestOnlyGlobal`.
+    pub(crate) test_only_items: Vec<SymbolKey>,
+}
+
+/// Compute liveness over every loaded module.
+///
+/// `world_export_names` holds every export name across all registered worlds; a
+/// function whose name matches is a potential world entry point and is seeded
+/// as a root, so a misdeclared entry (`fn run()` without `export`) survives
+/// reify gating and still reaches the world-conformance check.
+pub(crate) fn compute(
+    modules: &IndexMap<ModuleSource, Module>,
+    references: &IndexMap<SymbolKey, SymbolKey>,
+    world_export_names: &IndexSet<String>,
+) -> Liveness {
+    let mut graph = Graph::default();
+
+    for (source, module) in modules {
+        let user = is_user_authored(source);
+        for item in &module.items {
+            match item {
+                Item::Function(func) => {
+                    let key = SymbolKey::new(source.clone(), func.id);
+                    graph.add_function_edges(source, func, references, &key);
+                    if func.is_export
+                        || has_export_attr(func)
+                        || world_export_names.contains(&func.name)
+                    {
+                        graph.seed_export(key.clone());
+                    }
+                    // Bodyless functions are compiler builtins / imports, not
+                    // user-authored code that could be "dead".
+                    if user && func.body.is_some() {
+                        graph.report_candidates.push(key);
+                    }
+                }
+                Item::Global(global) => {
+                    let key = SymbolKey::new(source.clone(), global.id);
+                    graph.add_expr_edges(source, &global.initializer, references, &key);
+                    if user {
+                        graph.report_candidates.push(key);
+                    }
+                }
+                Item::Struct(struct_decl) => {
+                    // A field default is materialized by reify wherever the
+                    // struct is built with the field omitted (and by the
+                    // auto-derived `Default::default`), so any function it
+                    // references must stay live. We cannot cheaply tell whether
+                    // the struct is ever constructed, so seed the struct as a
+                    // root and edge it to its field defaults — sound against
+                    // dropping a reachable callee. Structs are not report
+                    // candidates, so the extra live entry is harmless.
+                    let mut has_default = false;
+                    let key = SymbolKey::new(source.clone(), struct_decl.id);
+                    for field in &struct_decl.fields {
+                        if let Some(default) = &field.default {
+                            graph.add_expr_edges(source, default, references, &key);
+                            has_default = true;
+                        }
+                    }
+                    if has_default {
+                        graph.seed_export(key);
+                    }
+                }
+                Item::Impl(impl_block) => {
+                    for method in &impl_block.methods {
+                        let key = SymbolKey::new(source.clone(), method.id);
+                        graph.add_function_edges(source, method, references, &key);
+                        // Slice 1: methods are live production intermediaries.
+                        graph.seed_export(key);
+                    }
+                }
+                Item::Trait(trait_decl) => {
+                    for method in &trait_decl.methods {
+                        if method.body.is_none() {
+                            continue;
+                        }
+                        let key = SymbolKey::new(source.clone(), method.id);
+                        graph.add_function_edges(source, method, references, &key);
+                        graph.seed_export(key);
+                    }
+                }
+                Item::Test(test) => {
+                    // Test blocks are roots of the `T` (test-reachable) closure
+                    // only — never the production `E` closure. A function reached
+                    // solely from a test is therefore classified `test-only`
+                    // rather than live, so genuinely dead production code is not
+                    // masked by a lingering test reference.
+                    let key = SymbolKey::new(source.clone(), test.id);
+                    graph.add_block_edges(source, &test.body, references, &key);
+                    graph.seed_test(key);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    graph.finish()
+}
+
+/// Call graph plus the two root sets and report candidates, assembled in one
+/// walk.
+#[derive(Default)]
+struct Graph {
+    /// `owner -> called items`.
+    edges: IndexMap<SymbolKey, Vec<SymbolKey>>,
+    /// Production roots (world exports, `#[export]`, methods, struct-field
+    /// defaults) — seeds of the `E` closure.
+    export_seeds: Vec<SymbolKey>,
+    /// `test` block roots — seeds of the `T` closure.
+    test_seeds: Vec<SymbolKey>,
+    /// User-authored free functions / globals eligible for dead reporting,
+    /// in source order.
+    report_candidates: Vec<SymbolKey>,
+}
+
+impl Graph {
+    fn seed_export(&mut self, key: SymbolKey) {
+        self.export_seeds.push(key);
+    }
+
+    fn seed_test(&mut self, key: SymbolKey) {
+        self.test_seeds.push(key);
+    }
+
+    fn add_function_edges(
+        &mut self,
+        source: &ModuleSource,
+        func: &Function,
+        references: &IndexMap<SymbolKey, SymbolKey>,
+        owner: &SymbolKey,
+    ) {
+        if let Some(body) = &func.body {
+            self.add_block_edges(source, body, references, owner);
+        }
+        // A parameter default is materialized by reify at every call site that
+        // omits the argument, so anything it references is reachable whenever
+        // the function itself is. Edge from the function (not a seed) keeps that
+        // precise: a dead function's defaults stay dead too.
+        for param in &func.params {
+            if let Some(default) = &param.default {
+                self.add_expr_edges(source, default, references, owner);
+            }
+        }
+    }
+
+    fn add_block_edges(
+        &mut self,
+        source: &ModuleSource,
+        block: &Block,
+        references: &IndexMap<SymbolKey, SymbolKey>,
+        owner: &SymbolKey,
+    ) {
+        let mut collector = IdCollector::default();
+        ast::walk_block(&mut collector, block);
+        self.link(source, &collector.ids, references, owner);
+    }
+
+    fn add_expr_edges(
+        &mut self,
+        source: &ModuleSource,
+        expr: &Expr,
+        references: &IndexMap<SymbolKey, SymbolKey>,
+        owner: &SymbolKey,
+    ) {
+        let mut collector = IdCollector::default();
+        ast::walk_expr(&mut collector, expr);
+        self.link(source, &collector.ids, references, owner);
+    }
+
+    /// For each id in the owner's body that resolves to a definition, add an
+    /// `owner -> def` edge.
+    fn link(
+        &mut self,
+        source: &ModuleSource,
+        ids: &[AstId],
+        references: &IndexMap<SymbolKey, SymbolKey>,
+        owner: &SymbolKey,
+    ) {
+        for &id in ids {
+            let use_key = SymbolKey::new(source.clone(), id);
+            if let Some(def) = references.get(&use_key) {
+                self.edges
+                    .entry(owner.clone())
+                    .or_default()
+                    .push(def.clone());
+            }
+        }
+    }
+
+    /// Run both reachability closures and classify each report candidate.
+    fn finish(self) -> Liveness {
+        let production = self.closure(&self.export_seeds);
+        let tests = self.closure(&self.test_seeds);
+
+        let mut live_items = production.clone();
+        for key in &tests {
+            live_items.insert(key.clone());
+        }
+
+        let mut dead_items = Vec::new();
+        let mut test_only_items = Vec::new();
+        for key in &self.report_candidates {
+            if production.contains(key) {
+                continue;
+            }
+            if tests.contains(key) {
+                test_only_items.push(key.clone());
+            } else {
+                dead_items.push(key.clone());
+            }
+        }
+
+        Liveness {
+            live_items,
+            dead_items,
+            test_only_items,
+        }
+    }
+
+    /// BFS reachability from `seeds` over the call-graph edges.
+    fn closure(&self, seeds: &[SymbolKey]) -> IndexSet<SymbolKey> {
+        let mut reached: IndexSet<SymbolKey> = IndexSet::default();
+        let mut work: Vec<SymbolKey> = seeds.to_vec();
+        while let Some(key) = work.pop() {
+            if !reached.insert(key.clone()) {
+                continue;
+            }
+            if let Some(targets) = self.edges.get(&key) {
+                for target in targets {
+                    if !reached.contains(target) {
+                        work.push(target.clone());
+                    }
+                }
+            }
+        }
+        reached
+    }
+}
+
+/// Visitor that records every [`AstId`] it traverses.
+#[derive(Default)]
+struct IdCollector {
+    ids: Vec<AstId>,
+}
+
+impl AstVisitor for IdCollector {
+    fn visit_id(&mut self, id: AstId, _span: Span) {
+        self.ids.push(id);
+    }
+}
+
+/// User-authored modules are the entry point and the files / URLs it
+/// transitively imports. Stdlib is never reported — and never reify-gated:
+/// stdlib functions reached only through compiler synthesis (CM bindings,
+/// effect dispatch) have no source-level caller, so the optimize-time DCE
+/// removes their dead ones.
+///
+/// Stdlib lives in the `Core` / `Wasi` / `Wasm` variants *and* in bundled
+/// `.wado` files that the loader registers as `Local` with a scheme-prefixed
+/// path (`wasi:cli/terminal_stdout.wado`, `core:…`). Those must be excluded
+/// too; a user's `Local` import is a relative path with no such scheme.
+pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
+    match source {
+        ModuleSource::EntryPoint { .. }
+        | ModuleSource::Remote { .. }
+        | ModuleSource::Redirected { .. } => true,
+        ModuleSource::Local { path } => {
+            let path = path.as_str();
+            !(path.starts_with("core:") || path.starts_with("wasi:") || path.starts_with("wasm:"))
+        }
+        _ => false,
+    }
+}
+
+/// `#[export]` marks a raw Wasm export — an export-boundary root.
+fn has_export_attr(func: &Function) -> bool {
+    func.attrs.iter().any(|attr| attr.name == "export")
+}

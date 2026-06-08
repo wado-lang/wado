@@ -504,6 +504,7 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TupleLen { expr: inner }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             scan_transfers(inner, consuming, consumed, cx);
         }

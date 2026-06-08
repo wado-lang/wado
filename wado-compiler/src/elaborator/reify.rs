@@ -205,6 +205,11 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// matching instantiation (a nested inner for-of is instantiated once
     /// per outer element). See [`Self::reify_tuple_for_of`].
     pub(crate) tuple_overlay_visits: IndexMap<crate::symbol::SymbolKey, usize>,
+    /// Source-level live set. When `Some`, reify skips emitting free
+    /// functions and globals whose `SymbolKey` is absent — the dead items
+    /// the liveness pass found unreachable from the export boundary, which
+    /// downstream phases would discard anyway. `None` reifies everything.
+    pub(crate) live_items: Option<&'a IndexSet<crate::symbol::SymbolKey>>,
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
@@ -229,6 +234,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
         interner: Rc<RefCell<ModuleSourceInterner>>,
+        live_items: Option<&'a IndexSet<crate::symbol::SymbolKey>>,
     ) -> Self {
         Self {
             tysys,
@@ -244,6 +250,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
+            live_items,
         }
     }
 
@@ -421,7 +428,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Re-intern a resolved `fn(...) with E` type carrying its effects: the
     /// shared static resolver has no effect-resolution context and leaves
     /// `effects` empty, so a `fn`-typed parameter loses its `with` clause.
-    /// `check_effects` then can't see that, e.g., `f: fn() with Stdout`
+    /// the effect check then can't see that, e.g., `f: fn() with Stdout`
     /// requires `Stdout` at an indirect call site. Resolves effects through
     /// the same [`Self::reify_effects`] used for declared effects (so the
     /// `EffectRef`s stay canonically consistent across the module). Handles a
@@ -483,6 +490,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// The flow mirrors [`super::Elaborator::resolve_module`] item by
     /// item; only the per-Item dispatch shape is reproduced here, the
     /// body of each branch is delegated to a `reify_*` helper.
+    /// True when liveness gating is active and `(module, id)` is a
+    /// user-authored free function unreachable from the export boundary. Skips
+    /// dead free functions so they never reach monomorphization (WEP
+    /// 2026-05-16, reify gating). Globals are intentionally not gated here.
+    ///
+    /// Only user-authored modules are gated. Stdlib functions can be reached
+    /// solely through compiler synthesis (e.g. `memory_to_gc_string` from CM
+    /// bindings), which the source-level call graph cannot see; gating them
+    /// would drop a live function and trap WIR build. The optimize-time DCE
+    /// removes their dead ones instead.
+    fn is_dead_item(&self, module: &ModuleSource, id: crate::ast::AstId) -> bool {
+        super::liveness::is_user_authored(module)
+            && self.live_items.is_some_and(|live| {
+                !live.contains(&crate::symbol::SymbolKey::new(module.clone(), id))
+            })
+    }
+
     pub(crate) fn reify_module(
         &mut self,
         module: &'a Module,
@@ -491,11 +515,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.current_module_source = module_source.clone();
         self.current_module_items = &module.items;
 
-        let mut tir_module = TirModule::new(module_source);
+        let mut tir_module = TirModule::new(module_source.clone());
 
         for item in &module.items {
             match item {
                 Item::Function(func) => {
+                    if self.is_dead_item(&module_source, func.id) {
+                        continue;
+                    }
                     if let Some(tir_func) = self.reify_function(func) {
                         tir_module.add_function(tir_func);
                     }
@@ -535,6 +562,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 }
                 Item::Global(global_decl) => {
+                    // Globals are not gated: a global initializer can trap or
+                    // perform effects at module-init time (`global _X = panic(…)`
+                    // must still trap even if `_X` is never read), and purity
+                    // analysis cannot see divergence through ambient `panic`.
+                    // The optimize-time DCE removes genuinely pure dead globals
+                    // instead. A dead global is still reported as a warning.
                     if let Some(tir_global) = self.reify_global(global_decl) {
                         tir_module.globals.push(tir_global);
                     }
@@ -7065,6 +7098,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if is_tuple_receiver {
                 return match method_call.method.as_str() {
                     "len" => {
+                        // A tuple type still carrying a `..T` pack has an arity
+                        // unknown until monomorphization; defer folding to a
+                        // literal via `TupleLen` so it is not frozen at the
+                        // unsubstituted pack count (mirrors the `zip` deferral).
+                        if self.type_contains_pack(base_type_id) {
+                            return TirExpr::new(
+                                TirExprKind::TupleLen {
+                                    expr: Box::new(receiver),
+                                },
+                                TypeTable::I32,
+                                method_call.span,
+                            );
+                        }
                         let len = self
                             .tysys
                             .type_table

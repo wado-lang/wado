@@ -10,8 +10,9 @@ provides only the two value types every temporal API is built around, an
 exact point on the timeline (`Instant`) and that instant paired with a
 time-zone interpretation (`ZonedDateTime`). They carry ISO 8601 / RFC 3339
 formatting (`Display`), civil field accessors, RFC 3339 parsing, epoch
-constructors, and serde `Serialize`/`Deserialize` (as RFC 3339 strings, the
-idiomatic timestamp form in both JSON and CBOR); arithmetic, `now()`, and
+constructors, and serde `Serialize`/`Deserialize` (an RFC 3339 string under
+CBOR's date/time tag 0, a bare string in JSON; an epoch-seconds number is
+also accepted on decode); arithmetic, `now()`, and
 `Duration` are deferred to follow-up work. The types exist so a serde format
 such as `core:json` or `core:cbor` has a concrete Wado type for timestamps.
 

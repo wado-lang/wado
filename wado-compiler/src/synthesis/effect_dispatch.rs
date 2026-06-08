@@ -1306,6 +1306,7 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }
+        | TirExprKind::TupleLen { expr }
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         }
@@ -2057,6 +2058,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::TupleZip { expr: inner }
+            | TirExprKind::TupleLen { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             }
@@ -2740,6 +2742,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }
+        | TirExprKind::TupleLen { expr }
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         }

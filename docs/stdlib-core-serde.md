@@ -122,6 +122,12 @@ impl Deserialize for Config;
 
 #### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
 
+#### `fn serialize_tag(&mut self, _tag: u64) -> Result<(), SerializeError>`
+
+Tag the next value with a CBOR semantic tag (major type 6, RFC 8949
+§3.4). Formats with no tag concept ignore it; the default no-op means
+only tag-aware serializers (CBOR) need to implement it.
+
 #### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
 
 Serialize a byte string. Self-describing binary formats (CBOR) emit a
@@ -237,6 +243,13 @@ Byte-string visit (CBOR major type 2; JSON base64). Defaults to an
 Opaque passthrough for a format item the value model cannot represent
 (e.g. an unassigned CBOR simple value or an uninterpreted tag). Only
 self-describing binary formats call this; defaults to an error.
+
+#### `fn visit_undefined(&mut self) -> Result<Self::Value, DeserializeError>`
+
+The CBOR `undefined` simple value (major 7, value 23). Distinct from
+`null`: a dynamic value model (`core:value`) keeps its own `Undefined`
+arm. The default collapses it to `null` so visitors that do not model
+the distinction (e.g. JSON) keep working.
 
 ### `pub trait Deserializer`
 

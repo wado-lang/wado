@@ -2085,6 +2085,7 @@ impl<'a> PatternLowerer<'a> {
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::TupleZip { expr: inner }
+            | TirExprKind::TupleLen { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             }

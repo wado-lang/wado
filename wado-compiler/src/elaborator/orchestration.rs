@@ -108,6 +108,10 @@ pub(crate) struct AnnotateState {
     /// new module sources during name resolution.
     // MIGRATION: cross-cutting input (shared interner).
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
+    /// Source-level liveness computed between `annotate_bodies` and `reify`
+    /// in [`Self::build_tir_from_state`]. Empty until that runs; consumed by
+    /// reify item gating and the unused-diagnostics emitter.
+    pub(crate) liveness: super::liveness::Liveness,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -998,6 +1002,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             module_semantics.entry(ms.clone()).or_default();
         }
         if let Some(snap) = snapshot {
+            // Seed each stdlib module's per-module `types` facts from the
+            // snapshot's annotate state. The flattened `snap` maps below carry
+            // only the facts `semantics_of` drains into `Semantics`
+            // (references, local_*, expression_types, method_dispatch,
+            // coercions, desugars — all empty in `snap_state` after the drain).
+            // The rest — `function_effects`, `effect_ops`, `fn_param_types`,
+            // `fn_return_types`, `method_names`, static / operator / from / for-of
+            // dispatch, `struct_field_types`, … — live only here, and the
+            // Semantics-based effect check needs them for stdlib (callee
+            // effects and the effect→resource propagation closure). Cloning the
+            // whole `types` keeps the two sources in sync; the drained fields
+            // are then re-seeded from the flattened `snap` maps below.
+            if let Some(snap_state) = snapshot_state {
+                for (ms, snap_sem) in &snap_state.module_semantics {
+                    if let Some(sem) = module_semantics.get_mut(ms) {
+                        sem.types = snap_sem.types.clone();
+                    }
+                }
+            }
             // Snapshot keys must always reference modules in the current
             // compile's `modules` set — the loader's implicit-modules pass
             // pulls in the snapshot's stdlib closure on every compile. Use
@@ -1084,6 +1107,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             module_semantics,
             invocations,
             interner,
+            liveness: super::liveness::Liveness::default(),
         })
     }
 
@@ -1131,32 +1155,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // swap each module's `ModuleSemantics` in and out, which would
         // otherwise conflict with borrowing `state.sorted_sources`.
         let sorted_sources = state.sorted_sources.clone();
-        for module_source in &sorted_sources {
-            // Cache hit: deep-clone the cached `TirModule` into the
-            // per-compile shared type table.  Only `Core` / `Wasi` /
-            // `Wasm` variants are eligible — `ModuleSource::EntryPoint`
-            // values compare equal regardless of filename (one entry
-            // per compile), so `snap.tir_modules.get` would otherwise
-            // match the snapshot's synthetic empty entry against the
-            // user's real entry and silently substitute it.
-            if matches!(
-                module_source,
+        // A stdlib module whose pre-lowered `TirModule` is in the snapshot:
+        // its facts are already seeded into `module_semantics`, so it runs no
+        // body walk (Phase 1); the cached TIR is rehydrated in the reify pass
+        // below. Only `Core` / `Wasi` / `Wasm` variants are eligible —
+        // `ModuleSource::EntryPoint` values compare equal regardless of
+        // filename (one entry per compile), so the gate keeps the user entry
+        // from matching the snapshot's synthetic empty entry.
+        let is_stdlib_snapshot_hit = |ms: &ModuleSource| {
+            matches!(
+                ms,
                 ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
-            ) && let Some(snap_module) = snapshot.and_then(|s| s.tir_modules.get(module_source))
-            {
-                // Stdlib facts are already seeded into `state.module_semantics`
-                // from the snapshot (annotate_modules); only the cached
-                // `TirModule` needs rehydrating, and only when TIR is wanted.
-                if build_tir {
-                    result.insert(
-                        module_source.clone(),
-                        crate::stdlib_snapshot::rehydrate_tir_module(
-                            snap_module,
-                            &state.tysys.type_table,
-                            &mut fn_remap,
-                        ),
-                    );
-                }
+            ) && snapshot.is_some_and(|s| s.tir_modules.contains_key(ms))
+        };
+        // User modules whose Phase 1 body walk succeeded and whose AST is
+        // well-formed — the set the reify pass emits.
+        let mut reify_eligible: IndexSet<ModuleSource> = IndexSet::default();
+
+        // Phase 1 — `annotate_bodies`: run the body walk over every user
+        // module to populate `ModuleSemantics`. The combined walk's own TIR is
+        // discarded; reify (Phase 2, below) is the sole TIR source. Liveness
+        // runs between the two phases so reify can gate on it.
+        for module_source in &sorted_sources {
+            if is_stdlib_snapshot_hit(module_source) {
                 continue;
             }
             let module = modules.get(module_source).expect("module should exist");
@@ -1325,6 +1346,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // Reify consumes the per-element tuple-for-of overlays the
                 // body walk captures here, so they are always recorded.
                 capture_tuple_overlays: true,
+                suppress_reference_recording: false,
             };
 
             // Set file context so diagnostics emitted during resolution
@@ -1344,35 +1366,85 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .module_semantics
                 .insert(module_source.clone(), saved_sem);
 
+            // Eligible for reify (Phase 2) when the body walk succeeded and
+            // the AST is well-formed. A module with recovered syntax errors is
+            // skipped: its TIR is never consumed (the batch path bails on
+            // `!is_complete()`, the LSP path reads only Phase 1 facts), and
+            // skipping keeps reify off `Error` placeholder nodes while Phase 1
+            // still recorded the use→def edges the LSP needs.
             if build_tir && resolve_result.is_ok() && !module.has_syntax_errors() {
-                // Phase 2 — `reify_modules`: walk the AST + `ModuleSemantics`
-                // to produce the TIR. Reify is the source of truth. Skipped
-                // entirely on the LSP path (`build_tir == false`), which reads
-                // only the Phase 1 facts.
-                //
-                // Skipped for a module with recovered syntax errors: its TIR is
-                // never consumed (the batch path bails on `!is_complete()`
-                // before reading `tir_modules`, and the LSP path reads only the
-                // Phase 1 edge/type maps, never `tir_modules`). Skipping keeps
-                // reify off partial ASTs, so it never walks an `Error`
-                // placeholder node — `reify` stays "real TIR for well-formed
-                // code only", while Phase 1 still records the use→def edges the
-                // LSP needs on the broken module.
-                let sem_ref = state
-                    .module_semantics
-                    .get(module_source)
-                    .expect("just re-installed above");
-                let mut reify = super::reify::Reify::new(
-                    state.tysys.clone(),
-                    sem_ref,
-                    &state.module_semantics,
-                    symbols,
-                    modules,
-                    logger,
-                    Rc::clone(&state.interner),
-                );
-                if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
-                    result.insert(module_source.clone(), reified);
+                reify_eligible.insert(module_source.clone());
+            }
+        }
+
+        // Liveness — source-level reachability over every module's recorded
+        // references, between `annotate_bodies` and `reify` (WEP 2026-05-26
+        // phase order). The flattened view mirrors what `Semantics` builds
+        // later; computing it here lets reify gate item emission on the live
+        // set and the unused-diagnostics emitter read `dead_items`.
+        {
+            let mut references: IndexMap<crate::symbol::SymbolKey, crate::symbol::SymbolKey> =
+                IndexMap::default();
+            for sem in state.module_semantics.values() {
+                for (use_key, def_key) in &sem.bindings.references {
+                    references.insert(use_key.clone(), def_key.clone());
+                }
+            }
+            let export_names: crate::hashmap::IndexSet<String> = state
+                .world_registry
+                .all_export_names()
+                .map(str::to_string)
+                .collect();
+            state.liveness = super::liveness::compute(modules, &references, &export_names);
+        }
+
+        // Phase 2 — `reify`: rehydrate stdlib TIR from the snapshot and reify
+        // the eligible user modules, gating free-function / global emission on
+        // `live_items`. Iterating `sorted_sources` keeps `result`'s insertion
+        // order identical to the single-pass form downstream phases expect.
+        if build_tir {
+            for module_source in &sorted_sources {
+                if is_stdlib_snapshot_hit(module_source) {
+                    let snap_module = snapshot
+                        .and_then(|s| s.tir_modules.get(module_source))
+                        .expect("stdlib snapshot hit implies a cached TirModule");
+                    result.insert(
+                        module_source.clone(),
+                        crate::stdlib_snapshot::rehydrate_tir_module(
+                            snap_module,
+                            &state.tysys.type_table,
+                            &mut fn_remap,
+                        ),
+                    );
+                } else if reify_eligible.contains(module_source) {
+                    let module = modules.get(module_source).expect("module should exist");
+                    logger.set_file(module_source.diagnostic_filename());
+                    let sem_ref = state
+                        .module_semantics
+                        .get(module_source)
+                        .expect("populated by Phase 1");
+                    let mut reify = super::reify::Reify::new(
+                        state.tysys.clone(),
+                        sem_ref,
+                        &state.module_semantics,
+                        symbols,
+                        modules,
+                        logger,
+                        Rc::clone(&state.interner),
+                        // Gate dead free-function emission on the live set
+                        // (globals are emitted unconditionally; see
+                        // `reify_module`). The semantic diagnostics (effect /
+                        // stores / purity) are produced from `Semantics`, not
+                        // the emitted TIR (Design B), so dropping a dead
+                        // function no longer suppresses any diagnostic. The
+                        // liveness graph traces bodies, global initializers,
+                        // parameter defaults, and struct field defaults so every
+                        // reify-emitted call site keeps its callee live.
+                        Some(&state.liveness.live_items),
+                    );
+                    if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
+                        result.insert(module_source.clone(), reified);
+                    }
                 }
             }
         }

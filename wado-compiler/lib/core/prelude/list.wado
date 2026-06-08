@@ -191,6 +191,31 @@ impl List<T> {
         self.used = new_used;
     }
 
+    /// Extends this list with the elements of a slice in a single bulk copy
+    /// (one `array_copy`, no per-element bounds checks). The slice may view a
+    /// different backing array than this list. Taken by value because a slice is
+    /// a cheap view (a backing reference plus two offsets), which also lets a
+    /// newtype view (e.g. `ByteSlice`) coerce to `ArraySlice<T>` at the call.
+    pub fn extend_from_slice(&mut self, other: ArraySlice<T>) {
+        let other_len = other.len();
+        if other_len == 0 {
+            return;
+        }
+        let new_used = self.used + other_len;
+        if new_used > builtin::array_len(&self.repr) {
+            builtin::cold_path();
+            self.grow_to(new_used);
+        }
+        builtin::array_copy(
+            &mut self.repr,
+            self.used,
+            other.internal_repr(),
+            other.internal_start(),
+            other_len,
+        );
+        self.used = new_used;
+    }
+
     /// Reverses the elements in place.
     pub fn reverse(&mut self) {
         let mut lo = 0;

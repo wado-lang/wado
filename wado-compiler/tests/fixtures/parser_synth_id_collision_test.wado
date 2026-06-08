@@ -1,0 +1,361 @@
+//! Regression: a module that calls methods on imported WASI resources
+//! (`Descriptor`, `Stream`, …) alongside imported sub-modules used to ICE
+//! with `[WIR] unresolved Call: name="section_header_of"`.
+//!
+//! Root cause: method-info lookup resolves a (foreign) resource/impl
+//! method's parameter and return types to compute its signature. Those
+//! type-name references were recorded into the `(ModuleSource, AstId)`-keyed
+//! `references` map under `current_module_source` — the *consumer* — even
+//! though the resolved nodes are owned by the WASI module. Because `AstId`s
+//! are dense per module, a foreign signature node's id (e.g. an `ErrorCode`
+//! reference) collided with a real entry-module call node's id and clobbered
+//! its use→def edge. Source-level liveness then marked the still-reachable
+//! `section_header_of` dead, reify gating dropped it, and WIR build hit an
+//! unresolved call.
+//!
+//! Fix: suppress use→def recording while a type-checking query resolves a
+//! declaration's signature (`lookup_method_info`). Those edges are already
+//! recorded — under the correct owning module — when that module is
+//! annotated, so suppression both removes the mis-attribution and prevents
+//! the collision. Reify gating is retained.
+
+//! Extract ANTLR4 runtime-testsuite descriptors into Wado parse-only tests.
+//!
+//! Source:  vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/runtime/descriptors/
+//! Outputs:
+//!   package-gale/tests/antlr4-compat/grammars/<Category>/<Name>.g4
+//!   package-gale/tests/antlr4-compat/<category>_test.wado
+//!
+//! Triage data lives in package-gale/tests/antlr4-compat/status.toml:
+//!   [todo]
+//!   "LexerExec/CharSetWithMissingEscapeChar" = "Gale rejects malformed escape"
+//!   [skip]
+//!   "Listeners/SomeJavaSpecific" = "target-language only"
+//!
+//! The script never initializes the antlr4 submodule itself. If the source
+//! directory is missing it errors out with instructions and exits non-zero.
+//!
+//! Usage (from the repository root):
+//!   wado run package-gale/scripts/extract_antlr4_descriptors.wado [Category ...]
+//!   wado run package-gale/scripts/extract_antlr4_descriptors.wado all
+//!
+//! Default categories (Phase 1): Sets, LexerExec, ParseTrees.
+
+use { args, env, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use {
+    Preopens,
+    Descriptor,
+    DescriptorType,
+    DescriptorFlags,
+    PathFlags,
+    OpenFlags,
+    DirectoryEntry,
+    Filesize,
+} from "wasi:filesystem";
+use { ErrorCode } from "wasi:filesystem/types.wado";
+use { synth_id_a } from "./sub/parser_synth_id_a.wado";
+use { synth_id_b } from "./sub/parser_synth_id_b.wado";
+use { synth_id_c } from "./sub/parser_synth_id_c.wado";
+
+// ===== Constants =====
+
+fn descriptors_root() -> String {
+    return "vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/runtime/descriptors";
+}
+
+/// Root of the generated artefacts (everything compat-related lives here).
+fn compat_root_dir() -> String {
+    return "package-gale/tests/antlr4-compat";
+}
+
+/// Subdirectory holding the extracted `.g4` files (`<Category>/<Name>.g4`).
+fn grammars_subdir() -> String {
+    return "grammars";
+}
+
+/// Path to the triage file relative to repo root.
+fn status_file_path() -> String {
+    return "package-gale/tests/antlr4-compat/status.toml";
+}
+
+fn default_categories() -> List<String> {
+    return ["Sets", "LexerExec", "ParseTrees"];
+}
+
+/// `#![generated(by = ...)]` attribute string written at the top of every
+/// generated test file. The `by` value is the canonical path of the
+/// generator script (relative to repo root) per the Wado convention used
+/// by `wado-from-idl` etc.
+fn generator_attr() -> String {
+    return "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado\")]";
+}
+
+// ===== Descriptor format =====
+
+fn is_known_section(name: &String) -> bool {
+    return match *name {
+        "notes" | "type" | "grammar" | "slaveGrammar" | "start" | "input" | "output" | "errors" | "flags" | "skip" => true,
+        _ => false,
+    };
+}
+
+struct DescriptorPair {
+    name: String,
+    value: String,  // raw collected value, before post-processing
+}
+
+struct ParsedDescriptor {
+    grammar: String,
+    slave_grammars: List<String>,
+    /// `[type]` block — `Parser`, `Lexer`, `CompositeParser`, or
+    /// `CompositeLexer`. Stage A only emits for `Parser` because Gale's
+    /// generated `parse(&input)` entry point exists only for parser-type
+    /// grammars; lexer-only descriptors are deferred to Stage L.
+    descriptor_type: String,
+    /// `[input]` block — the raw test input fed to the generated parser.
+    /// Empty when the descriptor declares no `[input]` (lexer-only smoke
+    /// tests, etc.).
+    input: String,
+    /// `[output]` block — the expected `to_string_tree()` (or host-language
+    /// artefact) the upstream test runner asserts. Empty when missing.
+    /// Stage B's `normalize_output_for_stage_b` decides whether this is a
+    /// parse-tree shape we can compare against.
+    output: String,
+    /// `[errors]` block — non-empty when the descriptor expects the parser
+    /// to report errors. Stage A (parse-accepts-input) auto-skips
+    /// error-bearing descriptors because the input is not guaranteed to
+    /// parse to `Ok`; those are Stage E territory.
+    errors: String,
+    /// `[start]` field — the rule the upstream runner enters at. Gale's
+    /// generated parser exposes both `parse(input)` (an alias for the
+    /// first parser rule) and `parse_<rule>(input)` for every parser
+    /// rule, so the emitted Stage A drivers dispatch via
+    /// `t::parse_<start>(&input)` when this field is non-empty and via
+    /// `t::parse(&input)` otherwise. See `parse_call_for_start`.
+    start: String,
+}
+
+/// Mirrors `RuntimeTestDescriptorParser.parse` — section detection plus the
+/// triple-quote / trailing-newline post-processing applied to each value.
+/// We only return the fields we care about (grammar text + slave grammars).
+fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
+    let mut pairs: List<DescriptorPair> = [];
+    let mut current_name: String = "";
+    let mut have_current = false;
+    let mut current_value = String::with_capacity(256);
+
+    for let line of text.lines() {
+        let section_name = section_header_of(&line);
+        match section_name {
+            Some(name) => {
+                if have_current {
+                    pairs.push(DescriptorPair {
+                        name: current_name,
+                        value: current_value,
+                    });
+                }
+                current_name = name;
+                have_current = true;
+                current_value = String::with_capacity(256);
+            },
+            None => {
+                current_value.push_str(&line);
+                current_value.push('\n');
+            },
+        }
+    }
+    if have_current {
+        pairs.push(DescriptorPair {
+            name: current_name,
+            value: current_value,
+        });
+    }
+
+    let mut grammar: String = "";
+    let mut slaves: List<String> = [];
+    let mut descriptor_type: String = "";
+    let mut input: String = "";
+    let mut output: String = "";
+    let mut errors: String = "";
+    let mut start: String = "";
+    for let p of pairs {
+        let processed = post_process(&p.value);
+        match p.name {
+            "grammar" => {
+                grammar = unescape_st_text(&processed);
+            },
+            "slaveGrammar" => {
+                slaves.push(unescape_st_text(&processed));
+            },
+            "type" => {
+                descriptor_type = processed.trim();
+            },
+            "input" => {
+                input = processed;
+            },
+            "output" => {
+                output = processed;
+            },
+            "errors" => {
+                errors = processed;
+            },
+            "start" => {
+                start = processed;
+            },
+            _ => {
+            },
+        }
+    }
+    return ParsedDescriptor {
+        grammar,
+        slave_grammars: slaves,
+        descriptor_type,
+        input,
+        output,
+        errors,
+        start,
+    };
+}
+
+/// Mirror StringTemplate's text-mode escape handling for the descriptor's
+/// `[grammar]` / `[slaveGrammar]` blocks. The upstream test runner wraps
+/// the descriptor text in `new ST(group, descriptor.grammar)` with `<` /
+/// `>` delimiters before handing it to `antlr4`, so any literal that needs
+/// to survive ST as `\` must be written as `\\` in the descriptor (and any
+/// literal `<` / `>` as `\<` / `\>`). Without this step, descriptors like
+/// `LETTERS : ('a'|'\\u00E0'..'\\u00E5')` reach the g4 parser with the
+/// 6-character escape text `\u00E0`, which cannot serve as a range bound.
+///
+/// We deliberately leave non-delimiter backslash sequences (`\n`, `\u…`,
+/// `\t`, …) intact: ST's text mode does not interpret them, so passing
+/// them through preserves the upstream-equivalent input for the g4 lexer.
+fn unescape_st_text(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    let chars: List<char> = s.chars().collect();
+    let n = chars.len();
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        if c == '\\' && i + 1 < n {
+            let next = chars[i + 1];
+            if next == '\\' || next == '<' || next == '>' {
+                out.push(next);
+                i += 2;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    return out;
+}
+
+/// If `line` is a known `[section]` header, return the section name.
+fn section_header_of(line: &String) -> Option<String> {
+    if line.len() <= 2 {
+        return null;
+    }
+    if !line.starts_with("[") {
+        return null;
+    }
+    let last_idx = line.len() - 1;
+    if line.get_byte_unchecked(last_idx) != 0x5D {
+        // ']'
+        return null;
+    }
+    let candidate = line.substr_bytes(1, last_idx);
+    if !is_known_section(&candidate) {
+        return null;
+    }
+    return Option::Some(candidate);
+}
+
+/// Apply the same trim / triple-quote / trailing-newline rules as
+/// RuntimeTestDescriptorParser.parse.
+fn post_process(raw: &String) -> String {
+    let trimmed = raw.trim();
+    if trimmed.starts_with("\"\"\"") {
+        return trimmed.replace("\"\"\"", "");
+    }
+    if trimmed.contains("\n") {
+        let mut s = String::with_capacity(trimmed.len() + 1);
+        s.push_str(&trimmed);
+        s.push('\n');
+        return s;
+    }
+    return trimmed;
+}
+
+// ===== Status file =====
+
+variant Triage {
+    Pass,
+    Todo(String),  // reason
+    Skip(String),  // reason
+}
+
+fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorCode> {
+    let opened = match dir.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait() {
+        Ok(file) => file,
+        Err(e) => {
+            return Result::Err(e);
+        },
+    };
+    let [stream, done] = opened.read_via_stream(0 as Filesize);
+    let mut bytes: List<u8> = [];
+    loop {
+        let chunk = stream.read(8192);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            bytes.push(b);
+        }
+    }
+    stream.drop();
+    done.drop();
+    return match String::from_utf8(bytes) {
+        Ok(s) => Result::Ok(s),
+        Err(_) => Result::Err(ErrorCode::IllegalByteSequence),
+    };
+}
+
+fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
+    let file = match dir.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => {
+            return Result::Err(e);
+        },
+    };
+    let bytes: List<u8> = content.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write(bytes);
+    tx.drop();
+    sub.drop();
+    return Result::Ok(());
+}
+
+/// Remove a regular file. `Err(NoEntry)` is treated like other errors — the
+/// caller decides whether a missing file is fatal (typical use is "best
+/// effort cleanup", where any failure is silently ignored).
+
+export fn run() with Stdout {
+    let text = String::from("[grammar]\nfoo\n[input]\nbar");
+    let d = parse_descriptor_text(&text);
+    println(`{d.grammar}`);
+}
+__DATA__
+{
+    "stdout": "foo\n"
+}

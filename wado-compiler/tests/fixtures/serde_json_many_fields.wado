@@ -1,0 +1,48 @@
+// Deserialize for a struct with more than 32 fields, covering a required field
+// past index 31, a `#[serde(default)]` field, and a missing required field.
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct Wide {
+    f0: i32, f1: i32, f2: i32, f3: i32, f4: i32, f5: i32, f6: i32, f7: i32,
+    f8: i32, f9: i32, f10: i32, f11: i32, f12: i32, f13: i32, f14: i32, f15: i32,
+    f16: i32, f17: i32, f18: i32, f19: i32, f20: i32, f21: i32, f22: i32, f23: i32,
+    f24: i32, f25: i32, f26: i32, f27: i32, f28: i32, f29: i32, f30: i32, f31: i32,
+    f32: i32,
+    #[serde(default)]
+    f33: i32,
+}
+
+impl Serialize for Wide;
+impl Deserialize for Wide;
+
+test "wide struct roundtrip preserves fields past index 31" {
+    let w = Wide {
+        f0: 0, f1: 1, f2: 2, f3: 3, f4: 4, f5: 5, f6: 6, f7: 7,
+        f8: 8, f9: 9, f10: 10, f11: 11, f12: 12, f13: 13, f14: 14, f15: 15,
+        f16: 16, f17: 17, f18: 18, f19: 19, f20: 20, f21: 21, f22: 22, f23: 23,
+        f24: 24, f25: 25, f26: 26, f27: 27, f28: 28, f29: 29, f30: 30, f31: 31,
+        f32: 320,
+        f33: 330,
+    };
+    let json = to_string::<Wide>(&w).expect("serialize failed");
+    let parsed = from_string::<Wide>(json).expect("deserialize failed");
+    assert parsed.f0 == 0;
+    assert parsed.f31 == 31;
+    assert parsed.f32 == 320;
+    assert parsed.f33 == 330;
+}
+
+test "wide struct default applies to omitted field past index 31" {
+    let parsed = from_string::<Wide>("{\"f0\":0,\"f1\":1,\"f2\":2,\"f3\":3,\"f4\":4,\"f5\":5,\"f6\":6,\"f7\":7,\"f8\":8,\"f9\":9,\"f10\":10,\"f11\":11,\"f12\":12,\"f13\":13,\"f14\":14,\"f15\":15,\"f16\":16,\"f17\":17,\"f18\":18,\"f19\":19,\"f20\":20,\"f21\":21,\"f22\":22,\"f23\":23,\"f24\":24,\"f25\":25,\"f26\":26,\"f27\":27,\"f28\":28,\"f29\":29,\"f30\":30,\"f31\":31,\"f32\":32}").expect("deserialize failed");
+    assert parsed.f32 == 32;
+    assert parsed.f33 == 0;
+}
+
+test "wide struct missing required field at index 32 errors" {
+    let r = from_string::<Wide>("{\"f0\":0,\"f1\":1,\"f2\":2,\"f3\":3,\"f4\":4,\"f5\":5,\"f6\":6,\"f7\":7,\"f8\":8,\"f9\":9,\"f10\":10,\"f11\":11,\"f12\":12,\"f13\":13,\"f14\":14,\"f15\":15,\"f16\":16,\"f17\":17,\"f18\":18,\"f19\":19,\"f20\":20,\"f21\":21,\"f22\":22,\"f23\":23,\"f24\":24,\"f25\":25,\"f26\":26,\"f27\":27,\"f28\":28,\"f29\":29,\"f30\":30,\"f31\":31,\"f33\":33}");
+    assert r matches { Err(_) };
+}
+
+__DATA__
+{"test": {}}

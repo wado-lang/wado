@@ -349,7 +349,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<MethodInfo> {
         // First, get the base (non-reference) type for method lookup
         let base_type_id = self.get_base_type(receiver_type);
-        self.lookup_method_info_uncached(base_type_id, method_name)
+        // Resolving the method's signature here walks a (possibly foreign)
+        // declaration's parameter / return type AST. Those nodes are owned by
+        // the declaring module and already have their use→def edges recorded
+        // when that module is annotated; re-recording them under the consumer
+        // would mis-key the use and can clobber a real edge via an AstId
+        // collision. Suppress recording for the whole query.
+        self.with_reference_recording_suppressed(|s| {
+            s.lookup_method_info_uncached(base_type_id, method_name)
+        })
     }
 
     fn lookup_method_info_uncached(

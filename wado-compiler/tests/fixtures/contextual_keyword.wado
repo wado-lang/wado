@@ -9,6 +9,7 @@ fn test_param(flags: i32, type: i32, of: i32) -> i32 {
 
 struct Item {
     of: i32,
+    type: i32,
 }
 
 export fn run() with Stdout {
@@ -25,9 +26,10 @@ export fn run() with Stdout {
     let result = test_param(flags, type, of);
     println(`test_param result = {result}`);
 
-    // Test as struct field
-    let item = Item { of: 42 };
+    // Test as struct field (including `type` as a field name and field access)
+    let item = Item { of: 42, type: 7 };
     println(`item.of = {item.of}`);
+    println(`item.type = {item.type}`);
 
     // Test in for-of binding
     let arr: List<i32> = [1, 2, 3];
@@ -42,4 +44,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "flags + type + of = 60\ntest_param result = 60\nitem.of = 42\nfor-of flags = 1\nfor-of flags = 2\nfor-of flags = 3\nfor-of of = 1\nfor-of of = 2\nfor-of of = 3\n"}
+{"stdout": "flags + type + of = 60\ntest_param result = 60\nitem.of = 42\nitem.type = 7\nfor-of flags = 1\nfor-of flags = 2\nfor-of flags = 3\nfor-of of = 1\nfor-of of = 2\nfor-of of = 3\n"}

@@ -18,6 +18,7 @@ mod expr;
 mod handlers;
 mod infer;
 mod item;
+pub(crate) mod liveness;
 mod matches;
 mod method_call;
 mod method_lookup;
@@ -227,6 +228,23 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// consume the result (Stage 5); `false` for the production / LSP
     /// path so their annotation maps are left exactly as before.
     pub(super) capture_tuple_overlays: bool,
+    /// When `true`, the single use→def edge sink [`Self::insert_reference`]
+    /// (which every `record_*` helper funnels through) drops edges instead of
+    /// recording them. Set while a *type-checking query* resolves a
+    /// declaration's signature whose AST nodes belong to another declaration —
+    /// most notably [`Self::lookup_method_info`], which resolves a method's
+    /// parameter / return types from a (possibly foreign) `impl` / `resource`
+    /// declaration to compute its `MethodInfo`.
+    ///
+    /// Those signature nodes are owned by the declaring module and already get
+    /// their use→def edges recorded when that module is annotated
+    /// (`resolve_resource_decl`, the impl-method walk). Re-recording them here
+    /// keys the *use* under `current_module_source` (the consumer), not the
+    /// owning module — and because `AstId`s are dense per module, a foreign
+    /// node's id can collide with a real node's id in the consumer and clobber
+    /// a genuine edge. Suppressing keeps `references` keyed by the true
+    /// `(owning_module, ast_id)` of each use.
+    pub(super) suppress_reference_recording: bool,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -345,6 +363,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         result
     }
 
+    /// Run `body` with use→def reference recording suppressed, restoring the
+    /// previous setting on return. Used by type-checking queries that resolve
+    /// foreign declaration signatures (see
+    /// [`Self::suppress_reference_recording`]).
+    pub(super) fn with_reference_recording_suppressed<R>(
+        &mut self,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let saved = std::mem::replace(&mut self.suppress_reference_recording, true);
+        let result = body(self);
+        self.suppress_reference_recording = saved;
+        result
+    }
+
+    /// The single sink for every use→def edge. All `record_*` helpers funnel
+    /// through here, so the [`Self::suppress_reference_recording`] gate lives in
+    /// exactly one place: when set, the edge is dropped rather than mis-keyed
+    /// under the consumer module (see the field docs).
+    fn insert_reference(&mut self, use_key: SymbolKey, def_key: SymbolKey) {
+        if self.suppress_reference_recording {
+            return;
+        }
+        self.sem.bindings.references.insert(use_key, def_key);
+    }
+
     /// Record that an identifier resolved to a local binding in the current
     /// module. Both `use_id` and `def_id` live in `current_module_source`.
     pub(super) fn record_reference(
@@ -354,7 +397,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) {
         let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
         let def_key = SymbolKey::new(self.current_module_source.clone(), def_id);
-        self.sem.bindings.references.insert(use_key, def_key);
+        self.insert_reference(use_key, def_key);
     }
 
     /// Record a use→def reference when the definition lives in a (possibly
@@ -367,7 +410,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         def_key: SymbolKey,
     ) {
         let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
-        self.sem.bindings.references.insert(use_key, def_key);
+        self.insert_reference(use_key, def_key);
     }
 
     /// Record a use→def reference where the defining declaration is
@@ -397,10 +440,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         };
         let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
-        self.sem
-            .bindings
-            .references
-            .insert(use_key, sym.defined_at.clone());
+        let def_key = sym.defined_at.clone();
+        self.insert_reference(use_key, def_key);
     }
 
     /// Record use→def edges for a `TypeName::CaseName` qualified path

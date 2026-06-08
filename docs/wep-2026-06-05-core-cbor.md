@@ -375,13 +375,15 @@ API above.
 
 Typed timestamps map to [`core:temporal`](./wep-2026-06-05-core-temporal.md):
 
-- CBOR tag 1 (epoch-based, numeric) ↔ `Instant`.
-- CBOR tag 0 (RFC 3339 text) ↔ `ZonedDateTime`.
-- In JSON, both serialize as an RFC 3339 string.
+- Encode: both serialize as an RFC 3339 text string, wrapped in the standard
+  date/time tag 0 (RFC 8949 §3.4.1) under CBOR and emitted bare under JSON.
+- Decode: both accept an RFC 3339 string (tag 0 / JSON string) or an
+  epoch-seconds number (tag 1 / JSON number, read as UTC). Tag passthrough
+  (§6.1) makes the tag number advisory, so either tag decodes into either type.
 
-These serde impls live in `core:cbor`/`core:json` and depend on the
-`core:temporal` MVP types. Because `core:temporal` ships definitions first, the
-impls are tracked as TODO here rather than blocking the format work.
+The impls are format-agnostic and live in `core:temporal` itself, shared by
+`core:cbor` and `core:json` through a `Serializer::serialize_tag` hook (a no-op
+for tagless formats).
 
 ### Module/source layout
 
@@ -416,13 +418,14 @@ already share code.
 - `to_bytes_canonical` is deterministic for integers, lengths, and map order but
   not byte-identical to a reference encoder for floats (no `f16`) — a documented
   COSE caveat.
-- This WEP specifies the design; `core:cbor`/`core:temporal` serde
-  implementations are deferred (see TODO).
+- This WEP specifies the design; the format and its typed date/time mapping are
+  implemented. Lossy CBOR→JSON via `Value` remains deferred (see TODO).
 
 ## TODO
 
-The groundwork below is complete; the `core:cbor` encoder/decoder and its
-tags/tests remain (the format itself, a follow-up).
+The groundwork, the `core:cbor` format itself (encoder, decoder, canonical
+encoding), and the typed `core:temporal` date/time mapping are complete. The
+remaining item is lossy CBOR→JSON conversion.
 
 - [x] Vendor RFC 8949 at `wado-compiler/ref/rfc8949.txt`
 - [x] prelude: `AsByteSlice` trait — new, since Wado has only `From`/`TryFrom`
@@ -442,9 +445,34 @@ tags/tests remain (the format itself, a follow-up).
       as thin convenience wrappers rather than removed.
 - [x] `core:value` (replacing `core:json_value`)
 - [x] `to_bytes_canonical` for JSON (sorted keys, RFC 8785-style)
-- [ ] `core:cbor` encoder (preferred serialization)
-- [ ] `core:cbor` decoder (variation-tolerant, definite + indefinite)
-- [ ] `to_bytes_canonical` for CBOR (sorted keys, shortest forms)
-- [ ] tags: bignum (2/3); date/time (0/1) via `core:temporal`
-- [ ] tests: RFC 8949 Appendix A vectors, round-trip, canonical determinism,
+- [x] serde: `visit_undefined` (default → `visit_null`) so `core:value` can
+      realize `Value::Undefined` from CBOR simple value 23 — a gap in the
+      original `Visitor` completion, found while implementing the decoder.
+- [x] `core:cbor` encoder (preferred serialization) in `lib/core/cbor.wado`
+- [x] `core:cbor` decoder (variation-tolerant, definite + indefinite, bounded
+      recursion, no length-driven preallocation, duplicate/trailing/UTF-8
+      checks)
+- [x] `to_bytes_canonical` for CBOR (encoded-key bytewise sort, shortest forms;
+      float ladder stops at binary32 — documented `f16` caveat)
+- [x] tags: bignum (2/3, encode + decode); self-described (55799) unwrap;
+      date/time tag 0 (RFC 3339 text) unwraps on decode so a tag-0-wrapped
+      `ZonedDateTime`/`Instant` decodes via its string `Deserialize`. In
+      `core:value`, tags 0/1/21/22/23/55799 decode by their content per
+      RFC 8949 §6.1.
+- [x] tests: RFC 8949 Appendix A vectors, round-trip, canonical determinism,
       well-formedness/Appendix F rejection, security limits
+      (`lib/core/cbor_test.wado`)
+- [x] compiler fixes uncovered by the format work (CBOR is the first
+      length-prefixed serde format, so it exercised paths JSON never did):
+      (1) variant-return SROA now rewrites `Return`s hidden inside an `if`/
+      `while` condition (the `?`-in-condition shape in synthesized
+      `next_field`), instead of changing the signature and leaving a boxed
+      return; (2) `[..T].len()` in a generic body now yields the monomorphized
+      arity rather than the unsubstituted pack count of 1 (deferred via a new
+      `TirExprKind::TupleLen`, mirroring `TupleZip`).
+- [x] typed date/time mapping: `Instant`/`ZonedDateTime` emit tag 0 (RFC 3339
+      text) via a `Serializer::serialize_tag` hook, and decode a string (tag 0)
+      or a numeric epoch (tag 1) through a `deserialize_any` visitor. The impls
+      live in `core:temporal`.
+- [ ] lossy CBOR→JSON via `Value` (RFC 8949 §6.1 substitution: bytes→base64,
+      `undefined`/non-finite→`null`); the default still errors.

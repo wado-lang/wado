@@ -1,0 +1,14 @@
+// A private function with no caller is reported as dead code, while the
+// `export fn run()` entry point (a world-export root) is never reported.
+fn unused_helper() -> i32 {
+    return 1;
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_contains": ["function `unused_helper` is never used"],
+    "warnings_not_contains": ["function `run` is never used"]
+}

@@ -3079,6 +3079,16 @@ Returns a by-value iterator over the slice.
 
 Copies the slice's elements into a new `Array<T>`.
 
+#### `pub fn internal_repr(&self) -> &Array<T>`
+
+Internal: the backing array this slice views. Paired with
+`internal_start`, lets bulk-copy paths (`List::extend_from_slice`)
+`array_copy` directly from the view without a temporary.
+
+#### `pub fn internal_start(&self) -> i32`
+
+Internal: the start offset of this slice within its backing array.
+
 #### `impl IndexValue<i32> for ArraySlice<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
@@ -3782,6 +3792,14 @@ Shrinks the capacity to match the current length.
 #### `pub fn extend(&mut self, other: &List<T>)`
 
 Extends this list with elements from another list.
+
+#### `pub fn extend_from_slice(&mut self, other: ArraySlice<T>)`
+
+Extends this list with the elements of a slice in a single bulk copy
+(one `array_copy`, no per-element bounds checks). The slice may view a
+different backing array than this list. Taken by value because a slice is
+a cheap view (a backing reference plus two offsets), which also lets a
+newtype view (e.g. `ByteSlice`) coerce to `ArraySlice<T>` at the call.
 
 #### `pub fn reverse(&mut self)`
 

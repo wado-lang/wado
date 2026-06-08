@@ -283,7 +283,7 @@ set -xe -o pipefail
 cargo build --bin wado --quiet
 
 CORE_MODULES="core:prelude core:cli core:collections core:base64 core:zlib \
-  core:serde core:json core:json_nsd core:value core:simd core:url core:kiln \
+  core:serde core:json core:json_nsd core:value core:cbor core:simd core:url core:kiln \
   core:benchmark core:router core:digest core:uuid core:temporal"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
@@ -491,6 +491,10 @@ run = "mise run -C benchmark fts"
 [tasks.benchmark-json-twitter]
 description = "Run json-twitter benchmark"
 run = "mise run -C benchmark json-twitter"
+
+[tasks.benchmark-cbor]
+description = "Run cbor ser/de benchmark (serde_cbor vs @msgpack/msgpack vs Wado core:cbor)"
+run = "mise run -C benchmark cbor"
 
 [tasks.benchmark-json-canada]
 description = "Run json-canada benchmark"
