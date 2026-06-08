@@ -18,12 +18,15 @@
 //! plus the program-wide CTFE callee map, applied through the engine's edit API
 //! so the worklist and use index stay coherent.
 //!
-//! Two rules keep their own standalone engine passes:
+//! `match_to_switch` (dense `Match` → `Switch`) also runs here as a rule:
+//! folding it into the shared session means a function's `Match` lowering reuses
+//! the same engine the other rules already build, instead of a separate
+//! per-function session each iteration. Global initializer bodies are not
+//! visited by the function-level loop, so their `Match` lowering runs once via
+//! `match_to_switch_globals`, and `-O0` (loop skipped) keeps `match_to_switch_all`.
 //!
-//! - `match_to_switch` must run before every other in-loop pass (so they see
-//!   the `Switch` shape) and also runs at `-O0`, where the loop is skipped.
-//! - `select_lowering` is a terminal post-loop lowering (`If` → `select`) that
-//!   must run after all other transformations.
+//! `select_lowering` stays a terminal post-loop lowering (`If` → `select`) that
+//! must run after all other transformations.
 //!
 //! The pass is invoked at two points in the fixed-point loop — before `inline`
 //! (after value-copy elision / demotion so `string_push` sees the stripped
@@ -42,11 +45,22 @@ use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map};
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
+use super::match_to_switch::MatchToSwitchRule;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
 
 /// Run the unified peephole rule set over every function body. Returns whether
 /// any rule fired. Gated: skips functions unchanged since this pass last ran.
-pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+///
+/// `include_match` adds `MatchToSwitchRule` to the set. It is set on the
+/// pre-inline run only: that run lowers every reachable `Match` to `Switch`
+/// before `inline` copies bodies, so the post-inline run would only re-scan
+/// already-`Switch` bodies. A `Match` a later rewrite plants is caught by the
+/// next iteration's pre-inline run, matching the old once-per-iteration pass.
+pub(super) fn run_peephole(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    include_match: bool,
+) -> bool {
     // Whole-package contexts, resolved once before the mutable body walk.
     let push_names = resolve_array_push_names(project);
     let array_rule = Collapser::new(&push_names);
@@ -59,6 +73,7 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate) ->
     let callees = build_callee_map(project);
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
+    let match_rule = MatchToSwitchRule::new(&type_table);
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
@@ -71,12 +86,16 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate) ->
         let Some(body) = func.body.as_mut() else {
             return false;
         };
-        let mut rules: Vec<&dyn Rule> = vec![
-            &array_rule,
+        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(6);
+        if include_match {
+            rules.push(&match_rule);
+        }
+        rules.extend([
+            &array_rule as &dyn Rule,
             &elide_rule,
             &const_fold_rule,
             &branch_prune_rule,
-        ];
+        ]);
         if let Some(push_rule) = push_rule.as_ref() {
             rules.push(push_rule);
         }

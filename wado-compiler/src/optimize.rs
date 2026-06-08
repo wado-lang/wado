@@ -4,8 +4,11 @@
 //! ordering rationale lives in [`docs/optimizer.md`](../../../docs/optimizer.md);
 //! the inventory below is just an index of the modules under `optimize/`.
 //!
+//! Dense `Match` → `Switch` lowering runs as `MatchToSwitchRule` inside the
+//! unified `peephole` session (item 5) for functions; global initializer bodies
+//! are lowered once by `match_to_switch_globals` before the loop.
+//!
 //! Fixed-point loop ([`run_optimization_passes`], in order):
-//! 1.  `match_to_switch` — dense `Match` → `Switch` lowering.
 //! 2.  `container_sroa` — `AoS` → `SoA` for `List<Tuple<...>>` / `List<Struct>`.
 //! 3.  `value_copy_elide` — strip `$value_copy$T<id>` wrappers on read-only
 //!     bindings.
@@ -101,7 +104,7 @@ use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
 use licm::apply_licm;
-use match_to_switch::{match_to_switch, match_to_switch_all};
+use match_to_switch::{match_to_switch_all, match_to_switch_globals};
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
@@ -488,6 +491,13 @@ fn run_optimization_passes(
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
     let mut gate = gate::FunctionGate::new(project);
+    // Dense `Match` → `Switch` in global initializer bodies. Functions are
+    // lowered by `MatchToSwitchRule` inside the unified peephole session; the
+    // function-level loop never mutates global initializer bodies, so a single
+    // pass over globals here is equivalent to running it each iteration.
+    run_pass("nir/match_to_switch_globals", project, profiler, |p| {
+        match_to_switch_globals(p)
+    });
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
         let mut changed = false;
@@ -506,14 +516,14 @@ fn run_optimization_passes(
                 }
             }};
         }
-        // Dense-int / dense-enum `Match` → `Switch` is a codegen-
-        // friendly late lowering the optimizer materialises (see WEP
-        // 2026-05-11). Running it first lets every subsequent pass in
-        // the iteration see the `Switch` shape its variant-walking arms
-        // already handle. Subsequent iterations only see fresh `Match`
-        // shapes if `inline` (or a future shape-rewriting pass) plants
-        // them, in which case this pass reconverges on iteration N+1.
-        gated!("nir/match_to_switch", match_to_switch);
+        // Dense-int / dense-enum `Match` → `Switch` is a codegen-friendly late
+        // lowering (see WEP 2026-05-11). It runs as `MatchToSwitchRule` inside
+        // the unified peephole session below: the pre-inline `peephole` run
+        // converts every function's `Match` to `Switch` before `inline`, so
+        // inline still sees `Switch`-shaped bodies, and the worklist reconverges
+        // on any `Match` a later rewrite plants. `container_sroa` /
+        // `value_copy_*` run before that first `peephole` and so see `Match`,
+        // which is fine — neither keys on the `Switch` shape.
         // Container SROA must run *before* inline in each iteration: inline
         // expands trait methods like `IndexValue::index_value` into raw
         // `builtin::array_get` + field-access pairs, after which the
@@ -571,8 +581,10 @@ fn run_optimization_passes(
         // the duplicable-receiver check sees the stripped receiver. This run
         // also hosts `const_branch_prune` (trivial-block / dead-statement
         // cleanup); it keys only on block structure, so `copy_prop` — not pass
-        // ordering — is what folds the inliner's parameter copies.
-        gated!("nir/peephole", peephole::run_peephole);
+        // ordering — is what folds the inliner's parameter copies. This
+        // pre-inline run also hosts `MatchToSwitchRule` (`include_match =
+        // true`), lowering every `Match` to `Switch` before `inline`.
+        gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, true));
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
         // case) to take the inner scalar directly. Runs before `nir/inline`
@@ -602,8 +614,10 @@ fn run_optimization_passes(
         // self.field.push` delegation) are inlined into the raw `array_new +
         // push` window, direct or field-rooted. Later `cse` / `const_fold` in
         // this same loop then see the normalized literal. `elide_local` runs
-        // again here over inline's freshly dead bindings.
-        gated!("nir/peephole", peephole::run_peephole);
+        // again here over inline's freshly dead bindings. No `MatchToSwitchRule`
+        // here (`include_match = false`): the pre-inline run already lowered
+        // every reachable `Match`, and `inline` copies `Switch`-shaped bodies.
+        gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, false));
         // Adjacent-use Box-local elision. After `sroa_param` reshapes
         // `Box<T>` parameters into scalars and `inline` propagates the
         // resulting `FieldAccess(Local(x), "value")` shape into call
