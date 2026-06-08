@@ -9,12 +9,16 @@
 //! analysis and the substitute-and-remove rewrite read and mutate the arena
 //! `Body` directly.
 
+use cranelift_entity::EntityRef;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+
+use super::gate::{FunctionGate, FunctionId, GatedPass};
 
 #[derive(Debug, Clone)]
 struct CopyBinding {
@@ -649,7 +653,7 @@ fn propagate_copies_in_function(
     ever_changed
 }
 
-pub fn propagate_copies(project: &mut NirPackage) -> bool {
+pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
     let mut first_param_types: FirstParamTypes = IndexMap::default();
@@ -660,9 +664,20 @@ pub fn propagate_copies(project: &mut NirPackage) -> bool {
             first_param_types.insert(key, first_param.type_id);
         }
     }
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        changed |= propagate_copies_in_function(&mut func, &type_table, &first_param_types);
+    for (i, func_rc) in project.functions.iter().enumerate() {
+        let fid = FunctionId::new(i);
+        if !gate.needs(GatedPass::CopyProp, fid) {
+            continue;
+        }
+        let func_changed = {
+            let mut func = func_rc.borrow_mut();
+            propagate_copies_in_function(&mut func, &type_table, &first_param_types)
+        };
+        gate.seen(GatedPass::CopyProp, fid);
+        if func_changed {
+            gate.mark_changed(fid);
+            changed = true;
+        }
     }
     changed
 }
