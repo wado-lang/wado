@@ -46,6 +46,7 @@ use super::const_folding::{ConstFoldRule, build_callee_map};
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
 use super::match_to_switch::MatchToSwitchRule;
+use super::ref_elim::build_ref_elim;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
 use super::value_copy_elide::{ValueCopyElideRule, build_usage};
 
@@ -93,15 +94,24 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate, pr
             .flatten();
         let value_copy_rule =
             value_copy_usage.map(|u| ValueCopyElideRule::new(&value_copy_set, u));
+        // Reference elimination runs post-inline only (it cleans up the ref
+        // bindings inlining exposes). Its maps are built from the pristine
+        // post-inline body.
+        let ref_elim_rule = (!pre_inline)
+            .then(|| func.body.as_ref().map(build_ref_elim))
+            .flatten();
         let Some(body) = func.body.as_mut() else {
             return false;
         };
-        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(7);
+        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(8);
         if pre_inline {
             rules.push(&match_rule);
         }
         if let Some(value_copy_rule) = value_copy_rule.as_ref() {
             rules.push(value_copy_rule);
+        }
+        if let Some(ref_elim_rule) = ref_elim_rule.as_ref() {
+            rules.push(ref_elim_rule);
         }
         rules.extend([
             &array_rule as &dyn Rule,

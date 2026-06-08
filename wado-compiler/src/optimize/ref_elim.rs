@@ -17,53 +17,183 @@
 //! The pass also handles bindings whose source is a field-access chain
 //! (`let r: &T = &v.f1.f2`), substituting the chain at each `r.field` use.
 //!
-//! The algorithm uses a two-pass approach that processes ALL ref bindings
-//! simultaneously, avoiding the O(K × N) cost of processing each binding
-//! separately (where K = number of bindings, N = body size).
-//!
-//! Pass 1 (analyze): Single traversal to collect all `let r = &v` bindings
-//!   and classify every use of each `r` as field-access-only or not.
-//! Pass 2 (transform): Single traversal to replace eliminable field accesses
-//!   and remove dead let statements.
-//!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the analysis and
-//! transform read and mutate the arena `Body` directly. The referent of a
-//! binding is stored as the *unresolved* source expression id and resolved
-//! lazily during the transform — the refs map is complete by then, so a
-//! transitive `let r2 = &r1.field` resolves through `r1` even though `r1`'s
-//! `let` is dropped. The deref-only source is single-use, so it is moved into
-//! its one `*r` site rather than cloned.
+//! Runs as `RefElimRule` inside the unified post-inline peephole session
+//! (combine migration; see `docs/wep-2026-06-05-worklist-rewrite-engine.md`).
+//! `build_ref_elim` collects all `let r = &v` bindings and classifies every use
+//! of each `r` (field-access-only or not), plus the disjoint deref-only set, in
+//! one pristine-body analysis per function. The rule then drops eliminable
+//! bindings and substitutes uses through the engine edit API. The referent is
+//! stored as the *unresolved* source expression id and resolved during the
+//! transform — the refs map is complete, so a transitive `let r2 = &r1.field`
+//! resolves through `r1` even though `r1`'s `let` is dropped. A deref-only
+//! source is single-use, so it is moved into its one `*r` site rather than
+//! cloned.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirFunction, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtId, StmtKind};
-use crate::nir_package::NirPackage;
+use crate::nir::NirUnaryOp;
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeId;
 use crate::token::Span;
-
-use cranelift_entity::EntityRef;
-
-use super::gate::{FunctionGate, GatedPass};
 
 /// Per-binding analysis state, keyed by the ref local index.
 struct RefInfo {
     /// The *unresolved* source expression `E` from `let r = &E` (or the
     /// inherited referent of a transitive `let r = s` shadow). Resolved
-    /// lazily in pass 2.
+    /// lazily during the transform.
     referent_e: ExprId,
     /// True until a non-field-access use is found.
     eliminable: bool,
 }
 
-pub fn eliminate_unnecessary_refs(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let len = project.functions.len();
-    gate.run_gated(GatedPass::RefElim, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
-        let mut changed = eliminate_refs_in_function(&mut func);
-        changed |= eliminate_deref_ref_pairs_in_function(&mut func);
-        changed
-    })
+/// Reference elimination as a rule on the unified post-inline peephole session
+/// (combine migration; formerly the standalone `nir/ref_elim` pass). Both maps
+/// are built once per function from the pristine post-inline body (`build_ref_elim`)
+/// — the two sub-analyses target disjoint binding shapes (`&pure-read-referent`
+/// vs `&literal`), so a single pristine snapshot of each matches the old
+/// sequential pass. The transforms (drop the binding `Let`, substitute each
+/// `r.field` with the resolved referent, inline each single-use `*r` literal)
+/// run through the engine edit API so the worklist re-examines the result.
+pub(super) struct RefElimRule {
+    /// `let r = &E` bindings (eliminable when every use is `r.field`).
+    refs: IndexMap<u32, RefInfo>,
+    /// `let r = &literal` bindings used exactly once as `*r`; value is the
+    /// source literal expression to inline.
+    deref_sources: IndexMap<u32, ExprId>,
+}
+
+/// Build a [`RefElimRule`] for one function from its pristine body.
+pub(super) fn build_ref_elim(body: &Body) -> RefElimRule {
+    let rebound = find_rebound_locals(body);
+    let mut refs: IndexMap<u32, RefInfo> = IndexMap::default();
+    analyze_block(body, body.root, &rebound, &mut refs);
+
+    let mut deref: IndexMap<u32, DerefOnlyRef> = IndexMap::default();
+    deref_collect_block(body, body.root, &mut deref);
+    // Only eliminate refs still eliminable AND used exactly once via `*r`;
+    // multi-use elision would duplicate the source literal at every site.
+    let deref_sources = deref
+        .into_iter()
+        .filter(|(_, info)| info.eliminable && info.use_count == 1)
+        .map(|(idx, info)| (idx, info.source_e))
+        .collect();
+
+    RefElimRule {
+        refs,
+        deref_sources,
+    }
+}
+
+impl Rule for RefElimRule {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        let stmts = engine.body.blocks[block].stmts.clone();
+        let kept: Vec<StmtId> = stmts
+            .iter()
+            .copied()
+            .filter(|s| match &engine.body.stmts[*s].kind {
+                StmtKind::Let { local_index, .. } => {
+                    let drop = self.refs.get(local_index).is_some_and(|i| i.eliminable)
+                        || self.deref_sources.contains_key(local_index);
+                    !drop
+                }
+                _ => true,
+            })
+            .collect();
+        if kept.len() == stmts.len() {
+            return false;
+        }
+        engine.set_block_stmts(block, kept);
+        true
+    }
+
+    fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
+        match &engine.body.exprs[id].kind {
+            // `r.field` for an eliminable ref `r` → resolved referent.
+            ExprKind::FieldAccess { expr: inner, .. } => {
+                let inner = *inner;
+                let ExprKind::Local { index, .. } = &engine.body.exprs[inner].kind else {
+                    return false;
+                };
+                let index = *index;
+                if !self.refs.get(&index).is_some_and(|i| i.eliminable) {
+                    return false;
+                }
+                let referent_e = self.refs[&index].referent_e;
+                let resolved = resolve_via_engine(engine, referent_e, &self.refs);
+                // Replace `r` (the inner Local) with the resolved referent,
+                // keeping `inner`'s type_id / span — the surrounding code was
+                // sized to the ref-type tag `r` had at this position.
+                let kind = engine.body.exprs[resolved].kind.clone();
+                engine.replace_expr_kind(inner, kind);
+                true
+            }
+            // `*r` for a single-use deref-only ref `r` → inline the literal.
+            ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                expr: inner,
+            } => {
+                let inner = *inner;
+                let ExprKind::Local { index, .. } = &engine.body.exprs[inner].kind else {
+                    return false;
+                };
+                let Some(&source_e) = self.deref_sources.get(index) else {
+                    return false;
+                };
+                // Single-use: move the source literal into this `*r` site,
+                // keeping the deref expr's type_id / span.
+                let kind = std::mem::replace(&mut engine.body.exprs[source_e].kind, ExprKind::Unit);
+                engine.replace_expr_kind(id, kind);
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Resolve the unresolved referent `e` into a fresh engine-allocated subtree,
+/// splicing in any tracked local's referent transitively. Mirrors the old
+/// `resolve`, but builds through the engine so the parent map / use index stay
+/// coherent.
+fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefInfo>) -> ExprId {
+    enum Step {
+        Tracked(ExprId),
+        Field(ExprId, u32, String, TypeId, Span),
+        Leaf,
+    }
+    let step = match &engine.body.exprs[e].kind {
+        ExprKind::Local { index, .. } => match refs.get(index) {
+            Some(info) => Step::Tracked(info.referent_e),
+            None => Step::Leaf,
+        },
+        ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            field_name,
+        } => Step::Field(
+            *inner,
+            *field_index,
+            field_name.clone(),
+            engine.body.exprs[e].type_id,
+            engine.body.exprs[e].span,
+        ),
+        _ => Step::Leaf,
+    };
+    match step {
+        Step::Tracked(re) => resolve_via_engine(engine, re, refs),
+        Step::Field(inner, field_index, field_name, type_id, span) => {
+            let resolved_inner = resolve_via_engine(engine, inner, refs);
+            engine.alloc_expr(
+                ExprKind::FieldAccess {
+                    expr: resolved_inner,
+                    field_index,
+                    field_name,
+                },
+                type_id,
+                span,
+            )
+        }
+        Step::Leaf => engine.clone_expr(e),
+    }
 }
 
 /// An expression is a valid referent if it's a pure read of a local — either
@@ -225,133 +355,6 @@ fn analyze_expr(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Pass 2: replace eliminable `r.field` with the referent and drop the let.
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn eliminate_refs_in_function(func: &mut NirFunction) -> bool {
-    let Some(body) = func.body.as_mut() else {
-        return false;
-    };
-    let rebound = find_rebound_locals(body);
-    let mut refs: IndexMap<u32, RefInfo> = IndexMap::default();
-    analyze_block(body, body.root, &rebound, &mut refs);
-
-    if !refs.values().any(|i| i.eliminable) {
-        return false;
-    }
-
-    transform_block(body, body.root, &refs);
-    true
-}
-
-/// Resolve the unresolved referent `e` into a fresh arena subtree, splicing in
-/// any tracked local's referent transitively.
-fn resolve(body: &mut Body, e: ExprId, refs: &IndexMap<u32, RefInfo>) -> ExprId {
-    enum Action {
-        Tracked(ExprId),
-        Field(ExprId, u32, String, TypeId, Span),
-        Leaf,
-    }
-    let action = match &body.exprs[e].kind {
-        ExprKind::Local { index, .. } => match refs.get(index) {
-            Some(info) => Action::Tracked(info.referent_e),
-            None => Action::Leaf,
-        },
-        ExprKind::FieldAccess {
-            expr: inner,
-            field_index,
-            field_name,
-        } => Action::Field(
-            *inner,
-            *field_index,
-            field_name.clone(),
-            body.exprs[e].type_id,
-            body.exprs[e].span,
-        ),
-        _ => Action::Leaf,
-    };
-    match action {
-        Action::Tracked(re) => resolve(body, re, refs),
-        Action::Field(inner, field_index, field_name, type_id, span) => {
-            let resolved_inner = resolve(body, inner, refs);
-            body.exprs.push(ExprNode {
-                kind: ExprKind::FieldAccess {
-                    expr: resolved_inner,
-                    field_index,
-                    field_name,
-                },
-                type_id,
-                span,
-            })
-        }
-        Action::Leaf => {
-            let node = body.exprs[e].clone();
-            body.exprs.push(node)
-        }
-    }
-}
-
-fn transform_block(body: &mut Body, block: BlockId, refs: &IndexMap<u32, RefInfo>) {
-    // Remove dead let statements for eliminable bindings.
-    let kept: Vec<StmtId> = body.blocks[block]
-        .stmts
-        .iter()
-        .copied()
-        .filter(|s| match &body.stmts[*s].kind {
-            StmtKind::Let { local_index, .. } => {
-                !refs.get(local_index).is_some_and(|i| i.eliminable)
-            }
-            _ => true,
-        })
-        .collect();
-    body.blocks[block].stmts = kept;
-
-    let stmts = body.blocks[block].stmts.clone();
-    for s in stmts {
-        transform_node(body, NodeRef::Stmt(s), refs);
-    }
-}
-
-fn transform_node(body: &mut Body, node: NodeRef, refs: &IndexMap<u32, RefInfo>) {
-    match node {
-        NodeRef::Expr(id) => transform_expr(body, id, refs),
-        NodeRef::Block(b) => transform_block(body, b, refs),
-        NodeRef::Stmt(_) | NodeRef::Pat(_) => {
-            let mut kids = Vec::new();
-            body.for_each_child(node, |c| kids.push(c));
-            for c in kids {
-                transform_node(body, c, refs);
-            }
-        }
-    }
-}
-
-fn transform_expr(body: &mut Body, id: ExprId, refs: &IndexMap<u32, RefInfo>) {
-    if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[id].kind {
-        let inner = *inner;
-        if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
-            let index = *index;
-            if let Some(info) = refs.get(&index)
-                && info.eliminable
-            {
-                // Replace `r` (the inner Local) with the resolved referent,
-                // keeping `inner`'s type_id / span — the surrounding code was
-                // sized to the ref-type tag `r` had at this position.
-                let resolved = resolve(body, info.referent_e, refs);
-                let kind = body.exprs[resolved].kind.clone();
-                body.exprs[inner].kind = kind;
-                return;
-            }
-        }
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
-    for c in kids {
-        transform_node(body, c, refs);
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
 // Deref-only elision: `let r = &StructLit; ... *r ...` → inline the literal.
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -364,34 +367,6 @@ struct DerefOnlyRef {
     eliminable: bool,
     /// Number of times r is used as `*r`.
     use_count: u32,
-}
-
-fn eliminate_deref_ref_pairs_in_function(func: &mut NirFunction) -> bool {
-    let Some(body) = func.body.as_mut() else {
-        return false;
-    };
-
-    let mut refs: IndexMap<u32, DerefOnlyRef> = IndexMap::default();
-    deref_collect_block(body, body.root, &mut refs);
-
-    // Only eliminate refs still eliminable AND used exactly once via `*r`.
-    // Multi-use elision would duplicate the source literal at every site.
-    let eliminable: IndexSet<u32> = refs
-        .iter()
-        .filter(|(_, info)| info.eliminable && info.use_count == 1)
-        .map(|(idx, _)| *idx)
-        .collect();
-    if eliminable.is_empty() {
-        return false;
-    }
-    let sources: IndexMap<u32, ExprId> = refs
-        .into_iter()
-        .filter(|(idx, _)| eliminable.contains(idx))
-        .map(|(idx, info)| (idx, info.source_e))
-        .collect();
-
-    deref_transform_block(body, body.root, &sources);
-    true
 }
 
 fn deref_collect_block(body: &Body, block: BlockId, refs: &mut IndexMap<u32, DerefOnlyRef>) {
@@ -473,62 +448,5 @@ fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnl
                 deref_collect_node(body, c, refs);
             }
         }
-    }
-}
-
-fn deref_transform_block(body: &mut Body, block: BlockId, sources: &IndexMap<u32, ExprId>) {
-    let kept: Vec<StmtId> = body.blocks[block]
-        .stmts
-        .iter()
-        .copied()
-        .filter(|s| match &body.stmts[*s].kind {
-            StmtKind::Let { local_index, .. } => !sources.contains_key(local_index),
-            _ => true,
-        })
-        .collect();
-    body.blocks[block].stmts = kept;
-
-    let stmts = body.blocks[block].stmts.clone();
-    for s in stmts {
-        deref_transform_node(body, NodeRef::Stmt(s), sources);
-    }
-}
-
-fn deref_transform_node(body: &mut Body, node: NodeRef, sources: &IndexMap<u32, ExprId>) {
-    match node {
-        NodeRef::Expr(id) => deref_transform_expr(body, id, sources),
-        NodeRef::Block(b) => deref_transform_block(body, b, sources),
-        NodeRef::Stmt(_) | NodeRef::Pat(_) => {
-            let mut kids = Vec::new();
-            body.for_each_child(node, |c| kids.push(c));
-            for c in kids {
-                deref_transform_node(body, c, sources);
-            }
-        }
-    }
-}
-
-fn deref_transform_expr(body: &mut Body, id: ExprId, sources: &IndexMap<u32, ExprId>) {
-    if let ExprKind::Unary {
-        op: NirUnaryOp::Deref,
-        expr: inner,
-    } = &body.exprs[id].kind
-    {
-        let inner = *inner;
-        if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
-            let index = *index;
-            if let Some(&source_e) = sources.get(&index) {
-                // Single-use (`use_count == 1`): move the source literal into
-                // this `*r` site, keeping the deref expr's type_id / span.
-                let kind = std::mem::replace(&mut body.exprs[source_e].kind, ExprKind::Unit);
-                body.exprs[id].kind = kind;
-                return;
-            }
-        }
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
-    for c in kids {
-        deref_transform_node(body, c, sources);
     }
 }

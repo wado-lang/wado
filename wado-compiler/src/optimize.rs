@@ -23,7 +23,8 @@
 //!     (materialize `ArrayLiteral` from the `array_new + push` window),
 //!     `elide_local`, and env-free `const_fold`.
 //! 8.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
-//! 9.  `ref_elim` — drop unnecessary reference bindings exposed by inlining.
+//! 9.  `ref_elim` (`RefElimRule`, in the post-inline `peephole` session) —
+//!     drop unnecessary reference bindings exposed by inlining.
 //! 10. `sroa` — Scalar Replacement of Aggregates.
 //! 11. `copy_prop` — copy propagation.
 //! 12. `dae` — Dead Argument Elimination.
@@ -104,7 +105,6 @@ use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
 use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
-use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
 use store_load_forward::forward_stores_to_loads;
@@ -604,7 +604,6 @@ fn run_optimization_passes(
         // inner}; … x.value …` shells. See `optimize/elide_box_local.rs`.
         gated!("nir/elide_box_local", elide_adjacent_box_locals);
         gated!("nir/labeled_block_fusion", fuse_labeled_blocks);
-        gated!("nir/ref_elim", eliminate_unnecessary_refs);
         gated!("nir/sroa", scalar_replace_aggregates);
         gated!("nir/copy_prop", propagate_copies);
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
