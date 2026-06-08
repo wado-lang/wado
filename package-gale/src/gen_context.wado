@@ -86,12 +86,13 @@ pub struct GenContext {
     /// paying an extra stack slot per recursive frame (the
     /// `Performance/ExpressionGrammar_2` stack-exhaustion regression).
     caller_follow_gate_seen: bool,
-    /// Set by lowering whenever it lowers a non-greedy repeat (`??`/`*?`/
-    /// `+?`). When set, emit includes the runtime ATN simulator
-    /// infrastructure (the serialized `GALE_ATN_DATA` blob, the
-    /// `Parser.atn`/`Parser.atn_stack` fields, and the rule-entry
-    /// stack push/pop) and routes the non-greedy decision through
-    /// `atn_predict_with_stack`. Gate-free grammars stay byte-identical.
+    /// Set by lowering when it lowers a non-greedy optional (`??`). When
+    /// set, emit includes the runtime ATN simulator infrastructure (the
+    /// serialized `GALE_ATN_DATA` blob, the `Parser.atn`/`Parser.atn_stack`
+    /// fields, and the rule-entry stack push/pop) and routes the `??`
+    /// enter/skip decision through `atn_ng_optional_enter`. Grammars without
+    /// a non-greedy `??` stay byte-identical. (`*?`/`+?` keep the dedicated
+    /// non-greedy strategy and do not set this.)
     needs_atn_seen: bool,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator

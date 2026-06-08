@@ -1,10 +1,11 @@
-//! Tests for the runtime ATN simulator core (P2).
+//! Tests for the runtime ATN simulator core (P2/P3a).
 //!
 //! Builds ATNs with `atn.wado`, serializes, decodes through the inlined
-//! runtime (`atn_decode`), and drives `atn_adaptive_predict` to prove the
-//! engine mechanics: multi-token lookahead resolution, and the
-//! greedy/non-greedy tie-break that min-alt-on-conflict + edge ordering
-//! produce. Full-context (real-stack) integration is P3.
+//! runtime (`atn_decode`), and drives `atn_adaptive_predict` /
+//! `atn_predict_with_stack` to prove the engine mechanics: multi-token
+//! lookahead resolution, the greedy/non-greedy tie-break (min-alt-on-conflict
+//! + edge ordering), and the full-context (real rule-stack) cases that bind
+//! the dangling-`else` per caller context (the closing tests).
 
 use {
     build_atn,

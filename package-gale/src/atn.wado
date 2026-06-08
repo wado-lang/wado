@@ -2,9 +2,9 @@
 //!
 //! This is the codegen-side representation of the grammar as an NFA, the
 //! foundation of the hybrid runtime ATN simulator (see the "ATN-class
-//! grammars" section of `TODO.md`). The simulator runs only at decision
-//! sites the static predictor (`prediction.wado`) marks `Ambiguous`; the
-//! ATN is the data it walks.
+//! grammars" section of `TODO.md`). The simulator runs only at the cold
+//! decisions that need it — today, non-greedy `??` (the static fast path
+//! handles everything else); the ATN is the data it walks.
 //!
 //! Clean-room: the construction here follows the textbook Thompson-style
 //! NFA-for-a-grammar (rule-start/stop states, alternation block-start
@@ -17,7 +17,7 @@
 //! layout's constants (magic/version, state kinds, transition kinds) are
 //! the single source of truth in `runtime.wado` — that module is embedded
 //! verbatim into every parser and so cannot import from here, whereas this
-//! compiler-side module freely `use`s it. `atn_sim_test.wado` pins the
+//! compiler-side module freely `use`s it. `atn_test.wado` pins the
 //! `serialize_atn` -> `atn_decode` round-trip.
 
 use {

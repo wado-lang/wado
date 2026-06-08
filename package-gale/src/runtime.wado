@@ -746,9 +746,9 @@ fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
 // ===========================================================================
 // Runtime ATN simulator (hybrid ALL(*)) — full-context SLL prediction.
 //
-// Inlined into every generated parser. Invoked only at decision sites the
-// static predictor marked `Ambiguous` / a non-greedy repeat — the compiled
-// fast path handles everything else, so this never runs on the hot path.
+// Inlined into every generated parser. Invoked only at the cold decisions
+// that need it (today, non-greedy `??`) — the compiled fast path handles
+// everything else, so this never runs on the hot path.
 //
 // Full context without a per-call-site GIR<->ATN mapping: the caller passes
 // its current *rule-invocation stack* (a list of rule indices, cheaply
@@ -760,8 +760,9 @@ fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
 // SLL (rule-stop = wildcard follow).
 //
 // Clean-room: follows the published ALL(*) description, not ANTLR4 sources
-// (License hygiene, AGENTS.md). Wire-format constants MUST match
-// `src/atn.wado`; the blob carries a version word `atn_decode` asserts.
+// (License hygiene, AGENTS.md). The wire-format constants below are the
+// single source of truth; `atn.wado`'s builder imports them. The blob
+// carries a version word `atn_decode` asserts.
 // ===========================================================================
 
 // ATN wire-format constants — the single source of truth for the serialized
