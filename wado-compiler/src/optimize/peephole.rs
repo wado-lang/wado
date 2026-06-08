@@ -47,24 +47,24 @@ use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
 use super::match_to_switch::MatchToSwitchRule;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
+use super::value_copy_elide::{ValueCopyElideRule, build_usage};
 
 /// Run the unified peephole rule set over every function body. Returns whether
 /// any rule fired. Gated: skips functions unchanged since this pass last ran.
 ///
-/// `include_match` adds `MatchToSwitchRule` to the set. It is set on the
-/// pre-inline run only: that run lowers every reachable `Match` to `Switch`
-/// before `inline` copies bodies, so the post-inline run would only re-scan
-/// already-`Switch` bodies. A `Match` a later rewrite plants is caught by the
-/// next iteration's pre-inline run, matching the old once-per-iteration pass.
-pub(super) fn run_peephole(
-    project: &mut NirPackage,
-    gate: &mut FunctionGate,
-    include_match: bool,
-) -> bool {
+/// `pre_inline` adds the rules that the old loop ran once per iteration before
+/// `inline`: `MatchToSwitchRule` (lower every reachable `Match` to `Switch`
+/// before `inline` copies bodies; the post-inline run would only re-scan
+/// already-`Switch` bodies) and `ValueCopyElideRule` (strip read-only
+/// `$value_copy$T` wrappers). A `Match` or wrapper a later rewrite plants is
+/// caught by the next iteration's pre-inline run, matching the old timing.
+pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate, pre_inline: bool) -> bool {
     // Whole-package contexts, resolved once before the mutable body walk.
     let push_names = resolve_array_push_names(project);
     let array_rule = Collapser::new(&push_names);
     let push_rule = resolve_ctx(project).map(ShortPushStrRule::new);
+    // `$value_copy$T` helper types, for the pre-inline value-copy-elision rule.
+    let value_copy_set = project.value_copy_helper_types();
     // Environment-free constant folding shares the session. It needs the
     // program-wide CTFE callee map and the type table; the per-function `env`
     // stays empty so only literal arithmetic and pure CTFE fold here, leaving
@@ -83,12 +83,25 @@ pub(super) fn run_peephole(
         // for each body.
         let stores_aliased = func.stores_aliased_locals.clone();
         let elide_rule = ElideRule::new(&stores_aliased);
+        // Value-copy elision runs pre-inline only, and not on the
+        // `$value_copy$T` helpers themselves. Its usage map is built from the
+        // pristine body here, before the session rewrites it (matching the old
+        // standalone pass's snapshot); the rule borrows the shared helper-type
+        // set.
+        let value_copy_usage = (pre_inline && !func.is_value_copy() && !value_copy_set.is_empty())
+            .then(|| func.body.as_ref().map(|b| build_usage(b, &type_table)))
+            .flatten();
+        let value_copy_rule =
+            value_copy_usage.map(|u| ValueCopyElideRule::new(&value_copy_set, u));
         let Some(body) = func.body.as_mut() else {
             return false;
         };
-        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(6);
-        if include_match {
+        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(7);
+        if pre_inline {
             rules.push(&match_rule);
+        }
+        if let Some(value_copy_rule) = value_copy_rule.as_ref() {
+            rules.push(value_copy_rule);
         }
         rules.extend([
             &array_rule as &dyn Rule,

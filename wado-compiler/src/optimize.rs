@@ -10,15 +10,14 @@
 //!
 //! Fixed-point loop ([`run_optimization_passes`], in order):
 //! 2.  `container_sroa` — `AoS` → `SoA` for `List<Tuple<...>>` / `List<Struct>`.
-//! 3.  `value_copy_elide` — strip `$value_copy$T<id>` wrappers on read-only
-//!     bindings.
 //! 4.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
 //!     copy when elements are provably immutable through the binding.
-//! 5.  `peephole` (pre-inline) — unified engine pass: `string_push`
-//!     (`buf.push_str("short")` → per-byte `push`), `elide_local` (write-only
-//!     local elimination), env-free `const_fold` (literal arithmetic + pure
-//!     CTFE), and `const_branch_prune` (trivial-block / dead-statement cleanup;
-//!     pre-inline only — see its module docs). See `optimize/peephole.rs`.
+//! 5.  `peephole` (pre-inline) — unified engine pass: `MatchToSwitchRule`,
+//!     `ValueCopyElideRule` (strip `$value_copy$T<id>` wrappers on read-only
+//!     bindings), `string_push` (`buf.push_str("short")` → per-byte `push`),
+//!     `elide_local` (write-only local elimination), env-free `const_fold`
+//!     (literal arithmetic + pure CTFE), and `const_branch_prune` (trivial-block
+//!     / dead-statement cleanup). See `optimize/peephole.rs`.
 //! 6.  `inline` — function inlining.
 //! 7.  `peephole` (post-inline) — unified engine pass: `array_literal`
 //!     (materialize `ArrayLiteral` from the `array_new + push` window),
@@ -111,7 +110,6 @@ use sroa_param::sroa_single_field_parameters;
 use store_load_forward::forward_stores_to_loads;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
-use value_copy_elide::elide_synthesized_value_copies;
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
@@ -532,34 +530,15 @@ fn run_optimization_passes(
         // while its inner `Constructor` call is still a plain `Call` node,
         // which `recognize_init` can match structurally.
         gated!("nir/container_sroa", scalarize_containers);
-        // Run value-copy elision *before* inlining: the inliner expands
-        // every reachable `$value_copy$T<id>` body into a labeled
-        // block, after which the `Call($value_copy$T, [arg])` shape the
-        // elider matches on no longer exists. Running before inline
-        // lets the elider strip wrappers around `match Parser::expect(p,
-        // K) { Ok(v) => v, Err(e) => return Err(e) }`-style `?`
-        // desugarings, where the match's `Ok` arm produces a value
-        // that is observably read-only and the surplus copy can fold
-        // away.
-        //
-        // No post-pass run is needed: the only way a fresh
-        // `$value_copy$T(arg)` `Call` shape can appear after lowering
-        // is for the inliner to expand a function whose body still
-        // contains a wrapper. The next iteration's pre-inline run
-        // catches those, and if the loop converges (no pass returned
-        // `changed`) the inliner did nothing this round, so no new
-        // wrappers were introduced.
-        // These two report change only to the gate (so the gated passes
-        // re-examine the bodies they rewrote), not to the convergence `changed`
-        // flag — keeping the original convergence behaviour where they never
-        // kept the loop alive on their own.
-        // Both report their touched functions to the gate but stay out of the
-        // convergence `changed` flag: they never keep the loop alive on their
-        // own; the gated passes they dirty drive convergence in the same
-        // iteration.
-        run_pass("nir/value_copy_elide", project, profiler, |p| {
-            elide_synthesized_value_copies(p, &mut gate)
-        });
+        // Value-copy elision (`ValueCopyElideRule`) runs inside the pre-inline
+        // `peephole` session below, before `inline` expands every reachable
+        // `$value_copy$T<id>` body (after which the `Call($value_copy$T, [arg])`
+        // shape it matches is gone). A wrapper the inliner later plants is
+        // caught by the next iteration's pre-inline run.
+        // `value_copy_demote` reports change only to the gate (so the gated
+        // passes re-examine the bodies it rewrote), not to the convergence
+        // `changed` flag — it never keeps the loop alive on its own; the gated
+        // passes it dirties drive convergence in the same iteration.
         // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
         // copies when the binding's elements are provably never mutated
         // through it. Runs alongside `value_copy_elide`: elide removes a

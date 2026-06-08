@@ -71,11 +71,10 @@ pub enum GatedPass {
     RefElim,
     ContainerSroa,
     LabeledBlockFusion,
-    ValueCopyElide,
 }
 
 impl GatedPass {
-    const COUNT: usize = 14;
+    const COUNT: usize = 13;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.
@@ -260,7 +259,6 @@ mod tests {
             GatedPass::RefElim,
             GatedPass::ContainerSroa,
             GatedPass::LabeledBlockFusion,
-            GatedPass::ValueCopyElide,
         ];
         for p in all {
             match p {
@@ -276,8 +274,7 @@ mod tests {
                 | GatedPass::ElideBoxLocal
                 | GatedPass::RefElim
                 | GatedPass::ContainerSroa
-                | GatedPass::LabeledBlockFusion
-                | GatedPass::ValueCopyElide => {}
+                | GatedPass::LabeledBlockFusion => {}
             }
         }
         assert_eq!(all.len(), GatedPass::COUNT);
