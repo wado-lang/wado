@@ -101,7 +101,7 @@ use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
 use licm::apply_licm;
-use match_to_switch::match_to_switch;
+use match_to_switch::{match_to_switch, match_to_switch_all};
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
@@ -225,10 +225,8 @@ pub fn optimize(
             // `unreachable` directly and is never DCE'd, so ordering
             // around DCE is irrelevant.
             run_pass("nir/match_to_switch", &mut project, profiler, |p| {
-                // O0 runs the lowering once with no loop; a fresh gate marks
-                // every function dirty so all are processed.
-                let mut gate = gate::FunctionGate::new(p);
-                match_to_switch(p, &mut gate)
+                // O0 skips the loop/gate entirely; lower every function.
+                match_to_switch_all(p)
             });
         }
         OptLevel::O1 => {

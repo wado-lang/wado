@@ -36,6 +36,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use cranelift_entity::EntityRef;
 
+use super::arena_query::place_root_local;
 use super::gate::{FunctionGate, FunctionId};
 
 type FnKey = (ModuleSource, String);
@@ -346,20 +347,6 @@ fn check_call_arg(
         return candidates.contains_key(&(callee.clone(), pos));
     }
     check_expr(body, arg, idx, candidates)
-}
-
-/// The bottom-most `Local { index }` of a place expression, or `None`.
-fn place_root_local(body: &Body, target: ExprId) -> Option<u32> {
-    match &body.exprs[target].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr, .. } => place_root_local(body, *expr),
-        ExprKind::Index { expr, .. } => place_root_local(body, *expr),
-        ExprKind::Unary {
-            op: NirUnaryOp::Deref,
-            expr,
-        } => place_root_local(body, *expr),
-        _ => None,
-    }
 }
 
 // -----------------------------------------------------------------------

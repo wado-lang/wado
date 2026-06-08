@@ -18,7 +18,8 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtI
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use super::gate::{FunctionGate, FunctionId, GatedPass};
+use super::arena_query::place_root_local;
+use super::gate::{FunctionGate, GatedPass};
 
 #[derive(Debug, Clone)]
 struct CopyBinding {
@@ -162,21 +163,6 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
         // Filled in by `analyze_block`, which knows the binding's position.
         source_scope_stable: false,
     })
-}
-
-/// If `expr` is a place rooted at a local (`x`, `x.f`, `x[i]`, `x.f[i].g`, …),
-/// return that root local index. Used to detect mutation of `local` through any
-/// field/index projection, not just a one-level `x.f`.
-fn place_root_local(body: &Body, mut expr: ExprId) -> Option<u32> {
-    loop {
-        match &body.exprs[expr].kind {
-            ExprKind::Local { index, .. } => return Some(*index),
-            ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
-                expr = *inner;
-            }
-            _ => return None,
-        }
-    }
 }
 
 /// Whether `local`'s value is mutated anywhere in the subtree at `node`:
@@ -657,7 +643,6 @@ fn propagate_copies_in_function(
 }
 
 pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let mut changed = false;
     let type_table = project.type_table.borrow();
     let mut first_param_types: FirstParamTypes = IndexMap::default();
     for func_rc in &project.functions {
@@ -667,20 +652,9 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
             first_param_types.insert(key, first_param.type_id);
         }
     }
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let fid = FunctionId::new(i);
-        if !gate.needs(GatedPass::CopyProp, fid) {
-            continue;
-        }
-        let func_changed = {
-            let mut func = func_rc.borrow_mut();
-            propagate_copies_in_function(&mut func, &type_table, &first_param_types)
-        };
-        gate.seen(GatedPass::CopyProp, fid);
-        if func_changed {
-            gate.mark_changed(fid);
-            changed = true;
-        }
-    }
-    changed
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::CopyProp, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
+        propagate_copies_in_function(&mut func, &type_table, &first_param_types)
+    })
 }

@@ -45,7 +45,7 @@ use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::array_literal::{Collapser, resolve_array_push_names};
-use super::gate::{FunctionGate, FunctionId, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map};
 use super::elide_local::ElideRule;
@@ -67,39 +67,26 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate) ->
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
 
-    let mut changed = false;
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let fid = FunctionId::new(i);
-        if !gate.needs(GatedPass::Peephole, fid) {
-            continue;
-        }
-        let mut func = func_rc.borrow_mut();
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::Peephole, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the elide rule is rebuilt
-        // for each body; the borrow is dropped before the body is taken.
+        // for each body.
         let stores_aliased = func.stores_aliased_locals.clone();
         let elide_rule = ElideRule::new(&stores_aliased);
-        let func_changed = match func.body.as_mut() {
-            Some(body) => {
-                let mut rules: Vec<&dyn Rule> = vec![
-                    &array_rule,
-                    &elide_rule,
-                    &const_fold_rule,
-                    &branch_prune_rule,
-                ];
-                if let Some(push_rule) = push_rule.as_ref() {
-                    rules.push(push_rule);
-                }
-                let mut engine = Engine::new(body);
-                engine.run(&rules)
-            }
-            None => false,
+        let Some(body) = func.body.as_mut() else {
+            return false;
         };
-        drop(func);
-        gate.seen(GatedPass::Peephole, fid);
-        if func_changed {
-            gate.mark_changed(fid);
-            changed = true;
+        let mut rules: Vec<&dyn Rule> = vec![
+            &array_rule,
+            &elide_rule,
+            &const_fold_rule,
+            &branch_prune_rule,
+        ];
+        if let Some(push_rule) = push_rule.as_ref() {
+            rules.push(push_rule);
         }
-    }
-    changed
+        let mut engine = Engine::new(body);
+        engine.run(&rules)
+    })
 }
