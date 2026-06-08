@@ -1,0 +1,17 @@
+// A public function whose default argument references a module-private
+// global AND calls a module-private function. Callers in other modules
+// cannot see BASE or helper(), but the default `BASE + helper()` must
+// still resolve in this (the declaring) module's scope. Regression for
+// the private-function-*call* gap in default expressions (issue #1308):
+// a private call previously failed with `unknown function 'helper'`
+// while a private global in the same position resolved.
+
+global BASE: i32 = 42;
+
+fn helper() -> i32 {
+    return 7;
+}
+
+pub fn make(x: i32 = BASE + helper()) -> i32 {
+    return x;
+}
