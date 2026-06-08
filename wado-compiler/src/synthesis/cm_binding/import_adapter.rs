@@ -318,7 +318,6 @@ fn synthesize_async_lift_function(
         local_index: outptr_local,
         is_mut: false,
         span: synth_span(),
-        default_expr: None,
     }];
 
     let lifted = if let Some(return_type) = &func_info.return_type {
@@ -464,7 +463,6 @@ pub(super) fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
-                    default_expr: None,
                 });
                 locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
                 next_local += 1;
@@ -482,7 +480,6 @@ pub(super) fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
-                    default_expr: None,
                 });
                 locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
                 next_local += 1;
@@ -496,7 +493,6 @@ pub(super) fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
-                    default_expr: None,
                 });
                 locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
                 next_local += 1;
@@ -525,7 +521,6 @@ pub(super) fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
-                    default_expr: None,
                 });
                 locals.push(TirLocal::synth(next_local, struct_type_id, false));
                 next_local += 1;
@@ -554,7 +549,6 @@ pub(super) fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
-                    default_expr: None,
                 });
                 locals.push(TirLocal::synth(next_local, variant_type_id, false));
                 next_local += 1;
@@ -577,7 +571,6 @@ pub(super) fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
-                    default_expr: None,
                 });
                 locals.push(TirLocal::synth(next_local, option_type_id, false));
                 next_local += 1;
@@ -597,7 +590,6 @@ pub(super) fn synthesize_adapter(
                         local_index: next_local,
                         is_mut: false,
                         span: synth_span(),
-                        default_expr: None,
                     });
                     locals.push(TirLocal::synth(next_local, *flat_ty, false));
                     next_local += 1;

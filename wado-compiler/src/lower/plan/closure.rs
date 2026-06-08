@@ -525,7 +525,6 @@ impl ClosureLowerer {
                 local_index: 0,
                 is_mut: false,
                 span: collected.span,
-                default_expr: None,
             });
             for (i, (name, type_id)) in collected.params.iter().enumerate() {
                 params.push(TirParam {
@@ -534,7 +533,6 @@ impl ClosureLowerer {
                     local_index: (i + 1) as u32,
                     is_mut: false,
                     span: collected.span,
-                    default_expr: None,
                 });
             }
 
@@ -860,7 +858,6 @@ impl ClosureLowerer {
                     local_index: 0,
                     is_mut: false,
                     span,
-                    default_expr: None,
                 },
                 TirParam {
                     name: "f".to_string(),
@@ -868,7 +865,6 @@ impl ClosureLowerer {
                     local_index: 1,
                     is_mut: false,
                     span,
-                    default_expr: None,
                 },
             ],
             return_type: TypeTable::UNIT,

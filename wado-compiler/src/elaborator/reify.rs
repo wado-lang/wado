@@ -966,7 +966,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
-                default_expr: None,
                 span: param.span,
             });
         }
@@ -1405,7 +1404,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 type_id,
                 local_index,
                 is_mut: p.is_mut,
-                default_expr: None,
                 span: p.span,
             });
         }

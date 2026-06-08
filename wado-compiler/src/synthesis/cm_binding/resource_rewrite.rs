@@ -500,7 +500,6 @@ fn synthesize_stream_read_func(
                 type_id: TypeTable::I32,
                 is_mut: false,
                 span: synth_span(),
-                default_expr: None,
             },
             TirParam {
                 name: "max".to_string(),
@@ -508,7 +507,6 @@ fn synthesize_stream_read_func(
                 type_id: TypeTable::I32,
                 is_mut: false,
                 span: synth_span(),
-                default_expr: None,
             },
         ],
         return_type: array_type_id,

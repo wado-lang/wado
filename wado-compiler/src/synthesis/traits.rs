@@ -180,7 +180,6 @@ fn binary_method_params(ref_type: TypeId, span: Span) -> Vec<TirParam> {
             local_index: 0,
             is_mut: false,
             span,
-            default_expr: None,
         },
         TirParam {
             name: "other".to_string(),
@@ -188,7 +187,6 @@ fn binary_method_params(ref_type: TypeId, span: Span) -> Vec<TirParam> {
             local_index: 1,
             is_mut: false,
             span,
-            default_expr: None,
         },
     ]
 }
@@ -210,7 +208,6 @@ fn inspect_params(ref_type: TypeId, fmt_type: TypeId, span: Span) -> Vec<TirPara
             local_index: 0,
             is_mut: false,
             span,
-            default_expr: None,
         },
         TirParam {
             name: "f".to_string(),
@@ -218,7 +215,6 @@ fn inspect_params(ref_type: TypeId, fmt_type: TypeId, span: Span) -> Vec<TirPara
             local_index: 1,
             is_mut: false,
             span,
-            default_expr: None,
         },
     ]
 }
@@ -2796,7 +2792,6 @@ fn generate_display_fallback(
             local_index: 0,
             is_mut: false,
             span,
-            default_expr: None,
         },
         TirParam {
             name: "f".to_string(),
@@ -2804,7 +2799,6 @@ fn generate_display_fallback(
             local_index: 1,
             is_mut: false,
             span,
-            default_expr: None,
         },
     ];
 

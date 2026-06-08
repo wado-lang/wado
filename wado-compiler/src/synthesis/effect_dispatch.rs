@@ -519,7 +519,6 @@ fn build_dispatch_wrapper_function(
             type_id: p.type_id,
             local_index,
             is_mut: false,
-            default_expr: None,
             span,
         });
     }

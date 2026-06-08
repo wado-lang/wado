@@ -901,7 +901,6 @@ pub(super) fn synthesize_result_export_binding(
                 type_id: cm_val_type_to_type_id(vt),
                 local_index: i as u32,
                 is_mut: false,
-                default_expr: None,
                 span: synth_span(),
             })
             .collect();
@@ -952,7 +951,6 @@ pub(super) fn synthesize_result_export_binding(
                 local_index: i as u32,
                 is_mut: false,
                 span: synth_span(),
-                default_expr: None,
             })
             .collect();
 
@@ -1479,7 +1477,6 @@ pub(super) fn synthesize_general_export_binding(
                 type_id: cm_val_type_to_type_id(vt),
                 local_index: i as u32,
                 is_mut: false,
-                default_expr: None,
                 span: synth_span(),
             })
             .collect();
@@ -1528,7 +1525,6 @@ pub(super) fn synthesize_general_export_binding(
                 local_index: i as u32,
                 is_mut: false,
                 span: synth_span(),
-                default_expr: None,
             })
             .collect();
 
@@ -1679,7 +1675,6 @@ pub(super) fn synthesize_async_export_binding(
                 type_id: cm_val_type_to_type_id(vt),
                 local_index: i as u32,
                 is_mut: false,
-                default_expr: None,
                 span: synth_span(),
             })
             .collect();
@@ -1734,7 +1729,6 @@ pub(super) fn synthesize_async_export_binding(
                 local_index: i as u32,
                 is_mut: false,
                 span: synth_span(),
-                default_expr: None,
             })
             .collect();
 
