@@ -1,0 +1,38 @@
+// Regression: a control-flow / binder expression (match, if, labeled block)
+// used as a default argument must evaluate to its real value at every
+// optimization level — the callee must read its actual parameter, not a
+// zero-initialised shadow.
+//
+// Reify previously reified each function-param default into the function's own
+// context, which for a control-flow default allocated that default's value
+// local *in the callee*. The stray local shadowed the parameter in the callee
+// body; with no optimization to remove it, `return <param>` read the zero
+// shadow, so the call returned 0 at -O0 (a literal / closure default, which
+// allocates no local, was unaffected, and -O2 optimized the shadow away). The
+// param default is now left unbuilt in the callee, matching `item.rs`.
+
+global N: i32 = 41;
+global FLAG: bool = true;
+
+fn with_match(a: i32, y: i32 = match Option::<i32>::Some(N) { Some(v) => v + 1, None => 0 }) -> i32 {
+    return y;
+}
+
+fn with_if(a: i32, y: i32 = if FLAG { 7 } else { 9 }) -> i32 {
+    return y;
+}
+
+fn with_labeled_block(a: i32, y: i32 = blk: { let t = 100; break blk: t + 1 }) -> i32 {
+    return y;
+}
+
+export fn run() {
+    assert with_match(0) == 42;          // default: Some(41) -> 41 + 1
+    assert with_match(0, 5) == 5;        // explicit argument
+    assert with_if(0) == 7;              // default: FLAG is true
+    assert with_if(0, 3) == 3;           // explicit argument
+    assert with_labeled_block(0) == 101; // default: 100 + 1
+}
+
+__DATA__
+{"stdout": ""}

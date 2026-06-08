@@ -952,17 +952,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let type_id = *param_types
                 .get(p_idx)
                 .expect("resolve_function records one param type per func.params entry");
-            let default_expr = param
-                .default
-                .as_ref()
-                .map(|default_ast| Box::new(self.reify_expr(default_ast, &mut ctx, Some(type_id))));
+            // The function-param default is expanded (and re-reified) at each
+            // call site by `reify_pad_args_with_defaults`; monomorphize drops
+            // this field to `None` and nothing downstream reads it. Reifying it
+            // into the function's own `ctx` here would allocate stray locals for
+            // a control-flow default (the `match` / `if` value local), which
+            // then surface as a parameter-shadowing `let` in the function body
+            // at -O0 (returning the zero-initialised shadow). Leave it unbuilt,
+            // matching `item.rs`.
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             params.push(tir::TirParam {
                 name: param.name.clone(),
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
-                default_expr,
+                default_expr: None,
                 span: param.span,
             });
         }
@@ -1390,17 +1394,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             } else {
                 "self".to_string()
             };
-            let default_expr = p
-                .default
-                .as_ref()
-                .map(|d| Box::new(self.reify_expr(d, &mut ctx, Some(type_id))));
+            // See the free-function param loop: the param default is expanded
+            // at call sites and monomorphize drops this field, so reifying it
+            // into the method's `ctx` only pollutes its locals (a control-flow
+            // default's value local shadows the parameter at -O0). Leave it
+            // unbuilt.
             let local_index = ctx.add_local(name.clone(), type_id, p.is_mut, Some(p.id));
             params.push(crate::tir::TirParam {
                 name,
                 type_id,
                 local_index,
                 is_mut: p.is_mut,
-                default_expr,
+                default_expr: None,
                 span: p.span,
             });
         }
