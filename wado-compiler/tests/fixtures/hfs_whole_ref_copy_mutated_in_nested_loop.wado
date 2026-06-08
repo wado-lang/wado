@@ -1,0 +1,84 @@
+// Regression: at -O3 a code-writer that indented lines inside a loop
+// dropped the indentation entirely, printing the body unindented.
+//
+// The outer `for` loop appends each line to `w.buf`, so HFS scalarises
+// `w.buf.{used,repr}` into `__hfs_*` for that loop. LICM hoists the
+// buffer into `_licm_buf_a` and the nested `write_indent` loop hoists it
+// again into a whole-ref copy `let _licm_buf_b = _licm_buf_a;`. Because a
+// `String` is a reference, `_licm_buf_b` aliases the same heap object, so
+// `_licm_buf_b.push(' ')` mutates the buffer the `__hfs_*` scalars stand
+// for — bypassing them. The stale scalars were then written back, so the
+// indentation pushed through the alias was overwritten by the next line.
+//
+// Root cause: the per-loop alias scan marks `_licm_buf_a` aliased only if
+// the `let _licm_buf_b = _licm_buf_a;` copy is walked after the field-
+// access entries exist, but the copy precedes the loop's first
+// `_licm_buf_a.field` access, so the mark was a no-op. The fix records
+// whole-GC-ref copies in the order-independent function-wide alias scan,
+// disqualifying the source from scalarisation.
+
+struct CodeWriter {
+    buf: String,
+    level: i32,
+}
+
+impl CodeWriter {
+    fn new() -> CodeWriter {
+        return CodeWriter { buf: String::with_capacity(65536), level: 0 };
+    }
+
+    fn write_indent(&mut self) {
+        for let mut i = 0; i < self.level; i += 1 {
+            self.buf.push_str(&"    ");
+        }
+    }
+
+    fn begin(&mut self, opener: &String) {
+        self.buf.push_str(opener);
+        self.buf.push_str(&" {\n");
+        self.level += 1;
+    }
+
+    fn line(&mut self, text: &String) {
+        self.write_indent();
+        self.buf.push_str(text);
+        self.buf.push('\n');
+    }
+
+    fn end(&mut self) {
+        self.level -= 1;
+        self.write_indent();
+        self.buf.push_str(&"}\n");
+    }
+}
+
+struct FlagsSpec {
+    name: String,
+    members: List<String>,
+}
+
+impl FlagsSpec {
+    fn emit(&self, w: &mut CodeWriter) {
+        w.begin(&`flags {self.name}`);
+        for let member of &self.members {
+            w.line(&`{*member},`);
+        }
+        w.end();
+    }
+}
+
+test "nested-loop indentation survives HFS" {
+    let mut f = FlagsSpec { name: "Perms", members: [] };
+    f.members.push("Read");
+    f.members.push("Write");
+    f.members.push("Execute");
+
+    let mut w = CodeWriter::new();
+    f.emit(&mut w);
+
+    let expected = "flags Perms {\n    Read,\n    Write,\n    Execute,\n}\n";
+    assert w.buf == expected, `got: {w.buf}`;
+}
+
+__DATA__
+{"test": {}}

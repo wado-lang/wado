@@ -759,18 +759,47 @@ fn count_field_accesses_in_block(
     }
 }
 
-/// Walk the function body once and collect every GC-heap-typed local
-/// whose address (`&local` / `&mut local`) is taken outside a direct
-/// call-argument position. Such locals cannot be HFS-scalarized at any
-/// loop level: writes through the captured alias bypass the scalar.
+/// Walk the function body once and collect every GC-heap-typed local that
+/// becomes aliased anywhere in the function, so it cannot be HFS-scalarized
+/// at any loop level. Two shapes alias a local:
 ///
-/// Direct call arguments are excluded from the set because the call's
-/// write-back/re-read mechanism synchronises HFS scalars around the
+/// - Its address (`&local` / `&mut local`) is taken outside a direct
+///   call-argument position. Writes through the captured alias bypass the
+///   scalar.
+/// - Its whole value is bound/assigned to another local (`let other = gc;`
+///   or `other = gc;`). A GC struct is a reference, so the copy shares the
+///   heap object; a mutation through `other` (e.g. `other.push(c)`) bypasses
+///   `gc`'s scalar. The per-loop scan marks this too, but only when the
+///   alias-creating statement is walked *after* the field-access entries
+///   exist; doing it here makes the disqualification order-independent (the
+///   real-world trigger is a LICM-hoisted buffer `let _licm_buf_b = _licm_buf_a`
+///   whose copy precedes the loop's first `_licm_buf_a.field` access).
+///
+/// Direct call arguments are excluded from the address-taken set because the
+/// call's write-back/re-read mechanism synchronises HFS scalars around the
 /// call, bounding the alias's lifetime to that single call.
 fn collect_function_aliased_locals(body: &Body, type_table: &TypeTable) -> IndexSet<u32> {
     let mut out: IndexSet<u32> = IndexSet::default();
     visit_block_for_alias(body, body.root, type_table, &mut out);
     out
+}
+
+/// If `value` is a bare `Local` of GC-heap type — a whole-struct copy that
+/// (because the struct is a reference) shares the heap object with its
+/// source — record that source local as aliased. A deep value copy is
+/// wrapped in `copy_value(...)` (an `ExprKind::Call`), not a bare `Local`,
+/// so it does not match here.
+fn mark_whole_gc_ref_copy_source(
+    body: &Body,
+    value: ExprId,
+    type_table: &TypeTable,
+    out: &mut IndexSet<u32>,
+) {
+    if let ExprKind::Local { index, .. } = &body.exprs[value].kind
+        && is_gc_heap_type(body.exprs[value].type_id, type_table)
+    {
+        out.insert(*index);
+    }
 }
 
 fn visit_block_for_alias(
@@ -793,6 +822,7 @@ fn visit_stmt_for_alias(
 ) {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+            mark_whole_gc_ref_copy_source(body, *value, type_table, out);
             visit_expr_for_alias(body, *value, false, type_table, out);
         }
         StmtKind::Expr(expr) => {
@@ -883,6 +913,7 @@ fn visit_expr_for_alias(
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
+            mark_whole_gc_ref_copy_source(body, value, type_table, out);
             visit_expr_for_alias(body, target, false, type_table, out);
             visit_expr_for_alias(body, value, false, type_table, out);
         }
