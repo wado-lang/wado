@@ -757,6 +757,111 @@ pub fn normalize_caches(grammar: &mut Grammar) {
     }
 }
 
+/// Canonicalize two-alternative groups with exactly one empty alt into an
+/// Optional repeat. `( | X)` (empty alt first) ≡ `(X)??` (non-greedy
+/// optional: prefer to skip) and `(X | )` (empty alt last) ≡ `(X)?` (greedy
+/// optional: prefer to enter) — a true EBNF equivalence (ANTLR4
+/// `doc/wildcard.md` / parser-rules semantics). Folding the two surface
+/// forms onto the one Optional path means a single prediction strategy
+/// drives both, and the empty-first form reuses the runtime ATN simulator
+/// that already resolves non-greedy `??` (e.g. the dangling-`else` binding
+/// in `ParserExec/IfIfElseNonGreedyBinding2`).
+///
+/// Only the clean 2-alt case is rewritten: both-empty / both-non-empty
+/// groups, groups carrying their own `options { ... }`, and a body alt
+/// bearing an alt label are left untouched (rewriting them could drop
+/// information or change the CST shape).
+pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
+    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
+        let canon_alts = canon_empty_alt_alternatives(&grammar.parser_rules[ri].alternatives);
+        grammar.parser_rules[ri].alternatives = canon_alts;
+    }
+}
+
+/// Rebuild an alternative list with each element canonicalized. Returns a
+/// fresh list (value semantics: in-place `&mut list[i]` mutation does not
+/// persist, so the pass rebuilds and reassigns).
+fn canon_empty_alt_alternatives(alts: &List<Alternative>) -> List<Alternative> {
+    let mut out: List<Alternative> = [];
+    for let alt of alts {
+        let mut elems: List<Element> = [];
+        for let e of &alt.elements {
+            elems.push(canon_empty_alt_element(e));
+        }
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems });
+    }
+    return out;
+}
+
+/// Bottom-up rewrite: canonicalize nested groups first, then this element.
+fn canon_empty_alt_element(elem: &Element) -> Element {
+    let rebuilt = match *elem {
+        Label(lab) => Element::Label(LabelElement {
+            name: lab.name,
+            list: lab.list,
+            element: canon_empty_alt_element(&lab.element),
+            snake_name: lab.snake_name,
+            field_name: lab.field_name,
+        }),
+        Repeat(rep) => Element::Repeat(RepeatElement {
+            kind: rep.kind,
+            element: canon_empty_alt_element(&rep.element),
+            non_greedy: rep.non_greedy,
+        }),
+        Not(n) => Element::Not(NotElement {
+            element: canon_empty_alt_element(&n.element),
+        }),
+        Group(g) => Element::Group(GroupElement {
+            alternatives: canon_empty_alt_alternatives(&g.alternatives),
+            options: g.options,
+        }),
+        _ => *elem,
+    };
+
+    if let Group(g) = &rebuilt {
+        if let Some(opt) = empty_alt_group_as_optional(g) {
+            return opt;
+        }
+    }
+    return rebuilt;
+}
+
+/// Returns the Optional-repeat equivalent of a two-alt group with exactly
+/// one empty alternative, or `null` if the group is not that clean shape.
+fn empty_alt_group_as_optional(g: &GroupElement) -> Option<Element> {
+    if !g.options.is_empty() {
+        return null;
+    }
+    if g.alternatives.len() != 2 {
+        return null;
+    }
+    let a0_empty = g.alternatives[0].elements.is_empty();
+    let a1_empty = g.alternatives[1].elements.is_empty();
+    // Exactly one empty: both-empty `( | )` and both-non-empty `(a | b)`
+    // are real decisions, not optionals.
+    if a0_empty == a1_empty {
+        return null;
+    }
+    // Empty alt first ⇒ prefer to skip ⇒ non-greedy.
+    let non_greedy = a0_empty;
+    let body_alt = if a0_empty { &g.alternatives[1] } else { &g.alternatives[0] };
+    if body_alt.label matches { Some(_) } {
+        return null;
+    }
+    // Wrap the body alt in a single-alt group so a multi-element body
+    // (`'else' statement`) lowers exactly like the hand-written
+    // `('else' statement)??` form (Binding1). A single-element body's
+    // wrapper is flattened again by the transparent-group lowering.
+    let inner = Element::Group(GroupElement::new([
+        Alternative { label: null, options: body_alt.options, elements: body_alt.elements },
+    ]));
+    return Option::<Element>::Some(Element::Repeat(RepeatElement {
+        kind: RepeatKind::Optional,
+        element: inner,
+        non_greedy,
+    }));
+}
+
 fn normalize_element(elem: &mut Element) {
     if let RuleRef(r) = elem {
         if r.snake_name.is_empty() {

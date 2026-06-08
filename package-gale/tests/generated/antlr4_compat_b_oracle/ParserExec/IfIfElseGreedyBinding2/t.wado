@@ -1179,17 +1179,9 @@ pub struct StatementAlt1 {
     pub if_statement: IfStatementNode,
 }
 
-pub variant IfStatementGroup0 {
-    Alt0(IfStatementGroup0Alt0),
-    Alt1(IfStatementGroup0Alt1),
-}
-
-pub struct IfStatementGroup0Alt0 {
+pub struct LitElseStatementItem {
     pub lit_else: Token,
     pub statement: StatementNode,
-}
-
-pub struct IfStatementGroup0Alt1 {
 }
 
 pub struct IfStatementNode {
@@ -1197,7 +1189,7 @@ pub struct IfStatementNode {
     pub lit_if: Token,
     pub lit_y: Token,
     pub statement: StatementNode,
-    pub group_0: Option<IfStatementGroup0>,
+    pub lit_else_statement: Option<LitElseStatementItem>,
 }
 
 global TK_ID: i32 = 0;
@@ -1548,24 +1540,19 @@ fn scan_if_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     pos += 1;
     pos = scan_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    let gp_0 = pos;
-    let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    if sgk_0 == TK_LIT_ELSE {
-        sg_0: {
-            pos = gp_0;
-            sg_0_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_ELSE { break sg_0_0; }
+    if pos < tokens.len() && tokens[pos].kind == TK_LIT_ELSE && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+        let sp = pos;
+        sg_0_done: {
+            sg_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_ELSE { break sg_0; }
                 pos += 1;
                 pos = scan_statement(tokens, pos, follow, 0);
-                if pos < 0 { break sg_0_0; }
-                break sg_0;
+                if pos < 0 { break sg_0; }
+                break sg_0_done;
             }
-            pos = gp_0;
-            sg_0_1: {
-                break sg_0;
-            }
-            pos = gp_0;
+            pos = -1;
         }
+        if pos < 0 { pos = sp; }
     }
     return pos;
 }
@@ -1652,26 +1639,23 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let lit_if = p.expect(TK_LIT_IF)?;
     let lit_y = p.expect(TK_LIT_Y)?;
     let statement = _parse_statement(p, follow)?;
-    let mut group_0_inner: Option<IfStatementGroup0> = null;
-    let grp_kind = p.peek_kind();
-    if grp_kind == TK_LIT_ELSE {
+    let lit_else_statement: Option<LitElseStatementItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_ELSE) {
         let lit_else = p.expect(TK_LIT_ELSE)?;
         let statement = _parse_statement(p, follow)?;
-        group_0_inner = Option::<IfStatementGroup0>::Some(IfStatementGroup0::Alt0(IfStatementGroup0Alt0 {
+        let lit_else_statement = LitElseStatementItem {
             lit_else,
             statement,
-        }));
-    } else if true {
-        group_0_inner = Option::<IfStatementGroup0>::Some(IfStatementGroup0::Alt1(IfStatementGroup0Alt1 {
-        }));
-    }
-    let group_0 = group_0_inner;
+        };
+        Option::<LitElseStatementItem>::Some(lit_else_statement)
+    } else {
+        null
+    };
     return Result::<IfStatementNode, ParseError>::Ok(IfStatementNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lit_if,
         lit_y,
         statement,
-        group_0,
+        lit_else_statement,
     });
 }
 
@@ -1758,15 +1742,9 @@ pub fn walk_ifStatement<V: Visitor>(v: &mut V, node: &IfStatementNode) {
     v.visit_token(&node.lit_if);
     v.visit_token(&node.lit_y);
     walk_statement(v, &node.statement);
-    if let Some(item) = &node.group_0 {
-        match item {
-            Alt0(inner) => {
-                v.visit_token(&inner.lit_else);
-                walk_statement(v, &inner.statement);
-            }
-            Alt1(inner) => {
-            }
-        }
+    if let Some(item) = &node.lit_else_statement {
+        v.visit_token(&item.lit_else);
+        walk_statement(v, &item.statement);
     }
     v.exit_rule(2, &"ifStatement", &node.span);
 }
