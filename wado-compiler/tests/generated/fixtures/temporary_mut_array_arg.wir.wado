@@ -119,22 +119,22 @@ fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(name, coun
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let value: ref "tuple//[core:prelude/string.wado/String, i32]";
-    let __sroa_self_value: i32;
-    let _licm_used_21: i32;
-    let _licm_repr_22: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let self_18: i32;
+    let _licm_used_20: i32;
+    let _licm_repr_21: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
     i = 0;
-    _licm_used_21 = counts.used;
-    _licm_repr_22 = counts.repr;
+    _licm_used_20 = counts.used;
+    _licm_repr_21 = counts.repr;
     b0: block {
         l1: loop {
-            if i >= _licm_used_21 {
+            if i >= _licm_used_20 {
                 break b0;
             }
-            if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_22, i).0, name) {
-                prev = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_22, i).1;
+            if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_21, i).0, name) {
+                prev = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_21, i).1;
                 value = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: name, 1: prev + 1 };
-                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_22, i, value);
-                return __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_4, name), "core:prelude/string.wado/String::push"(__local_4, 95), __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }, "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value(prev + 1), __local_5), __local_4;
+                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_21, i, value);
+                return __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_4, name), "core:prelude/string.wado/String::push"(__local_4, 95), __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }, "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_18(prev + 1), __local_5), __local_4;
             }
             i = i + 1;
             continue l1;

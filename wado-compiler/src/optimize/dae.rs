@@ -51,6 +51,8 @@
 //! are arena `Body`s too (Phase 5 group 1a), so the same arena routines run on
 //! them directly.
 
+use cranelift_entity::EntityRef;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction};
@@ -58,10 +60,11 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 
 use super::arena_query;
+use super::gate::{FunctionGate, FunctionId};
 
 pub(super) type FnKey = (ModuleSource, String);
 
-pub fn eliminate_dead_arguments(project: &mut NirPackage) -> bool {
+pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let pinned = collect_pinned(project);
     let closure_call_keys = collect_closure_call_keys(project);
 
@@ -90,8 +93,13 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage) -> bool {
         return false;
     }
 
-    // Phase 3: rewrite signatures and call sites.
-    apply_dae(project, &confirmed);
+    // Phase 3: rewrite signatures and call sites. dae is interprocedural and
+    // scans all functions, but reports exactly the ones it touched so the gated
+    // passes re-examine only those and their call-graph neighbours.
+    let touched = apply_dae(project, &confirmed);
+    for idx in touched {
+        gate.mark_changed(FunctionId::new(idx));
+    }
     true
 }
 
@@ -344,33 +352,43 @@ fn validate_call(
 // Application
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) {
+/// Applies the rewrites and returns the indices of every function whose body or
+/// signature changed (confirmed callees + callers whose call sites were
+/// rewritten), so the caller can mark exactly those dirty in the gate. The call
+/// graph is unaffected: dae drops arguments and may collapse `MethodCall` →
+/// `Call` on the *same* callee, never adding or removing an edge.
+fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -> Vec<usize> {
+    let mut touched: IndexSet<usize> = IndexSet::default();
     // Phase 3a: shrink the parameter list of every confirmed callee, then
     // renumber locals so `params[k].local_index == k` continues to hold.
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let key = (func.module_source.clone(), func.name.clone());
         if let Some(dead) = confirmed.get(&key) {
             shrink_params_and_renumber(&mut func, dead);
+            touched.insert(i);
         }
     }
 
     // Phase 3b: rewrite every call site.
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = func.body.as_mut() {
-            rewrite_calls_in_body(body, confirmed);
+        if let Some(body) = func.body.as_mut()
+            && rewrite_calls_in_body(body, confirmed)
+        {
+            touched.insert(i);
         }
     }
     for global in &mut project.globals {
         rewrite_calls_in_body(global.initializer.body_mut(), confirmed);
     }
+    touched.into_iter().collect()
 }
 
 /// Rewrite every `Call` / `MethodCall` of a confirmed function in `body`:
 /// drop the dead-position arguments, collapsing a receiver-dropped
 /// `MethodCall` into a plain `Call`.
-fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>) {
+fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
     let mut calls = Vec::new();
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
@@ -386,20 +404,22 @@ fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>
     }
     // Each rewrite drops arguments / collapses by the callee's dead set,
     // independent of the call's position, so processing order does not matter.
+    let mut changed = false;
     for id in calls {
-        rewrite_call(body, id, confirmed);
+        changed |= rewrite_call(body, id, confirmed);
     }
+    changed
 }
 
-fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<bool>>) {
+fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
     let key = match &body.exprs[id].kind {
         ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => {
             (func.module_source.clone(), func.name.clone())
         }
-        _ => return,
+        _ => return false,
     };
     let Some(dead) = confirmed.get(&key).cloned() else {
-        return;
+        return false;
     };
     match &mut body.exprs[id].kind {
         ExprKind::Call { args, .. } => {
@@ -447,8 +467,9 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
                 });
             }
         }
-        _ => {}
+        _ => return false,
     }
+    true
 }
 
 fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {

@@ -11,20 +11,27 @@
 //!     bindings.
 //! 4.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
 //!     copy when elements are provably immutable through the binding.
-//! 5.  `string_push` — `buf.push_str("short")` → per-byte `push`.
+//! 5.  `peephole` (pre-inline) — unified engine pass: `string_push`
+//!     (`buf.push_str("short")` → per-byte `push`), `elide_local` (write-only
+//!     local elimination), env-free `const_fold` (literal arithmetic + pure
+//!     CTFE), and `const_branch_prune` (trivial-block / dead-statement cleanup;
+//!     pre-inline only — see its module docs). See `optimize/peephole.rs`.
 //! 6.  `inline` — function inlining.
-//! 7.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
-//! 8.  `ref_elim` — drop unnecessary reference bindings exposed by inlining.
-//! 9.  `sroa` — Scalar Replacement of Aggregates.
-//! 10. `copy_prop` — copy propagation.
-//! 11. `dae` — Dead Argument Elimination.
-//! 12. `drve` — Dead Return Value Elimination.
-//! 13. `elide_local` — Write-Only Local Elimination.
+//! 7.  `peephole` (post-inline) — unified engine pass: `array_literal`
+//!     (materialize `ArrayLiteral` from the `array_new + push` window),
+//!     `elide_local`, and env-free `const_fold`.
+//! 8.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
+//! 9.  `ref_elim` — drop unnecessary reference bindings exposed by inlining.
+//! 10. `sroa` — Scalar Replacement of Aggregates.
+//! 11. `copy_prop` — copy propagation.
+//! 12. `dae` — Dead Argument Elimination.
+//! 13. `drve` — Dead Return Value Elimination.
 //! 14. `cse` — Loop-level Common Subexpression Elimination.
 //! 15. `store_load_forward` — store-to-load forwarding.
 //! 16. `const_folding` — partial evaluation via [`crate::niri`] (also drives
-//!     alias-aware field-knowledge tracking; see `alias`).
-//! 17. `const_branch_prune` — constant-condition branch / trivial-block cleanup.
+//!     alias-aware field-knowledge tracking; see `alias`). The flow-sensitive
+//!     half; the env-free folds and trivial-block pruning run in `peephole`
+//!     (`const_branch_prune` in the pre-inline run).
 //! 19. `licm` — Loop-Invariant Code Motion.
 //! 20. `condition_implication` — eliminate conditions implied by dominators.
 //! 21. `tmpl_hoist` — hoist template-string backing buffers out of loops.
@@ -57,12 +64,14 @@ mod drve;
 mod elide_box_local;
 mod elide_local;
 mod field_scalarize;
+mod gate;
 mod inline;
 mod labeled_block_fusion;
 mod licm;
 mod match_to_switch;
 mod mod_ref;
 mod multi_value_return;
+mod peephole;
 mod ref_elim;
 mod select_lowering;
 mod sroa;
@@ -73,10 +82,9 @@ mod tmpl_hoist;
 mod value_copy_demote;
 mod value_copy_elide;
 
-use array_literal::collapse_array_literals;
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
-use const_folding::fold_constants;
+use const_folding::{fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
@@ -89,17 +97,15 @@ use dce::{
 };
 use drve::eliminate_dead_return_values;
 use elide_box_local::elide_adjacent_box_locals;
-use elide_local::elide_write_only_locals;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
 use licm::apply_licm;
-use match_to_switch::match_to_switch;
+use match_to_switch::{match_to_switch, match_to_switch_all};
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
 use store_load_forward::forward_stores_to_loads;
-use string_push::simplify_short_push_str;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 use value_copy_elide::elide_synthesized_value_copies;
@@ -219,7 +225,8 @@ pub fn optimize(
             // `unreachable` directly and is never DCE'd, so ordering
             // around DCE is irrelevant.
             run_pass("nir/match_to_switch", &mut project, profiler, |p| {
-                match_to_switch(p)
+                // O0 skips the loop/gate entirely; lower every function.
+                match_to_switch_all(p)
             });
         }
         OptLevel::O1 => {
@@ -476,13 +483,21 @@ fn run_optimization_passes(
 ) {
     let threshold = config.inline_threshold;
     let trace_loop = crate::trace::filter().enabled("opt_loop");
+    // Per-function dirty-set gate (WEP Phase 6). Every loop pass is gate-aware:
+    // a per-function pass (`gated!`) skips functions unchanged since it last ran;
+    // an interprocedural pass scans all functions but reports exactly the ones
+    // it touched. Both go through `&mut gate`.
+    let mut gate = gate::FunctionGate::new(project);
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
         let mut changed = false;
         let mut iter_changed: Vec<&'static str> = Vec::new();
-        macro_rules! step {
-            ($name:expr, $body:expr) => {{
-                let c = run_pass($name, project, profiler, $body);
+        // A gate-aware pass: receives `&mut gate`, skips functions it has
+        // already processed at their current revision, and reports its own
+        // per-function changes.
+        macro_rules! gated {
+            ($name:expr, $pass:expr) => {{
+                let c = run_pass($name, project, profiler, |p| $pass(p, &mut gate));
                 if c {
                     changed = true;
                     if trace_loop {
@@ -498,7 +513,7 @@ fn run_optimization_passes(
         // already handle. Subsequent iterations only see fresh `Match`
         // shapes if `inline` (or a future shape-rewriting pass) plants
         // them, in which case this pass reconverges on iteration N+1.
-        step!("nir/match_to_switch", match_to_switch);
+        gated!("nir/match_to_switch", match_to_switch);
         // Container SROA must run *before* inline in each iteration: inline
         // expands trait methods like `IndexValue::index_value` into raw
         // `builtin::array_get` + field-access pairs, after which the
@@ -506,7 +521,7 @@ fn run_optimization_passes(
         // also means we see the `SequenceLiteralBuilder` desugaring for `[]`
         // while its inner `Constructor` call is still a plain `Call` node,
         // which `recognize_init` can match structurally.
-        step!("nir/container_sroa", scalarize_containers);
+        gated!("nir/container_sroa", scalarize_containers);
         // Run value-copy elision *before* inlining: the inliner expands
         // every reachable `$value_copy$T<id>` body into a labeled
         // block, after which the `Call($value_copy$T, [arg])` shape the
@@ -524,9 +539,16 @@ fn run_optimization_passes(
         // catches those, and if the loop converges (no pass returned
         // `changed`) the inliner did nothing this round, so no new
         // wrappers were introduced.
+        // These two report change only to the gate (so the gated passes
+        // re-examine the bodies they rewrote), not to the convergence `changed`
+        // flag — keeping the original convergence behaviour where they never
+        // kept the loop alive on their own.
+        // Both report their touched functions to the gate but stay out of the
+        // convergence `changed` flag: they never keep the loop alive on their
+        // own; the gated passes they dirty drive convergence in the same
+        // iteration.
         run_pass("nir/value_copy_elide", project, profiler, |p| {
-            elide_synthesized_value_copies(p);
-            false
+            elide_synthesized_value_copies(p, &mut gate)
         });
         // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
         // copies when the binding's elements are provably never mutated
@@ -535,52 +557,79 @@ fn run_optimization_passes(
         // is only spine-mutated. Both before `nir/inline` for the same
         // `$value_copy$T(arg)`-shape-visibility reason.
         run_pass("nir/value_copy_demote", project, profiler, |p| {
-            demote_value_copies(p);
-            false
+            demote_value_copies(p, &mut gate)
         });
-        // Run short-`push_str` simplification *before* inline. Once the
-        // inliner expands `String::push_str`'s body the `MethodCall` node is
-        // gone and the literal-recognising rewrite can no longer match,
-        // leaving short-string formatting paths (e.g. `fpfmt.wado`'s
-        // `buf.push_str("0.")`) paying full per-call allocation cost.
-        step!("nir/string_push", simplify_short_push_str);
+        // Unified peephole engine pass, pre-inline run. Folds short
+        // `push_str` literals, elides write-only locals, and (post-inline only)
+        // materializes array literals — all three rules over one shared
+        // worklist; see `optimize/peephole.rs`. Runs *before* inline so
+        // `string_push` still sees the `buf.push_str("0.")` `MethodCall` shape:
+        // once the inliner expands `String::push_str`'s body that node is gone
+        // and the literal-recognising rewrite can no longer match, leaving
+        // short-string formatting paths (e.g. `fpfmt.wado`) paying full
+        // per-call allocation cost. Also after value-copy elision/demotion so
+        // the duplicable-receiver check sees the stripped receiver. This run
+        // also hosts `const_branch_prune` (trivial-block / dead-statement
+        // cleanup); it keys only on block structure, so `copy_prop` — not pass
+        // ordering — is what folds the inliner's parameter copies.
+        gated!("nir/peephole", peephole::run_peephole);
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
         // case) to take the inner scalar directly. Runs before `nir/inline`
         // so the inliner sees post-SROA signatures and can propagate the
         // scalar through call chains. NIR analog of WIR's `sroa_param`; see
         // `optimize/sroa_param.rs`.
-        step!("nir/sroa_param", sroa_single_field_parameters);
-        step!("nir/inline", |p| inline_functions(p, threshold));
-        // Materialize `ArrayLiteral` from the `List<T> { array_new(N) } +
-        // N × List::push` builder window. Runs *after* inline: the
-        // `SequenceLiteralBuilder` methods (and, for wrapper builders such
-        // as `SeqVec { items: List<T> }`, the `push_literal → self.field.push`
-        // delegation) must be inlined first so the raw `array_new + push`
-        // window — direct or field-rooted — is exposed. Later `cse` /
-        // `const_fold` in this same loop then see the normalized literal.
-        step!("nir/array_literal", collapse_array_literals);
+        gated!("nir/sroa_param", sroa_single_field_parameters);
+        // `inline` self-reports the callers it modified to the gate (no
+        // `bump_all`); it only mutates caller bodies, so the gated passes need
+        // re-examine just those (and their neighbours).
+        {
+            let c = run_pass("nir/inline", project, profiler, |p| {
+                inline_functions(p, threshold, &mut gate)
+            });
+            if c {
+                changed = true;
+                if trace_loop {
+                    iter_changed.push("nir/inline");
+                }
+            }
+        }
+        // Unified peephole engine pass, post-inline run. Now `array_literal`
+        // fires: it materializes `ArrayLiteral` from the `List<T> {
+        // array_new(N) } + N × List::push` builder window, which inline must
+        // expose first — the `SequenceLiteralBuilder` methods (and, for wrapper
+        // builders such as `SeqVec { items: List<T> }`, the `push_literal →
+        // self.field.push` delegation) are inlined into the raw `array_new +
+        // push` window, direct or field-rooted. Later `cse` / `const_fold` in
+        // this same loop then see the normalized literal. `elide_local` runs
+        // again here over inline's freshly dead bindings.
+        gated!("nir/peephole", peephole::run_peephole);
         // Adjacent-use Box-local elision. After `sroa_param` reshapes
         // `Box<T>` parameters into scalars and `inline` propagates the
         // resulting `FieldAccess(Local(x), "value")` shape into call
         // sites, this pass collapses the surrounding `let x = Box{value:
         // inner}; … x.value …` shells. See `optimize/elide_box_local.rs`.
-        step!("nir/elide_box_local", elide_adjacent_box_locals);
-        step!("nir/labeled_block_fusion", fuse_labeled_blocks);
-        step!("nir/ref_elim", eliminate_unnecessary_refs);
-        step!("nir/sroa", scalar_replace_aggregates);
-        step!("nir/copy_prop", propagate_copies);
-        // DAE / DRVE / write-only local elimination after `copy_prop` shrinks
-        // signatures and discards unused let-bindings before `cse` /
-        // `const_fold` revisit the simplified body. Running here (rather
-        // than at WIR level) lets `inline` see the slimmer signatures on
-        // the next iteration and lets `dce` clean up the freshly dead
-        // computation in the same fixed-point loop.
-        step!("nir/dae", eliminate_dead_arguments);
-        step!("nir/drve", eliminate_dead_return_values);
-        step!("nir/elide_local", elide_write_only_locals);
-        step!("nir/cse", eliminate_common_subexprs);
-        step!("nir/store_load_forward", forward_stores_to_loads);
+        gated!("nir/elide_box_local", elide_adjacent_box_locals);
+        gated!("nir/labeled_block_fusion", fuse_labeled_blocks);
+        gated!("nir/ref_elim", eliminate_unnecessary_refs);
+        gated!("nir/sroa", scalar_replace_aggregates);
+        gated!("nir/copy_prop", propagate_copies);
+        // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
+        // let-bindings before `cse` / `const_fold` revisit the simplified body.
+        // Running here (rather than at WIR level) lets `inline` see the slimmer
+        // signatures on the next iteration and lets `dce` clean up the freshly
+        // dead computation in the same fixed-point loop. (Write-only local
+        // elimination moved into the unified `nir/peephole` pass above.)
+        gated!("nir/dae", eliminate_dead_arguments);
+        gated!("nir/drve", eliminate_dead_return_values);
+        gated!("nir/cse", eliminate_common_subexprs);
+        gated!("nir/store_load_forward", forward_stores_to_loads);
+        // The flow-sensitive half of constant folding; the env-free half
+        // (literal arithmetic + pure CTFE) runs in the `nir/peephole` passes.
+        // This walker handles the folds that need per-function dataflow state —
+        // env-bound locals, forwarded struct fields, immutable-global reads, and
+        // constant-branch collapse.
+        //
         // `field_forward`'s rewrite responsibilities are absorbed by
         // `const_fold` (see `optimize::const_folding::ConstFoldVisitor`).
         // Both passes used to alternate one statement at a time on
@@ -592,11 +641,14 @@ fn run_optimization_passes(
         // chain of pushes folds in a single iteration. The alias and
         // value-copy-helper analyses migrated to
         // `optimize::alias`.
-        step!("nir/const_fold", fold_constants);
-        step!("nir/branch_prune", prune_constant_branches);
-        step!("nir/licm", apply_licm);
-        step!("nir/condition_implication", eliminate_implied_conditions);
-        step!("nir/tmpl_hoist", hoist_template_buffers);
+        gated!("nir/const_fold", fold_constants);
+        // Trivial-block / dead-statement pruning moved into the pre-inline
+        // `nir/peephole` run above; the post-loop `branch_prune_final` and the
+        // post-globalization `const_fold_post_global` keep their own engine
+        // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
+        gated!("nir/licm", apply_licm);
+        gated!("nir/condition_implication", eliminate_implied_conditions);
+        gated!("nir/tmpl_hoist", hoist_template_buffers);
         profiler.span_end(&format!("nir/iteration {}", i + 1));
         if trace_loop {
             crate::compiler_trace!(
@@ -656,7 +708,7 @@ fn run_optimization_passes(
     // through `value_copy` / `sroa` (which is why globalization runs last).
     run_pass("nir/const_fold_post_global", project, profiler, |p| {
         let mut changed = false;
-        while fold_constants(p) | prune_constant_branches(p) {
+        while fold_constants_all(p) | prune_constant_branches(p) {
             changed = true;
         }
         changed

@@ -76,6 +76,10 @@ use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, GatedPass};
+
 /// Signature key for a monomorphized `List<T>` method: (`trait_name`, `method_name`).
 /// Inherent methods (`push/len/is_empty/with_capacity`) use `trait_name = None`;
 /// trait methods (`index_value/index_assign`) use `Some("IndexValue<i32>")` etc.
@@ -261,7 +265,7 @@ struct CandidateInit {
 }
 
 /// Apply container SROA to all functions in the project.
-pub fn scalarize_containers(project: &mut NirPackage) -> bool {
+pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     // Build the method catalog + signature-kind index once, using an immutable
     // borrow on functions. Both indexes are derived from the same scan.
     let (catalog, sig_kinds) = {
@@ -276,31 +280,31 @@ pub fn scalarize_containers(project: &mut NirPackage) -> bool {
     // `collect_candidates` to expand `List<UserStruct>` element types.
     let struct_index = build_struct_index(&project.structs);
 
-    let mut changed = false;
-    for func_rc in &project.functions {
-        // Skip CM bindings (they are ABI bridges, do not optimize their bodies)
+    // Per-function rewrite, gate-skipped. It mutates only the current function's
+    // body (and adds SoA types to the shared `type_table`). Retargeting some
+    // `List<Tuple>::m` calls to per-field `List<F>::m` callees shifts the
+    // function's call edges, which only costs propagation precision, not
+    // correctness.
+    let type_table_rc = project.type_table.clone();
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::ContainerSroa, len, |fid| {
+        let func_rc = &project.functions[fid.index()];
+        // Skip CM bindings (ABI bridges) and body-less declarations.
         {
             let func = func_rc.borrow();
-            if func.is_cm_binding {
-                continue;
-            }
-            if func.body.is_none() {
-                continue;
+            if func.is_cm_binding || func.body.is_none() {
+                return false;
             }
         }
-        // Scoped mutable borrow for analysis + rewrite.
-        let type_table_rc = project.type_table.clone();
         let mut func = func_rc.borrow_mut();
-        let func_changed = scalarize_in_function(
+        scalarize_in_function(
             &mut func,
             &type_table_rc,
             &catalog,
             &sig_kinds,
             &struct_index,
-        );
-        changed |= func_changed;
-    }
-    changed
+        )
+    })
 }
 
 /// Lookup index for user-defined structs by (name, module source).

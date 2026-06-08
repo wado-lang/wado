@@ -42,6 +42,10 @@ use crate::nir_package::NirPackage;
 use crate::tir::TypeId;
 use crate::token::Span;
 
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, GatedPass};
+
 /// Per-binding analysis state, keyed by the ref local index.
 struct RefInfo {
     /// The *unresolved* source expression `E` from `let r = &E` (or the
@@ -52,14 +56,14 @@ struct RefInfo {
     eliminable: bool,
 }
 
-pub fn eliminate_unnecessary_refs(project: &mut NirPackage) -> bool {
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        changed |= eliminate_refs_in_function(&mut func);
+pub fn eliminate_unnecessary_refs(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::RefElim, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
+        let mut changed = eliminate_refs_in_function(&mut func);
         changed |= eliminate_deref_ref_pairs_in_function(&mut func);
-    }
-    changed
+        changed
+    })
 }
 
 /// An expression is a valid referent if it's a pure read of a local — either

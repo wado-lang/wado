@@ -424,8 +424,10 @@ fn "wado-compiler/tests/fixtures/match_or_pattern_5.wado/Expr^Inspect::inspect"(
         s_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_20);
     } else {
-        s_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr::Zero"), used: 10 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_22);
+        block {
+            s_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr::Zero"), used: 10 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_22);
+        };
     }
 }
 

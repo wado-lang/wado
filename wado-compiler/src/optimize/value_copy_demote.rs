@@ -42,6 +42,8 @@ use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeTable};
 
 use super::arena_query::{expr_mentions_local, is_local, strip_refs};
+use super::gate::{FunctionGate, FunctionId};
+use cranelift_entity::EntityRef;
 
 type FuncKey = (ModuleSource, String);
 
@@ -50,7 +52,10 @@ fn builtin_gname(func: &FunctionRef) -> Option<String> {
         .or_else(|| func.monomorphized_builtin_name())
 }
 
-pub fn demote_value_copies(project: &mut NirPackage) {
+/// Returns whether anything changed (a binding was retargeted or a shallow
+/// specialization was added), so the optimizer's dirty-set gate can re-examine
+/// the touched functions and accommodate the new ones.
+pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     // Map every function to its index for callee lookup.
     let mut by_key: IndexMap<FuncKey, usize> = IndexMap::default();
     for (i, f) in project.functions.iter().enumerate() {
@@ -76,7 +81,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         list_wrapper_copies.len()
     );
     if list_wrapper_copies.is_empty() {
-        return;
+        return false;
     }
 
     let type_table = project.type_table.clone();
@@ -122,7 +127,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
     }
     crate::compiler_trace!("demote", "demoted helper keys: {}", demoted_keys.len());
     if demoted_keys.is_empty() {
-        return;
+        return false;
     }
 
     // Phase 2a: synthesize a shallow sibling helper per demoted deep helper.
@@ -158,13 +163,22 @@ pub fn demote_value_copies(project: &mut NirPackage) {
             touched.insert(*fi);
         }
     }
-    for fi in touched {
+    let changed = !touched.is_empty() || !new_funcs.is_empty();
+    for &fi in &touched {
         let mut f = project.functions[fi].borrow_mut();
         if let Some(body) = &mut f.body {
             retarget_block(body, fi, &site_elig, &list_wrapper_copies, &shallow_name);
         }
     }
     project.functions.extend(new_funcs);
+    // Report the retargeted callers; the appended shallow specializations get a
+    // fresh dirty gate slot via the gate's auto-grow on first access. Retarget
+    // shifts a caller's call edges (a `$value_copy$` call → its shallow twin),
+    // which only costs propagation precision, not correctness.
+    for fi in touched {
+        gate.mark_changed(FunctionId::new(fi));
+    }
+    changed
 }
 
 // ---------------------------------------------------------------------------

@@ -31,23 +31,33 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-pub fn elide_synthesized_value_copies(project: &mut NirPackage) {
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, GatedPass};
+
+/// Returns whether any wrapper was stripped. Gate-skipped: a pure per-function
+/// rewrite (it removes `$value_copy$T(arg)` `Call` wrappers within a body, with
+/// no signature or call-graph change), so it skips functions unchanged since it
+/// last ran and reports the ones it strips via the gate.
+pub fn elide_synthesized_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let value_copy_set = project.value_copy_helper_types();
     if value_copy_set.is_empty() {
-        return;
+        return false;
     }
     let type_table = project.type_table.clone();
-
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::ValueCopyElide, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
         if func.is_value_copy() {
-            continue;
+            return false;
         }
         if let Some(body) = func.body.as_mut() {
             let usage = analyze_usage(body, &type_table.borrow());
-            strip_wrappers_in_body(body, &value_copy_set, &usage);
+            strip_wrappers_in_body(body, &value_copy_set, &usage)
+        } else {
+            false
         }
-    }
+    })
 }
 
 fn is_mut_ref_type(type_id: TypeId, type_table: &TypeTable) -> bool {
@@ -258,7 +268,7 @@ fn strip_wrappers_in_body(
     body: &mut Body,
     value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
     usage: &IndexMap<u32, LocalUsage>,
-) {
+) -> bool {
     let mut blocks = Vec::new();
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
@@ -267,12 +277,14 @@ fn strip_wrappers_in_body(
         }
         body.for_each_child(node, |c| stack.push(c));
     }
+    let mut changed = false;
     for b in blocks {
         let stmts = body.blocks[b].stmts.clone();
         for stmt in stmts {
-            try_strip_stmt(body, stmt, value_copy_set, usage);
+            changed |= try_strip_stmt(body, stmt, value_copy_set, usage);
         }
     }
+    changed
 }
 
 /// Strip the wrapper of one statement when it binds / assigns a read-only local
@@ -282,7 +294,7 @@ fn try_strip_stmt(
     stmt: StmtId,
     value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
     usage: &IndexMap<u32, LocalUsage>,
-) {
+) -> bool {
     let target = match &body.stmts[stmt].kind {
         // `let x = $value_copy$T(arg)` — Let establishes a fresh binding, so
         // any subsequent assignment to `x` invalidates the snapshot; require
@@ -319,5 +331,8 @@ fn try_strip_stmt(
     };
     if let Some(value) = target {
         strip_wrapper(body, value);
+        true
+    } else {
+        false
     }
 }

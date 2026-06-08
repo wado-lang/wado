@@ -46,17 +46,16 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::tir::TypeTable;
 
+use super::gate::{FunctionGate, GatedPass};
 use super::mod_ref::{ModRef, can_move_past};
+use cranelift_entity::EntityRef;
 
-pub fn elide_adjacent_box_locals(project: &mut NirPackage) -> bool {
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        if elide_in_function(&mut func) {
-            changed = true;
-        }
-    }
-    changed
+pub fn elide_adjacent_box_locals(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::ElideBoxLocal, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
+        elide_in_function(&mut func)
+    })
 }
 
 fn elide_in_function(func: &mut NirFunction) -> bool {

@@ -3,29 +3,38 @@
 //! Simplifies trivial blocks left over after other passes:
 //! - `{ expr; }` → `expr`
 //! - `label: { break label: val; }` → `val`
-//! - `label: { let x = y; ... }` → substitute x with y in remaining stmts
 //! - Empty blocks → `()`
 //!
 //! Constant-condition `if` folding is handled by `niri` via the `const_folding`
-//! pass; this pass intentionally does *not* duplicate that logic.
+//! pass; this pass intentionally does *not* duplicate that logic. Copy
+//! propagation (including the in-block copies of loop-mutated locals the
+//! inliner leaves behind) is `copy_prop`'s job — this pass keys only on block
+//! and control-flow *structure*, never on labels or variable names.
 //!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): a bottom-up simplifier,
-//! so it walks the arena `Body` children-first (a default bottom-up visitor
-//! walk) and mutates in place — block-stmt flattening rebuilds the
-//! statement-id list, expression simplification rewrites node kinds, and the
-//! break-target queries use the arena `arena_query::has_break_to`.
+//! Runs on the worklist rewrite engine (see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: the
+//! expression simplifications are an `apply_expr` peephole and the
+//! statement-list flattening / dead-code elimination is an `apply_block`
+//! rewrite. The break-target queries are read-only walks over the arena
+//! (`arena_query::has_break_to`). All edits go through the engine API
+//! (`become_expr`, `replace_expr_kind`, `set_block_stmts`, `alloc_stmt`) so the
+//! parent map and use index stay coherent.
+//!
+//! The in-loop run rides the unified [`super::peephole`] session
+//! (`PruneMode::Fixpoint`). Two standalone entry points keep their own engine
+//! session for the callers outside that session: [`prune_constant_branches`]
+//! (`Fixpoint`, used by the post-globalization cleanup) and
+//! [`prune_template_block_wrappers`] (`PostFixpoint`, the final `__tmpl:`
+//! flatten after the fixpoint converges).
 
-use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtId, StmtKind, StmtNode,
-};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::arena_query::has_break_to;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum PruneMode {
+pub(super) enum PruneMode {
     /// Run inside the optimizer fixpoint loop — preserve `__tmpl:` blocks
     /// for `tmpl_hoist`.
     Fixpoint,
@@ -34,25 +43,51 @@ enum PruneMode {
 }
 
 /// Prune constant branches and simplify trivial blocks in all functions.
+/// Standalone engine session for the post-globalization cleanup caller; the
+/// in-loop run goes through [`super::peephole`] instead.
 pub fn prune_constant_branches(project: &mut NirPackage) -> bool {
-    run(project, PruneMode::Fixpoint)
+    run_rule(project, PruneMode::Fixpoint)
 }
 
 /// Final post-fixpoint pass that flattens any `__tmpl:` wrappers.
 pub fn prune_template_block_wrappers(project: &mut NirPackage) -> bool {
-    run(project, PruneMode::PostFixpoint)
+    run_rule(project, PruneMode::PostFixpoint)
 }
 
-fn run(project: &mut NirPackage, mode: PruneMode) -> bool {
+fn run_rule(project: &mut NirPackage, mode: PruneMode) -> bool {
+    let rule = BranchPruneRule::new(mode);
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
-            let root = body.root;
-            changed |= prune_block(body, root, mode);
+            let mut engine = Engine::new(body);
+            changed |= engine.run(&[&rule]);
         }
     }
     changed
+}
+
+/// Engine rule for constant branch pruning. `mode` controls whether `__tmpl:`
+/// labeled blocks are preserved (`Fixpoint`, for `tmpl_hoist`) or flattened
+/// (`PostFixpoint`).
+pub(super) struct BranchPruneRule {
+    mode: PruneMode,
+}
+
+impl BranchPruneRule {
+    pub(super) fn new(mode: PruneMode) -> Self {
+        Self { mode }
+    }
+}
+
+impl Rule for BranchPruneRule {
+    fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
+        prune_expr_local(engine, id, self.mode)
+    }
+
+    fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
+        eliminate_dead_stmts(engine, id, self.mode)
+    }
 }
 
 fn block_has_break_to(body: &Body, block: BlockId, label: &str) -> bool {
@@ -67,178 +102,111 @@ fn expr_has_break_to(body: &Body, expr: ExprId, label: &str) -> bool {
     has_break_to(body, NodeRef::Expr(expr), label)
 }
 
-/// Move `src`'s node content into `id` (the arena form of `*expr = src_expr`);
-/// `src` is left as a dead `Unit`.
-fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
-    if id == src {
-        return;
-    }
-    let ty = body.exprs[src].type_id;
-    let span = body.exprs[src].span;
-    let node = std::mem::replace(
-        &mut body.exprs[src],
-        ExprNode {
-            kind: ExprKind::Unit,
-            type_id: ty,
-            span,
-        },
-    );
-    body.exprs[id] = node;
-}
-
-// ---------------------------------------------------------------------------
-// Bottom-up traversal
-// ---------------------------------------------------------------------------
-
-fn prune_block(body: &mut Body, block: BlockId, mode: PruneMode) -> bool {
-    // Bottom-up: prune each statement's children first.
-    let stmts = body.blocks[block].stmts.clone();
-    let mut changed = false;
-    for s in stmts {
-        changed |= prune_stmt(body, s, mode);
-    }
-    changed |= eliminate_dead_stmts(body, block, mode);
-    changed
-}
-
-fn prune_stmt(body: &mut Body, stmt: StmtId, mode: PruneMode) -> bool {
-    let mut kids = Vec::new();
-    body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
-    let mut changed = false;
-    for c in kids {
-        changed |= prune_node(body, c, mode);
-    }
-    changed
-}
-
-fn prune_node(body: &mut Body, node: NodeRef, mode: PruneMode) -> bool {
-    match node {
-        NodeRef::Expr(id) => prune_expr(body, id, mode),
-        NodeRef::Block(b) => prune_block(body, b, mode),
-        NodeRef::Stmt(s) => prune_stmt(body, s, mode),
-        NodeRef::Pat(_) => {
-            let mut kids = Vec::new();
-            body.for_each_child(node, |c| kids.push(c));
-            let mut changed = false;
-            for c in kids {
-                changed |= prune_node(body, c, mode);
-            }
-            changed
-        }
-    }
-}
-
-fn prune_expr(body: &mut Body, id: ExprId, mode: PruneMode) -> bool {
-    // Bottom-up: walk children first.
-    let mut kids = Vec::new();
-    body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
-    let mut changed = false;
-    for c in kids {
-        changed |= prune_node(body, c, mode);
-    }
-    changed |= inline_labeled_block_copies(body, id);
-    changed |= prune_expr_local(body, id, mode);
-    changed
-}
-
 // ---------------------------------------------------------------------------
 // Expression-level simplification
 // ---------------------------------------------------------------------------
 
-fn prune_expr_local(body: &mut Body, id: ExprId, mode: PruneMode) -> bool {
-    let mut changed = false;
-
+/// One peephole simplification at `id`, applied through the engine edit API.
+/// Returns `true` after the first rewrite; the engine re-tries the node, so a
+/// sequence of collapses (e.g. C3 → `{ expr; }` → `expr`) still runs to a
+/// local fixed point.
+fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
     // `{ expr; }` → `expr` (single-expression unlabeled block)
-    if let ExprKind::Block(block) = &body.exprs[id].kind {
+    if let ExprKind::Block(block) = &engine.body.exprs[id].kind {
         let block = *block;
-        if body.blocks[block].stmts.len() == 1
-            && let StmtKind::Expr(inner) = body.stmts[body.blocks[block].stmts[0]].kind
+        if engine.body.blocks[block].stmts.len() == 1
+            && let StmtKind::Expr(inner) =
+                engine.body.stmts[engine.body.blocks[block].stmts[0]].kind
         {
-            become_expr(body, id, inner);
-            changed = true;
+            engine.become_expr(id, inner);
+            return true;
         }
     }
 
     // (C3) `label: { stmts...; break label: val; }` → `{ stmts...; val }`.
-    if let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[id].kind {
+    if let ExprKind::LabeledBlock { label, block, .. } = &engine.body.exprs[id].kind {
         let label = label.clone();
         let block = *block;
         let go = (mode == PruneMode::PostFixpoint || label != "__tmpl")
-            && body.blocks[block].stmts.last().is_some_and(|&last| {
+            && engine.body.blocks[block].stmts.last().is_some_and(|&last| {
                 matches!(
-                    &body.stmts[last].kind,
+                    &engine.body.stmts[last].kind,
                     StmtKind::Break { label: Some(bl), value: Some(_) } if *bl == label
                 )
             });
         if go {
-            let last = *body.blocks[block].stmts.last().unwrap();
+            let last = *engine.body.blocks[block].stmts.last().unwrap();
             let StmtKind::Break {
                 value: Some(brk_value),
                 ..
-            } = body.stmts[last].kind
+            } = engine.body.stmts[last].kind
             else {
                 unreachable!();
             };
-            let prefix = &body.blocks[block].stmts[..body.blocks[block].stmts.len() - 1];
-            let prefix_clean = !expr_has_break_to(body, brk_value, &label)
-                && !prefix.iter().any(|&s| stmt_has_break_to(body, s, &label));
+            let n = engine.body.blocks[block].stmts.len();
+            let prefix = &engine.body.blocks[block].stmts[..n - 1];
+            let prefix_clean = !expr_has_break_to(engine.body, brk_value, &label)
+                && !prefix
+                    .iter()
+                    .any(|&s| stmt_has_break_to(engine.body, s, &label));
             if prefix_clean {
                 // Drop the trailing break; the broken value becomes the tail.
-                body.blocks[block].stmts.pop();
-                if body.blocks[block].stmts.is_empty() {
-                    become_expr(body, id, brk_value);
+                let mut stmts = engine.body.blocks[block].stmts.clone();
+                stmts.pop();
+                if stmts.is_empty() {
+                    engine.become_expr(id, brk_value);
                 } else {
-                    let tail_span = body.exprs[brk_value].span;
-                    let tail = body.stmts.push(StmtNode {
-                        kind: StmtKind::Expr(brk_value),
-                        span: tail_span,
-                    });
-                    body.blocks[block].stmts.push(tail);
-                    body.exprs[id].kind = ExprKind::Block(block);
+                    let tail_span = engine.body.exprs[brk_value].span;
+                    let tail = engine.alloc_stmt(StmtKind::Expr(brk_value), tail_span);
+                    stmts.push(tail);
+                    engine.set_block_stmts(block, stmts);
+                    engine.replace_expr_kind(id, ExprKind::Block(block));
                 }
-                changed = true;
+                return true;
             }
         }
     }
 
-    // Single-`break` labeled block (covers the `value: None` case too).
-    if let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[id].kind {
+    // Single-`break` labeled block delivering a value.
+    if let ExprKind::LabeledBlock { label, block, .. } = &engine.body.exprs[id].kind {
         let label = label.clone();
         let block = *block;
         let single_break = (mode == PruneMode::PostFixpoint || label != "__tmpl")
-            && body.blocks[block].stmts.len() == 1
+            && engine.body.blocks[block].stmts.len() == 1
             && matches!(
-                &body.stmts[body.blocks[block].stmts[0]].kind,
+                &engine.body.stmts[engine.body.blocks[block].stmts[0]].kind,
                 StmtKind::Break { label: Some(bl), .. } if *bl == label
             );
         if single_break {
-            let s0 = body.blocks[block].stmts[0];
-            let StmtKind::Break { value, .. } = body.stmts[s0].kind else {
+            let s0 = engine.body.blocks[block].stmts[0];
+            let StmtKind::Break { value, .. } = engine.body.stmts[s0].kind else {
                 unreachable!();
             };
-            let value_ok = value.is_none_or(|v| !expr_has_break_to(body, v, &label));
-            if value_ok {
-                if let Some(inner) = value {
-                    become_expr(body, id, inner);
-                }
-                changed = true;
+            // A value-less `label: { break label }` yields unit but carries no
+            // value to promote, so leave it untouched (return `false` so the
+            // engine does not spin on it).
+            if let Some(inner) = value
+                && !expr_has_break_to(engine.body, inner, &label)
+            {
+                engine.become_expr(id, inner);
+                return true;
             }
         }
     }
 
     // `[label:] { }` → `()` (empty block, with or without label)
-    let is_empty = match &body.exprs[id].kind {
+    let is_empty = match &engine.body.exprs[id].kind {
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
-            body.blocks[*b].stmts.is_empty()
+            engine.body.blocks[*b].stmts.is_empty()
         }
         _ => false,
     };
     if is_empty {
-        body.exprs[id].kind = ExprKind::Unit;
-        changed = true;
+        engine.replace_expr_kind(id, ExprKind::Unit);
+        return true;
     }
 
-    changed
+    false
 }
 
 // ---------------------------------------------------------------------------
@@ -306,20 +274,25 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
     base || is_tail_break_only_labeled_block(body, stmt, mode)
 }
 
-fn eliminate_dead_stmts(body: &mut Body, block: BlockId, mode: PruneMode) -> bool {
-    let stmts = body.blocks[block].stmts.clone();
+/// Rebuild `block`'s statement list, dropping code after a terminator and
+/// flattening unused-label / void wrapper blocks into it. A flattened-in inner
+/// block is emptied: the engine may later pop that now-orphaned block, and
+/// emptying it prevents re-parenting the (now shared) statement ids back to it.
+fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) -> bool {
+    let stmts = engine.body.blocks[block].stmts.clone();
     let has_dead_after_terminator = stmts.iter().enumerate().any(|(i, &s)| {
         i + 1 < stmts.len()
             && matches!(
-                &body.stmts[s].kind,
+                &engine.body.stmts[s].kind,
                 StmtKind::Break { .. } | StmtKind::Continue | StmtKind::Return { .. }
             )
     });
-    if !has_dead_after_terminator && !stmts.iter().any(|&s| stmt_dominated(body, s, mode)) {
+    if !has_dead_after_terminator && !stmts.iter().any(|&s| stmt_dominated(engine.body, s, mode)) {
         return false;
     }
 
     let mut new_stmts: Vec<StmtId> = Vec::with_capacity(stmts.len());
+    let mut consumed_inner: Vec<BlockId> = Vec::new();
     let mut terminated = false;
     for stmt in stmts {
         if terminated {
@@ -329,219 +302,85 @@ fn eliminate_dead_stmts(body: &mut Body, block: BlockId, mode: PruneMode) -> boo
         if let StmtKind::LabeledBlock {
             label,
             block: inner,
-        } = &body.stmts[stmt].kind
+        } = &engine.body.stmts[stmt].kind
         {
             let inner = *inner;
-            if unused_label_flattenable(body, label, inner, mode) {
-                let inner_stmts = body.blocks[inner].stmts.clone();
-                if ends_with_terminator_stmt(body, &inner_stmts) {
+            if unused_label_flattenable(engine.body, label, inner, mode) {
+                let inner_stmts = engine.body.blocks[inner].stmts.clone();
+                if ends_with_terminator_stmt(engine.body, &inner_stmts) {
                     terminated = true;
                 }
                 new_stmts.extend(inner_stmts);
+                consumed_inner.push(inner);
                 continue;
             }
         }
         // (C2) Labeled block whose only `break LABEL` is a value-less tail.
-        if is_tail_break_only_labeled_block(body, stmt, mode) {
-            let StmtKind::LabeledBlock { block: inner, .. } = &body.stmts[stmt].kind else {
+        if is_tail_break_only_labeled_block(engine.body, stmt, mode) {
+            let StmtKind::LabeledBlock { block: inner, .. } = &engine.body.stmts[stmt].kind else {
                 unreachable!();
             };
             let inner = *inner;
-            let mut inner_stmts = body.blocks[inner].stmts.clone();
+            let mut inner_stmts = engine.body.blocks[inner].stmts.clone();
             inner_stmts.pop();
-            if ends_with_terminator_stmt(body, &inner_stmts) {
+            if ends_with_terminator_stmt(engine.body, &inner_stmts) {
                 terminated = true;
             }
             new_stmts.extend(inner_stmts);
+            consumed_inner.push(inner);
             continue;
         }
         // Unit expression statement → drop.
-        if let StmtKind::Expr(e) = &body.stmts[stmt].kind
-            && matches!(body.exprs[*e].kind, ExprKind::Unit)
+        if let StmtKind::Expr(e) = &engine.body.stmts[stmt].kind
+            && matches!(engine.body.exprs[*e].kind, ExprKind::Unit)
         {
             continue;
         }
         // Void block expression statement → flatten.
-        if let StmtKind::Expr(e) = &body.stmts[stmt].kind
-            && let ExprKind::Block(inner) = &body.exprs[*e].kind
+        if let StmtKind::Expr(e) = &engine.body.stmts[stmt].kind
+            && let ExprKind::Block(inner) = &engine.body.exprs[*e].kind
         {
             let inner = *inner;
-            let inner_stmts = body.blocks[inner].stmts.clone();
-            if ends_with_terminator_stmt(body, &inner_stmts) {
+            let inner_stmts = engine.body.blocks[inner].stmts.clone();
+            if ends_with_terminator_stmt(engine.body, &inner_stmts) {
                 terminated = true;
             }
             new_stmts.extend(inner_stmts);
+            consumed_inner.push(inner);
             continue;
         }
         // Unused-label labeled-block expression statement → flatten.
-        if let StmtKind::Expr(e) = &body.stmts[stmt].kind
+        if let StmtKind::Expr(e) = &engine.body.stmts[stmt].kind
             && let ExprKind::LabeledBlock {
                 label,
                 block: inner,
                 ..
-            } = &body.exprs[*e].kind
-            && unused_label_flattenable(body, label, *inner, mode)
+            } = &engine.body.exprs[*e].kind
+            && unused_label_flattenable(engine.body, label, *inner, mode)
         {
             let inner = *inner;
-            let inner_stmts = body.blocks[inner].stmts.clone();
-            if ends_with_terminator_stmt(body, &inner_stmts) {
+            let inner_stmts = engine.body.blocks[inner].stmts.clone();
+            if ends_with_terminator_stmt(engine.body, &inner_stmts) {
                 terminated = true;
             }
             new_stmts.extend(inner_stmts);
+            consumed_inner.push(inner);
             continue;
         }
         if matches!(
-            &body.stmts[stmt].kind,
+            &engine.body.stmts[stmt].kind,
             StmtKind::Break { .. } | StmtKind::Continue | StmtKind::Return { .. }
         ) {
             terminated = true;
         }
         new_stmts.push(stmt);
     }
-    body.blocks[block].stmts = new_stmts;
+    engine.set_block_stmts(block, new_stmts);
+    // Empty each consumed inner block: its statements now live (and are
+    // re-parented) in `block`, so the orphaned inner must not keep claiming
+    // them if the engine pops it again.
+    for inner in consumed_inner {
+        engine.set_block_stmts(inner, Vec::new());
+    }
     true
-}
-
-// ---------------------------------------------------------------------------
-// Leading copy-binding inlining inside labeled blocks
-// ---------------------------------------------------------------------------
-
-fn inline_labeled_block_copies(body: &mut Body, id: ExprId) -> bool {
-    let ExprKind::LabeledBlock { block, .. } = &body.exprs[id].kind else {
-        return false;
-    };
-    let block = *block;
-
-    // Collect leading copy bindings: `let x = y` (y a Local, x immutable).
-    let mut copies: Vec<(u32, u32, String)> = Vec::new();
-    for &stmt in &body.blocks[block].stmts {
-        if let StmtKind::Let {
-            local_index,
-            is_mut,
-            value,
-            ..
-        } = &body.stmts[stmt].kind
-            && !*is_mut
-            && let ExprKind::Local { index, name } = &body.exprs[*value].kind
-        {
-            copies.push((*local_index, *index, name.clone()));
-        } else {
-            break;
-        }
-    }
-    if copies.is_empty() {
-        return false;
-    }
-
-    // Verify safety: neither target nor source is mutated in the remaining stmts.
-    let copy_count = copies.len();
-    let remaining: Vec<StmtId> = body.blocks[block].stmts[copy_count..].to_vec();
-    let mut locals: IndexSet<u32> = IndexSet::default();
-    for (target, source, _) in &copies {
-        locals.insert(*target);
-        locals.insert(*source);
-    }
-    if remaining
-        .iter()
-        .any(|&s| node_mutates(body, NodeRef::Stmt(s), &locals))
-    {
-        return false;
-    }
-
-    // Build substitution map with transitive resolution.
-    let mut subs: IndexMap<u32, (u32, String)> = IndexMap::default();
-    for (target, source, source_name) in copies {
-        let (final_source, final_name) = if let Some((resolved, resolved_name)) = subs.get(&source)
-        {
-            (*resolved, resolved_name.clone())
-        } else {
-            (source, source_name)
-        };
-        subs.insert(target, (final_source, final_name));
-    }
-
-    body.blocks[block].stmts.drain(..copy_count);
-    substitute_locals(body, block, &subs);
-    true
-}
-
-/// Whether any local in `locals` is assigned or mutably referenced within the
-/// subtree at `node`. Mirrors the tree `MutationChecker`.
-fn node_mutates(body: &Body, node: NodeRef, locals: &IndexSet<u32>) -> bool {
-    if let NodeRef::Expr(id) = node {
-        match &body.exprs[id].kind {
-            ExprKind::Assign { target, .. } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-                    && locals.contains(index)
-                {
-                    return true;
-                }
-                if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[*target].kind
-                    && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
-                    && locals.contains(index)
-                {
-                    return true;
-                }
-            }
-            ExprKind::Unary {
-                op: crate::nir::NirUnaryOp::MutRef,
-                expr: inner,
-            } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
-                    && locals.contains(index)
-                {
-                    return true;
-                }
-            }
-            ExprKind::MethodCall { receiver, .. } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind
-                    && locals.contains(index)
-                {
-                    return true;
-                }
-            }
-            ExprKind::Call { args, .. } => {
-                for arg in args {
-                    if arg.is_mut
-                        && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
-                        && locals.contains(index)
-                    {
-                        return true;
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut found = false;
-    body.for_each_child(node, |c| {
-        if !found {
-            found = node_mutates(body, c, locals);
-        }
-    });
-    found
-}
-
-/// Replace `Local { index: target }` with `Local { index: source, … }`
-/// throughout the subtree of `block`.
-fn substitute_locals(body: &mut Body, block: BlockId, subs: &IndexMap<u32, (u32, String)>) {
-    let mut targets = Vec::new();
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(id) = node
-            && let ExprKind::Local { index, .. } = &body.exprs[id].kind
-            && subs.contains_key(index)
-        {
-            targets.push(id);
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    for id in targets {
-        if let ExprKind::Local { index, name } = &mut body.exprs[id].kind
-            && let Some((src_idx, src_name)) = subs.get(index)
-        {
-            *index = *src_idx;
-            name.clone_from(src_name);
-        }
-    }
 }

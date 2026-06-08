@@ -9,6 +9,8 @@
 //! analysis and the substitute-and-remove rewrite read and mutate the arena
 //! `Body` directly.
 
+use cranelift_entity::EntityRef;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
@@ -16,11 +18,35 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtI
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
+use super::arena_query::place_root_local;
+use super::gate::{FunctionGate, GatedPass};
+
 #[derive(Debug, Clone)]
 struct CopyBinding {
     target_local: u32,
     source: CopySource,
     type_id: TypeId,
+    /// Whether the source value is stable across the target's scope: the source
+    /// local is never *mutated* (re-assigned, field-mutated, `&mut`-borrowed, or
+    /// passed as a mutable argument) anywhere in the binding block's statements
+    /// after the binding. The target's uses are confined to that scope, so a
+    /// stable source can be propagated even when the source is reassigned
+    /// elsewhere in the function (e.g. a loop counter copied inside the loop
+    /// body). Always `true` for literal sources.
+    source_scope_stable: bool,
+}
+
+impl CopySource {
+    /// The source local index for the index-bearing sources; `None` for
+    /// literals (which are always stable).
+    fn local_index(&self) -> Option<u32> {
+        match self {
+            CopySource::Local { index, .. }
+            | CopySource::Ref { index, .. }
+            | CopySource::MutRef { index, .. } => Some(*index),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +160,56 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
         target_local: local_index,
         source,
         type_id: value_type,
+        // Filled in by `analyze_block`, which knows the binding's position.
+        source_scope_stable: false,
     })
+}
+
+/// Whether `local`'s value is mutated anywhere in the subtree at `node`:
+/// re-assignment, field/element assignment, `&mut` borrow, mutable method
+/// receiver, or a mutable call argument — through any field/index projection
+/// (`local.f.g = …`, `local[i] = …`, `local.f.method()`), not just one level.
+/// Conservative (treats any method call on a place rooted at `local` as a
+/// mutation), matching and generalizing the in-block copy-inlining check this
+/// subsumes.
+fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
+    if let NodeRef::Expr(id) = node {
+        match &body.exprs[id].kind {
+            ExprKind::Assign { target, .. } => {
+                if place_root_local(body, *target) == Some(local) {
+                    return true;
+                }
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => {
+                if place_root_local(body, *inner) == Some(local) {
+                    return true;
+                }
+            }
+            ExprKind::MethodCall { receiver, .. } => {
+                if place_root_local(body, *receiver) == Some(local) {
+                    return true;
+                }
+            }
+            ExprKind::Call { args, .. } => {
+                for arg in args {
+                    if arg.is_mut && place_root_local(body, arg.expr) == Some(local) {
+                        return true;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut found = false;
+    body.for_each_child(node, |c| {
+        if !found {
+            found = subtree_mutates_local(body, c, local);
+        }
+    });
+    found
 }
 
 struct AnalysisResult {
@@ -165,8 +240,17 @@ fn analyze_block(
     fpt: &FirstParamTypes,
 ) {
     let stmts = body.blocks[block].stmts.clone();
-    for stmt in stmts {
-        if let Some(binding) = analyze_copy_binding(body, stmt) {
+    for (k, &stmt) in stmts.iter().enumerate() {
+        if let Some(mut binding) = analyze_copy_binding(body, stmt) {
+            // The target's uses are confined to this block from `k` onward, so
+            // the source is stable for the propagation iff it is not mutated in
+            // those statements (literals are unconditionally stable).
+            binding.source_scope_stable = match binding.source.local_index() {
+                Some(src) => !stmts[k + 1..]
+                    .iter()
+                    .any(|&s| subtree_mutates_local(body, NodeRef::Stmt(s), src)),
+                None => true,
+            };
             result.bindings.push(binding);
         }
         analyze_stmt(body, stmt, result, type_table, fpt);
@@ -331,6 +415,14 @@ fn can_propagate_copy(
 
     match &binding.source {
         CopySource::Local { index, .. } => {
+            // A scope-stable source is provably unchanged across every use of
+            // the target (the target's reads are confined to the binding's
+            // scope), so the coarse whole-function source gates below — which
+            // would otherwise reject e.g. a loop counter copied inside the loop
+            // — do not apply.
+            if binding.source_scope_stable {
+                return true;
+            }
             let source_usage = usage.get(index);
             if let Some(su) = source_usage
                 && su.is_assigned
@@ -548,8 +640,7 @@ fn propagate_copies_in_function(
     ever_changed
 }
 
-pub fn propagate_copies(project: &mut NirPackage) -> bool {
-    let mut changed = false;
+pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
     let mut first_param_types: FirstParamTypes = IndexMap::default();
     for func_rc in &project.functions {
@@ -559,9 +650,9 @@ pub fn propagate_copies(project: &mut NirPackage) -> bool {
             first_param_types.insert(key, first_param.type_id);
         }
     }
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        changed |= propagate_copies_in_function(&mut func, &type_table, &first_param_types);
-    }
-    changed
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::CopyProp, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
+        propagate_copies_in_function(&mut func, &type_table, &first_param_types)
+    })
 }

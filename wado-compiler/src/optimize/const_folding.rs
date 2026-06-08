@@ -30,6 +30,11 @@
 //! [`super::alias::build_value_copy_helpers`] for the per-function
 //! alias / helper computations the visitor consumes.
 
+use std::cell::RefCell;
+
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, FunctionId, GatedPass};
 use crate::compiler_item::SeqField;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
@@ -38,6 +43,7 @@ use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind,
 };
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
     Arm, CalleeMap, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
@@ -49,7 +55,19 @@ use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_c
 use super::arena_query::has_break_to;
 
 /// Apply constant folding to all functions in the project.
-pub fn fold_constants(project: &mut NirPackage) -> bool {
+/// Flow-sensitive constant folding, gated: skips functions unchanged since this
+/// pass last ran. Used in the fixed-point loop.
+pub fn fold_constants(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    fold_constants_impl(project, Some(gate))
+}
+
+/// Ungated variant: folds every function. Used by the post-globalization
+/// cleanup, which runs to its own fixed point outside the gated loop.
+pub fn fold_constants_all(project: &mut NirPackage) -> bool {
+    fold_constants_impl(project, None)
+}
+
+fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionGate>) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
     // Build the CalleeMap once per pass with Rc handles aliased with
@@ -80,12 +98,18 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
     visitor.interpreter.with_callees(&callees);
     visitor.interpreter.with_globals(&globals);
     visitor.interpreter.with_global_fields(&global_fields);
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
+        let fid = FunctionId::new(i);
+        if let Some(g) = gate.as_deref_mut()
+            && !g.needs(GatedPass::ConstFold, fid)
+        {
+            continue;
+        }
         let mut func = func_rc.borrow_mut();
         let address_taken = func.address_taken_locals.clone();
         let stores_aliased = func.stores_aliased_locals.clone();
         let locals = func.locals.clone();
-        if let Some(body) = func.body.as_mut() {
+        let func_changed = if let Some(body) = func.body.as_mut() {
             // Local indices are unique per function, not project-wide,
             // so reset the interpreter's env at every function boundary.
             visitor.interpreter.enter_function();
@@ -98,10 +122,61 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
                 build_alias_info(body, &locals, &address_taken, &stores_aliased, &type_table);
             visitor.interpreter.set_alias_info(alias_info);
             let root = body.root;
-            changed |= visitor.visit_block(body, root);
+            visitor.visit_block(body, root)
+        } else {
+            false
+        };
+        drop(func);
+        if let Some(g) = gate.as_deref_mut() {
+            g.seen(GatedPass::ConstFold, fid);
+            if func_changed {
+                g.mark_changed(fid);
+            }
         }
+        changed |= func_changed;
     }
     changed
+}
+
+/// Engine rule: environment-free constant folding.
+///
+/// Runs the [`Interpreter::const_fold_kind_a`] subset — literal arithmetic and
+/// pure CTFE — over the worklist rewrite engine, applying each fold through the
+/// engine's edit API so the parent map and use index stay coherent. The
+/// program-wide [`CalleeMap`] is installed; the per-function `env` / `field_env`
+/// stay empty, so the flow-sensitive folds (env-bound locals, forwarded fields,
+/// immutable globals, constant-branch collapse) remain with the standalone
+/// [`fold_constants`] walker that still runs once per fixed-point iteration.
+///
+/// `const_fold_kind_a` needs `&mut Interpreter` (CTFE advances the call stack
+/// and step budget), but [`Rule::apply_expr`] is `&self`, so the interpreter
+/// lives behind a [`RefCell`].
+pub(super) struct ConstFoldRule<'a> {
+    interpreter: RefCell<Interpreter<'a>>,
+}
+
+impl<'a> ConstFoldRule<'a> {
+    pub(super) fn new(type_table: &'a TypeTable, callees: &'a CalleeMap) -> Self {
+        let mut interpreter = Interpreter::new(type_table);
+        interpreter.with_callees(callees);
+        Self {
+            interpreter: RefCell::new(interpreter),
+        }
+    }
+}
+
+impl Rule for ConstFoldRule<'_> {
+    fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
+        let Some(kind) = self
+            .interpreter
+            .borrow_mut()
+            .const_fold_kind_a(engine.body, id)
+        else {
+            return false;
+        };
+        engine.replace_expr_kind(id, kind);
+        true
+    }
 }
 
 /// Pre-build the [`CalleeMap`] from every CTFE-eligible function in
@@ -110,7 +185,7 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
 /// optimizer iteration costs only refcount bumps. The key shape
 /// `(module_source, full_name)` mirrors what `try_call_fold`
 /// synthesises from a `Call` node's `FunctionRef`.
-fn build_callee_map(project: &NirPackage) -> CalleeMap {
+pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
     let mut map = CalleeMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();

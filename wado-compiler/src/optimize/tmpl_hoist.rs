@@ -50,16 +50,17 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::is_local;
+use super::gate::{FunctionGate, GatedPass};
+use cranelift_entity::EntityRef;
 
 /// Apply template string buffer hoisting to all functions in the project.
-pub fn hoist_template_buffers(project: &mut NirPackage) -> bool {
-    let mut changed = false;
+pub fn hoist_template_buffers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.clone();
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        changed |= hoist_in_function(&mut func, &type_table);
-    }
-    changed
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::TmplHoist, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
+        hoist_in_function(&mut func, &type_table)
+    })
 }
 
 fn hoist_in_function(func: &mut NirFunction, type_table: &std::cell::RefCell<TypeTable>) -> bool {

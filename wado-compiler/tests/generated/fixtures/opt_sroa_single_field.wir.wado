@@ -348,7 +348,6 @@ fn "wado-compiler/tests/fixtures/opt_sroa_single_field.wado/run"() with Stdout {
     let f_231: ref "core:prelude/format.wado//Formatter";
     let f_249: ref "core:prelude/format.wado//Formatter";
     let f_254: ref "core:prelude/format.wado//Formatter";
-    let __sroa_l_text: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -380,8 +379,7 @@ condition: a.as_cents() == 1950
 "), used: 33 }); "core:prelude/string.wado/String::push_str"(__local_50, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a.as_cents(): "), used: 14 }); __local_51 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_50 }; f_112 = __local_51; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_6, f_112); "core:prelude/string.wado/String::push"(__local_50, 10); __local_50);
         unreachable;
     }
-    __sroa_l_text = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    __cond_10 = local.tee __v0_9("wado-compiler/tests/fixtures/opt_sroa_single_field.wado/Label::len"(__sroa_l_text)) == 5;
+    __cond_10 = local.tee __v0_9("wado-compiler/tests/fixtures/opt_sroa_single_field.wado/Label::len"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 })) == 5;
     if @unlikely(__cond_10 == 0) {
         cold_path;
         "core:internal/panic"(__local_52 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(124), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_52, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_52, 114); "core:prelude/string.wado/String::push"(__local_52, 117); "core:prelude/string.wado/String::push"(__local_52, 110); "core:prelude/string.wado/String::push"(__local_52, 32); "core:prelude/string.wado/String::push"(__local_52, 97); "core:prelude/string.wado/String::push"(__local_52, 116); "core:prelude/string.wado/String::push"(__local_52, 32); "core:prelude/string.wado/String::push_str"(__local_52, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_single_field.wado"), used: 55 }); "core:prelude/string.wado/String::push"(__local_52, 58); __local_53 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_52 }; f_118 = __local_53; "core:prelude/primitive.wado/i32::fmt_decimal"(148, f_118); "core:prelude/string.wado/String::push_str"(__local_52, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -1124,6 +1122,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
 fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
+    let index: i32;
     let value: u8;
     let _licm_repr_9: ref Array<u8>;
     v = val;
@@ -1134,8 +1133,9 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
             if idx < offset {
                 break b111;
             }
+            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, idx, value);
+            builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l112;

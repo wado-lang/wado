@@ -51,19 +51,20 @@ use crate::tir::TypeId;
 use crate::token::Span;
 
 use super::arena_query::{has_break_to, is_local};
+use super::gate::{FunctionGate, GatedPass};
+use cranelift_entity::EntityRef;
 
 /// `expr_has_break_to` arena adapter.
 fn expr_has_break_to(body: &Body, label: &str, e: ExprId) -> bool {
     has_break_to(body, NodeRef::Expr(e), label)
 }
 
-pub fn fuse_labeled_blocks(project: &mut NirPackage) -> bool {
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        changed |= fuse_in_function(&mut func);
-    }
-    changed
+pub fn fuse_labeled_blocks(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::LabeledBlockFusion, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
+        fuse_in_function(&mut func)
+    })
 }
 
 fn fuse_in_function(func: &mut NirFunction) -> bool {

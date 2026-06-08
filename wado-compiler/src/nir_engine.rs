@@ -261,6 +261,40 @@ impl<'a> Engine<'a> {
         }
     }
 
+    /// Edit API: promote `src`'s node content (kind + type + span) into `dst`,
+    /// leaving `src` a dead `Unit`. The arena analogue of `*dst = *src` when a
+    /// rewrite collapses a wrapper onto a nested node it contains — e.g.
+    /// `{ expr; }` → `expr`, or `label: { break label: val }` → `val`.
+    ///
+    /// `dst`'s former subtree is discarded. As with [`set_block_stmts`], this
+    /// does not deep-unregister `Local` mentions inside that discarded subtree:
+    /// the only way a stale mention matters is `is_local_read`, where an extra
+    /// (dead) mention is conservative — it can keep a binding alive, never drop
+    /// a live one. Callers use this to lift a nested node whose discarded
+    /// siblings carry no live reads (every production caller in
+    /// `const_branch_prune` promotes the sole meaningful child of a wrapper).
+    /// `src`'s own mention is moved off `src` so it is not left dangling.
+    pub fn become_expr(&mut self, dst: ExprId, src: ExprId) {
+        if dst == src {
+            return;
+        }
+        let type_id = self.body.exprs[src].type_id;
+        let span = self.body.exprs[src].span;
+        let src_kind = std::mem::replace(&mut self.body.exprs[src].kind, ExprKind::Unit);
+        // `src` is now `Unit`; if it named a local, that mention belongs at
+        // `dst` after the move, so drop it here — `replace_expr_kind` re-adds it
+        // for `dst` when `src_kind` is itself a `Local`.
+        if let ExprKind::Local { index, .. } = &src_kind {
+            let index = *index;
+            if let Some(u) = self.uses.get_mut(&index) {
+                u.reads.retain(|&r| r != src);
+            }
+        }
+        self.body.exprs[dst].type_id = type_id;
+        self.body.exprs[dst].span = span;
+        self.replace_expr_kind(dst, src_kind);
+    }
+
     /// Edit API: replace a block's statement list. Re-parents the new
     /// statements to the block, re-enqueues them, the block, and the block's
     /// parent. Statements dropped from the list become unreachable (dead nodes
@@ -1006,6 +1040,41 @@ mod tests {
         });
         let eng2 = Engine::new(&mut body2);
         assert!(eng2.is_local_read(0));
+    }
+
+    #[test]
+    fn become_expr_moves_node_and_updates_use_index() {
+        // `{ x; 1 + 2; }` — promote the `x` local read into the `1 + 2` node.
+        let mut body = mk_body(|b| {
+            let lx = local0(b);
+            let s_x = s(b, StmtKind::Expr(lx));
+            let one = lit(b, 1);
+            let two = lit(b, 2);
+            let add = bin(b, one, NirBinaryOp::Add, two);
+            let s_add = s(b, StmtKind::Expr(add));
+            vec![s_x, s_add]
+        });
+        let root = body.root;
+        let StmtKind::Expr(lx) = body.stmts[body.blocks[root].stmts[0]].kind else {
+            panic!("expected expr stmt");
+        };
+        let StmtKind::Expr(add) = body.stmts[body.blocks[root].stmts[1]].kind else {
+            panic!("expected expr stmt");
+        };
+        {
+            let mut eng = Engine::new(&mut body);
+            // Before: local 0 is read only by the `x` node.
+            assert_eq!(eng.local_reads(0), &[lx]);
+            eng.become_expr(add, lx);
+            // After: `add` now holds the local read; `lx` is dead and dropped,
+            // and the use index tracks the read at its new home.
+            assert!(matches!(
+                eng.body.exprs[add].kind,
+                ExprKind::Local { index: 0, .. }
+            ));
+            assert!(matches!(eng.body.exprs[lx].kind, ExprKind::Unit));
+            assert_eq!(eng.local_reads(0), &[add]);
+        }
     }
 
     #[test]

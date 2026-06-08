@@ -8,6 +8,24 @@ use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 
+/// If `expr` is a place rooted at a local — `x`, `x.f`, `x[i]`, `*x`, and any
+/// chain thereof — return that root local index; otherwise `None`. Used by
+/// passes that need the local a place projects from (parameter SROA) or that
+/// detect mutation of a local through any projection (copy propagation).
+pub(super) fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
+            place_root_local(body, *inner)
+        }
+        ExprKind::Unary {
+            op: NirUnaryOp::Deref,
+            expr: inner,
+        } => place_root_local(body, *inner),
+        _ => None,
+    }
+}
+
 /// Whether the subtree at `node` contains a `Break` targeting `label`. A full
 /// subtree search, so nested blocks that rebind the same label are still
 /// searched — the conservative behaviour the sync-placement passes rely on.

@@ -123,11 +123,11 @@ fn "wado-compiler/tests/fixtures/short_circuit.wado/run"() with Stdout {
     let __local_2_21: ref "core:prelude/string.wado//String";
     let f_37: ref "core:prelude/format.wado//Formatter";
     let f_42: ref "core:prelude/format.wado//Formatter";
+    let self_45: i32;
     let msg_53: ref "core:prelude/string.wado//String";
     let __local_2_55: ref "core:prelude/string.wado//String";
-    let __sroa_self_value_60: i32;
-    let _licm_used_62: i32;
-    let _licm_repr_63: ref Array<i32>;
+    let _licm_used_59: i32;
+    let _licm_repr_60: ref Array<i32>;
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("=== Testing && ==="), used: 18 });
     if block -> i32 {
         0;
@@ -156,26 +156,26 @@ fn "wado-compiler/tests/fixtures/short_circuit.wado/run"() with Stdout {
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 === Testing while loop ==="), used: 27 });
     i = 0;
-    _licm_used_62 = global:__const_obj_0.used;
-    _licm_repr_63 = global:__const_obj_0.repr;
+    _licm_used_59 = global:__const_obj_0.used;
+    _licm_repr_60 = global:__const_obj_0.repr;
     b6: block {
         l7: loop {
-            if (if i < _licm_used_62 -> i32 {
-                if @unlikely(i >= _licm_used_62) {
+            if (if i < _licm_used_59 -> i32 {
+                if @unlikely(i >= _licm_used_59) {
                     cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }; builtin::array_get<i32>(_licm_repr_63, i) < 100;
+                }; builtin::array_get<i32>(_licm_repr_60, i) < 100;
             } else {
                 0;
             }) == 0 {
                 break b6;
             }
-            "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }; "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 114); "core:prelude/string.wado/String::push"(__local_5, 114); "core:prelude/string.wado/String::push"(__local_5, 91); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_37 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(i, f_37); "core:prelude/string.wado/String::push"(__local_5, 93); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 61); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; if @unlikely(i >= _licm_used_62) {
+            "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }; "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 114); "core:prelude/string.wado/String::push"(__local_5, 114); "core:prelude/string.wado/String::push"(__local_5, 91); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_37 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(i, f_37); "core:prelude/string.wado/String::push"(__local_5, 93); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 61); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_42 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_45(if @unlikely(i >= _licm_used_59) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            }; __sroa_self_value_60 = builtin::array_get<i32>(_licm_repr_63, i); f_42 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_60, f_42); __local_5);
+            }; builtin::array_get<i32>(_licm_repr_60, i)), f_42); __local_5);
             i = i + 1;
             continue l7;
         };

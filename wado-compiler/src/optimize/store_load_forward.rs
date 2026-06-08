@@ -21,6 +21,10 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKin
 use crate::nir_package::NirPackage;
 use crate::tir::TypeTable;
 
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, GatedPass};
+
 /// Precomputed per-block modified-locals cache, keyed by `BlockId`.
 type ModifiedLocalsCache = IndexMap<BlockId, IndexSet<u32>>;
 
@@ -196,14 +200,13 @@ fn collect_unsafe_node(body: &Body, node: NodeRef, unsafe_locals: &mut IndexSet<
     }
 }
 
-pub fn forward_stores_to_loads(project: &mut NirPackage) -> bool {
-    let mut changed = false;
+pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        changed |= forward_in_function(&mut func, &type_table);
-    }
-    changed
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::StoreLoadForward, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
+        forward_in_function(&mut func, &type_table)
+    })
 }
 
 fn forward_in_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {

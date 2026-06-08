@@ -37,12 +37,15 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKin
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeTable};
 
+use cranelift_entity::EntityRef;
+
 use super::arena_query;
 use super::dae;
+use super::gate::{FunctionGate, FunctionId};
 
 type FnKey = dae::FnKey;
 
-pub fn eliminate_dead_return_values(project: &mut NirPackage) -> bool {
+pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let pinned = collect_pinned(project);
     let type_table = project.type_table.borrow();
 
@@ -68,7 +71,13 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage) -> bool {
         return false;
     }
 
-    apply_drve(project, &confirmed);
+    // drve is interprocedural and scans all functions, but reports exactly the
+    // ones it touched (converted callees + retyped callers) so the gated passes
+    // re-examine only those. The call graph is unaffected, so no refresh.
+    let touched = apply_drve(project, &confirmed);
+    for idx in touched {
+        gate.mark_changed(FunctionId::new(idx));
+    }
     true
 }
 
@@ -284,11 +293,17 @@ impl ValidateCtx<'_> {
 // Application
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) {
+/// Applies the rewrites and returns the indices of every function whose body or
+/// signature changed (converted callees + callers whose call sites were
+/// retyped), so the caller can mark exactly those dirty in the gate. The call
+/// graph is unaffected: drve only voids returns and retypes call expressions,
+/// never adding or removing an edge.
+fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usize> {
+    let mut touched: IndexSet<usize> = IndexSet::default();
     // Step A: convert each confirmed candidate to void return. The candidate
     // filter guarantees every reachable `Return { value: Some(_) }` carries a
     // pure expression, so dropping its value is observably equivalent.
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let key = (func.module_source.clone(), func.name.clone());
         if !confirmed.contains(&key) {
@@ -298,21 +313,25 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) {
         if let Some(body) = func.body.as_mut() {
             void_returns(body);
         }
+        touched.insert(i);
     }
 
     // Step B: refresh `type_id` at every call site of a converted function.
     // Without this, `Expr(Call(f))` in stmt position still claims the old
     // return type and `wir_build::translate.rs` wraps the call in `Drop`,
     // underflowing the Wasm stack.
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = func.body.as_mut() {
-            retype_calls(body, confirmed);
+        if let Some(body) = func.body.as_mut()
+            && retype_calls(body, confirmed)
+        {
+            touched.insert(i);
         }
     }
     for global in &mut project.globals {
         retype_calls(global.initializer.body_mut(), confirmed);
     }
+    touched.into_iter().collect()
 }
 
 /// Rewrite every reachable `Return { value: Some(_) }` to `Return { value: None }`.
@@ -334,7 +353,7 @@ fn void_returns(body: &mut Body) {
 
 /// Set `type_id` to `Unit` at every `Call` / `MethodCall` of a confirmed
 /// function in the body.
-fn retype_calls(body: &mut Body, confirmed: &IndexSet<FnKey>) {
+fn retype_calls(body: &mut Body, confirmed: &IndexSet<FnKey>) -> bool {
     let mut targets = Vec::new();
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
@@ -349,7 +368,9 @@ fn retype_calls(body: &mut Body, confirmed: &IndexSet<FnKey>) {
         }
         body.for_each_child(node, |c| stack.push(c));
     }
+    let changed = !targets.is_empty();
     for id in targets {
         body.exprs[id].type_id = TypeTable::UNIT;
     }
+    changed
 }

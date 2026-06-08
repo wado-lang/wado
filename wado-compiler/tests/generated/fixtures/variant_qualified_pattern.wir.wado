@@ -1019,6 +1019,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
 fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
+    let index: i32;
     let value: u8;
     let _licm_repr_9: ref Array<u8>;
     v = val;
@@ -1029,8 +1030,9 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
             if idx < offset {
                 break b109;
             }
+            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, idx, value);
+            builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l110;
@@ -1580,11 +1582,15 @@ fn "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op^Inspect::insp
     let s_15: ref "core:prelude/string.wado//String";
     __match_3 = self.value;
     if __match_3.discriminant == 0 {
-        s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Wildcard"), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+        block {
+            s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Wildcard"), used: 12 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+        };
     } else if __match_3.discriminant == 1 {
-        s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Excluded"), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_7);
+        block {
+            s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Excluded"), used: 12 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_7);
+        };
     } else {
         __inspect_Token_2 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_3).payload_0;
         s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Token("), used: 10 };
@@ -1854,8 +1860,10 @@ fn "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Maybe<i32>^Inspe
         s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_11);
     } else {
-        s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Maybe::None"), used: 11 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_13);
+        block {
+            s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Maybe::None"), used: 11 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_13);
+        };
     }
 }
 
