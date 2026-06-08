@@ -23,6 +23,14 @@
 //! The graph traces every site where reify can emit a call: function and
 //! method bodies, global initializers, parameter defaults, and struct field
 //! defaults. A callee reachable only through one of those still stays live.
+//!
+//! # Suppression
+//!
+//! `#[allow(dead_code)]` on a function or global (or `#![allow(dead_code)]` at
+//! the module level, covering every item in the file) drops the item from the
+//! lint's report candidates while leaving its call-graph edges intact, so a
+//! callee it reaches still stays live. The attribute name matches rustc's
+//! `dead_code` lint.
 
 use crate::ast::{self, AstId, AstVisitor, Block, Expr, Function, Item, Module};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -71,7 +79,15 @@ pub(crate) fn compute(
     let mut graph = Graph::default();
 
     for (source, module) in modules {
-        let user = is_user_authored(source);
+        // `#![generated]` modules are machine-emitted (e.g. Gale's parser
+        // output), not hand-edited source — linting them is pure noise, so they
+        // are never report candidates. They still seed exports / edges below, so
+        // they keep the items they call live.
+        let user = is_user_authored(source) && !module.has_generated();
+        // A file-level `#![allow(dead_code)]` waives the lint for every item in
+        // the module — the idiom for test-helper files whose functions exist
+        // only to back `test` blocks.
+        let module_allows_dead = inner_attrs_allow_dead_code(&module.inner_attributes);
         for item in &module.items {
             match item {
                 Item::Function(func) => {
@@ -84,15 +100,21 @@ pub(crate) fn compute(
                         graph.seed_export(key.clone());
                     }
                     // Bodyless functions are compiler builtins / imports, not
-                    // user-authored code that could be "dead".
-                    if user && func.body.is_some() {
+                    // user-authored code that could be "dead". `#[allow(dead_code)]`
+                    // (item- or module-level) opts an item out of the lint while
+                    // leaving its call-graph edges intact.
+                    if user
+                        && func.body.is_some()
+                        && !module_allows_dead
+                        && !attrs_allow_dead_code(&func.attrs)
+                    {
                         graph.report_candidates.push(key);
                     }
                 }
                 Item::Global(global) => {
                     let key = SymbolKey::new(source.clone(), global.id);
                     graph.add_expr_edges(source, &global.initializer, references, &key);
-                    if user {
+                    if user && !module_allows_dead && !attrs_allow_dead_code(&global.attributes) {
                         graph.report_candidates.push(key);
                     }
                 }
@@ -331,4 +353,24 @@ pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
 /// `#[export]` marks a raw Wasm export — an export-boundary root.
 fn has_export_attr(func: &Function) -> bool {
     func.attrs.iter().any(|attr| attr.name == "export")
+}
+
+/// True if `args` name the `dead_code` lint, as in `allow(dead_code)`.
+fn args_name_dead_code(args: &[ast::AttrArg]) -> bool {
+    args.iter()
+        .any(|arg| matches!(arg, ast::AttrArg::Ident(name) if name == "dead_code"))
+}
+
+/// `#[allow(dead_code)]` on an item waives its unused / test-only lint.
+fn attrs_allow_dead_code(attrs: &[ast::Attribute]) -> bool {
+    attrs
+        .iter()
+        .any(|attr| attr.name == "allow" && args_name_dead_code(&attr.args))
+}
+
+/// `#![allow(dead_code)]` at the top of a module waives the lint for every item.
+fn inner_attrs_allow_dead_code(attrs: &[ast::InnerAttribute]) -> bool {
+    attrs
+        .iter()
+        .any(|attr| attr.name == "allow" && args_name_dead_code(&attr.args))
 }

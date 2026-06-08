@@ -1,0 +1,21 @@
+// A file-level `#![allow(dead_code)]` waives the unused lint for every item in
+// the module — the idiom for test-helper files whose functions exist only to
+// back `test` blocks.
+#![allow(dead_code)]
+
+fn helper() -> i32 {
+    return 1;
+}
+
+global SCRATCH: i32 = 42;
+
+export fn run() {}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_not_contains": [
+        "function `helper` is never used",
+        "global `SCRATCH` is never used"
+    ]
+}

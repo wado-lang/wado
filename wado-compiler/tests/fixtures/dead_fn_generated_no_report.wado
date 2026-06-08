@@ -1,0 +1,21 @@
+// `#![generated]` marks machine-emitted code (e.g. Gale's parser output, which
+// inlines a runtime with many helpers that any given grammar leaves unused). It
+// is never hand-edited, so the unused lint is suppressed for the whole module.
+#![generated(by = "gale", sources = ["X.g4"])]
+
+fn unused_helper() -> i32 {
+    return 1;
+}
+
+global UNUSED: i32 = 42;
+
+export fn run() {}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_not_contains": [
+        "function `unused_helper` is never used",
+        "global `UNUSED` is never used"
+    ]
+}
