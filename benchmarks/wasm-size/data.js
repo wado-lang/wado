@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780922958040,
+  "lastUpdate": 1780928401132,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31517,6 +31517,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/181f0c732c79252fd14f8f4c2a250aab586f4d94"
         },
         "date": 1780922957670,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437035,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "05304cf269966fc3614df1039166ea12261f71ee",
+          "message": "Merge pull request #1336 from wado-lang/claude/unused-diagnostics-refinement-0pIJj\n\nfeat(unused-diagnostics): suppress dead-code lint via #[allow(dead_code)]",
+          "timestamp": "2026-06-08T23:11:07+09:00",
+          "tree_id": "e4063be4530c0a5084700e6215183f694732f09f",
+          "url": "https://github.com/wado-lang/wado/commit/05304cf269966fc3614df1039166ea12261f71ee"
+        },
+        "date": 1780928400569,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
