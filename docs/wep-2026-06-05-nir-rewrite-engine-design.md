@@ -1,275 +1,123 @@
 # WEP: NIR Rewrite Engine — Detailed Design
 
-This is the follow-up the
+Follow-up to the
 [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
-WEP promised: it specifies the engine, the worklist discipline, and the
-migration. It builds on the
-[NIR Skeleton Arena](./wep-2026-06-05-nir-skeleton-arena.md) (Layer 1) — `Body`
-is the canonical `NirFunction.body`. This WEP is "Phase 4" of the arena
-migration, now complete: the engine is implemented, every optimizer pass runs
-on the arena, and the `body_block` bridge is gone (see Migration → Outcome).
+WEP: it specifies the engine that runs local NIR rewrites over the
+[NIR Skeleton Arena](./wep-2026-06-05-nir-skeleton-arena.md) `Body`. Status:
+complete — the engine is implemented, every optimizer pass runs on the arena
+(the `Body ↔ tree` bridge is gone), the local rules share one session, and a
+per-function dirty-set gate drives the fixed-point loop.
 
 ## Context
 
-The arena exists but the parent map, local use index, and mutating edit API
-were deferred (skeleton-arena WEP, Phase 4). Without them there is no worklist:
-a rewrite cannot find the node's parent to re-enqueue, nor a local's uses. The
-optimize passes are still 31 independent whole-tree walks in a global
-fixed-point; the per-pass `Body ↔ tree` bridges currently _add_ traversal
-rather than remove it. The engine is what turns that around.
+The arena made `Body` the canonical `NirFunction.body`, but a worklist needs a
+parent map (to re-enqueue a node's context after an edit) and a local use index
+(to re-enqueue a local's uses). Those live in a per-function engine session, not
+on `Body` (which would burden every constructor).
 
-## Decision
+## Engine
 
-A single worklist-driven engine runs the local (intra-procedural, peephole)
-rewrites over one function's `Body`, to a local fixed point, visiting a node
-only when it might be reducible.
+A single worklist-driven engine (`nir_engine.rs`) runs local intra-procedural
+rewrites over one function's `Body` to a local fixed point, visiting a node only
+when an edit might have made it reducible.
 
-### Engine session
+### Session
 
-The parent map and use index are not stored on `Body` (they would burden every
-`from_block`). They live in an engine session built once per function run:
+`Engine::new(body)` does one O(n) pass to build:
 
-```
-struct Engine<'a> {
-    body: &'a mut Body,
-    parent: Parents,        // NodeRef -> Option<NodeRef>, per category
-    uses: UseIndex,         // local index -> { def, reads, writes }
-    worklist: Worklist,     // dedup queue of NodeRef
-    dirty: Vec<NodeRef>,    // re-enqueue scratch filled by the edit API
-}
-```
-
-`Engine::new(body)` does one O(n) pass to populate `parent` and `uses`, seeds
-the worklist with every node in post-order, then `run(rules)` drains it.
-
-- `Parents`: one `SecondaryMap<Id, PackedOption<NodeRef>>` per category
-  (`cranelift_entity`). Parent is the nearest id-bearing ancestor; arms /
-  fields / call args are transparent.
-- `UseIndex`: `IndexMap<u32, LocalUses>` with `LocalUses { def: PackedOption<StmtId>,
-  reads: Vec<ExprId>, writes: Vec<ExprId> }`. `reads` = `Local` expr nodes;
-  `writes` = the place forms (`Assign` target `Local`, `Local.field = …`,
-  `&local` / `&mut local`).
-- `Worklist`: `VecDeque<NodeRef>` plus an "in-queue" bit per node so a node is
-  never queued twice.
+- parent maps — nearest id-bearing ancestor per category (`expr`/`stmt`/`block`/`pat`); arms / fields / call args are transparent.
+- use index — `IndexMap<u32, LocalUses>` where `LocalUses { def: Option<StmtId>, reads: Vec<ExprId> }`; built by walking from `root`, so orphaned (dead) nodes are not counted.
+- worklist — a `VecDeque<NodeRef>` plus an in-queue set, seeded with every node in post-order (children before parents).
 
 ### Edit API
 
-Rules never touch `body.<map>` directly. They go through the session, which
-keeps `parent` / `uses` coherent and pushes affected nodes into `dirty`:
+Rules never touch `body.<map>` directly; they go through the session, which keeps
+the parent map and use index coherent and re-enqueues the affected neighbourhood:
 
-- `alloc_expr(kind, type_id, span) -> ExprId` (and `_stmt` / `_block` / `_pat`):
-  push the node, set `parent` of any id children to it, register any `Local`
-  mention in `uses`.
-- `replace_kind(id, new_kind)`: rewrite in place — the id is stable, so worklist
-  entries and parent links survive. Diff old vs new child / local sets; fix
-  `parent` and `uses`; push `parent[id]` (and changed local def/use neighbours)
-  into `dirty`.
-- `set_child(parent, slot, new)`: re-point one operand slot; fix `parent[new]`,
-  push `parent`.
-- `splice(block, range, stmts)`: statement-list edit; fix parents and uses for
-  the spliced range.
+- `alloc_expr` / `alloc_stmt` / … — push a node, parent its id children, register any `Local` mention.
+- `replace_expr_kind(id, kind)` — rewrite in place (the id is stable); fix the use index for the old/new `Local` mention, re-parent the new children, enqueue the parent and new children.
+- `become_expr(dst, src)` — promote `src`'s node content into `dst` (collapse a wrapper onto a nested child); `src` becomes a dead `Unit`.
+- `set_block_stmts(block, stmts)` — replace a statement list, re-parenting and enqueuing.
+- `clone_expr` — deep-copy a subtree into fresh ids.
 
-Dead nodes are not freed mid-run (liveness is reachability from `root`). This
-design assumed the per-pass bridge's arena → tree lowering would compact them
-for free; with the bridge now gone, compaction is an open follow-up (see
-Migration → Follow-ups).
+Dead nodes are not freed mid-run (liveness is reachability from `root`, and the
+use index ignores orphans). Arena compaction at end-of-optimize is an open
+follow-up, wanted only if memory becomes a concern.
 
-### Rules
+### Rules and worklist
 
-A rule is a single-node local rewrite:
+A rule is a single-node local rewrite with `apply_expr(engine, id) -> bool` and a
+sibling `apply_block` for statement-list rewrites. At a popped node the engine
+tries the registered rules in order; the first that returns `changed` re-tries at
+the same node (its kind may now match another rule). Re-enqueue is exactly what
+the edit API recorded — a node's parent after a structural change, a local's uses
+after its def changed — so there is no whole-tree or global-convergence sweep.
+Rules must be idempotent (so the per-node retry terminates) and confluent or
+priority-ordered.
 
-```
-trait Rule {
-    fn apply(&self, e: &mut Engine, id: ExprId) -> bool;   // most rules are expr-typed
-}
-```
+### Unified peephole session
 
-Statement / block rules get sibling entry points (`apply_stmt` / `apply_block`)
-for the few rewrites that target those (dead-stmt-after-break, block flatten).
-Rules are registered in a fixed priority list. At a popped node the engine tries
-rules in order; the first that returns `true` (changed) re-processes the node
-(its kind may now match a different rule) before moving on.
+`optimize/peephole.rs` runs the position-flexible local rules — `string_push`,
+`array_literal`, `elide_local`, the env-free subset of `const_folding` (literal
+`Binary`/`Unary`/`Cast` + pure CTFE), and `const_branch_prune` — over one session
+per function, interleaved on a single worklist. Invoked pre-inline and
+post-inline each iteration. `match_to_switch` (runs first, and at `-O0`) and
+`select_lowering` (terminal post-loop lowering) keep standalone sessions.
 
-### Worklist discipline
+The flow-sensitive folds of `const_folding` (env-bound locals, forwarded fields,
+immutable-global reads, constant-branch collapse) need per-function dataflow
+(snapshot/restore/join) and stay in the standalone `fold_constants` walker.
 
-```
-seed: push every node post-order.
-loop:
-    pop id (clear its in-queue bit)
-    for rule in rules:
-        if rule.apply(engine, id):
-            drain `dirty` into the worklist (parent + use neighbours)
-            re-try rules at id
-            break
-until worklist empty.
-```
+## Per-function dirty-set gating
 
-Re-enqueue is exactly what the edit API recorded: a node's `parent` after any
-structural change, and a local's def / use nodes after its def changed. No
-whole-tree sweep, no global convergence sweep.
+A `FunctionGate` (`optimize/gate.rs`) lets every loop pass skip functions
+unchanged since it last ran. Each function has a monotonic revision; each pass a
+per-function watermark. A per-function pass runs a function only when
+`revision > watermark` (`run_gated`); any pass that changes a function calls
+`mark_changed`, which bumps its revision and that of its 1-hop call-graph
+neighbours. Interprocedural passes (`inline`, `dae`, `drve`, `sroa_param`,
+`value_copy_demote`) scan all functions but report exactly the ones they touch.
+`FunctionId` is a function's index in `NirPackage::functions` (stable within one
+optimizer run).
 
-Rule-conflict policy: rules must be confluent at a node (order-independent
-final result) or ordered so the priority list is the tie-break. Each rule is
-idempotent (re-applying to its own output is a no-op), so the per-node retry
-terminates.
+Soundness: gating changes only which functions a pass visits, never the result of
+a visit. Every loop pass is an optimization, so an imprecise gate costs only
+optimization quality, never correctness — verified by the full E2E suite
+(including `wir_expect` shape assertions). The call graph is built once and not
+refreshed when a pass shifts a function's edges; stale edges only reduce
+propagation precision.
 
 ## What stays outside the engine
 
-- Interprocedural stages — `inline`, `dce`, `dae`, `drve`, globalization — run
-  as distinct steps around the engine, unchanged. Optionally gated later by a
-  per-function dirty set so the engine only re-runs on functions they touched.
-- Flow-sensitive passes — `field_scalarize`, `licm`, `tmpl_hoist`,
-  `value_copy_demote`, `store_load_forward` — keep their own dataflow walkers
-  but read the arena (their bridges drop as they port).
+- Flow-sensitive passes (`field_scalarize`, `licm`, `tmpl_hoist`,
+  `value_copy_demote`, `store_load_forward`, the flow-sensitive `const_folding`)
+  keep their own dataflow walkers, reading the arena directly.
+- Interprocedural stages (`inline`, `dce`, `dae`, `drve`, globalization) run as
+  distinct steps, gated as above.
 
-## Migration
+## Status
 
-The engine landed incrementally — the old fixed-point loop co-existing with it
-until every pass had moved — each step staying e2e bit-identical.
+- Phase 4 — engine substrate, edit API, `Rule`/`run`; every pass moved off the
+  `Body ↔ tree` bridge.
+- Phase 5 — the tree representation removed: `lower::translate` builds the arena
+  directly, the bridge and tree enums / tree visitor are deleted, NIR is
+  arena-only.
+- Phase 6 — local rules consolidated onto the shared peephole session, and the
+  full fixed-point loop put on the dirty-set gate (every pass reports change at
+  function granularity).
 
-- [x] Engine substrate + core (`nir_engine.rs`): the per-function session
-      (parent map, local `uses` index, post-order worklist,
-      `Body::for_each_child`), the coherent edit API (`replace_expr_kind`,
-      `apply_block`, `alloc_*`, `clone_expr`, …), the `Rule` trait, and the
-      `run` driver.
-- [x] Every optimizer pass moved off the `Body ↔ tree` bridge in one of four
-      shapes: engine `Rule` peepholes (`select_lowering`, `match_to_switch`,
-      `string_push`, `array_literal`, `elide_local`); direct arena walks
-      (`drve`, `dae`, `cse`, `ref_elim`, `sroa`/`sroa_param`, `dce`,
-      `const_object_globalization`, `condition_implication`,
-      `value_copy_elide`/`_demote`, `tmpl_hoist`, `labeled_block_fusion`,
-      `multi_value_return`, `container_sroa`, `const_branch_prune`);
-      flow-sensitive own-walkers (`copy_prop`, `licm`, `store_load_forward`);
-      and `const_folding` (niri), staged as an arena evaluator (`*_lattice_a`),
-      an arena rewriter (`reduce_local_a`), then the `ConstFoldVisitor` over
-      arena ids with the field-env snapshot/restore/join intact. Shared infra:
-      `optimize/arena_query` + `Body::{for_each_child, clone_*, lower_*}`.
-
-Measured win (peak-bridge vs arena-direct; isolated NIR optimize phase; median
-of 9; dev profile): zlib 1.12×, fts 1.49×, json_catalog_v2 1.53×,
-sqlite_parse 1.67×. The bridge cost (`to_block` + `from_block` per pass per
-fixpoint iteration) scales with optimizer load — a heavy module's optimize
-phase is cut ~40 %.
-
-## Phase 5 — NIR tree retirement
-
-The engine made the arena canonical for the optimizer; Phase 5 removes the tree
-representation outright. Per-step detail is in the git history (`Phase 5`
-commits); the compressed record:
-
-- [x] `lower::translate` builds the arena `Body` directly — the one-time
-      tree-build + `from_block` at the lower boundary is gone.
-- [x] The remaining tree-coupled passes / positions ported to the arena:
-      `mod_ref`, `alias`, `elide_box_local` (incl. its leftmost-evaluated-use
-      walker), `field_scalarize`'s function-wide alias scan +
-      `collect_locals_introduced`, `inline` (full core — a cross-`Body`
-      `splice_*` that local/label-remaps and converts `return` → `break`),
-      `wir_build::collect_let_names`, and the diagnostics `nir_unparse` /
-      `remarks`.
-- [x] `NirGlobal.initializer` is an arena `ExprBody` (a newtype over a
-      single-`Expr`-statement `Body`); the write-only NIR
-      `NirParam`/`NirField.default_expr` fields are deleted.
-- [x] `nir_visitor` (the tree visitor) and `NirFunction::body_block` are
-      deleted — no consumers remain.
-
-Phase 5 is complete: both transform-core ports landed, the test builders moved
-to the arena, and the tree representation is gone. NIR is now arena-only.
-
-- [x] D2 — `field_scalarize` per-loop machinery → arena. `scalarize_loop` /
-      `process_loop_body` / the `walk_block` / `walk_stmt` / `walk_expr` dataflow
-      walker, sync emission, branch/switch/match joins, escape commits, and temp
-      pooling all mutate `body.exprs` / `body.stmts` / `body.blocks` in place;
-      the `FieldUsageCache` builder (`collect_param_field_usage_*`) and the
-      call-sync analysis read arena ids directly. `scalarize_loop_at` no longer
-      round-trips through `to_tree_block` / `lower_block`. This was the last
-      production caller of the bridge.
-- [x] E — niri tree interpreter + `const_folding` CTFE → arena. `try_call_fold_a`
-      reads the callee tail id via `single_tail_expression_a` and reduces it on a
-      cloned scratch `Body` with `reduce_in_place_a` (the arena analogue of
-      `reduce_in_place` + `reduce_to_lattice`), removing the `Body::to_block`
-      materialization from the production CTFE path. The tree interpreter cluster
-      now survives only to back `tests/niri.rs`.
-- [x] The unit-test builders that still constructed trees (`mod_ref`,
-      `elide_box_local`, `tmpl_hoist`, `nir_engine`, `tests/niri`) are migrated to
-      arena builders — `tests/niri` via `Rc`-thunk builders (`Build` /
-      `BlockBuild` / `PatBuild` / `ArmBuild` / `StmtBuild`) over a `Body`. The
-      now-test-only niri tree interpreter cluster (`reduce` / `reduce_to_lattice`
-      / `reduce_in_place` / `reduce_local` / `try_call_fold` / `expr_to_lattice`
-      / `try_fold` / `single_tail_expression` / …) and `set_body_block` are
-      deleted.
-- [x] The `Body ↔ tree` bridge is deleted (`Lower` + the `from_block` /
-      `to_block` / `to_tree_*` / `lower_*` Body methods).
-- [x] The tree enums (`NirExpr` / `NirExprKind` / `NirStmt` / `NirStmtKind` /
-      `NirBlock` / `NirPattern` / `NirMatchArm` / `NirStructField` /
-      `NirStructPatternField` / `CallArg`) and `nir_visitor` are deleted. NIR is
-      now arena-only; `nir.rs` keeps the function/global metadata and the shared
-      leaf enums (`NirBinaryOp` / `NirUnaryOp` / `NirLiteralPattern`).
-
-Handoff notes:
-
-- D2 ported in place: the walker mutates the live arena `Body`, so it needs no
-  cross-`Body` clone — field rewrites flip the node kind on the stable `ExprId`,
-  and arm-body wrapping moves the original node to a fresh id so the parent's
-  `ExprId` still resolves. E reuses whole-`Body` `Clone` (the single-statement
-  callee body is tiny) rather than a subtree clone. A reusable cross-`Body`
-  deep-clone-with-remap is therefore still only wanted by `inline`'s `splice_*`
-  cluster; lifting it into `nir_arena` (next to the intra-`Body` `clone_*`, which
-  cannot share its `&mut self` vs `&mut dst` + `&src` borrow shape) remains a
-  cleanup, not a blocker.
-- Arena compaction is still open: in-place passes leave orphaned (dead) nodes in
-  `Body`. Traversal is from `root` and `build_uses` ignores orphans, so it is
-  correct, but a from-`root` re-lowering (or mark-sweep) at the end of optimize
-  would reclaim them if memory becomes a concern.
-
-## Phase 6 — Engine consolidation
-
-Phases 4–5 made the arena canonical and ported every pass off the tree, but the
-engine-rule peepholes still each rebuilt their own session and ran one rule in
-isolation inside the global fixed-point loop — the worklist-engine win (visit a
-node when it changes, not ~80× a body) was unrealized. Phase 6 collapses the
-local rewrites onto one shared session and starts pulling the remaining local
-work out of the per-iteration whole-body passes.
-
-- [x] Unified peephole session (`optimize/peephole.rs`): `string_push`,
-      `array_literal`, and `elide_local` now run together over one
-      `Engine::new` per function, interleaving on a single worklist instead of
-      three separate sessions. Invoked twice per iteration — pre-inline (so
-      `string_push` sees the `push_str` `MethodCall`, after value-copy so the
-      receiver is stripped) and post-inline (so `array_literal` sees the
-      exposed `array_new + push` window). `match_to_switch` (must run first /
-      also at `-O0`) and `select_lowering` (terminal post-loop lowering) keep
-      their standalone sessions.
-- [x] Constant folding split. The environment-free subset — literal
-      `Binary` / `Unary` / `Cast` arithmetic and pure CTFE
-      (`niri::Interpreter::const_fold_kind_a`) — joined the unified session as
-      `const_folding::ConstFoldRule`, applied through `Engine::replace_expr_kind`
-      so the worklist and use index stay coherent. Because the rule's `env`
-      stays empty, only operands/arguments that are already literals fold, so the
-      discarded children are literal-only (never `Local` mentions) and the edit
-      API needs no deep-unregister. The flow-sensitive folds — env-bound locals,
-      forwarded struct fields, immutable-global reads, constant-branch collapse —
-      need the driving visitor's per-function dataflow (snapshot / restore /
-      join) and stay in the standalone `const_folding::fold_constants` walker,
-      which still runs once per iteration. This matches the worklist-engine WEP's
-      partition: flow-sensitive passes keep their own dataflow walkers.
-- [ ] Migrate the remaining local peephole passes into engine rules joining the
-      unified session: `ref_elim`, `labeled_block_fusion`, `condition_implication`,
-      and `const_branch_prune` (the natural co-migration with const-fold's
-      constant-branch handling).
-- [ ] Per-function dirty-set gating so the interprocedural / flow-sensitive
-      passes only re-trigger the engine on functions they touched, shrinking the
-      global fixed-point loop.
+Measured (isolated NIR optimize phase, dev profile): the arena-direct engine cut
+a heavy module's optimize phase ~40 % vs the peak-bridge baseline (zlib 1.12×,
+fts 1.49×, sqlite_parse 1.67×); dirty-set gating then cut it a further ~50 % on
+the Gale-generated SQLite parser at `-O2`.
 
 ## Out of scope
 
-- Layer 2 (the hash-consed value e-graph / GVN). Re-decided after the engine
-  lands, per the worklist-engine WEP's sequencing.
+- Layer 2 (hash-consed value e-graph / GVN) — re-decided after the engine, per
+  the worklist-engine WEP's sequencing.
 
 ## See also
 
-- [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
-  — the direction.
-- [NIR Skeleton Arena (Layer 1)](./wep-2026-06-05-nir-skeleton-arena.md) — the
-  substrate this engine drives.
-- `optimize/mod_ref.rs` — the referential-transparency check a later Layer 2
-  would gate on.
+- [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md) — the direction.
+- [NIR Skeleton Arena (Layer 1)](./wep-2026-06-05-nir-skeleton-arena.md) — the substrate.
+- [Wado Optimizer](./optimizer.md) — the pass inventory the engine drives.

@@ -297,7 +297,13 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
             }
         }
         let mut func = func_rc.borrow_mut();
-        scalarize_in_function(&mut func, &type_table_rc, &catalog, &sig_kinds, &struct_index)
+        scalarize_in_function(
+            &mut func,
+            &type_table_rc,
+            &catalog,
+            &sig_kinds,
+            &struct_index,
+        )
     })
 }
 

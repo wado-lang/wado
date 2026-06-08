@@ -121,7 +121,7 @@ Synthesized impls are recorded back into the shared `TraitEnv` so subsequent pha
 
 ## Optimize
 
-`optimize/` runs a fixed-point loop of NIR-level passes (inlining, copy propagation, SROA, LICM, DCE, …). See [optimizer.md](./optimizer.md).
+`optimize/` runs a fixed-point loop of NIR-level passes (inlining, copy propagation, SROA, LICM, DCE, …). Local rewrites run on a worklist engine (`nir_engine.rs`) over the arena `Body` — a node is revisited only when an edit might have made it reducible — with the position-flexible rules sharing one session (`optimize/peephole.rs`). A per-function dirty-set gate (`optimize/gate.rs`) lets each pass skip functions unchanged since it last ran. See [optimizer.md](./optimizer.md) and [WEP: NIR Rewrite Engine](./wep-2026-06-05-nir-rewrite-engine-design.md).
 
 ## WIR Build
 

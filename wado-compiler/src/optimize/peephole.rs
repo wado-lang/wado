@@ -38,10 +38,10 @@ use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::array_literal::{Collapser, resolve_array_push_names};
-use super::gate::{FunctionGate, GatedPass};
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map};
 use super::elide_local::ElideRule;
+use super::gate::{FunctionGate, GatedPass};
 use super::string_push::{ShortPushStrRule, resolve_ctx};
 
 /// Run the unified peephole rule set over every function body. Returns whether
