@@ -1,7 +1,8 @@
 //! Tests for the ATN model, builder, and serialization (P1).
 //!
 //! These pin three things the runtime simulator (P2/P3) will depend on:
-//!   1. the serialize/deserialize round-trip is exact;
+//!   1. `serialize_atn` -> `atn_decode` reconstructs the ATN exactly (the
+//!      production encode/decode path);
 //!   2. token-kind numbering matches the generated `TK_*` constants;
 //!   3. non-greedy repeats put the EXIT edge first at the decision state
 //!      (the invariant that makes `(else stmt)??` bind to the outer rule).
@@ -10,14 +11,17 @@ use {
     build_atn,
     build_token_kinds,
     serialize_atn,
-    deserialize_atn,
     Atn,
     AtnState,
+} from "./atn.wado";
+use {
+    atn_decode,
+    AtnSim,
     ATN_BLOCK_START,
     ATN_BLOCK_END,
     ATN_RULE_START,
     ATN_TR_EPSILON,
-} from "./atn.wado";
+} from "./runtime.wado";
 use { parse } from "./g4/parser.wado";
 
 global NON_GREEDY_G4: String = "
@@ -61,12 +65,39 @@ fn find_exit_first_decision(atn: &Atn) -> i32 {
     return -1;
 }
 
-test "ATN round-trips through serialize/deserialize exactly" {
+/// Assert the SoA `AtnSim` the runtime decodes faithfully reconstructs the
+/// AoS `Atn` the builder produced — i.e. `serialize_atn` and the production
+/// `atn_decode` agree field-for-field.
+fn assert_sim_matches_atn(sim: &AtnSim, atn: &Atn) {
+    assert sim.num_tokens == atn.num_tokens, "num_tokens";
+    assert sim.rule_start == atn.rule_start, "rule_start";
+    assert sim.rule_stop == atn.rule_stop, "rule_stop";
+    assert sim.decision_state == atn.decision_state, "decision_state";
+    assert sim.state_kind.len() == atn.states.len(), "state count";
+    for let mut i = 0; i < atn.states.len(); i += 1 {
+        let st = &atn.states[i];
+        assert sim.state_kind[i] == st.kind, `state {i} kind`;
+        assert sim.state_rule[i] == st.rule, `state {i} rule`;
+        assert sim.state_decision[i] == st.decision, `state {i} decision`;
+        assert sim.state_tr_count[i] == st.transitions.len(), `state {i} tr count`;
+        let base = sim.state_tr_start[i];
+        for let mut j = 0; j < st.transitions.len(); j += 1 {
+            let t = &st.transitions[j];
+            assert sim.tr_src[base + j] == i, `state {i} tr {j} src`;
+            assert sim.tr_kind[base + j] == t.kind, `state {i} tr {j} kind`;
+            assert sim.tr_target[base + j] == t.target, `state {i} tr {j} target`;
+            assert sim.tr_label[base + j] == t.label, `state {i} tr {j} label`;
+            assert sim.tr_follow[base + j] == t.follow, `state {i} tr {j} follow`;
+            assert sim.tr_prec[base + j] == t.prec, `state {i} tr {j} prec`;
+        }
+    }
+}
+
+test "ATN round-trips through serialize_atn/atn_decode exactly" {
     let g = parse(NON_GREEDY_G4).unwrap();
     let atn = build_atn(&g);
-    let blob = serialize_atn(&atn);
-    let back = deserialize_atn(&blob);
-    assert atn == back, "ATN did not survive the serialize/deserialize round-trip";
+    let sim = atn_decode(&serialize_atn(&atn));
+    assert_sim_matches_atn(&sim, &atn);
 }
 
 test "ATN has one start/stop per parser rule" {
