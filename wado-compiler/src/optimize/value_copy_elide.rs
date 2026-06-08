@@ -31,27 +31,33 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-/// Returns whether any wrapper was stripped (so the optimizer's dirty-set gate
-/// can re-examine the touched functions).
-pub fn elide_synthesized_value_copies(project: &mut NirPackage) -> bool {
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, GatedPass};
+
+/// Returns whether any wrapper was stripped. Gate-skipped: a pure per-function
+/// rewrite (it removes `$value_copy$T(arg)` `Call` wrappers within a body, with
+/// no signature or call-graph change), so it skips functions unchanged since it
+/// last ran and reports the ones it strips via the gate.
+pub fn elide_synthesized_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let value_copy_set = project.value_copy_helper_types();
     if value_copy_set.is_empty() {
         return false;
     }
     let type_table = project.type_table.clone();
-
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::ValueCopyElide, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
         if func.is_value_copy() {
-            continue;
+            return false;
         }
         if let Some(body) = func.body.as_mut() {
             let usage = analyze_usage(body, &type_table.borrow());
-            changed |= strip_wrappers_in_body(body, &value_copy_set, &usage);
+            strip_wrappers_in_body(body, &value_copy_set, &usage)
+        } else {
+            false
         }
-    }
-    changed
+    })
 }
 
 fn is_mut_ref_type(type_id: TypeId, type_table: &TypeTable) -> bool {

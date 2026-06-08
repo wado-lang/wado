@@ -485,10 +485,10 @@ fn run_optimization_passes(
 ) {
     let threshold = config.inline_threshold;
     let trace_loop = crate::trace::filter().enabled("opt_loop");
-    // Per-function dirty-set gate (WEP Phase 6). Gate-aware passes (`gated!`)
-    // skip functions unchanged since they last ran; passes that are not yet
-    // gate-aware (`step!`) report change at package granularity, so on any
-    // change they `bump_all` to keep the gated passes conservatively correct.
+    // Per-function dirty-set gate (WEP Phase 6). Every loop pass is gate-aware:
+    // a per-function pass (`gated!`) skips functions unchanged since it last ran;
+    // an interprocedural pass scans all functions but reports exactly the ones
+    // it touched. Both go through `&mut gate`.
     let mut gate = gate::FunctionGate::new(project);
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
@@ -545,22 +545,22 @@ fn run_optimization_passes(
         // re-examine the bodies they rewrote), not to the convergence `changed`
         // flag — keeping the original convergence behaviour where they never
         // kept the loop alive on their own.
-        if run_pass("nir/value_copy_elide", project, profiler, |p| {
-            elide_synthesized_value_copies(p)
-        }) {
-            gate.bump_all();
-        }
+        // Both self-report to the gate (no `bump_all`) and stay out of the
+        // convergence `changed` flag — preserving the behaviour where they never
+        // keep the loop alive on their own (the gated passes they dirty drive
+        // convergence within the same iteration).
+        run_pass("nir/value_copy_elide", project, profiler, |p| {
+            elide_synthesized_value_copies(p, &mut gate)
+        });
         // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
         // copies when the binding's elements are provably never mutated
         // through it. Runs alongside `value_copy_elide`: elide removes a
         // copy whose target is read-only; demote weakens a copy whose target
         // is only spine-mutated. Both before `nir/inline` for the same
         // `$value_copy$T(arg)`-shape-visibility reason.
-        if run_pass("nir/value_copy_demote", project, profiler, |p| {
-            demote_value_copies(p)
-        }) {
-            gate.bump_all();
-        }
+        run_pass("nir/value_copy_demote", project, profiler, |p| {
+            demote_value_copies(p, &mut gate)
+        });
         // Unified peephole engine pass, pre-inline run. Folds short
         // `push_str` literals, elides write-only locals, and (post-inline only)
         // materializes array literals — all three rules over one shared

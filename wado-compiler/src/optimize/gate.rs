@@ -28,11 +28,12 @@
 //! callees (a callee shrinking enables inlining / constant folding in callers; a
 //! call site appearing or vanishing changes a callee's dead-argument analysis).
 //!
-//! A pass that is not yet gate-aware reports change at package granularity; the
-//! loop then calls [`FunctionGate::bump_all`], so every gated pass conservatively
-//! re-examines every function. As more passes become gate-aware (reporting
-//! per-function change instead of forcing `bump_all`), the steady-state skip
-//! rate — and the speedup — grows.
+//! Every fixed-point loop pass is gate-aware: a per-function pass skips
+//! functions it has already processed at their current revision (via
+//! [`FunctionGate::run_gated`]); an interprocedural pass scans all functions but
+//! reports exactly the ones it touched (via [`FunctionGate::mark_changed`]).
+//! There is no whole-package `bump_all` fallback — every change is reported at
+//! function granularity.
 //!
 //! # Safety
 //!
@@ -72,10 +73,11 @@ pub enum GatedPass {
     ContainerSroa,
     MatchToSwitch,
     LabeledBlockFusion,
+    ValueCopyElide,
 }
 
 impl GatedPass {
-    const COUNT: usize = 14;
+    const COUNT: usize = 15;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.
@@ -200,15 +202,6 @@ impl FunctionGate {
         }
     }
 
-    /// Conservatively mark every function dirty for every gated pass. Used when a
-    /// pass that is not gate-aware reports a package-level change, since the gate
-    /// cannot tell which functions it touched.
-    pub fn bump_all(&mut self) {
-        for r in &mut self.revision {
-            *r += 1;
-        }
-    }
-
     /// Drive a gate-aware per-function pass: call `f` only for the functions
     /// `pass` needs to (re)process, marking each seen afterwards and bumping the
     /// gate when `f` reports a change. Returns whether any function changed.
@@ -305,14 +298,29 @@ mod tests {
     }
 
     #[test]
-    fn bump_all_dirties_everything() {
-        let mut gate = gate_with_graph(3, &[]);
+    fn run_gated_processes_only_dirty_and_reports_changes() {
+        // 0 -> 1; functions 0,1,2. Mark all seen for Peephole, then run a
+        // CopyProp pass that changes function 2; only dirty functions are
+        // visited, and the change propagates to function 2's (none) neighbours.
+        let mut gate = gate_with_graph(3, &[(0, 1)]);
         for i in 0..3 {
-            gate.seen(GatedPass::Peephole, FunctionId::new(i));
+            gate.seen(GatedPass::CopyProp, FunctionId::new(i));
         }
-        gate.bump_all();
-        for i in 0..3 {
-            assert!(gate.needs(GatedPass::Peephole, FunctionId::new(i)));
-        }
+        // Nothing dirty for CopyProp now: run_gated visits nothing.
+        let mut visited = Vec::new();
+        let changed = gate.run_gated(GatedPass::CopyProp, 3, |fid| {
+            visited.push(fid);
+            false
+        });
+        assert!(visited.is_empty());
+        assert!(!changed);
+        // Dirty function 1 (and its caller 0 via propagation), then run again.
+        gate.mark_changed(FunctionId::new(1));
+        let mut visited = Vec::new();
+        gate.run_gated(GatedPass::CopyProp, 3, |fid| {
+            visited.push(fid);
+            false
+        });
+        assert_eq!(visited, vec![FunctionId::new(0), FunctionId::new(1)]);
     }
 }
