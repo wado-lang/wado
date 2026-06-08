@@ -60,10 +60,13 @@ cranelift_entity::entity_impl!(FunctionId, "func");
 pub enum GatedPass {
     Peephole,
     CopyProp,
+    ConstFold,
+    Sroa,
+    Cse,
 }
 
 impl GatedPass {
-    const COUNT: usize = 2;
+    const COUNT: usize = 5;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.
@@ -195,6 +198,33 @@ impl FunctionGate {
         for r in &mut self.revision {
             *r += 1;
         }
+    }
+
+    /// Drive a gate-aware per-function pass: call `f` only for the functions
+    /// `pass` needs to (re)process, marking each seen afterwards and bumping the
+    /// gate when `f` reports a change. Returns whether any function changed.
+    /// `len` is the current function count (read once; these passes do not add
+    /// functions mid-pass).
+    pub fn run_gated(
+        &mut self,
+        pass: GatedPass,
+        len: usize,
+        mut f: impl FnMut(FunctionId) -> bool,
+    ) -> bool {
+        let mut any = false;
+        for i in 0..len {
+            let fid = FunctionId::new(i);
+            if !self.needs(pass, fid) {
+                continue;
+            }
+            let changed = f(fid);
+            self.seen(pass, fid);
+            if changed {
+                self.mark_changed(fid);
+                any = true;
+            }
+        }
+        any
     }
 }
 

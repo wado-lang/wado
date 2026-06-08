@@ -32,6 +32,9 @@
 //! `Binary` / `Local` / `IntLiteral` subtree, so cloning it into the hoisted
 //! `Let` is a small dedicated copy.
 
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, GatedPass};
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirFunction, NirLocal};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, ExprNode, StmtId, StmtKind, StmtNode};
@@ -39,10 +42,10 @@ use crate::nir_package::NirPackage;
 use crate::tir::TypeId;
 use crate::token::Span;
 
-pub fn eliminate_common_subexprs(project: &mut NirPackage) -> bool {
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
+pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::Cse, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
         // Destructure into disjoint field borrows so the body arena and the
         // local list / counter can be mutated together.
         let NirFunction {
@@ -52,12 +55,13 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage) -> bool {
             ..
         } = &mut *func;
         let Some(body) = body.as_mut() else {
-            continue;
+            return false;
         };
         let root = body.root;
-        cse_in_block(body, root, local_count, locals, &mut changed);
-    }
-    changed
+        let mut func_changed = false;
+        cse_in_block(body, root, local_count, locals, &mut func_changed);
+        func_changed
+    })
 }
 
 fn cse_in_block(

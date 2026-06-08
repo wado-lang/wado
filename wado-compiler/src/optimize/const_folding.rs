@@ -32,6 +32,9 @@
 
 use std::cell::RefCell;
 
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, FunctionId, GatedPass};
 use crate::compiler_item::SeqField;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
@@ -52,7 +55,19 @@ use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_c
 use super::arena_query::has_break_to;
 
 /// Apply constant folding to all functions in the project.
-pub fn fold_constants(project: &mut NirPackage) -> bool {
+/// Flow-sensitive constant folding, gated: skips functions unchanged since this
+/// pass last ran. Used in the fixed-point loop.
+pub fn fold_constants(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    fold_constants_impl(project, Some(gate))
+}
+
+/// Ungated variant: folds every function. Used by the post-globalization
+/// cleanup, which runs to its own fixed point outside the gated loop.
+pub fn fold_constants_all(project: &mut NirPackage) -> bool {
+    fold_constants_impl(project, None)
+}
+
+fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionGate>) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
     // Build the CalleeMap once per pass with Rc handles aliased with
@@ -83,12 +98,18 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
     visitor.interpreter.with_callees(&callees);
     visitor.interpreter.with_globals(&globals);
     visitor.interpreter.with_global_fields(&global_fields);
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
+        let fid = FunctionId::new(i);
+        if let Some(g) = gate.as_deref_mut()
+            && !g.needs(GatedPass::ConstFold, fid)
+        {
+            continue;
+        }
         let mut func = func_rc.borrow_mut();
         let address_taken = func.address_taken_locals.clone();
         let stores_aliased = func.stores_aliased_locals.clone();
         let locals = func.locals.clone();
-        if let Some(body) = func.body.as_mut() {
+        let func_changed = if let Some(body) = func.body.as_mut() {
             // Local indices are unique per function, not project-wide,
             // so reset the interpreter's env at every function boundary.
             visitor.interpreter.enter_function();
@@ -101,8 +122,18 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
                 build_alias_info(body, &locals, &address_taken, &stores_aliased, &type_table);
             visitor.interpreter.set_alias_info(alias_info);
             let root = body.root;
-            changed |= visitor.visit_block(body, root);
+            visitor.visit_block(body, root)
+        } else {
+            false
+        };
+        drop(func);
+        if let Some(g) = gate.as_deref_mut() {
+            g.seen(GatedPass::ConstFold, fid);
+            if func_changed {
+                g.mark_changed(fid);
+            }
         }
+        changed |= func_changed;
     }
     changed
 }

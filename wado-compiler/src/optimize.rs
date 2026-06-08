@@ -84,7 +84,7 @@ mod value_copy_elide;
 
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
-use const_folding::fold_constants;
+use const_folding::{fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
@@ -612,7 +612,7 @@ fn run_optimization_passes(
         step!("nir/elide_box_local", elide_adjacent_box_locals);
         step!("nir/labeled_block_fusion", fuse_labeled_blocks);
         step!("nir/ref_elim", eliminate_unnecessary_refs);
-        step!("nir/sroa", scalar_replace_aggregates);
+        gated!("nir/sroa", scalar_replace_aggregates);
         gated!("nir/copy_prop", propagate_copies);
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
         // let-bindings before `cse` / `const_fold` revisit the simplified body.
@@ -622,7 +622,7 @@ fn run_optimization_passes(
         // elimination moved into the unified `nir/peephole` pass above.)
         step!("nir/dae", eliminate_dead_arguments);
         step!("nir/drve", eliminate_dead_return_values);
-        step!("nir/cse", eliminate_common_subexprs);
+        gated!("nir/cse", eliminate_common_subexprs);
         step!("nir/store_load_forward", forward_stores_to_loads);
         // The flow-sensitive half of constant folding. The env-free half
         // (literal arithmetic + pure CTFE) already ran on the worklist in the
@@ -641,7 +641,7 @@ fn run_optimization_passes(
         // chain of pushes folds in a single iteration. The alias and
         // value-copy-helper analyses migrated to
         // `optimize::alias`.
-        step!("nir/const_fold", fold_constants);
+        gated!("nir/const_fold", fold_constants);
         // Trivial-block / dead-statement pruning moved into the pre-inline
         // `nir/peephole` run above; the post-loop `branch_prune_final` and the
         // post-globalization `const_fold_post_global` keep their own engine
@@ -708,7 +708,7 @@ fn run_optimization_passes(
     // through `value_copy` / `sroa` (which is why globalization runs last).
     run_pass("nir/const_fold_post_global", project, profiler, |p| {
         let mut changed = false;
-        while fold_constants(p) | prune_constant_branches(p) {
+        while fold_constants_all(p) | prune_constant_branches(p) {
             changed = true;
         }
         changed

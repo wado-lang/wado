@@ -26,6 +26,9 @@
 //! `Body` directly. New scalar locals are pushed to `func.locals` (reached via
 //! disjoint-field access from `func.body`).
 
+use cranelift_entity::EntityRef;
+
+use super::gate::{FunctionGate, GatedPass};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirLocal};
@@ -76,15 +79,14 @@ fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
     lookup
 }
 
-pub fn scalar_replace_aggregates(project: &mut NirPackage) -> bool {
+pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let stores_lookup = build_stores_lookup(project);
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::Sroa, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
         let module_source = func.module_source.clone();
-        changed |= sroa_in_function(&mut func, &stores_lookup, &module_source);
-    }
-    changed
+        sroa_in_function(&mut func, &stores_lookup, &module_source)
+    })
 }
 
 fn sroa_in_function(
