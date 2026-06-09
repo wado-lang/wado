@@ -219,6 +219,94 @@ grammar parses) and may pass Stage B if the action body is
 `Inspect`/`writeln`-style chatter that doesn't change the parse
 tree shape.
 
+## ATN-class prediction — the hybrid LR loop-entry decision
+
+Some descriptors (the `Performance/DropLoopEntryBranchInLRRule_*`
+family, and the `LeftRecursion` precedence grammars) need a
+**full-context** decision at a left-recursive rule's loop entry:
+"consume the next operator as an LR operator (ENTER alt _i_), or stop
+and return to the caller (EXIT)". ANTLR4 answers this with full ALL(\*)
+adaptive prediction. Matching that answer is a hard Stage A / Stage B
+contract obligation, but doing it ANTLR4's way naively is too slow for
+the very descriptor that needs it — so Gale uses a **hybrid**. This
+section records that design decision and its known approximation gaps;
+the implementation lives in `runtime/atn.wado` and is cross-referenced
+from [`AGENTS.md`](./AGENTS.md) / [`TODO.md`](./TODO.md).
+
+### Two mechanisms
+
+1. **Complete simulator** — `atn_predict_with_stack` + `atn_closure` /
+   `atn_move` over graph-structured prediction contexts (`CtxArena`).
+   This is correct in **all** cases: it simulates the ATN against the
+   input, so it handles multi-token lookahead, `~X` (`NOT_ATOM`)
+   exclusions, deep suffix disambiguation, and the exact caller
+   continuation. It is what the non-greedy `??` decision uses, and what
+   P4.3 originally used for the loop entry.
+2. **Dedicated O(1) loop-entry decision** — `atn_lr_loop_decision`.
+   It does **not** simulate forward. It does one shallow check:
+   - if the caller continuation **mandates** the lookahead token
+     (`atn_caller_mandates` walks the caller return-state stack, skips
+     nullable levels, tests the first non-nullable FIRST) → EXIT;
+   - else the first precedence-allowed enter edge whose suffix FIRST
+     admits the token → ENTER;
+   - else EXIT.
+
+### Why the dedicated decision exists (the performance invariant)
+
+The complete simulator, used at **every** loop iteration of a deep
+chain, is **O(n²)**: each iteration's `predict` re-walks the O(depth)
+enclosing-loop caller chain (measured `lr_between.g4` depth 8/16/32 =
+1.3 s / 7 s / 48 s). `DropLoopEntryBranchInLRRule_4` is a **Performance**
+descriptor with a deep input, so the complete simulator times out on
+the very test it is meant to pass. The dedicated decision's
+caller-mandate check terminates at the **first non-nullable** caller
+level (one step for the `between … 'and'` shape), so each iteration is
+O(1) and the deep chain is O(n) (~117 ms).
+
+**Invariant for any future change: the deep descriptor's loop
+iterations must stay decidable without forward simulation.** A fix that
+re-introduces per-iteration simulation on the common case is a
+regression even if it is "more correct".
+
+### The hybrid: fast decision + bounded refinement + rare fallback
+
+The dedicated decision is an approximation. Its gaps (each shipped with
+a regression fixture under `tests/grammars/`) and how the hybrid closes
+them **without** breaking the performance invariant:
+
+| Gap | Symptom | Hybrid resolution | Touches perf? |
+| --- | --- | --- | --- |
+| `~X` (`NOT_ATOM`) treated as "matches anything" | `~COMMA` continuation claims to mandate `COMMA` | FIRST carries the **excluded** label; membership tests `token != excluded` | No (O(1) extra) |
+| Scan stack pushed only for self-ref calls | an ATN-class rule called from another rule's scanner sees an empty `GALE_SCAN_STACK` and eats the caller's delimiter | scan side pushes the exact return state for **every** rule call, mirroring the parse side | No (constant factor) |
+| Classifier sees only top-level self-ref + immediate token | `'between' (expr) 'and'` / `'between' expr mod? 'and'` stay on the broken static path | classifier walks nested sequences and nullable intervening elements | No (codegen-time) |
+| Mandate yields on a 1-token FIRST match | caller tail `'and' ')'` vs suffix `'and' expr` on `a and b and )` exits too early | mandate check verifies the caller continuation a **bounded k** past the shared delimiter | Bounded `O(k)` |
+| Commit to the first enter edge by FIRST alone | two suffixes sharing a first token (`'op' '('…` vs `'op' '['…`) always pick the first | when >1 enter edge admits the token, **bounded-k** disambiguate; if still tied, **fall back** to the complete simulator | `O(k)`; fallback only on residual ambiguity |
+| Nullable-atom LR rule trapped at decode | guard rejects rules that never route through the decision | scope the check to genuinely routed ATN-class rules (or let the decision fall back) | No |
+
+The fallback to the complete simulator fires **only** when bounded-k
+cannot decide — a property of specific grammar shapes (shared-prefix
+suffixes, FIRST-overlapping caller tails), not of chain depth. The deep
+`between` chain is unambiguous at every iteration (the mandate or a
+lone enter edge decides it), so it never falls back and stays O(n). The
+residual unbounded-ambiguous case is the only place the complete
+simulator's cost can appear; it is rare and pathological (ANTLR4 itself
+leans on a DFA cache there).
+
+### Why a hybrid and not "just use the complete simulator"
+
+The complete simulator already exists and is correct, so completeness
+is not the obstacle — **cost placement** is. The hybrid keeps the O(1)
+decision on the hot path (where it is both correct and fast), spends a
+bounded `O(k)` only when the cheap check is genuinely uncertain, and
+reserves the expensive complete simulation for the pathological tail.
+This is the standard ALL(\*)-with-shortcut shape; it is the deliberate
+trade-off for Gale's clean-room re-derivation.
+
+Each gap above is closed incrementally, and every closure ships a
+`tests/grammars/` fixture pinning the previously-wrong input so the
+edge stays closed (the same regression-fixture discipline the LL
+soundness invariants in [`AGENTS.md`](./AGENTS.md) require).
+
 ## The Descriptor Pipeline
 
 Upstream `antlr4` ships a JUnit-driven runtime test suite at
