@@ -209,10 +209,7 @@ impl<'a> Builder<'a> {
                 // operations — not pure values. Walk the child (so pure
                 // subtrees still land in `value_of`) but do not assign an id
                 // to this expr.
-                if matches!(
-                    op,
-                    NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref
-                ) {
+                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
                     self.walk_expr(inner);
                     None
                 } else {
@@ -295,7 +292,8 @@ impl<'a> Builder<'a> {
             } => {
                 self.walk_expr(scrutinee);
                 let saved = self.current_value.clone();
-                let mut arm_states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len() + 1);
+                let mut arm_states: Vec<IndexMap<u32, ValueId>> =
+                    Vec::with_capacity(arms.len() + 1);
                 for arm in &arms {
                     self.current_value = saved.clone();
                     self.walk_block(*arm);
@@ -590,7 +588,9 @@ fn collect_writes_in_block(
 
 fn collect_writes_in_stmt(body: &Body, stmt: StmtId, out: &mut crate::hashmap::IndexSet<u32>) {
     match &body.stmts[stmt].kind {
-        StmtKind::Let { local_index, value, .. } => {
+        StmtKind::Let {
+            local_index, value, ..
+        } => {
             out.insert(*local_index);
             collect_writes_in_expr(body, *value, out);
         }
@@ -654,8 +654,8 @@ fn collect_writes_in_pattern(body: &Body, pat: PatId, out: &mut crate::hashmap::
 mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirParam};
-    use crate::nir_value_graph::ValueKind;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
+    use crate::nir_value_graph::ValueKind;
     use crate::tir::TypeTable;
     use crate::token::Span;
 
