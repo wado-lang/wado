@@ -27,8 +27,8 @@
 //! [`prune_template_block_wrappers`] (`PostFixpoint`, the final `__tmpl:`
 //! flatten after the fixpoint converges).
 
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir::NirFunction;
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 

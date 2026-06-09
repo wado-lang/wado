@@ -970,7 +970,7 @@ mod tests {
         });
         {
             let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut __locals_eng: Vec<NirLocal> = Vec::new();
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.run(&[&FoldAddMulConst]);
         }
@@ -1003,7 +1003,7 @@ mod tests {
         let before = body.exprs.len();
         let clone = {
             let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut __locals_eng: Vec<NirLocal> = Vec::new();
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.clone_expr(original)
         };
@@ -1058,7 +1058,7 @@ mod tests {
         assert_eq!(body.blocks[root].stmts.len(), 3);
         {
             let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut __locals_eng: Vec<NirLocal> = Vec::new();
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             assert!(eng.run(&[&DropUnitStmts]));
         }
@@ -1131,7 +1131,7 @@ mod tests {
         };
         {
             let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut __locals_eng: Vec<NirLocal> = Vec::new();
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             // Before: local 0 is read only by the `x` node.
             assert_eq!(eng.local_reads(0), &[lx]);

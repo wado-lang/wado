@@ -86,8 +86,14 @@ impl Rule for ElideBoxLocalRule {
             else {
                 continue;
             };
-            let Some(j) = find_use_site(engine.body, &stmts, i + 1, candidate, &field_name, &inner_mr)
-            else {
+            let Some(j) = find_use_site(
+                engine.body,
+                &stmts,
+                i + 1,
+                candidate,
+                &field_name,
+                &inner_mr,
+            ) else {
                 continue;
             };
             let inner = candidate_inner(engine.body, stmts[i]);
@@ -286,7 +292,6 @@ fn record_pattern_defs(
 // -----------------------------------------------------------------------
 // Candidate detection & substitution
 // -----------------------------------------------------------------------
-
 
 fn describe_candidate(
     body: &Body,
