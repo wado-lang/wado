@@ -90,6 +90,8 @@ impl u128 {
     }
 
     /// Gets the low 64 bits
+    /// Used by the compiler to lower truncating `u128 as <int>` casts.
+    #[compiler_item("u128_low")]
     pub fn low(&self) -> u64 {
         return self.low;
     }
@@ -97,6 +99,131 @@ impl u128 {
     /// Gets the high 64 bits
     pub fn high(&self) -> u64 {
         return self.high;
+    }
+
+    /// Create a u128 from an i128 (reinterpret bits)
+    /// Used by the compiler to lower `i128 as u128` casts.
+    #[compiler_item("u128_from_i128")]
+    pub fn from_i128(val: i128) -> u128 {
+        return u128 { low: val.low, high: val.high as u64 };
+    }
+
+    /// Convert to `f64`, rounding to the nearest representable value with
+    /// ties to even — the same semantics as Rust's `value as f64` cast.
+    /// Used by the compiler to lower `u128 as f64` casts.
+    #[compiler_item("u128_as_f64")]
+    pub fn as_f64(&self) -> f64 {
+        if self.high == 0 {
+            // The native u64 → f64 conversion is correctly rounded.
+            return self.low as f64;
+        }
+        // 65..=128 significant bits. Fold the value into a 55-bit integer
+        // (53-bit mantissa + guard bit + sticky bit), round to nearest with
+        // ties to even, then scale by the discarded power of two. Mirrors
+        // compiler-rt's `__floatuntidf`.
+        let hbits = 64 - builtin::i64_clz(self.high as i64);  // 1..=64
+        let shift = hbits + 9;  // (64 + hbits) - 55, in 10..=73
+        let mut a: u64 = 0;
+        let mut sticky: u64 = 0;
+        if shift >= 64 {
+            let t = (shift - 64) as u64;  // 0..=9
+            a = self.high >> t;
+            if self.low != 0 || self.high & (1 << t) - 1 != 0 {
+                sticky = 1;
+            }
+        } else {
+            let s = shift as u64;  // 10..=63
+            a = self.low >> s | self.high << 64 - s;
+            if self.low & (1 << s) - 1 != 0 {
+                sticky = 1;
+            }
+        }
+        // Bits 54..2 of `a` hold the 53-bit mantissa, bit 1 the guard bit,
+        // bit 0 the rest; fold sticky into bit 0, then round half-to-even:
+        // copying the mantissa LSB (bit 2) into bit 0 makes the +1 below
+        // carry into the mantissa exactly when guard && (sticky || odd).
+        a = a | sticky;
+        if a & 4 != 0 {
+            a = a | 1;
+        }
+        a += 1;
+        a = a >> 2;
+        let mut exp = 64 + hbits - 1;  // exponent of the leading bit, 64..=127
+        if a >> 53 != 0 {
+            // Rounding overflowed the mantissa to 2^53.
+            a = a >> 1;
+            exp += 1;
+        }
+        // `a` has at most 53 bits so the conversion is exact, and scaling
+        // by a power of two is exact: the result is the correctly rounded
+        // conversion of the original value.
+        let mut result = a as f64;
+        let mut k = exp - 52;
+        while k >= 16 {
+            result *= 65536.0;
+            k -= 16;
+        }
+        while k > 0 {
+            result *= 2.0;
+            k -= 1;
+        }
+        return result;
+    }
+
+    /// Convert to `f32`, rounding to the nearest representable value with
+    /// ties to even; values above `f32::MAX` become infinity — the same
+    /// semantics as Rust's `value as f32` cast.
+    /// Used by the compiler to lower `u128 as f32` casts.
+    #[compiler_item("u128_as_f32")]
+    pub fn as_f32(&self) -> f32 {
+        if self.high == 0 {
+            // The native u64 → f32 conversion is correctly rounded.
+            return self.low as f32;
+        }
+        // Same algorithm as `as_f64` with a 24-bit mantissa: fold into a
+        // 26-bit integer (24-bit mantissa + guard bit + sticky bit).
+        let hbits = 64 - builtin::i64_clz(self.high as i64);  // 1..=64
+        let shift = hbits + 38;  // (64 + hbits) - 26, in 39..=102
+        let mut a: u64 = 0;
+        let mut sticky: u64 = 0;
+        if shift >= 64 {
+            let t = (shift - 64) as u64;  // 0..=38
+            a = self.high >> t;
+            if self.low != 0 || self.high & (1 << t) - 1 != 0 {
+                sticky = 1;
+            }
+        } else {
+            let s = shift as u64;  // 39..=63
+            a = self.low >> s | self.high << 64 - s;
+            if self.low & (1 << s) - 1 != 0 {
+                sticky = 1;
+            }
+        }
+        a = a | sticky;
+        if a & 4 != 0 {
+            a = a | 1;
+        }
+        a += 1;
+        a = a >> 2;
+        let mut exp = 64 + hbits - 1;  // 64..=127
+        if a >> 24 != 0 {
+            // Rounding overflowed the mantissa to 2^24.
+            a = a >> 1;
+            exp += 1;
+        }
+        // The scaling overflows to infinity for values above f32::MAX,
+        // matching Rust's cast semantics.
+        let mut result = a as f32;
+        let mut k = exp - 23;
+        while k >= 16 {
+            result *= 65536.0;
+            k -= 16;
+        }
+        while k > 0 {
+            result *= 2.0;
+            k -= 1;
+        }
+        return result;
     }
 
     /// Add two u128 values
@@ -734,6 +861,8 @@ impl i128 {
     }
 
     /// Gets the low 64 bits (unsigned)
+    /// Used by the compiler to lower truncating `i128 as <int>` casts.
+    #[compiler_item("i128_low")]
     pub fn low(&self) -> u64 {
         return self.low;
     }
@@ -792,8 +921,36 @@ impl i128 {
     }
 
     /// Create i128 from u128 (reinterpret bits)
+    /// Used by the compiler to lower `u128 as i128` casts.
+    #[compiler_item("i128_from_u128")]
     pub fn from_u128(val: u128) -> i128 {
         return i128 { low: val.low, high: val.high as i64 };
+    }
+
+    /// Convert to `f64`, rounding to the nearest representable value with
+    /// ties to even — the same semantics as Rust's `value as f64` cast.
+    /// Used by the compiler to lower `i128 as f64` casts.
+    #[compiler_item("i128_as_f64")]
+    pub fn as_f64(&self) -> f64 {
+        let magnitude = self.abs_u128().as_f64();
+        if self.is_negative() {
+            // Negation of an f64 is exact, so the result stays correctly
+            // rounded.
+            return -magnitude;
+        }
+        return magnitude;
+    }
+
+    /// Convert to `f32`, rounding to the nearest representable value with
+    /// ties to even — the same semantics as Rust's `value as f32` cast.
+    /// Used by the compiler to lower `i128 as f32` casts.
+    #[compiler_item("i128_as_f32")]
+    pub fn as_f32(&self) -> f32 {
+        let magnitude = self.abs_u128().as_f32();
+        if self.is_negative() {
+            return -magnitude;
+        }
+        return magnitude;
     }
 
     /// Divide self by divisor, returning (quotient, remainder)
@@ -1325,6 +1482,28 @@ impl TryFrom<u128> for u64 {
     }
 }
 
+impl TryFrom<u128> for i64 {
+    type Error = ConvertError;
+
+    pub fn try_from(value: u128) -> Result<i64, ConvertError> {
+        if value.high() != 0 || value.low() > i64::MAX as u64 {
+            return Result::Err(ConvertError::new("value out of range for i64"));
+        }
+        return Result::Ok(value.low() as i64);
+    }
+}
+
+impl TryFrom<u128> for i128 {
+    type Error = ConvertError;
+
+    pub fn try_from(value: u128) -> Result<i128, ConvertError> {
+        if value.high() > i64::MAX as u64 {
+            return Result::Err(ConvertError::new("value out of range for i128"));
+        }
+        return Result::Ok(i128::from_u128(value));
+    }
+}
+
 impl TryFrom<i128> for i64 {
     type Error = ConvertError;
 
@@ -1335,6 +1514,30 @@ impl TryFrom<i128> for i64 {
             return Result::Err(ConvertError::new("value out of range for i64"));
         }
         return Result::Ok(value.low() as i64);
+    }
+}
+
+impl TryFrom<i128> for u64 {
+    type Error = ConvertError;
+
+    pub fn try_from(value: i128) -> Result<u64, ConvertError> {
+        // In range exactly when the value is in [0, 2^64): the high half
+        // is zero (negative values have a sign-extended, non-zero high).
+        if value.high() != 0 {
+            return Result::Err(ConvertError::new("value out of range for u64"));
+        }
+        return Result::Ok(value.low());
+    }
+}
+
+impl TryFrom<i128> for u128 {
+    type Error = ConvertError;
+
+    pub fn try_from(value: i128) -> Result<u128, ConvertError> {
+        if value.is_negative() {
+            return Result::Err(ConvertError::new("value out of range for u128"));
+        }
+        return Result::Ok(u128::from_i128(value));
     }
 }
 

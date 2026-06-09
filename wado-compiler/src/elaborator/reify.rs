@@ -2067,6 +2067,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let target_type = self.ann_expression_types(cast.id).expect(
                     "resolve_cast records the target type on expression_types for every cast",
                 );
+                // `i128/u128 as T` lowers to prelude calls rather than a
+                // bare cast, since the 128-bit types are prelude structs:
+                // floats go through the correctly rounded `as_f64` /
+                // `as_f32`, integer targets truncate via `low()`, and
+                // `i128 ↔ u128` reinterprets via `from_u128` / `from_i128`.
+                // Must run before the target-side `try_reify_int128_cast`
+                // so `i128 ↔ u128` is not mis-handled by its non-numeric
+                // bare-cast fallback.
+                if let Some(tir) = self.try_reify_int128_source_cast(cast, target_type, ctx) {
+                    return tir;
+                }
                 // `expr as i128/u128` lowers to a `from_u64` / `from_i64`
                 // / `from_pair` constructor call rather than a bare cast,
                 // since the 128-bit types are prelude structs. Mirrors
@@ -8078,6 +8089,157 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             target_type,
             cast.span,
         ))
+    }
+
+    /// `i128/u128 as T` for a wide-int *source*. The 128-bit types are
+    /// prelude structs, so a bare `Cast` would leak the boxed struct ref
+    /// into a slot expecting a Wasm scalar (issue #1328). Lower instead to
+    /// prelude calls: `f64`/`f32` through the correctly rounded
+    /// `as_f64`/`as_f32`, integer targets through `low()` plus a primitive
+    /// cast (truncation), and `i128 ↔ u128` through the bit-reinterpreting
+    /// `from_u128`/`from_i128` constructors. Targets outside that set
+    /// return `None`; `resolve_cast` has already reported them as invalid.
+    fn try_reify_int128_source_cast(
+        &mut self,
+        cast: &ast::CastExpr,
+        target_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> Option<TirExpr> {
+        use crate::compiler_item::CompilerItem;
+        use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
+
+        let source_type = self.ann_expression_types(cast.expr.id())?;
+        let source_name = match self.tysys.type_table.borrow().get(source_type).clone() {
+            ResolvedType::Struct { name, .. } if name == "u128" || name == "i128" => name,
+            _ => return None,
+        };
+        let signed_source = source_name == "i128";
+
+        enum Lowering {
+            /// `i128 as i128` / `u128 as u128` — no-op.
+            Identity,
+            /// `&self` accessor returning the target primitive directly.
+            Method(CompilerItem),
+            /// `low()` then a primitive cast down to the target width.
+            LowThenCast,
+            /// Static bit-reinterpreting constructor of the other wide type.
+            Reinterpret(CompilerItem),
+        }
+        let lowering = match self.tysys.type_table.borrow().get(target_type).clone() {
+            ResolvedType::Primitive(PrimitiveType::F64) => Lowering::Method(if signed_source {
+                CompilerItem::I128AsF64
+            } else {
+                CompilerItem::U128AsF64
+            }),
+            ResolvedType::Primitive(PrimitiveType::F32) => Lowering::Method(if signed_source {
+                CompilerItem::I128AsF32
+            } else {
+                CompilerItem::U128AsF32
+            }),
+            ResolvedType::Primitive(
+                PrimitiveType::I64
+                | PrimitiveType::U64
+                | PrimitiveType::I32
+                | PrimitiveType::U32
+                | PrimitiveType::I16
+                | PrimitiveType::U16
+                | PrimitiveType::I8
+                | PrimitiveType::U8,
+            ) => Lowering::LowThenCast,
+            ResolvedType::Struct { name, .. } if name == source_name => Lowering::Identity,
+            ResolvedType::Struct { name, .. } if name == "i128" => {
+                Lowering::Reinterpret(CompilerItem::I128FromU128)
+            }
+            ResolvedType::Struct { name, .. } if name == "u128" => {
+                Lowering::Reinterpret(CompilerItem::U128FromI128)
+            }
+            _ => return None,
+        };
+
+        let make_func_ref = |tysys: &super::tysys::TypeSystem, item: CompilerItem| {
+            let (owner_type, method_name) = {
+                let tt = tysys.type_table.borrow();
+                let (_, owner_type, method_name) = tt.compiler_items().require_method(item);
+                (owner_type.to_string(), method_name.to_string())
+            };
+            let method_info = crate::name::LocalMethodName::new(owner_type, None, method_name);
+            crate::tir::FunctionRef {
+                module_source: crate::module_source::ModuleSource::int128(),
+                name: method_info.to_mangled_name(),
+                monomorph_info: None,
+                method_info: Some(method_info),
+            }
+        };
+
+        let inner = self.reify_expr(&cast.expr, ctx, None);
+        let span = cast.span;
+        match lowering {
+            Lowering::Identity => Some(inner),
+            Lowering::Method(item) => {
+                let func = make_func_ref(&self.tysys, item);
+                let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                    inner,
+                    ast::SelfKind::Ref,
+                    /* is_ref_impl */ false,
+                    span,
+                    &self.tysys.type_table,
+                );
+                Some(super::Elaborator::<H>::build_tir_method_call(
+                    receiver,
+                    func,
+                    vec![],
+                    vec![],
+                    target_type,
+                    span,
+                ))
+            }
+            Lowering::LowThenCast => {
+                let item = if signed_source {
+                    CompilerItem::I128Low
+                } else {
+                    CompilerItem::U128Low
+                };
+                let func = make_func_ref(&self.tysys, item);
+                let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                    inner,
+                    ast::SelfKind::Ref,
+                    /* is_ref_impl */ false,
+                    span,
+                    &self.tysys.type_table,
+                );
+                let low_call = super::Elaborator::<H>::build_tir_method_call(
+                    receiver,
+                    func,
+                    vec![],
+                    vec![],
+                    TypeTable::U64,
+                    span,
+                );
+                if target_type == TypeTable::U64 {
+                    return Some(low_call);
+                }
+                Some(TirExpr::new(
+                    crate::tir::TirExprKind::Cast {
+                        expr: Box::new(low_call),
+                        target_type,
+                    },
+                    target_type,
+                    span,
+                ))
+            }
+            Lowering::Reinterpret(item) => {
+                let func = make_func_ref(&self.tysys, item);
+                Some(TirExpr::new(
+                    crate::tir::TirExprKind::Call {
+                        func,
+                        type_args: vec![],
+                        args: vec![crate::tir::CallArg::new(inner, false)],
+                    },
+                    target_type,
+                    span,
+                ))
+            }
+        }
     }
 
     fn reify_literal(

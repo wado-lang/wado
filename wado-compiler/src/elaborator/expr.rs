@@ -2782,6 +2782,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Normal cast
         let source_type = self.resolve_expr(&cast.expr, ctx, None);
 
+        // Casts *from* i128/u128 support: f64/f32 (correctly rounded), the
+        // integer widths (truncating), and i128 ↔ u128 (bit reinterpret).
+        // Reify lowers them (`try_reify_int128_source_cast`); here reject
+        // anything else, so an unsupported target fails with a diagnostic
+        // instead of leaking the wide-int struct ref into codegen. `char`
+        // targets are excluded: the char-cast diagnostic below already
+        // covers them.
+        let source_is_wide_int = matches!(
+            self.tysys.type_table.borrow().get(source_type),
+            ResolvedType::Struct { name, .. } if name == "i128" || name == "u128"
+        );
+        if source_is_wide_int {
+            use crate::tir::PrimitiveType;
+            let target_supported = match self.tysys.type_table.borrow().get(target_type) {
+                ResolvedType::Primitive(
+                    PrimitiveType::F64
+                    | PrimitiveType::F32
+                    | PrimitiveType::I64
+                    | PrimitiveType::U64
+                    | PrimitiveType::I32
+                    | PrimitiveType::U32
+                    | PrimitiveType::I16
+                    | PrimitiveType::U16
+                    | PrimitiveType::I8
+                    | PrimitiveType::U8
+                    | PrimitiveType::Char,
+                ) => true,
+                ResolvedType::Struct { name, .. } => name == "i128" || name == "u128",
+                _ => false,
+            };
+            if !target_supported {
+                let from_name = self.tysys.type_table.borrow().type_name(source_type);
+                let to_name = self.tysys.type_table.borrow().type_name(target_type);
+                let _ = self.logger.error(TypeError::InvalidCast {
+                    from: from_name,
+                    to: to_name,
+                    hint: "i128/u128 can only be cast to numeric types".to_string(),
+                    span: cast.span,
+                });
+            }
+        }
+
         // Validate char casts: prohibit integer/float -> char (use char::from_u32 instead)
         // Exception: u8 -> char is always valid (0..255 are valid Unicode scalar values)
         let source_base = self
