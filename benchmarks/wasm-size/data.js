@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781015948729,
+  "lastUpdate": 1781016534978,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31693,6 +31693,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0ccccb120c181fd87b5f443c8d8716d075b93e79"
         },
         "date": 1781015948187,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "259dd88cb75e6a233c73de7cf95093cf3a455802",
+          "message": "Merge pull request #1340 from wado-lang/claude/festive-cray-xb4bqo\n\nfeat(package-gale): ATN-class LR loop-entry adaptive prediction (P4)",
+          "timestamp": "2026-06-09T23:39:30+09:00",
+          "tree_id": "866d4a6ca9d5b8aab1393b505b9cdeb375a0a06d",
+          "url": "https://github.com/wado-lang/wado/commit/259dd88cb75e6a233c73de7cf95093cf3a455802"
+        },
+        "date": 1781016534745,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
