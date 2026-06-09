@@ -255,3 +255,42 @@ test "LR loop decision: precedence gates enter/exit" {
     // min_prec 2: '+' (own_prec 1 < 2) pruned, '*' suffix !startswith '+', exit.
     assert atn_lr_loop_decision(&sim, &empty, d, &toks, 0, eof, 2) == 2, "min_prec 2 exits";
 }
+
+// Guard: a caller stack this deep seeds `rs = 999`, which overflows the
+// 3-decimal-digit `rs` slot of CfgSet's packed key. Without the guard the
+// over-deep config would alias a *different* config onto the same key — a
+// silent mis-merge — so `CfgSet.add` must trap instead.
+#[expect_trap]
+test "CfgSet packed key traps on an over-deep caller stack" {
+    let g = parse(K2_G4).unwrap();
+    let atn = build_atn(&g);
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = rule_block_decision(&atn, 0);
+    assert d >= 0, "rule `a` must have an alternation decision";
+    let mut deep: List<i32> = [];
+    for let mut i = 0; i < 1000; i += 1 {
+        deep.push(-1);
+    }
+    let toks: List<Token> = [mk(0), mk(4), mk(5)];
+    let _ = atn_predict_with_stack(&sim, d, &deep, &toks, 0, 2);
+}
+
+// Guard: an LR rule whose atom alternative is nullable (`a : ID?`) lets the
+// FIRST walk reach the loop-entry precedence edges, leaking the operator
+// tokens into the rule's FIRST set and mis-firing the caller-mandate test.
+// `atn_decode` runs the FIRST/nullable fixpoint with `forbid_prec`, so it
+// must trap on this unsupported ATN-class shape.
+global LR_NULLABLE_ATOM_G4: String = "
+grammar T;
+e : e '+' e | a ;
+a : ID? ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+#[expect_trap]
+test "atn_decode traps on a nullable atom alternative in an LR rule" {
+    let g = parse(LR_NULLABLE_ATOM_G4).unwrap();
+    let atn = build_atn(&g);
+    let _ = atn_decode(&serialize_atn(&atn));
+}
