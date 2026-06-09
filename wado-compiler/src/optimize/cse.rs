@@ -287,12 +287,20 @@ fn replace_matching_in_stmt(
     cse_local_name: &str,
     type_id: TypeId,
 ) {
+    // Snapshot the matching ExprIds *before* any rewrite. The engine's
+    // ValueGraph cache is built lazily and not invalidated by
+    // `replace_expr_kind`, so post-rewrite `engine.value(e)` queries
+    // happen to still return the original VNs today — but relying on that
+    // makes CSE depend on an implementation detail of the cache.
+    // Snapshotting up-front decouples us: this loop is now correct
+    // regardless of any future change to invalidation policy.
     let mut exprs: Vec<ExprId> = Vec::new();
     collect_exprs_in_stmt(engine.body, stmt, &mut exprs);
-    for e in exprs {
-        if engine.value(e) != Some(target) {
-            continue;
-        }
+    let matches: Vec<ExprId> = exprs
+        .into_iter()
+        .filter(|&e| engine.value(e) == Some(target))
+        .collect();
+    for e in matches {
         // The CSE'd subtree's type matches the hoisted local's type; the
         // engine tracks parent / use-index coherence on kinds only, so a
         // direct type-id write is independent of `replace_expr_kind`.

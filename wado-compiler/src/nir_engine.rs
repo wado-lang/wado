@@ -135,10 +135,19 @@ impl<'a> Engine<'a> {
     /// [`crate::nir_value_graph::builder::build`] (one walk of the body);
     /// subsequent calls are O(1).
     ///
-    /// Rules that materially edit the body should call
-    /// [`Engine::invalidate_value_graph`] if they intend to re-query after
-    /// the edit, or simply consult the value graph once at the start of
-    /// their work (the typical pattern).
+    /// # Invalidation contract
+    ///
+    /// **Edits via `replace_expr_kind` / `set_block_stmts` / `alloc_*` do
+    /// not invalidate this cache.** The side-table keyed on pre-edit
+    /// `ExprId`s continues to return its original VNs. A rule that wants
+    /// to re-query after structurally rewriting the body must call
+    /// [`Engine::invalidate_value_graph`] explicitly — otherwise the
+    /// cached VN is the value at *build time*, not at query time.
+    ///
+    /// The typical pattern is to consult the value graph once at the
+    /// start of a rule and snapshot any VN results you intend to act on,
+    /// then perform the edits. See `optimize/cse.rs` and
+    /// `optimize/store_load_forward.rs` for examples.
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
         self.value_graph.as_ref()?.value_of.get(&expr).copied()

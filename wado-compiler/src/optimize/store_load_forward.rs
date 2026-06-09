@@ -28,7 +28,7 @@
 use std::cell::Cell;
 
 use crate::hashmap::IndexSet;
-use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir::NirFunction;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -46,8 +46,16 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
         if func.body.is_none() {
             return false;
         }
+        // Canonical alias set: locals whose address is taken (`&x` / `&mut x`)
+        // plus those that flow through a `stores` clause. Mirrors `alias.rs`'s
+        // seeding; the rule treats their reads as forwarding-ineligible
+        // because the ValueGraph builder does not model writes through
+        // pointers or `stores`-aliased references.
+        let mut unsafe_locals = func.address_taken_locals.clone();
+        unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
         let rule = StoreLoadForwardRule {
             applied: Cell::new(false),
+            unsafe_locals,
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
@@ -60,6 +68,9 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
 /// function literal-forwarding pass at the body root.
 pub(super) struct StoreLoadForwardRule {
     applied: Cell<bool>,
+    /// Pre-computed forwarding-ineligible locals; see the caller for how
+    /// this set is built.
+    unsafe_locals: IndexSet<u32>,
 }
 
 impl Rule for StoreLoadForwardRule {
@@ -70,12 +81,11 @@ impl Rule for StoreLoadForwardRule {
         if self.applied.replace(true) {
             return false;
         }
-        forward_at_root(engine)
+        forward_at_root(engine, &self.unsafe_locals)
     }
 }
 
-fn forward_at_root(engine: &mut Engine) -> bool {
-    let unsafe_locals = collect_unsafe_locals(engine.body);
+fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
     // Collect every `Local` read expression first; iterating while the
     // engine rewrites would invalidate body/expr indices we're walking.
     let mut local_reads: Vec<(ExprId, u32)> = Vec::new();
@@ -104,37 +114,18 @@ fn forward_at_root(engine: &mut Engine) -> bool {
         let Some(src) = engine.literal_source(vid) else {
             continue;
         };
+        // We clone the original literal `ExprKind` so the substituted node
+        // keeps its source `repr` and span. When several distinct literal
+        // expressions hash-cons to the same `ValueId` (e.g. `0` and `0x0`),
+        // `literal_source` returns the first one observed; the other
+        // literals' reprs are lost on substitution. This is sound — VN
+        // equality implies semantic equality — but may surface in NIR
+        // dumps and diagnostic spans for edge-case literals.
         let new_kind = engine.body.exprs[src].kind.clone();
         engine.replace_expr_kind(expr, new_kind);
         changed = true;
     }
     changed
-}
-
-/// Locals whose address is taken anywhere in the body. The ValueGraph
-/// builder does not yet model writes through pointers, so we treat these
-/// as forwarding-ineligible at the rule level.
-fn collect_unsafe_locals(body: &Body) -> IndexSet<u32> {
-    let mut unsafe_locals = IndexSet::default();
-    collect_unsafe_node(body, NodeRef::Block(body.root), &mut unsafe_locals);
-    unsafe_locals
-}
-
-fn collect_unsafe_node(body: &Body, node: NodeRef, unsafe_locals: &mut IndexSet<u32>) {
-    if let NodeRef::Expr(id) = node
-        && let ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-            expr: inner,
-        } = &body.exprs[id].kind
-        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
-    {
-        unsafe_locals.insert(*index);
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_unsafe_node(body, c, unsafe_locals);
-    }
 }
 
 fn collect_local_reads(body: &Body, out: &mut Vec<(ExprId, u32)>) {

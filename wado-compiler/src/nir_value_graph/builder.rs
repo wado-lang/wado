@@ -101,6 +101,32 @@ impl HeapState {
         self.per_field.clear();
         self.default_version = v;
     }
+
+    /// Snapshot the read-visible part of the state (the `per_field` map and
+    /// `default_version`) so an arm walk can restore them on exit. `next` is
+    /// deliberately *not* part of the snapshot: it is a monotonic counter
+    /// shared across the entire function, so an arm's `bump_*` calls
+    /// continue to hand out unique versions even after restore. This keeps
+    /// VN equality across arms sound — no two distinct heap states ever
+    /// reuse a version — while preventing arm 1's bumps from forcing
+    /// arm 2's reads to spuriously distinct VNs.
+    fn snapshot(&self) -> HeapSnapshot {
+        HeapSnapshot {
+            per_field: self.per_field.clone(),
+            default_version: self.default_version,
+        }
+    }
+
+    fn restore(&mut self, snap: HeapSnapshot) {
+        self.per_field = snap.per_field;
+        self.default_version = snap.default_version;
+    }
+}
+
+#[derive(Clone)]
+struct HeapSnapshot {
+    per_field: IndexMap<u32, HeapVersion>,
+    default_version: HeapVersion,
 }
 
 /// The result of running [`build`] over a function body: the populated
@@ -235,13 +261,16 @@ impl<'a> Builder<'a> {
                 self.walk_loop(lb);
             }
             StmtKind::LabeledBlock { block, .. } => {
-                // Conservative: locals modified inside that may escape via
-                // `break` could disagree with the fall-through value. For
-                // MVP, take the snapshot before, walk, then any local that
-                // changed becomes Opaque after.
-                let saved = self.current_value.clone();
+                // Conservative: any local written anywhere in the labeled
+                // block's subtree could disagree with the fall-through
+                // value via a `break` (either to this label or to an
+                // enclosing one) that escapes before the write's effect
+                // propagates to the fall-through `current_value`. Mark
+                // every modified local Opaque post-LB. A fall-through-diff
+                // check alone would miss writes that occur only on a
+                // break-only path.
                 self.walk_block(block);
-                self.dirty_changed_locals(&saved);
+                self.dirty_all_writes_in_block(block);
                 self.heap_state.bump_all();
             }
         }
@@ -393,9 +422,11 @@ impl<'a> Builder<'a> {
                 None
             }
             ExprKind::LabeledBlock { block, .. } => {
-                let saved = self.current_value.clone();
+                // See the `StmtKind::LabeledBlock` arm for the rationale —
+                // a break-only-path write is invisible to a fall-through-
+                // diff check, so dirty every local written in the subtree.
                 self.walk_block(block);
-                self.dirty_changed_locals(&saved);
+                self.dirty_all_writes_in_block(block);
                 self.heap_state.bump_all();
                 None
             }
@@ -413,14 +444,17 @@ impl<'a> Builder<'a> {
             } => {
                 self.walk_expr(scrutinee);
                 let saved = self.current_value.clone();
+                let saved_heap = self.heap_state.snapshot();
                 let mut arm_states: Vec<IndexMap<u32, ValueId>> =
                     Vec::with_capacity(arms.len() + 1);
                 for arm in &arms {
                     self.current_value = saved.clone();
+                    self.heap_state.restore(saved_heap.clone());
                     self.walk_block(*arm);
                     arm_states.push(self.current_value.clone());
                 }
                 self.current_value = saved.clone();
+                self.heap_state.restore(saved_heap);
                 self.walk_block(default);
                 arm_states.push(std::mem::replace(&mut self.current_value, saved.clone()));
                 self.merge_n_arms(&saved, &arm_states);
@@ -639,9 +673,11 @@ impl<'a> Builder<'a> {
 
     fn walk_match_arms(&mut self, arms: &[ArmData]) {
         let saved = self.current_value.clone();
+        let saved_heap = self.heap_state.snapshot();
         let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());
         for arm in arms {
             self.current_value = saved.clone();
+            self.heap_state.restore(saved_heap.clone());
             // Pattern bindings introduced by this arm are conservatively
             // Opaque. The arm body and guard are walked from that state.
             self.bind_pattern_opaque(arm.pattern);
@@ -652,6 +688,7 @@ impl<'a> Builder<'a> {
             states.push(self.current_value.clone());
         }
         self.current_value = saved.clone();
+        self.heap_state.restore(saved_heap);
         self.merge_n_arms(&saved, &states);
     }
 
@@ -689,24 +726,27 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
+        // Symmetric to the pre-loop bump: the body may have written to
+        // any field via `obj.f = ...` (or via an opaque heap-write event).
+        // Post-loop reads must not share heap versions with in-body reads,
+        // since the body's last iteration's stored value can't be known to
+        // reach the post-loop point in a 0-iteration execution.
         self.heap_state.bump_all();
     }
 
     /// After a flow-opaque construct (LabeledBlock with potential breaks),
-    /// any local that the construct changed becomes Opaque. Untouched locals
-    /// keep their saved value.
-    fn dirty_changed_locals(&mut self, saved: &IndexMap<u32, ValueId>) {
-        let to_dirty: Vec<u32> = self
-            .current_value
-            .iter()
-            .filter_map(|(&idx, &v)| {
-                let s = saved.get(&idx)?;
-                if *s != v { Some(idx) } else { None }
-            })
-            .collect();
-        for idx in to_dirty {
-            let opaque = self.pool.fresh_opaque();
-            self.current_value.insert(idx, opaque);
+    /// every local written anywhere in `block`'s subtree becomes Opaque —
+    /// including locals written on a `break`-only path that fall-through
+    /// never sees. Locals not written in the subtree keep their pre-block
+    /// value.
+    fn dirty_all_writes_in_block(&mut self, block: crate::nir_arena::BlockId) {
+        let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
+        collect_writes_in_block(self.body, block, &mut writes);
+        for idx in &writes {
+            if self.current_value.contains_key(idx) {
+                let opaque = self.pool.fresh_opaque();
+                self.current_value.insert(*idx, opaque);
+            }
         }
     }
 }
@@ -1307,5 +1347,114 @@ mod tests {
         root_with(&mut body, vec![s]);
         let r = build(&body, &[]);
         assert!(!r.value_of.contains_key(&fa));
+    }
+
+    // ----- Per-arm heap snapshot (P1-3) -----
+
+    #[test]
+    fn switch_arm_field_writes_do_not_leak_across_arms() {
+        // fn(obj) {
+        //     switch (0) {
+        //         0 => { obj.f = 1; }
+        //         1 => { obj.g; }                  // VN must match obj.g read at TOP
+        //         default => {}
+        //     }
+        // }
+        // The two `obj.g` reads (one inside arm 1, one before the switch) must
+        // share a VN: arm 0's `obj.f = 1` bumps field `f` only, but without
+        // per-arm snapshot the bump would leak into arm 1's heap state and
+        // give `obj.g` a fresh heap version.
+        let mut body = empty_body();
+        // Read obj.g before the switch.
+        let recv_pre = local_ref(&mut body, 0);
+        let read_pre = field_access(&mut body, recv_pre, 1);
+        let let_pre = let_stmt(&mut body, 1, read_pre, false);
+
+        // Arm 0: obj.f = 1
+        let recv_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let arm0_write = field_assign_stmt(&mut body, recv_w, 0, one);
+        let arm0 = block_with(&mut body, vec![arm0_write]);
+
+        // Arm 1: read obj.g
+        let recv_in = local_ref(&mut body, 0);
+        let read_in_arm = field_access(&mut body, recv_in, 1);
+        let let_in_arm = let_stmt(&mut body, 2, read_in_arm, false);
+        let arm1 = block_with(&mut body, vec![let_in_arm]);
+
+        // Default: empty
+        let default = block_with(&mut body, vec![]);
+
+        let scrut = int_lit(&mut body, 0);
+        let switch_e = alloc_expr(
+            &mut body,
+            ExprKind::Switch {
+                scrutinee: scrut,
+                min_value: 0,
+                arms: vec![arm0, arm1],
+                default,
+            },
+        );
+        let switch_s = alloc_stmt(&mut body, StmtKind::Expr(switch_e));
+
+        root_with(&mut body, vec![let_pre, switch_s]);
+        let r = build(&body, &[param_seed()]);
+        // The read inside arm 1 must share a VN with the pre-switch read.
+        assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_arm]);
+    }
+
+    // ----- LabeledBlock break-only-path writes (P1-4) -----
+
+    #[test]
+    fn labeled_block_break_only_write_marks_local_opaque() {
+        // fn() {
+        //     let mut x = 1;
+        //     'lb: { if cond { x = 2; break 'lb; } else {} }
+        //     x   // must be Opaque — the break path wrote 2 but fall-through didn't
+        // }
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let let_x = let_stmt(&mut body, 0, one, true);
+
+        // Inside the LB: `if true { x = 2; break 'lb; }`
+        let cond = bool_lit(&mut body, true);
+        let two = int_lit(&mut body, 2);
+        let assign_then = assign_stmt(&mut body, 0, two);
+        let break_stmt = alloc_stmt(
+            &mut body,
+            StmtKind::Break {
+                label: Some("lb".to_string()),
+                value: None,
+            },
+        );
+        let then_block = block_with(&mut body, vec![assign_then, break_stmt]);
+        let else_block = block_with(&mut body, vec![]);
+        let if_inside = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: Some(else_block),
+            },
+        );
+        let lb_block = block_with(&mut body, vec![if_inside]);
+        let lb_stmt = alloc_stmt(
+            &mut body,
+            StmtKind::LabeledBlock {
+                label: "lb".to_string(),
+                block: lb_block,
+            },
+        );
+
+        let read = local_ref(&mut body, 0);
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        root_with(&mut body, vec![let_x, lb_stmt, s_read]);
+        let r = build(&body, &[]);
+        // Post-LB `x` must be Opaque — the break-path write of 2 means the
+        // value is unknown, even though fall-through never observes it.
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::Opaque(_)
+        ));
     }
 }
