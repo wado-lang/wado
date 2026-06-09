@@ -29,8 +29,9 @@
 //! must run after all other transformations.
 //!
 //! The pass is invoked at two points in the fixed-point loop — before `inline`
-//! (after value-copy elision / demotion so `string_push` sees the stripped
-//! receiver) and after `inline` (so `array_literal` sees the exposed
+//! (where `ValueCopyElideRule` runs in the same session, so `string_push` sees
+//! the value-copy-stripped receiver via the shared worklist; `value_copy_demote`
+//! then runs after) and after `inline` (so `array_literal` sees the exposed
 //! `array_new + push` window). `array_literal` no-ops in the first run and
 //! `string_push` no-ops in the second; both bail immediately on a non-matching
 //! node, so the wasted dispatch is negligible.
@@ -61,7 +62,11 @@ use super::value_copy_elide::{ValueCopyElideRule, build_usage};
 /// already-`Switch` bodies) and `ValueCopyElideRule` (strip read-only
 /// `$value_copy$T` wrappers). A `Match` or wrapper a later rewrite plants is
 /// caught by the next iteration's pre-inline run, matching the old timing.
-pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate, pre_inline: bool) -> bool {
+pub(super) fn run_peephole(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    pre_inline: bool,
+) -> bool {
     // Whole-package contexts, resolved once before the mutable body walk.
     let push_names = resolve_array_push_names(project);
     let array_rule = Collapser::new(&push_names);
@@ -94,8 +99,7 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate, pr
         let value_copy_usage = (pre_inline && !func.is_value_copy() && !value_copy_set.is_empty())
             .then(|| func.body.as_ref().map(|b| build_usage(b, &type_table)))
             .flatten();
-        let value_copy_rule =
-            value_copy_usage.map(|u| ValueCopyElideRule::new(&value_copy_set, u));
+        let value_copy_rule = value_copy_usage.map(|u| ValueCopyElideRule::new(&value_copy_set, u));
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine
         // post-inline body.
@@ -111,9 +115,9 @@ pub(super) fn run_peephole(project: &mut NirPackage, gate: &mut FunctionGate, pr
         // phase where this rule is absent).
         let elide_box_rule = (!pre_inline)
             .then(|| {
-                func.body.as_ref().map(|b| {
-                    build_elide_box_local(b, &func.address_taken_locals, &stores_aliased)
-                })
+                func.body
+                    .as_ref()
+                    .map(|b| build_elide_box_local(b, &func.address_taken_locals, &stores_aliased))
             })
             .flatten();
         // Disjoint borrow of the body arena and the local list so rules can

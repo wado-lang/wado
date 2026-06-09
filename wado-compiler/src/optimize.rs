@@ -10,14 +10,17 @@
 //!
 //! Fixed-point loop ([`run_optimization_passes`], in order):
 //! 2.  `container_sroa` — `AoS` → `SoA` for `List<Tuple<...>>` / `List<Struct>`.
-//! 4.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
-//!     copy when elements are provably immutable through the binding.
 //! 5.  `peephole` (pre-inline) — unified engine pass: `MatchToSwitchRule`,
 //!     `ValueCopyElideRule` (strip `$value_copy$T<id>` wrappers on read-only
 //!     bindings), `string_push` (`buf.push_str("short")` → per-byte `push`),
 //!     `elide_local` (write-only local elimination), env-free `const_fold`
 //!     (literal arithmetic + pure CTFE), and `const_branch_prune` (trivial-block
 //!     / dead-statement cleanup). See `optimize/peephole.rs`.
+//! 4.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
+//!     copy when elements are provably immutable through the binding. Runs
+//!     *after* the pre-inline `peephole` so `ValueCopyElideRule` strips
+//!     fully-read-only copies first; demoting first would hide them behind a
+//!     shallow `array_clone` shape elide can no longer match.
 //! 6.  `inline` — function inlining.
 //! 7.  `peephole` (post-inline) — unified engine pass: `array_literal`
 //!     (materialize `ArrayLiteral` from the `array_new + push` window),
@@ -534,19 +537,6 @@ fn run_optimization_passes(
         // `$value_copy$T<id>` body (after which the `Call($value_copy$T, [arg])`
         // shape it matches is gone). A wrapper the inliner later plants is
         // caught by the next iteration's pre-inline run.
-        // `value_copy_demote` reports change only to the gate (so the gated
-        // passes re-examine the bodies it rewrote), not to the convergence
-        // `changed` flag — it never keeps the loop alive on its own; the gated
-        // passes it dirties drive convergence in the same iteration.
-        // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
-        // copies when the binding's elements are provably never mutated
-        // through it. Runs alongside `value_copy_elide`: elide removes a
-        // copy whose target is read-only; demote weakens a copy whose target
-        // is only spine-mutated. Both before `nir/inline` for the same
-        // `$value_copy$T(arg)`-shape-visibility reason.
-        run_pass("nir/value_copy_demote", project, profiler, |p| {
-            demote_value_copies(p, &mut gate)
-        });
         // Unified peephole engine pass, pre-inline run. Folds short
         // `push_str` literals, elides write-only locals, and (post-inline only)
         // materializes array literals — all three rules over one shared
@@ -555,14 +545,31 @@ fn run_optimization_passes(
         // once the inliner expands `String::push_str`'s body that node is gone
         // and the literal-recognising rewrite can no longer match, leaving
         // short-string formatting paths (e.g. `fpfmt.wado`) paying full
-        // per-call allocation cost. Also after value-copy elision/demotion so
-        // the duplicable-receiver check sees the stripped receiver. This run
+        // per-call allocation cost. `ValueCopyElideRule` runs in this same
+        // session, so `string_push`'s duplicable-receiver check sees the
+        // value-copy-stripped receiver via the shared worklist. This run
         // also hosts `const_branch_prune` (trivial-block / dead-statement
         // cleanup); it keys only on block structure, so `copy_prop` — not pass
         // ordering — is what folds the inliner's parameter copies. This
         // pre-inline run also hosts `MatchToSwitchRule` (`include_match =
         // true`), lowering every `Match` to `Switch` before `inline`.
         gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, true));
+        // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
+        // copies when the binding's elements are provably never mutated through
+        // it. Runs *after* the pre-inline `peephole` (which hosts
+        // `ValueCopyElideRule`) so elide gets first crack: elide removes a copy
+        // whose target is read-only, then demote weakens the remaining
+        // spine-mutated copies. Running demote before elide would rewrite a
+        // fully-elidable `$value_copy$T(arg)` into a shallow `array_clone` shape
+        // that elide's `is_value_copy_call` no longer recognises, leaving the
+        // copy un-elided. Still before `nir/inline`, where the
+        // `$value_copy$T(arg)` shape both passes match disappears. Reports change
+        // only to the gate (so the gated passes re-examine the bodies it
+        // rewrote), not to the convergence `changed` flag — it never keeps the
+        // loop alive on its own.
+        run_pass("nir/value_copy_demote", project, profiler, |p| {
+            demote_value_copies(p, &mut gate)
+        });
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
         // case) to take the inner scalar directly. Runs before `nir/inline`

@@ -1,0 +1,26 @@
+// Regression: a value-copy that `value_copy_elide` should fully remove must not
+// survive as a `value_copy_demote` shallow `array_clone`.
+//
+// `value_copy_elide` removes a copy whose target is read-only; `value_copy_demote`
+// weakens a spine-mutated copy to a shallow `array_clone` of the list spine. For
+// elide to get first crack, it must run BEFORE demote — otherwise demote rewrites
+// a fully-elidable `$value_copy$T(arg)` into a shallow `array_clone` shape elide's
+// `is_value_copy_call` no longer recognises, leaving the copy un-elided.
+//
+// This regressed when `value_copy_elide` was folded into the pre-inline peephole
+// session, which ran after the standalone `value_copy_demote`. The fix runs
+// `value_copy_demote` after the pre-inline peephole. The `wir_not_expect` below
+// asserts no shallow-copy `array_clone` survives at -O2.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let a: List<i32> = [] as List<i32>;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": ["array_clone"]
+}
