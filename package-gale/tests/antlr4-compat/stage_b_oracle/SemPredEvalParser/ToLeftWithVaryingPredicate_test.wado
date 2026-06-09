@@ -15,8 +15,9 @@ use t from "../../grammars/SemPredEvalParser/ToLeftWithVaryingPredicate.g4"
     };
 use { normalize_tree } from "../../grammars/SemPredEvalParser/ToLeftWithVaryingPredicate.g4";
 
-#[TODO]
+
 // triage: Stage C: semantic predicate evaluation drives alt selection at runtime in ANTLR4. Gale's generator skips action bodies entirely (including `{...}?` predicates), so it picks the first alt unconditionally and produces an empty `(s)` shell instead of the oracle's predicate-guided `(s (a x) (a x) (a y))`. Untriaged until Stage C lands.
+#[TODO]
 test "stage_b_oracle: SemPredEvalParser/ToLeftWithVaryingPredicate" {
     let input = "x x y";
     let expected = "(s (a x) (a x) (a y))";

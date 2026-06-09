@@ -1,0 +1,42 @@
+//! Regression fixture for scan-side caller-context symmetry (hybrid gap #1).
+//!
+//! When an ATN-class LR rule (`expr`, made ATN-class by `'between' …`) is
+//! scanned from another rule's tournament (`stat`), the scan caller stack must
+//! carry stat's return state so `scan_expr` yields stat's mandatory `'and'`.
+//! Without it, `scan_expr` greedily enters the binary `and`-loop and both stat
+//! alts fail. The fix pushes the exact return state at every scan rule call,
+//! mirroring the parse-side rule-entry wrapper.
+
+use g from "./grammars/lr_scan_caller.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/lr_scan_caller",
+        },
+    };
+
+fn assert_parses(input: &String) {
+    let result = g::parse_stat(input);
+    if let Err(err) = &result {
+        assert false, `parse failed: {err.message} at {err.span.start}..{err.span.end}`;
+    }
+}
+
+// The crux: `a and b !` must parse as `expr('a') 'and' ID('b') '!'` — the
+// caller's mandatory `'and'` survives the binary `and`-loop. Without the
+// scan caller stack carrying stat's frame, scan_expr eats `a and b` and both
+// alts fail.
+test "cross-rule scan yields the caller's mandatory and" {
+    assert_parses(&"a and b !");
+}
+
+// The second alt still parses (no regression): `a and b ;` is `expr ';'`.
+test "binary chain into the semicolon alt parses" {
+    assert_parses(&"a and b ;");
+}
+
+// between still works through the cross-rule scan.
+test "between through a cross-rule scan parses" {
+    assert_parses(&"between a and b ;");
+}

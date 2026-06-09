@@ -1,0 +1,40 @@
+//! Regression fixture for ATN-class LR loop-entry prediction
+//! (ANTLR4 `Performance/DropLoopEntryBranchInLRRule_4`).
+//!
+//! `'between' expr 'and' expr` shares the `'and'` delimiter with the binary
+//! `expr 'and' expr` LR alt. The static suffix-first dispatch enters the
+//! `and`-loop greedily and starves between's mandatory `'and'`; the runtime
+//! ATN simulator (`gen_lr_suffix_dispatch_atn`) resolves the loop-entry with
+//! full context so the parse accepts the input.
+
+use g from "./grammars/lr_between.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/lr_between",
+        },
+    };
+
+fn assert_parses(input: &String) {
+    let result = g::parse_stat(input);
+    if let Err(err) = &result {
+        assert false, `parse failed: {err.message} at {err.span.start}..{err.span.end}`;
+    }
+}
+
+// The canonical case: between's mandatory `'and'` must survive the binary
+// `and`-loop. Static dispatch fails here ("expected ';' got 'and'").
+test "between with trailing and parses" {
+    assert_parses(&"between X1 and X2 and X3 ;");
+}
+
+// Plain binary chains still parse (the ATN path must not regress them).
+test "binary and/or chain parses" {
+    assert_parses(&"X1 and X2 or X3 and X4 ;");
+}
+
+// between mixed with a binary continuation.
+test "between then or continuation parses" {
+    assert_parses(&"between X1 and X2 or X3 ;");
+}

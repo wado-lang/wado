@@ -219,6 +219,120 @@ grammar parses) and may pass Stage B if the action body is
 `Inspect`/`writeln`-style chatter that doesn't change the parse
 tree shape.
 
+## ATN-class prediction — the hybrid LR loop-entry decision
+
+Some descriptors (the `Performance/DropLoopEntryBranchInLRRule_*`
+family, and the `LeftRecursion` precedence grammars) need a
+**full-context** decision at a left-recursive rule's loop entry:
+"consume the next operator as an LR operator (ENTER alt _i_), or stop
+and return to the caller (EXIT)". ANTLR4 answers this with full ALL(\*)
+adaptive prediction. Matching that answer is a hard Stage A / Stage B
+contract obligation, but doing it ANTLR4's way naively is too slow for
+the very descriptor that needs it — so Gale uses a **hybrid**. This
+section records that design decision and its known approximation gaps;
+the implementation lives in `runtime/atn.wado` and is cross-referenced
+from [`AGENTS.md`](./AGENTS.md) / [`TODO.md`](./TODO.md).
+
+### Two mechanisms
+
+1. **Complete simulator** — `atn_predict_with_stack` + `atn_closure` /
+   `atn_move` over graph-structured prediction contexts (`CtxArena`).
+   This is correct in **all** cases: it simulates the ATN against the
+   input, so it handles multi-token lookahead, `~X` (`NOT_ATOM`)
+   exclusions, deep suffix disambiguation, and the exact caller
+   continuation. It is what the non-greedy `??` decision uses, and what
+   P4.3 originally used for the loop entry.
+2. **Dedicated O(1) loop-entry decision** — `atn_lr_loop_decision`.
+   It does **not** simulate forward. It does one shallow check:
+   - if the caller continuation **mandates** the lookahead token
+     (`atn_caller_mandates` walks the caller return-state stack, skips
+     nullable levels, tests the first non-nullable FIRST) → EXIT;
+   - else the first precedence-allowed enter edge whose suffix FIRST
+     admits the token → ENTER;
+   - else EXIT.
+
+### Why the dedicated decision exists (the performance invariant)
+
+The complete simulator, used at **every** loop iteration of a deep
+chain, is **O(n²)**: each iteration's `predict` re-walks the O(depth)
+enclosing-loop caller chain (measured `lr_between.g4` depth 8/16/32 =
+1.3 s / 7 s / 48 s). `DropLoopEntryBranchInLRRule_4` is a **Performance**
+descriptor with a deep input, so the complete simulator times out on
+the very test it is meant to pass. The dedicated decision's
+caller-mandate check terminates at the **first non-nullable** caller
+level (one step for the `between … 'and'` shape), so each iteration is
+O(1) and the deep chain is O(n) (~117 ms).
+
+**Invariant for any future change: the deep descriptor's loop
+iterations must stay decidable without forward simulation.** A fix that
+re-introduces per-iteration simulation on the common case is a
+regression even if it is "more correct".
+
+### Status of the known edges
+
+The dedicated decision is an approximation; its edges have been worked
+through under one rule: **never silently mispredict**. Each edge is
+resolved one of three ways — a correct fix, a loud guard, or (for the
+remaining runtime-precision cases) a documented fall-back-to-complete-
+simulator plan. The performance invariant is preserved throughout.
+
+**Closed (correct fix + regression test):**
+
+| Edge                                                                                  | Resolution                                                                                               |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `~X` (`NOT_ATOM`) treated as "matches anything" (`~COMMA` mandates `COMMA`)           | FIRST carries the **excluded** label (`rule_first_neg` / `atn_first_admits`); tests `token != excluded`  |
+| Scan stack pushed only for a rule's own self-ref operand                              | every scan rule call pushes its exact return state (`needs_scan_atn`), mirroring the parse-side wrapper  |
+| Nullable-atom LR rule trapped at decode (the guard blocked _correct_ behaviour)       | removed: a nullable atom legitimately puts the loop operator in FIRST, so walk precedence edges in FIRST |
+| `lr_loop_entry_decision` returned the first `STAR_LOOP_ENTRY` (wrong for an atom `*`) | select the entry by its **precedence enter edges**                                                       |
+| Packed-key depth limit (998 caller frames; 254 precedence levels)                     | collision-free power-of-two bit-pack (pr/alt 11b, rs/state 20b ≈ 1M); assert is encoding-capacity only   |
+| Speculative repeat-recovery `_parse_R` missing `atn_ret_pending`                      | stamp the call's exact return state before the recovery parse (diagnostic-only path)                     |
+
+**Guarded (loud codegen panic + `#[expect_trap]` test):** shapes the
+ATN-class machinery does not yet model are rejected at generation rather
+than mis-dispatched at runtime —
+
+- an open-ended (`.` / `~X`-led, empty static `suffix_first`) LR suffix
+  in an ATN-class rule (its edge index misaligns against `valid_lr_alts`);
+- a self-reference nested inside a Group/Repeat LR-suffix element (built
+  with the wrong precedence floor);
+- a non-greedy `??` inside a left-recursive rule (prediction at
+  `min_prec 0` ignores the raised precedence).
+
+No corpus grammar trips any guard. Each is a real fix away (align the
+dispatcher to the edge list; a precedence-aware recursive element
+builder; thread `min_prec` into `atn_ng_optional_enter`) — the guard is
+the honest interim.
+
+**Open — runtime precision (fall back, don't panic):** these mispredict
+on _valid_ input the heuristic can't resolve, where a panic would reject
+a legal parse, so the right answer is to fall back to the complete
+simulator (which already exists and is correct), not to fail:
+
+- the mandate yields on a 1-token FIRST match without verifying the
+  caller continuation past the shared delimiter (`a and b and )`);
+- two enter edges sharing a first token are decided by FIRST alone;
+- the parse-side scan tournament seeds from an empty `GALE_SCAN_STACK`
+  instead of `p.atn_stack`, so an enclosing parser rule's mandatory
+  delimiter is invisible to the scan decision when the immediate
+  continuation is nullable.
+
+The fallback fires **only** on these specific shapes, never on chain
+depth, so the deep `between` descriptor stays O(n).
+
+### Why a hybrid and not "just use the complete simulator"
+
+The complete simulator already exists and is correct, so completeness is
+not the obstacle — **cost placement** is. The hybrid keeps the O(1)
+decision on the hot path (correct and fast there), and reserves the
+expensive complete simulation for the residual ambiguous tail. This is
+the standard ALL(\*)-with-shortcut shape; it is the deliberate trade-off
+for Gale's clean-room re-derivation.
+
+A wado compiler ICE found while implementing the precedence-edge check
+(a nested `for … break` miscompiling in the full `atn` module) is
+tracked separately as a GitHub issue and worked around in-tree (see the
+note at `state_has_precedence_edge` in `src/atn.wado`).
+
 ## The Descriptor Pipeline
 
 Upstream `antlr4` ships a JUnit-driven runtime test suite at

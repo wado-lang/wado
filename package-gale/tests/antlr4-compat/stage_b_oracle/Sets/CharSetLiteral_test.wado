@@ -15,8 +15,9 @@ use t from "../../grammars/Sets/CharSetLiteral.g4"
     };
 use { normalize_tree } from "../../grammars/Sets/CharSetLiteral.g4";
 
-#[TODO]
+
 // triage: Lexer or grammar shape mismatch — Gale produces `(a)` while the oracle produces `(a A a B b)`. Likely a Gale-side parser bug (rule fails to repeat or EOF is consumed too early). Worth a TDD investigation as a self-contained ATN-class case.
+#[TODO]
 test "stage_b_oracle: Sets/CharSetLiteral" {
     let input = "A a B b";
     let expected = "(a A a B b)";

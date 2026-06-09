@@ -86,14 +86,37 @@ pub struct GenContext {
     /// paying an extra stack slot per recursive frame (the
     /// `Performance/ExpressionGrammar_2` stack-exhaustion regression).
     caller_follow_gate_seen: bool,
-    /// Set by lowering when it lowers a non-greedy optional (`??`). When
-    /// set, emit includes the runtime ATN simulator infrastructure (the
-    /// serialized `GALE_ATN_DATA` blob, the `Parser.atn`/`Parser.atn_stack`
-    /// fields, and the rule-entry stack push/pop) and routes the `??`
-    /// enter/skip decision through `atn_ng_optional_enter`. Grammars without
-    /// a non-greedy `??` stay byte-identical. (`*?`/`+?` keep the dedicated
-    /// non-greedy strategy and do not set this.)
+    /// Set by lowering when it lowers a non-greedy optional (`??`) or an
+    /// ATN-class LR rule. When set, emit includes the runtime ATN simulator
+    /// infrastructure (the serialized `GALE_ATN_DATA` blob, the shared
+    /// `GALE_ATN_SIM` global, the `Parser.atn_stack` field, and the
+    /// rule-entry stack push/pop) and routes the `??` enter/skip decision
+    /// through `atn_ng_optional_enter`. Grammars without either stay
+    /// byte-identical. (`*?`/`+?` keep the dedicated non-greedy strategy and
+    /// do not set this.)
     needs_atn_seen: bool,
+    /// Set by lowering for an ATN-class LR rule. Gates the scan-side caller
+    /// stack (`GALE_SCAN_STACK`) and the scan-side LR loop routing, so a
+    /// non-greedy-`??`-only grammar (which shares the same `GALE_ATN_SIM` but
+    /// needs no scan-side LR routing) does not carry a dead scan stack.
+    needs_scan_atn_seen: bool,
+    /// The ATN call-site → return-state correspondence (`Atn.call_site_returns`,
+    /// indexed by `RuleRefElement.atn_call_site`). Populated after lowering
+    /// by `set_atn_call_site_returns` when `needs_atn`, so parser emit can
+    /// push each rule call's exact return state (`atn_ret_pending`). Empty
+    /// for grammars that do not need the ATN. See P4.2b in `TODO.md`.
+    atn_call_site_returns: List<i32>,
+    /// Index of the parser rule currently being emitted (set by
+    /// `gen_parse_fn`). Read when emitting a non-greedy `??`'s
+    /// `atn_ng_optional_enter` call so the simulator knows which rule's
+    /// exit-first decision to predict (the caller stack now holds return
+    /// states, not rule indices). -1 outside rule-body emission.
+    current_rule_index: i32,
+    /// Per-rule ATN loop-entry (`STAR_LOOP_ENTRY`) decision number, indexed
+    /// by rule, or -1 for a rule with no LR loop. Populated after `build_atn`
+    /// (only when `needs_atn`); read by the LR dispatch emitter to route an
+    /// ATN-class rule's loop-entry through `atn_predict_with_stack`.
+    lr_loop_entry_decisions: List<i32>,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
@@ -122,6 +145,10 @@ impl GenContext {
             diagnostics: [],
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
+            needs_scan_atn_seen: false,
+            atn_call_site_returns: [],
+            current_rule_index: -1,
+            lr_loop_entry_decisions: [],
             trace: false,
         };
     }
@@ -141,17 +168,86 @@ impl GenContext {
         return self.caller_follow_gate_seen;
     }
 
-    /// Record that lowering encountered a non-greedy repeat, so emit must
+    /// Record that lowering encountered a construct that needs the runtime
+    /// simulator (a non-greedy `??` or an ATN-class LR rule), so emit must
     /// include the ATN simulator infrastructure.
     pub fn mark_needs_atn(&mut self) {
         self.needs_atn_seen = true;
     }
 
     /// Whether the generated parser should emit the ATN simulator
-    /// infrastructure (blob, `Parser.atn`/`atn_stack`, rule-entry
-    /// stack maintenance). True iff lowering saw a non-greedy repeat.
+    /// infrastructure (blob + the shared `GALE_ATN_SIM` global,
+    /// `Parser.atn_stack`, rule-entry stack maintenance). True iff lowering
+    /// saw a non-greedy `??` or an ATN-class LR rule.
     pub fn needs_atn(&self) -> bool {
         return self.needs_atn_seen;
+    }
+
+    /// Record that lowering saw an ATN-class LR rule (needs scan-side ATN
+    /// globals). Implies `needs_atn`.
+    pub fn mark_needs_scan_atn(&mut self) {
+        self.needs_scan_atn_seen = true;
+    }
+
+    /// Whether to emit the scan-side caller stack (`GALE_SCAN_STACK`) and
+    /// route the scan LR loop through the ATN. True iff an ATN-class LR rule
+    /// exists. (`GALE_ATN_SIM` itself is emitted whenever `needs_atn`.)
+    pub fn needs_scan_atn(&self) -> bool {
+        return self.needs_scan_atn_seen;
+    }
+
+    /// Store the ATN call-site → return-state correspondence after the ATN
+    /// is built (only when `needs_atn`). Read by `atn_ret_pending_arg`.
+    pub fn set_atn_call_site_returns(&mut self, returns: &List<i32>) {
+        self.atn_call_site_returns = *returns;
+    }
+
+    /// The exact ATN return state for surface call site `call_site`, or -1
+    /// when unknown (no ATN built, the id is out of range, or the call site
+    /// never got a `RuleRef` segment — e.g. the stripped leading LR self-ref).
+    pub fn atn_call_site_return(&self, call_site: i32) -> i32 {
+        if call_site < 0 || call_site >= self.atn_call_site_returns.len() {
+            return -1;
+        }
+        return self.atn_call_site_returns[call_site];
+    }
+
+    /// Record the rule whose body is currently being emitted (its index in
+    /// `parser_rules`). Set by `gen_parse_fn` before the body walk.
+    pub fn set_current_rule_index(&mut self, idx: i32) {
+        self.current_rule_index = idx;
+    }
+
+    /// The rule currently being emitted, or -1 outside rule-body emission.
+    pub fn current_rule_index(&self) -> i32 {
+        return self.current_rule_index;
+    }
+
+    /// Store the per-rule ATN loop-entry decision numbers (after `build_atn`).
+    pub fn set_lr_loop_entry_decisions(&mut self, decs: &List<i32>) {
+        self.lr_loop_entry_decisions = *decs;
+    }
+
+    /// The ATN loop-entry decision number for `rule`, or -1 if none / unbuilt.
+    pub fn lr_loop_entry_decision(&self, rule: i32) -> i32 {
+        if rule < 0 || rule >= self.lr_loop_entry_decisions.len() {
+            return -1;
+        }
+        return self.lr_loop_entry_decisions[rule];
+    }
+
+    /// The exact ATN return state to push onto `GALE_SCAN_STACK` before a scan
+    /// rule call (from `Atn.call_site_returns`), or -1 when the grammar has no
+    /// scan-side ATN routing. Every scan rule call brackets with this push/pop
+    /// — mirroring the parse side, where the rule-entry wrapper pushes every
+    /// call's return state — so an ATN-class LR rule scanned from any caller
+    /// (not only its own self-ref operand) sees the caller's mandatory
+    /// continuation (e.g. `between`'s `'and'`).
+    pub fn scan_atn_push_return(&self, atn_call_site: i32) -> i32 {
+        if !self.needs_scan_atn() {
+            return -1;
+        }
+        return self.atn_call_site_return(atn_call_site);
     }
 
     /// Enable trace instrumentation in the generated parser (the
@@ -333,7 +429,13 @@ impl GenContext {
     /// expanded body may contribute multiple depths). Callers needing
     /// to follow the suffix past the walk must use the element count,
     /// not the depth count.
-    pub fn deep_position_first_sets_from(&mut self, elements: &List<Element>, start: i32, max_depth: i32, visiting: &mut List<String>) -> [List<List<String>>, i32] {
+    pub fn deep_position_first_sets_from(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        max_depth: i32,
+        visiting: &mut List<String>,
+    ) -> [List<List<String>>, i32] {
         let mut result: List<List<String>> = [];
         let final_cursor = self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
         return [result, final_cursor - start];
@@ -346,7 +448,14 @@ impl GenContext {
     /// return value tells callers whether subsequent elements can be
     /// safely indexed (when fully consumed) or whether the walk hit a
     /// non-deterministic position (halted).
-    fn deep_position_walk(&mut self, elements: &List<Element>, start: i32, max_depth: i32, result: &mut List<List<String>>, visiting: &mut List<String>) -> i32 {
+    fn deep_position_walk(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        max_depth: i32,
+        result: &mut List<List<String>>,
+        visiting: &mut List<String>,
+    ) -> i32 {
         let mut cursor = start;
         while result.len() < max_depth && cursor < elements.len() {
             // Suffix from `cursor` must consume ≥1 token — otherwise the
@@ -428,7 +537,12 @@ impl GenContext {
     /// multi-token element — preserving the input-offset alignment that
     /// makes the result a sound lookahead predictor. See
     /// [`alt_position_first_sets`] for the invariant details.
-    pub fn position_first_sets_from(&mut self, elements: &List<Element>, start: i32, max_depth: i32) -> List<List<String>> {
+    pub fn position_first_sets_from(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        max_depth: i32,
+    ) -> List<List<String>> {
         let mut result: List<List<String>> = [];
         let mut cursor = start;
         while result.len() < max_depth && cursor < elements.len() {

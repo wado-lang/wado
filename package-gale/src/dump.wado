@@ -50,11 +50,7 @@ use {
     AmbiguityReason,
     build_prediction,
 } from "./prediction.wado";
-use {
-    compute_overlap_groups,
-    sort_group_by_specificity,
-    sort_group_by_element_count,
-} from "./alt_grouping.wado";
+use { compute_overlap_groups, sort_group_by_specificity, sort_group_by_element_count } from "./alt_grouping.wado";
 use { literal_const_name } from "./gen_util.wado";
 
 /// Render the full per-rule dump report for a lowered grammar.
@@ -246,12 +242,16 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
     let surface = find_parser_rule(grammar, &header.name);
     let surface = match surface {
         Some(r) => r,
-        None => return,
+        None => {
+            return;
+        },
     };
 
     let mut non_lr_indices: List<i32> = [];
     match rule {
-        Simple(_) => return,
+        Simple(_) => {
+            return;
+        },
         MultiAlt(m) => {
             for let alt of &m.alts {
                 non_lr_indices.push(alt.alt_index);

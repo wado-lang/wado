@@ -234,6 +234,16 @@ pub struct LeftRecursiveRule {
     /// the second-token disambiguation needed when first-tokens
     /// collide.
     pub lr_dispatch: LrDispatchData,
+    /// True when the loop-entry decision is ATN-class: an atom alt
+    /// recursively references this rule with a trailing literal that
+    /// overlaps an LR suffix-first (the `'between' expr 'and' expr`
+    /// shape — `DropLoopEntryBranchInLRRule_4`). The static suffix-first
+    /// dispatch mis-commits here (it enters the `and`-loop and starves
+    /// `between`'s mandatory `'and'`), so codegen routes the loop-entry
+    /// through the runtime ATN simulator instead. Set by `lower_lr_rule`;
+    /// also flips `GenContext.needs_atn`. False for the common LR rule,
+    /// whose static `scan_X_lr_*` fast path stays byte-identical.
+    pub atn_class: bool = false,
 }
 
 /// One left-recursive alternative, with the prefix self-reference
@@ -533,6 +543,13 @@ pub struct RuleCallOp {
     /// Pre-dedup base name (the surface RuleRef's `field_name`).
     /// See `TokenOp.dedup_base` for the role.
     pub dedup_base: String,
+    /// The originating surface `RuleRefElement.atn_call_site` id (`-1` if
+    /// none). Lets codegen look up this call's exact ATN return state in
+    /// `Atn.call_site_returns` and push it so the runtime simulator pops to
+    /// the precise caller continuation (P4.2b). Propagated through every
+    /// `RuleCallOp`-rebuilding lowering step. -1 for synthesized calls with
+    /// no surface origin.
+    pub atn_call_site: i32 = -1,
 }
 
 pub struct WildcardOp {
@@ -869,6 +886,11 @@ pub struct ScanRuleCallElem {
     /// for the trailing self-ref and every other call site leaves at
     /// the default `0`.
     pub min_prec_arg: Option<i32>,
+    /// Scan-side mirror of `RuleCallOp.atn_call_site`: the originating surface
+    /// `RuleRefElement.atn_call_site` id, so the scan emit can push this call's
+    /// exact ATN return state onto the scan caller stack (`GALE_SCAN_STACK`)
+    /// for the ATN-class LR loop decision. -1 if none.
+    pub atn_call_site: i32 = -1,
 }
 
 pub struct ScanExcludedElem {
@@ -1054,7 +1076,11 @@ pub fn rule_alt_scan_body(rule: &Rule, alt_idx: i32) -> Option<&ScanBody> with s
     };
 }
 
-fn find_scan_body_in_array(alts: &List<AltBody>, scan_alts: &List<ScanBody>, alt_idx: i32) -> Option<&ScanBody> with stores[scan_alts] {
+fn find_scan_body_in_array(
+    alts: &List<AltBody>,
+    scan_alts: &List<ScanBody>,
+    alt_idx: i32,
+) -> Option<&ScanBody> with stores[scan_alts] {
     for let mut i = 0; i < alts.len(); i += 1 {
         if alts[i].alt_index == alt_idx {
             return Option::<&ScanBody>::Some(&scan_alts[i]);

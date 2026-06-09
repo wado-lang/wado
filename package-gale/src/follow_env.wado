@@ -128,7 +128,11 @@ pub fn build(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: 
 /// Termination: every iteration that doesn't grow any rule's set is
 /// the last; the algorithm terminates because each set is monotonic
 /// in a finite token universe.
-fn compute_rule_follow(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: &String) -> TreeMap<String, FollowSet> {
+fn compute_rule_follow(
+    parser_rules: &List<ParserRule>,
+    ctx: &mut GenContext,
+    start_rule: &String,
+) -> TreeMap<String, FollowSet> {
     let mut env = TreeMap::<String, FollowSet>::new();
     for let rule of parser_rules {
         env[rule.name] = FollowSet::empty();
@@ -164,14 +168,26 @@ fn compute_rule_follow(parser_rules: &List<ParserRule>, ctx: &mut GenContext, st
 /// at the group's position; `Repeat` recurses with `first(inner) ∪
 /// local_follow` so that the inner's siblings (after one iteration)
 /// see the start-of-inner contributions plus the loop exit follow.
-fn walk_for_contributions(elements: &List<Element>, ctx: &mut GenContext, outer_follow: &FollowSet, env: &mut TreeMap<String, FollowSet>, changed: &mut bool) {
+fn walk_for_contributions(
+    elements: &List<Element>,
+    ctx: &mut GenContext,
+    outer_follow: &FollowSet,
+    env: &mut TreeMap<String, FollowSet>,
+    changed: &mut bool,
+) {
     for let mut i = 0; i < elements.len(); i += 1 {
         let local = local_follow(elements, i, ctx, outer_follow);
         contribute_for_element(&elements[i], ctx, &local, env, changed);
     }
 }
 
-fn contribute_for_element(elem: &Element, ctx: &mut GenContext, local: &FollowSet, env: &mut TreeMap<String, FollowSet>, changed: &mut bool) {
+fn contribute_for_element(
+    elem: &Element,
+    ctx: &mut GenContext,
+    local: &FollowSet,
+    env: &mut TreeMap<String, FollowSet>,
+    changed: &mut bool,
+) {
     match elem {
         RuleRef(r) => {
             if env.contains_key(r.name) {

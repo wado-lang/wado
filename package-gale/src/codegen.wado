@@ -1,4 +1,12 @@
-use { Grammar, Alternative, OptionValue, LexerRule, normalize_caches, canonicalize_empty_alt_groups } from "./ir.wado";
+use {
+    Grammar,
+    Alternative,
+    OptionValue,
+    LexerRule,
+    normalize_caches,
+    canonicalize_empty_alt_groups,
+    assign_atn_call_sites,
+} from "./ir.wado";
 use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals } from "./parser_gen.wado";
@@ -7,7 +15,7 @@ use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
-use { build_atn, serialize_atn } from "./atn.wado";
+use { build_atn_with, serialize_atn, Atn, empty_atn, lr_loop_entry_decision } from "./atn.wado";
 use {
     LoweredGrammar,
     Diagnostic,
@@ -56,6 +64,11 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // before any structural pass (lowering, ATN build) sees them, so both
     // the emitter and `build_atn` agree on the canonical repeat shape.
     canonicalize_empty_alt_groups(grammar);
+    // Number every surface `RuleRef` call site so `build_atn`'s
+    // `call_site_returns` correspondence (read by codegen to push exact ATN
+    // return states) is keyed consistently. Runs after canonicalization (the
+    // numbered shape is the post-canonicalization one) and before lowering.
+    assign_atn_call_sites(grammar);
     normalize_caches(grammar);
     // Pre-size the output buffer from the grammar's rule count so the
     // bulk of `String::push_str` calls in `CodeWriter::line` don't
@@ -72,6 +85,20 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     ctx.set_trace(options.trace);
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
+    // Build the ATN up front when the grammar needs the simulator, so parser
+    // emit can push each rule call's exact return state (`call_site_returns`)
+    // and `gen_atn_data_global` can serialize the very same ATN. Gate-free
+    // grammars skip this entirely.
+    let mut atn = empty_atn();
+    if ctx.needs_atn() {
+        atn = build_atn_with(grammar, &lowered);
+        ctx.set_atn_call_site_returns(&atn.call_site_returns);
+        let mut lr_decs: List<i32> = [];
+        for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
+            lr_decs.push(lr_loop_entry_decision(&atn, r));
+        }
+        ctx.set_lr_loop_entry_decisions(&lr_decs);
+    }
     gen_header(&mut w, grammar);
     if options.trace {
         // Trace logging writes to stderr via the ambient logger.
@@ -99,10 +126,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // until the runtime-follow conversion wires repair call sites.
     gen_follow_mask_globals(&mut w, &ctx);
     // Serialized ATN blob for the runtime simulator. Only emitted when
-    // lowering saw a construct that needs it (a non-greedy repeat), so
-    // gate-free grammars stay byte-identical.
+    // lowering saw a construct that needs it (a non-greedy `??` or an
+    // ATN-class LR rule), so gate-free grammars stay byte-identical.
     if ctx.needs_atn() {
-        gen_atn_data_global(&mut w, grammar);
+        gen_atn_data_global(&mut w, &atn, ctx.needs_scan_atn());
     }
     return GeneratedOutput {
         source: w.to_string(),
@@ -111,10 +138,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
 }
 
 /// Emit `global GALE_ATN_DATA: List<i32> = [...]`: the serialized
-/// whole-grammar ATN the inlined runtime decodes once per parser.
-fn gen_atn_data_global(w: &mut CodeWriter, grammar: &Grammar) {
-    let atn = build_atn(grammar);
-    let blob = serialize_atn(&atn);
+/// whole-grammar ATN the inlined runtime decodes once into the module-level
+/// `GALE_ATN_SIM`.
+fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
+    let blob = serialize_atn(atn);
     let mut body = String::with_capacity(blob.len() * 6);
     for let mut i = 0; i < blob.len(); i += 1 {
         if i > 0 {
@@ -123,6 +150,21 @@ fn gen_atn_data_global(w: &mut CodeWriter, grammar: &Grammar) {
         body.push_str(&`{blob[i]}`);
     }
     w.line(&`global GALE_ATN_DATA: List<i32> = [{body}];`);
+    // The whole-grammar ATN is decoded exactly once, into a module-level
+    // global shared by both sides: the parse side reads `&GALE_ATN_SIM` (the
+    // `Parser` no longer carries its own decoded copy) and the scan side
+    // reads it too (`scan_*` functions take no `Parser`). This single decode
+    // replaces the former per-`Parser::new` decode plus a separate scan-only
+    // global.
+    w.line(&"global GALE_ATN_SIM: AtnSim = atn_decode(&GALE_ATN_DATA);");
+    // The mutable scan caller stack. The scan emit pushes/pops it around
+    // operand scans so an ATN-class LR rule's scan loop can route through
+    // `atn_lr_loop_decision` exactly like the parse side. Only needed when an
+    // ATN-class LR rule exists (a non-greedy-`??`-only grammar uses the
+    // simulator but not the scan-side routing).
+    if emit_scan_globals {
+        w.line(&"global GALE_SCAN_STACK: List<i32> = [];");
+    }
     w.blank();
 }
 
@@ -337,7 +379,14 @@ fn gen_rule_cst_type(w: &mut CodeWriter, rule: &Rule, surface_alts: &List<Altern
     };
 }
 
-fn gen_multi_alt_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String, alts: &List<AltBody>, surface_alts: &List<Alternative>, emitted: &mut List<String>) {
+fn gen_multi_alt_cst(
+    w: &mut CodeWriter,
+    rule_name: &String,
+    type_name: &String,
+    alts: &List<AltBody>,
+    surface_alts: &List<Alternative>,
+    emitted: &mut List<String>,
+) {
     if all_alts_are_single_token(surface_alts) {
         // Compact single-token node: the token's `kind` already records
         // which alternative matched, so the N alt structs and the wrapping
@@ -364,7 +413,14 @@ fn gen_multi_alt_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String,
     }
 }
 
-fn gen_lr_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String, atom_alts: &List<AltBody>, lr_alts: &List<LrAlt>, emitted: &mut List<String>) {
+fn gen_lr_cst(
+    w: &mut CodeWriter,
+    rule_name: &String,
+    type_name: &String,
+    atom_alts: &List<AltBody>,
+    lr_alts: &List<LrAlt>,
+    emitted: &mut List<String>,
+) {
     // The variant cases follow original source order. Each
     // `AltBody.alt_index` / `LrAlt.alt_index` is the position of the
     // alt in the surface rule, so iterating `0..total` and looking
@@ -397,7 +453,14 @@ fn find_lr_alt_names(atom_alts: &List<AltBody>, lr_alts: &List<LrAlt>, idx: i32)
     panic(`gen_lr_cst: no atom / lr alt has alt_index = {idx}`);
 }
 
-fn emit_lr_alt_struct(w: &mut CodeWriter, atom_alts: &List<AltBody>, lr_alts: &List<LrAlt>, idx: i32, rule_name: &String, emitted: &mut List<String>) {
+fn emit_lr_alt_struct(
+    w: &mut CodeWriter,
+    atom_alts: &List<AltBody>,
+    lr_alts: &List<LrAlt>,
+    idx: i32,
+    rule_name: &String,
+    emitted: &mut List<String>,
+) {
     for let a of atom_alts {
         if a.alt_index == idx {
             gen_ops_nested_types(w, &a.ops, rule_name, emitted);
@@ -474,7 +537,12 @@ fn gen_group_nested_types(w: &mut CodeWriter, g: &GroupOp, rule_name: &String, e
     };
 }
 
-fn emit_simple_cst_enum_if_new(w: &mut CodeWriter, scst: &SimpleCstShape, alts: &List<AltBody>, emitted: &mut List<String>) {
+fn emit_simple_cst_enum_if_new(
+    w: &mut CodeWriter,
+    scst: &SimpleCstShape,
+    alts: &List<AltBody>,
+    emitted: &mut List<String>,
+) {
     if has_emitted(emitted, &scst.type_name) {
         return;
     }
@@ -496,7 +564,12 @@ fn emit_simple_cst_enum_if_new(w: &mut CodeWriter, scst: &SimpleCstShape, alts: 
     w.blank();
 }
 
-fn emit_single_alt_struct_if_new(w: &mut CodeWriter, sa: &SingleAltShape, alts: &List<AltBody>, emitted: &mut List<String>) {
+fn emit_single_alt_struct_if_new(
+    w: &mut CodeWriter,
+    sa: &SingleAltShape,
+    alts: &List<AltBody>,
+    emitted: &mut List<String>,
+) {
     if has_emitted(emitted, &sa.struct_name) {
         return;
     }
@@ -510,7 +583,13 @@ fn emit_single_alt_struct_if_new(w: &mut CodeWriter, sa: &SingleAltShape, alts: 
     emit_alt_struct(w, &sa.struct_name, &alts[0].fields);
 }
 
-fn emit_general_group_types_if_new(w: &mut CodeWriter, gen: &GeneralShape, alts: &List<AltBody>, rule_name: &String, emitted: &mut List<String>) {
+fn emit_general_group_types_if_new(
+    w: &mut CodeWriter,
+    gen: &GeneralShape,
+    alts: &List<AltBody>,
+    rule_name: &String,
+    emitted: &mut List<String>,
+) {
     if has_emitted(emitted, &gen.variant_type) {
         return;
     }

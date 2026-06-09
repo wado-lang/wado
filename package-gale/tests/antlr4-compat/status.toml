@@ -62,7 +62,11 @@
 "ParserErrors/SingleTokenDeletionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
 
 [stage_a_todo]
-"Performance/DropLoopEntryBranchInLRRule_4" = "parse-accepts-input: LR expression rule with operator precedence — Gale picks the wrong precedence chain for or-then-and (Stage C-independent)"
+# Performance/DropLoopEntryBranchInLRRule_4 — FLIPPED GREEN (P4.4). The
+# ATN-class `'between' expr 'and' expr` loop-entry is resolved by the
+# dedicated O(n) `atn_lr_loop_decision` (precedence + yield-to-caller-mandatory)
+# on both the parse and scan sides; the descriptor's 15-line input parses in
+# ~192ms. No longer todo.
 "LexerExec/RecursiveLexerRuleRefWithWildcardPlus_1" = "tokens-equivalence: Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.+?` wildcard plus does not nest correctly (Stage C-independent)"
 "LexerExec/RecursiveLexerRuleRefWithWildcardStar_1" = "tokens-equivalence: Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.*?` wildcard star does not nest correctly (Stage C-independent)"
 # IfIfElseNonGreedyBinding1's parse-accepts-input claim (b) is met

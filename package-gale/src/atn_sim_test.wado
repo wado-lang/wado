@@ -7,18 +7,20 @@
 //! + edge ordering), and the full-context (real rule-stack) cases that bind
 //! the dangling-`else` per caller context (the closing tests).
 
+use { build_atn, build_token_kinds, serialize_atn, Atn } from "./atn.wado";
 use {
-    build_atn,
-    build_token_kinds,
-    serialize_atn,
-    Atn,
-} from "./atn.wado";
-use {
-    atn_decode, atn_adaptive_predict, atn_predict_with_stack, AtnSim,
-    ATN_BLOCK_START, ATN_BLOCK_END,
+    atn_decode,
+    atn_adaptive_predict,
+    atn_predict_with_stack,
+    atn_lr_loop_decision,
+    AtnSim,
+    ATN_BLOCK_START,
+    ATN_BLOCK_END,
+    ATN_STAR_LOOP_ENTRY,
 } from "./runtime/atn.wado";
 use { Token, LexerSlice, Span } from "./runtime/lex.wado";
 use { parse } from "./g4/parser.wado";
+use { assign_atn_call_sites } from "./ir.wado";
 
 fn mk(kind: i32) -> Token {
     return Token::new(kind, LexerSlice::from_string(""), Span::new(0, 0));
@@ -58,11 +60,34 @@ fn alt_target_kind(atn: &Atn, d: i32, alt: i32) -> i32 {
     return atn.states[s.transitions[alt].target].kind;
 }
 
+/// Decision number of rule `rule`'s `STAR_LOOP_ENTRY` (the LR loop entry).
+fn loop_entry_decision(atn: &Atn, rule: i32) -> i32 {
+    for let mut d = 0; d < atn.decision_state.len(); d += 1 {
+        let s = &atn.states[atn.decision_state[d]];
+        if s.kind == ATN_STAR_LOOP_ENTRY && s.rule == rule {
+            return d;
+        }
+    }
+    return -1;
+}
+
 global K2_G4: String = "
 grammar T;
 a : ID '(' ')' | ID '[' ']' ;
 ID : 'a'..'z'+ ;
 WS : ' ' -> skip ;
+";
+
+// Directly left-recursive operator grammar — the P4.1 walkability case.
+// Built naively (pre-rewrite) the simulator would left-recurse forever on
+// `expr -> RuleRef(expr) ...`; the rewritten loop-entry form is finite.
+global LR_G4: String = "
+grammar E;
+expr : expr '*' expr
+     | expr '+' expr
+     | INT ;
+INT : '0'..'9'+ ;
+WS : ' ' -> channel(HIDDEN);
 ";
 
 global NG_G4: String = "
@@ -91,8 +116,16 @@ test "predict resolves a two-token shared-prefix decision" {
     assert d >= 0, "rule `a` must have an alternation decision";
     // kinds: ID=0, WS=1, EOF=2, ERROR=3, '('=4, ')'=5, '['=6, ']'=7.
     let eof = 2;
-    let paren: List<Token> = [mk(0), mk(4), mk(5)];
-    let brack: List<Token> = [mk(0), mk(6), mk(7)];
+    let paren: List<Token> = [
+        mk(0),
+        mk(4),
+        mk(5),
+    ];
+    let brack: List<Token> = [
+        mk(0),
+        mk(6),
+        mk(7),
+    ];
     assert atn_adaptive_predict(&sim, d, &paren, 0, eof) == 0, "ID '(' ')' should pick alt 0";
     assert atn_adaptive_predict(&sim, d, &brack, 0, eof) == 1, "ID '[' ']' should pick alt 1";
 }
@@ -106,7 +139,10 @@ test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
     let d = optional_decision(&atn);
     assert d >= 0, "the `??` must produce an optional decision";
     // 'else'=7, 'x'=4 — both alts stay viable to EOF (true ambiguity).
-    let toks: List<Token> = [mk(7), mk(4)];
+    let toks: List<Token> = [
+        mk(7),
+        mk(4),
+    ];
     let alt = atn_adaptive_predict(&sim, d, &toks, 0, eof);
     // The chosen alt's edge must lead to BlockEnd: non-greedy prefers EXIT.
     assert alt_target_kind(&atn, d, alt) == ATN_BLOCK_END, "non-greedy must choose the exit alt";
@@ -120,38 +156,211 @@ test "greedy ? picks the enter alt on the same conflict" {
     let sim = atn_decode(&serialize_atn(&atn));
     let d = optional_decision(&atn);
     assert d >= 0, "the `?` must produce an optional decision";
-    let toks: List<Token> = [mk(7), mk(4)];
+    let toks: List<Token> = [
+        mk(7),
+        mk(4),
+    ];
     let alt = atn_adaptive_predict(&sim, d, &toks, 0, eof);
     // Greedy prefers ENTER: the chosen alt's edge must NOT go to BlockEnd.
     assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "greedy must choose the enter alt";
 }
 
 // Full-context: the SAME `??` decision binds differently depending on the
-// caller's rule stack. This is the IfIfElseNonGreedyBinding1 crux.
-// Rule indices: start=0, statement=1, ifStatement=2.
+// caller stack of ATN return states. This is the IfIfElseNonGreedyBinding1
+// crux. The stack mirrors what the generated parser pushes at each rule
+// call: the start-rule frame (-1, follow is EOF) at the bottom, then each
+// call site's exact return state (`call_site_returns`). Call-site ids (the
+// depth-first numbering of `assign_atn_call_sites`):
+//   cs0 = start -> statement   (inside `statement+`)
+//   cs1 = statement -> ifStatement
+//   cs2 = ifStatement -> statement   (the mandatory one, before the `??`)
+//   cs3 = ifStatement -> statement   (inside `('else' statement)??`)
 
 test "full-context: inner ifStatement ?? skips the else (binds to outer)" {
-    let g = parse(NG_G4).unwrap();
+    let mut g = parse(NG_G4).unwrap();
+    assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let eof = build_token_kinds(&g).0["TK_EOF"];
     let sim = atn_decode(&serialize_atn(&atn));
     let d = optional_decision(&atn);
-    // Inner ifStatement reached via start>statement>ifStatement>statement>ifStatement.
-    let stack: List<i32> = [0, 1, 2, 1, 2];
-    let toks: List<Token> = [mk(7), mk(4)];
+    let csr = &atn.call_site_returns;
+    // Inner ifStatement reached via
+    // start >(cs0) statement >(cs1) ifStatement >(cs2) statement >(cs1) ifStatement.
+    let stack: List<i32> = [-1, csr[0], csr[1], csr[2], csr[1]];
+    let toks: List<Token> = [
+        mk(7),
+        mk(4),
+    ];
     let alt = atn_predict_with_stack(&sim, d, &stack, &toks, 0, eof);
     assert alt_target_kind(&atn, d, alt) == ATN_BLOCK_END, "inner ?? must EXIT (let the outer take the else)";
 }
 
 test "full-context: outer ifStatement ?? consumes the else" {
-    let g = parse(NG_G4).unwrap();
+    let mut g = parse(NG_G4).unwrap();
+    assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let eof = build_token_kinds(&g).0["TK_EOF"];
     let sim = atn_decode(&serialize_atn(&atn));
     let d = optional_decision(&atn);
-    // Outermost ifStatement: start>statement>ifStatement.
-    let stack: List<i32> = [0, 1, 2];
-    let toks: List<Token> = [mk(7), mk(4)];
+    let csr = &atn.call_site_returns;
+    // Outermost ifStatement: start >(cs0) statement >(cs1) ifStatement.
+    let stack: List<i32> = [-1, csr[0], csr[1]];
+    let toks: List<Token> = [
+        mk(7),
+        mk(4),
+    ];
     let alt = atn_predict_with_stack(&sim, d, &stack, &toks, 0, eof);
     assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "outer ?? must ENTER (consume the else)";
+}
+
+// P4.1: the rewritten LR loop-entry form is walkable. A naive
+// pre-rewrite ATN (`expr -> RuleRef(expr) ...` at position 0) would
+// left-recurse forever in `atn_closure`; the precedence-climbing rewrite
+// stops at the atom block, so prediction terminates and returns a valid
+// alternative. (Precedence-guided enter/exit selection itself is P4.3;
+// here we only assert termination + a sane in-range result.)
+test "LR loop-entry prediction terminates (no naive left recursion)" {
+    let g = parse(LR_G4).unwrap();
+    let atn = build_atn(&g);
+    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = loop_entry_decision(&atn, 0);
+    assert d >= 0, "expr must have an LR loop-entry decision";
+    // After the first atom, input continues with `'+' INT` (tk: INT=0,
+    // WS=1, EOF=2, ERROR=3, '*'=4, '+'=5). Three loop-entry edges exist
+    // (enter '*', enter '+', exit); the predictor must return one of them.
+    let toks: List<Token> = [
+        mk(5),
+        mk(0),
+    ];
+    let alt = atn_adaptive_predict(&sim, d, &toks, 0, eof);
+    assert alt >= 0 && alt < 3, `LR loop-entry prediction out of range: {alt}`;
+}
+
+// P4.3: the loop-entry precedence predicate `{prec_i >= pr}?` prunes
+// enter alts whose alt-precedence (`own_prec`) is below the current
+// min-prec context. For `expr : expr '*' expr | expr '+' expr | INT`,
+// the loop-entry edges are [enter '*' (own_prec 2), enter '+' (own_prec
+// 1), exit]; raising the context to 2 disables the '+' alt (left
+// associativity: a '+' right operand cannot re-enter '+').
+test "precedence pruning gates LR loop-entry enter alts by min_prec" {
+    let g = parse(LR_G4).unwrap();
+    let atn = build_atn(&g);
+    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = loop_entry_decision(&atn, 0);
+    // Tokens after the first atom: `'+' INT` (INT=0, '*'=4, '+'=5).
+    let toks: List<Token> = [
+        mk(5),
+        mk(0),
+    ];
+    let empty: List<i32> = [];
+    // pr=0: the '+' alt (own_prec 1) is enabled and matches → enter it (1).
+    let lo = atn_predict_with_stack(&sim, d, &empty, &toks, 0, eof, 0);
+    assert lo == 1, `min_prec 0 should enter the '+' alt (1), got {lo}`;
+    // pr=2: the '+' alt is pruned (1 < 2) and '*' does not match '+', so only
+    // the exit edge survives → exit alt (2).
+    let hi = atn_predict_with_stack(&sim, d, &empty, &toks, 0, eof, 2);
+    assert hi == 2, `min_prec 2 should prune '+' and exit (2), got {hi}`;
+}
+
+// P4.4: the dedicated LR loop-entry decision (`atn_lr_loop_decision`) — the
+// O(n) replacement for full ALL(*) simulation on LR loops. It encodes the
+// true loop-entry semantics: precedence prune + yield-to-caller-mandatory.
+test "LR loop decision: precedence gates enter/exit" {
+    let g = parse(LR_G4).unwrap();
+    let atn = build_atn(&g);
+    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = loop_entry_decision(&atn, 0);
+    let empty: List<i32> = [];
+    // After the first atom, `'+' INT` (INT=0, '*'=4, '+'=5). The exit edge is
+    // the last (index 2); enter '*'=0, enter '+'=1.
+    let toks: List<Token> = [
+        mk(5),
+        mk(0),
+    ];
+    // min_prec 0: enter the '+' alt (own_prec 1 >= 0, suffix starts with '+').
+    assert atn_lr_loop_decision(&sim, &empty, d, &toks, 0, eof, 0) == 1, "min_prec 0 enters '+'";
+    // min_prec 2: '+' (own_prec 1 < 2) pruned, '*' suffix !startswith '+', exit.
+    assert atn_lr_loop_decision(&sim, &empty, d, &toks, 0, eof, 2) == 2, "min_prec 2 exits";
+}
+
+// A `~SEMI` operator suffix must match any token EXCEPT `SEMI`. The FIRST
+// representation must carry the excluded label rather than treating the
+// negated set as an unrestricted "matches anything" (which would make the
+// loop wrongly enter on `SEMI`).
+global LR_NEG_G4: String = "
+grammar T;
+e : e ~SEMI e | INT ;
+INT : '0'..'9'+ ;
+SEMI : ';' ;
+WS : ' ' -> skip ;
+";
+
+test "atn_lr_loop_decision: ~SEMI suffix excludes the SEMI token" {
+    let g = parse(LR_NEG_G4).unwrap();
+    let atn = build_atn(&g);
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = loop_entry_decision(&atn, 0);
+    assert d >= 0, "rule `e` must have a loop-entry decision";
+    // kinds (lexer order): INT=0, SEMI=1, WS=2, EOF=3.
+    let empty: List<i32> = [];
+    let eof = 3;
+    // suffix `~SEMI e` must NOT admit SEMI(1): no enter edge matches → exit (alt 1).
+    let on_semi: List<Token> = [
+        mk(1),
+        mk(0),
+    ];
+    assert atn_lr_loop_decision(&sim, &empty, d, &on_semi, 0, eof) == 1, "~SEMI must not match SEMI";
+    // it admits INT(0): enter the suffix (alt 0).
+    let on_int: List<Token> = [
+        mk(0),
+        mk(0),
+    ];
+    assert atn_lr_loop_decision(&sim, &empty, d, &on_int, 0, eof) == 0, "~SEMI matches INT";
+}
+
+// A caller stack 1000 frames deep seeds `rs = 999`. The packed CfgSet key
+// gives `rs` a 21-bit (~2M) slot, so such a depth predicts normally rather
+// than overflowing the key — the prediction must complete and pick the
+// token-led alternative, not trap.
+test "CfgSet packed key handles a deep caller stack" {
+    let g = parse(K2_G4).unwrap();
+    let atn = build_atn(&g);
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = rule_block_decision(&atn, 0);
+    assert d >= 0, "rule `a` must have an alternation decision";
+    let mut deep: List<i32> = [];
+    for let mut i = 0; i < 1000; i += 1 {
+        deep.push(-1);
+    }
+    // `a : ID '(' ')' | ID '[' ']'` on `ID ( )` → alt 0. (ID=0, '('=4, ')'=5.)
+    let toks: List<Token> = [
+        mk(0),
+        mk(4),
+        mk(5),
+    ];
+    assert atn_predict_with_stack(&sim, d, &deep, &toks, 0, 2) == 0, "deep stack must still predict alt 0";
+}
+
+// An LR rule whose atom alternative is nullable (`a : ID?`) can begin with a
+// loop operator: when `a` derives empty, `e` starts the `('+' e)*` loop, so
+// `e`'s FIRST legitimately includes `'+'`. `atn_decode` must handle this (not
+// reject it), and the operator must land in the rule's FIRST set.
+global LR_NULLABLE_ATOM_G4: String = "
+grammar T;
+e : e '+' e | a ;
+a : ID? ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+test "atn_decode: a nullable atom LR rule carries the operator in its FIRST" {
+    let g = parse(LR_NULLABLE_ATOM_G4).unwrap();
+    let atn = build_atn(&g);
+    let sim = atn_decode(&serialize_atn(&atn));
+    // kinds (lexer order): ID=0, WS=1, EOF=2, ERROR=3, '+'=4. Rule 0 is `e`.
+    assert sim.rule_first[0].contains(&4), "e's FIRST must include '+' (a is nullable)";
+    assert sim.rule_first[0].contains(&0), "e's FIRST must include ID (via a)";
 }
