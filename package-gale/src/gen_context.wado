@@ -94,6 +94,18 @@ pub struct GenContext {
     /// a non-greedy `??` stay byte-identical. (`*?`/`+?` keep the dedicated
     /// non-greedy strategy and do not set this.)
     needs_atn_seen: bool,
+    /// The ATN call-site → return-state correspondence (`Atn.call_site_returns`,
+    /// indexed by `RuleRefElement.atn_call_site`). Populated after lowering
+    /// by `set_atn_call_site_returns` when `needs_atn`, so parser emit can
+    /// push each rule call's exact return state (`atn_ret_pending`). Empty
+    /// for grammars that do not need the ATN. See P4.2b in `TODO.md`.
+    atn_call_site_returns: List<i32>,
+    /// Index of the parser rule currently being emitted (set by
+    /// `gen_parse_fn`). Read when emitting a non-greedy `??`'s
+    /// `atn_ng_optional_enter` call so the simulator knows which rule's
+    /// exit-first decision to predict (the caller stack now holds return
+    /// states, not rule indices). -1 outside rule-body emission.
+    current_rule_index: i32,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
@@ -122,6 +134,8 @@ impl GenContext {
             diagnostics: [],
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
+            atn_call_site_returns: [],
+            current_rule_index: -1,
             trace: false,
         };
     }
@@ -152,6 +166,33 @@ impl GenContext {
     /// stack maintenance). True iff lowering saw a non-greedy repeat.
     pub fn needs_atn(&self) -> bool {
         return self.needs_atn_seen;
+    }
+
+    /// Store the ATN call-site → return-state correspondence after the ATN
+    /// is built (only when `needs_atn`). Read by `atn_ret_pending_arg`.
+    pub fn set_atn_call_site_returns(&mut self, returns: &List<i32>) {
+        self.atn_call_site_returns = *returns;
+    }
+
+    /// The exact ATN return state for surface call site `call_site`, or -1
+    /// when unknown (no ATN built, the id is out of range, or the call site
+    /// never got a `RuleRef` segment — e.g. the stripped leading LR self-ref).
+    pub fn atn_call_site_return(&self, call_site: i32) -> i32 {
+        if call_site < 0 || call_site >= self.atn_call_site_returns.len() {
+            return -1;
+        }
+        return self.atn_call_site_returns[call_site];
+    }
+
+    /// Record the rule whose body is currently being emitted (its index in
+    /// `parser_rules`). Set by `gen_parse_fn` before the body walk.
+    pub fn set_current_rule_index(&mut self, idx: i32) {
+        self.current_rule_index = idx;
+    }
+
+    /// The rule currently being emitted, or -1 outside rule-body emission.
+    pub fn current_rule_index(&self) -> i32 {
+        return self.current_rule_index;
     }
 
     /// Enable trace instrumentation in the generated parser (the

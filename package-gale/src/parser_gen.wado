@@ -185,13 +185,20 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     if trace {
         s.add_field(&"trace_depth", &"i32");
     }
-    // Runtime ATN simulator state (only when a non-greedy decision needs
-    // it). `atn` is decoded once from the `GALE_ATN_DATA` blob; `atn_stack`
-    // is the live rule-invocation stack (rule indices) the rule-entry
-    // wrapper maintains for full-context prediction.
+    // Runtime ATN simulator state (only when a non-greedy / LR decision
+    // needs it). `atn` is decoded once from the `GALE_ATN_DATA` blob.
+    // `atn_stack` is the live caller stack of ATN **return states** for
+    // full-context prediction — each rule call pushes its exact return
+    // state (so the simulator pops to the precise caller continuation).
+    // `atn_ret_pending` carries that return state from a call site to the
+    // callee's entry wrapper, which pushes it: a caller sets
+    // `p.atn_ret_pending = <state>` immediately before `_parse_X(...)`, the
+    // wrapper consumes it on entry and resets it to -1 (so an unstamped call
+    // pushes -1 = unknown caller, handled as SLL by the simulator).
     if needs_atn {
         s.add_field(&"atn", &"AtnSim");
         s.add_field(&"atn_stack", &"List<i32>");
+        s.add_field(&"atn_ret_pending", &"i32");
     }
     s.emit(w);
     w.blank();
@@ -208,7 +215,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
         init.push_str(&", trace_depth: 0");
     }
     if needs_atn {
-        init.push_str(&", atn: atn_decode(&GALE_ATN_DATA), atn_stack: []");
+        init.push_str(&", atn: atn_decode(&GALE_ATN_DATA), atn_stack: [], atn_ret_pending: -1");
     }
     w.line(&`return Parser \{ {init} \};`);
     w.end();
@@ -1566,6 +1573,10 @@ fn gen_scan_op_elements_in_block(w: &mut CodeWriter, scan_elems: &List<ScanEleme
 global mut SCAN_GROUP_COUNTER: i32 = 0;
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
+    // Track which rule's body we are emitting so a non-greedy `??` inside it
+    // can pass its owning rule index to `atn_ng_optional_enter` (the caller
+    // stack holds return states, not rule indices).
+    ctx.set_current_rule_index(ctx.rule_index_of(&rule.name));
     // Phase 4 — dispatch on the GIR `Rule` variant. Each shape gets
     // its own focused emit entry; the existing internal helpers
     // carry the body emission but no longer need to re-classify
@@ -1589,8 +1600,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
             true,
         ),
     }
-    let atn_rule_idx = if ctx.needs_atn() { ctx.rule_index_of(&rule.name) } else { -1 };
-    gen_rule_entry_wrapper(w, &canonical, &inner, &rule.type_name, &rule.name, rule_takes_min_prec(lowered_rule), ctx.emit_follow(), ctx.is_trace(), atn_rule_idx);
+    gen_rule_entry_wrapper(w, &canonical, &inner, &rule.type_name, &rule.name, rule_takes_min_prec(lowered_rule), ctx.emit_follow(), ctx.is_trace(), ctx.needs_atn());
 }
 
 /// Emit a thin entry wrapper named `outer_name` that delegates to
@@ -1676,7 +1686,7 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
-fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool, emit_follow: bool, trace: bool, atn_rule_idx: i32) {
+fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool, emit_follow: bool, trace: bool, atn_needs: bool) {
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
     // `follow` precedes `min_prec` so a non-precedence call site can pass
@@ -1700,12 +1710,16 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
         w.line(&`trace_enter(p, &{lit});`);
         w.line(&"p.trace_depth += 1;");
     }
-    // Maintain the rule-invocation stack the ATN simulator reads for
-    // full-context prediction: push this rule's index on entry, pop on
-    // every exit (both success and failure). Only emitted for grammars
-    // that need the ATN.
-    if atn_rule_idx >= 0 {
-        w.line(&`p.atn_stack.push({atn_rule_idx});`);
+    // Maintain the caller stack of ATN return states the simulator reads
+    // for full-context prediction. The calling site set `p.atn_ret_pending`
+    // to this invocation's exact return state (or left it -1 for an
+    // unstamped call / the start rule); consume it here, reset it, and push
+    // it. Popped on every exit (success and failure) below. Only emitted for
+    // grammars that need the ATN.
+    if atn_needs {
+        w.line(&"let _atn_ret = p.atn_ret_pending;");
+        w.line(&"p.atn_ret_pending = -1;");
+        w.line(&"p.atn_stack.push(_atn_ret);");
     }
     // Forward the runtime FOLLOW continuation to the inner body so its
     // tail-greedy gate sees the caller's continuation.
@@ -1715,7 +1729,7 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
     } else {
         w.line(&`let r = {*inner_name}(p{fsep});`);
     }
-    if atn_rule_idx >= 0 {
+    if atn_needs {
         w.line(&"p.atn_stack.pop();");
     }
     if trace {
@@ -2340,6 +2354,24 @@ fn op_is_leaf(op: &Op) -> bool {
 /// emitted field name comes from `op.field` exclusively — `dedup_base`
 /// is consulted only for the sync. The sync goes away entirely once
 /// every emit path consumes `Op`.
+/// Emit `p.atn_ret_pending = <state>;` immediately before a `_parse_X` call
+/// so the callee's entry wrapper pushes the call's exact ATN return state
+/// onto `p.atn_stack` (full-context prediction). No-op unless the grammar
+/// needs the ATN and the call site has a known return state
+/// (`Atn.call_site_returns`, keyed by `RuleCallOp.atn_call_site`). An
+/// unstamped call leaves `atn_ret_pending` at -1, which the simulator reads
+/// as an unknown caller (SLL-accept at that frame).
+fn emit_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
+    if !ctx.needs_atn() {
+        return;
+    }
+    let ret = ctx.atn_call_site_return(call_site);
+    if ret < 0 {
+        return;
+    }
+    w.line(&`p.atn_ret_pending = {ret};`);
+}
+
 fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
@@ -2357,6 +2389,7 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
             // `stamp_lr_self_ref_min_prec`, and `lower_alt_body` stamps the
             // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
             // reads a single source.
+            emit_atn_ret_pending(w, ctx, r.atn_call_site);
             if let Some(min_prec) = r.min_prec_arg {
                 w.line(&`let {r.field} = {fn_name}(p{follow_sep}, {min_prec})?;`);
             } else {
@@ -2612,7 +2645,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
     // Non-greedy `??`: the enter/skip decision is taken at runtime by the
     // ATN simulator (full context), not by the static first-set check.
     if rep.non_greedy && ctx.needs_atn() {
-        emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &atn_optional_enter_cond());
+        emit_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &opt_field, &inner_type, &inner_field, &atn_optional_enter_cond(ctx));
         return;
     }
 
@@ -2682,8 +2715,8 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
 /// decides enter vs skip with full context. The current rule is read from
 /// `p.atn_stack`'s top at runtime, so no compile-time decision number is
 /// needed.
-fn atn_optional_enter_cond() -> String {
-    return String::from("atn_ng_optional_enter(&p.atn, &p.atn_stack, &p.tokens, p.pos, TK_EOF)");
+fn atn_optional_enter_cond(ctx: &GenContext) -> String {
+    return `atn_ng_optional_enter(&p.atn, {ctx.current_rule_index()}, &p.atn_stack, &p.tokens, p.pos, TK_EOF)`;
 }
 
 fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> String {
@@ -2717,7 +2750,7 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 
     // Non-greedy `??`: runtime ATN decision (see gen_op_storable_optional).
     if rep.non_greedy && ctx.needs_atn() {
-        emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &atn_optional_enter_cond());
+        emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &atn_optional_enter_cond(ctx));
         return;
     }
 
@@ -3186,6 +3219,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         // Prefix LR alts' trailing self-ref is reached via `gen_op_leaf`
         // on `RuleCallOp.min_prec_arg`, so `gen_element` never threads
         // precedence here either.
+        emit_atn_ret_pending(w, ctx, r.atn_call_site);
         w.line(&`let {field_name} = _parse_{r.snake_name}(p)?;`);
         return;
     }
@@ -4040,6 +4074,7 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &List<i32>
             } else {
                 w.else_begin(&`else if {winner_var} == {k}`);
             }
+            emit_atn_ret_pending(w, ctx, rc.atn_call_site);
             w.line(&`let {local_var} = {fn_name}({call_args})?;`);
             w.line(&`{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
         } else {
@@ -4078,6 +4113,7 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                 let fn_name = `_parse_{rc.target_snake}`;
                 let local_var = rc.target_snake;
                 let call_args = if let Some(min_prec) = rc.min_prec_arg { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, {min_prec}` } else { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}` };
+                emit_atn_ret_pending(w, ctx, rc.atn_call_site);
                 w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{type_name}::{body.case_name}({local_var})`);
             } else {
@@ -4114,6 +4150,7 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                     let fn_name = `_parse_{rc.target_snake}`;
                     let local_var = rc.target_snake;
                     let call_args = if let Some(min_prec) = rc.min_prec_arg { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, {min_prec}` } else { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}` };
+                    emit_atn_ret_pending(w, ctx, rc.atn_call_site);
                     w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                     w.line(&`{opt_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
                 } else {
@@ -4195,6 +4232,7 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
                 let fn_name = `_parse_{rc.target_snake}`;
                 let local_var = rc.target_snake;
                 let call_args = if let Some(min_prec) = rc.min_prec_arg { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, {min_prec}` } else { `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}` };
+                emit_atn_ret_pending(w, ctx, rc.atn_call_site);
                 w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
             }
@@ -4613,10 +4651,12 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 if rr.name == rule.name {
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
                     let prec = lookup_baked_min_prec(suffix_op);
+                    emit_atn_ret_pending(w, ctx, rr.atn_call_site);
                     w.line(&`let {field_name} = {*fn_name}(p{follow_sep(ctx.emit_follow())}, {prec})?;`);
                 } else {
                     let elem_fn = `_parse_{rr.snake_name}`;
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
+                    emit_atn_ret_pending(w, ctx, rr.atn_call_site);
                     w.line(&`let {field_name} = {elem_fn}(p)?;`);
                 }
             } else if let Label(lab) = elem {
@@ -4629,6 +4669,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                         let lab_name = dedup_name(&lab.field_name, &mut name_counts);
                         let inner_name = dedup_name(&rr.field_name, &mut name_counts);
                         let prec = lookup_baked_min_prec(suffix_op);
+                        emit_atn_ret_pending(w, ctx, rr.atn_call_site);
                         w.line(&`let {inner_name} = {*fn_name}(p{follow_sep(ctx.emit_follow())}, {prec})?;`);
                         if lab.list {
                             // Type-annotate the local so `[inner]` parses as

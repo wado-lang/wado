@@ -173,20 +173,6 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
     };
 }
 
-/// Return states at which `caller` rule invokes `callee` rule. Used to
-/// continue a config into its real caller on rule exit (cold path; a linear
-/// transition scan is fine).
-#[allow(dead_code)]
-fn atn_call_return_states(sim: &AtnSim, caller: i32, callee: i32) -> List<i32> {
-    let mut out: List<i32> = [];
-    for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
-        if sim.tr_kind[j] == ATN_TR_RULE && sim.tr_label[j] == callee && sim.state_rule[sim.tr_src[j]] == caller {
-            out.push(sim.tr_follow[j]);
-        }
-    }
-    return out;
-}
-
 /// True when `state`'s outgoing edges consume a token (atom / wildcard /
 /// not-atom). Such a state is a resting point: closure stops there and
 /// `atn_move` reads the edge. Epsilon / rule states are expanded instead.
@@ -229,22 +215,30 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
                 let mut ns = c.stack;
                 let ret = ns.pop().unwrap();
                 work.push(AtnConfig { state: ret, alt: c.alt, stack: ns, rs: c.rs });
-            } else if c.rs > 0 {
-                let callee = rstk[c.rs];
-                let caller = rstk[c.rs - 1];
-                let sites = atn_call_return_states(sim, caller, callee);
-                if sites.is_empty() {
-                    result.push(c);
+            } else if c.rs >= 0 {
+                // The caller stack holds EXACT ATN return states (one per
+                // active rule invocation, the start rule at index 0): pop the
+                // current frame's return state and continue there. No
+                // over-approximation — each frame names its precise
+                // continuation.
+                let ret = rstk[c.rs];
+                if ret >= 0 {
+                    work.push(AtnConfig { state: ret, alt: c.alt, stack: [], rs: c.rs - 1 });
+                } else if c.rs == 0 {
+                    // The bottom (start rule) frame's follow is EOF: a config
+                    // that returns past the start rule accepts only EOF.
+                    result.push(AtnConfig { state: ATN_ACCEPT_EOF, alt: c.alt, stack: [], rs: -1 });
                 } else {
-                    for let st of &sites {
-                        work.push(AtnConfig { state: *st, alt: c.alt, stack: [], rs: c.rs - 1 });
-                    }
+                    // An unstamped intermediate call site (no return state was
+                    // pushed): the caller continuation is unknown, so match any
+                    // follow (SLL-equivalent for this frame).
+                    result.push(c);
                 }
             } else if rstk.is_empty() {
-                // SLL: caller unknown, rule-stop matches any follow.
+                // Pure SLL: no caller stack supplied, rule-stop matches any follow.
                 result.push(c);
             } else {
-                // Real stack exhausted to the start rule: follow is EOF.
+                // Real stack exhausted past the start rule: follow is EOF.
                 result.push(AtnConfig { state: ATN_ACCEPT_EOF, alt: c.alt, stack: [], rs: -1 });
             }
             continue;
@@ -415,21 +409,22 @@ pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &List<Token>, s
 }
 
 /// Decide whether a non-greedy optional (`(...)?? `) should ENTER (consume
-/// its body) or SKIP, using full-context ATN prediction. The current rule
-/// is the top of `rule_stack` (maintained by the rule-entry wrapper); the
-/// decision is that rule's unique exit-first BlockStart (an optional whose
-/// edge 0 goes straight to BlockEnd — the non-greedy ordering). Returns
-/// true to ENTER.
+/// its body) or SKIP, using full-context ATN prediction. `current_rule` (a
+/// compile-time constant the emitter passes) names the rule the `??` lives
+/// in; the decision is that rule's unique exit-first BlockStart (an optional
+/// whose edge 0 goes straight to BlockEnd — the non-greedy ordering).
+/// `rule_stack` is the caller stack of ATN return states. Returns true to
+/// ENTER.
 ///
 /// Falls back to ENTER (the prior greedy behaviour) when context is absent
 /// or the decision can't be uniquely identified (0 or >1 candidates), so a
 /// mapping miss degrades gracefully instead of mispredicting.
 #[allow(dead_code)]
-pub fn atn_ng_optional_enter(sim: &AtnSim, rule_stack: &List<i32>, tokens: &List<Token>, pos: i32, eof: i32) -> bool {
-    if rule_stack.is_empty() {
-        return true;
-    }
-    let rule = rule_stack[rule_stack.len() - 1];
+pub fn atn_ng_optional_enter(sim: &AtnSim, current_rule: i32, rule_stack: &List<i32>, tokens: &List<Token>, pos: i32, eof: i32) -> bool {
+    // `current_rule` is the rule the `??` lives in (a compile-time constant
+    // the emitter passes): the caller stack now holds ATN return states, so
+    // the current rule is no longer recoverable from its top.
+    let rule = current_rule;
     let mut dec = -1;
     let mut found = 0;
     for let mut d = 0; d < sim.decision_state.len(); d += 1 {

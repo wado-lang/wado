@@ -745,20 +745,6 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
     };
 }
 
-/// Return states at which `caller` rule invokes `callee` rule. Used to
-/// continue a config into its real caller on rule exit (cold path; a linear
-/// transition scan is fine).
-#[allow(dead_code)]
-fn atn_call_return_states(sim: &AtnSim, caller: i32, callee: i32) -> List<i32> {
-    let mut out: List<i32> = [];
-    for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
-        if sim.tr_kind[j] == ATN_TR_RULE && sim.tr_label[j] == callee && sim.state_rule[sim.tr_src[j]] == caller {
-            out.push(sim.tr_follow[j]);
-        }
-    }
-    return out;
-}
-
 /// True when `state`'s outgoing edges consume a token (atom / wildcard /
 /// not-atom). Such a state is a resting point: closure stops there and
 /// `atn_move` reads the edge. Epsilon / rule states are expanded instead.
@@ -801,22 +787,30 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
                 let mut ns = c.stack;
                 let ret = ns.pop().unwrap();
                 work.push(AtnConfig { state: ret, alt: c.alt, stack: ns, rs: c.rs });
-            } else if c.rs > 0 {
-                let callee = rstk[c.rs];
-                let caller = rstk[c.rs - 1];
-                let sites = atn_call_return_states(sim, caller, callee);
-                if sites.is_empty() {
-                    result.push(c);
+            } else if c.rs >= 0 {
+                // The caller stack holds EXACT ATN return states (one per
+                // active rule invocation, the start rule at index 0): pop the
+                // current frame's return state and continue there. No
+                // over-approximation — each frame names its precise
+                // continuation.
+                let ret = rstk[c.rs];
+                if ret >= 0 {
+                    work.push(AtnConfig { state: ret, alt: c.alt, stack: [], rs: c.rs - 1 });
+                } else if c.rs == 0 {
+                    // The bottom (start rule) frame's follow is EOF: a config
+                    // that returns past the start rule accepts only EOF.
+                    result.push(AtnConfig { state: ATN_ACCEPT_EOF, alt: c.alt, stack: [], rs: -1 });
                 } else {
-                    for let st of &sites {
-                        work.push(AtnConfig { state: *st, alt: c.alt, stack: [], rs: c.rs - 1 });
-                    }
+                    // An unstamped intermediate call site (no return state was
+                    // pushed): the caller continuation is unknown, so match any
+                    // follow (SLL-equivalent for this frame).
+                    result.push(c);
                 }
             } else if rstk.is_empty() {
-                // SLL: caller unknown, rule-stop matches any follow.
+                // Pure SLL: no caller stack supplied, rule-stop matches any follow.
                 result.push(c);
             } else {
-                // Real stack exhausted to the start rule: follow is EOF.
+                // Real stack exhausted past the start rule: follow is EOF.
                 result.push(AtnConfig { state: ATN_ACCEPT_EOF, alt: c.alt, stack: [], rs: -1 });
             }
             continue;
@@ -987,21 +981,22 @@ pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &List<Token>, s
 }
 
 /// Decide whether a non-greedy optional (`(...)?? `) should ENTER (consume
-/// its body) or SKIP, using full-context ATN prediction. The current rule
-/// is the top of `rule_stack` (maintained by the rule-entry wrapper); the
-/// decision is that rule's unique exit-first BlockStart (an optional whose
-/// edge 0 goes straight to BlockEnd — the non-greedy ordering). Returns
-/// true to ENTER.
+/// its body) or SKIP, using full-context ATN prediction. `current_rule` (a
+/// compile-time constant the emitter passes) names the rule the `??` lives
+/// in; the decision is that rule's unique exit-first BlockStart (an optional
+/// whose edge 0 goes straight to BlockEnd — the non-greedy ordering).
+/// `rule_stack` is the caller stack of ATN return states. Returns true to
+/// ENTER.
 ///
 /// Falls back to ENTER (the prior greedy behaviour) when context is absent
 /// or the decision can't be uniquely identified (0 or >1 candidates), so a
 /// mapping miss degrades gracefully instead of mispredicting.
 #[allow(dead_code)]
-pub fn atn_ng_optional_enter(sim: &AtnSim, rule_stack: &List<i32>, tokens: &List<Token>, pos: i32, eof: i32) -> bool {
-    if rule_stack.is_empty() {
-        return true;
-    }
-    let rule = rule_stack[rule_stack.len() - 1];
+pub fn atn_ng_optional_enter(sim: &AtnSim, current_rule: i32, rule_stack: &List<i32>, tokens: &List<Token>, pos: i32, eof: i32) -> bool {
+    // `current_rule` is the rule the `??` lives in (a compile-time constant
+    // the emitter passes): the caller stack now holds ATN return states, so
+    // the current rule is no longer recoverable from its top.
+    let rule = current_rule;
     let mut dec = -1;
     let mut found = 0;
     for let mut d = 0; d < sim.decision_state.len(); d += 1 {
@@ -1244,11 +1239,12 @@ struct Parser {
     pending: Option<ParseError>,
     atn: AtnSim,
     atn_stack: List<i32>,
+    atn_ret_pending: i32,
 }
 
 impl Parser {
     fn new(tokens: List<Token>, chars: List<char>) -> Parser {
-        return Parser { tokens, pos: 0, chars, pending: null, atn: atn_decode(&GALE_ATN_DATA), atn_stack: [] };
+        return Parser { tokens, pos: 0, chars, pending: null, atn: atn_decode(&GALE_ATN_DATA), atn_stack: [], atn_ret_pending: -1 };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1458,6 +1454,7 @@ fn _parse_start__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             }
         }
         _plus_first = false;
+        p.atn_ret_pending = 10;
         let statement = _parse_statement(p, &EMPTY_FOLLOW)?;
         statement_list.push(statement);
     }
@@ -1468,7 +1465,9 @@ fn _parse_start__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_start(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StartNode, ParseError> {
-    p.atn_stack.push(0);
+    let _atn_ret = p.atn_ret_pending;
+    p.atn_ret_pending = -1;
+    p.atn_stack.push(_atn_ret);
     let r = _parse_start__inner(p, follow);
     p.atn_stack.pop();
     if let Err(mut e) = r {
@@ -1489,6 +1488,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }));
     }
     if kind == TK_LIT_IF {
+        p.atn_ret_pending = 20;
         let if_statement = _parse_if_statement(p, follow)?;
         return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt1(StatementAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -1503,7 +1503,9 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
-    p.atn_stack.push(1);
+    let _atn_ret = p.atn_ret_pending;
+    p.atn_ret_pending = -1;
+    p.atn_stack.push(_atn_ret);
     let r = _parse_statement__inner(p, follow);
     p.atn_stack.pop();
     if let Err(mut e) = r {
@@ -1517,9 +1519,11 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let start = p.peek().span.start;
     let lit_if = p.expect(TK_LIT_IF)?;
     let lit_y = p.expect(TK_LIT_Y)?;
+    p.atn_ret_pending = 29;
     let statement = _parse_statement(p, follow)?;
-    let lit_else_statement: Option<LitElseStatementItem> = if atn_ng_optional_enter(&p.atn, &p.atn_stack, &p.tokens, p.pos, TK_EOF) {
+    let lit_else_statement: Option<LitElseStatementItem> = if atn_ng_optional_enter(&p.atn, 2, &p.atn_stack, &p.tokens, p.pos, TK_EOF) {
         let lit_else = p.expect(TK_LIT_ELSE)?;
+        p.atn_ret_pending = 38;
         let statement = _parse_statement(p, follow)?;
         let lit_else_statement = LitElseStatementItem {
             lit_else,
@@ -1539,7 +1543,9 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_if_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<IfStatementNode, ParseError> {
-    p.atn_stack.push(2);
+    let _atn_ret = p.atn_ret_pending;
+    p.atn_ret_pending = -1;
+    p.atn_stack.push(_atn_ret);
     let r = _parse_if_statement__inner(p, follow);
     p.atn_stack.pop();
     if let Err(mut e) = r {

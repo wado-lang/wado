@@ -99,6 +99,20 @@ pub struct Atn {
     pub call_site_returns: List<i32>,
 }
 
+/// An empty ATN placeholder. Used by codegen as the `needs_atn == false`
+/// default so the `Atn` variable is always initialized without paying for a
+/// build the grammar does not need.
+pub fn empty_atn() -> Atn {
+    return Atn {
+        states: [],
+        rule_start: [],
+        rule_stop: [],
+        decision_state: [],
+        num_tokens: 0,
+        call_site_returns: [],
+    };
+}
+
 /// Mutable accumulator used during construction.
 struct AtnBuilder {
     states: List<AtnState>,

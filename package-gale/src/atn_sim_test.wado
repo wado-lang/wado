@@ -19,6 +19,7 @@ use {
 } from "./runtime/atn.wado";
 use { Token, LexerSlice, Span } from "./runtime/lex.wado";
 use { parse } from "./g4/parser.wado";
+use { assign_atn_call_sites } from "./ir.wado";
 
 fn mk(kind: i32) -> Token {
     return Token::new(kind, LexerSlice::from_string(""), Span::new(0, 0));
@@ -150,30 +151,42 @@ test "greedy ? picks the enter alt on the same conflict" {
 }
 
 // Full-context: the SAME `??` decision binds differently depending on the
-// caller's rule stack. This is the IfIfElseNonGreedyBinding1 crux.
-// Rule indices: start=0, statement=1, ifStatement=2.
+// caller stack of ATN return states. This is the IfIfElseNonGreedyBinding1
+// crux. The stack mirrors what the generated parser pushes at each rule
+// call: the start-rule frame (-1, follow is EOF) at the bottom, then each
+// call site's exact return state (`call_site_returns`). Call-site ids (the
+// depth-first numbering of `assign_atn_call_sites`):
+//   cs0 = start -> statement   (inside `statement+`)
+//   cs1 = statement -> ifStatement
+//   cs2 = ifStatement -> statement   (the mandatory one, before the `??`)
+//   cs3 = ifStatement -> statement   (inside `('else' statement)??`)
 
 test "full-context: inner ifStatement ?? skips the else (binds to outer)" {
-    let g = parse(NG_G4).unwrap();
+    let mut g = parse(NG_G4).unwrap();
+    assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let eof = build_token_kinds(&g).0["TK_EOF"];
     let sim = atn_decode(&serialize_atn(&atn));
     let d = optional_decision(&atn);
-    // Inner ifStatement reached via start>statement>ifStatement>statement>ifStatement.
-    let stack: List<i32> = [0, 1, 2, 1, 2];
+    let csr = &atn.call_site_returns;
+    // Inner ifStatement reached via
+    // start >(cs0) statement >(cs1) ifStatement >(cs2) statement >(cs1) ifStatement.
+    let stack: List<i32> = [-1, csr[0], csr[1], csr[2], csr[1]];
     let toks: List<Token> = [mk(7), mk(4)];
     let alt = atn_predict_with_stack(&sim, d, &stack, &toks, 0, eof);
     assert alt_target_kind(&atn, d, alt) == ATN_BLOCK_END, "inner ?? must EXIT (let the outer take the else)";
 }
 
 test "full-context: outer ifStatement ?? consumes the else" {
-    let g = parse(NG_G4).unwrap();
+    let mut g = parse(NG_G4).unwrap();
+    assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let eof = build_token_kinds(&g).0["TK_EOF"];
     let sim = atn_decode(&serialize_atn(&atn));
     let d = optional_decision(&atn);
-    // Outermost ifStatement: start>statement>ifStatement.
-    let stack: List<i32> = [0, 1, 2];
+    let csr = &atn.call_site_returns;
+    // Outermost ifStatement: start >(cs0) statement >(cs1) ifStatement.
+    let stack: List<i32> = [-1, csr[0], csr[1]];
     let toks: List<Token> = [mk(7), mk(4)];
     let alt = atn_predict_with_stack(&sim, d, &stack, &toks, 0, eof);
     assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "outer ?? must ENTER (consume the else)";
