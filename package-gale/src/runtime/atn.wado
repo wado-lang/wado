@@ -107,6 +107,20 @@ struct AtnConfig {
     alt: i32,
     stack: List<i32>,
     rs: i32,
+    /// Current min-precedence context `pr`. A loop-entry precedence edge
+    /// `{prec_i >= pr}?` is pruned when `tr_prec < pr`. Seeded from the
+    /// prediction's `min_prec`; updated to a recursive operand's baked floor
+    /// (`expr[next_i]`) when a config traverses a precedence-carrying
+    /// `RuleRef`, and restored from `pr_stack` on return.
+    pr: i32,
+    /// Saved `pr` per during-prediction return frame (parallel to `stack`):
+    /// pushed when a `RuleRef` raises the context, popped to restore on the
+    /// matching rule-stop. (Caller frames popped via `rs` carry no saved pr —
+    /// the runtime caller stack holds return states only — so a config that
+    /// returns into the pre-existing parse stack keeps its current `pr`; LR
+    /// precedence decisions live within the predicted rule's own recursion,
+    /// not its callers, so this is sound for the grammars routed here.)
+    pr_stack: List<i32>,
 }
 
 /// Decode the serialized ATN blob into `AtnSim`. Mirrors the layout of
@@ -214,7 +228,10 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
             if !c.stack.is_empty() {
                 let mut ns = c.stack;
                 let ret = ns.pop().unwrap();
-                work.push(AtnConfig { state: ret, alt: c.alt, stack: ns, rs: c.rs });
+                // Restore the caller frame's min-prec context.
+                let mut nps = c.pr_stack;
+                let npr = if let Some(p) = nps.pop() { p } else { c.pr };
+                work.push(AtnConfig { state: ret, alt: c.alt, stack: ns, rs: c.rs, pr: npr, pr_stack: nps });
             } else if c.rs >= 0 {
                 // The caller stack holds EXACT ATN return states (one per
                 // active rule invocation, the start rule at index 0): pop the
@@ -223,11 +240,11 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
                 // continuation.
                 let ret = rstk[c.rs];
                 if ret >= 0 {
-                    work.push(AtnConfig { state: ret, alt: c.alt, stack: [], rs: c.rs - 1 });
+                    work.push(AtnConfig { state: ret, alt: c.alt, stack: [], rs: c.rs - 1, pr: c.pr, pr_stack: [] });
                 } else if c.rs == 0 {
                     // The bottom (start rule) frame's follow is EOF: a config
                     // that returns past the start rule accepts only EOF.
-                    result.push(AtnConfig { state: ATN_ACCEPT_EOF, alt: c.alt, stack: [], rs: -1 });
+                    result.push(AtnConfig { state: ATN_ACCEPT_EOF, alt: c.alt, stack: [], rs: -1, pr: c.pr, pr_stack: [] });
                 } else {
                     // An unstamped intermediate call site (no return state was
                     // pushed): the caller continuation is unknown, so match any
@@ -239,7 +256,7 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
                 result.push(c);
             } else {
                 // Real stack exhausted past the start rule: follow is EOF.
-                result.push(AtnConfig { state: ATN_ACCEPT_EOF, alt: c.alt, stack: [], rs: -1 });
+                result.push(AtnConfig { state: ATN_ACCEPT_EOF, alt: c.alt, stack: [], rs: -1, pr: c.pr, pr_stack: [] });
             }
             continue;
         }
@@ -254,17 +271,26 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
         for let mut j = 0; j < cnt; j += 1 {
             let k = sim.tr_kind[start + j];
             let target = sim.tr_target[start + j];
-            if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
-                // P4.1: precedence edges are traversed unconditionally; the
-                // `{prec_i >= pr}?` pruning lands in P4.3.
-                work.push(AtnConfig { state: target, alt: c.alt, stack: c.stack, rs: c.rs });
+            if k == ATN_TR_EPSILON {
+                work.push(AtnConfig { state: target, alt: c.alt, stack: c.stack, rs: c.rs, pr: c.pr, pr_stack: c.pr_stack });
+            } else if k == ATN_TR_PRECEDENCE {
+                // Loop-entry predicate `{prec_i >= pr}?`: prune when the alt's
+                // precedence is below the current min-prec context.
+                if sim.tr_prec[start + j] >= c.pr {
+                    work.push(AtnConfig { state: target, alt: c.alt, stack: c.stack, rs: c.rs, pr: c.pr, pr_stack: c.pr_stack });
+                }
             } else if k == ATN_TR_RULE {
                 if c.stack.len() >= ATN_MAX_STACK || target < 0 {
                     continue;
                 }
                 let mut ns = c.stack;
                 ns.push(sim.tr_follow[start + j]);
-                work.push(AtnConfig { state: target, alt: c.alt, stack: ns, rs: c.rs });
+                // A recursive operand `expr[next_i]` carries its raised floor
+                // on the RuleRef's `prec`; raise the context entering it and
+                // save the current `pr` to restore on return.
+                let mut nps = c.pr_stack;
+                nps.push(c.pr);
+                work.push(AtnConfig { state: target, alt: c.alt, stack: ns, rs: c.rs, pr: sim.tr_prec[start + j], pr_stack: nps });
             }
         }
     }
@@ -303,7 +329,7 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
                 false;
             };
             if matched {
-                out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, stack: c.stack, rs: c.rs });
+                out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, stack: c.stack, rs: c.rs, pr: c.pr, pr_stack: c.pr_stack });
             }
         }
     }
@@ -351,10 +377,12 @@ fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
 
 /// Predict the winning alternative at `decision` against `tokens` from
 /// `start_pos`, with full context: `rule_stack` is the caller's current
-/// rule-invocation chain (rule indices, outermost first, the decision's own
-/// rule last). Pass an empty `rule_stack` for plain SLL. Returns the 0-based
-/// alternative index (the decision state's edge order), or -1 if no
-/// alternative is viable.
+/// chain of ATN return states (outermost — the start-rule frame — first).
+/// Pass an empty `rule_stack` for plain SLL. `min_prec` is the current
+/// precedence context `pr`: a loop-entry edge `{prec_i >= pr}?` whose
+/// `prec_i < min_prec` is pruned (left/right-associative precedence
+/// climbing). Returns the 0-based alternative index (the decision state's
+/// edge order), or -1 if no alternative is viable.
 ///
 /// Resolution: simulate until one alt survives (return it), the config set
 /// empties (return the previous step's lowest alt), or all survivors are
@@ -362,14 +390,19 @@ fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
 /// ANTLR4's rule-order tie-break; non-greedy repeats order their exit edge
 /// first so this yields the exit).
 #[allow(dead_code)]
-pub fn atn_predict_with_stack(sim: &AtnSim, decision: i32, rule_stack: &List<i32>, tokens: &List<Token>, start_pos: i32, eof: i32) -> i32 {
+pub fn atn_predict_with_stack(sim: &AtnSim, decision: i32, rule_stack: &List<i32>, tokens: &List<Token>, start_pos: i32, eof: i32, min_prec: i32 = 0) -> i32 {
     let dstate = sim.decision_state[decision];
     let start = sim.state_tr_start[dstate];
     let cnt = sim.state_tr_count[dstate];
     let rs_init = rule_stack.len() - 1;
     let mut seeds: List<AtnConfig> = [];
     for let mut j = 0; j < cnt; j += 1 {
-        seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, stack: [], rs: rs_init });
+        // Prune a precedence-guarded enter edge whose alt precedence is below
+        // the current context (the predicate `{prec_i >= min_prec}?` is false).
+        if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
+            continue;
+        }
+        seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, stack: [], rs: rs_init, pr: min_prec, pr_stack: [] });
     }
     let mut configs = atn_closure(sim, &seeds, rule_stack);
     let mut pos = start_pos;

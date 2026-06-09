@@ -212,3 +212,27 @@ test "LR loop-entry prediction terminates (no naive left recursion)" {
     let alt = atn_adaptive_predict(&sim, d, &toks, 0, eof);
     assert alt >= 0 && alt < 3, `LR loop-entry prediction out of range: {alt}`;
 }
+
+// P4.3: the loop-entry precedence predicate `{prec_i >= pr}?` prunes
+// enter alts whose alt-precedence (`own_prec`) is below the current
+// min-prec context. For `expr : expr '*' expr | expr '+' expr | INT`,
+// the loop-entry edges are [enter '*' (own_prec 2), enter '+' (own_prec
+// 1), exit]; raising the context to 2 disables the '+' alt (left
+// associativity: a '+' right operand cannot re-enter '+').
+test "precedence pruning gates LR loop-entry enter alts by min_prec" {
+    let g = parse(LR_G4).unwrap();
+    let atn = build_atn(&g);
+    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = loop_entry_decision(&atn, 0);
+    // Tokens after the first atom: `'+' INT` (INT=0, '*'=4, '+'=5).
+    let toks: List<Token> = [mk(5), mk(0)];
+    let empty: List<i32> = [];
+    // pr=0: the '+' alt (own_prec 1) is enabled and matches → enter it (1).
+    let lo = atn_predict_with_stack(&sim, d, &empty, &toks, 0, eof, 0);
+    assert lo == 1, `min_prec 0 should enter the '+' alt (1), got {lo}`;
+    // pr=2: the '+' alt is pruned (1 < 2) and '*' does not match '+', so only
+    // the exit edge survives → exit alt (2).
+    let hi = atn_predict_with_stack(&sim, d, &empty, &toks, 0, eof, 2);
+    assert hi == 2, `min_prec 2 should prune '+' and exit (2), got {hi}`;
+}
