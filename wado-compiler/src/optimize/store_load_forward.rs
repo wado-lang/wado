@@ -9,15 +9,20 @@
 //! (`&x` / `&mut x`) or it is captured by a closure. At control-flow
 //! boundaries only locals modified within branches are invalidated.
 //!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the unsafe-locals scan,
-//! the per-block modified-locals precompute, and the flow-sensitive forward
-//! traversal read and mutate the arena `Body` directly. The modified-locals
-//! cache is keyed by `BlockId` (cleaner than the old block raw pointer).
+//! Runs on the worklist rewrite engine (combine migration; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! per-function standalone engine session whose `apply_block` fires once at
+//! the body root and runs the whole-function flow-sensitive forward pass.
+//! The single rewrite point (`Local → ForwardValue`-derived literal) routes
+//! through the engine edit API (`replace_expr_kind`) so the parent map and
+//! use index stay coherent.
+
+use std::cell::Cell;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::TypeTable;
 
@@ -203,21 +208,48 @@ fn collect_unsafe_node(body: &Body, node: NodeRef, unsafe_locals: &mut IndexSet<
 pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::StoreLoadForward, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
-        forward_in_function(&mut func, &type_table)
+        if func.body.is_none() {
+            return false;
+        }
+        let rule = StoreLoadForwardRule {
+            type_table: &type_table,
+            applied: Cell::new(false),
+        };
+        let NirFunction { body, locals, .. } = &mut *func;
+        let body = body.as_mut().expect("checked above");
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.run(&[&rule])
     })
 }
 
-fn forward_in_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
-    let Some(body) = func.body.as_mut() else {
-        return false;
-    };
-    let unsafe_locals = collect_unsafe_locals(body);
-    let cache = precompute_all_modified_locals(body);
+/// Standalone-session rule whose single `apply_block` performs the whole-
+/// function flow-sensitive forward pass at the body root.
+pub(super) struct StoreLoadForwardRule<'a> {
+    type_table: &'a TypeTable,
+    applied: Cell<bool>,
+}
+
+impl Rule for StoreLoadForwardRule<'_> {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        if engine.parent_of(NodeRef::Block(block)).is_some() {
+            return false;
+        }
+        if self.applied.replace(true) {
+            return false;
+        }
+        forward_at_root(engine, self.type_table)
+    }
+}
+
+fn forward_at_root(engine: &mut Engine, type_table: &TypeTable) -> bool {
+    let unsafe_locals = collect_unsafe_locals(engine.body);
+    let cache = precompute_all_modified_locals(engine.body);
     let mut known = KnownValues::default();
-    let root = body.root;
-    forward_in_block(body, root, &mut known, &unsafe_locals, type_table, &cache)
+    let root = engine.body.root;
+    forward_in_block(engine, root, &mut known, &unsafe_locals, type_table, &cache)
 }
 
 fn lookup_modified(cache: &ModifiedLocalsCache, block: BlockId) -> IndexSet<u32> {
@@ -225,7 +257,7 @@ fn lookup_modified(cache: &ModifiedLocalsCache, block: BlockId) -> IndexSet<u32>
 }
 
 fn forward_in_block(
-    body: &mut Body,
+    engine: &mut Engine,
     block: BlockId,
     known: &mut KnownValues,
     unsafe_locals: &IndexSet<u32>,
@@ -233,29 +265,29 @@ fn forward_in_block(
     cache: &ModifiedLocalsCache,
 ) -> bool {
     let mut changed = false;
-    let stmts = body.blocks[block].stmts.clone();
+    let stmts = engine.body.blocks[block].stmts.clone();
     for stmt in stmts {
-        changed |= forward_in_stmt(body, stmt, known, unsafe_locals, type_table, cache);
+        changed |= forward_in_stmt(engine, stmt, known, unsafe_locals, type_table, cache);
     }
     changed
 }
 
 fn forward_in_stmt(
-    body: &mut Body,
+    engine: &mut Engine,
     stmt: StmtId,
     known: &mut KnownValues,
     unsafe_locals: &IndexSet<u32>,
     type_table: &TypeTable,
     cache: &ModifiedLocalsCache,
 ) -> bool {
-    match &body.stmts[stmt].kind {
+    match &engine.body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
         } => {
             let (local_index, value) = (*local_index, *value);
-            let changed = forward_in_expr(body, value, known, unsafe_locals, type_table, cache);
+            let changed = forward_in_expr(engine,value, known, unsafe_locals, type_table, cache);
             if !unsafe_locals.contains(&local_index)
-                && let Some(fv) = ForwardValue::from_expr(body, value)
+                && let Some(fv) = ForwardValue::from_expr(engine.body, value)
             {
                 known.set_local(local_index, fv);
             }
@@ -263,13 +295,13 @@ fn forward_in_stmt(
         }
         StmtKind::Expr(e) => {
             let e = *e;
-            let changed = forward_in_expr(body, e, known, unsafe_locals, type_table, cache);
-            update_known_from_assign(body, e, known, unsafe_locals);
+            let changed = forward_in_expr(engine,e, known, unsafe_locals, type_table, cache);
+            update_known_from_assign(engine.body, e, known, unsafe_locals);
             changed
         }
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
             if let Some(v) = *value {
-                forward_in_expr(body, v, known, unsafe_locals, type_table, cache)
+                forward_in_expr(engine,v, known, unsafe_locals, type_table, cache)
             } else {
                 false
             }
@@ -281,14 +313,14 @@ fn forward_in_stmt(
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
             let mut changed =
-                forward_in_expr(body, condition, known, unsafe_locals, type_table, cache);
+                forward_in_expr(engine,condition, known, unsafe_locals, type_table, cache);
             let mut modified = lookup_modified(cache, then_block);
             if let Some(eb) = else_block {
                 modified.extend(lookup_modified(cache, eb));
             }
             let mut then_known = known.clone();
             changed |= forward_in_block(
-                body,
+                engine,
                 then_block,
                 &mut then_known,
                 unsafe_locals,
@@ -298,7 +330,7 @@ fn forward_in_stmt(
             if let Some(eb) = else_block {
                 let mut else_known = known.clone();
                 changed |=
-                    forward_in_block(body, eb, &mut else_known, unsafe_locals, type_table, cache);
+                    forward_in_block(engine,eb, &mut else_known, unsafe_locals, type_table, cache);
             }
             known.invalidate_modified(&modified);
             changed
@@ -309,99 +341,99 @@ fn forward_in_stmt(
             known.invalidate_modified(&modified);
             let mut loop_known = known.clone();
             let changed =
-                forward_in_block(body, b, &mut loop_known, unsafe_locals, type_table, cache);
+                forward_in_block(engine,b, &mut loop_known, unsafe_locals, type_table, cache);
             known.invalidate_modified(&modified);
             changed
         }
         StmtKind::LabeledBlock { block: b, .. } => {
             let b = *b;
             let modified = lookup_modified(cache, b);
-            let changed = forward_in_block(body, b, known, unsafe_locals, type_table, cache);
+            let changed = forward_in_block(engine,b, known, unsafe_locals, type_table, cache);
             known.invalidate_modified(&modified);
             changed
         }
         StmtKind::Continue => false,
         StmtKind::LetDestructure { value, .. } => {
             let value = *value;
-            forward_in_expr(body, value, known, unsafe_locals, type_table, cache)
+            forward_in_expr(engine,value, known, unsafe_locals, type_table, cache)
         }
     }
 }
 
 fn forward_in_expr(
-    body: &mut Body,
+    engine: &mut Engine,
     id: ExprId,
     known: &mut KnownValues,
     unsafe_locals: &IndexSet<u32>,
     type_table: &TypeTable,
     cache: &ModifiedLocalsCache,
 ) -> bool {
-    let mut changed = try_forward_expr(body, id, known);
+    let mut changed = try_forward_expr(engine, id, known);
 
-    match &body.exprs[id].kind {
+    match &engine.body.exprs[id].kind {
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            changed |= forward_in_expr(body, left, known, unsafe_locals, type_table, cache);
-            changed |= forward_in_expr(body, right, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,left, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,right, known, unsafe_locals, type_table, cache);
         }
         ExprKind::Unary { expr: inner, .. } => {
             let inner = *inner;
-            changed |= forward_in_expr(body, inner, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,inner, known, unsafe_locals, type_table, cache);
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
-            changed |= forward_in_expr(body, value, known, unsafe_locals, type_table, cache);
-            update_known_from_target(body, target, value, known, unsafe_locals);
+            changed |= forward_in_expr(engine, value, known, unsafe_locals, type_table, cache);
+            update_known_from_target(engine.body, target, value, known, unsafe_locals);
         }
         ExprKind::Call { args, .. } => {
             let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
             for a in args {
-                changed |= forward_in_expr(body, a, known, unsafe_locals, type_table, cache);
+                changed |= forward_in_expr(engine,a, known, unsafe_locals, type_table, cache);
             }
         }
         ExprKind::CmRawCall { args, .. } => {
             let args = args.clone();
             for a in args {
-                changed |= forward_in_expr(body, a, known, unsafe_locals, type_table, cache);
+                changed |= forward_in_expr(engine,a, known, unsafe_locals, type_table, cache);
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
             let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            changed |= forward_in_expr(body, receiver, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,receiver, known, unsafe_locals, type_table, cache);
             for a in args {
-                changed |= forward_in_expr(body, a, known, unsafe_locals, type_table, cache);
+                changed |= forward_in_expr(engine,a, known, unsafe_locals, type_table, cache);
             }
         }
         ExprKind::IndirectCall { callee, args, .. } => {
             let callee = *callee;
             let args = args.clone();
-            changed |= forward_in_expr(body, callee, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,callee, known, unsafe_locals, type_table, cache);
             for a in args {
-                changed |= forward_in_expr(body, a, known, unsafe_locals, type_table, cache);
+                changed |= forward_in_expr(engine,a, known, unsafe_locals, type_table, cache);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
             let functor = *functor;
-            changed |= forward_in_expr(body, functor, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,functor, known, unsafe_locals, type_table, cache);
         }
         ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
             let inner = *inner;
-            changed |= forward_in_expr(body, inner, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,inner, known, unsafe_locals, type_table, cache);
         }
         ExprKind::Index { expr: inner, index } => {
             let (inner, index) = (*inner, *index);
-            changed |= forward_in_expr(body, inner, known, unsafe_locals, type_table, cache);
-            changed |= forward_in_expr(body, index, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,inner, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,index, known, unsafe_locals, type_table, cache);
         }
         ExprKind::Block(b) => {
             let b = *b;
-            changed |= forward_in_block(body, b, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_block(engine,b, known, unsafe_locals, type_table, cache);
         }
         ExprKind::LabeledBlock { block: b, .. } => {
             let b = *b;
             let modified = lookup_modified(cache, b);
-            changed |= forward_in_block(body, b, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_block(engine,b, known, unsafe_locals, type_table, cache);
             known.invalidate_modified(&modified);
         }
         ExprKind::If {
@@ -410,14 +442,14 @@ fn forward_in_expr(
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            changed |= forward_in_expr(body, condition, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,condition, known, unsafe_locals, type_table, cache);
             let mut modified = lookup_modified(cache, then_branch);
             if let Some(eb) = else_branch {
                 modified.extend(lookup_modified(cache, eb));
             }
             let mut then_known = known.clone();
             changed |= forward_in_block(
-                body,
+                engine,
                 then_branch,
                 &mut then_known,
                 unsafe_locals,
@@ -427,47 +459,47 @@ fn forward_in_expr(
             if let Some(eb) = else_branch {
                 let mut else_known = known.clone();
                 changed |=
-                    forward_in_block(body, eb, &mut else_known, unsafe_locals, type_table, cache);
+                    forward_in_block(engine,eb, &mut else_known, unsafe_locals, type_table, cache);
             }
             known.invalidate_modified(&modified);
         }
         ExprKind::StructLiteral { fields, .. } => {
             let vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
             for v in vals {
-                changed |= forward_in_expr(body, v, known, unsafe_locals, type_table, cache);
+                changed |= forward_in_expr(engine,v, known, unsafe_locals, type_table, cache);
             }
         }
         ExprKind::TupleLiteral { elements, .. } | ExprKind::ArrayLiteral { elements, .. } => {
             let elems = elements.clone();
             for e in elems {
-                changed |= forward_in_expr(body, e, known, unsafe_locals, type_table, cache);
+                changed |= forward_in_expr(engine,e, known, unsafe_locals, type_table, cache);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = *payload {
-                changed |= forward_in_expr(body, p, known, unsafe_locals, type_table, cache);
+                changed |= forward_in_expr(engine,p, known, unsafe_locals, type_table, cache);
             }
         }
         ExprKind::Match { expr: inner, arms } => {
             let inner = *inner;
             let arm_data: Vec<(Option<ExprId>, ExprId)> =
                 arms.iter().map(|a| (a.guard, a.body)).collect();
-            changed |= forward_in_expr(body, inner, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine, inner, known, unsafe_locals, type_table, cache);
             let mut modified = IndexSet::default();
             for (guard, arm_body) in &arm_data {
                 if let Some(g) = guard {
-                    modified.extend(collect_modified_expr(body, *g));
+                    modified.extend(collect_modified_expr(engine.body, *g));
                 }
-                modified.extend(collect_modified_expr(body, *arm_body));
+                modified.extend(collect_modified_expr(engine.body, *arm_body));
             }
             for (guard, arm_body) in arm_data {
                 let mut arm_known = known.clone();
                 if let Some(g) = guard {
                     changed |=
-                        forward_in_expr(body, g, &mut arm_known, unsafe_locals, type_table, cache);
+                        forward_in_expr(engine, g, &mut arm_known, unsafe_locals, type_table, cache);
                 }
                 changed |= forward_in_expr(
-                    body,
+                    engine,
                     arm_body,
                     &mut arm_known,
                     unsafe_locals,
@@ -479,13 +511,13 @@ fn forward_in_expr(
         }
         ExprKind::GlobalVarSet { value, .. } => {
             let value = *value;
-            changed |= forward_in_expr(body, value, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,value, known, unsafe_locals, type_table, cache);
         }
         ExprKind::VariantTag { expr }
         | ExprKind::VariantTest { expr, .. }
         | ExprKind::VariantPayload { expr, .. } => {
             let expr = *expr;
-            changed |= forward_in_expr(body, expr, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,expr, known, unsafe_locals, type_table, cache);
         }
         ExprKind::Switch {
             scrutinee,
@@ -496,7 +528,7 @@ fn forward_in_expr(
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            changed |= forward_in_expr(body, scrutinee, known, unsafe_locals, type_table, cache);
+            changed |= forward_in_expr(engine,scrutinee, known, unsafe_locals, type_table, cache);
             let mut modified = IndexSet::default();
             for &arm in &arms {
                 modified.extend(lookup_modified(cache, arm));
@@ -505,11 +537,11 @@ fn forward_in_expr(
             for arm in arms {
                 let mut arm_known = known.clone();
                 changed |=
-                    forward_in_block(body, arm, &mut arm_known, unsafe_locals, type_table, cache);
+                    forward_in_block(engine,arm, &mut arm_known, unsafe_locals, type_table, cache);
             }
             let mut default_known = known.clone();
             changed |= forward_in_block(
-                body,
+                engine,
                 default,
                 &mut default_known,
                 unsafe_locals,
@@ -524,14 +556,14 @@ fn forward_in_expr(
     changed
 }
 
-fn try_forward_expr(body: &mut Body, id: ExprId, known: &KnownValues) -> bool {
-    let fv = if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
+fn try_forward_expr(engine: &mut Engine, id: ExprId, known: &KnownValues) -> bool {
+    let fv = if let ExprKind::Local { index, .. } = &engine.body.exprs[id].kind {
         known.get_local(*index).cloned()
     } else {
         None
     };
     if let Some(fv) = fv {
-        body.exprs[id].kind = fv.to_expr_kind();
+        engine.replace_expr_kind(id, fv.to_expr_kind());
         return true;
     }
     false
