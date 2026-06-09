@@ -1187,12 +1187,19 @@ fn transform_lb_stmt(
                 case_index,
                 payload_local,
             );
-            let cloned_stmts = engine.body.blocks[subst_then].stmts.clone();
+            // Move the cloned stmts into `out` and empty the source block.
+            // Leaving them parented to `subst_then` AND a new block at the
+            // same time double-claims the stmt ids: the engine still
+            // enqueues `subst_then` for `apply_block`, and downstream
+            // rules (e.g. `const_branch_prune::eliminate_dead_stmts`'s
+            // void-block flatten) see the now-orphaned stmts a second
+            // time, which can erase live work.
+            let cloned_stmts = std::mem::take(&mut engine.body.blocks[subst_then].stmts);
             out.extend(cloned_stmts);
         } else if let Some(eb) = else_block {
             // None / non-matching case → emit a clone of the else block.
             let cloned = engine.clone_block(eb);
-            let cloned_stmts = engine.body.blocks[cloned].stmts.clone();
+            let cloned_stmts = std::mem::take(&mut engine.body.blocks[cloned].stmts);
             out.extend(cloned_stmts);
         }
 
