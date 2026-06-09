@@ -1,29 +1,16 @@
 //! Store-to-Load Forwarding optimization for Wado NIR.
 //!
-//! When a literal value reaches a `Local` read at its program point — with
-//! no intervening aliasing write — substitute the literal directly,
-//! eliminating the load. Particularly useful after SROA decomposes struct
-//! fields into scalar locals.
+//! Replace `Local` reads with the literal that reaches them. The engine's
+//! ValueGraph handles flow-sensitive reaching-defs, branch merges, loop
+//! and heap-write invalidation, so this rule only inspects each read's
+//! `ValueKind` and substitutes when it is a literal.
 //!
-//! Implementation: a thin wrapper over the engine's ValueGraph. For each
-//! `Local` read expression in the body, ask the engine for the read's
-//! `ValueId`; if its kind is a literal (`Int`, `Float`, `Bool`, `Char`),
-//! clone the original defining literal expression's `ExprKind` and replace
-//! the `Local`. The ValueGraph builder is responsible for flow-sensitive
-//! reaching-def tracking, branch merging (`Select`), loop invalidation,
-//! and heap-write invalidation — this rule contains none of that.
+//! Address-taken and `stores`-aliased locals are excluded — the builder
+//! does not model writes through references. Particularly useful after
+//! SROA decomposes struct fields into scalar locals.
 //!
-//! Safety carve-out: `Local`s whose address is taken (`&x` / `&mut x`) are
-//! excluded — the ValueGraph builder does not yet model writes through
-//! pointers, so a literal reaching such a local is unsound to forward.
-//! Other invalidation (calls, opaque writes, branches) is already encoded
-//! in the ValueGraph's per-point reaching-def state.
-//!
-//! Runs on the worklist rewrite engine: a per-function standalone session
-//! whose `apply_block` fires once at the body root and runs the
-//! whole-function substitution pass. The single rewrite point routes through
-//! the engine edit API (`replace_expr_kind`) so the parent map and use
-//! index stay coherent.
+//! Runs as a per-function standalone engine session whose `apply_block`
+//! fires once at the body root.
 
 use std::cell::Cell;
 
@@ -46,11 +33,9 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
         if func.body.is_none() {
             return false;
         }
-        // Canonical alias set: locals whose address is taken (`&x` / `&mut x`)
-        // plus those that flow through a `stores` clause. Mirrors `alias.rs`'s
-        // seeding; the rule treats their reads as forwarding-ineligible
-        // because the ValueGraph builder does not model writes through
-        // pointers or `stores`-aliased references.
+        // Forwarding-ineligible locals: address-taken (`&x` / `&mut x`)
+        // plus those flowing through a `stores` clause. The builder models
+        // writes through neither.
         let mut unsafe_locals = func.address_taken_locals.clone();
         unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
         let rule = StoreLoadForwardRule {
@@ -68,8 +53,6 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
 /// function literal-forwarding pass at the body root.
 pub(super) struct StoreLoadForwardRule {
     applied: Cell<bool>,
-    /// Pre-computed forwarding-ineligible locals; see the caller for how
-    /// this set is built.
     unsafe_locals: IndexSet<u32>,
 }
 
@@ -96,9 +79,7 @@ fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
         if unsafe_locals.contains(&local_index) {
             continue;
         }
-        // Skip if this Local is itself an assign target (LHS) — `x = ...`
-        // is a write, not a read, and rewriting the target with a literal
-        // makes no sense.
+        // Skip `Assign` LHS reads — they are writes, not reads.
         if is_assign_target(engine, expr) {
             continue;
         }
@@ -114,13 +95,12 @@ fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
         let Some(src) = engine.literal_source(vid) else {
             continue;
         };
-        // We clone the original literal `ExprKind` so the substituted node
-        // keeps its source `repr` and span. When several distinct literal
-        // expressions hash-cons to the same `ValueId` (e.g. `0` and `0x0`),
-        // `literal_source` returns the first one observed; the other
-        // literals' reprs are lost on substitution. This is sound — VN
-        // equality implies semantic equality — but may surface in NIR
-        // dumps and diagnostic spans for edge-case literals.
+        // Cloning the source `ExprKind` keeps the substituted node's
+        // `repr` and span. When distinct literal exprs hash-cons to one
+        // `ValueId` (e.g. `0` vs `0x0`), `literal_source` returns the
+        // first one — the others' reprs are lost on substitution. Sound
+        // (VN equality ⇒ semantic equality), but visible in NIR dumps and
+        // diagnostic spans for these edge-case literals.
         let new_kind = engine.body.exprs[src].kind.clone();
         engine.replace_expr_kind(expr, new_kind);
         changed = true;

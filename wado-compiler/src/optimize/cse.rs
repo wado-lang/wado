@@ -23,23 +23,13 @@
 //! }
 //! ```
 //!
-//! Identity check (Stage 3 migration to the engine's ValueGraph
-//! side-table; see `docs/wep-2026-06-05-worklist-rewrite-engine.md`):
-//! two expressions are "the same" iff `engine.value(e1) == engine.value(e2)`.
-//! The ValueGraph builder threads each local's reaching definition through
-//! `current_value` and merges at If / Match / Switch endpoints, so two
-//! syntactically identical `Local` reads at points where the local has been
-//! reassigned in between resolve to different `ValueId`s — making the
-//! `stmt_modifies_any` / `block_modifies_any` reassignment guard from the
-//! pre-Stage-3 pass redundant (the equality check already encodes it).
+//! Identity check: two expressions are "the same" iff `engine.value(e1) ==
+//! engine.value(e2)`. The ValueGraph already encodes reassignment between
+//! occurrences, so this pass needs no separate modification guard.
 //!
-//! Runs on the worklist rewrite engine as a [`Rule`]: a per-function
-//! standalone engine session whose `apply_block` fires once at the body
-//! root and walks every loop in the function, applying the guard/body
-//! redundancy fold per loop. All mutations route through the engine edit
-//! API (`alloc_stmt`, `alloc_expr`, `clone_expr`, `set_block_stmts`,
-//! `replace_expr_kind`, `alloc_local`) so the parent map and use index
-//! stay coherent.
+//! Runs as a per-function standalone engine session whose `apply_block`
+//! fires once at the body root and walks every loop in the function,
+//! applying the guard/body redundancy fold per loop.
 
 use std::cell::Cell;
 
@@ -225,15 +215,13 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
 }
 
 /// Collect every `Binary` subexpression of `expr` paired with its ValueId.
-/// Recurses into Binary's children (left/right) and Unary's inner expr to
-/// match the pre-Stage-3 collector's reach (which keyed on `Binary` while
-/// peering through one level of Unary, e.g., `!(p * p <= limit)`).
+/// Recurses through Binary/Unary so candidates like `!(p * p <= limit)`
+/// are reached. Two-pass: pass 1 collects candidates under `&body`;
+/// pass 2 attaches ValueIds (which needs `&mut engine`).
 fn collect_binary_candidates(
     engine: &mut Engine,
     expr: ExprId,
 ) -> Vec<(ExprId, ValueId, TypeId, Span)> {
-    // Pass 1 — walk under an immutable borrow of body and collect Binary
-    // candidate metadata. The value-graph query is deferred to pass 2.
     let mut binary_exprs: Vec<(ExprId, TypeId, Span)> = Vec::new();
     {
         let body: &Body = &*engine.body;
@@ -252,9 +240,8 @@ fn collect_binary_candidates(
             }
         }
     }
-    // Pass 2 — attach ValueIds. An expr whose ValueId is `None` is impure
-    // by the builder's classification (a `Binary` over a non-pure child
-    // such as a `Call`) and is filtered out here.
+    // Drop impure candidates (a `Binary` whose ValueId is `None` has an
+    // impure child like a `Call`).
     binary_exprs
         .into_iter()
         .filter_map(|(e, type_id, span)| engine.value(e).map(|vn| (e, vn, type_id, span)))
@@ -287,13 +274,8 @@ fn replace_matching_in_stmt(
     cse_local_name: &str,
     type_id: TypeId,
 ) {
-    // Snapshot the matching ExprIds *before* any rewrite. The engine's
-    // ValueGraph cache is built lazily and not invalidated by
-    // `replace_expr_kind`, so post-rewrite `engine.value(e)` queries
-    // happen to still return the original VNs today — but relying on that
-    // makes CSE depend on an implementation detail of the cache.
-    // Snapshotting up-front decouples us: this loop is now correct
-    // regardless of any future change to invalidation policy.
+    // Snapshot matches before rewriting — see `Engine::value`'s
+    // invalidation contract.
     let mut exprs: Vec<ExprId> = Vec::new();
     collect_exprs_in_stmt(engine.body, stmt, &mut exprs);
     let matches: Vec<ExprId> = exprs
@@ -301,9 +283,7 @@ fn replace_matching_in_stmt(
         .filter(|&e| engine.value(e) == Some(target))
         .collect();
     for e in matches {
-        // The CSE'd subtree's type matches the hoisted local's type; the
-        // engine tracks parent / use-index coherence on kinds only, so a
-        // direct type-id write is independent of `replace_expr_kind`.
+        // `replace_expr_kind` doesn't touch `type_id`; write it directly.
         engine.body.exprs[e].type_id = type_id;
         engine.replace_expr_kind(
             e,
@@ -315,16 +295,10 @@ fn replace_matching_in_stmt(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Subtree enumeration
-// ---------------------------------------------------------------------------
-//
-// These mirror the pre-Stage-3 `stmt_contains_expr` / `block_contains` /
-// `expr_contains` walk shape (including the deliberate opaque treatment of
-// nested `Loop` statements — CSE in an outer loop does not reach into inner
-// loops, where the same expression would compute a different value per
-// iteration).
-
+/// Walk `stmt`'s subtree, collecting `ExprId`s of every node CSE may
+/// rewrite. Nested `Loop` statements are deliberately opaque: an outer
+/// loop's CSE does not reach into them, since the same expression
+/// computes different values per inner-loop iteration.
 fn collect_exprs_in_stmt(body: &Body, stmt: StmtId, out: &mut Vec<ExprId>) {
     match &body.stmts[stmt].kind {
         StmtKind::Expr(e) => collect_exprs_in_expr(body, *e, out),
@@ -342,7 +316,7 @@ fn collect_exprs_in_stmt(body: &Body, stmt: StmtId, out: &mut Vec<ExprId>) {
                 collect_exprs_in_block(body, *eb, out);
             }
         }
-        // Nested loops are opaque (matches the pre-Stage-3 `stmt_contains_expr`).
+        // Inner loops are opaque per the rationale on `collect_exprs_in_stmt`.
         StmtKind::Loop { .. } => {}
         StmtKind::LabeledBlock { block, .. } => collect_exprs_in_block(body, *block, out),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {

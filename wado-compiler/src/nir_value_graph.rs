@@ -5,10 +5,10 @@
 //! SkelTree (Layer 1 — see [`crate::nir_arena`]) references pure operands by
 //! `ValueId`; pure values live exclusively here.
 //!
-//! See `docs/wep-2026-06-05-worklist-rewrite-engine.md` (Stage 1). This
-//! module is currently standalone: nothing in the optimizer references it
-//! yet. Stage 2 wires the per-function builder; the engine and rules pick it
-//! up in Stage 3+.
+//! Consumed by [`crate::nir_engine::Engine::value`] (which lazily builds the
+//! per-function graph via [`builder::build`]) and through that by the CSE
+//! and store-load-forward rules. See
+//! `docs/wep-2026-06-05-worklist-rewrite-engine.md`.
 
 pub mod builder;
 
@@ -74,24 +74,19 @@ impl HeapVersion {
 
 /// A pure-value expression. Hash-consed by structural equality.
 ///
-/// Anything with side effects (`Call`, `MethodCall`, `Assign`-to-heap, …)
-/// stays in the SkelTree. The Skel side references a pure operand via the
-/// `Operand::Value(ValueId)` enum that lands in Stage 7; until then a Stage-2
-/// side-table `value_of: IndexMap<ExprId, ValueId>` connects the SkelTree's
-/// pure `ExprKind` positions to their hash-consed values.
-///
-/// `String` literals are stored as `String` for now. Phase 2 may intern them
-/// behind an id table if it measures.
+/// Side-effecting nodes (`Call`, `MethodCall`, `Assign`-to-heap, …) stay
+/// in the SkelTree. Pure operand positions connect to their `ValueId`s
+/// through the per-function side-table `value_of: IndexMap<ExprId,
+/// ValueId>` populated by [`crate::nir_value_graph::builder`]. Stage 7
+/// of the WEP would replace that table with `Operand::Value(ValueId)` on
+/// Skel slots, but is deferred.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ValueKind {
     // ---- Literals ----
     Int(u64),
-    /// `f64` bit pattern. Same bit pattern → same `ValueId`; distinct bit
-    /// patterns (including different NaN payloads) are distinct values. This
-    /// is the safe definitional equality: runtime `==` on floats is not the
-    /// same relation (NaN is never `==` itself), and equality saturation
-    /// rules that rewrite over float values must take that into account
-    /// without help from the hash-cons.
+    /// `f64` bit pattern: distinct NaN payloads and `+0.0` / `-0.0` are
+    /// distinct values. Algebraic rules over floats must consult numeric
+    /// equality separately — runtime `==` is not this relation.
     Float(u64),
     Bool(bool),
     Char(char),
@@ -100,10 +95,8 @@ pub enum ValueKind {
     Unit,
 
     // ---- Opaque ----
-    /// Anonymous unknown. Parameters are seeded with one `Opaque` each at
-    /// function entry; loop locals are `Opaque` in the MVP. Stage 6 promotes
-    /// induction-pattern locals to a tagged form (added to this enum at
-    /// that stage; tracked in the migration plan in the WEP).
+    /// Anonymous unknown. Used for parameters and loop locals; Stage 6
+    /// may promote recognised inductions to a tagged form.
     Opaque(OpaqueId),
 
     // ---- Pure arithmetic ----
@@ -140,11 +133,10 @@ pub enum ValueKind {
     },
 
     // ---- Heap-bearing reads ----
-    /// `receiver.field_index` at the given heap version. Two reads with the
-    /// same `(receiver, field_index, heap_ver)` triple share a `ValueId`,
-    /// automatically forwarding stored values. `field_index` rather than
-    /// `field_name` because the receiver `ValueId` already pins the type:
-    /// indices that collide across types belong to distinct receivers.
+    /// `receiver.field_index` at the given heap version. `field_index`
+    /// rather than `field_name` because the receiver `ValueId` already
+    /// pins the type: indices that collide across types belong to
+    /// distinct receivers.
     FieldAccess {
         receiver: ValueId,
         field_index: u32,
@@ -152,12 +144,9 @@ pub enum ValueKind {
     },
 }
 
-/// Hash-consed pure-value pool. One instance per function in normal use.
-///
-/// `ValueId`s allocated by one pool refer to that pool's `values` vector;
-/// mixing pools is a logic bug. The pool also owns the `OpaqueId` counter,
-/// so [`ValuePool::fresh_opaque`] returns a globally-unique-within-this-pool
-/// identity each call.
+/// Hash-consed pure-value pool. One instance per function. Also owns the
+/// `OpaqueId` counter, so [`ValuePool::fresh_opaque`] returns a
+/// pool-unique identity each call.
 #[derive(Debug, Default)]
 pub struct ValuePool {
     /// Allocated values, in `ValueId` order. `values[id.index() as usize]`
@@ -208,9 +197,6 @@ impl ValuePool {
     pub fn fresh_opaque(&mut self) -> ValueId {
         let opaque = OpaqueId(self.next_opaque);
         self.next_opaque += 1;
-        // `Opaque(n)` for a fresh `n` is never present in `interned`, so the
-        // intern is guaranteed to allocate. Going through `intern` keeps
-        // `values` and `interned` in sync.
         self.intern(ValueKind::Opaque(opaque))
     }
 
@@ -220,12 +206,6 @@ impl ValuePool {
     pub fn kind(&self, id: ValueId) -> &ValueKind {
         &self.values[id.0 as usize]
     }
-
-    // ---- Convenience builders ----
-    //
-    // Tests and the Stage-2 builder use these to construct values without
-    // repeating the `ValueKind::` prefix on every line. Each one threads
-    // through `intern`, so hash-cons applies.
 
     #[inline]
     pub fn int(&mut self, value: u64) -> ValueId {

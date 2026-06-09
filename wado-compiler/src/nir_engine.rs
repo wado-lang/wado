@@ -92,11 +92,10 @@ pub struct Engine<'a> {
     /// pass a scratch `Vec`; those bodies have no locals and their rules never
     /// allocate, so it stays empty.
     locals: &'a mut Vec<NirLocal>,
-    /// Lazily-built ValueGraph for this session. `None` until the first call
-    /// to [`Engine::value`] / [`Engine::value_kind`]; cleared by
-    /// [`Engine::invalidate_value_graph`]. See
-    /// `docs/wep-2026-06-05-worklist-rewrite-engine.md` (Stage 1 – 2) and
-    /// [`crate::nir_value_graph`] for the data model.
+    /// Lazy per-session ValueGraph cache. `None` until the first
+    /// [`Engine::value`] / [`Engine::value_kind`] call; cleared by
+    /// [`Engine::invalidate_value_graph`]. See [`crate::nir_value_graph`]
+    /// for the data model.
     value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
 }
 
@@ -124,30 +123,18 @@ impl<'a> Engine<'a> {
         engine
     }
 
-    /// Return the [`ValueId`] of `expr` if it is a pure expression that the
-    /// per-function ValueGraph builder assigned an id to. Returns `None` for
-    /// impure / allocation-bearing / control-flow expressions, and for any
-    /// `ExprId` allocated after the session's ValueGraph was built (the
-    /// builder runs once on first access; the side-table does not see
-    /// post-build edits).
-    ///
-    /// First call builds the ValueGraph on demand via
-    /// [`crate::nir_value_graph::builder::build`] (one walk of the body);
-    /// subsequent calls are O(1).
+    /// Return the [`ValueId`] of `expr` if the per-function ValueGraph
+    /// assigned one. Returns `None` for impure / allocation-bearing /
+    /// control-flow expressions and for any `ExprId` allocated after the
+    /// cache was built. Built lazily on first call.
     ///
     /// # Invalidation contract
     ///
-    /// **Edits via `replace_expr_kind` / `set_block_stmts` / `alloc_*` do
-    /// not invalidate this cache.** The side-table keyed on pre-edit
-    /// `ExprId`s continues to return its original VNs. A rule that wants
-    /// to re-query after structurally rewriting the body must call
-    /// [`Engine::invalidate_value_graph`] explicitly — otherwise the
-    /// cached VN is the value at *build time*, not at query time.
-    ///
-    /// The typical pattern is to consult the value graph once at the
-    /// start of a rule and snapshot any VN results you intend to act on,
-    /// then perform the edits. See `optimize/cse.rs` and
-    /// `optimize/store_load_forward.rs` for examples.
+    /// Edits via `replace_expr_kind` / `set_block_stmts` / `alloc_*` do
+    /// **not** invalidate this cache — it keeps returning the VNs from
+    /// build time. Snapshot any VN results before editing, or call
+    /// [`Engine::invalidate_value_graph`] to force a rebuild. See
+    /// `optimize/cse.rs` and `optimize/store_load_forward.rs`.
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
         self.value_graph.as_ref()?.value_of.get(&expr).copied()
@@ -184,11 +171,11 @@ impl<'a> Engine<'a> {
         if self.value_graph.is_some() {
             return;
         }
-        // The builder does not need parameter seeding to behave correctly —
-        // the first read of an unseeded local lazily allocates an `Opaque`
-        // and caches it, which is functionally equivalent to up-front
-        // seeding (every subsequent read of the same local returns the same
-        // `ValueId`).
+        // Pass `&[]` for params: the builder's `read_local` fallback caches
+        // an `Opaque` on first read, which is observationally identical to
+        // up-front seeding as long as the engine never needs non-`Opaque`
+        // parameter values. Wire `params` through `Engine::new` if that
+        // changes.
         let build = crate::nir_value_graph::builder::build(&*self.body, &[]);
         self.value_graph = Some(build);
     }

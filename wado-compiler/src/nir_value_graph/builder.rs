@@ -2,38 +2,30 @@
 //!
 //! Walks the SkelTree (`Body`) once and assigns a [`ValueId`] to every pure
 //! [`ExprId`]. Impure or allocation-bearing expressions (calls, struct/array
-//! literals, control flow, etc.) get no entry in `value_of`; their Skel
-//! position carries the value at extraction time, not a ValueGraph node.
+//! literals, control flow, etc.) get no entry in `value_of`.
 //!
-//! See `docs/wep-2026-06-05-worklist-rewrite-engine.md` (Stage 2). The
-//! ValueGraph this builder produces is not yet consumed by any rule —
-//! Stages 3 – 6 migrate the existing passes onto it.
+//! Consumed lazily by [`crate::nir_engine::Engine::value`]; see the WEP at
+//! `docs/wep-2026-06-05-worklist-rewrite-engine.md`.
 //!
-//! # Flow handling (MVP)
+//! # Flow handling
 //!
-//! - Function parameters are seeded with a fresh `Opaque` value each.
+//! - Parameters seed `current_value` with a fresh `Opaque` each.
 //! - `Let` / `Assign`-to-bare-`Local` updates `current_value[local_idx]` to
 //!   the RHS's value (or `Opaque` if the RHS is impure).
-//! - `If` snapshots `current_value`, walks both branches, then merges: for
-//!   each local that diverged across the branches we hash-cons a
-//!   [`ValueKind::Select`] keyed on the condition's value. If the condition
-//!   is impure (no ValueGraph id), the merge falls back to a fresh
-//!   `Opaque`.
+//! - `If` snapshots `current_value`, walks both branches, then merges:
+//!   diverging locals hash-cons a [`ValueKind::Select`] keyed on the
+//!   condition's value, falling back to `Opaque` if the condition is impure.
 //! - `Match` / `Switch` walk every arm and merge n-ary: if every arm agrees
-//!   on a local, that value carries; otherwise the local goes `Opaque`. We
-//!   do not yet construct n-ary `Select` chains for them — that is Stage 6
-//!   territory (induction recognition + bound implication need the same
-//!   machinery and are tackled together).
+//!   on a local, that value carries; otherwise the local goes `Opaque`.
+//!   N-ary `Select` chains are not yet constructed.
 //! - `Loop` pre-scans the body for locals it may write and reassigns each
 //!   to a fresh `Opaque` before walking the body; post-loop those locals
 //!   stay `Opaque`. Stage 6 swaps recurring-pattern locals to `LoopPhi`.
-//! - `LabeledBlock` walks as a regular block. `Break` flow-merging into the
-//!   label target is conservative — locals modified inside that escape via
-//!   `Break` end up `Opaque` after the labeled block.
+//! - `LabeledBlock` marks every local written in its subtree `Opaque` on
+//!   exit, since `break` paths can carry writes the fall-through state
+//!   never observes.
 //! - Pattern bindings (`LetDestructure`, `Match` arm bindings) are seeded
-//!   with `Opaque`. Field destructuring will become real `FieldAccess` /
-//!   `VariantPayload` Value kinds once heap-version tracking activates in
-//!   Stage 5.
+//!   with `Opaque`.
 
 use crate::hashmap::IndexMap;
 use crate::nir::{NirParam, NirUnaryOp};
@@ -48,17 +40,12 @@ use super::{HeapVersion, ValueId, ValuePool};
 /// appropriate field's version (or every field's version, for opaque
 /// writes) bumps to a fresh value.
 ///
-/// Granularity is **per field_index** (Q3 / Stage 5). A direct write to
-/// `obj.f` bumps only the `f` slot — a subsequent read of `obj.g` keeps
-/// its previous version, so the hash-cons key
-/// `(receiver, field, heap_ver)` agrees with prior reads and they share a
-/// `ValueId`. An opaque write (a Call, an `Index` / `Deref` assign target,
-/// a Loop entry, an If/Match/Switch merge) calls [`HeapState::bump_all`],
-/// invalidating every field's version.
-///
-/// Phase 2 may refine to `(receiver_root, field)` granularity using
-/// `mod_ref.rs` — at that point a Call that provably cannot alias one
-/// receiver root would bump only the others. MVP keeps it field-only.
+/// Granularity is per `field_index`: a direct write to `obj.f` bumps the
+/// `f` slot only, so a later read of `obj.g` keeps its prior version and
+/// shares a `ValueId` with earlier reads. Opaque writes (Call,
+/// `Index` / `Deref` assign target, Loop entry, branch merge) call
+/// [`HeapState::bump_all`], invalidating every field. Refinement to
+/// `(receiver_root, field)` granularity via `mod_ref.rs` is a follow-up.
 struct HeapState {
     /// Next fresh version to hand out.
     next: HeapVersion,
@@ -102,14 +89,10 @@ impl HeapState {
         self.default_version = v;
     }
 
-    /// Snapshot the read-visible part of the state (the `per_field` map and
-    /// `default_version`) so an arm walk can restore them on exit. `next` is
-    /// deliberately *not* part of the snapshot: it is a monotonic counter
-    /// shared across the entire function, so an arm's `bump_*` calls
-    /// continue to hand out unique versions even after restore. This keeps
-    /// VN equality across arms sound — no two distinct heap states ever
-    /// reuse a version — while preventing arm 1's bumps from forcing
-    /// arm 2's reads to spuriously distinct VNs.
+    /// Snapshot the read-visible state (`per_field`, `default_version`)
+    /// only. `next` is a monotonic counter shared across the whole
+    /// function, so arms restored from the snapshot never reuse a version
+    /// another arm allocated.
     fn snapshot(&self) -> HeapSnapshot {
         HeapSnapshot {
             per_field: self.per_field.clone(),
@@ -197,10 +180,6 @@ impl<'a> Builder<'a> {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Blocks / statements
-    // ------------------------------------------------------------------
-
     fn walk_block(&mut self, block: crate::nir_arena::BlockId) {
         let stmts = self.body.blocks[block].stmts.clone();
         for s in stmts {
@@ -220,9 +199,8 @@ impl<'a> Builder<'a> {
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
                 self.walk_expr(value);
-                // MVP: destructured bindings are Opaque. Field-projection
-                // Value kinds will activate alongside `FieldAccess` in
-                // Stage 5.
+                // Destructured bindings are Opaque for now; field-projection
+                // Value kinds for them are a follow-up.
                 self.bind_pattern_opaque(pattern);
             }
             StmtKind::Expr(e) => {
@@ -253,32 +231,25 @@ impl<'a> Builder<'a> {
                 }
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
-                // Branches may have written to heap; bump_all conservatively
-                // (Stage 5 MVP). Stage 6 may refine to per-arm join.
+                // Conservative bump_all after the merge — per-arm join is
+                // a follow-up.
                 self.heap_state.bump_all();
             }
             StmtKind::Loop { body: lb } => {
                 self.walk_loop(lb);
             }
             StmtKind::LabeledBlock { block, .. } => {
-                // Conservative: any local written anywhere in the labeled
-                // block's subtree could disagree with the fall-through
-                // value via a `break` (either to this label or to an
-                // enclosing one) that escapes before the write's effect
-                // propagates to the fall-through `current_value`. Mark
-                // every modified local Opaque post-LB. A fall-through-diff
-                // check alone would miss writes that occur only on a
-                // break-only path.
+                // A `break` to this label (or an enclosing one) can carry a
+                // write whose effect never reaches the fall-through state.
+                // Mark every local written anywhere in the subtree Opaque;
+                // a fall-through-diff check would miss break-only-path
+                // writes.
                 self.walk_block(block);
                 self.dirty_all_writes_in_block(block);
                 self.heap_state.bump_all();
             }
         }
     }
-
-    // ------------------------------------------------------------------
-    // Expressions
-    // ------------------------------------------------------------------
 
     /// Walk `expr` and return its ValueGraph id if the expression is pure.
     /// Impure expressions return `None`; their pure children are still walked
@@ -365,10 +336,6 @@ impl<'a> Builder<'a> {
                 let v = self
                     .walk_expr(value)
                     .unwrap_or_else(|| self.pool.fresh_opaque());
-                // Bare `Local` target = local reassignment (no heap write).
-                // `FieldAccess { field_index }` target = heap write to that
-                // field. `Index` / `Unary::Deref` targets are opaque heap
-                // writes — bump every field's version.
                 let target_kind = self.body.exprs[target].kind.clone();
                 match target_kind {
                     ExprKind::Local { index, .. } => {
@@ -398,9 +365,8 @@ impl<'a> Builder<'a> {
 
             // ---- Control-flow expressions ----
             ExprKind::Block(block) => {
-                // Walk every stmt for the side-table; the block expr itself
-                // is not currently Value-graph-able (Stage 6 may revisit for
-                // `Match`-replacement Selects).
+                // Block expressions are walked for the side-table but get
+                // no `ValueId`.
                 self.walk_block(block);
                 None
             }
@@ -422,9 +388,7 @@ impl<'a> Builder<'a> {
                 None
             }
             ExprKind::LabeledBlock { block, .. } => {
-                // See the `StmtKind::LabeledBlock` arm for the rationale —
-                // a break-only-path write is invisible to a fall-through-
-                // diff check, so dirty every local written in the subtree.
+                // Same break-only-write hazard as the `StmtKind::LabeledBlock` arm.
                 self.walk_block(block);
                 self.dirty_all_writes_in_block(block);
                 self.heap_state.bump_all();
@@ -557,18 +521,13 @@ impl<'a> Builder<'a> {
         if let Some(&v) = self.current_value.get(&idx) {
             v
         } else {
-            // First read of a local not yet bound by Let / param seeding —
-            // shouldn't happen on well-typed NIR, but stay graceful: emit an
-            // Opaque and record it so subsequent reads agree.
+            // Unbound locals shouldn't occur on well-typed NIR; cache a
+            // fresh Opaque so subsequent reads agree.
             let v = self.pool.fresh_opaque();
             self.current_value.insert(idx, v);
             v
         }
     }
-
-    // ------------------------------------------------------------------
-    // Pattern bindings
-    // ------------------------------------------------------------------
 
     fn bind_pattern_opaque(&mut self, pat: PatId) {
         match self.body.pats[pat].kind.clone() {
@@ -606,10 +565,6 @@ impl<'a> Builder<'a> {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Control flow: branch merge and loop handling
-    // ------------------------------------------------------------------
-
     /// Merge an if-style two-arm structural endpoint. For each local that
     /// existed before the branch:
     /// - Both arms agree → keep that value.
@@ -640,9 +595,8 @@ impl<'a> Builder<'a> {
     }
 
     /// Merge n arms (Match / Switch). For each pre-branch local: if every
-    /// arm agrees, keep that value; otherwise fall back to `Opaque`. We do
-    /// not currently build n-ary `Select` chains — Stage 6 introduces the
-    /// machinery for that alongside induction recognition.
+    /// arm agrees, keep that value; otherwise fall back to `Opaque`. N-ary
+    /// `Select` chains are not yet constructed.
     fn merge_n_arms(
         &mut self,
         saved: &IndexMap<u32, ValueId>,
@@ -678,8 +632,6 @@ impl<'a> Builder<'a> {
         for arm in arms {
             self.current_value = saved.clone();
             self.heap_state.restore(saved_heap.clone());
-            // Pattern bindings introduced by this arm are conservatively
-            // Opaque. The arm body and guard are walked from that state.
             self.bind_pattern_opaque(arm.pattern);
             if let Some(g) = arm.guard {
                 self.walk_expr(g);
@@ -692,45 +644,29 @@ impl<'a> Builder<'a> {
         self.merge_n_arms(&saved, &states);
     }
 
-    /// Pre-scan a loop body for locals it may write and reassign each to a
-    /// fresh `Opaque` before walking. Locals untouched by the body keep
-    /// their pre-loop values. Post-loop, the modified locals are again
-    /// `Opaque` — the body may have run 0..N times and we cannot describe
-    /// the final value without a `LoopPhi`. (MVP — Stage 6 swaps in
-    /// `LoopPhi` for recognisable inductions.)
+    /// Reassign every local the body may write to a fresh `Opaque` before
+    /// and after the walk, and bump the heap state on both sides. The body
+    /// may run 0..N times, so in-body reads must not share `ValueId`s
+    /// with pre-loop reads, and post-loop reads must not share them with
+    /// in-body reads. (Locals declared inside the loop need no pre-seed:
+    /// they get fresh `Opaque`s as the body walks.)
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
         collect_writes_in_block(self.body, body_block, &mut writes);
         for idx in &writes {
-            // Locals not yet in `current_value` (e.g., declared inside the
-            // loop) get fresh Opaques as part of walking the body; we don't
-            // need to pre-seed those.
             if self.current_value.contains_key(idx) {
                 let opaque = self.pool.fresh_opaque();
                 self.current_value.insert(*idx, opaque);
             }
         }
-        // Same reasoning for heap: the body may have run 0..N times before
-        // the body walk begins, so reads inside the body must not share
-        // heap versions with pre-loop reads.
         self.heap_state.bump_all();
         self.walk_block(body_block);
-        // After the body walks, an in-loop `Assign` may have overwritten a
-        // pre-seeded Opaque with a derived value (e.g., `i = i + 1` writes
-        // `Binary(Add, OpaqueEntry, Int 1)`). The post-loop value is still
-        // unknown — there could have been 0, 1, or many iterations — so
-        // reset modified locals to a fresh Opaque again.
         for idx in &writes {
             if self.current_value.contains_key(idx) {
                 let opaque = self.pool.fresh_opaque();
                 self.current_value.insert(*idx, opaque);
             }
         }
-        // Symmetric to the pre-loop bump: the body may have written to
-        // any field via `obj.f = ...` (or via an opaque heap-write event).
-        // Post-loop reads must not share heap versions with in-body reads,
-        // since the body's last iteration's stored value can't be known to
-        // reach the post-loop point in a 0-iteration execution.
         self.heap_state.bump_all();
     }
 
@@ -752,9 +688,9 @@ impl<'a> Builder<'a> {
 }
 
 /// Collect every local index that an `Assign`-to-bare-`Local`, a `Let`, or
-/// a `LetDestructure` binding writes anywhere in `block`'s subtree. Used by
-/// `walk_loop` to identify the locals it must reset to `Opaque` at loop
-/// entry.
+/// a `LetDestructure` binding writes anywhere in `block`'s subtree. Used
+/// by `walk_loop` and `dirty_all_writes_in_block` to mark the right set
+/// of locals `Opaque` on entry/exit of flow-opaque constructs.
 fn collect_writes_in_block(
     body: &Body,
     block: crate::nir_arena::BlockId,
@@ -1253,7 +1189,7 @@ mod tests {
         assert!(!r.value_of.contains_key(&call));
     }
 
-    // ----- Stage 5: FieldAccess heap-version behavior -----
+    // ----- FieldAccess heap-version behavior -----
 
     #[test]
     fn two_field_reads_same_field_share_value_id() {
@@ -1349,7 +1285,7 @@ mod tests {
         assert!(!r.value_of.contains_key(&fa));
     }
 
-    // ----- Per-arm heap snapshot (P1-3) -----
+    // ----- Per-arm heap snapshot -----
 
     #[test]
     fn switch_arm_field_writes_do_not_leak_across_arms() {
@@ -1403,7 +1339,7 @@ mod tests {
         assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_arm]);
     }
 
-    // ----- LabeledBlock break-only-path writes (P1-4) -----
+    // ----- LabeledBlock break-only-path writes -----
 
     #[test]
     fn labeled_block_break_only_write_marks_local_opaque() {

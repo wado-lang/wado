@@ -7,13 +7,15 @@ rules under equality-saturation semantics, and a call-graph-driven
 interprocedural driver replacing the global fixed-point loop.
 
 The engine substrate, the arena NIR, the routing of every intra-procedural
-pass through the engine edit API, and the standalone ValueGraph
-foundation (kinds, hash-cons pool, per-function builder) have landed. The
-required-path rule migrations and interprocedural worklist remain. The
-full Layer-2 promotion (Skel pure-`ExprKind` retirement and saturation-
-driven engine) stays in this WEP as the terminal ideal but is gated
-behind measurement — see "Why Layer 2 promotion is deferred" and the
-"Optional acceleration" entries in the migration plan.
+pass through the engine edit API, and the ValueGraph foundation (kinds,
+hash-cons pool, per-function builder) have all landed, along with the
+Stage 3 (`cse`) and Stage 5 (`store_load_forward`) rule migrations onto
+the ValueGraph. The remaining required-path migrations and the
+interprocedural worklist are open. Full Layer-2 promotion (Skel
+pure-`ExprKind` retirement and saturation-driven engine) stays in this
+WEP as the terminal ideal but is gated behind measurement — see "Why
+Layer 2 promotion is deferred" and the "Optional acceleration" entries
+in the migration plan.
 
 ## Context
 
@@ -26,17 +28,10 @@ as a `Rule` (or per-function standalone session of one) on it, and every
 mutation goes through `Engine::*` so the parent map and use index stay
 coherent.
 
-What that gave us:
-
-- Arena NIR (`nir_arena.rs`), parent map + use index per session.
-- `EngineBuffers` pooled across sessions; `Engine::new` allocations cut.
-- All intra-procedural rules routed through the engine edit API:
-  `ref_elim`, `elide_box_local`, `value_copy_elide`, `labeled_block_fusion`
-  in the shared peephole session; `sroa`, `container_sroa`,
-  `store_load_forward`, `copy_prop`, `cse`, `licm`,
-  `condition_implication`, `tmpl_hoist` in per-function standalone
-  sessions; `match_to_switch`, `select_lowering`, and the env-free
-  `const_folding` subset in the peephole session.
+What that gave us is the arena NIR, the parent map + use index, the
+pooled `EngineBuffers`, and every intra-procedural rule running through
+the engine edit API (see the "Completed substrate" checklist below for
+the exact pass list).
 
 What it has not yet given us is the architectural win the redesign exists
 for:
@@ -51,8 +46,6 @@ for:
 - The global fixed-point loop and `OptConfig::iterations` are still
   present; intra-procedural saturation comes only from the loop re-running
   each rule.
-- `niri.rs` (CTFE interpreter) still mutates `Body` in place via
-  `reduce_*_a`, blocking its integration with the engine.
 
 A native profile of `wado compile` on `package-gale` (34.5k lines) pins
 the surviving cost to per-pass analysis reconstruction: `optimize` is
@@ -104,7 +97,7 @@ flow-sensitive migration stage). Function parameters seed
 MVP. They are pure but allocation-bearing; `const_object_globalization`
 already covers the constant-sharing case, and Value-graph promotion
 needs an extraction policy that decides when two identical literals may
-share an allocation. Phase 2 measured follow-up.
+share an allocation. Deferred until measurement justifies it.
 
 ### Heap modeling
 
@@ -146,35 +139,21 @@ a cost-minimal Skel form for each `Operand::Value(...)`. A multi-use
 the cost model favours sharing over duplication — that is the "real CSE"
 decision.
 
-Equality saturation is **optional acceleration**, not a required
-checkpoint. The required path runs the rules **destructively** as today
-— a rule that fires replaces the source node, the engine re-enqueues
-neighbours, and the global fixed-point loop converges (the existing
-`peephole.rs` / `gate.rs` model). The ValueGraph still buys
-hash-cons-based equality and reaching-def-by-construction in destructive
-mode; what only saturation unlocks is phase-ordering dissolution and
-algebraic exploration (e.g. re-association, distributive law,
-strength-reduction-per-use, cost-based share-vs-duplicate).
-
-Stage 8 below promotes the engine to saturation + extraction. It is
-deferred until measured wins justify the cost — see the rationale below.
+Equality saturation is optional acceleration: the required path runs
+rules destructively as today, with the ValueGraph supplying hash-cons
+equality and reaching-def-by-construction. Saturation (Stage 8) adds
+phase-ordering dissolution and algebraic exploration on top, and is
+deferred until measurement justifies it.
 
 ## Why two-tier (not classical SSA)
 
-- Wado emits structured Wasm. Classical SSA construction plus a relooper /
-  stackifier buys nothing for a target that already has block / loop / if,
-  and dissolves the structure the backend re-emits directly.
-- Two-tier keeps SkelTree as the source of structure — no SSA
-  construction, no relooper. The ValueGraph is a side representation that
-  coexists with the Skel, accessed via `Operand::Value`. Local versioning
-  is expressed by structural `Select` nodes at merges, never as explicit
-  phis.
-- Binaryen — the production-grade Wasm optimizer — is exactly this shape
-  (structured AST + side analyses). We are formalising what they already
-  do.
-
-Full SSA / sea-of-nodes stays rejected. So does building the ValueGraph
-without a SkelTree (it would lose the effect ordering Wasm codegen needs).
+Wado emits structured Wasm, so SSA + relooper buys nothing the backend
+doesn't already need. Two-tier keeps SkelTree as the effect-ordering
+substrate; the ValueGraph is a side representation accessed via
+`Operand::Value`, with local versioning expressed by structural `Select`
+nodes at merges rather than explicit phis. Full SSA / sea-of-nodes
+stays rejected, as does dropping the SkelTree (Wasm codegen needs the
+effect ordering it carries).
 
 ## Why Layer 2 promotion (Stages 7 – 8) is deferred
 
@@ -247,11 +226,10 @@ WIR output stays byte-identical.
       `Select` at If / Match / Switch endpoints; emit `Opaque` for loop
       locals; seed parameters with `Opaque`.
 - [x] Side table `value_of: IndexMap<ExprId, ValueId>` populated per
-      function. Engine exposes `engine.value(expr) -> Option<ValueId>`;
-      ValueGraph is built at session start. No incremental maintenance
-      under edits at this stage — a rule that edits invalidates the
-      table; rules either re-trigger the build or refrain from further
-      queries.
+      function. Engine exposes `engine.value(expr) -> Option<ValueId>`,
+      built lazily on first call. Edits do not invalidate the cache;
+      rules snapshot results before editing, or call
+      `Engine::invalidate_value_graph` to force a rebuild.
 
 #### Stage 3 — CSE migration
 
@@ -278,11 +256,11 @@ algebraic rules over `Select` and `Opaque` provenance.
       `(r, f, v)` return the same `ValueId`, automatically forwarding
       stored literals.
 - [x] `store_load_forward`'s `KnownValues` / `ModifiedLocalsCache`
-      walker collapses into a thin rule: walk `Local` mentions, consult
-      `engine.value(read)`, replace with the source literal when the
-      `ValueKind` is `Int`/`Float`/`Bool`/`Char`. Address-taken locals
-      are excluded (the builder does not yet model writes through
-      pointers).
+      walker collapsed into a thin rule: walks `Local` mentions, consults
+      `engine.value(read)`, replaces with the source literal when the
+      `ValueKind` is `Int`/`Float`/`Bool`/`Char`. Locals in
+      `NirFunction::address_taken_locals` or `stores_aliased_locals` are
+      excluded — the builder models writes through neither.
 
 #### Stage 6 — const_folding, condition_implication, licm
 
@@ -307,6 +285,9 @@ algebraic rules over `Select` and `Opaque` provenance.
       cyclic Value graph at this stage.
 
 #### Stage 9 — Interprocedural worklist
+
+Stages 7 – 8 belong to the optional acceleration path below; the required
+path jumps from Stage 6 directly to Stage 9.
 
 - [ ] Old per-pass walkers (stub-only after Stages 3 – 6) are deleted in
       bulk.
