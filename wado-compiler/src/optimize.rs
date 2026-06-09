@@ -342,11 +342,11 @@ fn run_pass(
     if pass_dump::should_skip_pass(name) {
         return false;
     }
-    pass_dump::dump_tir(name, project, pass_dump::Phase::Before);
+    pass_dump::dump_nir(name, project, pass_dump::Phase::Before);
     profiler.span_start(name);
     let changed = f(project);
     profiler.span_end(name);
-    pass_dump::dump_tir(name, project, pass_dump::Phase::After);
+    pass_dump::dump_nir(name, project, pass_dump::Phase::After);
     changed
 }
 
@@ -440,12 +440,12 @@ pub mod pass_dump {
         }
     }
 
-    pub fn dump_tir(name: &str, project: &NirPackage, phase: Phase) {
+    pub fn dump_nir(name: &str, project: &NirPackage, phase: Phase) {
         if matches(name, phase) {
             let label = phase.label();
-            eprintln!("=== TIR {label} {name} ===");
+            eprintln!("=== NIR {label} {name} ===");
             eprintln!("{}", crate::nir_unparse::unparse_nir_package(project));
-            eprintln!("=== end TIR {label} {name} ===");
+            eprintln!("=== end NIR {label} {name} ===");
         }
     }
 
