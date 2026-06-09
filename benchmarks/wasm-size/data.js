@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780969481704,
+  "lastUpdate": 1780975388603,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31605,6 +31605,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c11ac952ce759672889091f755b21a391443906d"
         },
         "date": 1780969481355,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437035,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c89a8dfbc54f73176911a6e231a5609433132957",
+          "message": "Merge pull request #1338 from wado-lang/claude/package-gale-unused-cleanup-DGtzL\n\nrefactor(package-gale): clean up unused code and split the inlined runtime",
+          "timestamp": "2026-06-09T12:14:16+09:00",
+          "tree_id": "cba431b0122bfb21ac1b23d09c918d3b133d5b39",
+          "url": "https://github.com/wado-lang/wado/commit/c89a8dfbc54f73176911a6e231a5609433132957"
+        },
+        "date": 1780975388068,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
