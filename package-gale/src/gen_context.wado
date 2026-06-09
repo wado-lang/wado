@@ -111,6 +111,13 @@ pub struct GenContext {
     /// (only when `needs_atn`); read by the LR dispatch emitter to route an
     /// ATN-class rule's loop-entry through `atn_predict_with_stack`.
     lr_loop_entry_decisions: List<i32>,
+    /// Snake name of the ATN-class LR rule whose `scan_*` body is currently
+    /// being emitted, or empty otherwise. Set by `gen_scan_lr_functions` so
+    /// `gen_scan_op_element` recognises a self-ref operand scan and brackets it
+    /// with `GALE_SCAN_STACK` push/pop (the scan caller stack the LR loop
+    /// decision reads). Empty for every non-ATN-class scan, so they are
+    /// byte-identical.
+    scan_atn_rule_snake: String,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
@@ -142,6 +149,7 @@ impl GenContext {
             atn_call_site_returns: [],
             current_rule_index: -1,
             lr_loop_entry_decisions: [],
+            scan_atn_rule_snake: "",
             trace: false,
         };
     }
@@ -212,6 +220,22 @@ impl GenContext {
             return -1;
         }
         return self.lr_loop_entry_decisions[rule];
+    }
+
+    /// Mark (or clear with `""`) the ATN-class LR rule whose `scan_*` body is
+    /// being emitted, so a self-ref operand scan brackets with the scan stack.
+    pub fn set_scan_atn_rule(&mut self, snake: &String) {
+        self.scan_atn_rule_snake = *snake;
+    }
+
+    /// If a self-ref operand scan to `target_snake` is being emitted inside an
+    /// ATN-class rule's scan, the exact ATN return state to push onto
+    /// `GALE_SCAN_STACK` (from `Atn.call_site_returns`); else -1.
+    pub fn scan_atn_push_return(&self, target_snake: &String, atn_call_site: i32) -> i32 {
+        if self.scan_atn_rule_snake.is_empty() || self.scan_atn_rule_snake != *target_snake {
+            return -1;
+        }
+        return self.atn_call_site_return(atn_call_site);
     }
 
     /// Enable trace instrumentation in the generated parser (the

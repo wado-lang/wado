@@ -141,6 +141,13 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn) {
         body.push_str(&`{blob[i]}`);
     }
     w.line(&`global GALE_ATN_DATA: List<i32> = [{body}];`);
+    // A module-level decoded ATN and a mutable scan caller stack, used by the
+    // scan side (`scan_*` functions take no `Parser`, so they cannot reach
+    // `p.atn` / `p.atn_stack`). The scan emit pushes/pops `GALE_SCAN_STACK`
+    // around operand scans so an ATN-class LR rule's scan loop can route
+    // through `atn_lr_loop_decision` exactly like the parse side.
+    w.line(&"global GALE_ATN_SIM: AtnSim = atn_decode(&GALE_ATN_DATA);");
+    w.line(&"global GALE_SCAN_STACK: List<i32> = [];");
     w.blank();
 }
 

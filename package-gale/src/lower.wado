@@ -777,6 +777,7 @@ fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32
                 target_snake: rc.target_snake,
                 follow_arg: rc.follow_arg,
                 min_prec_arg: Option::<i32>::Some(prec),
+                atn_call_site: rc.atn_call_site,
             });
         }
     }
@@ -951,6 +952,7 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                     target_snake: rc.target_snake,
                     follow_arg: rc.follow_arg,
                     min_prec_arg: Option::<i32>::Some(prec),
+                    atn_call_site: rc.atn_call_site,
                 });
             } else {
                 ScanElement::RuleCall(rc);
@@ -1679,6 +1681,7 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<
             target_snake: r.snake_name,
             follow_arg: follow_arg,
             min_prec_arg: null,
+            atn_call_site: r.atn_call_site,
         }),
         Wildcard(_) => ScanElement::Wildcard,
         Not(ne) => ScanElement::Excluded(ScanExcludedElem {

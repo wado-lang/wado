@@ -528,7 +528,20 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
             for let alt of &l.atom.alts {
                 non_lr_indices.push(alt.alt_index);
             }
-            gen_scan_lr_functions(w, rule, &l.lr_alts, &l.lr_dispatch, &non_lr_indices, &l.atom.scan_alts, ctx, fn_name);
+            // ATN-class LR rule: route the scan loop through the simulator and
+            // bracket self-ref operand scans with the scan caller stack
+            // (`gen_scan_op_element` keys on `scan_atn_rule`). The decision
+            // number is the rule's ATN loop-entry.
+            let atn_loop_dec = if l.atn_class && ctx.needs_atn() {
+                ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name));
+            } else {
+                -1;
+            };
+            if atn_loop_dec >= 0 {
+                ctx.set_scan_atn_rule(&rule.snake_name);
+            }
+            gen_scan_lr_functions(w, rule, &l.lr_alts, &l.lr_dispatch, &non_lr_indices, &l.atom.scan_alts, ctx, fn_name, atn_loop_dec);
+            ctx.set_scan_atn_rule(&String::from(""));
             return;
         }
     }
@@ -618,7 +631,7 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
 ///   - scan_X(tokens, pos, min_prec = 0): atom + precedence-aware LR-suffix
 ///     loop with token-kind dispatch and second-token overlap resolution.
 ///     Callers without a precedence context omit min_prec and get 0.
-fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, non_lr_indices: &List<i32>, atom_scan_alts: &List<ScanBody>, ctx: &mut GenContext, fn_name: &String) {
+fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, non_lr_indices: &List<i32>, atom_scan_alts: &List<ScanBody>, ctx: &mut GenContext, fn_name: &String, atn_loop_dec: i32) {
     let atom_name = `{*fn_name}_atom`;
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
@@ -662,7 +675,11 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<L
     f2.emit_begin(w);
     w.line(&`let mut pos = {atom_name}(tokens, pos{follow_sep(ctx.emit_follow())});`);
     w.line(&"if pos < 0 { return -1; }");
-    gen_scan_lr_suffix_dispatch(w, rule, lr_alts, lr_dispatch, ctx, fn_name);
+    if atn_loop_dec >= 0 {
+        gen_scan_lr_suffix_dispatch_atn(w, lr_alts, lr_dispatch, ctx, fn_name, atn_loop_dec);
+    } else {
+        gen_scan_lr_suffix_dispatch(w, rule, lr_alts, lr_dispatch, ctx, fn_name);
+    }
     w.line(&"return pos;");
     w.end();
     w.blank();
@@ -712,6 +729,42 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &L
 /// side, with p.peek_kind() replaced by an inline bounds-checked read into
 /// `suffix_kind` and `result = fn(p, ...)?` replaced by `pos = fn(tokens, pos);
 /// if pos < 0 { return -1; }`.
+/// Scan-side twin of `gen_lr_suffix_dispatch_atn`: route the loop-entry
+/// decision through `atn_lr_loop_decision` using the module-level decoded ATN
+/// (`GALE_ATN_SIM`) and the scan caller stack (`GALE_SCAN_STACK`, maintained by
+/// the operand-scan brackets in `gen_scan_op_element`). No static scan gate —
+/// the decision is the commit (progress guard for termination).
+fn gen_scan_lr_suffix_dispatch_atn(w: &mut CodeWriter, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, fn_name: &String, decision: i32) {
+    let valid = &lr_dispatch.valid_lr_alts;
+    w.begin(&"loop");
+    w.line(&`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &GALE_SCAN_STACK, {decision}, tokens, pos, TK_EOF, min_prec);`);
+    w.line(&"let _lr_pos0 = pos;");
+    let mut is_first = true;
+    for let mut i = 0; i < valid.len(); i += 1 {
+        let lr_idx = lr_alts[valid[i]].alt_index;
+        let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
+        if is_first {
+            w.begin(&`if _atn_alt == {i}`);
+            is_first = false;
+        } else {
+            w.else_begin(&`else if _atn_alt == {i}`);
+        }
+        w.line(&`pos = {suffix_fn}(tokens, pos{follow_sep(ctx.emit_follow())});`);
+        w.line(&"if pos < 0 { return -1; }");
+    }
+    if !is_first {
+        w.else_begin(&"else");
+        w.line(&"break;");
+        w.end();
+    } else {
+        w.line(&"break;");
+    }
+    w.begin(&"if pos == _lr_pos0");
+    w.line(&"break;");
+    w.end();
+    w.end();  // loop
+}
+
 fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, fn_name: &String) {
     let projected = project_lr_dispatch(lr_alts, lr_dispatch);
     let valid_lr_indices = projected.0;
@@ -1185,7 +1238,18 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         } else {
             min_prec_override;
         };
-        w.line(&`pos = {fn_name}(tokens, pos{follow_sep}, {min_prec});`);
+        // ATN-class scan: bracket a self-ref operand scan with the scan caller
+        // stack so the callee's LR loop yields this rule's mandatory
+        // continuation (e.g. `between`'s `'and'`). Pop before the fail check so
+        // an early return never leaks the frame.
+        let push_ret = ctx.scan_atn_push_return(&rc.target_snake, rc.atn_call_site);
+        if push_ret >= 0 {
+            w.line(&`GALE_SCAN_STACK.push({push_ret});`);
+            w.line(&`pos = {fn_name}(tokens, pos{follow_sep}, {min_prec});`);
+            w.line(&"GALE_SCAN_STACK.pop();");
+        } else {
+            w.line(&`pos = {fn_name}(tokens, pos{follow_sep}, {min_prec});`);
+        }
         w.line(&`if pos < 0 \{ {*fail_stmt} \}`);
         return;
     }
