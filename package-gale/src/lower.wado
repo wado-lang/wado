@@ -1636,7 +1636,7 @@ fn alt_is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
     return element_is_self_ref(&alt.elements[0], rule_name);
 }
 
-fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
+pub fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
     return match *elem {
         RuleRef(r) => r.name == *rule_name,
         Label(lab) => element_is_self_ref(&lab.element, rule_name),

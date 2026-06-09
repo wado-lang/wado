@@ -374,7 +374,21 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
         sim.rule_first.push([]);
         sim.rule_first_open.push(false);
     }
-    atn_compute_first_nullable(&mut sim);
+    // The FIRST/nullable fixpoint feeds only the LR loop-entry decision
+    // (`atn_lr_loop_decision` / `atn_caller_mandates`), which exists solely
+    // for rules with precedence edges. A grammar without any precedence edge
+    // (e.g. one that needs the simulator only for a non-greedy `??`) never
+    // reads this data, so skip the whole fixpoint there.
+    let mut has_precedence = false;
+    for let k of &sim.tr_kind {
+        if *k == ATN_TR_PRECEDENCE {
+            has_precedence = true;
+            break;
+        }
+    }
+    if has_precedence {
+        atn_compute_first_nullable(&mut sim);
+    }
     return sim;
 }
 

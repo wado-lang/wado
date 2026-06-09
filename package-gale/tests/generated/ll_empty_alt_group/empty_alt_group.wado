@@ -946,7 +946,21 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
         sim.rule_first.push([]);
         sim.rule_first_open.push(false);
     }
-    atn_compute_first_nullable(&mut sim);
+    // The FIRST/nullable fixpoint feeds only the LR loop-entry decision
+    // (`atn_lr_loop_decision` / `atn_caller_mandates`), which exists solely
+    // for rules with precedence edges. A grammar without any precedence edge
+    // (e.g. one that needs the simulator only for a non-greedy `??`) never
+    // reads this data, so skip the whole fixpoint there.
+    let mut has_precedence = false;
+    for let k of &sim.tr_kind {
+        if *k == ATN_TR_PRECEDENCE {
+            has_precedence = true;
+            break;
+        }
+    }
+    if has_precedence {
+        atn_compute_first_nullable(&mut sim);
+    }
     return sim;
 }
 
@@ -1746,14 +1760,13 @@ struct Parser {
     pos: i32,
     chars: List<char>,
     pending: Option<ParseError>,
-    atn: AtnSim,
     atn_stack: List<i32>,
     atn_ret_pending: i32,
 }
 
 impl Parser {
     fn new(tokens: List<Token>, chars: List<char>) -> Parser {
-        return Parser { tokens, pos: 0, chars, pending: null, atn: atn_decode(&GALE_ATN_DATA), atn_stack: [], atn_ret_pending: -1 };
+        return Parser { tokens, pos: 0, chars, pending: null, atn_stack: [], atn_ret_pending: -1 };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -2030,7 +2043,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let lit_y = p.expect(TK_LIT_Y)?;
     p.atn_ret_pending = 29;
     let statement = _parse_statement(p, follow)?;
-    let lit_else_statement: Option<LitElseStatementItem> = if atn_ng_optional_enter(&p.atn, 2, &p.atn_stack, &p.tokens, p.pos, TK_EOF) {
+    let lit_else_statement: Option<LitElseStatementItem> = if atn_ng_optional_enter(&GALE_ATN_SIM, 2, &p.atn_stack, &p.tokens, p.pos, TK_EOF) {
         let lit_else = p.expect(TK_LIT_ELSE)?;
         p.atn_ret_pending = 38;
         let statement = _parse_statement(p, follow)?;
@@ -2159,4 +2172,5 @@ global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_Y]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_IF, TK_LIT_X]];
 
 global GALE_ATN_DATA: List<i32> = [1195463758, 2, 8, 3, 0, 2, 4, 1, 3, 5, 3, 11, 13, 30, 39, 2, 0, -1, 1, 0, 6, -1, -1, 0, 3, 0, -1, 0, 2, 1, -1, 1, 0, 13, -1, -1, 0, 3, 1, -1, 0, 2, 2, -1, 1, 0, 21, -1, -1, 0, 3, 2, -1, 0, 4, 0, -1, 1, 0, 8, -1, -1, 0, 5, 0, -1, 1, 0, 1, -1, -1, 0, 1, 0, -1, 1, 0, 9, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 10, 0, 1, 0, -1, 1, 0, 11, -1, -1, 0, 8, 0, 0, 2, 0, 9, -1, -1, 0, 0, 12, -1, -1, 0, 9, 0, -1, 1, 0, 7, -1, -1, 0, 4, 1, 1, 2, 0, 15, -1, -1, 0, 0, 18, -1, -1, 0, 5, 1, -1, 1, 0, 3, -1, -1, 0, 1, 1, -1, 1, 0, 16, -1, -1, 0, 1, 1, -1, 1, 1, 17, 4, -1, 0, 1, 1, -1, 1, 0, 14, -1, -1, 0, 1, 1, -1, 1, 0, 19, -1, -1, 0, 1, 1, -1, 1, 4, 4, 2, 20, 0, 1, 1, -1, 1, 0, 14, -1, -1, 0, 4, 2, -1, 1, 0, 23, -1, -1, 0, 5, 2, -1, 1, 0, 5, -1, -1, 0, 1, 2, -1, 1, 0, 24, -1, -1, 0, 1, 2, -1, 1, 1, 25, 5, -1, 0, 1, 2, -1, 1, 0, 26, -1, -1, 0, 1, 2, -1, 1, 1, 27, 6, -1, 0, 1, 2, -1, 1, 0, 28, -1, -1, 0, 1, 2, -1, 1, 4, 2, 1, 29, 0, 1, 2, -1, 1, 0, 30, -1, -1, 0, 4, 2, 2, 2, 0, 31, -1, -1, 0, 0, 32, -1, -1, 0, 5, 2, -1, 1, 0, 22, -1, -1, 0, 4, 2, -1, 1, 0, 34, -1, -1, 0, 5, 2, -1, 1, 0, 31, -1, -1, 0, 1, 2, -1, 1, 0, 35, -1, -1, 0, 1, 2, -1, 1, 1, 36, 7, -1, 0, 1, 2, -1, 1, 0, 37, -1, -1, 0, 1, 2, -1, 1, 4, 2, 1, 38, 0, 1, 2, -1, 1, 0, 33, -1, -1, 0];
+global GALE_ATN_SIM: AtnSim = atn_decode(&GALE_ATN_DATA);
 

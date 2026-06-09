@@ -186,17 +186,18 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
         s.add_field(&"trace_depth", &"i32");
     }
     // Runtime ATN simulator state (only when a non-greedy / LR decision
-    // needs it). `atn` is decoded once from the `GALE_ATN_DATA` blob.
-    // `atn_stack` is the live caller stack of ATN **return states** for
-    // full-context prediction — each rule call pushes its exact return
-    // state (so the simulator pops to the precise caller continuation).
-    // `atn_ret_pending` carries that return state from a call site to the
-    // callee's entry wrapper, which pushes it: a caller sets
+    // needs it). The decoded ATN itself lives in the module-level
+    // `GALE_ATN_SIM` global (decoded once, shared by both the parse and scan
+    // sides — see `gen_atn_data_global`), so the `Parser` carries only the
+    // per-parse mutable state. `atn_stack` is the live caller stack of ATN
+    // **return states** for full-context prediction — each rule call pushes
+    // its exact return state (so the simulator pops to the precise caller
+    // continuation). `atn_ret_pending` carries that return state from a call
+    // site to the callee's entry wrapper, which pushes it: a caller sets
     // `p.atn_ret_pending = <state>` immediately before `_parse_X(...)`, the
     // wrapper consumes it on entry and resets it to -1 (so an unstamped call
     // pushes -1 = unknown caller, handled as SLL by the simulator).
     if needs_atn {
-        s.add_field(&"atn", &"AtnSim");
         s.add_field(&"atn_stack", &"List<i32>");
         s.add_field(&"atn_ret_pending", &"i32");
     }
@@ -215,7 +216,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
         init.push_str(&", trace_depth: 0");
     }
     if needs_atn {
-        init.push_str(&", atn: atn_decode(&GALE_ATN_DATA), atn_stack: [], atn_ret_pending: -1");
+        init.push_str(&", atn_stack: [], atn_ret_pending: -1");
     }
     w.line(&`return Parser \{ {init} \};`);
     w.end();
@@ -2786,7 +2787,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
 /// `p.atn_stack`'s top at runtime, so no compile-time decision number is
 /// needed.
 fn atn_optional_enter_cond(ctx: &GenContext) -> String {
-    return `atn_ng_optional_enter(&p.atn, {ctx.current_rule_index()}, &p.atn_stack, &p.tokens, p.pos, TK_EOF)`;
+    return `atn_ng_optional_enter(&GALE_ATN_SIM, {ctx.current_rule_index()}, &p.atn_stack, &p.tokens, p.pos, TK_EOF)`;
 }
 
 fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> String {
@@ -5053,7 +5054,7 @@ fn project_lr_dispatch(lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData) -> [
 fn gen_lr_suffix_dispatch_atn(w: &mut CodeWriter, type_name: &String, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, decision: i32) {
     let valid = &lr_dispatch.valid_lr_alts;
     w.begin(&"loop");
-    w.line(&`let _atn_alt = atn_lr_loop_decision(&p.atn, &p.atn_stack, {decision}, &p.tokens, p.pos, TK_EOF, min_prec);`);
+    w.line(&`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, {decision}, &p.tokens, p.pos, TK_EOF, min_prec);`);
     // Progress guard: every LR suffix consumes at least its operator token,
     // so a non-advancing iteration means the prediction's min-alt fallback
     // returned an enter alt with nothing to parse — exit instead of spinning.

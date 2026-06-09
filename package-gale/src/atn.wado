@@ -28,7 +28,7 @@ use {
     RepeatKind,
 } from "./ir.wado";
 use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
-use { lower } from "./lower.wado";
+use { lower, element_is_self_ref } from "./lower.wado";
 use { collect_literal_tokens, LitToken } from "./lexer_gen.wado";
 use { literal_const_name } from "./gen_util.wado";
 use {
@@ -360,7 +360,7 @@ fn build_lr_suffix(b: &mut AtnBuilder, alt: &Alternative, lr_alt: &LrAlt, rule_n
     let entry = b.new_state(ATN_BASIC, r);
     let mut cursor = entry;
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        let seg = if elem_is_self_ref(&alt.elements[i], rule_name) {
+        let seg = if element_is_self_ref(&alt.elements[i], rule_name) {
             let prec = if i == lr_alt.last_self_ref_idx { lr_alt.conflict_min } else { 0 };
             self_ref_segment(b, r, prec, self_ref_call_site(&alt.elements[i]));
         } else {
@@ -378,16 +378,6 @@ fn self_ref_call_site(elem: &Element) -> i32 {
         RuleRef(rr) => rr.atn_call_site,
         Label(lab) => self_ref_call_site(&lab.element),
         _ => -1,
-    };
-}
-
-/// True iff `elem` is a self-reference to `rule_name` (unwrapping labels).
-/// Mirrors `lower::element_is_self_ref` for the subset the ATN cares about.
-fn elem_is_self_ref(elem: &Element, rule_name: &String) -> bool {
-    return match *elem {
-        RuleRef(rr) => rr.name == *rule_name,
-        Label(lab) => elem_is_self_ref(&lab.element, rule_name),
-        _ => false,
     };
 }
 

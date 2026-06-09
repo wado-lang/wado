@@ -874,7 +874,21 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
         sim.rule_first.push([]);
         sim.rule_first_open.push(false);
     }
-    atn_compute_first_nullable(&mut sim);
+    // The FIRST/nullable fixpoint feeds only the LR loop-entry decision
+    // (`atn_lr_loop_decision` / `atn_caller_mandates`), which exists solely
+    // for rules with precedence edges. A grammar without any precedence edge
+    // (e.g. one that needs the simulator only for a non-greedy `??`) never
+    // reads this data, so skip the whole fixpoint there.
+    let mut has_precedence = false;
+    for let k of &sim.tr_kind {
+        if *k == ATN_TR_PRECEDENCE {
+            has_precedence = true;
+            break;
+        }
+    }
+    if has_precedence {
+        atn_compute_first_nullable(&mut sim);
+    }
     return sim;
 }
 
@@ -1687,14 +1701,13 @@ struct Parser {
     pos: i32,
     chars: List<char>,
     pending: Option<ParseError>,
-    atn: AtnSim,
     atn_stack: List<i32>,
     atn_ret_pending: i32,
 }
 
 impl Parser {
     fn new(tokens: List<Token>, chars: List<char>) -> Parser {
-        return Parser { tokens, pos: 0, chars, pending: null, atn: atn_decode(&GALE_ATN_DATA), atn_stack: [], atn_ret_pending: -1 };
+        return Parser { tokens, pos: 0, chars, pending: null, atn_stack: [], atn_ret_pending: -1 };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1988,7 +2001,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, Par
     let start = p.peek().span.start;
     let mut result = _parse_expr__inner_atom(p)?;
     loop {
-        let _atn_alt = atn_lr_loop_decision(&p.atn, &p.atn_stack, 1, &p.tokens, p.pos, TK_EOF, min_prec);
+        let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, 1, &p.tokens, p.pos, TK_EOF, min_prec);
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
             result = _parse_expr__inner_lr_1(p, result, start)?;
