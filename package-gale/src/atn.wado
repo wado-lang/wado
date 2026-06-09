@@ -90,6 +90,13 @@ pub struct Atn {
     pub rule_stop: List<i32>,
     pub decision_state: List<i32>,
     pub num_tokens: i32,
+    /// Compile-time correspondence `atn_call_site -> return_state`, indexed
+    /// by the surface `RuleRefElement.atn_call_site` id (`-1` for any id not
+    /// assigned a `RuleRef` segment). NOT part of the serialized blob — the
+    /// runtime never sees this map; codegen (P4.2b) reads it to push the
+    /// exact return state around each rule call. Empty when call sites were
+    /// not assigned (`assign_atn_call_sites` not run).
+    pub call_site_returns: List<i32>,
 }
 
 /// Mutable accumulator used during construction.
@@ -100,6 +107,7 @@ struct AtnBuilder {
     decision_state: List<i32>,
     kinds: TreeMap<String, i32>,
     num_tokens: i32,
+    call_site_returns: List<i32>,
 }
 
 impl AtnBuilder {
@@ -107,6 +115,21 @@ impl AtnBuilder {
         let id = self.states.len();
         self.states.push(AtnState { kind, rule, decision: -1, transitions: [] });
         return id;
+    }
+
+    /// Record that the surface call site `call_site` returns to ATN state
+    /// `return_state`. Grows `call_site_returns` (sparsely, with -1 fillers)
+    /// so it can be indexed directly by id. A `call_site` of -1 (unassigned
+    /// `RuleRefElement`, e.g. a unit test that skipped `assign_atn_call_sites`)
+    /// is ignored.
+    fn record_call_site(&mut self, call_site: i32, return_state: i32) {
+        if call_site < 0 {
+            return;
+        }
+        while self.call_site_returns.len() <= call_site {
+            self.call_site_returns.push(-1);
+        }
+        self.call_site_returns[call_site] = return_state;
     }
 
     /// Allocate a fresh decision number and bind it to `state`.
@@ -203,6 +226,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         decision_state: [],
         kinds: tk.0,
         num_tokens: tk.1,
+        call_site_returns: [],
     };
 
     let nrules = grammar.parser_rules.len();
@@ -237,6 +261,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         rule_stop: b.rule_stop,
         decision_state: b.decision_state,
         num_tokens: b.num_tokens,
+        call_site_returns: b.call_site_returns,
     };
 }
 
@@ -310,7 +335,7 @@ fn build_lr_suffix(b: &mut AtnBuilder, alt: &Alternative, lr_alt: &LrAlt, rule_n
     for let mut i = 1; i < alt.elements.len(); i += 1 {
         let seg = if elem_is_self_ref(&alt.elements[i], rule_name) {
             let prec = if i == lr_alt.last_self_ref_idx { lr_alt.conflict_min } else { 0 };
-            self_ref_segment(b, r, prec);
+            self_ref_segment(b, r, prec, self_ref_call_site(&alt.elements[i]));
         } else {
             build_element(b, &alt.elements[i], r, rule_index);
         };
@@ -318,6 +343,15 @@ fn build_lr_suffix(b: &mut AtnBuilder, alt: &Alternative, lr_alt: &LrAlt, rule_n
         cursor = seg.1;
     }
     return [entry, cursor];
+}
+
+/// The `atn_call_site` id of a self-ref element (unwrapping labels), or -1.
+fn self_ref_call_site(elem: &Element) -> i32 {
+    return match *elem {
+        RuleRef(rr) => rr.atn_call_site,
+        Label(lab) => self_ref_call_site(&lab.element),
+        _ => -1,
+    };
 }
 
 /// True iff `elem` is a self-reference to `rule_name` (unwrapping labels).
@@ -333,10 +367,11 @@ fn elem_is_self_ref(elem: &Element, rule_name: &String) -> bool {
 /// A recursive self-ref `RuleRef` segment carrying `prec` (the raised
 /// precedence floor for `expr[next_i]`). A self-ref always targets the
 /// current rule, so the target is `rule_start[r]` directly.
-fn self_ref_segment(b: &mut AtnBuilder, r: i32, prec: i32) -> [i32, i32] {
+fn self_ref_segment(b: &mut AtnBuilder, r: i32, prec: i32, call_site: i32) -> [i32, i32] {
     let from = b.new_state(ATN_BASIC, r);
     let to = b.new_state(ATN_BASIC, r);
     b.add_trans(from, AtnTransition { kind: ATN_TR_RULE, target: b.rule_start[r], label: r, follow: to, prec });
+    b.record_call_site(call_site, to);
     return [from, to];
 }
 
@@ -395,6 +430,7 @@ fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &Tre
             // keeps the rule index for dump/debug; `follow` is the return.
             let tstart = if ri >= 0 { b.rule_start[ri] } else { -1 };
             b.add_trans(from, AtnTransition { kind: ATN_TR_RULE, target: tstart, label: ri, follow: to });
+            b.record_call_site(rr.atn_call_site, to);
             [from, to];
         },
         Group(g) => build_alternation(b, &g.alternatives, rule, rule_index),

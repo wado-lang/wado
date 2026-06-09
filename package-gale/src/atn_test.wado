@@ -27,6 +27,7 @@ use {
     ATN_TR_PRECEDENCE,
 } from "./runtime/atn.wado";
 use { parse } from "./g4/parser.wado";
+use { assign_atn_call_sites } from "./ir.wado";
 
 global NON_GREEDY_G4: String = "
 grammar T;
@@ -70,6 +71,35 @@ fn find_loop_entry(atn: &Atn, rule: i32) -> i32 {
     }
     return -1;
 }
+
+/// True iff some RULE transition in `atn` targets `target_start` and returns
+/// (follow) to `ret` — i.e. `ret` is a genuine post-call return state.
+fn return_state_follows_call(atn: &Atn, ret: i32, target_start: i32) -> bool {
+    for let mut i = 0; i < atn.states.len(); i += 1 {
+        for let t of &atn.states[i].transitions {
+            if t.kind == ATN_TR_RULE && t.target == target_start && t.follow == ret {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// A `between`-style LR grammar: `expr` is left-recursive (`expr 'and' expr`)
+// with a non-LR atom alt that itself calls `expr` twice
+// (`'between' expr 'and' expr`). The descriptor `DropLoopEntryBranchInLRRule_4`
+// hinges on distinguishing between's first operand (after which `'and'` is
+// pending) from the LR loop operand — which the rule-index stack cannot do
+// but per-call-site return states can.
+global BETWEEN_G4: String = "
+grammar B;
+stat : expr ;
+expr : expr 'and' expr
+     | 'between' expr 'and' expr
+     | ID ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> channel(HIDDEN);
+";
 
 /// Find a BlockStart decision state whose FIRST outgoing epsilon edge
 /// targets a BlockEnd — i.e. an optional/loop whose decision prefers to
@@ -222,4 +252,36 @@ test "LR ATN round-trips through serialize_atn/atn_decode exactly" {
     let atn = build_atn(&g);
     let sim = atn_decode(&serialize_atn(&atn));
     assert_sim_matches_atn(&sim, &atn);
+}
+
+test "P4.2a: call sites map to distinct ATN return states (between shape)" {
+    let mut g = parse(BETWEEN_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    let atn = build_atn(&g);
+    let csr = &atn.call_site_returns;
+    // Call-site numbering (depth-first over rules then alts):
+    //   cs0 = stat -> expr
+    //   cs1 = expr alt0 leading self-ref (LR prefix, stripped by the rewrite)
+    //   cs2 = expr alt0 trailing 'and' operand
+    //   cs3 = 'between' first operand
+    //   cs4 = 'between' second operand
+    assert csr.len() == 5, `expected 5 call sites, got {csr.len()}`;
+    assert csr[0] >= 0, "stat->expr call site should have a return state";
+    // The leading LR self-ref is the precedence-climb entry, not a real call
+    // in the rewritten form, so it never gets a return state.
+    assert csr[1] == -1, "leading LR self-ref is stripped, not a call site";
+    assert csr[2] >= 0, "trailing 'and' operand has a return state";
+    assert csr[3] >= 0, "between's first operand has a return state";
+    assert csr[4] >= 0, "between's second operand has a return state";
+    // The crux of the `between` fix: the LR loop operand and between's first
+    // operand return to DIFFERENT ATN states — the precision a rule-index
+    // stack lacks. Likewise between's two operands are distinct sites.
+    assert csr[2] != csr[3], "loop operand vs between-first-operand must differ";
+    assert csr[3] != csr[4], "between's two operands return to different states";
+    assert csr[2] != csr[4], "loop operand vs between-second-operand must differ";
+    // Every recorded return state is the follow of a real `expr` call.
+    let expr_start = atn.rule_start[1];
+    assert return_state_follows_call(&atn, csr[2], expr_start), "cs2 follows an expr call";
+    assert return_state_follows_call(&atn, csr[3], expr_start), "cs3 follows an expr call";
+    assert return_state_follows_call(&atn, csr[4], expr_start), "cs4 follows an expr call";
 }

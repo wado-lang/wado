@@ -363,6 +363,15 @@ pub struct RuleRefElement {
     pub snake_name: String = "",
     /// Cached `escape_ident(snake_name)` — standalone field name in CST structs.
     pub field_name: String = "",
+    /// Unique call-site id, assigned by `assign_atn_call_sites` on the path
+    /// through `generate()` (before lowering / `build_atn`). It is the stable
+    /// key that ties this surface call site to its ATN return state: the same
+    /// id is read by `build_atn` (which records `call_site -> return_state` in
+    /// `Atn.call_site_returns`) and, in P4.2b, threaded onto the GIR
+    /// `RuleCallOp` so codegen can push the exact return state. -1 until
+    /// assigned. (Foundation for the full-context LR loop-entry predictor —
+    /// see `TODO.md` P4.2.)
+    pub atn_call_site: i32 = -1,
 }
 
 impl RuleRefElement {
@@ -776,6 +785,76 @@ pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
         let canon_alts = canon_empty_alt_alternatives(&grammar.parser_rules[ri].alternatives);
         grammar.parser_rules[ri].alternatives = canon_alts;
     }
+}
+
+/// Assign every parser-rule `RuleRefElement` a unique, increasing
+/// `atn_call_site` id (a depth-first walk over rules, alternatives, and
+/// nested elements). The id is the stable correspondence key between a
+/// surface call site and its ATN return state: `build_atn` records
+/// `call_site -> return_state`, and codegen (P4.2b) pushes that return state
+/// around the call so the simulator pops to the exact caller continuation.
+///
+/// Runs on the `generate()` path after `canonicalize_empty_alt_groups` (so
+/// the post-canonicalization element shape is what gets numbered) and before
+/// lowering / `build_atn`. Value semantics: each rule's alternatives are
+/// rebuilt with stamped elements and reassigned. Idempotent re-runs simply
+/// re-number from 0.
+pub fn assign_atn_call_sites(grammar: &mut Grammar) {
+    let mut next: i32 = 0;
+    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
+        let stamped = stamp_call_sites_alternatives(&grammar.parser_rules[ri].alternatives, &mut next);
+        grammar.parser_rules[ri].alternatives = stamped;
+    }
+}
+
+fn stamp_call_sites_alternatives(alts: &List<Alternative>, next: &mut i32) -> List<Alternative> {
+    let mut out: List<Alternative> = [];
+    for let alt of alts {
+        let mut elems: List<Element> = [];
+        for let e of &alt.elements {
+            elems.push(stamp_call_sites_element(e, next));
+        }
+        out.push(Alternative { label: alt.label, options: alt.options, elements: elems });
+    }
+    return out;
+}
+
+/// Stamp this element (and any nested elements) with call-site ids. Only
+/// `RuleRef` leaves consume an id; transformer / group wrappers recurse.
+fn stamp_call_sites_element(elem: &Element, next: &mut i32) -> Element {
+    return match *elem {
+        RuleRef(rr) => {
+            let id = *next;
+            *next += 1;
+            Element::RuleRef(RuleRefElement {
+                name: rr.name,
+                options: rr.options,
+                snake_name: rr.snake_name,
+                field_name: rr.field_name,
+                atn_call_site: id,
+            });
+        },
+        Label(lab) => Element::Label(LabelElement {
+            name: lab.name,
+            list: lab.list,
+            element: stamp_call_sites_element(&lab.element, next),
+            snake_name: lab.snake_name,
+            field_name: lab.field_name,
+        }),
+        Repeat(rep) => Element::Repeat(RepeatElement {
+            kind: rep.kind,
+            element: stamp_call_sites_element(&rep.element, next),
+            non_greedy: rep.non_greedy,
+        }),
+        Not(n) => Element::Not(NotElement {
+            element: stamp_call_sites_element(&n.element, next),
+        }),
+        Group(g) => Element::Group(GroupElement {
+            alternatives: stamp_call_sites_alternatives(&g.alternatives, next),
+            options: g.options,
+        }),
+        _ => *elem,
+    };
 }
 
 /// Rebuild an alternative list with each element canonicalized. Returns a

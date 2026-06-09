@@ -1,4 +1,4 @@
-use { Grammar, Alternative, OptionValue, LexerRule, normalize_caches, canonicalize_empty_alt_groups } from "./ir.wado";
+use { Grammar, Alternative, OptionValue, LexerRule, normalize_caches, canonicalize_empty_alt_groups, assign_atn_call_sites } from "./ir.wado";
 use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals } from "./parser_gen.wado";
@@ -56,6 +56,11 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // before any structural pass (lowering, ATN build) sees them, so both
     // the emitter and `build_atn` agree on the canonical repeat shape.
     canonicalize_empty_alt_groups(grammar);
+    // Number every surface `RuleRef` call site so `build_atn`'s
+    // `call_site_returns` correspondence (read by codegen to push exact ATN
+    // return states) is keyed consistently. Runs after canonicalization (the
+    // numbered shape is the post-canonicalization one) and before lowering.
+    assign_atn_call_sites(grammar);
     normalize_caches(grammar);
     // Pre-size the output buffer from the grammar's rule count so the
     // bulk of `String::push_str` calls in `CodeWriter::line` don't
