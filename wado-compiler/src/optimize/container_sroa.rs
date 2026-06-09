@@ -62,16 +62,23 @@
 //! lets container SROA pick up new `List<Tuple<...>>` locals exposed by
 //! earlier-iteration inlining of helper functions.
 //!
-//! The pass reads and mutates the arena [`Body`] directly: analysis navigates
-//! by id, and the rewrite pushes the synthesized per-field calls into the arena
-//! (deep-cloning duplicated sub-expressions via [`Body::clone_expr`]).
+//! Runs on the worklist rewrite engine (combine migration; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! per-function standalone engine session whose `apply_block` fires once at
+//! the body root and performs the whole-function rewrite in one shot. The
+//! analysis phases (candidate collection, escape / used-kinds) stay read-only
+//! walks over `engine.body`; the rewrite routes every mutation through the
+//! engine edit API (`set_block_stmts`, `replace_expr_kind`, `become_expr`,
+//! `alloc_stmt`, `alloc_expr`, `alloc_local`, `clone_expr`) so the parent map
+//! and use index stay coherent.
+
+use std::cell::Cell;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirFunction, NirLocal, NirStruct, NirUnaryOp};
-use crate::nir_arena::{
-    ArenaCallArg, BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtId, StmtKind, StmtNode,
-};
+use crate::nir::{FunctionRef, NirFunction, NirStruct, NirUnaryOp};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -280,13 +287,14 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     // `collect_candidates` to expand `List<UserStruct>` element types.
     let struct_index = build_struct_index(&project.structs);
 
-    // Per-function rewrite, gate-skipped. It mutates only the current function's
-    // body (and adds SoA types to the shared `type_table`). Retargeting some
-    // `List<Tuple>::m` calls to per-field `List<F>::m` callees shifts the
-    // function's call edges, which only costs propagation precision, not
-    // correctness.
+    // Per-function engine session, gate-skipped. Mutations route through the
+    // engine API; the rule fires once at the body root (whole-function shape).
+    // Retargeting some `List<Tuple>::m` calls to per-field `List<F>::m` callees
+    // shifts the function's call edges, which only costs propagation precision,
+    // not correctness.
     let type_table_rc = project.type_table.clone();
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ContainerSroa, len, |fid| {
         let func_rc = &project.functions[fid.index()];
         // Skip CM bindings (ABI bridges) and body-less declarations.
@@ -297,14 +305,44 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
             }
         }
         let mut func = func_rc.borrow_mut();
-        scalarize_in_function(
-            &mut func,
-            &type_table_rc,
-            &catalog,
-            &sig_kinds,
-            &struct_index,
-        )
+        let rule = ContainerSroaRule {
+            catalog: &catalog,
+            sig_kinds: &sig_kinds,
+            struct_index: &struct_index,
+            type_table_rc: type_table_rc.clone(),
+            applied: Cell::new(false),
+        };
+        let NirFunction { body, locals, .. } = &mut *func;
+        let body = body.as_mut().expect("checked above");
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.run(&[&rule])
     })
+}
+
+/// Standalone-session rule whose single `apply_block` performs the whole-
+/// function container SROA at the body root.
+pub(super) struct ContainerSroaRule<'a> {
+    catalog: &'a MethodCatalog,
+    sig_kinds: &'a SigKindIndex,
+    struct_index: &'a StructIndex<'a>,
+    /// Shared `TypeTable` — `make_list(elem_ty)` interns per-field array types
+    /// during the local-allocation step. Borrowed through the `Rc` to avoid
+    /// holding a long mutable borrow across the rewrite.
+    type_table_rc: std::rc::Rc<std::cell::RefCell<TypeTable>>,
+    /// Whole-function rewrite: only run once per session.
+    applied: Cell<bool>,
+}
+
+impl Rule for ContainerSroaRule<'_> {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        if engine.parent_of(NodeRef::Block(block)).is_some() {
+            return false;
+        }
+        if self.applied.replace(true) {
+            return false;
+        }
+        scalarize_at_root(engine, self)
+    }
 }
 
 /// Lookup index for user-defined structs by (name, module source).
@@ -370,19 +408,12 @@ fn build_method_catalog(
     (catalog, sig_kinds)
 }
 
-/// Per-function driver: detect candidates, analyze uses, allocate parallel locals, rewrite.
-fn scalarize_in_function(
-    func: &mut NirFunction,
-    type_table_rc: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
-    catalog: &MethodCatalog,
-    sig_kinds: &SigKindIndex,
-    struct_index: &StructIndex<'_>,
-) -> bool {
+/// Whole-function container SROA driven from the engine session root.
+fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     // Step 1: collect candidates. Immutable borrow of type_table.
     let candidates = {
-        let type_table = type_table_rc.borrow();
-        let body = func.body.as_ref().expect("checked in caller");
-        collect_candidates(body, &type_table, struct_index, sig_kinds)
+        let type_table = rule.type_table_rc.borrow();
+        collect_candidates(engine.body, &type_table, rule.struct_index, rule.sig_kinds)
     };
     if candidates.is_empty() {
         return false;
@@ -392,10 +423,8 @@ fn scalarize_in_function(
     // Also track which `ListMethodKind`s were observed on each whitelisted use,
     // so step 3 can demand only the monomorphizations that will actually be
     // emitted per field (rather than unconditionally requiring all four kinds).
-    let (safe_indices, used_kinds_map) = {
-        let body = func.body.as_ref().expect("checked in caller");
-        compute_safe_set(body, &candidates, sig_kinds)
-    };
+    let (safe_indices, used_kinds_map) =
+        compute_safe_set(engine.body, &candidates, rule.sig_kinds);
     if safe_indices.is_empty() {
         return false;
     }
@@ -409,38 +438,28 @@ fn scalarize_in_function(
         .filter(|c| safe_indices.contains(&c.local_index))
         .filter(|c| {
             let used = used_kinds_map.get(&c.local_index).unwrap_or(&empty_used);
-            required_methods_available(c, used, catalog, sig_kinds)
+            required_methods_available(c, used, rule.catalog, rule.sig_kinds)
         })
         .collect();
     if safe_candidates.is_empty() {
         return false;
     }
 
-    // Step 4: allocate parallel `List<T_k>` locals. Mutable borrow of type_table.
-    // Map: (original local, field k) → new local index
+    // Step 4: allocate parallel `List<T_k>` locals through the engine. The
+    // type-table borrow is scoped so it does not overlap the engine's locals
+    // mutation (`alloc_local` takes `&mut self`).
     let mut field_local_map: IndexMap<(u32, u32), u32> = IndexMap::default();
-    // Map: (original local, field k) → (new name, array type id)
     let mut field_info_map: IndexMap<(u32, u32), (String, TypeId)> = IndexMap::default();
-    // The set of original locals we decided to decompose (final).
     let mut decomposed: IndexSet<u32> = IndexSet::default();
-    {
-        let mut type_table = type_table_rc.borrow_mut();
-        for c in &safe_candidates {
-            let base = func.local_count();
-            for (k, &elem_ty) in c.element_types.iter().enumerate() {
-                let arr_ty = type_table.make_list(elem_ty);
-                let new_index = base + k as u32;
-                let new_name = format!("__csroa_{}_{}", c.local_name, k);
-                field_local_map.insert((c.local_index, k as u32), new_index);
-                field_info_map.insert((c.local_index, k as u32), (new_name.clone(), arr_ty));
-                func.locals.push(NirLocal {
-                    name: new_name,
-                    type_id: arr_ty,
-                    is_mut: false,
-                });
-            }
-            decomposed.insert(c.local_index);
+    for c in &safe_candidates {
+        for (k, &elem_ty) in c.element_types.iter().enumerate() {
+            let arr_ty = rule.type_table_rc.borrow_mut().make_list(elem_ty);
+            let new_name = format!("__csroa_{}_{}", c.local_name, k);
+            let new_index = engine.alloc_local(new_name.clone(), arr_ty, /* is_mut */ false);
+            field_local_map.insert((c.local_index, k as u32), new_index);
+            field_info_map.insert((c.local_index, k as u32), (new_name, arr_ty));
         }
+        decomposed.insert(c.local_index);
     }
 
     // Build a lookup from local_index → candidate data needed during rewrite.
@@ -462,18 +481,17 @@ fn scalarize_in_function(
         })
         .collect();
 
-    // Step 5: rewrite the body.
+    // Step 5: rewrite the body via the engine edit API.
     let ctx = RewriteCtx {
         decomposed: &decomposed,
         field_local_map: &field_local_map,
         field_info_map: &field_info_map,
         candidate_data: &candidate_data,
-        catalog,
-        sig_kinds,
+        catalog: rule.catalog,
+        sig_kinds: rule.sig_kinds,
     };
-    let body = func.body.as_mut().expect("checked in caller");
-    let root = body.root;
-    Rewriter { ctx: &ctx }.rewrite_block(body, root);
+    let root = engine.body.root;
+    Rewriter { ctx: &ctx }.rewrite_block(engine, root);
 
     true
 }
@@ -1110,32 +1128,32 @@ impl Rewriter<'_, '_> {
     /// Replace candidate let-bindings and expression-statement-level
     /// `push` / `index_assign` calls with their per-field versions; recurse
     /// into everything else.
-    fn rewrite_block(&self, body: &mut Body, block: BlockId) {
-        let old_stmts = std::mem::take(&mut body.blocks[block].stmts);
+    fn rewrite_block(&self, engine: &mut Engine, block: BlockId) {
+        let old_stmts = engine.body.blocks[block].stmts.clone();
         let mut out: Vec<StmtId> = Vec::with_capacity(old_stmts.len());
         for s in old_stmts {
-            self.process_stmt(body, s, &mut out);
+            self.process_stmt(engine, s, &mut out);
         }
-        body.blocks[block].stmts = out;
+        engine.set_block_stmts(block, out);
     }
 
     /// Route a statement: either emit its per-field expansion or recurse + push as-is.
-    fn process_stmt(&self, body: &mut Body, s: StmtId, out: &mut Vec<StmtId>) {
+    fn process_stmt(&self, engine: &mut Engine, s: StmtId, out: &mut Vec<StmtId>) {
         let ctx = self.ctx;
         // Candidate Let: expand in place.
-        if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+        if let StmtKind::Let { local_index, .. } = &engine.body.stmts[s].kind
             && ctx.decomposed.contains(local_index)
         {
             let local_index = *local_index;
-            self.expand_candidate_let(body, local_index, out);
+            self.expand_candidate_let(engine, local_index, out);
             return;
         }
 
         // Candidate push/index_assign as an ExprStmt at the statement level.
-        if let StmtKind::Expr(expr) = &body.stmts[s].kind {
+        if let StmtKind::Expr(expr) = &engine.body.stmts[s].kind {
             let expr = *expr;
-            let span = body.stmts[s].span;
-            if let Some(expanded) = self.try_expand_call_stmt(body, expr, span) {
+            let span = engine.body.stmts[s].span;
+            if let Some(expanded) = self.try_expand_call_stmt(engine, expr, span) {
                 out.extend(expanded);
                 return;
             }
@@ -1143,12 +1161,12 @@ impl Rewriter<'_, '_> {
 
         // Otherwise, recurse into the statement (rewriting any nested
         // expressions/blocks) and push it unchanged.
-        self.walk_children(body, NodeRef::Stmt(s));
+        self.walk_children(engine, NodeRef::Stmt(s));
         out.push(s);
     }
 
     /// Emit N per-field Let statements for a decomposed candidate.
-    fn expand_candidate_let(&self, body: &mut Body, local_index: u32, out: &mut Vec<StmtId>) {
+    fn expand_candidate_let(&self, engine: &mut Engine, local_index: u32, out: &mut Vec<StmtId>) {
         let ctx = self.ctx;
         let info = ctx
             .candidate_data
@@ -1162,10 +1180,10 @@ impl Rewriter<'_, '_> {
             let new_local_index = ctx.field_local_map[&(local_index, k as u32)];
             let (new_name, arr_ty) = ctx.field_info_map[&(local_index, k as u32)].clone();
             // Deep-clone the (duplicable) capacity once per field.
-            let cap = body.clone_expr(capacity);
-            let init = build_with_capacity_call(body, elem_ty, arr_ty, cap, span, ctx);
-            let let_stmt = body.stmts.push(StmtNode {
-                kind: StmtKind::Let {
+            let cap = engine.clone_expr(capacity);
+            let init = build_with_capacity_call(engine, elem_ty, arr_ty, cap, span, ctx);
+            let let_stmt = engine.alloc_stmt(
+                StmtKind::Let {
                     name: new_name,
                     local_index: new_local_index,
                     is_mut,
@@ -1175,7 +1193,7 @@ impl Rewriter<'_, '_> {
                     skip_value_copy: false,
                 },
                 span,
-            });
+            );
             out.push(let_stmt);
         }
     }
@@ -1185,12 +1203,12 @@ impl Rewriter<'_, '_> {
     /// decomposed candidate; `None` otherwise.
     fn try_expand_call_stmt(
         &self,
-        body: &mut Body,
+        engine: &mut Engine,
         expr: ExprId,
         span: Span,
     ) -> Option<Vec<StmtId>> {
         let ctx = self.ctx;
-        let (receiver, func, arg_ids) = match &body.exprs[expr].kind {
+        let (receiver, func, arg_ids) = match &engine.body.exprs[expr].kind {
             ExprKind::MethodCall {
                 receiver,
                 func,
@@ -1203,7 +1221,7 @@ impl Rewriter<'_, '_> {
             ),
             _ => return None,
         };
-        let rec_local = receiver_local(body, receiver)?;
+        let rec_local = receiver_local(engine.body, receiver)?;
         if !ctx.decomposed.contains(&rec_local) {
             return None;
         }
@@ -1216,7 +1234,7 @@ impl Rewriter<'_, '_> {
         match (kind, arg_ids.len()) {
             // Case 1: v.ElementWriter(source) — e.g. push
             (Some(ListMethodKind::ElementWriter), 1) => {
-                let per_field = self.decompose_source(body, arg_ids[0], arity, &layout)?;
+                let per_field = self.decompose_source(engine, arg_ids[0], arity, &layout)?;
                 let sig = sig_key_of(&func)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
@@ -1224,7 +1242,7 @@ impl Rewriter<'_, '_> {
                     let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
                     let elem_ty = element_types[k];
                     let call = build_element_writer_call(
-                        body,
+                        engine,
                         elem_ty,
                         arr_ty,
                         field_local,
@@ -1234,10 +1252,7 @@ impl Rewriter<'_, '_> {
                         span,
                         ctx,
                     );
-                    let st = body.stmts.push(StmtNode {
-                        kind: StmtKind::Expr(call),
-                        span,
-                    });
+                    let st = engine.alloc_stmt(StmtKind::Expr(call), span);
                     out.push(st);
                 }
                 Some(out)
@@ -1246,19 +1261,19 @@ impl Rewriter<'_, '_> {
             (Some(ListMethodKind::IndexWriter), 2) => {
                 let idx = arg_ids[0];
                 let src = arg_ids[1];
-                if !is_duplicable_expr(body, idx) {
+                if !is_duplicable_expr(engine.body, idx) {
                     return None;
                 }
-                let per_field = self.decompose_source(body, src, arity, &layout)?;
+                let per_field = self.decompose_source(engine, src, arity, &layout)?;
                 let sig = sig_key_of(&func)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                     let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
                     let elem_ty = element_types[k];
-                    let idx_clone = body.clone_expr(idx);
+                    let idx_clone = engine.clone_expr(idx);
                     let call = build_index_writer_call(
-                        body,
+                        engine,
                         elem_ty,
                         arr_ty,
                         field_local,
@@ -1269,10 +1284,7 @@ impl Rewriter<'_, '_> {
                         span,
                         ctx,
                     );
-                    let st = body.stmts.push(StmtNode {
-                        kind: StmtKind::Expr(call),
-                        span,
-                    });
+                    let st = engine.alloc_stmt(StmtKind::Expr(call), span);
                     out.push(st);
                 }
                 Some(out)
@@ -1284,7 +1296,7 @@ impl Rewriter<'_, '_> {
     /// Decompose a source expression into N per-field expression ids.
     fn decompose_source(
         &self,
-        body: &mut Body,
+        engine: &mut Engine,
         expr: ExprId,
         expected_arity: usize,
         expected_layout: &ElementLayout,
@@ -1301,7 +1313,7 @@ impl Rewriter<'_, '_> {
                 span: Span,
             },
         }
-        let source = match &body.exprs[expr].kind {
+        let source = match &engine.body.exprs[expr].kind {
             ExprKind::TupleLiteral { elements } => {
                 if !matches!(expected_layout, ElementLayout::Tuple) {
                     return None;
@@ -1338,7 +1350,7 @@ impl Rewriter<'_, '_> {
             } if list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1 =>
             {
-                let other = receiver_local(body, *receiver)?;
+                let other = receiver_local(engine.body, *receiver)?;
                 if !ctx.decomposed.contains(&other) {
                     return None;
                 }
@@ -1350,7 +1362,7 @@ impl Rewriter<'_, '_> {
                     return None;
                 }
                 let idx_expr = args[0].expr;
-                if !is_duplicable_expr(body, idx_expr) {
+                if !is_duplicable_expr(engine.body, idx_expr) {
                     return None;
                 }
                 let sig = sig_key_of(func)?;
@@ -1358,7 +1370,7 @@ impl Rewriter<'_, '_> {
                     other,
                     idx: idx_expr,
                     sig,
-                    span: body.exprs[expr].span,
+                    span: engine.body.exprs[expr].span,
                 }
             }
             _ => return None,
@@ -1370,8 +1382,8 @@ impl Rewriter<'_, '_> {
                 // rewritten to propagate nested decomposed reads.
                 let mut out = Vec::with_capacity(expected_arity);
                 for el in elements {
-                    let c = body.clone_expr(el);
-                    self.rewrite_expr(body, c);
+                    let c = engine.clone_expr(el);
+                    self.rewrite_expr(engine, c);
                     out.push(c);
                 }
                 Some(out)
@@ -1388,8 +1400,8 @@ impl Rewriter<'_, '_> {
                     if out[k].is_some() {
                         return None;
                     }
-                    let c = body.clone_expr(value);
-                    self.rewrite_expr(body, c);
+                    let c = engine.clone_expr(value);
+                    self.rewrite_expr(engine, c);
                     out[k] = Some(c);
                 }
                 out.into_iter().collect::<Option<Vec<_>>>()
@@ -1408,9 +1420,9 @@ impl Rewriter<'_, '_> {
                     let (other_field_name, other_arr_ty) =
                         ctx.field_info_map[&(other, k as u32)].clone();
                     let other_elem_ty = other_elem_types[k];
-                    let idx_clone = body.clone_expr(idx);
+                    let idx_clone = engine.clone_expr(idx);
                     let call = build_index_reader_call(
-                        body,
+                        engine,
                         other_elem_ty,
                         other_arr_ty,
                         other_field_local,
@@ -1429,7 +1441,7 @@ impl Rewriter<'_, '_> {
 
     /// Rewrite an expression in place: `v.len()`/`v.is_empty()` → field-0 call;
     /// `v.index_value(i).K` → `v_K.index_value(i)`. All other expressions recurse.
-    fn rewrite_expr(&self, body: &mut Body, e: ExprId) {
+    fn rewrite_expr(&self, engine: &mut Engine, e: ExprId) {
         let ctx = self.ctx;
 
         // Handle FieldAccess on IndexValue first (read pattern).
@@ -1437,7 +1449,7 @@ impl Rewriter<'_, '_> {
             expr: inner,
             field_index,
             ..
-        } = &body.exprs[e].kind
+        } = &engine.body.exprs[e].kind
         {
             let inner = *inner;
             let field_index = *field_index;
@@ -1446,10 +1458,10 @@ impl Rewriter<'_, '_> {
                 func,
                 args,
                 ..
-            } = &body.exprs[inner].kind
+            } = &engine.body.exprs[inner].kind
                 && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1
-                && let Some(rec_local) = receiver_local(body, *receiver)
+                && let Some(rec_local) = receiver_local(engine.body, *receiver)
                 && ctx.decomposed.contains(&rec_local)
             {
                 sig_key_of(func).map(|sig| (rec_local, field_index, args[0].expr, sig))
@@ -1469,21 +1481,25 @@ impl Rewriter<'_, '_> {
                 let elem_ty = info.element_types[k];
                 let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                 let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
-                let idx_clone = body.clone_expr(idx_arg);
-                self.rewrite_expr(body, idx_clone);
+                let idx_clone = engine.clone_expr(idx_arg);
+                self.rewrite_expr(engine, idx_clone);
+                let span = engine.body.exprs[e].span;
                 let new_call = build_index_reader_call(
-                    body,
+                    engine,
                     elem_ty,
                     arr_ty,
                     field_local,
                     field_name,
                     idx_clone,
                     &sig,
-                    body.exprs[e].span,
+                    span,
                     ctx,
                 );
-                let node = body.exprs[new_call].clone();
-                body.exprs[e] = node;
+                // Promote `new_call`'s content into `e`, leaving `new_call`
+                // a dead `Unit`. Equivalent to the old `body.exprs[e] = node;`
+                // but registers the move in the engine's parent map and use
+                // index.
+                engine.become_expr(e, new_call);
                 return;
             }
         }
@@ -1494,9 +1510,9 @@ impl Rewriter<'_, '_> {
             func,
             args,
             ..
-        } = &body.exprs[e].kind
+        } = &engine.body.exprs[e].kind
         {
-            if let Some(rec_local) = receiver_local(body, *receiver)
+            if let Some(rec_local) = receiver_local(engine.body, *receiver)
                 && ctx.decomposed.contains(&rec_local)
                 && args.is_empty()
                 && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::Query)
@@ -1521,31 +1537,35 @@ impl Rewriter<'_, '_> {
                 .get(&(elem_ty, sig))
                 .cloned()
                 .expect("Query monomorphization must exist for decomposed element type");
-            let span = body.exprs[e].span;
-            let new_receiver = build_receiver(body, field_local, field_name, arr_ty, false, span);
-            body.exprs[e].kind = ExprKind::MethodCall {
-                receiver: new_receiver,
-                func: new_func,
-                type_args: Vec::new(),
-                args: Vec::new(),
-            };
+            let span = engine.body.exprs[e].span;
+            let new_receiver =
+                build_receiver(engine, field_local, field_name, arr_ty, false, span);
+            engine.replace_expr_kind(
+                e,
+                ExprKind::MethodCall {
+                    receiver: new_receiver,
+                    func: new_func,
+                    type_args: Vec::new(),
+                    args: Vec::new(),
+                },
+            );
             return;
         }
 
         // Default: recurse into children.
-        self.walk_children(body, NodeRef::Expr(e));
+        self.walk_children(engine, NodeRef::Expr(e));
     }
 
     /// Default mutating walk: recurse into every id-bearing child, dispatching
     /// blocks back through the statement-restructuring `rewrite_block`.
-    fn walk_children(&self, body: &mut Body, node: NodeRef) {
+    fn walk_children(&self, engine: &mut Engine, node: NodeRef) {
         let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
+        engine.body.for_each_child(node, |c| kids.push(c));
         for c in kids {
             match c {
-                NodeRef::Block(b) => self.rewrite_block(body, b),
-                NodeRef::Expr(ex) => self.rewrite_expr(body, ex),
-                NodeRef::Stmt(_) | NodeRef::Pat(_) => self.walk_children(body, c),
+                NodeRef::Block(b) => self.rewrite_block(engine, b),
+                NodeRef::Expr(ex) => self.rewrite_expr(engine, ex),
+                NodeRef::Stmt(_) | NodeRef::Pat(_) => self.walk_children(engine, c),
             }
         }
     }
@@ -1553,36 +1573,32 @@ impl Rewriter<'_, '_> {
 
 /// Build a `Unary::{Ref|MutRef}(Local{field_local})` receiver expression.
 fn build_receiver(
-    body: &mut Body,
+    engine: &mut Engine,
     field_local: u32,
     field_name: String,
     arr_ty: TypeId,
     mut_ref: bool,
     span: Span,
 ) -> ExprId {
-    let local = body.exprs.push(ExprNode {
-        kind: ExprKind::Local {
+    let local = engine.alloc_expr(
+        ExprKind::Local {
             index: field_local,
             name: field_name,
         },
-        type_id: arr_ty,
+        arr_ty,
         span,
-    });
+    );
     let op = if mut_ref {
         NirUnaryOp::MutRef
     } else {
         NirUnaryOp::Ref
     };
-    body.exprs.push(ExprNode {
-        kind: ExprKind::Unary { op, expr: local },
-        type_id: arr_ty,
-        span,
-    })
+    engine.alloc_expr(ExprKind::Unary { op, expr: local }, arr_ty, span)
 }
 
 /// Build a `List<T_k>::Constructor(cap)` NIR call — e.g. `with_capacity(cap)`.
 fn build_with_capacity_call(
-    body: &mut Body,
+    engine: &mut Engine,
     elem_ty: TypeId,
     arr_ty: TypeId,
     cap: ExprId,
@@ -1601,8 +1617,8 @@ fn build_with_capacity_call(
         .get(&(elem_ty, sig))
         .expect("Constructor entry checked by required_methods_available")
         .clone();
-    body.exprs.push(ExprNode {
-        kind: ExprKind::Call {
+    engine.alloc_expr(
+        ExprKind::Call {
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
@@ -1610,15 +1626,15 @@ fn build_with_capacity_call(
                 is_mut: false,
             }],
         },
-        type_id: arr_ty,
+        arr_ty,
         span,
-    })
+    )
 }
 
 /// Build `v_field.ElementWriter(value)` — e.g. `v_field.push(value)`.
 #[allow(clippy::too_many_arguments)]
 fn build_element_writer_call(
-    body: &mut Body,
+    engine: &mut Engine,
     elem_ty: TypeId,
     arr_ty: TypeId,
     field_local: u32,
@@ -1633,9 +1649,9 @@ fn build_element_writer_call(
         .get(&(elem_ty, sig.clone()))
         .expect("ElementWriter entry checked by required_methods_available")
         .clone();
-    let receiver = build_receiver(body, field_local, field_name, arr_ty, true, span);
-    body.exprs.push(ExprNode {
-        kind: ExprKind::MethodCall {
+    let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
+    engine.alloc_expr(
+        ExprKind::MethodCall {
             receiver,
             func,
             type_args: Vec::new(),
@@ -1644,15 +1660,15 @@ fn build_element_writer_call(
                 is_mut: false,
             }],
         },
-        type_id: TypeTable::UNIT,
+        TypeTable::UNIT,
         span,
-    })
+    )
 }
 
 /// Build `v_field.IndexWriter(index, value)` — e.g. `index_assign(index, value)`.
 #[allow(clippy::too_many_arguments)]
 fn build_index_writer_call(
-    body: &mut Body,
+    engine: &mut Engine,
     elem_ty: TypeId,
     arr_ty: TypeId,
     field_local: u32,
@@ -1668,9 +1684,9 @@ fn build_index_writer_call(
         .get(&(elem_ty, sig.clone()))
         .expect("IndexWriter entry checked by required_methods_available")
         .clone();
-    let receiver = build_receiver(body, field_local, field_name, arr_ty, true, span);
-    body.exprs.push(ExprNode {
-        kind: ExprKind::MethodCall {
+    let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
+    engine.alloc_expr(
+        ExprKind::MethodCall {
             receiver,
             func,
             type_args: Vec::new(),
@@ -1685,15 +1701,15 @@ fn build_index_writer_call(
                 },
             ],
         },
-        type_id: TypeTable::UNIT,
+        TypeTable::UNIT,
         span,
-    })
+    )
 }
 
 /// Build `v_field.IndexReader(index)` — e.g. `index_value(index)`, of type `elem_ty`.
 #[allow(clippy::too_many_arguments)]
 fn build_index_reader_call(
-    body: &mut Body,
+    engine: &mut Engine,
     elem_ty: TypeId,
     arr_ty: TypeId,
     field_local: u32,
@@ -1708,9 +1724,9 @@ fn build_index_reader_call(
         .get(&(elem_ty, sig.clone()))
         .expect("IndexReader entry checked by required_methods_available")
         .clone();
-    let receiver = build_receiver(body, field_local, field_name, arr_ty, false, span);
-    body.exprs.push(ExprNode {
-        kind: ExprKind::MethodCall {
+    let receiver = build_receiver(engine, field_local, field_name, arr_ty, false, span);
+    engine.alloc_expr(
+        ExprKind::MethodCall {
             receiver,
             func,
             type_args: Vec::new(),
@@ -1719,9 +1735,9 @@ fn build_index_reader_call(
                 is_mut: false,
             }],
         },
-        type_id: elem_ty,
+        elem_ty,
         span,
-    })
+    )
 }
 
 /// Returns true if the expression can be safely duplicated (cloned and
