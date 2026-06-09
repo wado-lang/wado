@@ -606,6 +606,16 @@ pub struct AtnSim {
     pub rule_start: List<i32>,
     pub rule_stop: List<i32>,
     pub num_tokens: i32,
+    /// Per-rule FIRST / nullability, computed once from the decoded ATN (not
+    /// from the blob). `rule_nullable[r]` — can rule `r` derive empty;
+    /// `rule_first[r]` — the explicit token kinds rule `r` can start with;
+    /// `rule_first_open[r]` — rule `r`'s FIRST also admits a wildcard /
+    /// negated set (matches "many" tokens, handled conservatively). These
+    /// drive the LR loop-entry decision's caller-mandatory check
+    /// (`atn_lr_loop_decision`).
+    pub rule_nullable: List<bool>,
+    pub rule_first: List<List<i32>>,
+    pub rule_first_open: List<bool>,
 }
 
 /// Sentinel return state inside a `PredictionContext`: this branch's
@@ -852,11 +862,134 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
             tr_prec.push(data[p]); p += 1;
         }
     }
-    return AtnSim {
+    let nrules_count = rule_start.len();
+    let mut sim = AtnSim {
         state_kind, state_rule, state_decision, state_tr_start, state_tr_count,
         tr_kind, tr_src, tr_target, tr_label, tr_follow, tr_prec,
         decision_state, rule_start, rule_stop, num_tokens,
+        rule_nullable: [], rule_first: [], rule_first_open: [],
     };
+    for let mut r = 0; r < nrules_count; r += 1 {
+        sim.rule_nullable.push(false);
+        sim.rule_first.push([]);
+        sim.rule_first_open.push(false);
+    }
+    atn_compute_first_nullable(&mut sim);
+    return sim;
+}
+
+/// Fill `rule_nullable` / `rule_first` / `rule_first_open` by a monotone
+/// fixpoint over the ATN: each pass recomputes every rule's FIRST/nullable
+/// from the current values (used for rule-ref edges), stopping when nothing
+/// grows. Runs once per parser at decode; the grammar (ATN) is constant so
+/// this is O(1) w.r.t. input.
+#[allow(dead_code)]
+fn atn_compute_first_nullable(sim: &mut AtnSim) {
+    let nrules = sim.rule_start.len();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut r = 0; r < nrules; r += 1 {
+            let mut v1: List<i32> = [];
+            if atn_cont_nullable(sim, sim.rule_start[r], &mut v1) && !sim.rule_nullable[r] {
+                sim.rule_nullable[r] = true;
+                changed = true;
+            }
+            let mut v2: List<i32> = [];
+            let mut f: List<i32> = [];
+            if atn_cont_first(sim, sim.rule_start[r], &mut v2, &mut f) && !sim.rule_first_open[r] {
+                sim.rule_first_open[r] = true;
+                changed = true;
+            }
+            for let t of &f {
+                if !sim.rule_first[r].contains(t) {
+                    sim.rule_first[r].push(*t);
+                    changed = true;
+                }
+            }
+        }
+    }
+}
+
+/// True iff the continuation from `state` to its rule's `RULE_STOP` can be
+/// empty (derive no token). Uses `sim.rule_nullable` for rule-ref edges;
+/// `visited` breaks within-rule cycles (a re-entered state adds no new
+/// nullability).
+#[allow(dead_code)]
+fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool {
+    if visited.contains(&state) {
+        return false;
+    }
+    visited.push(state);
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        return true;
+    }
+    let s = sim.state_tr_start[state];
+    let c = sim.state_tr_count[state];
+    for let mut j = 0; j < c; j += 1 {
+        let k = sim.tr_kind[s + j];
+        if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+            if atn_cont_nullable(sim, sim.tr_target[s + j], visited) {
+                return true;
+            }
+        } else if k == ATN_TR_RULE {
+            let callee = sim.tr_label[s + j];
+            if callee >= 0 && sim.rule_nullable[callee] && atn_cont_nullable(sim, sim.tr_follow[s + j], visited) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Collect the explicit FIRST token kinds of the continuation from `state`
+/// into `out`; returns `open` (true if the FIRST also admits a wildcard /
+/// negated set, i.e. "many" tokens — handled conservatively by callers).
+/// Stops at consuming atoms (their label is the FIRST; no walk past them).
+/// Uses `sim.rule_first` / `rule_first_open` / `rule_nullable` for rule-ref
+/// edges; `visited` breaks within-rule cycles.
+#[allow(dead_code)]
+fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>) -> bool {
+    if visited.contains(&state) {
+        return false;
+    }
+    visited.push(state);
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        return false;
+    }
+    let mut open = false;
+    let s = sim.state_tr_start[state];
+    let c = sim.state_tr_count[state];
+    for let mut j = 0; j < c; j += 1 {
+        let k = sim.tr_kind[s + j];
+        if k == ATN_TR_ATOM {
+            if !out.contains(&sim.tr_label[s + j]) {
+                out.push(sim.tr_label[s + j]);
+            }
+        } else if k == ATN_TR_WILDCARD || k == ATN_TR_NOT_ATOM {
+            open = true;
+        } else if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+            if atn_cont_first(sim, sim.tr_target[s + j], visited, out) {
+                open = true;
+            }
+        } else if k == ATN_TR_RULE {
+            let callee = sim.tr_label[s + j];
+            if callee >= 0 {
+                for let t of &sim.rule_first[callee] {
+                    if !out.contains(t) {
+                        out.push(*t);
+                    }
+                }
+                if sim.rule_first_open[callee] {
+                    open = true;
+                }
+                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out) {
+                    open = true;
+                }
+            }
+        }
+    }
+    return open;
 }
 
 /// True when `state`'s outgoing edges consume a token (atom / wildcard /
@@ -1183,6 +1316,71 @@ pub fn atn_predict_with_stack(sim: &AtnSim, decision: i32, rule_stack: &List<i32
         pos += 1;
         configs = atn_closure(sim, &mut arena, &moved, rule_stack);
     }
+}
+
+/// Decide an LR rule's loop-entry: ENTER alt `j` (continue the loop with
+/// operator alt `j`) or EXIT (the trailing exit-edge index `c - 1`). This is
+/// the LR loop-entry's true semantics — precedence + yield-to-caller-mandatory
+/// — computed directly, not by general ALL(*) simulation (which is correct but
+/// O(n^2) here because the exit branch re-walks the whole enclosing-loop
+/// caller chain). O(caller-depth + grammar) per decision.
+///
+/// 1. If the current token is MANDATORY in the caller continuation (the first
+///    non-nullable level of the caller return-state stack), EXIT — the caller
+///    needs it (`between`'s mandatory `'and'`).
+/// 2. Else the lowest-index precedence-allowed (`prec >= min_prec`) enter edge
+///    whose suffix can start with the token wins (greedy; left-associativity
+///    falls out of the precedence prune).
+/// 3. Else EXIT.
+#[allow(dead_code)]
+pub fn atn_lr_loop_decision(sim: &AtnSim, rule_stack: &List<i32>, decision: i32, tokens: &List<Token>, pos: i32, eof: i32, min_prec: i32 = 0) -> i32 {
+    let dstate = sim.decision_state[decision];
+    let t = if pos < tokens.len() { tokens[pos].kind } else { eof };
+    let s = sim.state_tr_start[dstate];
+    let c = sim.state_tr_count[dstate];
+    let exit_alt = c - 1;
+    if atn_caller_mandates(sim, rule_stack, t, eof) {
+        return exit_alt;
+    }
+    for let mut j = 0; j < c; j += 1 {
+        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE {
+            if sim.tr_prec[s + j] < min_prec {
+                continue;
+            }
+            let mut v: List<i32> = [];
+            let mut f: List<i32> = [];
+            let open = atn_cont_first(sim, sim.tr_target[s + j], &mut v, &mut f);
+            if open || f.contains(&t) {
+                return j;
+            }
+        }
+    }
+    return exit_alt;
+}
+
+/// True iff the caller continuation MANDATES token `t`: walking the caller
+/// return-state stack from the top, pop nullable continuations (optional
+/// loops / nullable tails), and at the first non-nullable level test whether
+/// its FIRST admits `t`. The start frame (-1 at index 0) mandates EOF.
+#[allow(dead_code)]
+fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {
+    let mut i = rule_stack.len() - 1;
+    while i >= 0 {
+        let ret = rule_stack[i];
+        if ret < 0 {
+            return i == 0 && t == eof;
+        }
+        let mut v: List<i32> = [];
+        if atn_cont_nullable(sim, ret, &mut v) {
+            i -= 1;
+            continue;
+        }
+        let mut v2: List<i32> = [];
+        let mut f: List<i32> = [];
+        let open = atn_cont_first(sim, ret, &mut v2, &mut f);
+        return open || f.contains(&t);
+    }
+    return false;
 }
 
 /// SLL convenience wrapper: predict with an empty rule stack. Correct for
@@ -1763,7 +1961,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, Par
     let start = p.peek().span.start;
     let mut result = _parse_expr__inner_atom(p)?;
     loop {
-        let _atn_alt = atn_predict_with_stack(&p.atn, 1, &p.atn_stack, &p.tokens, p.pos, TK_EOF, min_prec);
+        let _atn_alt = atn_lr_loop_decision(&p.atn, &p.atn_stack, 1, &p.tokens, p.pos, TK_EOF, min_prec);
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
             result = _parse_expr__inner_lr_1(p, result, start)?;

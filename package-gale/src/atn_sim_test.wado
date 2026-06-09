@@ -14,7 +14,7 @@ use {
     Atn,
 } from "./atn.wado";
 use {
-    atn_decode, atn_adaptive_predict, atn_predict_with_stack, AtnSim,
+    atn_decode, atn_adaptive_predict, atn_predict_with_stack, atn_lr_loop_decision, AtnSim,
     ATN_BLOCK_START, ATN_BLOCK_END, ATN_STAR_LOOP_ENTRY,
 } from "./runtime/atn.wado";
 use { Token, LexerSlice, Span } from "./runtime/lex.wado";
@@ -235,4 +235,23 @@ test "precedence pruning gates LR loop-entry enter alts by min_prec" {
     // the exit edge survives → exit alt (2).
     let hi = atn_predict_with_stack(&sim, d, &empty, &toks, 0, eof, 2);
     assert hi == 2, `min_prec 2 should prune '+' and exit (2), got {hi}`;
+}
+
+// P4.4: the dedicated LR loop-entry decision (`atn_lr_loop_decision`) — the
+// O(n) replacement for full ALL(*) simulation on LR loops. It encodes the
+// true loop-entry semantics: precedence prune + yield-to-caller-mandatory.
+test "LR loop decision: precedence gates enter/exit" {
+    let g = parse(LR_G4).unwrap();
+    let atn = build_atn(&g);
+    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = loop_entry_decision(&atn, 0);
+    let empty: List<i32> = [];
+    // After the first atom, `'+' INT` (INT=0, '*'=4, '+'=5). The exit edge is
+    // the last (index 2); enter '*'=0, enter '+'=1.
+    let toks: List<Token> = [mk(5), mk(0)];
+    // min_prec 0: enter the '+' alt (own_prec 1 >= 0, suffix starts with '+').
+    assert atn_lr_loop_decision(&sim, &empty, d, &toks, 0, eof, 0) == 1, "min_prec 0 enters '+'";
+    // min_prec 2: '+' (own_prec 1 < 2) pruned, '*' suffix !startswith '+', exit.
+    assert atn_lr_loop_decision(&sim, &empty, d, &toks, 0, eof, 2) == 2, "min_prec 2 exits";
 }

@@ -4989,7 +4989,7 @@ fn project_lr_dispatch(lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData) -> [
 fn gen_lr_suffix_dispatch_atn(w: &mut CodeWriter, type_name: &String, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, decision: i32) {
     let valid = &lr_dispatch.valid_lr_alts;
     w.begin(&"loop");
-    w.line(&`let _atn_alt = atn_predict_with_stack(&p.atn, {decision}, &p.atn_stack, &p.tokens, p.pos, TK_EOF, min_prec);`);
+    w.line(&`let _atn_alt = atn_lr_loop_decision(&p.atn, &p.atn_stack, {decision}, &p.tokens, p.pos, TK_EOF, min_prec);`);
     // Progress guard: every LR suffix consumes at least its operator token,
     // so a non-advancing iteration means the prediction's min-alt fallback
     // returned an enter alt with nothing to parse — exit instead of spinning.
