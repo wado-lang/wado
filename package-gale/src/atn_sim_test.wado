@@ -321,12 +321,11 @@ test "atn_lr_loop_decision: ~SEMI suffix excludes the SEMI token" {
     assert atn_lr_loop_decision(&sim, &empty, d, &on_int, 0, eof) == 0, "~SEMI matches INT";
 }
 
-// Guard: a caller stack this deep seeds `rs = 999`, which overflows the
-// 3-decimal-digit `rs` slot of CfgSet's packed key. Without the guard the
-// over-deep config would alias a *different* config onto the same key — a
-// silent mis-merge — so `CfgSet.add` must trap instead.
-#[expect_trap]
-test "CfgSet packed key traps on an over-deep caller stack" {
+// A caller stack 1000 frames deep seeds `rs = 999`. The packed CfgSet key
+// gives `rs` a 21-bit (~2M) slot, so such a depth predicts normally rather
+// than overflowing the key — the prediction must complete and pick the
+// token-led alternative, not trap.
+test "CfgSet packed key handles a deep caller stack" {
     let g = parse(K2_G4).unwrap();
     let atn = build_atn(&g);
     let sim = atn_decode(&serialize_atn(&atn));
@@ -336,19 +335,19 @@ test "CfgSet packed key traps on an over-deep caller stack" {
     for let mut i = 0; i < 1000; i += 1 {
         deep.push(-1);
     }
+    // `a : ID '(' ')' | ID '[' ']'` on `ID ( )` → alt 0. (ID=0, '('=4, ')'=5.)
     let toks: List<Token> = [
         mk(0),
         mk(4),
         mk(5),
     ];
-    let _ = atn_predict_with_stack(&sim, d, &deep, &toks, 0, 2);
+    assert atn_predict_with_stack(&sim, d, &deep, &toks, 0, 2) == 0, "deep stack must still predict alt 0";
 }
 
-// Guard: an LR rule whose atom alternative is nullable (`a : ID?`) lets the
-// FIRST walk reach the loop-entry precedence edges, leaking the operator
-// tokens into the rule's FIRST set and mis-firing the caller-mandate test.
-// `atn_decode` runs the FIRST/nullable fixpoint with `forbid_prec`, so it
-// must trap on this unsupported ATN-class shape.
+// An LR rule whose atom alternative is nullable (`a : ID?`) can begin with a
+// loop operator: when `a` derives empty, `e` starts the `('+' e)*` loop, so
+// `e`'s FIRST legitimately includes `'+'`. `atn_decode` must handle this (not
+// reject it), and the operator must land in the rule's FIRST set.
 global LR_NULLABLE_ATOM_G4: String = "
 grammar T;
 e : e '+' e | a ;
@@ -357,9 +356,11 @@ ID : 'a'..'z'+ ;
 WS : ' ' -> skip ;
 ";
 
-#[expect_trap]
-test "atn_decode traps on a nullable atom alternative in an LR rule" {
+test "atn_decode: a nullable atom LR rule carries the operator in its FIRST" {
     let g = parse(LR_NULLABLE_ATOM_G4).unwrap();
     let atn = build_atn(&g);
-    let _ = atn_decode(&serialize_atn(&atn));
+    let sim = atn_decode(&serialize_atn(&atn));
+    // kinds (lexer order): ID=0, WS=1, EOF=2, ERROR=3, '+'=4. Rule 0 is `e`.
+    assert sim.rule_first[0].contains(&4), "e's FIRST must include '+' (a is nullable)";
+    assert sim.rule_first[0].contains(&0), "e's FIRST must include ID (via a)";
 }

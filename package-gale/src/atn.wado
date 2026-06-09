@@ -96,14 +96,39 @@ pub struct Atn {
 /// The loop-entry (`STAR_LOOP_ENTRY`) decision number for parser rule
 /// `rule`, or -1 if the rule has no LR loop. Codegen uses this to route an
 /// ATN-class LR rule's loop-entry through the runtime simulator.
+///
+/// The dedicated LR loop entry is identified by its **precedence enter
+/// edges**, not merely by being a `STAR_LOOP_ENTRY`: an ordinary `*` in the
+/// rule's atom (e.g. `ID* 'between' …`) also builds a `STAR_LOOP_ENTRY` for
+/// the same rule, earlier in state order, but carries no precedence
+/// transitions. Returning that one would feed `atn_lr_loop_decision` the wrong
+/// decision (its epsilon edge read as an LR-suffix index).
 pub fn lr_loop_entry_decision(atn: &Atn, rule: i32) -> i32 {
     for let mut i = 0; i < atn.states.len(); i += 1 {
         let st = &atn.states[i];
-        if st.kind == ATN_STAR_LOOP_ENTRY && st.rule == rule && st.decision >= 0 {
+        if st.kind == ATN_STAR_LOOP_ENTRY && st.rule == rule && st.decision >= 0 && state_has_precedence_edge(st) {
             return st.decision;
         }
     }
     return -1;
+}
+
+/// True iff `st` has a precedence enter edge — the marker of an LR rule's
+/// dedicated loop entry (vs. an ordinary `*` loop, which has none).
+///
+/// NOTE: kept as a helper with an indexed `for` + early `return` on purpose.
+/// Inlining this as a nested `for t of &st.transitions { … break }` inside
+/// `lr_loop_entry_decision` triggered a wado compiler ICE ("WIR pipeline
+/// generated invalid core Wasm module") in the full `atn` module context (the
+/// bare pattern reproduces fine standalone). Do not re-inline until that
+/// compiler bug is fixed.
+fn state_has_precedence_edge(st: &AtnState) -> bool {
+    for let mut j = 0; j < st.transitions.len(); j += 1 {
+        if st.transitions[j].kind == ATN_TR_PRECEDENCE {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// An empty ATN placeholder. Used by codegen as the `needs_atn == false`

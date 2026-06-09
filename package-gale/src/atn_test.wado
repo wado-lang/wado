@@ -7,7 +7,7 @@
 //!   3. non-greedy repeats put the EXIT edge first at the decision state
 //!      (the invariant that makes `(else stmt)??` bind to the outer rule).
 
-use { build_atn, build_token_kinds, serialize_atn, Atn, AtnState } from "./atn.wado";
+use { build_atn, build_token_kinds, serialize_atn, lr_loop_entry_decision, Atn, AtnState } from "./atn.wado";
 use {
     atn_decode,
     AtnSim,
@@ -282,4 +282,32 @@ test "P4.2a: call sites map to distinct ATN return states (between shape)" {
     assert return_state_follows_call(&atn, csr[2], expr_start), "cs2 follows an expr call";
     assert return_state_follows_call(&atn, csr[3], expr_start), "cs3 follows an expr call";
     assert return_state_follows_call(&atn, csr[4], expr_start), "cs4 follows an expr call";
+}
+
+// An ATN-class LR rule whose atom contains an ordinary `*` (`ID* '+' e | ID`)
+// builds a STAR_LOOP_ENTRY for that `*` *before* the dedicated LR loop entry.
+// `lr_loop_entry_decision` must skip the `*` loop (no precedence edges) and
+// return the LR loop entry (precedence enter edges) — otherwise the LR
+// dispatcher feeds the wrong decision number to `atn_lr_loop_decision`.
+global LR_ATOM_STAR_G4: String = "
+grammar T;
+e : e '+' e | ID* 'x' ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+test "lr_loop_entry_decision selects the precedence loop entry, not an atom star" {
+    let g = parse(LR_ATOM_STAR_G4).unwrap();
+    let atn = build_atn(&g);
+    let d = lr_loop_entry_decision(&atn, 0);
+    assert d >= 0, "rule `e` has an LR loop entry";
+    // The selected decision's state must carry the precedence enter edges.
+    let st = &atn.states[atn.decision_state[d]];
+    let mut has_prec = false;
+    for let mut j = 0; j < st.transitions.len(); j += 1 {
+        if st.transitions[j].kind == ATN_TR_PRECEDENCE {
+            has_prec = true;
+        }
+    }
+    assert has_prec, "lr_loop_entry_decision must return the precedence-bearing loop entry, not the atom's ID* loop";
 }
