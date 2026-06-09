@@ -92,6 +92,12 @@ pub struct Engine<'a> {
     /// pass a scratch `Vec`; those bodies have no locals and their rules never
     /// allocate, so it stays empty.
     locals: &'a mut Vec<NirLocal>,
+    /// Lazily-built ValueGraph for this session. `None` until the first call
+    /// to [`Engine::value`] / [`Engine::value_kind`]; cleared by
+    /// [`Engine::invalidate_value_graph`]. See
+    /// `docs/wep-2026-06-05-worklist-rewrite-engine.md` (Stage 1 – 2) and
+    /// [`crate::nir_value_graph`] for the data model.
+    value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
 }
 
 impl<'a> Engine<'a> {
@@ -106,11 +112,64 @@ impl<'a> Engine<'a> {
         locals: &'a mut Vec<NirLocal>,
     ) -> Self {
         buf.reset_for(body);
-        let mut engine = Self { body, buf, locals };
+        let mut engine = Self {
+            body,
+            buf,
+            locals,
+            value_graph: None,
+        };
         engine.build_parents();
         engine.build_uses();
         engine.seed_post_order();
         engine
+    }
+
+    /// Return the [`ValueId`] of `expr` if it is a pure expression that the
+    /// per-function ValueGraph builder assigned an id to. Returns `None` for
+    /// impure / allocation-bearing / control-flow expressions, and for any
+    /// `ExprId` allocated after the session's ValueGraph was built (the
+    /// builder runs once on first access; the side-table does not see
+    /// post-build edits).
+    ///
+    /// First call builds the ValueGraph on demand via
+    /// [`crate::nir_value_graph::builder::build`] (one walk of the body);
+    /// subsequent calls are O(1).
+    ///
+    /// Rules that materially edit the body should call
+    /// [`Engine::invalidate_value_graph`] if they intend to re-query after
+    /// the edit, or simply consult the value graph once at the start of
+    /// their work (the typical pattern).
+    pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
+        self.ensure_value_graph();
+        self.value_graph.as_ref()?.value_of.get(&expr).copied()
+    }
+
+    /// Read-only view of a value's kind. The returned reference borrows the
+    /// engine's value-graph cache; callers that need to hold the kind across
+    /// further `engine` calls should clone it.
+    pub fn value_kind(&mut self, id: crate::nir_value_graph::ValueId) -> &crate::nir_value_graph::ValueKind {
+        self.ensure_value_graph();
+        self.value_graph.as_ref().unwrap().pool.kind(id)
+    }
+
+    /// Drop the cached ValueGraph so the next [`Engine::value`] call
+    /// rebuilds. Used by rules that intend to query the value graph again
+    /// after a structural rewrite that would invalidate the prior build.
+    pub fn invalidate_value_graph(&mut self) {
+        self.value_graph = None;
+    }
+
+    fn ensure_value_graph(&mut self) {
+        if self.value_graph.is_some() {
+            return;
+        }
+        // The builder does not need parameter seeding to behave correctly —
+        // the first read of an unseeded local lazily allocates an `Opaque`
+        // and caches it, which is functionally equivalent to up-front
+        // seeding (every subsequent read of the same local returns the same
+        // `ValueId`).
+        let build = crate::nir_value_graph::builder::build(&*self.body, &[]);
+        self.value_graph = Some(build);
     }
 
     /// Read-only view of the owning function's local list. Some rules
