@@ -121,7 +121,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // lowering saw a construct that needs it (a non-greedy repeat), so
     // gate-free grammars stay byte-identical.
     if ctx.needs_atn() {
-        gen_atn_data_global(&mut w, &atn);
+        gen_atn_data_global(&mut w, &atn, ctx.needs_scan_atn());
     }
     return GeneratedOutput {
         source: w.to_string(),
@@ -131,7 +131,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
 
 /// Emit `global GALE_ATN_DATA: List<i32> = [...]`: the serialized
 /// whole-grammar ATN the inlined runtime decodes once per parser.
-fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn) {
+fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
     let blob = serialize_atn(atn);
     let mut body = String::with_capacity(blob.len() * 6);
     for let mut i = 0; i < blob.len(); i += 1 {
@@ -145,9 +145,13 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn) {
     // scan side (`scan_*` functions take no `Parser`, so they cannot reach
     // `p.atn` / `p.atn_stack`). The scan emit pushes/pops `GALE_SCAN_STACK`
     // around operand scans so an ATN-class LR rule's scan loop can route
-    // through `atn_lr_loop_decision` exactly like the parse side.
-    w.line(&"global GALE_ATN_SIM: AtnSim = atn_decode(&GALE_ATN_DATA);");
-    w.line(&"global GALE_SCAN_STACK: List<i32> = [];");
+    // through `atn_lr_loop_decision` exactly like the parse side. Only emitted
+    // when an ATN-class LR rule exists (a non-greedy-`??`-only grammar uses
+    // the simulator but not the scan-side routing, so it carries neither).
+    if emit_scan_globals {
+        w.line(&"global GALE_ATN_SIM: AtnSim = atn_decode(&GALE_ATN_DATA);");
+        w.line(&"global GALE_SCAN_STACK: List<i32> = [];");
+    }
     w.blank();
 }
 

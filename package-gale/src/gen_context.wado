@@ -94,6 +94,11 @@ pub struct GenContext {
     /// a non-greedy `??` stay byte-identical. (`*?`/`+?` keep the dedicated
     /// non-greedy strategy and do not set this.)
     needs_atn_seen: bool,
+    /// Set by lowering for an ATN-class LR rule. Gates the scan-side ATN
+    /// globals (`GALE_ATN_SIM` / `GALE_SCAN_STACK`) so non-greedy-`??`-only
+    /// grammars (which need the ATN simulator but no scan-side LR routing)
+    /// do not carry a redundant decoded ATN / dead scan stack.
+    needs_scan_atn_seen: bool,
     /// The ATN call-site → return-state correspondence (`Atn.call_site_returns`,
     /// indexed by `RuleRefElement.atn_call_site`). Populated after lowering
     /// by `set_atn_call_site_returns` when `needs_atn`, so parser emit can
@@ -146,6 +151,7 @@ impl GenContext {
             diagnostics: [],
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
+            needs_scan_atn_seen: false,
             atn_call_site_returns: [],
             current_rule_index: -1,
             lr_loop_entry_decisions: [],
@@ -180,6 +186,18 @@ impl GenContext {
     /// stack maintenance). True iff lowering saw a non-greedy repeat.
     pub fn needs_atn(&self) -> bool {
         return self.needs_atn_seen;
+    }
+
+    /// Record that lowering saw an ATN-class LR rule (needs scan-side ATN
+    /// globals). Implies `needs_atn`.
+    pub fn mark_needs_scan_atn(&mut self) {
+        self.needs_scan_atn_seen = true;
+    }
+
+    /// Whether to emit the scan-side ATN globals (`GALE_ATN_SIM` /
+    /// `GALE_SCAN_STACK`). True iff an ATN-class LR rule exists.
+    pub fn needs_scan_atn(&self) -> bool {
+        return self.needs_scan_atn_seen;
     }
 
     /// Store the ATN call-site → return-state correspondence after the ATN
