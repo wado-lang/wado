@@ -357,9 +357,18 @@ fn build_lr_body(
     let back = b.new_state(ATN_STAR_LOOP_BACK, r);
     b.mark_decision(entry);
 
-    // One precedence-guarded enter edge per LR alt with a non-empty suffix.
-    // Degenerate `expr : expr` alts (no suffix) are skipped, matching
-    // `LrDispatchData.valid_lr_alts`.
+    // One precedence-guarded enter edge per LR alt with a non-empty suffix
+    // (a degenerate `expr : expr` with no suffix is skipped). The edge index
+    // `atn_lr_loop_decision` returns is over THIS list.
+    //
+    // KNOWN GAP (tracked): the parse/scan dispatchers map that edge index onto
+    // `LrDispatchData.valid_lr_alts`, which additionally filters out alts with
+    // an empty static `suffix_first` (a `.` / `~X`-led suffix). For a grammar
+    // with such a suffix the two lists diverge and the index misaligns. The
+    // runtime decision itself handles a `~X` suffix correctly (via the
+    // negated-label FIRST), so the fix is to align the dispatcher with this
+    // edge list rather than to drop the edge. No corpus grammar has a
+    // `.`/`~X`-led LR suffix, so this is latent.
     for let a of &lr.lr_alts {
         let alt = &rule.alternatives[a.alt_index];
         if alt.elements.len() <= 1 {
@@ -396,6 +405,14 @@ fn build_lr_suffix(
             let prec = if i == lr_alt.last_self_ref_idx { lr_alt.conflict_min } else { 0 };
             self_ref_segment(b, r, prec, self_ref_call_site(&alt.elements[i]));
         } else {
+            // KNOWN GAP (tracked): a self-ref *nested* inside a Group/Repeat
+            // suffix element is built by the generic path with `prec = 0`,
+            // whereas lowering stamps it with `conflict_min`. This only skews
+            // the *general* simulator (non-greedy `??` traversing such an LR
+            // rule); the dedicated `atn_lr_loop_decision` uses the loop-entry
+            // precedence edges, not the nested operand's floor. No corpus
+            // grammar has a nested-self-ref LR suffix. Fixing it needs a
+            // precedence-aware recursive element builder.
             build_element(b, &alt.elements[i], r, rule_index);
         };
         b.add_eps(cursor, seg.0);

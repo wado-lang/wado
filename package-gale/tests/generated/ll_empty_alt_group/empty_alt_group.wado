@@ -1219,20 +1219,21 @@ impl CfgSet {
         // Packed i64 key (avoids per-config string allocation on the hot
         // closure path). Each field gets a power-of-two bit slot, offset by
         // its -2/-1 sentinel so the value stays non-negative:
-        //   pr    : bits [0,8)   (×1)            — precedence level
-        //   alt   : bits [8,20)  (×256 = 2^8)    — alternative index
-        //   rs    : bits [20,41) (×2^20)         — caller-stack depth
-        //   state : bits [41,62) (×2^41)         — ATN state id
-        // The slots are far wider than anything reachable: `rs` admits ~2M
-        // caller frames (the wasm stack overflows in the low thousands first),
-        // `state` ~2M states, `alt`/`pr` thousands. The asserts document the
+        //   pr    : bits [0,11)  (×1)            — precedence level
+        //   alt   : bits [11,22) (×2^11 = 2048)  — alternative index
+        //   rs    : bits [22,42) (×2^22)         — caller-stack depth
+        //   state : bits [42,62) (×2^42)         — ATN state id
+        // The slots are far wider than anything reachable: `pr`/`alt` admit
+        // ~2046 (a rule never has thousands of precedence levels or alts),
+        // `rs` ~1M caller frames (the wasm stack overflows in the low
+        // thousands first), `state` ~1M states. The asserts document the
         // encoding capacity and fail loudly rather than let a field overflow
         // its slot and alias a *different* config onto the same key.
-        assert pr + 2 < 256, `ATN config precedence {pr} exceeds packed-key slot`;
-        assert alt + 1 < 4096, `ATN config alt {alt} exceeds packed-key slot`;
-        assert rs + 2 < 2097152, `ATN config caller-stack depth {rs} exceeds packed-key slot`;
-        assert state + 2 < 2097152, `ATN config state {state} exceeds packed-key slot`;
-        let k = (state + 2) as i64 * 2199023255552 + (rs + 2) as i64 * 1048576 + (alt + 1) as i64 * 256 + (pr + 2) as i64;
+        assert pr + 2 < 2048, `ATN config precedence {pr} exceeds packed-key slot`;
+        assert alt + 1 < 2048, `ATN config alt {alt} exceeds packed-key slot`;
+        assert rs + 2 < 1048576, `ATN config caller-stack depth {rs} exceeds packed-key slot`;
+        assert state + 2 < 1048576, `ATN config state {state} exceeds packed-key slot`;
+        let k = (state + 2) as i64 * 4398046511104 + (rs + 2) as i64 * 4194304 + (alt + 1) as i64 * 2048 + (pr + 2) as i64;
         if let Some(i) = self.index.get(k) {
             let merged = arena.merge(self.ctx[i], ctx);
             let changed = merged != self.ctx[i];
@@ -2110,6 +2111,7 @@ fn _parse_start__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             if rep_scan_pos < 0 {
                 if _gale_kind_set_0(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    p.atn_ret_pending = 10;
                     if let Err(_rec_e) = _parse_statement(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
                     p.pos = _rec_pos;
                 }

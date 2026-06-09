@@ -4179,6 +4179,13 @@ fn emit_rep_break_with_recovery(
         w.begin(&`if {scan_pos} < 0`);
         w.begin(&`if {ctx.first_check_str(loop_first)}`);
         w.line(&"let _rec_pos = p.pos;");
+        // Stamp the call's exact ATN return state for the speculative recovery
+        // parse, just as a normal parse call does, so a context-sensitive
+        // callee (`??` / ATN-class LR) sees the right caller frame and records
+        // the intended deep error rather than one from an unknown (-1) caller.
+        if let RuleCall(r) = &rep_op.body {
+            emit_atn_ret_pending(w, ctx, r.atn_call_site);
+        }
         w.line(&`if let Err(_rec_e) = {call} \{ p.record_deeper(_rec_e); \}`);
         w.line(&"p.pos = _rec_pos;");
         w.end();
