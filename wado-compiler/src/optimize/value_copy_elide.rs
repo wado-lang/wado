@@ -16,48 +16,80 @@
 //! what the closure observes — no closure-capture safety gate is
 //! needed here.
 //!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a direct arena walk
-//! rather than a worklist rule: this is a single-pass, flow-insensitive
-//! transform, so it walks the live blocks once and strips each eligible
-//! binding's wrapper in place — exactly the old visitor's one-shot behaviour,
-//! with none of a fixed-point loop's risk of stripping a freshly exposed
-//! nested wrapper that the original would have left for the next iteration.
+//! Runs as `ValueCopyElideRule` inside the unified pre-inline peephole session
+//! (combine migration; see `docs/wep-2026-06-05-worklist-rewrite-engine.md`).
+//! The whole-function usage map (`analyze_usage`) is the safety oracle; it is
+//! computed once per function from the pristine body before the session runs,
+//! so eligibility decisions match the old standalone pass even as other rules
+//! interleave. Strips go through the engine edit API.
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
-use crate::nir_package::NirPackage;
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_engine::{Engine, Rule};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use cranelift_entity::EntityRef;
+/// Strips `$value_copy$T(arg)` wrappers off observably read-only bindings, run
+/// as a rule inside the unified peephole session (formerly the standalone
+/// `nir/value_copy_elide` pass). `usage` is the same whole-function map
+/// `analyze_usage` built, computed once per function from the pristine body
+/// before the session runs (`build_usage`). It keys on local indices, not
+/// nodes, so it stays valid as the session rewrites: the map is the maximal
+/// (pristine) assign / field-mutation profile, and no peephole rule introduces
+/// a new mutation of a local, so an entry can only become conservatively stale
+/// (fewer strips), never unsound. Strips go through the engine edit API so the
+/// worklist re-examines the unwrapped value.
+pub(super) struct ValueCopyElideRule<'a> {
+    value_copy_set: &'a IndexMap<(ModuleSource, String), TypeId>,
+    usage: IndexMap<u32, LocalUsage>,
+}
 
-use super::gate::{FunctionGate, GatedPass};
-
-/// Returns whether any wrapper was stripped. Gate-skipped: a pure per-function
-/// rewrite (it removes `$value_copy$T(arg)` `Call` wrappers within a body, with
-/// no signature or call-graph change), so it skips functions unchanged since it
-/// last ran and reports the ones it strips via the gate.
-pub fn elide_synthesized_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let value_copy_set = project.value_copy_helper_types();
-    if value_copy_set.is_empty() {
-        return false;
+impl<'a> ValueCopyElideRule<'a> {
+    pub(super) fn new(
+        value_copy_set: &'a IndexMap<(ModuleSource, String), TypeId>,
+        usage: IndexMap<u32, LocalUsage>,
+    ) -> Self {
+        Self {
+            value_copy_set,
+            usage,
+        }
     }
-    let type_table = project.type_table.clone();
-    let len = project.functions.len();
-    gate.run_gated(GatedPass::ValueCopyElide, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
-        if func.is_value_copy() {
+}
+
+/// Build the per-function usage map a [`ValueCopyElideRule`] needs, from the
+/// pristine body before the engine session rewrites it.
+pub(super) fn build_usage(body: &Body, type_table: &TypeTable) -> IndexMap<u32, LocalUsage> {
+    analyze_usage(body, type_table)
+}
+
+impl Rule for ValueCopyElideRule<'_> {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        if self.value_copy_set.is_empty() {
             return false;
         }
-        if let Some(body) = func.body.as_mut() {
-            let usage = analyze_usage(body, &type_table.borrow());
-            strip_wrappers_in_body(body, &value_copy_set, &usage)
-        } else {
-            false
+        let usage = &self.usage;
+        let stmts = engine.body.blocks[block].stmts.clone();
+        let mut changed = false;
+        for stmt in stmts {
+            let Some(value) = eligible_value(engine.body, stmt, self.value_copy_set, usage) else {
+                continue;
+            };
+            // `value` is `$value_copy$T(arg)`; replace it with `arg` so the
+            // binding aliases the source. The call returns `arg`'s own type, so
+            // `value`'s type/span are unchanged — matching the old `*value = arg`.
+            let ExprKind::Call { args, .. } = &engine.body.exprs[value].kind else {
+                continue;
+            };
+            let Some(arg) = args.first().map(|a| a.expr) else {
+                continue;
+            };
+            let arg_kind = engine.body.exprs[arg].kind.clone();
+            engine.replace_expr_kind(value, arg_kind);
+            changed = true;
         }
-    })
+        changed
+    }
 }
 
 fn is_mut_ref_type(type_id: TypeId, type_table: &TypeTable) -> bool {
@@ -65,7 +97,7 @@ fn is_mut_ref_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 }
 
 #[derive(Debug, Default)]
-struct LocalUsage {
+pub(super) struct LocalUsage {
     /// Count of `local = expr` assignments. Used by the Assign-form
     /// elision branch to recognize "binding-style" assignments (count
     /// == 1) — those behave like a `Let` and are eligible to strip.
@@ -250,52 +282,16 @@ fn elision_safe(
 /// Replace the `$value_copy$T(arg)` call at `value` with its single argument,
 /// in place. The call returns the argument's own type, so keeping `value`'s
 /// `type_id` / `span` matches the old `*value = arg` rewrite; the orphaned
-/// argument node becomes dead and is purged by the next `from_block` rebuild.
-fn strip_wrapper(body: &mut Body, value: ExprId) {
-    let arg = match &body.exprs[value].kind {
-        ExprKind::Call { args, .. } => args.first().map(|a| a.expr),
-        _ => None,
-    };
-    if let Some(arg) = arg {
-        let arg_kind = body.exprs[arg].kind.clone();
-        body.exprs[value].kind = arg_kind;
-    }
-}
-
-/// Walk the live blocks and strip every eligible `$value_copy$T` wrapper in a
-/// single pass.
-fn strip_wrappers_in_body(
-    body: &mut Body,
-    value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
-    usage: &IndexMap<u32, LocalUsage>,
-) -> bool {
-    let mut blocks = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Block(b) = node {
-            blocks.push(b);
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    let mut changed = false;
-    for b in blocks {
-        let stmts = body.blocks[b].stmts.clone();
-        for stmt in stmts {
-            changed |= try_strip_stmt(body, stmt, value_copy_set, usage);
-        }
-    }
-    changed
-}
-
-/// Strip the wrapper of one statement when it binds / assigns a read-only local
-/// to a `$value_copy$T(arg)` call.
-fn try_strip_stmt(
-    body: &mut Body,
+/// Return the `$value_copy$T(arg)` call expression of `stmt` when `stmt` binds /
+/// assigns a read-only local to such a call (and is thus safe to unwrap). The
+/// caller performs the unwrap via the engine edit API.
+fn eligible_value(
+    body: &Body,
     stmt: StmtId,
     value_copy_set: &IndexMap<(ModuleSource, String), TypeId>,
     usage: &IndexMap<u32, LocalUsage>,
-) -> bool {
-    let target = match &body.stmts[stmt].kind {
+) -> Option<ExprId> {
+    match &body.stmts[stmt].kind {
         // `let x = $value_copy$T(arg)` — Let establishes a fresh binding, so
         // any subsequent assignment to `x` invalidates the snapshot; require
         // `assign_count == 0`.
@@ -328,11 +324,5 @@ fn try_strip_stmt(
             }
         }
         _ => None,
-    };
-    if let Some(value) = target {
-        strip_wrapper(body, value);
-        true
-    } else {
-        false
     }
 }

@@ -43,7 +43,7 @@ Gating affects only which functions a pass visits, never the IR a visit produces
 `optimize.rs` orchestrates the NIR stages; `wir_optimize.rs` runs the WIR stages.
 
 1. Early DCE — remove unreachable functions/types/globals.
-2. Fixed-point loop (skipped at `-O0`), in order: `match_to_switch`, `container_sroa`, `value_copy_elide`, `value_copy_demote`, peephole (pre-inline), `sroa_param`, `inline`, peephole (post-inline), `labeled_block_fusion`, `ref_elim`, `sroa`, `copy_prop`, `dae`, `drve`, `cse`, `store_load_forward`, `const_folding`, `licm`, `condition_implication`, `tmpl_hoist`.
+2. Fixed-point loop (skipped at `-O0`), in order: `container_sroa`, peephole (pre-inline; hosts `match_to_switch` and `value_copy_elide` as rules), `value_copy_demote`, `sroa_param`, `inline`, peephole (post-inline; hosts `ref_elim` and `elide_box_local` as rules), `labeled_block_fusion`, `sroa`, `copy_prop`, `dae`, `drve`, `cse`, `store_load_forward`, `const_folding`, `licm`, `condition_implication`, `tmpl_hoist`. (`match_to_switch` on global initializers runs once before the loop; `-O0` lowers everything via `match_to_switch_all`.)
 3. Post-loop, once: `field_scalarize`; `branch_prune_final` (flatten `__tmpl:` wrappers); `const_object_globalization` + a final `const_folding`/`const_branch_prune` cleanup.
 4. Final DCE.
 5. Backend-required rewrites (all levels): `select_lowering`, `multi_value_return`.

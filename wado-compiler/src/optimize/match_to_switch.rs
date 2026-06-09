@@ -22,16 +22,12 @@
 //! no-op.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirLiteralPattern};
+use crate::nir::{FunctionRef, NirFunction, NirLiteralPattern};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, PatKind, StmtKind};
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
 use crate::token::Span;
-
-use cranelift_entity::EntityRef;
-
-use super::gate::{FunctionGate, GatedPass};
 
 /// Minimum number of literal arms required for the `br_table` rewrite
 /// to be worthwhile.
@@ -43,56 +39,62 @@ const SWITCH_DENSITY_THRESHOLD: f64 = 0.75;
 /// Maximum range size for `br_table` (to avoid huge jump tables).
 const SWITCH_MAX_RANGE: i64 = 1024;
 
-/// Rewrite dense-int / dense-enum `Match` expressions to `Switch`, driven by
-/// the rewrite engine. Returns `true` if any rewrite fired.
-/// Gated: run in the fixed-point loop, skipping functions unchanged since this
-/// pass last ran.
-pub fn match_to_switch(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    match_to_switch_impl(project, Some(gate))
-}
-
-/// Ungated: lower every function. Used at `-O0`, where the loop (and thus the
-/// gate) is skipped — avoids building a throwaway `FunctionGate` (a full
-/// call-graph walk) just to satisfy the gated signature.
+/// Ungated: lower every function (and global). Used at `-O0`, where the loop
+/// (and thus the gate) is skipped — avoids building a throwaway `FunctionGate`
+/// (a full call-graph walk) just to satisfy the gated signature.
 pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
-    match_to_switch_impl(project, None)
+    let type_table = project.type_table.borrow();
+    let rule = MatchToSwitchRule::new(&type_table);
+    let mut buffers = EngineBuffers::default();
+    let mut changed = false;
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        let NirFunction { body, locals, .. } = &mut *func;
+        if let Some(body) = body.as_mut() {
+            changed |= Engine::new(body, &mut buffers, locals).run(&[&rule]);
+        }
+    }
+    changed | run_globals(&mut project.globals, &rule, &mut buffers)
 }
 
-fn match_to_switch_impl(project: &mut NirPackage, gate: Option<&mut FunctionGate>) -> bool {
+/// Lower dense `Match` → `Switch` in global initializer bodies only. Functions
+/// are handled inside the unified peephole session (`MatchToSwitchRule` is one
+/// of its rules); globals are not, so the fixed-point driver runs this once.
+/// Global initializer bodies are not mutated by the function-level loop, so a
+/// single pass is equivalent to running it every iteration.
+pub(super) fn match_to_switch_globals(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
-    let rule = MatchToSwitchRule {
-        type_table: &type_table,
-    };
-    let run_one = |func: &mut crate::nir::NirFunction| -> bool {
-        if let Some(body) = func.body.as_mut() {
-            Engine::new(body).run(&[&rule])
-        } else {
-            false
-        }
-    };
-    let mut changed = if let Some(gate) = gate {
-        let len = project.functions.len();
-        gate.run_gated(GatedPass::MatchToSwitch, len, |fid| {
-            run_one(&mut project.functions[fid.index()].borrow_mut())
-        })
-    } else {
-        let mut c = false;
-        for func_rc in &project.functions {
-            c |= run_one(&mut func_rc.borrow_mut());
-        }
-        c
-    };
-    for global in &mut project.globals {
-        // Global initializers are arena bodies; run the rule on each directly.
-        // Globals are not gated (the gated passes operate on functions only).
-        let mut engine = Engine::new(global.initializer.body_mut());
-        changed |= engine.run(&[&rule]);
+    let rule = MatchToSwitchRule::new(&type_table);
+    let mut buffers = EngineBuffers::default();
+    run_globals(&mut project.globals, &rule, &mut buffers)
+}
+
+fn run_globals(
+    globals: &mut [crate::nir::NirGlobal],
+    rule: &MatchToSwitchRule,
+    buffers: &mut EngineBuffers,
+) -> bool {
+    let mut changed = false;
+    // Global initializer bodies have no owning function — and no locals (any
+    // runtime-computed local is hoisted into `__initialize_module`). Lend an
+    // empty scratch list, reused across globals; `MatchToSwitchRule` never
+    // allocates, so it stays empty.
+    let mut no_locals: Vec<crate::nir::NirLocal> = Vec::new();
+    for global in globals {
+        let mut engine = Engine::new(global.initializer.body_mut(), buffers, &mut no_locals);
+        changed |= engine.run(&[rule]);
     }
     changed
 }
 
-struct MatchToSwitchRule<'t> {
+pub(super) struct MatchToSwitchRule<'t> {
     type_table: &'t TypeTable,
+}
+
+impl<'t> MatchToSwitchRule<'t> {
+    pub(super) fn new(type_table: &'t TypeTable) -> Self {
+        Self { type_table }
+    }
 }
 
 impl Rule for MatchToSwitchRule<'_> {

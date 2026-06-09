@@ -20,6 +20,7 @@ use std::collections::VecDeque;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::nir::NirLocal;
 use crate::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, PatId, PatKind,
     PatNode, StmtId, StmtKind, StmtNode,
@@ -41,10 +42,15 @@ pub struct LocalUses {
     pub reads: Vec<ExprId>,
 }
 
-/// An engine session over one function body: the arena plus the parent map,
-/// use index, and worklist the worklist discipline needs.
-pub struct Engine<'a> {
-    pub body: &'a mut Body,
+/// The reusable scratch buffers an [`Engine`] session needs: the parent map,
+/// use index, and worklist. Constructing an engine for every dirty function in
+/// every engine-based pass — `peephole` twice per fixed-point iteration,
+/// `match_to_switch`, … — happens tens of thousands of times on a large
+/// program, so these containers are owned by the caller once and lent to each
+/// session via [`Engine::new`], which clears and right-sizes them. Reusing the
+/// allocations keeps the optimizer off the global allocator's hot path.
+#[derive(Default)]
+pub struct EngineBuffers {
     expr_parent: Vec<Option<NodeRef>>,
     stmt_parent: Vec<Option<NodeRef>>,
     block_parent: Vec<Option<NodeRef>>,
@@ -54,71 +60,108 @@ pub struct Engine<'a> {
     queued: IndexSet<NodeRef>,
 }
 
-impl<'a> Engine<'a> {
-    /// Build a session: one O(n) pass populates the parent map and use index,
-    /// then the worklist is seeded with every node in post-order (children
-    /// before parents) so leaf reductions are seen before the contexts that
-    /// might fold them.
-    pub fn new(body: &'a mut Body) -> Self {
-        let expr_parent = vec![None; body.exprs.len()];
-        let stmt_parent = vec![None; body.stmts.len()];
-        let block_parent = vec![None; body.blocks.len()];
-        let pat_parent = vec![None; body.pats.len()];
-
-        let mut engine = Self {
-            body,
-            expr_parent,
-            stmt_parent,
-            block_parent,
-            pat_parent,
-            uses: IndexMap::default(),
-            worklist: VecDeque::new(),
-            queued: IndexSet::default(),
+impl EngineBuffers {
+    /// Clear every buffer and size the parent maps to `body`'s current node
+    /// counts (`None`-filled), readying them for a fresh session. Capacity is
+    /// retained, so a reused `EngineBuffers` allocates only when a body is
+    /// larger than any seen before.
+    fn reset_for(&mut self, body: &Body) {
+        let fill = |v: &mut Vec<Option<NodeRef>>, len: usize| {
+            v.clear();
+            v.resize(len, None);
         };
+        fill(&mut self.expr_parent, body.exprs.len());
+        fill(&mut self.stmt_parent, body.stmts.len());
+        fill(&mut self.block_parent, body.blocks.len());
+        fill(&mut self.pat_parent, body.pats.len());
+        self.uses.clear();
+        self.worklist.clear();
+        self.queued.clear();
+    }
+}
+
+/// An engine session over one function body: the arena plus the [`EngineBuffers`]
+/// scratch (parent map, use index, and worklist) the worklist discipline needs,
+/// and the function's `locals` list so rules can allocate fresh locals.
+pub struct Engine<'a> {
+    pub body: &'a mut Body,
+    buf: &'a mut EngineBuffers,
+    /// The function's local list — the single source of truth for the local
+    /// count, so `alloc_local` appends here and returns the new index. Sessions
+    /// over a body with no owning function (a global initializer, a unit test)
+    /// pass a scratch `Vec`; those bodies have no locals and their rules never
+    /// allocate, so it stays empty.
+    locals: &'a mut Vec<NirLocal>,
+}
+
+impl<'a> Engine<'a> {
+    /// Build a session over `body`, reusing the caller-owned `buf`: one O(n)
+    /// pass populates the parent map and use index, then the worklist is seeded
+    /// with every node in post-order (children before parents) so leaf
+    /// reductions are seen before the contexts that might fold them. `locals` is
+    /// the owning function's local list (see [`Engine::alloc_local`]).
+    pub fn new(
+        body: &'a mut Body,
+        buf: &'a mut EngineBuffers,
+        locals: &'a mut Vec<NirLocal>,
+    ) -> Self {
+        buf.reset_for(body);
+        let mut engine = Self { body, buf, locals };
         engine.build_parents();
         engine.build_uses();
         engine.seed_post_order();
         engine
     }
 
+    /// Allocate a fresh function local, returning its index. `locals.len()` is
+    /// the local count (there is no separate counter — see
+    /// [`crate::nir::NirFunction::local_count`]), so the new local takes the
+    /// index `locals.len()` and the push makes it the next free index.
+    pub fn alloc_local(&mut self, name: String, type_id: TypeId, is_mut: bool) -> u32 {
+        let index = self.locals.len() as u32;
+        self.locals.push(NirLocal {
+            name,
+            type_id,
+            is_mut,
+        });
+        index
+    }
+
     /// Set `parent[child] = node` for every id-bearing child of every node.
+    ///
+    /// Destructuring `self` lets the parent slices be written in place while
+    /// `body` is borrowed immutably by `for_each_child`, so no intermediate
+    /// edge buffer is materialized.
     fn build_parents(&mut self) {
-        let body = &*self.body;
-        let set = |child: NodeRef,
-                   parent: NodeRef,
-                   ep: &mut [Option<NodeRef>],
-                   sp: &mut [Option<NodeRef>],
-                   bp: &mut [Option<NodeRef>],
-                   pp: &mut [Option<NodeRef>]| match child {
-            NodeRef::Expr(id) => ep[id.index()] = Some(parent),
-            NodeRef::Stmt(id) => sp[id.index()] = Some(parent),
-            NodeRef::Block(id) => bp[id.index()] = Some(parent),
-            NodeRef::Pat(id) => pp[id.index()] = Some(parent),
+        let body: &Body = &*self.body;
+        let EngineBuffers {
+            expr_parent,
+            stmt_parent,
+            block_parent,
+            pat_parent,
+            ..
+        } = &mut *self.buf;
+        let mut set = |child: NodeRef, parent: NodeRef| match child {
+            NodeRef::Expr(id) => expr_parent[id.index()] = Some(parent),
+            NodeRef::Stmt(id) => stmt_parent[id.index()] = Some(parent),
+            NodeRef::Block(id) => block_parent[id.index()] = Some(parent),
+            NodeRef::Pat(id) => pat_parent[id.index()] = Some(parent),
         };
-        // Collect (parent, child) edges first to avoid borrowing `self` both
-        // immutably (for `for_each_child`) and mutably (the parent slices).
-        let mut edges: Vec<(NodeRef, NodeRef)> = Vec::new();
         for id in body.exprs.keys() {
-            body.for_each_child(NodeRef::Expr(id), |c| edges.push((NodeRef::Expr(id), c)));
+            let parent = NodeRef::Expr(id);
+            body.for_each_child(parent, |c| set(c, parent));
         }
         for id in body.stmts.keys() {
-            body.for_each_child(NodeRef::Stmt(id), |c| edges.push((NodeRef::Stmt(id), c)));
+            let parent = NodeRef::Stmt(id);
+            body.for_each_child(parent, |c| set(c, parent));
         }
         for id in body.blocks.keys() {
-            body.for_each_child(NodeRef::Block(id), |c| edges.push((NodeRef::Block(id), c)));
+            let parent = NodeRef::Block(id);
+            body.for_each_child(parent, |c| set(c, parent));
         }
         for id in body.pats.keys() {
-            body.for_each_child(NodeRef::Pat(id), |c| edges.push((NodeRef::Pat(id), c)));
-        }
-        for (parent, child) in edges {
-            set(
-                child,
-                parent,
-                &mut self.expr_parent,
-                &mut self.stmt_parent,
-                &mut self.block_parent,
-                &mut self.pat_parent,
-            );
+            let parent = NodeRef::Pat(id);
+            body.for_each_child(parent, |c| set(c, parent));
         }
     }
 
@@ -134,13 +177,13 @@ impl<'a> Engine<'a> {
                 NodeRef::Expr(id) => {
                     if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
                         let index = *index;
-                        self.uses.entry(index).or_default().reads.push(id);
+                        self.buf.uses.entry(index).or_default().reads.push(id);
                     }
                 }
                 NodeRef::Stmt(id) => {
                     if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
                         let index = *local_index;
-                        self.uses.entry(index).or_default().def = Some(id);
+                        self.buf.uses.entry(index).or_default().def = Some(id);
                     }
                 }
                 NodeRef::Block(_) | NodeRef::Pat(_) => {}
@@ -150,32 +193,43 @@ impl<'a> Engine<'a> {
     }
 
     /// Seed the worklist with every node, children before parents.
+    ///
+    /// Iterative post-order over an explicit stack. Each node is pushed twice:
+    /// once unprocessed (to expand its children) and once processed (to enqueue
+    /// it after its subtree). Children are pushed in reverse so they pop — and
+    /// thus enqueue — in source order, reproducing the recursive walk's exact
+    /// post-order sequence. A single reused `scratch` buffer collects each
+    /// node's children, avoiding a per-node allocation (the previous recursion
+    /// allocated a fresh `Vec` for every node and could overflow the native
+    /// stack on deep bodies).
     fn seed_post_order(&mut self) {
-        let root = self.body.root;
-        self.seed_node(NodeRef::Block(root));
-    }
-
-    fn seed_node(&mut self, node: NodeRef) {
-        // Collect children first (immutable borrow), then recurse.
-        let mut children = Vec::new();
-        self.body.for_each_child(node, |c| children.push(c));
-        for c in children {
-            self.seed_node(c);
+        let mut stack: Vec<(NodeRef, bool)> = vec![(NodeRef::Block(self.body.root), false)];
+        let mut scratch: Vec<NodeRef> = Vec::new();
+        while let Some((node, processed)) = stack.pop() {
+            if processed {
+                self.enqueue(node);
+                continue;
+            }
+            stack.push((node, true));
+            scratch.clear();
+            self.body.for_each_child(node, |c| scratch.push(c));
+            for &c in scratch.iter().rev() {
+                stack.push((c, false));
+            }
         }
-        self.enqueue(node);
     }
 
     /// Push a node onto the worklist unless it is already queued.
     pub fn enqueue(&mut self, node: NodeRef) {
-        if self.queued.insert(node) {
-            self.worklist.push_back(node);
+        if self.buf.queued.insert(node) {
+            self.buf.worklist.push_back(node);
         }
     }
 
     /// Pop the next node to process, clearing its in-queue bit.
     pub fn pop(&mut self) -> Option<NodeRef> {
-        let node = self.worklist.pop_front()?;
-        self.queued.swap_remove(&node);
+        let node = self.buf.worklist.pop_front()?;
+        self.buf.queued.swap_remove(&node);
         Some(node)
     }
 
@@ -183,21 +237,21 @@ impl<'a> Engine<'a> {
     /// the body root.
     pub fn parent_of(&self, node: NodeRef) -> Option<NodeRef> {
         match node {
-            NodeRef::Expr(id) => self.expr_parent[id.index()],
-            NodeRef::Stmt(id) => self.stmt_parent[id.index()],
-            NodeRef::Block(id) => self.block_parent[id.index()],
-            NodeRef::Pat(id) => self.pat_parent[id.index()],
+            NodeRef::Expr(id) => self.buf.expr_parent[id.index()],
+            NodeRef::Stmt(id) => self.buf.stmt_parent[id.index()],
+            NodeRef::Block(id) => self.buf.block_parent[id.index()],
+            NodeRef::Pat(id) => self.buf.pat_parent[id.index()],
         }
     }
 
     /// Every `Local { index }` expression node naming `local`.
     pub fn local_reads(&self, local: u32) -> &[ExprId] {
-        self.uses.get(&local).map_or(&[], |u| &u.reads)
+        self.buf.uses.get(&local).map_or(&[], |u| &u.reads)
     }
 
     /// The defining `Let` / `LetDestructure` statement of `local`, if any.
     pub fn local_def(&self, local: u32) -> Option<StmtId> {
-        self.uses.get(&local).and_then(|u| u.def)
+        self.buf.uses.get(&local).and_then(|u| u.def)
     }
 
     /// Whether `local` is read anywhere — i.e. has any mention that is not the
@@ -221,10 +275,10 @@ impl<'a> Engine<'a> {
 
     fn set_parent(&mut self, child: NodeRef, parent: Option<NodeRef>) {
         match child {
-            NodeRef::Expr(id) => self.expr_parent[id.index()] = parent,
-            NodeRef::Stmt(id) => self.stmt_parent[id.index()] = parent,
-            NodeRef::Block(id) => self.block_parent[id.index()] = parent,
-            NodeRef::Pat(id) => self.pat_parent[id.index()] = parent,
+            NodeRef::Expr(id) => self.buf.expr_parent[id.index()] = parent,
+            NodeRef::Stmt(id) => self.buf.stmt_parent[id.index()] = parent,
+            NodeRef::Block(id) => self.buf.block_parent[id.index()] = parent,
+            NodeRef::Pat(id) => self.buf.pat_parent[id.index()] = parent,
         }
     }
 
@@ -237,7 +291,7 @@ impl<'a> Engine<'a> {
         // Drop the old `Local` mention, if any, from the use index.
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
-            if let Some(u) = self.uses.get_mut(&index) {
+            if let Some(u) = self.buf.uses.get_mut(&index) {
                 u.reads.retain(|&r| r != id);
             }
         }
@@ -245,7 +299,7 @@ impl<'a> Engine<'a> {
         // Register a new `Local` mention, if any.
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
-            self.uses.entry(index).or_default().reads.push(id);
+            self.buf.uses.entry(index).or_default().reads.push(id);
         }
         // Re-parent and re-enqueue the new kind's children.
         let mut children = Vec::new();
@@ -286,7 +340,7 @@ impl<'a> Engine<'a> {
         // for `dst` when `src_kind` is itself a `Local`.
         if let ExprKind::Local { index, .. } = &src_kind {
             let index = *index;
-            if let Some(u) = self.uses.get_mut(&index) {
+            if let Some(u) = self.buf.uses.get_mut(&index) {
                 u.reads.retain(|&r| r != src);
             }
         }
@@ -325,7 +379,7 @@ impl<'a> Engine<'a> {
             type_id,
             span,
         });
-        self.expr_parent.push(None);
+        self.buf.expr_parent.push(None);
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Expr(id), |c| children.push(c));
@@ -334,7 +388,7 @@ impl<'a> Engine<'a> {
         }
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
-            self.uses.entry(index).or_default().reads.push(id);
+            self.buf.uses.entry(index).or_default().reads.push(id);
         }
         self.enqueue(NodeRef::Expr(id));
         id
@@ -343,7 +397,7 @@ impl<'a> Engine<'a> {
     /// Edit API: allocate a fresh statement node.
     pub fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
         let id = self.body.stmts.push(StmtNode { kind, span });
-        self.stmt_parent.push(None);
+        self.buf.stmt_parent.push(None);
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Stmt(id), |c| children.push(c));
@@ -352,7 +406,7 @@ impl<'a> Engine<'a> {
         }
         if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
             let index = *local_index;
-            self.uses.entry(index).or_default().def = Some(id);
+            self.buf.uses.entry(index).or_default().def = Some(id);
         }
         self.enqueue(NodeRef::Stmt(id));
         id
@@ -361,7 +415,7 @@ impl<'a> Engine<'a> {
     /// Edit API: allocate a fresh block node from a statement list.
     pub fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId {
         let id = self.body.blocks.push(BlockNode { stmts, span });
-        self.block_parent.push(None);
+        self.buf.block_parent.push(None);
         let kids: Vec<StmtId> = self.body.blocks[id].stmts.clone();
         for s in kids {
             self.set_parent(NodeRef::Stmt(s), Some(NodeRef::Block(id)));
@@ -373,7 +427,7 @@ impl<'a> Engine<'a> {
     /// Edit API: allocate a fresh pattern node.
     pub fn alloc_pat(&mut self, kind: PatKind, span: Span) -> PatId {
         let id = self.body.pats.push(PatNode { kind, span });
-        self.pat_parent.push(None);
+        self.buf.pat_parent.push(None);
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Pat(id), |c| children.push(c));
@@ -841,7 +895,9 @@ mod tests {
     #[test]
     fn use_index_tracks_def_and_reads() {
         let mut body = sample_body();
-        let eng = Engine::new(&mut body);
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // local 0 is read once (the `return x`) and defined once (the `let`).
         assert_eq!(eng.local_reads(0).len(), 1);
         assert!(eng.local_def(0).is_some());
@@ -851,7 +907,9 @@ mod tests {
     fn parents_link_children_to_their_node() {
         let mut body = sample_body();
         let root = body.root;
-        let eng = Engine::new(&mut body);
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // Every statement of the root block has the root block as its parent.
         for &s in &eng.body.blocks[root].stmts {
             assert_eq!(eng.parent_of(NodeRef::Stmt(s)), Some(NodeRef::Block(root)));
@@ -911,7 +969,9 @@ mod tests {
             vec![let_stmt]
         });
         {
-            let mut eng = Engine::new(&mut body);
+            let mut __buf_eng = EngineBuffers::default();
+            let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.run(&[&FoldAddMulConst]);
         }
         // The let's value is now a single IntLiteral(12).
@@ -942,7 +1002,9 @@ mod tests {
         };
         let before = body.exprs.len();
         let clone = {
-            let mut eng = Engine::new(&mut body);
+            let mut __buf_eng = EngineBuffers::default();
+            let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.clone_expr(original)
         };
         // A Binary plus its two literal operands were allocated.
@@ -995,7 +1057,9 @@ mod tests {
         let root = body.root;
         assert_eq!(body.blocks[root].stmts.len(), 3);
         {
-            let mut eng = Engine::new(&mut body);
+            let mut __buf_eng = EngineBuffers::default();
+            let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             assert!(eng.run(&[&DropUnitStmts]));
         }
         // The `()` statement is gone; the `let` and `return` remain in order.
@@ -1026,7 +1090,9 @@ mod tests {
             let assign_stmt = s(b, StmtKind::Expr(assign));
             vec![let_stmt, assign_stmt]
         });
-        let eng = Engine::new(&mut body);
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         assert!(!eng.is_local_read(0));
 
         // The same body with a trailing `return x` makes local 0 read.
@@ -1038,7 +1104,9 @@ mod tests {
             let ret = ret_x(b);
             vec![let2, ret]
         });
-        let eng2 = Engine::new(&mut body2);
+        let mut __buf_eng2 = EngineBuffers::default();
+        let mut __locals_eng2: Vec<NirLocal> = Vec::new();
+        let eng2 = Engine::new(&mut body2, &mut __buf_eng2, &mut __locals_eng2);
         assert!(eng2.is_local_read(0));
     }
 
@@ -1062,7 +1130,9 @@ mod tests {
             panic!("expected expr stmt");
         };
         {
-            let mut eng = Engine::new(&mut body);
+            let mut __buf_eng = EngineBuffers::default();
+            let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             // Before: local 0 is read only by the `x` node.
             assert_eq!(eng.local_reads(0), &[lx]);
             eng.become_expr(add, lx);
@@ -1081,7 +1151,9 @@ mod tests {
     fn worklist_seeds_every_node_once() {
         let mut body = sample_body();
         let total = body.exprs.len() + body.stmts.len() + body.blocks.len() + body.pats.len();
-        let mut eng = Engine::new(&mut body);
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         let mut popped = 0;
         while eng.pop().is_some() {
             popped += 1;

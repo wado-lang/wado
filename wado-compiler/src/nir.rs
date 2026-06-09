@@ -288,13 +288,13 @@ pub struct NirFunction {
     pub stores: Vec<String>,
     pub body: Option<crate::nir_arena::Body>,
     pub span: Span,
-    pub local_count: u32,
     /// Per-local metadata — `name`, `type_id`, `is_mut` — indexed by Wasm
     /// local index. Entries `0..params.len()` shadow the corresponding
     /// `params[i]` (for uniform absolute indexing); body let-bindings and
     /// elaborator/optimizer-allocated temporaries occupy `params.len()..`.
-    /// `local_count == locals.len()` post-resolve; passes that grow the
-    /// local set must keep the two in sync.
+    /// `locals.len()` *is* the local count: passes that grow the local set push
+    /// a `NirLocal` per new index, so the next free index is always
+    /// [`NirFunction::local_count`].
     pub locals: Vec<NirLocal>,
     /// Local indices that have their address taken (&x or &mut x).
     /// For mutable primitives, these locals are stored in box structs.
@@ -443,6 +443,15 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
+    /// The number of locals (params + body locals), i.e. the next free local
+    /// index. `locals` is the single source of truth — there is no separate
+    /// count field — so a pass allocates a local by pushing a `NirLocal` and
+    /// taking the new `locals.len() - 1` as its index.
+    #[inline]
+    pub fn local_count(&self) -> u32 {
+        self.locals.len() as u32
+    }
+
     /// Returns true if this is a method (belongs to a struct)
     #[inline]
     pub fn is_method(&self) -> bool {

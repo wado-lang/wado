@@ -47,19 +47,17 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
     gate.run_gated(GatedPass::Cse, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // Destructure into disjoint field borrows so the body arena and the
-        // local list / counter can be mutated together.
-        let NirFunction {
-            body,
-            local_count,
-            locals,
-            ..
-        } = &mut *func;
+        // local list can be mutated together. `locals.len()` is the next free
+        // local index; thread it as a counter and let the pushes below keep
+        // `locals` the source of truth.
+        let NirFunction { body, locals, .. } = &mut *func;
         let Some(body) = body.as_mut() else {
             return false;
         };
+        let mut local_count = locals.len() as u32;
         let root = body.root;
         let mut func_changed = false;
-        cse_in_block(body, root, local_count, locals, &mut func_changed);
+        cse_in_block(body, root, &mut local_count, locals, &mut func_changed);
         func_changed
     })
 }

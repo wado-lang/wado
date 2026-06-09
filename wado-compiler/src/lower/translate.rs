@@ -329,7 +329,6 @@ impl Translator<'_> {
         let root = func.body.as_ref().map(|b| fctx.convert_block(b));
         let params = func.params.iter().map(|p| fctx.convert_param(p)).collect();
         let extra_locals = fctx.take_extra_locals();
-        let local_count = func.local_count + u32::try_from(extra_locals.len()).unwrap();
         let mut locals: Vec<NirLocal> = func.locals.iter().map(convert_local).collect();
         locals.extend(extra_locals.iter().map(convert_local));
         let body = root.map(move |r| {
@@ -358,7 +357,6 @@ impl Translator<'_> {
             stores: func.stores.clone(),
             body,
             span: func.span,
-            local_count,
             locals,
             address_taken_locals: func.address_taken_locals.clone(),
             stores_aliased_locals: func.stores_aliased_locals.clone(),

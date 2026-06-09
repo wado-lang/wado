@@ -144,7 +144,7 @@ fn licm_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
     if func.body.is_none() {
         return false;
     }
-    let mut local_count = func.local_count;
+    let mut local_count = func.local_count();
     // The local list is read (original local types) *and* grown (hoist locals,
     // including second-level ones) during the walk, so thread an owned clone and
     // write it back once the body borrow ends.
@@ -162,7 +162,6 @@ fn licm_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
             &mut outer_aliases,
         )
     };
-    func.local_count = local_count;
     func.locals = locals;
     changed
 }

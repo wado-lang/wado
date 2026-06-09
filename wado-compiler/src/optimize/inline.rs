@@ -670,7 +670,7 @@ pub fn inline_functions(
             let mut inlined_funcs: Vec<(ModuleSource, String)> = Vec::new();
             // Take ownership of local_count and locals to avoid borrow conflicts
             // with the `&mut func.body` walk below.
-            let mut local_count = func.local_count;
+            let mut local_count = func.local_count();
             let mut locals = std::mem::take(&mut func.locals);
             // Counter for generating unique inline labels
             let mut inline_counter: u32 = 0;
@@ -689,7 +689,6 @@ pub fn inline_functions(
                     &mut inline_counter,
                 );
             }
-            func.local_count = local_count;
             func.locals = locals;
 
             if !inlined_funcs.is_empty() {
@@ -1103,7 +1102,7 @@ fn build_inlined_labeled_block(
 
     let local_offset = *local_count;
     let callee_param_count = candidate.params.len() as u32;
-    let callee_local_count = candidate.local_count;
+    let callee_local_count = candidate.local_count();
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
 
     let mut block_stmts: Vec<StmtId> = Vec::with_capacity(bindings.len());

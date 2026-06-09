@@ -144,7 +144,7 @@ fn sroa_in_function(
         if !all_sroa.contains(&candidate.local_index) {
             continue;
         }
-        let base = func.local_count;
+        let base = func.local_count();
         for (i, (field_name, field_type)) in candidate.fields.iter().enumerate() {
             let new_index = base + i as u32;
             field_local_map.insert((candidate.local_index, i as u32), new_index);
@@ -159,7 +159,6 @@ fn sroa_in_function(
                 is_mut: candidate.is_mut,
             });
         }
-        func.local_count += candidate.fields.len() as u32;
     }
 
     let mut candidate_mut: IndexMap<u32, bool> = IndexMap::default();

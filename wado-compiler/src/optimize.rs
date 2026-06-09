@@ -4,37 +4,43 @@
 //! ordering rationale lives in [`docs/optimizer.md`](../../../docs/optimizer.md);
 //! the inventory below is just an index of the modules under `optimize/`.
 //!
-//! Fixed-point loop ([`run_optimization_passes`], in order):
-//! 1.  `match_to_switch` — dense `Match` → `Switch` lowering.
-//! 2.  `container_sroa` — `AoS` → `SoA` for `List<Tuple<...>>` / `List<Struct>`.
-//! 3.  `value_copy_elide` — strip `$value_copy$T<id>` wrappers on read-only
-//!     bindings.
-//! 4.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
-//!     copy when elements are provably immutable through the binding.
-//! 5.  `peephole` (pre-inline) — unified engine pass: `string_push`
-//!     (`buf.push_str("short")` → per-byte `push`), `elide_local` (write-only
-//!     local elimination), env-free `const_fold` (literal arithmetic + pure
-//!     CTFE), and `const_branch_prune` (trivial-block / dead-statement cleanup;
-//!     pre-inline only — see its module docs). See `optimize/peephole.rs`.
-//! 6.  `inline` — function inlining.
-//! 7.  `peephole` (post-inline) — unified engine pass: `array_literal`
+//! Fixed-point loop ([`run_optimization_passes`], in execution order):
+//! 1.  `container_sroa` — `AoS` → `SoA` for `List<Tuple<...>>` / `List<Struct>`.
+//! 2.  `peephole` (pre-inline) — unified engine session: `MatchToSwitchRule`
+//!     (dense `Match` → `Switch`), `ValueCopyElideRule` (strip `$value_copy$T<id>`
+//!     wrappers on read-only bindings), `string_push` (`buf.push_str("short")` →
+//!     per-byte `push`), `elide_local` (write-only local elimination), env-free
+//!     `const_fold` (literal arithmetic + pure CTFE), and `const_branch_prune`
+//!     (trivial-block / dead-statement cleanup). See `optimize/peephole.rs`.
+//! 3.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
+//!     copy when elements are provably immutable through the binding. Runs
+//!     *after* the pre-inline `peephole` so `ValueCopyElideRule` strips
+//!     fully-read-only copies first; demoting first would hide them behind a
+//!     shallow `array_clone` shape elide can no longer match.
+//! 4.  `sroa_param` — single-field (`Box<T>`) parameter SROA.
+//! 5.  `inline` — function inlining.
+//! 6.  `peephole` (post-inline) — unified engine session: `RefElimRule` (drop
+//!     reference bindings inlining exposes), `ElideBoxLocalRule` (collapse
+//!     `let x = Box{value: inner}; … x.value …` shells), `array_literal`
 //!     (materialize `ArrayLiteral` from the `array_new + push` window),
-//!     `elide_local`, and env-free `const_fold`.
-//! 8.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
-//! 9.  `ref_elim` — drop unnecessary reference bindings exposed by inlining.
-//! 10. `sroa` — Scalar Replacement of Aggregates.
-//! 11. `copy_prop` — copy propagation.
-//! 12. `dae` — Dead Argument Elimination.
-//! 13. `drve` — Dead Return Value Elimination.
-//! 14. `cse` — Loop-level Common Subexpression Elimination.
-//! 15. `store_load_forward` — store-to-load forwarding.
-//! 16. `const_folding` — partial evaluation via [`crate::niri`] (also drives
+//!     `elide_local`, env-free `const_fold`, and `const_branch_prune`.
+//! 7.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
+//! 8.  `sroa` — Scalar Replacement of Aggregates.
+//! 9.  `copy_prop` — copy propagation.
+//! 10. `dae` — Dead Argument Elimination.
+//! 11. `drve` — Dead Return Value Elimination.
+//! 12. `cse` — Loop-level Common Subexpression Elimination.
+//! 13. `store_load_forward` — store-to-load forwarding.
+//! 14. `const_folding` — partial evaluation via [`crate::niri`] (also drives
 //!     alias-aware field-knowledge tracking; see `alias`). The flow-sensitive
-//!     half; the env-free folds and trivial-block pruning run in `peephole`
-//!     (`const_branch_prune` in the pre-inline run).
-//! 19. `licm` — Loop-Invariant Code Motion.
-//! 20. `condition_implication` — eliminate conditions implied by dominators.
-//! 21. `tmpl_hoist` — hoist template-string backing buffers out of loops.
+//!     half; the env-free folds and trivial-block pruning run in `peephole`.
+//! 15. `licm` — Loop-Invariant Code Motion.
+//! 16. `condition_implication` — eliminate conditions implied by dominators.
+//! 17. `tmpl_hoist` — hoist template-string backing buffers out of loops.
+//!
+//! Dense `Match` → `Switch` on global initializer bodies runs once before the
+//! loop (`match_to_switch_globals`); `-O0` skips the loop and lowers everything
+//! via `match_to_switch_all`.
 //!
 //! Once after the loop converges: `field_scalarize` (Hot Field Scalarization).
 //!
@@ -96,19 +102,16 @@ use dce::{
     remove_unreachable_types,
 };
 use drve::eliminate_dead_return_values;
-use elide_box_local::elide_adjacent_box_locals;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
 use licm::apply_licm;
-use match_to_switch::{match_to_switch, match_to_switch_all};
-use ref_elim::eliminate_unnecessary_refs;
+use match_to_switch::{match_to_switch_all, match_to_switch_globals};
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
 use store_load_forward::forward_stores_to_loads;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
-use value_copy_elide::elide_synthesized_value_copies;
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
@@ -488,6 +491,13 @@ fn run_optimization_passes(
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
     let mut gate = gate::FunctionGate::new(project);
+    // Dense `Match` → `Switch` in global initializer bodies. Functions are
+    // lowered by `MatchToSwitchRule` inside the unified peephole session; the
+    // function-level loop never mutates global initializer bodies, so a single
+    // pass over globals here is equivalent to running it each iteration.
+    run_pass("nir/match_to_switch_globals", project, profiler, |p| {
+        match_to_switch_globals(p)
+    });
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
         let mut changed = false;
@@ -506,14 +516,14 @@ fn run_optimization_passes(
                 }
             }};
         }
-        // Dense-int / dense-enum `Match` → `Switch` is a codegen-
-        // friendly late lowering the optimizer materialises (see WEP
-        // 2026-05-11). Running it first lets every subsequent pass in
-        // the iteration see the `Switch` shape its variant-walking arms
-        // already handle. Subsequent iterations only see fresh `Match`
-        // shapes if `inline` (or a future shape-rewriting pass) plants
-        // them, in which case this pass reconverges on iteration N+1.
-        gated!("nir/match_to_switch", match_to_switch);
+        // Dense-int / dense-enum `Match` → `Switch` is a codegen-friendly late
+        // lowering (see WEP 2026-05-11). It runs as `MatchToSwitchRule` inside
+        // the unified peephole session below: the pre-inline `peephole` run
+        // converts every function's `Match` to `Switch` before `inline`, so
+        // inline still sees `Switch`-shaped bodies, and the worklist reconverges
+        // on any `Match` a later rewrite plants. `container_sroa` /
+        // `value_copy_*` run before that first `peephole` and so see `Match`,
+        // which is fine — neither keys on the `Switch` shape.
         // Container SROA must run *before* inline in each iteration: inline
         // expands trait methods like `IndexValue::index_value` into raw
         // `builtin::array_get` + field-access pairs, after which the
@@ -522,43 +532,11 @@ fn run_optimization_passes(
         // while its inner `Constructor` call is still a plain `Call` node,
         // which `recognize_init` can match structurally.
         gated!("nir/container_sroa", scalarize_containers);
-        // Run value-copy elision *before* inlining: the inliner expands
-        // every reachable `$value_copy$T<id>` body into a labeled
-        // block, after which the `Call($value_copy$T, [arg])` shape the
-        // elider matches on no longer exists. Running before inline
-        // lets the elider strip wrappers around `match Parser::expect(p,
-        // K) { Ok(v) => v, Err(e) => return Err(e) }`-style `?`
-        // desugarings, where the match's `Ok` arm produces a value
-        // that is observably read-only and the surplus copy can fold
-        // away.
-        //
-        // No post-pass run is needed: the only way a fresh
-        // `$value_copy$T(arg)` `Call` shape can appear after lowering
-        // is for the inliner to expand a function whose body still
-        // contains a wrapper. The next iteration's pre-inline run
-        // catches those, and if the loop converges (no pass returned
-        // `changed`) the inliner did nothing this round, so no new
-        // wrappers were introduced.
-        // These two report change only to the gate (so the gated passes
-        // re-examine the bodies they rewrote), not to the convergence `changed`
-        // flag — keeping the original convergence behaviour where they never
-        // kept the loop alive on their own.
-        // Both report their touched functions to the gate but stay out of the
-        // convergence `changed` flag: they never keep the loop alive on their
-        // own; the gated passes they dirty drive convergence in the same
-        // iteration.
-        run_pass("nir/value_copy_elide", project, profiler, |p| {
-            elide_synthesized_value_copies(p, &mut gate)
-        });
-        // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
-        // copies when the binding's elements are provably never mutated
-        // through it. Runs alongside `value_copy_elide`: elide removes a
-        // copy whose target is read-only; demote weakens a copy whose target
-        // is only spine-mutated. Both before `nir/inline` for the same
-        // `$value_copy$T(arg)`-shape-visibility reason.
-        run_pass("nir/value_copy_demote", project, profiler, |p| {
-            demote_value_copies(p, &mut gate)
-        });
+        // Value-copy elision (`ValueCopyElideRule`) runs inside the pre-inline
+        // `peephole` session below, before `inline` expands every reachable
+        // `$value_copy$T<id>` body (after which the `Call($value_copy$T, [arg])`
+        // shape it matches is gone). A wrapper the inliner later plants is
+        // caught by the next iteration's pre-inline run.
         // Unified peephole engine pass, pre-inline run. Folds short
         // `push_str` literals, elides write-only locals, and (post-inline only)
         // materializes array literals — all three rules over one shared
@@ -567,12 +545,31 @@ fn run_optimization_passes(
         // once the inliner expands `String::push_str`'s body that node is gone
         // and the literal-recognising rewrite can no longer match, leaving
         // short-string formatting paths (e.g. `fpfmt.wado`) paying full
-        // per-call allocation cost. Also after value-copy elision/demotion so
-        // the duplicable-receiver check sees the stripped receiver. This run
+        // per-call allocation cost. `ValueCopyElideRule` runs in this same
+        // session, so `string_push`'s duplicable-receiver check sees the
+        // value-copy-stripped receiver via the shared worklist. This run
         // also hosts `const_branch_prune` (trivial-block / dead-statement
         // cleanup); it keys only on block structure, so `copy_prop` — not pass
-        // ordering — is what folds the inliner's parameter copies.
-        gated!("nir/peephole", peephole::run_peephole);
+        // ordering — is what folds the inliner's parameter copies. This
+        // pre-inline run also hosts `MatchToSwitchRule` (`include_match =
+        // true`), lowering every `Match` to `Switch` before `inline`.
+        gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, true));
+        // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
+        // copies when the binding's elements are provably never mutated through
+        // it. Runs *after* the pre-inline `peephole` (which hosts
+        // `ValueCopyElideRule`) so elide gets first crack: elide removes a copy
+        // whose target is read-only, then demote weakens the remaining
+        // spine-mutated copies. Running demote before elide would rewrite a
+        // fully-elidable `$value_copy$T(arg)` into a shallow `array_clone` shape
+        // that elide's `is_value_copy_call` no longer recognises, leaving the
+        // copy un-elided. Still before `nir/inline`, where the
+        // `$value_copy$T(arg)` shape both passes match disappears. Reports change
+        // only to the gate (so the gated passes re-examine the bodies it
+        // rewrote), not to the convergence `changed` flag — it never keeps the
+        // loop alive on its own.
+        run_pass("nir/value_copy_demote", project, profiler, |p| {
+            demote_value_copies(p, &mut gate)
+        });
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
         // case) to take the inner scalar directly. Runs before `nir/inline`
@@ -602,16 +599,16 @@ fn run_optimization_passes(
         // self.field.push` delegation) are inlined into the raw `array_new +
         // push` window, direct or field-rooted. Later `cse` / `const_fold` in
         // this same loop then see the normalized literal. `elide_local` runs
-        // again here over inline's freshly dead bindings.
-        gated!("nir/peephole", peephole::run_peephole);
+        // again here over inline's freshly dead bindings. No `MatchToSwitchRule`
+        // here (`include_match = false`): the pre-inline run already lowered
+        // every reachable `Match`, and `inline` copies `Switch`-shaped bodies.
+        gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, false));
         // Adjacent-use Box-local elision. After `sroa_param` reshapes
         // `Box<T>` parameters into scalars and `inline` propagates the
         // resulting `FieldAccess(Local(x), "value")` shape into call
         // sites, this pass collapses the surrounding `let x = Box{value:
         // inner}; … x.value …` shells. See `optimize/elide_box_local.rs`.
-        gated!("nir/elide_box_local", elide_adjacent_box_locals);
         gated!("nir/labeled_block_fusion", fuse_labeled_blocks);
-        gated!("nir/ref_elim", eliminate_unnecessary_refs);
         gated!("nir/sroa", scalar_replace_aggregates);
         gated!("nir/copy_prop", propagate_copies);
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused

@@ -483,7 +483,7 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
 
     // Build the old → new local-index remap. Drop the dead slots and pack
     // surviving slots downward.
-    let old_count = func.local_count as usize;
+    let old_count = func.local_count() as usize;
     let mut remap: Vec<Option<u32>> = vec![None; old_count];
     let mut new_idx: u32 = 0;
     for old in 0..old_count {
@@ -503,7 +503,6 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
         }
     }
     func.locals = compact_locals;
-    func.local_count = new_idx;
 
     // Drop dead params and renumber surviving ones to point at the new
     // local positions.

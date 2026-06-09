@@ -3,10 +3,14 @@
 Follow-up to the
 [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
 WEP: it specifies the engine that runs local NIR rewrites over the
-[NIR Skeleton Arena](./wep-2026-06-05-nir-skeleton-arena.md) `Body`. Status:
-complete — the engine is implemented, every optimizer pass runs on the arena
-(the `Body ↔ tree` bridge is gone), the local rules share one session, and a
-per-function dirty-set gate drives the fixed-point loop.
+[NIR Skeleton Arena](./wep-2026-06-05-nir-skeleton-arena.md) `Body`. Status: the
+engine substrate is complete — every optimizer pass reads the arena (the
+`Body ↔ tree` bridge is gone), the unified peephole rules share one session, and
+a per-function dirty-set gate drives the fixed-point loop. This is the substrate,
+not the full combine: ~15 intra-procedural passes still run as standalone
+whole-tree passes inside the global loop. Migrating them onto the single
+worklist and removing the loop is the open continuation, specified in the
+direction WEP.
 
 ## Context
 

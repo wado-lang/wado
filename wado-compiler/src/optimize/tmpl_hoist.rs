@@ -67,14 +67,13 @@ fn hoist_in_function(func: &mut NirFunction, type_table: &std::cell::RefCell<Typ
     if func.body.is_none() {
         return false;
     }
-    let mut local_count = func.local_count;
+    let mut local_count = func.local_count();
     // New locals are append-only, so collect them separately and extend the
     // function's list once the body borrow ends (the body borrows `func` too).
     let mut new_locals: Vec<NirLocal> = Vec::new();
     let body = func.body.as_mut().unwrap();
     let root = body.root;
     let changed = hoist_in_block(body, root, &mut local_count, &mut new_locals, type_table);
-    func.local_count = local_count;
     func.locals.extend(new_locals);
     changed
 }

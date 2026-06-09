@@ -15,9 +15,9 @@
 //! produces the same result the old top-down visitor did.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, MonomorphInfo, NirBinaryOp, NirUnaryOp};
+use crate::nir::{FunctionRef, MonomorphInfo, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, StmtKind};
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -27,10 +27,12 @@ pub fn select_lowering(project: &mut NirPackage) {
     let rule = SelectLoweringRule {
         type_table: &type_table,
     };
+    let mut buffers = EngineBuffers::default();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = func.body.as_mut() {
-            let mut engine = Engine::new(body);
+        let NirFunction { body, locals, .. } = &mut *func;
+        if let Some(body) = body.as_mut() {
+            let mut engine = Engine::new(body, &mut buffers, locals);
             engine.run(&[&rule]);
         }
     }

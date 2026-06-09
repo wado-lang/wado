@@ -71,7 +71,7 @@ fn fuse_in_function(func: &mut NirFunction) -> bool {
     if func.body.is_none() {
         return false;
     }
-    let mut local_count = func.local_count;
+    let mut local_count = func.local_count();
     // The local list is read (binding-type checks) and grown (fused payload
     // slots), so thread an owned clone and write it back once the body borrow
     // ends.
@@ -87,7 +87,6 @@ fn fuse_in_function(func: &mut NirFunction) -> bool {
             &mut locals,
         )
     };
-    func.local_count = local_count;
     func.locals = locals;
     r
 }
