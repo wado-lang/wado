@@ -21,22 +21,23 @@
 //! 5.  `inline` — function inlining.
 //! 6.  `peephole` (post-inline) — unified engine session: `RefElimRule` (drop
 //!     reference bindings inlining exposes), `ElideBoxLocalRule` (collapse
-//!     `let x = Box{value: inner}; … x.value …` shells), `array_literal`
-//!     (materialize `ArrayLiteral` from the `array_new + push` window),
-//!     `elide_local`, env-free `const_fold`, and `const_branch_prune`.
-//! 7.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
-//! 8.  `sroa` — Scalar Replacement of Aggregates.
-//! 9.  `copy_prop` — copy propagation.
-//! 10. `dae` — Dead Argument Elimination.
-//! 11. `drve` — Dead Return Value Elimination.
-//! 12. `cse` — Loop-level Common Subexpression Elimination.
-//! 13. `store_load_forward` — store-to-load forwarding.
-//! 14. `const_folding` — partial evaluation via [`crate::niri`] (also drives
+//!     `let x = Box{value: inner}; … x.value …` shells),
+//!     `LabeledBlockFusionRule` (collapse inlined-helper `Option<T>` /
+//!     `Result<T, E>` allocations into the consumer's `if-let` / `match` site),
+//!     `array_literal` (materialize `ArrayLiteral` from the `array_new + push`
+//!     window), `elide_local`, env-free `const_fold`, and `const_branch_prune`.
+//! 7.  `sroa` — Scalar Replacement of Aggregates.
+//! 8.  `copy_prop` — copy propagation.
+//! 9.  `dae` — Dead Argument Elimination.
+//! 10. `drve` — Dead Return Value Elimination.
+//! 11. `cse` — Loop-level Common Subexpression Elimination.
+//! 12. `store_load_forward` — store-to-load forwarding.
+//! 13. `const_folding` — partial evaluation via [`crate::niri`] (also drives
 //!     alias-aware field-knowledge tracking; see `alias`). The flow-sensitive
 //!     half; the env-free folds and trivial-block pruning run in `peephole`.
-//! 15. `licm` — Loop-Invariant Code Motion.
-//! 16. `condition_implication` — eliminate conditions implied by dominators.
-//! 17. `tmpl_hoist` — hoist template-string backing buffers out of loops.
+//! 14. `licm` — Loop-Invariant Code Motion.
+//! 15. `condition_implication` — eliminate conditions implied by dominators.
+//! 16. `tmpl_hoist` — hoist template-string backing buffers out of loops.
 //!
 //! Dense `Match` → `Switch` on global initializer bodies runs once before the
 //! loop (`match_to_switch_globals`); `-O0` skips the loop and lowers everything
@@ -104,7 +105,6 @@ use dce::{
 use drve::eliminate_dead_return_values;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
-use labeled_block_fusion::fuse_labeled_blocks;
 use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
 use sroa::scalar_replace_aggregates;
@@ -603,12 +603,8 @@ fn run_optimization_passes(
         // here (`include_match = false`): the pre-inline run already lowered
         // every reachable `Match`, and `inline` copies `Switch`-shaped bodies.
         gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, false));
-        // Adjacent-use Box-local elision. After `sroa_param` reshapes
-        // `Box<T>` parameters into scalars and `inline` propagates the
-        // resulting `FieldAccess(Local(x), "value")` shape into call
-        // sites, this pass collapses the surrounding `let x = Box{value:
-        // inner}; … x.value …` shells. See `optimize/elide_box_local.rs`.
-        gated!("nir/labeled_block_fusion", fuse_labeled_blocks);
+        // `labeled_block_fusion` moved into the post-inline `nir/peephole`
+        // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
         gated!("nir/sroa", scalar_replace_aggregates);
         gated!("nir/copy_prop", propagate_copies);
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused

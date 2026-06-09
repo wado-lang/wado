@@ -113,6 +113,14 @@ impl<'a> Engine<'a> {
         engine
     }
 
+    /// Read-only view of the owning function's local list. Some rules
+    /// (`labeled_block_fusion`) need to inspect existing locals' declared types
+    /// (e.g. to confirm a pattern's payload binding slot matches the
+    /// constructed payload's type).
+    pub fn locals(&self) -> &[NirLocal] {
+        self.locals
+    }
+
     /// Allocate a fresh function local, returning its index. `locals.len()` is
     /// the local count (there is no separate counter — see
     /// [`crate::nir::NirFunction::local_count`]), so the new local takes the
@@ -448,7 +456,13 @@ impl<'a> Engine<'a> {
         self.alloc_expr(kind, node.type_id, node.span)
     }
 
-    fn clone_block(&mut self, id: BlockId) -> BlockId {
+    /// Deep-copy the block subtree rooted at `id` into fresh arena nodes,
+    /// returning the new root. Recurses through every nested stmt / expr / pat
+    /// via the engine's `alloc_*` and `clone_*` paths, so the new subtree is
+    /// fully registered in the parent map and use index. Needed for rewrites
+    /// like `labeled_block_fusion` that splice cloned THEN/ELSE branches at
+    /// each break site of an LB.
+    pub fn clone_block(&mut self, id: BlockId) -> BlockId {
         let node = self.body.blocks[id].clone();
         let stmts = node.stmts.iter().map(|s| self.clone_stmt(*s)).collect();
         self.alloc_block(stmts, node.span)

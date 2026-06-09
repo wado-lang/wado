@@ -1,8 +1,9 @@
-//! LabeledBlock-IfVariant fusion pass.
+//! LabeledBlock-IfVariant fusion rule.
 //!
-//! This pass detects the pattern produced by inlining `Option<T>`/`Result<T, E>`-returning
-//! functions into if-let call sites, where an intermediate GC allocation is created for the
-//! variant result and then immediately unpacked by a `VariantTest`/`VariantPayload` pair.
+//! Detects the pattern produced by inlining `Option<T>`/`Result<T, E>`-returning
+//! functions into if-let call sites, where an intermediate GC allocation is
+//! created for the variant result and then immediately unpacked by a
+//! `VariantTest`/`VariantPayload` pair (or a two-arm `Match`).
 //!
 //! ## Pattern detected
 //!
@@ -35,324 +36,149 @@
 //! }
 //! ```
 //!
-//! This eliminates the GC-allocated `temp: Option<T>` entirely. Subsequent passes
-//! (copy propagation, DCE) clean up the remaining `break '__fused_L;` bookkeeping.
+//! This eliminates the GC-allocated `temp: Option<T>` entirely. Subsequent
+//! rules (`elide_local`, `copy_prop`, `branch_prune`) clean up the
+//! `break '__fused_L;` bookkeeping.
 //!
-//! The pass reads and mutates the arena [`Body`] directly. Fusion moves the
-//! labeled block's statements (reusing their ids) and deep-clones the THEN/ELSE
-//! blocks into each break site via [`Body::clone_block`].
+//! ## Architecture
+//!
+//! Runs as a [`Rule`] on the unified post-inline peephole session (combine
+//! migration; formerly the standalone `nir/labeled_block_fusion` pass). The
+//! engine seeds every block in post-order, so each `apply_block` only has to
+//! find the first `(let-LB, consumer)` adjacent pair in *this* block; the
+//! worklist's `set_block_stmts` re-enqueue propagates fusion outwards
+//! naturally. All mutations route through the engine edit API so the parent
+//! map and use index stay coherent — `engine.clone_block` for THEN/ELSE
+//! clones, `engine.replace_expr_kind` for the `VariantPayload → Local`
+//! substitution, `engine.alloc_*` for fresh nodes, `engine.set_block_stmts`
+//! for the final block-list commit, and `engine.alloc_local` for the fresh
+//! `__fused_payload_N` slot.
+//!
+//! The pre-inline session does not include this rule — the
+//! `let temp = LB; if VariantTest(temp, …)` shape it matches is exposed by
+//! `inline` copying the helper body into the caller.
 
-use crate::nir::{NirFunction, NirLocal};
-use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, PatKind, StmtId, StmtKind, StmtNode,
-};
-use crate::nir_package::NirPackage;
+use crate::nir::NirLocal;
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatKind, StmtId, StmtKind};
+use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeId;
 use crate::token::Span;
 
 use super::arena_query::{has_break_to, is_local};
-use super::gate::{FunctionGate, GatedPass};
-use cranelift_entity::EntityRef;
 
 /// `expr_has_break_to` arena adapter.
 fn expr_has_break_to(body: &Body, label: &str, e: ExprId) -> bool {
     has_break_to(body, NodeRef::Expr(e), label)
 }
 
-pub fn fuse_labeled_blocks(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let len = project.functions.len();
-    gate.run_gated(GatedPass::LabeledBlockFusion, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
-        fuse_in_function(&mut func)
-    })
+/// Block-level fusion rule for the unified post-inline peephole session.
+/// The rule keeps no per-function state: every precondition is re-derived from
+/// the current body on each `apply_block`, since fusion candidates appear and
+/// disappear as neighbouring rewrites land.
+pub(super) struct LabeledBlockFusionRule;
+
+/// Build a [`LabeledBlockFusionRule`] for one function. Mirrors the
+/// `build_ref_elim` / `build_elide_box_local` constructors so the peephole
+/// wiring is uniform; no per-function analysis is needed yet.
+pub(super) fn build_labeled_block_fusion() -> LabeledBlockFusionRule {
+    LabeledBlockFusionRule
 }
 
-fn fuse_in_function(func: &mut NirFunction) -> bool {
-    if func.body.is_none() {
-        return false;
-    }
-    let mut local_count = func.local_count();
-    // The local list is read (binding-type checks) and grown (fused payload
-    // slots), so thread an owned clone and write it back once the body borrow
-    // ends.
-    let mut locals = func.locals.clone();
-    let r = {
-        let body = func.body.as_mut().unwrap();
-        let root = body.root;
-        fuse_in_block(
-            body,
-            root,
-            /* yields_value */ false,
-            &mut local_count,
-            &mut locals,
-        )
-    };
-    func.locals = locals;
-    r
-}
-
-/// `yields_value` is `true` when the value of `block`'s terminal statement is
-/// consumed by the enclosing context (e.g. `let x = { …; if-let-expr }`).
-fn fuse_in_block(
-    body: &mut Body,
-    block: BlockId,
-    yields_value: bool,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
-) -> bool {
-    let mut changed = false;
-    let stmts = body.blocks[block].stmts.clone();
-    let last_idx = stmts.len().saturating_sub(1);
-    for (i, s) in stmts.iter().enumerate() {
-        let stmt_yields_value = yields_value && i == last_idx;
-        changed |= fuse_in_stmt(body, *s, stmt_yields_value, local_count, locals);
-    }
-    changed |= fuse_adjacent_pairs(body, block, yields_value, local_count, locals);
-    changed
-}
-
-fn fuse_in_stmt(
-    body: &mut Body,
-    s: StmtId,
-    yields_value: bool,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
-) -> bool {
-    enum Shape {
-        Expr(ExprId),
-        If(ExprId, BlockId, Option<BlockId>),
-        Block(BlockId),
-        None,
-    }
-    let shape = match &body.stmts[s].kind {
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => Shape::Expr(*value),
-        StmtKind::Expr(expr) => Shape::Expr(*expr),
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => Shape::If(*condition, *then_block, *else_block),
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => Shape::Block(*b),
-        StmtKind::Break { value, .. } | StmtKind::Return { value } => match value {
-            Some(v) => Shape::Expr(*v),
-            None => Shape::None,
-        },
-        StmtKind::Continue => Shape::None,
-    };
-    match shape {
-        Shape::Expr(e) => fuse_in_expr(body, e, local_count, locals),
-        Shape::If(cond, tb, eb) => {
-            let mut changed = fuse_in_expr(body, cond, local_count, locals);
-            changed |= fuse_in_block(body, tb, yields_value, local_count, locals);
-            if let Some(eb) = eb {
-                changed |= fuse_in_block(body, eb, yields_value, local_count, locals);
-            }
-            changed
+impl Rule for LabeledBlockFusionRule {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        let stmts = engine.body.blocks[block].stmts.clone();
+        if stmts.len() < 2 {
+            return false;
         }
-        // Loop / statement-level labeled blocks discard their value.
-        Shape::Block(b) => fuse_in_block(body, b, false, local_count, locals),
-        Shape::None => false,
-    }
-}
-
-/// Check if a labeled block expression is trivially a single `break label: value`
-/// statement; if so, inline the break value, eliminating the labeled block.
-fn try_inline_trivial_labeled_block(body: &mut Body, e: ExprId) -> bool {
-    let (label, block) = match &body.exprs[e].kind {
-        ExprKind::LabeledBlock { label, block, .. } => (label.clone(), *block),
-        _ => return false,
-    };
-    if body.blocks[block].stmts.len() != 1 {
-        return false;
-    }
-    let s0 = body.blocks[block].stmts[0];
-    let break_value = match &body.stmts[s0].kind {
-        StmtKind::Break {
-            label: Some(break_label),
-            value: Some(break_value),
-        } if *break_label == label => *break_value,
-        _ => return false,
-    };
-    // Don't inline if the break value itself contains breaks to the same label.
-    if expr_has_break_to(body, &label, break_value) {
-        return false;
-    }
-    // Replace `e` with the break value's kind, keeping `e`'s own type/span.
-    let bv_kind = body.exprs[break_value].kind.clone();
-    body.exprs[e].kind = bv_kind;
-    true
-}
-
-fn fuse_in_expr(
-    body: &mut Body,
-    e: ExprId,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
-) -> bool {
-    enum Shape {
-        LabeledBlock(BlockId),
-        Block(BlockId),
-        If(ExprId, BlockId, Option<BlockId>),
-        Exprs(Vec<ExprId>),
-        None,
-    }
-    let shape = match &body.exprs[e].kind {
-        ExprKind::LabeledBlock { block, .. } => Shape::LabeledBlock(*block),
-        ExprKind::Block(block) => Shape::Block(*block),
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => Shape::If(*condition, *then_branch, *else_branch),
-        ExprKind::Binary { left, right, .. }
-        | ExprKind::Assign {
-            target: left,
-            value: right,
-        }
-        | ExprKind::Index {
-            expr: left,
-            index: right,
-        } => Shape::Exprs(vec![*left, *right]),
-        ExprKind::Unary { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::VariantTag { expr: inner }
-        | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. }
-        | ExprKind::ClosureToCanonical { functor: inner, .. }
-        | ExprKind::GlobalVarSet { value: inner, .. } => Shape::Exprs(vec![*inner]),
-        ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
-            // (MethodCall handled together; receiver added below if present.)
-            let mut v: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            if let ExprKind::MethodCall { receiver, .. } = &body.exprs[e].kind {
-                v.insert(0, *receiver);
-            }
-            Shape::Exprs(v)
-        }
-        ExprKind::CmRawCall { args, .. } => Shape::Exprs(args.clone()),
-        ExprKind::IndirectCall { callee, args } => {
-            let mut v = vec![*callee];
-            v.extend(args.iter().copied());
-            Shape::Exprs(v)
-        }
-        ExprKind::StructLiteral { fields, .. } => {
-            Shape::Exprs(fields.iter().map(|f| f.value).collect())
-        }
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            Shape::Exprs(elements.clone())
-        }
-        ExprKind::VariantConstruct { payload, .. } => {
-            Shape::Exprs(payload.iter().copied().collect())
-        }
-        ExprKind::Match { expr, arms } => {
-            let mut v = vec![*expr];
-            for arm in arms {
-                v.push(arm.body);
-                if let Some(g) = arm.guard {
-                    v.push(g);
-                }
-            }
-            Shape::Exprs(v)
-        }
-        ExprKind::Switch { .. } => {
-            // Switch arms are blocks; recurse via a dedicated path.
-            Shape::None
-        }
-        _ => Shape::None,
-    };
-    match shape {
-        Shape::LabeledBlock(block) => {
-            let changed = fuse_in_block(
-                body,
-                block,
-                /* yields_value */ true,
-                local_count,
-                locals,
-            );
-            try_inline_trivial_labeled_block(body, e) || changed
-        }
-        Shape::Block(block) => fuse_in_block(body, block, true, local_count, locals),
-        Shape::If(cond, tb, eb) => {
-            let mut changed = fuse_in_expr(body, cond, local_count, locals);
-            changed |= fuse_in_block(body, tb, true, local_count, locals);
-            if let Some(eb) = eb {
-                changed |= fuse_in_block(body, eb, true, local_count, locals);
-            }
-            changed
-        }
-        Shape::Exprs(v) => {
-            let mut changed = false;
-            for id in v {
-                changed |= fuse_in_expr(body, id, local_count, locals);
-            }
-            changed
-        }
-        Shape::None => {
-            // Switch: recurse into scrutinee + arm/default blocks.
-            if let ExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } = &body.exprs[e].kind
-            {
-                let scrutinee = *scrutinee;
-                let arms = arms.clone();
-                let default = *default;
-                // Switch is an expression: each arm contributes the value.
-                let mut changed = fuse_in_expr(body, scrutinee, local_count, locals);
-                for a in arms {
-                    changed |= fuse_in_block(body, a, true, local_count, locals);
-                }
-                changed |= fuse_in_block(body, default, true, local_count, locals);
-                changed
-            } else {
-                false
-            }
-        }
-    }
-}
-
-fn fuse_adjacent_pairs(
-    body: &mut Body,
-    block: BlockId,
-    yields_value: bool,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
-) -> bool {
-    let stmts = std::mem::take(&mut body.blocks[block].stmts);
-    let mut new_stmts = Vec::with_capacity(stmts.len());
-    let mut changed = false;
-    let mut i = 0;
-    while i < stmts.len() {
-        let let_s = stmts[i];
-        let info = if i + 1 < stmts.len() {
-            check_fusion_preconditions(body, let_s, stmts[i + 1], locals)
-        } else {
-            None
-        };
-        if let Some(info) = info {
-            let if_s = stmts[i + 1];
-            // Refuse to fuse when the If is the last statement of a
-            // value-yielding block (the fused block's breaks carry no value).
-            if yields_value && i + 2 == stmts.len() {
-                new_stmts.push(let_s);
-                new_stmts.push(if_s);
-                i += 2;
+        // The fused block uses value-less `break __fused_L;` to terminate each
+        // arm, so the original consumer site cannot be in a position where its
+        // value is observed. Refusing fusion here matches the standalone pass's
+        // `yields_value && i + 2 == stmts.len()` guard.
+        let yields = block_yields_value(engine, block);
+        for i in 0..stmts.len() - 1 {
+            let Some(info) =
+                check_fusion_preconditions(engine.body, stmts[i], stmts[i + 1], engine.locals())
+            else {
+                continue;
+            };
+            if yields && i + 2 == stmts.len() {
                 continue;
             }
-            let fused = perform_fusion(body, let_s, if_s, info, local_count, locals);
-            new_stmts.extend(fused);
-            changed = true;
-            i += 2;
-        } else {
-            new_stmts.push(let_s);
-            i += 1;
+            perform_fusion(engine, block, &stmts, i, info);
+            return true;
         }
+        false
     }
-    body.blocks[block].stmts = new_stmts;
-    changed
 }
+
+// ---------------------------------------------------------------------------
+// yields-value walker (replaces the standalone pass's recursive flag)
+// ---------------------------------------------------------------------------
+
+/// True iff the tail value of `block` reaches a consumer (a `let` initializer,
+/// a function argument, a returned expression, …). Walks up the parent map; the
+/// chain is bounded by tree depth. Mirrors the `yields_value` flag the
+/// standalone recursive driver threaded through `fuse_in_block`.
+fn block_yields_value(engine: &Engine, block: BlockId) -> bool {
+    node_yields_value(engine, NodeRef::Block(block))
+}
+
+fn node_yields_value(engine: &Engine, node: NodeRef) -> bool {
+    let Some(parent) = engine.parent_of(node) else {
+        return false;
+    };
+    match parent {
+        NodeRef::Expr(pe) => match &engine.body.exprs[pe].kind {
+            // Wrappers / control-flow expressions: yield iff the wrapper
+            // itself is in a value-consuming position.
+            ExprKind::Block(_)
+            | ExprKind::LabeledBlock { .. }
+            | ExprKind::If { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Switch { .. } => node_yields_value(engine, NodeRef::Expr(pe)),
+            // Any other expression parent (Binary, Call, FieldAccess, …):
+            // this node's value is consumed by the surrounding expression.
+            _ => true,
+        },
+        NodeRef::Stmt(ps) => match &engine.body.stmts[ps].kind {
+            StmtKind::Let { .. }
+            | StmtKind::LetDestructure { .. }
+            | StmtKind::Return { value: Some(_) }
+            | StmtKind::Break {
+                value: Some(_), ..
+            } => true,
+            StmtKind::Expr(_) => node_yields_value(engine, NodeRef::Stmt(ps)),
+            // For a block under a stmt-form `If` (a branch), mirror the
+            // standalone driver's Shape::If propagation: the branch yields iff
+            // the If statement itself yields (tail of a yielding outer block).
+            // For the condition expression, the value is always consumed.
+            StmtKind::If { .. } => match node {
+                NodeRef::Expr(_) => true,
+                NodeRef::Block(_) => node_yields_value(engine, NodeRef::Stmt(ps)),
+                _ => false,
+            },
+            // Stmt-form Loop / LabeledBlock discard their body's value.
+            StmtKind::Loop { .. } | StmtKind::LabeledBlock { .. } => false,
+            StmtKind::Break { value: None, .. }
+            | StmtKind::Return { value: None }
+            | StmtKind::Continue => false,
+        },
+        NodeRef::Block(pb) => {
+            // A stmt under a block yields iff it is the tail AND the block does.
+            let stmts = &engine.body.blocks[pb].stmts;
+            let s_id = match node {
+                NodeRef::Stmt(s) => s,
+                _ => return false,
+            };
+            stmts.last().copied() == Some(s_id) && node_yields_value(engine, NodeRef::Block(pb))
+        }
+        NodeRef::Pat(_) => false,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Fusion driver
+// ---------------------------------------------------------------------------
 
 /// Information extracted from the two statements during the precondition check.
 struct FusionInfo {
@@ -709,19 +535,14 @@ fn arm_body_has_free_unlabeled_loop_exit(body: &Body, e: ExprId) -> bool {
 }
 
 /// Unwrap a Match arm body to the block it produced, creating a one-stmt block
-/// when the body is not already a `Block`.
-fn arm_body_into_block(body: &mut Body, arm_body: ExprId, fallback_span: Span) -> BlockId {
-    if let ExprKind::Block(block) = &body.exprs[arm_body].kind {
+/// when the body is not already a `Block`. Engine-routed so the new
+/// stmt/block ids are registered in the parent map.
+fn arm_body_into_block(engine: &mut Engine, arm_body: ExprId, fallback_span: Span) -> BlockId {
+    if let ExprKind::Block(block) = &engine.body.exprs[arm_body].kind {
         *block
     } else {
-        let stmt = body.stmts.push(StmtNode {
-            kind: StmtKind::Expr(arm_body),
-            span: fallback_span,
-        });
-        body.blocks.push(crate::nir_arena::BlockNode {
-            stmts: vec![stmt],
-            span: fallback_span,
-        })
+        let stmt = engine.alloc_stmt(StmtKind::Expr(arm_body), fallback_span);
+        engine.alloc_block(vec![stmt], fallback_span)
     }
 }
 
@@ -1165,49 +986,53 @@ fn count_variant_payload_uses_in_expr(
     }
 }
 
-/// Perform the actual fusion transformation, returning the fused statement id(s).
+// ---------------------------------------------------------------------------
+// Fusion (engine-routed)
+// ---------------------------------------------------------------------------
+
 fn perform_fusion(
-    body: &mut Body,
-    let_s: StmtId,
-    if_s: StmtId,
+    engine: &mut Engine,
+    outer_block: BlockId,
+    stmts: &[StmtId],
+    i: usize,
     info: FusionInfo,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
-) -> Vec<StmtId> {
-    let span = body.stmts[let_s].span;
+) {
+    let let_s = stmts[i];
+    let if_s = stmts[i + 1];
+    let span = engine.body.stmts[let_s].span;
 
     // Extract the LabeledBlock body from the Let statement.
     let StmtKind::Let {
         value: let_value, ..
-    } = &body.stmts[let_s].kind
+    } = &engine.body.stmts[let_s].kind
     else {
-        unreachable!()
+        unreachable!("guarded by check_fusion_preconditions")
     };
     let ExprKind::LabeledBlock {
         block: lb_block, ..
-    } = &body.exprs[*let_value].kind
+    } = &engine.body.exprs[*let_value].kind
     else {
-        unreachable!()
+        unreachable!("guarded by check_fusion_preconditions")
     };
     let lb_block = *lb_block;
 
     // Extract the then/else blocks from the consumer statement.
-    let (then_block, else_block) = match &body.stmts[if_s].kind {
+    let (then_block, else_block) = match &engine.body.stmts[if_s].kind {
         StmtKind::If {
             then_block,
             else_block,
             ..
         } => (*then_block, *else_block),
         StmtKind::Expr(match_expr) => {
-            let ExprKind::Match { arms, .. } = &body.exprs[*match_expr].kind else {
+            let ExprKind::Match { arms, .. } = &engine.body.exprs[*match_expr].kind else {
                 unreachable!()
             };
             let variant_body = arms[0].body;
             let else_body = arms[1].body;
-            let then_block = arm_body_into_block(body, variant_body, span);
-            let else_block = match &body.exprs[else_body].kind {
+            let then_block = arm_body_into_block(engine, variant_body, span);
+            let else_block = match &engine.body.exprs[else_body].kind {
                 ExprKind::Unit => None,
-                _ => Some(arm_body_into_block(body, else_body, span)),
+                _ => Some(arm_body_into_block(engine, else_body, span)),
             };
             (then_block, else_block)
         }
@@ -1215,25 +1040,27 @@ fn perform_fusion(
     };
 
     // Pick the payload local — reuse the Match arm's pattern binding slot if any,
-    // else allocate a fresh `__fused_payload_N`.
+    // else allocate a fresh `__fused_payload_N` through the engine (so the
+    // function's local list grows coherently).
     let payload_local = if let Some(b_idx) = info.pattern_payload_binding {
         b_idx
     } else {
-        let payload_local = *local_count;
-        *local_count += 1;
-        locals.push(NirLocal {
-            name: format!("__fused_payload_{payload_local}"),
-            type_id: info.payload_type,
-            is_mut: false,
-        });
-        payload_local
+        let next = engine.locals().len() as u32;
+        engine.alloc_local(
+            format!("__fused_payload_{next}"),
+            info.payload_type,
+            /* is_mut */ false,
+        )
     };
 
     let fused_label = format!("__fused_{}", info.label);
 
-    let lb_stmts = std::mem::take(&mut body.blocks[lb_block].stmts);
+    // Reuse the LB block's stmt ids by clearing its list (the LB block becomes
+    // unreachable after `set_block_stmts` on the outer block; freeing the slot
+    // here is a Vec take, not an arena free).
+    let lb_stmts = std::mem::take(&mut engine.body.blocks[lb_block].stmts);
     let fused_stmts = transform_lb_stmts(
-        body,
+        engine,
         lb_stmts,
         &info.label,
         &fused_label,
@@ -1246,23 +1073,26 @@ fn perform_fusion(
         span,
     );
 
-    let fused_body = body.blocks.push(crate::nir_arena::BlockNode {
-        stmts: fused_stmts,
-        span,
-    });
-    let fused_stmt = body.stmts.push(StmtNode {
-        kind: StmtKind::LabeledBlock {
+    let fused_body = engine.alloc_block(fused_stmts, span);
+    let fused_stmt = engine.alloc_stmt(
+        StmtKind::LabeledBlock {
             label: fused_label,
             block: fused_body,
         },
         span,
-    });
-    vec![fused_stmt]
+    );
+
+    // Replace the (let, if/match) pair with the single fused LabeledBlock stmt.
+    let mut kept = Vec::with_capacity(stmts.len() - 1);
+    kept.extend_from_slice(&stmts[..i]);
+    kept.push(fused_stmt);
+    kept.extend_from_slice(&stmts[i + 2..]);
+    engine.set_block_stmts(outer_block, kept);
 }
 
 #[allow(clippy::too_many_arguments)]
 fn transform_lb_stmts(
-    body: &mut Body,
+    engine: &mut Engine,
     stmts: Vec<StmtId>,
     orig_label: &str,
     fused_label: &str,
@@ -1277,7 +1107,7 @@ fn transform_lb_stmts(
     let mut out = Vec::new();
     for s in stmts {
         transform_lb_stmt(
-            body,
+            engine,
             s,
             orig_label,
             fused_label,
@@ -1296,7 +1126,7 @@ fn transform_lb_stmts(
 
 #[allow(clippy::too_many_arguments)]
 fn transform_lb_stmt(
-    body: &mut Body,
+    engine: &mut Engine,
     s: StmtId,
     orig_label: &str,
     fused_label: &str,
@@ -1310,7 +1140,7 @@ fn transform_lb_stmt(
     out: &mut Vec<StmtId>,
 ) {
     // Check for `break orig_label: v` first.
-    let break_value = match &body.stmts[s].kind {
+    let break_value = match &engine.body.stmts[s].kind {
         StmtKind::Break {
             label: Some(l),
             value,
@@ -1320,7 +1150,7 @@ fn transform_lb_stmt(
 
     if let Some(value) = break_value {
         let is_some_case = match value {
-            Some(v) => matches!(&body.exprs[v].kind,
+            Some(v) => matches!(&engine.body.exprs[v].kind,
                 ExprKind::VariantConstruct { case_index: ci, .. } if *ci == case_index),
             None => false,
         };
@@ -1328,20 +1158,16 @@ fn transform_lb_stmt(
         if is_some_case {
             // Extract payload expression from the VariantConstruct.
             let v = value.unwrap();
-            let ExprKind::VariantConstruct { payload, .. } = &body.exprs[v].kind else {
+            let ExprKind::VariantConstruct { payload, .. } = &engine.body.exprs[v].kind else {
                 unreachable!()
             };
             let payload_expr = payload.unwrap_or_else(|| {
-                body.exprs.push(ExprNode {
-                    kind: ExprKind::Unit,
-                    type_id: payload_type,
-                    span,
-                })
+                engine.alloc_expr(ExprKind::Unit, payload_type, span)
             });
 
             // Emit: let __payload = payload_expr;
-            let let_stmt = body.stmts.push(StmtNode {
-                kind: StmtKind::Let {
+            let let_stmt = engine.alloc_stmt(
+                StmtKind::Let {
                     name: format!("__fused_payload_{payload_local}"),
                     local_index: payload_local,
                     is_mut: false,
@@ -1351,35 +1177,44 @@ fn transform_lb_stmt(
                     skip_value_copy: false,
                 },
                 span,
-            });
+            );
             out.push(let_stmt);
 
-            // Emit then_block stmts (a fresh clone) with the variant payload subst.
-            let subst_then = body.clone_block(then_block);
-            subst_variant_payload_in_block(body, subst_then, temp_local, case_index, payload_local);
-            out.extend(body.blocks[subst_then].stmts.clone());
+            // Emit a fresh clone of `then_block`'s stmts, with the
+            // `VariantPayload(temp, case)` subst applied through the engine.
+            let subst_then = engine.clone_block(then_block);
+            subst_variant_payload_in_block(
+                engine,
+                subst_then,
+                temp_local,
+                case_index,
+                payload_local,
+            );
+            let cloned_stmts = engine.body.blocks[subst_then].stmts.clone();
+            out.extend(cloned_stmts);
         } else if let Some(eb) = else_block {
             // None / non-matching case → emit a clone of the else block.
-            let cloned = body.clone_block(eb);
-            out.extend(body.blocks[cloned].stmts.clone());
+            let cloned = engine.clone_block(eb);
+            let cloned_stmts = engine.body.blocks[cloned].stmts.clone();
+            out.extend(cloned_stmts);
         }
 
         // Emit `break fused_label;` unless the last emitted statement already
         // terminates control flow.
         let last_terminates = out.last().is_some_and(|s| {
             matches!(
-                body.stmts[*s].kind,
+                engine.body.stmts[*s].kind,
                 StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
             )
         });
         if !last_terminates {
-            let brk = body.stmts.push(StmtNode {
-                kind: StmtKind::Break {
+            let brk = engine.alloc_stmt(
+                StmtKind::Break {
                     label: Some(fused_label.to_owned()),
                     value: None,
                 },
                 span,
-            });
+            );
             out.push(brk);
         }
         return;
@@ -1390,7 +1225,7 @@ fn transform_lb_stmt(
         Blocks(Vec<BlockId>),
         Other,
     }
-    let shape = match &body.stmts[s].kind {
+    let shape = match &engine.body.stmts[s].kind {
         StmtKind::If {
             then_block: tb,
             else_block: eb,
@@ -1411,9 +1246,9 @@ fn transform_lb_stmt(
     match shape {
         Shape::Blocks(blocks) => {
             for b in blocks {
-                let inner = std::mem::take(&mut body.blocks[b].stmts);
+                let inner = std::mem::take(&mut engine.body.blocks[b].stmts);
                 let transformed = transform_lb_stmts(
-                    body,
+                    engine,
                     inner,
                     orig_label,
                     fused_label,
@@ -1425,13 +1260,13 @@ fn transform_lb_stmt(
                     else_block,
                     span,
                 );
-                body.blocks[b].stmts = transformed;
+                engine.set_block_stmts(b, transformed);
             }
             out.push(s);
         }
         Shape::Other => {
             transform_lb_in_stmt_kind(
-                body,
+                engine,
                 s,
                 orig_label,
                 fused_label,
@@ -1450,7 +1285,7 @@ fn transform_lb_stmt(
 
 #[allow(clippy::too_many_arguments)]
 fn transform_lb_in_stmt_kind(
-    body: &mut Body,
+    engine: &mut Engine,
     s: StmtId,
     orig_label: &str,
     fused_label: &str,
@@ -1462,7 +1297,7 @@ fn transform_lb_in_stmt_kind(
     else_block: Option<BlockId>,
     span: Span,
 ) {
-    let target = match &body.stmts[s].kind {
+    let target = match &engine.body.stmts[s].kind {
         StmtKind::Let { value, .. }
         | StmtKind::LetDestructure { value, .. }
         | StmtKind::Expr(value) => Some(*value),
@@ -1474,7 +1309,7 @@ fn transform_lb_in_stmt_kind(
     };
     if let Some(v) = target {
         transform_lb_in_expr(
-            body,
+            engine,
             v,
             orig_label,
             fused_label,
@@ -1491,7 +1326,7 @@ fn transform_lb_in_stmt_kind(
 
 #[allow(clippy::too_many_arguments)]
 fn transform_lb_in_expr(
-    body: &mut Body,
+    engine: &mut Engine,
     e: ExprId,
     orig_label: &str,
     fused_label: &str,
@@ -1509,7 +1344,7 @@ fn transform_lb_in_expr(
         ExprsAndBlocks(Vec<ExprId>, Vec<BlockId>),
         None,
     }
-    let shape = match &body.exprs[e].kind {
+    let shape = match &engine.body.exprs[e].kind {
         ExprKind::Block(block) => Shape::Block(*block),
         ExprKind::LabeledBlock {
             label: l, block, ..
@@ -1553,11 +1388,10 @@ fn transform_lb_in_expr(
         }
         _ => Shape::None,
     };
-    let recurse_block = |body: &mut Body, b: BlockId| {
-        let inner = std::mem::take(&mut body.blocks[b].stmts);
-        let transformed = transform_lb_stmts(
-            body,
-            inner,
+    match shape {
+        Shape::Block(b) => recurse_block(
+            engine,
+            b,
             orig_label,
             fused_label,
             case_index,
@@ -1567,15 +1401,11 @@ fn transform_lb_in_expr(
             then_block,
             else_block,
             span,
-        );
-        body.blocks[b].stmts = transformed;
-    };
-    match shape {
-        Shape::Block(b) => recurse_block(body, b),
+        ),
         Shape::Exprs(exprs) => {
             for ex in exprs {
                 transform_lb_in_expr(
-                    body,
+                    engine,
                     ex,
                     orig_label,
                     fused_label,
@@ -1592,7 +1422,7 @@ fn transform_lb_in_expr(
         Shape::ExprsAndBlocks(exprs, blocks) => {
             for ex in exprs {
                 transform_lb_in_expr(
-                    body,
+                    engine,
                     ex,
                     orig_label,
                     fused_label,
@@ -1606,29 +1436,74 @@ fn transform_lb_in_expr(
                 );
             }
             for b in blocks {
-                recurse_block(body, b);
+                recurse_block(
+                    engine,
+                    b,
+                    orig_label,
+                    fused_label,
+                    case_index,
+                    temp_local,
+                    payload_local,
+                    payload_type,
+                    then_block,
+                    else_block,
+                    span,
+                );
             }
         }
         Shape::None => {}
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn recurse_block(
+    engine: &mut Engine,
+    b: BlockId,
+    orig_label: &str,
+    fused_label: &str,
+    case_index: u32,
+    temp_local: u32,
+    payload_local: u32,
+    payload_type: TypeId,
+    then_block: BlockId,
+    else_block: Option<BlockId>,
+    span: Span,
+) {
+    let inner = std::mem::take(&mut engine.body.blocks[b].stmts);
+    let transformed = transform_lb_stmts(
+        engine,
+        inner,
+        orig_label,
+        fused_label,
+        case_index,
+        temp_local,
+        payload_local,
+        payload_type,
+        then_block,
+        else_block,
+        span,
+    );
+    engine.set_block_stmts(b, transformed);
+}
+
 /// Replace `VariantPayload { expr: Local(temp_local), case_index }` with
-/// `Local(payload_local)` throughout a block.
+/// `Local(payload_local)` throughout a block. Engine-routed so each rewrite
+/// updates the use index (the new Local mention is registered, the old
+/// VariantPayload's children are orphaned but never queried again).
 fn subst_variant_payload_in_block(
-    body: &mut Body,
+    engine: &mut Engine,
     block: BlockId,
     temp_local: u32,
     case_index: u32,
     payload_local: u32,
 ) {
-    for s in body.blocks[block].stmts.clone() {
-        subst_variant_payload_in_stmt(body, s, temp_local, case_index, payload_local);
+    for s in engine.body.blocks[block].stmts.clone() {
+        subst_variant_payload_in_stmt(engine, s, temp_local, case_index, payload_local);
     }
 }
 
 fn subst_variant_payload_in_stmt(
-    body: &mut Body,
+    engine: &mut Engine,
     s: StmtId,
     temp_local: u32,
     case_index: u32,
@@ -1639,7 +1514,7 @@ fn subst_variant_payload_in_stmt(
         ExprAndBlocks(Option<ExprId>, Vec<BlockId>),
         None,
     }
-    let shape = match &body.stmts[s].kind {
+    let shape = match &engine.body.stmts[s].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => Shape::Expr(*value),
         StmtKind::Expr(expr) => Shape::Expr(*expr),
         StmtKind::Return { value } => match value {
@@ -1668,14 +1543,14 @@ fn subst_variant_payload_in_stmt(
     };
     match shape {
         Shape::Expr(e) => {
-            subst_variant_payload_in_expr(body, e, temp_local, case_index, payload_local);
+            subst_variant_payload_in_expr(engine, e, temp_local, case_index, payload_local);
         }
         Shape::ExprAndBlocks(cond, blocks) => {
             if let Some(c) = cond {
-                subst_variant_payload_in_expr(body, c, temp_local, case_index, payload_local);
+                subst_variant_payload_in_expr(engine, c, temp_local, case_index, payload_local);
             }
             for b in blocks {
-                subst_variant_payload_in_block(body, b, temp_local, case_index, payload_local);
+                subst_variant_payload_in_block(engine, b, temp_local, case_index, payload_local);
             }
         }
         Shape::None => {}
@@ -1683,7 +1558,7 @@ fn subst_variant_payload_in_stmt(
 }
 
 fn subst_variant_payload_in_expr(
-    body: &mut Body,
+    engine: &mut Engine,
     e: ExprId,
     temp_local: u32,
     case_index: u32,
@@ -1694,18 +1569,21 @@ fn subst_variant_payload_in_expr(
         expr: inner,
         case_index: ci,
         ..
-    } = &body.exprs[e].kind
+    } = &engine.body.exprs[e].kind
     {
         *ci == case_index
-            && matches!(&body.exprs[*inner].kind, ExprKind::Local { index, .. } if *index == temp_local)
+            && matches!(&engine.body.exprs[*inner].kind, ExprKind::Local { index, .. } if *index == temp_local)
     } else {
         false
     };
     if is_target {
-        body.exprs[e].kind = ExprKind::Local {
-            index: payload_local,
-            name: format!("__fused_payload_{payload_local}"),
-        };
+        engine.replace_expr_kind(
+            e,
+            ExprKind::Local {
+                index: payload_local,
+                name: format!("__fused_payload_{payload_local}"),
+            },
+        );
         return;
     }
 
@@ -1716,7 +1594,7 @@ fn subst_variant_payload_in_expr(
         Block(BlockId),
         None,
     }
-    let walk = match &body.exprs[e].kind {
+    let walk = match &engine.body.exprs[e].kind {
         ExprKind::Binary { left, right, .. }
         | ExprKind::Assign {
             target: left,
@@ -1792,19 +1670,19 @@ fn subst_variant_payload_in_expr(
     match walk {
         Walk::Exprs(v) => {
             for id in v {
-                subst_variant_payload_in_expr(body, id, temp_local, case_index, payload_local);
+                subst_variant_payload_in_expr(engine, id, temp_local, case_index, payload_local);
             }
         }
         Walk::ExprsAndBlocks(exprs, blocks) => {
             for id in exprs {
-                subst_variant_payload_in_expr(body, id, temp_local, case_index, payload_local);
+                subst_variant_payload_in_expr(engine, id, temp_local, case_index, payload_local);
             }
             for b in blocks {
-                subst_variant_payload_in_block(body, b, temp_local, case_index, payload_local);
+                subst_variant_payload_in_block(engine, b, temp_local, case_index, payload_local);
             }
         }
         Walk::Block(b) => {
-            subst_variant_payload_in_block(body, b, temp_local, case_index, payload_local);
+            subst_variant_payload_in_block(engine, b, temp_local, case_index, payload_local);
         }
         Walk::None => {}
     }
@@ -1973,3 +1851,4 @@ fn expr_has_free_unlabeled_loop_exit(body: &Body, e: ExprId, loop_depth: u32) ->
         _ => false,
     }
 }
+
