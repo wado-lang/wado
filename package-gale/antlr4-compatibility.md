@@ -268,44 +268,70 @@ iterations must stay decidable without forward simulation.** A fix that
 re-introduces per-iteration simulation on the common case is a
 regression even if it is "more correct".
 
-### The hybrid: fast decision + bounded refinement + rare fallback
+### Status of the known edges
 
-The dedicated decision is an approximation. Its gaps (each shipped with
-a regression fixture under `tests/grammars/`) and how the hybrid closes
-them **without** breaking the performance invariant:
+The dedicated decision is an approximation; its edges have been worked
+through under one rule: **never silently mispredict**. Each edge is
+resolved one of three ways — a correct fix, a loud guard, or (for the
+remaining runtime-precision cases) a documented fall-back-to-complete-
+simulator plan. The performance invariant is preserved throughout.
 
-| Gap                                                       | Symptom                                                                                                              | Hybrid resolution                                                                                                       | Touches perf?                               |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `~X` (`NOT_ATOM`) treated as "matches anything"           | `~COMMA` continuation claims to mandate `COMMA`                                                                      | FIRST carries the **excluded** label; membership tests `token != excluded`                                              | No (O(1) extra)                             |
-| Scan stack pushed only for self-ref calls                 | an ATN-class rule called from another rule's scanner sees an empty `GALE_SCAN_STACK` and eats the caller's delimiter | scan side pushes the exact return state for **every** rule call, mirroring the parse side                               | No (constant factor)                        |
-| Classifier sees only top-level self-ref + immediate token | `'between' (expr) 'and'` / `'between' expr mod? 'and'` stay on the broken static path                                | classifier walks nested sequences and nullable intervening elements                                                     | No (codegen-time)                           |
-| Mandate yields on a 1-token FIRST match                   | caller tail `'and' ')'` vs suffix `'and' expr` on `a and b and )` exits too early                                    | mandate check verifies the caller continuation a **bounded k** past the shared delimiter                                | Bounded `O(k)`                              |
-| Commit to the first enter edge by FIRST alone             | two suffixes sharing a first token (`'op' '('…` vs `'op' '['…`) always pick the first                                | when >1 enter edge admits the token, **bounded-k** disambiguate; if still tied, **fall back** to the complete simulator | `O(k)`; fallback only on residual ambiguity |
-| Nullable-atom LR rule trapped at decode                   | guard rejects rules that never route through the decision                                                            | scope the check to genuinely routed ATN-class rules (or let the decision fall back)                                     | No                                          |
+**Closed (correct fix + regression test):**
 
-The fallback to the complete simulator fires **only** when bounded-k
-cannot decide — a property of specific grammar shapes (shared-prefix
-suffixes, FIRST-overlapping caller tails), not of chain depth. The deep
-`between` chain is unambiguous at every iteration (the mandate or a
-lone enter edge decides it), so it never falls back and stays O(n). The
-residual unbounded-ambiguous case is the only place the complete
-simulator's cost can appear; it is rare and pathological (ANTLR4 itself
-leans on a DFA cache there).
+| Edge                                                                                  | Resolution                                                                                               |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `~X` (`NOT_ATOM`) treated as "matches anything" (`~COMMA` mandates `COMMA`)           | FIRST carries the **excluded** label (`rule_first_neg` / `atn_first_admits`); tests `token != excluded`  |
+| Scan stack pushed only for a rule's own self-ref operand                              | every scan rule call pushes its exact return state (`needs_scan_atn`), mirroring the parse-side wrapper  |
+| Nullable-atom LR rule trapped at decode (the guard blocked _correct_ behaviour)       | removed: a nullable atom legitimately puts the loop operator in FIRST, so walk precedence edges in FIRST |
+| `lr_loop_entry_decision` returned the first `STAR_LOOP_ENTRY` (wrong for an atom `*`) | select the entry by its **precedence enter edges**                                                       |
+| Packed-key depth limit (998 caller frames; 254 precedence levels)                     | collision-free power-of-two bit-pack (pr/alt 11b, rs/state 20b ≈ 1M); assert is encoding-capacity only   |
+| Speculative repeat-recovery `_parse_R` missing `atn_ret_pending`                      | stamp the call's exact return state before the recovery parse (diagnostic-only path)                     |
+
+**Guarded (loud codegen panic + `#[expect_trap]` test):** shapes the
+ATN-class machinery does not yet model are rejected at generation rather
+than mis-dispatched at runtime —
+
+- an open-ended (`.` / `~X`-led, empty static `suffix_first`) LR suffix
+  in an ATN-class rule (its edge index misaligns against `valid_lr_alts`);
+- a self-reference nested inside a Group/Repeat LR-suffix element (built
+  with the wrong precedence floor);
+- a non-greedy `??` inside a left-recursive rule (prediction at
+  `min_prec 0` ignores the raised precedence).
+
+No corpus grammar trips any guard. Each is a real fix away (align the
+dispatcher to the edge list; a precedence-aware recursive element
+builder; thread `min_prec` into `atn_ng_optional_enter`) — the guard is
+the honest interim.
+
+**Open — runtime precision (fall back, don't panic):** these mispredict
+on _valid_ input the heuristic can't resolve, where a panic would reject
+a legal parse, so the right answer is to fall back to the complete
+simulator (which already exists and is correct), not to fail:
+
+- the mandate yields on a 1-token FIRST match without verifying the
+  caller continuation past the shared delimiter (`a and b and )`);
+- two enter edges sharing a first token are decided by FIRST alone;
+- the parse-side scan tournament seeds from an empty `GALE_SCAN_STACK`
+  instead of `p.atn_stack`, so an enclosing parser rule's mandatory
+  delimiter is invisible to the scan decision when the immediate
+  continuation is nullable.
+
+The fallback fires **only** on these specific shapes, never on chain
+depth, so the deep `between` descriptor stays O(n).
 
 ### Why a hybrid and not "just use the complete simulator"
 
-The complete simulator already exists and is correct, so completeness
-is not the obstacle — **cost placement** is. The hybrid keeps the O(1)
-decision on the hot path (where it is both correct and fast), spends a
-bounded `O(k)` only when the cheap check is genuinely uncertain, and
-reserves the expensive complete simulation for the pathological tail.
-This is the standard ALL(\*)-with-shortcut shape; it is the deliberate
-trade-off for Gale's clean-room re-derivation.
+The complete simulator already exists and is correct, so completeness is
+not the obstacle — **cost placement** is. The hybrid keeps the O(1)
+decision on the hot path (correct and fast there), and reserves the
+expensive complete simulation for the residual ambiguous tail. This is
+the standard ALL(\*)-with-shortcut shape; it is the deliberate trade-off
+for Gale's clean-room re-derivation.
 
-Each gap above is closed incrementally, and every closure ships a
-`tests/grammars/` fixture pinning the previously-wrong input so the
-edge stays closed (the same regression-fixture discipline the LL
-soundness invariants in [`AGENTS.md`](./AGENTS.md) require).
+A wado compiler ICE found while implementing the precedence-edge check
+(a nested `for … break` miscompiling in the full `atn` module) is
+tracked separately as a GitHub issue and worked around in-tree (see the
+note at `state_has_precedence_edge` in `src/atn.wado`).
 
 ## The Descriptor Pipeline
 

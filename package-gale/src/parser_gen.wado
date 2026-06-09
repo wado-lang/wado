@@ -3026,7 +3026,16 @@ fn gen_op_storable_optional(
 /// `p.atn_stack`'s top at runtime, so no compile-time decision number is
 /// needed.
 fn atn_optional_enter_cond(ctx: &GenContext) -> String {
-    return `atn_ng_optional_enter(&GALE_ATN_SIM, {ctx.current_rule_index()}, &p.atn_stack, &p.tokens, p.pos, TK_EOF)`;
+    let rule = ctx.current_rule_index();
+    // A non-greedy `??` inside a left-recursive rule predicts at min_prec 0,
+    // but the rule can be invoked with a raised precedence — so prediction may
+    // keep LR suffixes the parser will reject and choose SKIP on an impossible
+    // path. Threading the live precedence into `atn_ng_optional_enter` /
+    // `atn_predict_with_stack` is the fix; until then fail loudly at codegen
+    // rather than emit a parser that silently mispredicts. No corpus grammar
+    // has a `??` inside an LR rule.
+    assert ctx.lr_loop_entry_decision(rule) < 0, `Gale does not yet support a non-greedy \`??\` inside a left-recursive rule`;
+    return `atn_ng_optional_enter(&GALE_ATN_SIM, {rule}, &p.atn_stack, &p.tokens, p.pos, TK_EOF)`;
 }
 
 fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> String {

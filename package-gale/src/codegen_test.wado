@@ -1520,3 +1520,20 @@ fn str_contains(haystack: &String, needle: &String) -> bool {
     }
     return false;
 }
+
+// A non-greedy `??` inside a left-recursive rule (`e` is LR via `e '+' e`; the
+// `??` sits in its atom) predicts at min_prec 0 even when the rule is invoked
+// at a raised precedence — an unsupported shape Gale must reject loudly at
+// codegen rather than emit a silently-mispredicting parser.
+global QQ_IN_LR_G4: String = "
+grammar T;
+e : e '+' e | ID ('x')?? ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+#[expect_trap]
+test "generate traps on a non-greedy ?? inside a left-recursive rule" {
+    let mut g = parse(QQ_IN_LR_G4).unwrap();
+    let _ = generate(&mut g, &DEFAULT_OPTIONS);
+}
