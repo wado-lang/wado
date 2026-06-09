@@ -15,7 +15,7 @@ use {
 } from "./atn.wado";
 use {
     atn_decode, atn_adaptive_predict, atn_predict_with_stack, AtnSim,
-    ATN_BLOCK_START, ATN_BLOCK_END,
+    ATN_BLOCK_START, ATN_BLOCK_END, ATN_STAR_LOOP_ENTRY,
 } from "./runtime/atn.wado";
 use { Token, LexerSlice, Span } from "./runtime/lex.wado";
 use { parse } from "./g4/parser.wado";
@@ -58,11 +58,34 @@ fn alt_target_kind(atn: &Atn, d: i32, alt: i32) -> i32 {
     return atn.states[s.transitions[alt].target].kind;
 }
 
+/// Decision number of rule `rule`'s `STAR_LOOP_ENTRY` (the LR loop entry).
+fn loop_entry_decision(atn: &Atn, rule: i32) -> i32 {
+    for let mut d = 0; d < atn.decision_state.len(); d += 1 {
+        let s = &atn.states[atn.decision_state[d]];
+        if s.kind == ATN_STAR_LOOP_ENTRY && s.rule == rule {
+            return d;
+        }
+    }
+    return -1;
+}
+
 global K2_G4: String = "
 grammar T;
 a : ID '(' ')' | ID '[' ']' ;
 ID : 'a'..'z'+ ;
 WS : ' ' -> skip ;
+";
+
+// Directly left-recursive operator grammar — the P4.1 walkability case.
+// Built naively (pre-rewrite) the simulator would left-recurse forever on
+// `expr -> RuleRef(expr) ...`; the rewritten loop-entry form is finite.
+global LR_G4: String = "
+grammar E;
+expr : expr '*' expr
+     | expr '+' expr
+     | INT ;
+INT : '0'..'9'+ ;
+WS : ' ' -> channel(HIDDEN);
 ";
 
 global NG_G4: String = "
@@ -154,4 +177,25 @@ test "full-context: outer ifStatement ?? consumes the else" {
     let toks: List<Token> = [mk(7), mk(4)];
     let alt = atn_predict_with_stack(&sim, d, &stack, &toks, 0, eof);
     assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "outer ?? must ENTER (consume the else)";
+}
+
+// P4.1: the rewritten LR loop-entry form is walkable. A naive
+// pre-rewrite ATN (`expr -> RuleRef(expr) ...` at position 0) would
+// left-recurse forever in `atn_closure`; the precedence-climbing rewrite
+// stops at the atom block, so prediction terminates and returns a valid
+// alternative. (Precedence-guided enter/exit selection itself is P4.3;
+// here we only assert termination + a sane in-range result.)
+test "LR loop-entry prediction terminates (no naive left recursion)" {
+    let g = parse(LR_G4).unwrap();
+    let atn = build_atn(&g);
+    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = loop_entry_decision(&atn, 0);
+    assert d >= 0, "expr must have an LR loop-entry decision";
+    // After the first atom, input continues with `'+' INT` (tk: INT=0,
+    // WS=1, EOF=2, ERROR=3, '*'=4, '+'=5). Three loop-entry edges exist
+    // (enter '*', enter '+', exit); the predictor must return one of them.
+    let toks: List<Token> = [mk(5), mk(0)];
+    let alt = atn_adaptive_predict(&sim, d, &toks, 0, eof);
+    assert alt >= 0 && alt < 3, `LR loop-entry prediction out of range: {alt}`;
 }

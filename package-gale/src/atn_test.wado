@@ -20,7 +20,11 @@ use {
     ATN_BLOCK_START,
     ATN_BLOCK_END,
     ATN_RULE_START,
+    ATN_STAR_LOOP_ENTRY,
+    ATN_LOOP_END,
     ATN_TR_EPSILON,
+    ATN_TR_RULE,
+    ATN_TR_PRECEDENCE,
 } from "./runtime/atn.wado";
 use { parse } from "./g4/parser.wado";
 
@@ -41,6 +45,31 @@ ifStatement : 'if' 'y' statement ('else' statement)? ;
 ID : 'a'..'z'+ ;
 WS : (' '|'\\n') -> channel(HIDDEN);
 ";
+
+// A directly left-recursive binary-operator rule. `expr`'s two LR alts
+// ('*' then '+') get descending `own_prec` (2, 1) by source order, and
+// left-associative `conflict_min` = own_prec + 1 (3, 2). `INT` is the
+// single non-LR atom alt. Drives the P4.1 rewritten-form assertions.
+global LR_G4: String = "
+grammar E;
+expr : expr '*' expr
+     | expr '+' expr
+     | INT ;
+INT : '0'..'9'+ ;
+WS : ' ' -> channel(HIDDEN);
+";
+
+/// Find rule `rule`'s `STAR_LOOP_ENTRY` decision state (the LR loop entry),
+/// or -1 if the rule has none.
+fn find_loop_entry(atn: &Atn, rule: i32) -> i32 {
+    for let mut i = 0; i < atn.states.len(); i += 1 {
+        let st = &atn.states[i];
+        if st.kind == ATN_STAR_LOOP_ENTRY && st.rule == rule {
+            return i;
+        }
+    }
+    return -1;
+}
 
 /// Find a BlockStart decision state whose FIRST outgoing epsilon edge
 /// targets a BlockEnd — i.e. an optional/loop whose decision prefers to
@@ -143,4 +172,54 @@ test "greedy optional puts the enter edge first" {
     // `statement` block starts with sequence entries, not a BlockEnd.)
     let d = find_exit_first_decision(&atn);
     assert d < 0, "greedy `?` must not be exit-first";
+}
+
+test "LR rule builds in rewritten loop-entry form" {
+    let g = parse(LR_G4).unwrap();
+    let atn = build_atn(&g);
+    // `expr` is the first parser rule.
+    let entry = find_loop_entry(&atn, 0);
+    assert entry >= 0, "LR rule should build a STAR_LOOP_ENTRY";
+    let st = &atn.states[entry];
+    assert st.decision >= 0, "loop entry must be a decision";
+    // Two precedence-guarded enter edges (one per LR alt), then the exit.
+    assert st.transitions.len() == 3, `expected 3 loop-entry edges, got {st.transitions.len()}`;
+    assert st.transitions[0].kind == ATN_TR_PRECEDENCE, "first enter edge is a precedence predicate";
+    assert st.transitions[0].prec == 2, `'*' alt own_prec should be 2, got {st.transitions[0].prec}`;
+    assert st.transitions[1].kind == ATN_TR_PRECEDENCE, "second enter edge is a precedence predicate";
+    assert st.transitions[1].prec == 1, `'+' alt own_prec should be 1, got {st.transitions[1].prec}`;
+    // Greedy ordering: the exit epsilon is last and lands on a LoopEnd.
+    assert st.transitions[2].kind == ATN_TR_EPSILON, "exit edge is epsilon";
+    assert atn.states[st.transitions[2].target].kind == ATN_LOOP_END, "exit lands on LoopEnd";
+}
+
+test "LR rule has no position-0 self-reference (no naive left recursion)" {
+    let g = parse(LR_G4).unwrap();
+    let atn = build_atn(&g);
+    // The rule body the simulator enters first must be the atom block, not
+    // a self-ref — otherwise the closure left-recurses forever.
+    let body_entry = atn.states[atn.rule_start[0]].transitions[0].target;
+    assert atn.states[body_entry].kind == ATN_BLOCK_START, "LR rule enters its atom block first";
+    // The only self-references (RULE edges back to expr's start) live in the
+    // loop suffixes, each carrying the raised precedence floor `conflict_min`
+    // (3 for '*', 2 for '+').
+    let mut found3 = false;
+    let mut found2 = false;
+    for let mut i = 0; i < atn.states.len(); i += 1 {
+        for let t of &atn.states[i].transitions {
+            if t.kind == ATN_TR_RULE && t.target == atn.rule_start[0] {
+                if t.prec == 3 { found3 = true; }
+                if t.prec == 2 { found2 = true; }
+            }
+        }
+    }
+    assert found3, "'*' operand should recurse at conflict_min = 3";
+    assert found2, "'+' operand should recurse at conflict_min = 2";
+}
+
+test "LR ATN round-trips through serialize_atn/atn_decode exactly" {
+    let g = parse(LR_G4).unwrap();
+    let atn = build_atn(&g);
+    let sim = atn_decode(&serialize_atn(&atn));
+    assert_sim_matches_atn(&sim, &atn);
 }

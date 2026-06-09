@@ -7,7 +7,7 @@ use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
-use { build_atn, serialize_atn } from "./atn.wado";
+use { build_atn_with, serialize_atn } from "./atn.wado";
 use {
     LoweredGrammar,
     Diagnostic,
@@ -102,7 +102,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // lowering saw a construct that needs it (a non-greedy repeat), so
     // gate-free grammars stay byte-identical.
     if ctx.needs_atn() {
-        gen_atn_data_global(&mut w, grammar);
+        gen_atn_data_global(&mut w, grammar, &lowered);
     }
     return GeneratedOutput {
         source: w.to_string(),
@@ -112,8 +112,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
 
 /// Emit `global GALE_ATN_DATA: List<i32> = [...]`: the serialized
 /// whole-grammar ATN the inlined runtime decodes once per parser.
-fn gen_atn_data_global(w: &mut CodeWriter, grammar: &Grammar) {
-    let atn = build_atn(grammar);
+fn gen_atn_data_global(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar) {
+    let atn = build_atn_with(grammar, lowered);
     let blob = serialize_atn(&atn);
     let mut body = String::with_capacity(blob.len() * 6);
     for let mut i = 0; i < blob.len(); i += 1 {

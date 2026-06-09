@@ -33,7 +33,7 @@ use { Token } from "./lex.wado";
 // the compiler crate is free to `use` the runtime. Bump `ATN_BLOB_VERSION`
 // on any layout change so a stale committed blob fails loudly.
 pub global ATN_BLOB_MAGIC: i32 = 0x47_41_54_4e;
-pub global ATN_BLOB_VERSION: i32 = 1;
+pub global ATN_BLOB_VERSION: i32 = 2;
 
 // State kinds. `atn_decode` copies every state's kind through verbatim and
 // the simulator only interprets `RULE_STOP` / `BLOCK_START` / `BLOCK_END`,
@@ -56,6 +56,14 @@ pub global ATN_TR_ATOM: i32 = 1;
 pub global ATN_TR_NOT_ATOM: i32 = 2;
 pub global ATN_TR_WILDCARD: i32 = 3;
 pub global ATN_TR_RULE: i32 = 4;
+// Precedence-predicate edge `{prec_i >= pr}?`, emitted on a
+// left-recursive rule's loop-entry decision (one per LR alt). `prec`
+// carries the alt's own precedence (`prec_i`); the simulator compares it
+// against the current min-prec context `pr` and prunes the edge when the
+// predicate is false. Traversed like epsilon otherwise. Precedence
+// evaluation itself lands in P4.3; until then closure walks it
+// unconditionally (no LR grammar routes through the simulator yet).
+pub global ATN_TR_PRECEDENCE: i32 = 5;
 
 /// Sentinel "state": a config that has returned past the real stack bottom
 /// and is viable only if the next token is EOF (the start rule's follow).
@@ -252,7 +260,9 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
         for let mut j = 0; j < cnt; j += 1 {
             let k = sim.tr_kind[start + j];
             let target = sim.tr_target[start + j];
-            if k == ATN_TR_EPSILON {
+            if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+                // P4.1: precedence edges are traversed unconditionally; the
+                // `{prec_i >= pr}?` pruning lands in P4.3.
                 work.push(AtnConfig { state: target, alt: c.alt, stack: c.stack, rs: c.rs });
             } else if k == ATN_TR_RULE {
                 if c.stack.len() >= ATN_MAX_STACK || target < 0 {

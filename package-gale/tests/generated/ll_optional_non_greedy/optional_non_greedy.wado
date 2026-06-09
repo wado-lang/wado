@@ -605,7 +605,7 @@ pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, e
 // the compiler crate is free to `use` the runtime. Bump `ATN_BLOB_VERSION`
 // on any layout change so a stale committed blob fails loudly.
 pub global ATN_BLOB_MAGIC: i32 = 0x47_41_54_4e;
-pub global ATN_BLOB_VERSION: i32 = 1;
+pub global ATN_BLOB_VERSION: i32 = 2;
 
 // State kinds. `atn_decode` copies every state's kind through verbatim and
 // the simulator only interprets `RULE_STOP` / `BLOCK_START` / `BLOCK_END`,
@@ -628,6 +628,14 @@ pub global ATN_TR_ATOM: i32 = 1;
 pub global ATN_TR_NOT_ATOM: i32 = 2;
 pub global ATN_TR_WILDCARD: i32 = 3;
 pub global ATN_TR_RULE: i32 = 4;
+// Precedence-predicate edge `{prec_i >= pr}?`, emitted on a
+// left-recursive rule's loop-entry decision (one per LR alt). `prec`
+// carries the alt's own precedence (`prec_i`); the simulator compares it
+// against the current min-prec context `pr` and prunes the edge when the
+// predicate is false. Traversed like epsilon otherwise. Precedence
+// evaluation itself lands in P4.3; until then closure walks it
+// unconditionally (no LR grammar routes through the simulator yet).
+pub global ATN_TR_PRECEDENCE: i32 = 5;
 
 /// Sentinel "state": a config that has returned past the real stack bottom
 /// and is viable only if the next token is EOF (the start rule's follow).
@@ -824,7 +832,9 @@ fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<
         for let mut j = 0; j < cnt; j += 1 {
             let k = sim.tr_kind[start + j];
             let target = sim.tr_target[start + j];
-            if k == ATN_TR_EPSILON {
+            if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+                // P4.1: precedence edges are traversed unconditionally; the
+                // `{prec_i >= pr}?` pruning lands in P4.3.
                 work.push(AtnConfig { state: target, alt: c.alt, stack: c.stack, rs: c.rs });
             } else if k == ATN_TR_RULE {
                 if c.stack.len() >= ATN_MAX_STACK || target < 0 {
@@ -1633,5 +1643,5 @@ fn _gale_kind_set_0(k: i32) -> bool {
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_Y]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_IF, TK_LIT_X]];
 
-global GALE_ATN_DATA: List<i32> = [1195463758, 1, 8, 3, 0, 2, 4, 1, 3, 5, 3, 11, 13, 30, 39, 2, 0, -1, 1, 0, 6, -1, -1, 0, 3, 0, -1, 0, 2, 1, -1, 1, 0, 13, -1, -1, 0, 3, 1, -1, 0, 2, 2, -1, 1, 0, 21, -1, -1, 0, 3, 2, -1, 0, 4, 0, -1, 1, 0, 8, -1, -1, 0, 5, 0, -1, 1, 0, 1, -1, -1, 0, 1, 0, -1, 1, 0, 9, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 10, 0, 1, 0, -1, 1, 0, 11, -1, -1, 0, 8, 0, 0, 2, 0, 9, -1, -1, 0, 0, 12, -1, -1, 0, 9, 0, -1, 1, 0, 7, -1, -1, 0, 4, 1, 1, 2, 0, 15, -1, -1, 0, 0, 18, -1, -1, 0, 5, 1, -1, 1, 0, 3, -1, -1, 0, 1, 1, -1, 1, 0, 16, -1, -1, 0, 1, 1, -1, 1, 1, 17, 4, -1, 0, 1, 1, -1, 1, 0, 14, -1, -1, 0, 1, 1, -1, 1, 0, 19, -1, -1, 0, 1, 1, -1, 1, 4, 4, 2, 20, 0, 1, 1, -1, 1, 0, 14, -1, -1, 0, 4, 2, -1, 1, 0, 23, -1, -1, 0, 5, 2, -1, 1, 0, 5, -1, -1, 0, 1, 2, -1, 1, 0, 24, -1, -1, 0, 1, 2, -1, 1, 1, 25, 5, -1, 0, 1, 2, -1, 1, 0, 26, -1, -1, 0, 1, 2, -1, 1, 1, 27, 6, -1, 0, 1, 2, -1, 1, 0, 28, -1, -1, 0, 1, 2, -1, 1, 4, 2, 1, 29, 0, 1, 2, -1, 1, 0, 30, -1, -1, 0, 4, 2, 2, 2, 0, 31, -1, -1, 0, 0, 32, -1, -1, 0, 5, 2, -1, 1, 0, 22, -1, -1, 0, 4, 2, -1, 1, 0, 34, -1, -1, 0, 5, 2, -1, 1, 0, 31, -1, -1, 0, 1, 2, -1, 1, 0, 35, -1, -1, 0, 1, 2, -1, 1, 1, 36, 7, -1, 0, 1, 2, -1, 1, 0, 37, -1, -1, 0, 1, 2, -1, 1, 4, 2, 1, 38, 0, 1, 2, -1, 1, 0, 33, -1, -1, 0];
+global GALE_ATN_DATA: List<i32> = [1195463758, 2, 8, 3, 0, 2, 4, 1, 3, 5, 3, 11, 13, 30, 39, 2, 0, -1, 1, 0, 6, -1, -1, 0, 3, 0, -1, 0, 2, 1, -1, 1, 0, 13, -1, -1, 0, 3, 1, -1, 0, 2, 2, -1, 1, 0, 21, -1, -1, 0, 3, 2, -1, 0, 4, 0, -1, 1, 0, 8, -1, -1, 0, 5, 0, -1, 1, 0, 1, -1, -1, 0, 1, 0, -1, 1, 0, 9, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 10, 0, 1, 0, -1, 1, 0, 11, -1, -1, 0, 8, 0, 0, 2, 0, 9, -1, -1, 0, 0, 12, -1, -1, 0, 9, 0, -1, 1, 0, 7, -1, -1, 0, 4, 1, 1, 2, 0, 15, -1, -1, 0, 0, 18, -1, -1, 0, 5, 1, -1, 1, 0, 3, -1, -1, 0, 1, 1, -1, 1, 0, 16, -1, -1, 0, 1, 1, -1, 1, 1, 17, 4, -1, 0, 1, 1, -1, 1, 0, 14, -1, -1, 0, 1, 1, -1, 1, 0, 19, -1, -1, 0, 1, 1, -1, 1, 4, 4, 2, 20, 0, 1, 1, -1, 1, 0, 14, -1, -1, 0, 4, 2, -1, 1, 0, 23, -1, -1, 0, 5, 2, -1, 1, 0, 5, -1, -1, 0, 1, 2, -1, 1, 0, 24, -1, -1, 0, 1, 2, -1, 1, 1, 25, 5, -1, 0, 1, 2, -1, 1, 0, 26, -1, -1, 0, 1, 2, -1, 1, 1, 27, 6, -1, 0, 1, 2, -1, 1, 0, 28, -1, -1, 0, 1, 2, -1, 1, 4, 2, 1, 29, 0, 1, 2, -1, 1, 0, 30, -1, -1, 0, 4, 2, 2, 2, 0, 31, -1, -1, 0, 0, 32, -1, -1, 0, 5, 2, -1, 1, 0, 22, -1, -1, 0, 4, 2, -1, 1, 0, 34, -1, -1, 0, 5, 2, -1, 1, 0, 31, -1, -1, 0, 1, 2, -1, 1, 0, 35, -1, -1, 0, 1, 2, -1, 1, 1, 36, 7, -1, 0, 1, 2, -1, 1, 0, 37, -1, -1, 0, 1, 2, -1, 1, 4, 2, 1, 38, 0, 1, 2, -1, 1, 0, 33, -1, -1, 0];
 
