@@ -99,6 +99,19 @@ pub struct Atn {
     pub call_site_returns: List<i32>,
 }
 
+/// The loop-entry (`STAR_LOOP_ENTRY`) decision number for parser rule
+/// `rule`, or -1 if the rule has no LR loop. Codegen uses this to route an
+/// ATN-class LR rule's loop-entry through the runtime simulator.
+pub fn lr_loop_entry_decision(atn: &Atn, rule: i32) -> i32 {
+    for let mut i = 0; i < atn.states.len(); i += 1 {
+        let st = &atn.states[i];
+        if st.kind == ATN_STAR_LOOP_ENTRY && st.rule == rule && st.decision >= 0 {
+            return st.decision;
+        }
+    }
+    return -1;
+}
+
 /// An empty ATN placeholder. Used by codegen as the `needs_atn == false`
 /// default so the `Atn` variable is always initialized without paying for a
 /// build the grammar does not need.

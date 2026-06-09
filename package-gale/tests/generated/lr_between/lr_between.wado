@@ -1,5 +1,5 @@
-#![generated(by = "local:src/generator.wado", sources = ["../../grammars/Performance/DropLoopEntryBranchInLRRule_4.g4"])]
-#![generated(by = "gale", sources = ["Expr.g4"])]
+#![generated(by = "local:src/generator.wado", sources = ["grammars/lr_between.g4"])]
+#![generated(by = "gale", sources = ["LrBetween.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -988,21 +988,10 @@ pub enum TokenKind {
     Error,
 }
 
-pub variant StatNode {
-    Alt0(StatAlt0),
-    Alt1(StatAlt1),
-}
-
-pub struct StatAlt0 {
+pub struct StatNode {
     pub span: Span,
     pub expr: ExprNode,
     pub semicolon: Token,
-}
-
-pub struct StatAlt1 {
-    pub span: Span,
-    pub expr: ExprNode,
-    pub dot: Token,
 }
 
 pub variant ExprNode {
@@ -1010,9 +999,6 @@ pub variant ExprNode {
     Alt1(ExprAlt1),
     Alt2(ExprAlt2),
     Alt3(ExprAlt3),
-    Alt4(ExprAlt4),
-    Alt5(ExprAlt5),
-    Alt6(ExprAlt6),
 }
 
 pub struct ExprAlt0 {
@@ -1022,42 +1008,19 @@ pub struct ExprAlt0 {
 
 pub struct ExprAlt1 {
     pub span: Span,
-    pub lit_not: Token,
-    pub expr: ExprNode,
-}
-
-pub struct ExprAlt2 {
-    pub span: Span,
     pub expr: ExprNode,
     pub lit_and: Token,
     pub expr_2: ExprNode,
 }
 
-pub struct ExprAlt3 {
+pub struct ExprAlt2 {
     pub span: Span,
     pub expr: ExprNode,
     pub lit_or: Token,
     pub expr_2: ExprNode,
 }
 
-pub struct ExprAlt4 {
-    pub span: Span,
-    pub lparen: Token,
-    pub id: Token,
-    pub rparen: Token,
-    pub expr: ExprNode,
-}
-
-pub struct ExprAlt5 {
-    pub span: Span,
-    pub expr: ExprNode,
-    pub question: Token,
-    pub expr_2: ExprNode,
-    pub colon: Token,
-    pub expr_3: ExprNode,
-}
-
-pub struct ExprAlt6 {
+pub struct ExprAlt3 {
     pub span: Span,
     pub lit_between: Token,
     pub expr: ExprNode,
@@ -1070,15 +1033,9 @@ global TK_WS: i32 = 1;
 global TK_EOF: i32 = 2;
 global TK_ERROR: i32 = 3;
 global TK_LIT_SEMI: i32 = 4;
-global TK_LIT_DOT: i32 = 5;
-global TK_LIT_NOT: i32 = 6;
-global TK_LIT_AND: i32 = 7;
-global TK_LIT_OR: i32 = 8;
-global TK_LIT_LPAREN: i32 = 9;
-global TK_LIT_RPAREN: i32 = 10;
-global TK_LIT_QUESTION: i32 = 11;
-global TK_LIT_COLON: i32 = 12;
-global TK_LIT_BETWEEN: i32 = 13;
+global TK_LIT_AND: i32 = 5;
+global TK_LIT_OR: i32 = 6;
+global TK_LIT_BETWEEN: i32 = 7;
 
 struct Lexer {
     chars: List<char>,
@@ -1121,13 +1078,13 @@ fn try_id(chars: &List<char>, start: i32) -> i32 {
 fn try_ws(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\n' || chars[pos] == '\r' || chars[pos] == 'f') { return -1; }
+    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
     pos += 1;
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\n' || chars[pos] == '\r' || chars[pos] == 'f') { break rep_1; }
+            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_1; }
             pos += 1;
             continue;
         }
@@ -1143,20 +1100,6 @@ fn try_lit_semi(chars: &List<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
-fn try_lit_dot(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '.' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_not(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'n' { return -1; }
-    if pos + 1 >= chars.len() || chars[pos + 1] != 'o' { return -1; }
-    if pos + 2 >= chars.len() || chars[pos + 2] != 't' { return -1; }
-    return pos + 3;
-}
-
 fn try_lit_and(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != 'a' { return -1; }
@@ -1170,30 +1113,6 @@ fn try_lit_or(chars: &List<char>, start: i32) -> i32 {
     if pos + 0 >= chars.len() || chars[pos + 0] != 'o' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != 'r' { return -1; }
     return pos + 2;
-}
-
-fn try_lit_lparen(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_rparen(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_question(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '?' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_colon(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != ':' { return -1; }
-    return pos + 1;
 }
 
 fn try_lit_between(chars: &List<char>, start: i32) -> i32 {
@@ -1221,18 +1140,8 @@ pub fn tokenize(input: &String) -> List<Token> {
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
             end = try_ws(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '(' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LPAREN; }
-        } else if first_char == ')' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RPAREN; }
-        } else if first_char == '.' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_DOT; }
-        } else if first_char == ':' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_COLON; }
         } else if first_char == ';' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SEMI; }
-        } else if first_char == '?' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_QUESTION; }
         } else if first_char == '_' {
             end = try_id(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
@@ -1244,16 +1153,6 @@ pub fn tokenize(input: &String) -> List<Token> {
         } else if first_char == 'b' {
             end = try_lit_between(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_BETWEEN; }
-            end = try_id(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char == 'f' {
-            end = try_id(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-            end = try_ws(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == 'n' {
-            end = try_lit_not(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_NOT; }
             end = try_id(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if first_char == 'o' {
@@ -1300,14 +1199,8 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_EOF => "Eof",
         TK_ERROR => "Error",
         TK_LIT_SEMI => "TK_LIT_SEMI",
-        TK_LIT_DOT => "TK_LIT_DOT",
-        TK_LIT_NOT => "TK_LIT_NOT",
         TK_LIT_AND => "TK_LIT_AND",
         TK_LIT_OR => "TK_LIT_OR",
-        TK_LIT_LPAREN => "TK_LIT_LPAREN",
-        TK_LIT_RPAREN => "TK_LIT_RPAREN",
-        TK_LIT_QUESTION => "TK_LIT_QUESTION",
-        TK_LIT_COLON => "TK_LIT_COLON",
         TK_LIT_BETWEEN => "TK_LIT_BETWEEN",
         _ => "Unknown",
     };
@@ -1444,34 +1337,11 @@ impl Parser {
 }
 
 fn scan_stat(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    scan_alts: {
-        if _gale_kind_set_0(alt_kind) {
-            let mut best: i32 = -1;
-            pos = start;
-            try_0: {
-                pos = scan_expr(tokens, pos, 0);
-                if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_1: {
-                pos = scan_expr(tokens, pos, 0);
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
+    pos = scan_expr(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -1488,41 +1358,17 @@ fn scan_expr_atom(tokens: &List<Token>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_NOT {
+        } else if alt_kind == TK_LIT_BETWEEN {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_NOT { break try_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BETWEEN { break try_1; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LIT_LPAREN {
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_2; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_2; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_2; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { break try_1; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, 0);
-                if pos < 0 { break try_2; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LIT_BETWEEN {
-            pos = start;
-            try_3: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BETWEEN { break try_3; }
-                pos += 1;
-                pos = scan_expr(tokens, pos, 0);
-                if pos < 0 { break try_3; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { break try_3; }
-                pos += 1;
-                pos = scan_expr(tokens, pos, 0);
-                if pos < 0 { break try_3; }
+                if pos < 0 { break try_1; }
                 break scan_alts;
             }
             return -1;
@@ -1533,31 +1379,18 @@ fn scan_expr_atom(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_2(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { return -1; }
-    pos += 1;
-    pos = scan_expr(tokens, pos, 4);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_expr_lr_3(tokens: &List<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_OR { return -1; }
     pos += 1;
     pos = scan_expr(tokens, pos, 3);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr_lr_5(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_QUESTION { return -1; }
-    pos += 1;
-    pos = scan_expr(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_OR { return -1; }
     pos += 1;
     pos = scan_expr(tokens, pos, 2);
     if pos < 0 { return -1; }
@@ -1570,25 +1403,17 @@ fn scan_expr(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
         if suffix_kind == TK_LIT_AND {
-            if 3 >= min_prec {
+            if 2 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_expr_lr_2(tokens, pos);
+                pos = scan_expr_lr_1(tokens, pos);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else if suffix_kind == TK_LIT_OR {
-            if 2 >= min_prec {
-                let lr_saved_pos = pos;
-                pos = scan_expr_lr_3(tokens, pos);
-                if pos < 0 { pos = lr_saved_pos; break; }
-            } else {
-                break;
-            }
-        } else if suffix_kind == TK_LIT_QUESTION {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_expr_lr_5(tokens, pos);
+                pos = scan_expr_lr_2(tokens, pos);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -1600,81 +1425,16 @@ fn scan_expr(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_stat__inner_bt_0(p: &mut Parser) -> Result<StatNode, ParseError> {
+fn _parse_stat__inner(p: &mut Parser) -> Result<StatNode, ParseError> {
     let start = p.peek().span.start;
     p.atn_ret_pending = 8;
     let expr = _parse_expr(p)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
-    return Result::<StatNode, ParseError>::Ok(StatNode::Alt0(StatAlt0 {
+    return Result::<StatNode, ParseError>::Ok(StatNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr,
         semicolon,
-    }));
-}
-
-fn _parse_stat__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_expr(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn _parse_stat__inner_bt_1(p: &mut Parser) -> Result<StatNode, ParseError> {
-    let start = p.peek().span.start;
-    p.atn_ret_pending = 13;
-    let expr = _parse_expr(p)?;
-    let dot = p.expect(TK_LIT_DOT)?;
-    return Result::<StatNode, ParseError>::Ok(StatNode::Alt1(StatAlt1 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        expr,
-        dot,
-    }));
-}
-
-fn _parse_stat__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_expr(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn _parse_stat__inner(p: &mut Parser) -> Result<StatNode, ParseError> {
-    let start = p.peek().span.start;
-    let kind = p.peek_kind();
-    if _gale_kind_set_0(kind) {
-        if _gale_kind_set_0(p.peek_kind()) {
-            let _sd_tokens = &p.tokens;
-            let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_stat__inner_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_stat__inner_scan_1(_sd_tokens, _sd_pos);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
-            }
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
-            if _sd_best_i == 0 {
-                return _parse_stat__inner_bt_0(p);
-            }
-            if _sd_best_i == 1 {
-                return _parse_stat__inner_bt_1(p);
-            }
-            return _parse_stat__inner_bt_1(p);
-        }
-    }
-    return Result::<StatNode, ParseError>::Err(p.error(
-        "expected stat",
-        p.peek().span,
-        ["TK_ID", "TK_LIT_NOT", "TK_LIT_LPAREN", "TK_LIT_BETWEEN"],
-    ));
+    });
 }
 
 fn _parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
@@ -1700,38 +1460,14 @@ fn _parse_expr__inner_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
             id,
         }));
     }
-    if kind == TK_LIT_NOT {
-        let lit_not = p.expect(TK_LIT_NOT)?;
-        p.atn_ret_pending = 25;
-        let expr = _parse_expr(p, 4)?;
-        return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt1(ExprAlt1 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            lit_not,
-            expr,
-        }));
-    }
-    if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN)?;
-        let id = p.expect(TK_ID)?;
-        let rparen = p.expect(TK_LIT_RPAREN)?;
-        p.atn_ret_pending = 34;
-        let expr = _parse_expr(p, 2)?;
-        return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt4(ExprAlt4 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            lparen,
-            id,
-            rparen,
-            expr,
-        }));
-    }
     if kind == TK_LIT_BETWEEN {
         let lit_between = p.expect(TK_LIT_BETWEEN)?;
-        p.atn_ret_pending = 39;
+        p.atn_ret_pending = 20;
         let expr = _parse_expr(p)?;
         let lit_and = p.expect(TK_LIT_AND)?;
-        p.atn_ret_pending = 43;
+        p.atn_ret_pending = 24;
         let expr_2 = _parse_expr(p, 1)?;
-        return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt6(ExprAlt6 {
+        return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt3(ExprAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             lit_between,
             expr,
@@ -1742,15 +1478,15 @@ fn _parse_expr__inner_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     return Result::<ExprNode, ParseError>::Err(p.error(
         "expected expr",
         p.peek().span,
-        ["TK_ID", "TK_LIT_NOT", "TK_LIT_LPAREN", "TK_LIT_BETWEEN"],
+        ["TK_ID", "TK_LIT_BETWEEN"],
     ));
 }
 
-fn _parse_expr__inner_lr_2(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let lit_and = p.expect(TK_LIT_AND)?;
-    p.atn_ret_pending = 51;
-    let expr_2 = _parse_expr__inner(p, 4)?;
-    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt2(ExprAlt2 {
+    p.atn_ret_pending = 32;
+    let expr_2 = _parse_expr__inner(p, 3)?;
+    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt1(ExprAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
         lit_and,
@@ -1758,11 +1494,11 @@ fn _parse_expr__inner_lr_2(p: &mut Parser, left: ExprNode, start: i32) -> Result
     }));
 }
 
-fn _parse_expr__inner_lr_3(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_2(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let lit_or = p.expect(TK_LIT_OR)?;
-    p.atn_ret_pending = 56;
-    let expr_2 = _parse_expr__inner(p, 3)?;
-    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt3(ExprAlt3 {
+    p.atn_ret_pending = 37;
+    let expr_2 = _parse_expr__inner(p, 2)?;
+    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt2(ExprAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
         lit_or,
@@ -1770,35 +1506,16 @@ fn _parse_expr__inner_lr_3(p: &mut Parser, left: ExprNode, start: i32) -> Result
     }));
 }
 
-fn _parse_expr__inner_lr_5(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let question = p.expect(TK_LIT_QUESTION)?;
-    p.atn_ret_pending = 61;
-    let expr_2 = _parse_expr__inner(p, 0)?;
-    let colon = p.expect(TK_LIT_COLON)?;
-    p.atn_ret_pending = 65;
-    let expr_3 = _parse_expr__inner(p, 2)?;
-    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt5(ExprAlt5 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        expr: left,
-        question,
-        expr_2,
-        colon,
-        expr_3,
-    }));
-}
-
 fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let mut result = _parse_expr__inner_atom(p)?;
     loop {
-        let _atn_alt = atn_predict_with_stack(&p.atn, 2, &p.atn_stack, &p.tokens, p.pos, TK_EOF, min_prec);
+        let _atn_alt = atn_predict_with_stack(&p.atn, 1, &p.atn_stack, &p.tokens, p.pos, TK_EOF, min_prec);
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
-            result = _parse_expr__inner_lr_2(p, result, start)?;
+            result = _parse_expr__inner_lr_1(p, result, start)?;
         } else if _atn_alt == 1 {
-            result = _parse_expr__inner_lr_3(p, result, start)?;
-        } else if _atn_alt == 2 {
-            result = _parse_expr__inner_lr_5(p, result, start)?;
+            result = _parse_expr__inner_lr_2(p, result, start)?;
         } else {
             break;
         }
@@ -1860,20 +1577,10 @@ pub fn parse(input: &String) -> Result<StatNode, ParseError> {
 }
 
 pub fn walk_stat<V: Visitor>(v: &mut V, node: &StatNode) {
-    match node {
-        Alt0(n) => {
-            v.enter_rule(0, &"stat", &n.span);
-            walk_expr(v, &n.expr);
-            v.visit_token(&n.semicolon);
-            v.exit_rule(0, &"stat", &n.span);
-        }
-        Alt1(n) => {
-            v.enter_rule(0, &"stat", &n.span);
-            walk_expr(v, &n.expr);
-            v.visit_token(&n.dot);
-            v.exit_rule(0, &"stat", &n.span);
-        }
-    }
+    v.enter_rule(0, &"stat", &node.span);
+    walk_expr(v, &node.expr);
+    v.visit_token(&node.semicolon);
+    v.exit_rule(0, &"stat", &node.span);
 }
 
 pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
@@ -1885,42 +1592,19 @@ pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
         }
         Alt1(n) => {
             v.enter_rule(1, &"expr", &n.span);
-            v.visit_token(&n.lit_not);
-            walk_expr(v, &n.expr);
-            v.exit_rule(1, &"expr", &n.span);
-        }
-        Alt2(n) => {
-            v.enter_rule(1, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.lit_and);
             walk_expr(v, &n.expr_2);
             v.exit_rule(1, &"expr", &n.span);
         }
-        Alt3(n) => {
+        Alt2(n) => {
             v.enter_rule(1, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.lit_or);
             walk_expr(v, &n.expr_2);
             v.exit_rule(1, &"expr", &n.span);
         }
-        Alt4(n) => {
-            v.enter_rule(1, &"expr", &n.span);
-            v.visit_token(&n.lparen);
-            v.visit_token(&n.id);
-            v.visit_token(&n.rparen);
-            walk_expr(v, &n.expr);
-            v.exit_rule(1, &"expr", &n.span);
-        }
-        Alt5(n) => {
-            v.enter_rule(1, &"expr", &n.span);
-            walk_expr(v, &n.expr);
-            v.visit_token(&n.question);
-            walk_expr(v, &n.expr_2);
-            v.visit_token(&n.colon);
-            walk_expr(v, &n.expr_3);
-            v.exit_rule(1, &"expr", &n.span);
-        }
-        Alt6(n) => {
+        Alt3(n) => {
             v.enter_rule(1, &"expr", &n.span);
             v.visit_token(&n.lit_between);
             walk_expr(v, &n.expr);
@@ -1937,9 +1621,5 @@ pub fn to_tree(node: &StatNode) -> CstNode {
     return recorder.build();
 }
 
-fn _gale_kind_set_0(k: i32) -> bool {
-    return k matches { TK_ID | TK_LIT_BETWEEN | TK_LIT_LPAREN | TK_LIT_NOT };
-}
-
-global GALE_ATN_DATA: List<i32> = [1195463758, 2, 14, 2, 0, 2, 1, 3, 3, 4, 16, 44, 66, 2, 0, -1, 1, 0, 4, -1, -1, 0, 3, 0, -1, 0, 2, 1, -1, 1, 0, 16, -1, -1, 0, 3, 1, -1, 0, 4, 0, 0, 2, 0, 6, -1, -1, 0, 0, 11, -1, -1, 0, 5, 0, -1, 1, 0, 1, -1, -1, 0, 1, 0, -1, 1, 0, 7, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 8, 0, 1, 0, -1, 1, 0, 9, -1, -1, 0, 1, 0, -1, 1, 1, 10, 4, -1, 0, 1, 0, -1, 1, 0, 5, -1, -1, 0, 1, 0, -1, 1, 0, 12, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 13, 0, 1, 0, -1, 1, 0, 14, -1, -1, 0, 1, 0, -1, 1, 1, 15, 5, -1, 0, 1, 0, -1, 1, 0, 5, -1, -1, 0, 4, 1, 1, 4, 0, 18, -1, -1, 0, 0, 21, -1, -1, 0, 0, 26, -1, -1, 0, 0, 35, -1, -1, 0, 5, 1, -1, 1, 0, 44, -1, -1, 0, 1, 1, -1, 1, 0, 19, -1, -1, 0, 1, 1, -1, 1, 1, 20, 0, -1, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 1, 1, -1, 1, 0, 22, -1, -1, 0, 1, 1, -1, 1, 1, 23, 6, -1, 0, 1, 1, -1, 1, 0, 24, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 25, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 1, 1, -1, 1, 0, 27, -1, -1, 0, 1, 1, -1, 1, 1, 28, 9, -1, 0, 1, 1, -1, 1, 0, 29, -1, -1, 0, 1, 1, -1, 1, 1, 30, 0, -1, 0, 1, 1, -1, 1, 0, 31, -1, -1, 0, 1, 1, -1, 1, 1, 32, 10, -1, 0, 1, 1, -1, 1, 0, 33, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 34, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 1, 1, -1, 1, 0, 36, -1, -1, 0, 1, 1, -1, 1, 1, 37, 13, -1, 0, 1, 1, -1, 1, 0, 38, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 39, 0, 1, 1, -1, 1, 0, 40, -1, -1, 0, 1, 1, -1, 1, 1, 41, 7, -1, 0, 1, 1, -1, 1, 0, 42, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 43, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 6, 1, 2, 4, 5, 47, -1, -1, 3, 5, 52, -1, -1, 2, 5, 57, -1, -1, 1, 0, 45, -1, -1, 0, 9, 1, -1, 1, 0, 3, -1, -1, 0, 7, 1, -1, 1, 0, 44, -1, -1, 0, 1, 1, -1, 1, 0, 48, -1, -1, 0, 1, 1, -1, 1, 1, 49, 7, -1, 0, 1, 1, -1, 1, 0, 50, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 51, 4, 1, 1, -1, 1, 0, 46, -1, -1, 0, 1, 1, -1, 1, 0, 53, -1, -1, 0, 1, 1, -1, 1, 1, 54, 8, -1, 0, 1, 1, -1, 1, 0, 55, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 56, 3, 1, 1, -1, 1, 0, 46, -1, -1, 0, 1, 1, -1, 1, 0, 58, -1, -1, 0, 1, 1, -1, 1, 1, 59, 11, -1, 0, 1, 1, -1, 1, 0, 60, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 61, 0, 1, 1, -1, 1, 0, 62, -1, -1, 0, 1, 1, -1, 1, 1, 63, 12, -1, 0, 1, 1, -1, 1, 0, 64, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 65, 2, 1, 1, -1, 1, 0, 46, -1, -1, 0];
+global GALE_ATN_DATA: List<i32> = [1195463758, 2, 8, 2, 0, 2, 1, 3, 2, 11, 25, 38, 2, 0, -1, 1, 0, 4, -1, -1, 0, 3, 0, -1, 0, 2, 1, -1, 1, 0, 11, -1, -1, 0, 3, 1, -1, 0, 4, 0, -1, 1, 0, 6, -1, -1, 0, 5, 0, -1, 1, 0, 1, -1, -1, 0, 1, 0, -1, 1, 0, 7, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 8, 0, 1, 0, -1, 1, 0, 9, -1, -1, 0, 1, 0, -1, 1, 1, 10, 4, -1, 0, 1, 0, -1, 1, 0, 5, -1, -1, 0, 4, 1, 0, 2, 0, 13, -1, -1, 0, 0, 16, -1, -1, 0, 5, 1, -1, 1, 0, 25, -1, -1, 0, 1, 1, -1, 1, 0, 14, -1, -1, 0, 1, 1, -1, 1, 1, 15, 0, -1, 0, 1, 1, -1, 1, 0, 12, -1, -1, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 1, 1, -1, 1, 1, 18, 7, -1, 0, 1, 1, -1, 1, 0, 19, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 20, 0, 1, 1, -1, 1, 0, 21, -1, -1, 0, 1, 1, -1, 1, 1, 22, 5, -1, 0, 1, 1, -1, 1, 0, 23, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 24, 0, 1, 1, -1, 1, 0, 12, -1, -1, 0, 6, 1, 1, 3, 5, 28, -1, -1, 2, 5, 33, -1, -1, 1, 0, 26, -1, -1, 0, 9, 1, -1, 1, 0, 3, -1, -1, 0, 7, 1, -1, 1, 0, 25, -1, -1, 0, 1, 1, -1, 1, 0, 29, -1, -1, 0, 1, 1, -1, 1, 1, 30, 5, -1, 0, 1, 1, -1, 1, 0, 31, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 32, 3, 1, 1, -1, 1, 0, 27, -1, -1, 0, 1, 1, -1, 1, 0, 34, -1, -1, 0, 1, 1, -1, 1, 1, 35, 6, -1, 0, 1, 1, -1, 1, 0, 36, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 37, 2, 1, 1, -1, 1, 0, 27, -1, -1, 0];
 

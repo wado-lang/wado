@@ -62,7 +62,7 @@
 "ParserErrors/SingleTokenDeletionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
 
 [stage_a_todo]
-"Performance/DropLoopEntryBranchInLRRule_4" = "parse-accepts-input: LR expression rule with operator precedence — Gale picks the wrong precedence chain for or-then-and (Stage C-independent)"
+"Performance/DropLoopEntryBranchInLRRule_4" = "parse-accepts-input: ATN-class LR loop-entry. CORRECTNESS fixed by P4.3 (the `between … 'and'` shape now parses — see tests/grammars/lr_between.g4 + driver_lr_between_test.wado, green); this descriptor's full 15-line deeply-nested input still TIMES OUT — the exact per-config stacks blow up under deep left recursion (P4.4: measure + graph-structured stacks). Stays todo until the perf work lands."
 "LexerExec/RecursiveLexerRuleRefWithWildcardPlus_1" = "tokens-equivalence: Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.+?` wildcard plus does not nest correctly (Stage C-independent)"
 "LexerExec/RecursiveLexerRuleRefWithWildcardStar_1" = "tokens-equivalence: Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.*?` wildcard star does not nest correctly (Stage C-independent)"
 # IfIfElseNonGreedyBinding1's parse-accepts-input claim (b) is met

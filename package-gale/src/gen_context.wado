@@ -106,6 +106,11 @@ pub struct GenContext {
     /// exit-first decision to predict (the caller stack now holds return
     /// states, not rule indices). -1 outside rule-body emission.
     current_rule_index: i32,
+    /// Per-rule ATN loop-entry (`STAR_LOOP_ENTRY`) decision number, indexed
+    /// by rule, or -1 for a rule with no LR loop. Populated after `build_atn`
+    /// (only when `needs_atn`); read by the LR dispatch emitter to route an
+    /// ATN-class rule's loop-entry through `atn_predict_with_stack`.
+    lr_loop_entry_decisions: List<i32>,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
@@ -136,6 +141,7 @@ impl GenContext {
             needs_atn_seen: false,
             atn_call_site_returns: [],
             current_rule_index: -1,
+            lr_loop_entry_decisions: [],
             trace: false,
         };
     }
@@ -193,6 +199,19 @@ impl GenContext {
     /// The rule currently being emitted, or -1 outside rule-body emission.
     pub fn current_rule_index(&self) -> i32 {
         return self.current_rule_index;
+    }
+
+    /// Store the per-rule ATN loop-entry decision numbers (after `build_atn`).
+    pub fn set_lr_loop_entry_decisions(&mut self, decs: &List<i32>) {
+        self.lr_loop_entry_decisions = *decs;
+    }
+
+    /// The ATN loop-entry decision number for `rule`, or -1 if none / unbuilt.
+    pub fn lr_loop_entry_decision(&self, rule: i32) -> i32 {
+        if rule < 0 || rule >= self.lr_loop_entry_decisions.len() {
+            return -1;
+        }
+        return self.lr_loop_entry_decisions[rule];
     }
 
     /// Enable trace instrumentation in the generated parser (the

@@ -234,6 +234,16 @@ pub struct LeftRecursiveRule {
     /// the second-token disambiguation needed when first-tokens
     /// collide.
     pub lr_dispatch: LrDispatchData,
+    /// True when the loop-entry decision is ATN-class: an atom alt
+    /// recursively references this rule with a trailing literal that
+    /// overlaps an LR suffix-first (the `'between' expr 'and' expr`
+    /// shape — `DropLoopEntryBranchInLRRule_4`). The static suffix-first
+    /// dispatch mis-commits here (it enters the `and`-loop and starves
+    /// `between`'s mandatory `'and'`), so codegen routes the loop-entry
+    /// through the runtime ATN simulator instead. Set by `lower_lr_rule`;
+    /// also flips `GenContext.needs_atn`. False for the common LR rule,
+    /// whose static `scan_X_lr_*` fast path stays byte-identical.
+    pub atn_class: bool = false,
 }
 
 /// One left-recursive alternative, with the prefix self-reference

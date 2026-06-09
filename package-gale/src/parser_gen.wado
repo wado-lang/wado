@@ -1994,7 +1994,13 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         f2.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
         w.line(&`let mut result = {*fn_name}_atom(p{follow_sep(ctx.emit_follow())})?;`);
-        gen_lr_suffix_dispatch(w, rule, &type_name, lr_alts, lr_dispatch, ctx, true, fn_name, scan_fn_name);
+        let atn_class = if let LeftRecursive(l) = lowered_rule { l.atn_class } else { false };
+        let loop_dec = if atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
+        if atn_class && loop_dec >= 0 {
+            gen_lr_suffix_dispatch_atn(w, &type_name, lr_alts, lr_dispatch, ctx, fn_name, scan_fn_name, loop_dec);
+        } else {
+            gen_lr_suffix_dispatch(w, rule, &type_name, lr_alts, lr_dispatch, ctx, true, fn_name, scan_fn_name);
+        }
         w.line(&`return Result::<{type_name}, ParseError>::Ok(result);`);
         w.end();
         w.blank();
@@ -4962,6 +4968,55 @@ fn project_lr_dispatch(lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData) -> [
         suffix_first_sets.push(lr.suffix_first);
     }
     return [valid_lr_indices, lr_precs, suffix_first_sets];
+}
+
+/// LR loop dispatch for an ATN-class rule: route the enter-vs-exit decision
+/// through the runtime simulator (full context + precedence) instead of the
+/// static suffix-first dispatch. `atn_predict_with_stack` returns the
+/// loop-entry edge index — `0..valid_lr_alts.len()` selects the matching LR
+/// suffix helper (edges are built in `valid_lr_alts` order), and the trailing
+/// exit edge (or any out-of-range result) breaks the loop. Precedence is
+/// handled inside the simulator (via `min_prec`) and inside each suffix
+/// helper (the recursive operand's baked floor), so no static `prec >=
+/// min_prec` gate is emitted.
+///
+/// Unlike the static path, no per-suffix scan-twin gate is emitted: the scan
+/// helpers use the *static* dispatch, which has the very ATN-class bug we are
+/// routing around (it mis-scans the shared delimiter), so gating on them
+/// would re-introduce the wrong early break. The simulator's prediction is
+/// the commit decision, and the recursive operand re-enters this same
+/// ATN-routed `_parse_X`, so a predicted suffix parses through.
+fn gen_lr_suffix_dispatch_atn(w: &mut CodeWriter, type_name: &String, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, decision: i32) {
+    let valid = &lr_dispatch.valid_lr_alts;
+    w.begin(&"loop");
+    w.line(&`let _atn_alt = atn_predict_with_stack(&p.atn, {decision}, &p.atn_stack, &p.tokens, p.pos, TK_EOF, min_prec);`);
+    // Progress guard: every LR suffix consumes at least its operator token,
+    // so a non-advancing iteration means the prediction's min-alt fallback
+    // returned an enter alt with nothing to parse — exit instead of spinning.
+    w.line(&"let _lr_pos0 = p.pos;");
+    let mut is_first = true;
+    for let mut i = 0; i < valid.len(); i += 1 {
+        let lr_idx = lr_alts[valid[i]].alt_index;
+        let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
+        if is_first {
+            w.begin(&`if _atn_alt == {i}`);
+            is_first = false;
+        } else {
+            w.else_begin(&`else if _atn_alt == {i}`);
+        }
+        w.line(&`result = {suffix_fn}(p, result, start{follow_sep(ctx.emit_follow())})?;`);
+    }
+    if !is_first {
+        w.else_begin(&"else");
+        w.line(&"break;");
+        w.end();
+    } else {
+        w.line(&"break;");
+    }
+    w.begin(&"if p.pos == _lr_pos0");
+    w.line(&"break;");
+    w.end();
+    w.end();  // loop
 }
 
 fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, use_prec: bool, fn_name: &String, scan_fn_name: &String) {

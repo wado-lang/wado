@@ -619,11 +619,68 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // and `scan_suffix.elements` (scan-side `ScanRuleCallElem.min_prec_arg`).
     stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name);
 
+    // ATN-class detection: the static suffix-first dispatch mis-commits when
+    // an atom alt recursively references this rule with a trailing literal
+    // that overlaps an LR suffix-first (the `'between' expr 'and' expr`
+    // shape). Route such a rule's loop-entry through the runtime simulator.
+    let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts);
+    if atn_class {
+        ctx.mark_needs_atn();
+    }
+
     return LeftRecursiveRule {
         header,
         atom,
         lr_alts,
         lr_dispatch,
+        atn_class,
+    };
+}
+
+/// True when this LR rule's loop-entry is ATN-class: some atom (non-LR) alt
+/// contains a self-reference to the rule immediately followed by a fixed
+/// token (`Literal` / `TokenRef`) that is also a first token of some LR
+/// alt's suffix. In that shape the atom's inner operand and the LR loop
+/// compete for the shared delimiter, and the static first-token dispatch
+/// commits the loop greedily — starving the atom's own trailing literal
+/// (`'between' expr 'and' expr` vs `expr 'and' expr`). The runtime simulator
+/// resolves it with full context.
+fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: &List<LrAlt>) -> bool {
+    let mut suffix_first_tokens: List<String> = [];
+    for let a of lr_alts {
+        for let t of &a.suffix_first {
+            if !suffix_first_tokens.contains(t) {
+                suffix_first_tokens.push(*t);
+            }
+        }
+    }
+    if suffix_first_tokens.is_empty() {
+        return false;
+    }
+    for let idx of non_lr_indices {
+        let alt = &rule.alternatives[*idx];
+        for let mut i = 0; i + 1 < alt.elements.len(); i += 1 {
+            if !element_is_self_ref(&alt.elements[i], &rule.name) {
+                continue;
+            }
+            let tok = fixed_token_const_name(&alt.elements[i + 1]);
+            if let Some(t) = tok {
+                if suffix_first_tokens.contains(&t) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/// The token constant name (`TK_X` / `LIT_x`) of a fixed-token element
+/// (`TokenRef` / `Literal`), or `null` for anything else.
+fn fixed_token_const_name(elem: &Element) -> Option<String> {
+    return match *elem {
+        TokenRef(t) => Option::<String>::Some(`TK_{t.name}`),
+        Literal(l) => Option::<String>::Some(literal_const_name(&l.text)),
+        _ => null,
     };
 }
 
