@@ -10,6 +10,8 @@
 //! yet. Stage 2 wires the per-function builder; the engine and rules pick it
 //! up in Stage 3+.
 
+pub mod builder;
+
 use crate::hashmap::IndexMap;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::tir::TypeId;
