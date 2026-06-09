@@ -15,8 +15,9 @@ use t from "../../grammars/ParserErrors/LL1ErrorInfo.g4"
     };
 use { normalize_tree } from "../../grammars/ParserErrors/LL1ErrorInfo.g4";
 
-#[TODO]
+
 // triage: Error recovery: ANTLR4's recovered tree pulls `acClass` up as a bare token (single-token insertion), while Gale produces a proper empty-rule `(acClass)` node. Error-recovery shape differences are the same gap as `ParseTrees/ExtraToken` / `NoViableAlt` / `Sync`; flip together when error recovery lands.
+#[TODO]
 test "stage_b_oracle: ParserErrors/LL1ErrorInfo" {
     let input = "dog and software";
     let expected = "(start (animal dog) and acClass (service software))";

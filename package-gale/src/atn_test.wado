@@ -7,13 +7,7 @@
 //!   3. non-greedy repeats put the EXIT edge first at the decision state
 //!      (the invariant that makes `(else stmt)??` bind to the outer rule).
 
-use {
-    build_atn,
-    build_token_kinds,
-    serialize_atn,
-    Atn,
-    AtnState,
-} from "./atn.wado";
+use { build_atn, build_token_kinds, serialize_atn, Atn, AtnState } from "./atn.wado";
 use {
     atn_decode,
     AtnSim,
@@ -238,8 +232,12 @@ test "LR rule has no position-0 self-reference (no naive left recursion)" {
     for let mut i = 0; i < atn.states.len(); i += 1 {
         for let t of &atn.states[i].transitions {
             if t.kind == ATN_TR_RULE && t.target == atn.rule_start[0] {
-                if t.prec == 3 { found3 = true; }
-                if t.prec == 2 { found2 = true; }
+                if t.prec == 3 {
+                    found3 = true;
+                }
+                if t.prec == 2 {
+                    found2 = true;
+                }
             }
         }
     }

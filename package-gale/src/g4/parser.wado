@@ -1181,7 +1181,13 @@ impl G4Parser {
         return Result::<Element, ParseError>::Ok(elem);
     }
 
-    fn parse_lexer_rule(&mut self, name: String, is_fragment: bool, mode: i32, mode_names: &mut List<String>) -> Result<LexerRule, ParseError> {
+    fn parse_lexer_rule(
+        &mut self,
+        name: String,
+        is_fragment: bool,
+        mode: i32,
+        mode_names: &mut List<String>,
+    ) -> Result<LexerRule, ParseError> {
         // Lexer rules in ANTLR4 also accept the rule prequel (rare but legal,
         // most commonly `locals [int n]`).
         let options = self.skip_rule_prequel();
@@ -1217,7 +1223,11 @@ impl G4Parser {
         );
     }
 
-    fn parse_lexer_actions(&mut self, actions: &mut LexerActions, mode_names: &mut List<String>) -> Result<(), ParseError> {
+    fn parse_lexer_actions(
+        &mut self,
+        actions: &mut LexerActions,
+        mode_names: &mut List<String>,
+    ) -> Result<(), ParseError> {
         loop {
             let action_tok = self.advance();
             let action_text = &action_tok.text;

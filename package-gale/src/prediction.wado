@@ -90,7 +90,12 @@ fn find_merge_branch(branches: &List<PredictionBranch>, child: &PredictionNode) 
     return -1;
 }
 
-pub fn build_prediction(alt_indices: &List<i32>, alt_elements: &List<List<Element>>, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
+pub fn build_prediction(
+    alt_indices: &List<i32>,
+    alt_elements: &List<List<Element>>,
+    max_depth: i32,
+    ctx: &mut GenContext,
+) -> PredictionNode {
     // Build initial SLL configs: one per alternative, at element position 0.
     let mut configs: List<SllConfig> = [];
     for let mut i = 0; i < alt_indices.len(); i += 1 {
@@ -735,11 +740,7 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
         if at_end_alts.len() == 1 {
             return PredictionNode::Leaf(at_end_alts[0]);
         }
-        let reason = if at_end_alts.len() >= 2 {
-            AmbiguityReason::MultiAtEnd;
-        } else {
-            AmbiguityReason::NoViableAlt;
-        };
+        let reason = if at_end_alts.len() >= 2 { AmbiguityReason::MultiAtEnd } else { AmbiguityReason::NoViableAlt };
         return ambiguous(alts, reason);
     }
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
@@ -749,7 +750,15 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
 /// Uses ATN-style expansion: enter referenced rules, advance by one token,
 /// then compute FIRST sets at the decision point's lookahead level.
 /// Builds a flat Dispatch — never calls build_sll_node on expanded configs.
-fn try_expand_opaque(original_configs: &List<SllConfig>, token: &String, non_opaque_configs: &List<SllConfig>, opaque_alts: List<i32>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> Option<PredictionNode> {
+fn try_expand_opaque(
+    original_configs: &List<SllConfig>,
+    token: &String,
+    non_opaque_configs: &List<SllConfig>,
+    opaque_alts: List<i32>,
+    depth: i32,
+    max_depth: i32,
+    ctx: &mut GenContext,
+) -> Option<PredictionNode> {
     if depth >= max_depth {
         return null;
     }

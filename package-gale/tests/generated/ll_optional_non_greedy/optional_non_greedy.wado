@@ -660,8 +660,9 @@ global ATN_CLOSURE_GUARD: i32 = 2000000;
 #[allow(dead_code)]
 global ATN_ARENA_CAP: i32 = 400000;
 
-/// The decoded ATN, in struct-of-arrays form. Built once per parser from
-/// the serialized blob and read (never mutated) during prediction.
+/// The decoded ATN, in struct-of-arrays form. Decoded once from the
+/// serialized blob (into the module-level `GALE_ATN_SIM` in a generated
+/// parser) and read (never mutated) during prediction.
 pub struct AtnSim {
     pub state_kind: List<i32>,
     pub state_rule: List<i32>,
@@ -681,12 +682,14 @@ pub struct AtnSim {
     /// Per-rule FIRST / nullability, computed once from the decoded ATN (not
     /// from the blob). `rule_nullable[r]` — can rule `r` derive empty;
     /// `rule_first[r]` — the explicit token kinds rule `r` can start with;
-    /// `rule_first_open[r]` — rule `r`'s FIRST also admits a wildcard /
-    /// negated set (matches "many" tokens, handled conservatively). These
-    /// drive the LR loop-entry decision's caller-mandatory check
-    /// (`atn_lr_loop_decision`).
+    /// `rule_first_neg[r]` — labels EXCLUDED by `~X` edges in rule `r`'s FIRST
+    /// (a `~X` start admits any token but `X`); `rule_first_open[r]` — rule
+    /// `r`'s FIRST admits a true wildcard `.`. Together these answer
+    /// `atn_first_admits`. They drive the LR loop-entry decision's
+    /// caller-mandatory check (`atn_lr_loop_decision`).
     pub rule_nullable: List<bool>,
     pub rule_first: List<List<i32>>,
+    pub rule_first_neg: List<List<i32>>,
     pub rule_first_open: List<bool>,
 }
 
@@ -939,11 +942,12 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
         state_kind, state_rule, state_decision, state_tr_start, state_tr_count,
         tr_kind, tr_src, tr_target, tr_label, tr_follow, tr_prec,
         decision_state, rule_start, rule_stop, num_tokens,
-        rule_nullable: [], rule_first: [], rule_first_open: [],
+        rule_nullable: [], rule_first: [], rule_first_neg: [], rule_first_open: [],
     };
     for let mut r = 0; r < nrules_count; r += 1 {
         sim.rule_nullable.push(false);
         sim.rule_first.push([]);
+        sim.rule_first_neg.push([]);
         sim.rule_first_open.push(false);
     }
     // The FIRST/nullable fixpoint feeds only the LR loop-entry decision
@@ -967,8 +971,9 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
 /// Fill `rule_nullable` / `rule_first` / `rule_first_open` by a monotone
 /// fixpoint over the ATN: each pass recomputes every rule's FIRST/nullable
 /// from the current values (used for rule-ref edges), stopping when nothing
-/// grows. Runs once per parser at decode; the grammar (ATN) is constant so
-/// this is O(1) w.r.t. input.
+/// grows. Runs once at decode, and only when the ATN has precedence edges
+/// (see `atn_decode`); the grammar (ATN) is constant so this is O(1) w.r.t.
+/// input.
 #[allow(dead_code)]
 fn atn_compute_first_nullable(sim: &mut AtnSim) {
     let nrules = sim.rule_start.len();
@@ -983,13 +988,20 @@ fn atn_compute_first_nullable(sim: &mut AtnSim) {
             }
             let mut v2: List<i32> = [];
             let mut f: List<i32> = [];
-            if atn_cont_first(sim, sim.rule_start[r], &mut v2, &mut f, true) && !sim.rule_first_open[r] {
+            let mut fneg: List<i32> = [];
+            if atn_cont_first(sim, sim.rule_start[r], &mut v2, &mut f, &mut fneg, true) && !sim.rule_first_open[r] {
                 sim.rule_first_open[r] = true;
                 changed = true;
             }
             for let t of &f {
                 if !sim.rule_first[r].contains(t) {
                     sim.rule_first[r].push(*t);
+                    changed = true;
+                }
+            }
+            for let x of &fneg {
+                if !sim.rule_first_neg[r].contains(x) {
+                    sim.rule_first_neg[r].push(*x);
                     changed = true;
                 }
             }
@@ -1029,13 +1041,15 @@ fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool 
 }
 
 /// Collect the explicit FIRST token kinds of the continuation from `state`
-/// into `out`; returns `open` (true if the FIRST also admits a wildcard /
-/// negated set, i.e. "many" tokens — handled conservatively by callers).
+/// into `out`, and the labels EXCLUDED by `~X` (`NOT_ATOM`) edges into `neg`
+/// (a `~X` edge matches any token except `X`). Returns `open` (true only for
+/// a true wildcard `.`, which matches any token). A token `t` is admitted by
+/// this FIRST iff `atn_first_admits(out, open, neg, t, eof)`.
 /// Stops at consuming atoms (their label is the FIRST; no walk past them).
-/// Uses `sim.rule_first` / `rule_first_open` / `rule_nullable` for rule-ref
-/// edges; `visited` breaks within-rule cycles.
+/// Uses `sim.rule_first` / `rule_first_open` / `rule_first_neg` /
+/// `rule_nullable` for rule-ref edges; `visited` breaks within-rule cycles.
 #[allow(dead_code)]
-fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>, forbid_prec: bool = false) -> bool {
+fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>, neg: &mut List<i32>, forbid_prec: bool = false) -> bool {
     if visited.contains(&state) {
         return false;
     }
@@ -1052,8 +1066,12 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
             if !out.contains(&sim.tr_label[s + j]) {
                 out.push(sim.tr_label[s + j]);
             }
-        } else if k == ATN_TR_WILDCARD || k == ATN_TR_NOT_ATOM {
+        } else if k == ATN_TR_WILDCARD {
             open = true;
+        } else if k == ATN_TR_NOT_ATOM {
+            if !neg.contains(&sim.tr_label[s + j]) {
+                neg.push(sim.tr_label[s + j]);
+            }
         } else if k == ATN_TR_PRECEDENCE {
             // A precedence edge only exists at an LR rule's loop entry, i.e.
             // *after* the left operand. Reaching one while computing a rule's
@@ -1067,11 +1085,11 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
             if forbid_prec {
                 panic(`ATN-class LR rule with a nullable atom alternative is unsupported (operator leaks into FIRST)`);
             }
-            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, forbid_prec) {
+            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, neg, forbid_prec) {
                 open = true;
             }
         } else if k == ATN_TR_EPSILON {
-            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, forbid_prec) {
+            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, neg, forbid_prec) {
                 open = true;
             }
         } else if k == ATN_TR_RULE {
@@ -1082,16 +1100,42 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
                         out.push(*t);
                     }
                 }
+                for let x of &sim.rule_first_neg[callee] {
+                    if !neg.contains(x) {
+                        neg.push(*x);
+                    }
+                }
                 if sim.rule_first_open[callee] {
                     open = true;
                 }
-                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out, forbid_prec) {
+                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out, neg, forbid_prec) {
                     open = true;
                 }
             }
         }
     }
     return open;
+}
+
+/// Whether the FIRST set described by (`out`, `open`, `neg`) admits token `t`:
+/// an explicit atom match, a true wildcard, or a `~X` exclusion whose excluded
+/// label is not `t` (matching `atn_move`'s `token != label && token != eof`).
+#[allow(dead_code)]
+fn atn_first_admits(out: &List<i32>, open: bool, neg: &List<i32>, t: i32, eof: i32) -> bool {
+    if open && t != eof {
+        return true;
+    }
+    if out.contains(&t) {
+        return true;
+    }
+    if t != eof {
+        for let x of neg {
+            if *x != t {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// True when `state`'s outgoing edges consume a token (atom / wildcard /
@@ -1460,8 +1504,9 @@ pub fn atn_lr_loop_decision(sim: &AtnSim, rule_stack: &List<i32>, decision: i32,
             }
             let mut v: List<i32> = [];
             let mut f: List<i32> = [];
-            let open = atn_cont_first(sim, sim.tr_target[s + j], &mut v, &mut f);
-            if open || f.contains(&t) {
+            let mut fneg: List<i32> = [];
+            let open = atn_cont_first(sim, sim.tr_target[s + j], &mut v, &mut f, &mut fneg);
+            if atn_first_admits(&f, open, &fneg, t, eof) {
                 return j;
             }
         }
@@ -1488,8 +1533,9 @@ fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -
         }
         let mut v2: List<i32> = [];
         let mut f: List<i32> = [];
-        let open = atn_cont_first(sim, ret, &mut v2, &mut f);
-        return open || f.contains(&t);
+        let mut fneg: List<i32> = [];
+        let open = atn_cont_first(sim, ret, &mut v2, &mut f, &mut fneg);
+        return atn_first_admits(&f, open, &fneg, t, eof);
     }
     return false;
 }

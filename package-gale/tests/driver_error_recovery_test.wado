@@ -15,10 +15,12 @@ use errrec from "./grammars/error_recovery.g4"
 // top level. The error must point at the `;` (col 8), not at EOF / the start.
 test "error position: malformed item under `item* EOF`" {
     match errrec::parse(&"let x = ;") {
-        Ok(_) => { assert false, "expected a parse error"; }
+        Ok(_) => {
+            assert false, "expected a parse error";
+        },
         Err(e) => {
             assert e.col == 8, `expected error at col 8 (the ';'), got col {e.col}: {e.message}`;
-        }
+        },
     }
 }
 
@@ -26,10 +28,12 @@ test "error position: malformed item under `item* EOF`" {
 // must point at the inner `;` (col 10), not at the block's `}`.
 test "error position: malformed item under `item* '}'`" {
     match errrec::parse(&"{ let x = ; }") {
-        Ok(_) => { assert false, "expected a parse error"; }
+        Ok(_) => {
+            assert false, "expected a parse error";
+        },
         Err(e) => {
             assert e.col == 10, `expected error at col 10 (the ';'), got col {e.col}: {e.message}`;
-        }
+        },
     }
 }
 
@@ -37,11 +41,13 @@ test "error position: malformed item under `item* '}'`" {
 // that token — recovery must not fire when the lookahead can't start an item.
 test "error position: non-item token stays put" {
     match errrec::parse(&"let x = y ; +") {
-        Ok(_) => { assert false, "expected a parse error"; }
+        Ok(_) => {
+            assert false, "expected a parse error";
+        },
         Err(e) => {
             // After the valid item, `+` is not in FIRST(item); the error is the
             // EOF expectation at `+` (col 12).
             assert e.col == 12, `expected error at col 12 (the '+'), got col {e.col}: {e.message}`;
-        }
+        },
     }
 }

@@ -29,7 +29,18 @@ use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
 use { assign_atn_call_sites } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
-use { Rule, Op, ScanElement, MultiAltDispatch, GroupShape, FieldDecl, FieldKind, FollowArg, Diagnostic, DiagnosticKind } from "./gir.wado";
+use {
+    Rule,
+    Op,
+    ScanElement,
+    MultiAltDispatch,
+    GroupShape,
+    FieldDecl,
+    FieldKind,
+    FollowArg,
+    Diagnostic,
+    DiagnosticKind,
+} from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
     return Grammar {
@@ -2600,9 +2611,7 @@ test "lower: RuleCall at the rule tail forwards the runtime follow" {
     // continuation is whatever `r` was itself called with → Forward.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [
-        ParserRule::new("r", Visibility::Default, [], [
-            alt_of([Element::RuleRef(RuleRefElement::new("a"))]),
-        ]),
+        ParserRule::new("r", Visibility::Default, [], [alt_of([Element::RuleRef(RuleRefElement::new("a"))])]),
         ParserRule::new("a", Visibility::Default, [], [
             alt_of([
                 Element::Repeat(RepeatElement {

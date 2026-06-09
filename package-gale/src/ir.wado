@@ -304,7 +304,12 @@ pub struct ParserRule {
 }
 
 impl ParserRule {
-    pub fn new(name: String, visibility: Visibility, options: List<GrammarOption>, alternatives: List<Alternative>) -> ParserRule {
+    pub fn new(
+        name: String,
+        visibility: Visibility,
+        options: List<GrammarOption>,
+        alternatives: List<Alternative>,
+    ) -> ParserRule {
         let snake_name = to_snake_case(&name);
         let field_name = escape_ident(&snake_name);
         let type_name = `{to_pascal_case(&name)}Node`;

@@ -20,13 +20,7 @@
 //! compiler-side module freely `use`s it. `atn_test.wado` pins the
 //! `serialize_atn` -> `atn_decode` round-trip.
 
-use {
-    Grammar,
-    ParserRule,
-    Alternative,
-    Element,
-    RepeatKind,
-} from "./ir.wado";
+use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
 use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
 use { lower, element_is_self_ref } from "./lower.wado";
 use { collect_literal_tokens, LitToken } from "./lexer_gen.wado";
@@ -309,7 +303,13 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
 /// `own_prec`; the trailing recursive operand (`expr[next_i]`) carries the
 /// alt's `conflict_min` as its `RuleRef` precedence floor. The predicate is
 /// evaluated in P4.3; here it is structural.
-fn build_lr_body(b: &mut AtnBuilder, rule: &ParserRule, lr: &LeftRecursiveRule, r: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
+fn build_lr_body(
+    b: &mut AtnBuilder,
+    rule: &ParserRule,
+    lr: &LeftRecursiveRule,
+    r: i32,
+    rule_index: &TreeMap<String, i32>,
+) -> [i32, i32] {
     // Atom block: the non-LR alternatives, in source order. LR alts are
     // identified by their `alt_index`; everything else is an atom.
     let mut is_lr_alt: List<bool> = [];
@@ -356,7 +356,14 @@ fn build_lr_body(b: &mut AtnBuilder, rule: &ParserRule, lr: &LeftRecursiveRule, 
 /// element index `last_self_ref_idx`) carries the alt's `conflict_min` as
 /// its precedence floor; any earlier self-ref carries 0. Non-self-ref
 /// elements build exactly as in the generic path.
-fn build_lr_suffix(b: &mut AtnBuilder, alt: &Alternative, lr_alt: &LrAlt, rule_name: &String, r: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
+fn build_lr_suffix(
+    b: &mut AtnBuilder,
+    alt: &Alternative,
+    lr_alt: &LrAlt,
+    rule_name: &String,
+    r: i32,
+    rule_index: &TreeMap<String, i32>,
+) -> [i32, i32] {
     let entry = b.new_state(ATN_BASIC, r);
     let mut cursor = entry;
     for let mut i = 1; i < alt.elements.len(); i += 1 {
@@ -397,7 +404,12 @@ fn self_ref_segment(b: &mut AtnBuilder, r: i32, prec: i32, call_site: i32) -> [i
 /// a decision iff there is more than one alternative. Alternatives are
 /// wired in source order so the simulator's min-alt conflict resolution
 /// matches ANTLR4.
-fn build_alternation(b: &mut AtnBuilder, alts: &List<Alternative>, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
+fn build_alternation(
+    b: &mut AtnBuilder,
+    alts: &List<Alternative>,
+    rule: i32,
+    rule_index: &TreeMap<String, i32>,
+) -> [i32, i32] {
     let start = b.new_state(ATN_BLOCK_START, rule);
     let end = b.new_state(ATN_BLOCK_END, rule);
     if alts.len() > 1 {
@@ -417,7 +429,12 @@ fn build_alternation(b: &mut AtnBuilder, alts: &List<Alternative>, rule: i32, ru
 
 /// Build a sequence of elements, threading each element's exit into the
 /// next element's entry. Returns `[entry, exit]`.
-fn build_sequence(b: &mut AtnBuilder, elements: &List<Element>, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
+fn build_sequence(
+    b: &mut AtnBuilder,
+    elements: &List<Element>,
+    rule: i32,
+    rule_index: &TreeMap<String, i32>,
+) -> [i32, i32] {
     let entry = b.new_state(ATN_BASIC, rule);
     let mut cursor = entry;
     for let elem of elements {
@@ -442,7 +459,11 @@ fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &Tre
         RuleRef(rr) => {
             let from = b.new_state(ATN_BASIC, rule);
             let to = b.new_state(ATN_BASIC, rule);
-            let ri = if let Some(idx) = rule_index.get(rr.name) { idx } else { -1 };
+            let ri = if let Some(idx) = rule_index.get(rr.name) {
+                idx;
+            } else {
+                -1;
+            };
             // `target` jumps to the invoked rule's start state; `label`
             // keeps the rule index for dump/debug; `follow` is the return.
             let tstart = if ri >= 0 { b.rule_start[ri] } else { -1 };
@@ -491,7 +512,14 @@ fn not_segment(b: &mut AtnBuilder, inner: &Element, rule: i32) -> [i32, i32] {
 /// min-alt resolution prefers the earlier edge, so greedy puts
 /// enter/loop first and non-greedy puts exit first. This is what makes
 /// `(else stmt)??` bind the `else` to the outer rule.
-fn build_repeat(b: &mut AtnBuilder, kind: RepeatKind, non_greedy: bool, inner: &Element, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
+fn build_repeat(
+    b: &mut AtnBuilder,
+    kind: RepeatKind,
+    non_greedy: bool,
+    inner: &Element,
+    rule: i32,
+    rule_index: &TreeMap<String, i32>,
+) -> [i32, i32] {
     return match kind {
         Optional => {
             let start = b.new_state(ATN_BLOCK_START, rule);
@@ -578,25 +606,55 @@ pub fn serialize_atn(atn: &Atn) -> List<i32> {
 }
 
 fn state_kind_name(kind: i32) -> String {
-    if kind == ATN_BASIC { return "Basic"; }
-    if kind == ATN_RULE_START { return "RuleStart"; }
-    if kind == ATN_RULE_STOP { return "RuleStop"; }
-    if kind == ATN_BLOCK_START { return "BlockStart"; }
-    if kind == ATN_BLOCK_END { return "BlockEnd"; }
-    if kind == ATN_STAR_LOOP_ENTRY { return "StarLoopEntry"; }
-    if kind == ATN_STAR_LOOP_BACK { return "StarLoopBack"; }
-    if kind == ATN_PLUS_LOOP_BACK { return "PlusLoopBack"; }
-    if kind == ATN_LOOP_END { return "LoopEnd"; }
+    if kind == ATN_BASIC {
+        return "Basic";
+    }
+    if kind == ATN_RULE_START {
+        return "RuleStart";
+    }
+    if kind == ATN_RULE_STOP {
+        return "RuleStop";
+    }
+    if kind == ATN_BLOCK_START {
+        return "BlockStart";
+    }
+    if kind == ATN_BLOCK_END {
+        return "BlockEnd";
+    }
+    if kind == ATN_STAR_LOOP_ENTRY {
+        return "StarLoopEntry";
+    }
+    if kind == ATN_STAR_LOOP_BACK {
+        return "StarLoopBack";
+    }
+    if kind == ATN_PLUS_LOOP_BACK {
+        return "PlusLoopBack";
+    }
+    if kind == ATN_LOOP_END {
+        return "LoopEnd";
+    }
     return "Invalid";
 }
 
 fn trans_kind_name(kind: i32) -> String {
-    if kind == ATN_TR_EPSILON { return "eps"; }
-    if kind == ATN_TR_ATOM { return "atom"; }
-    if kind == ATN_TR_NOT_ATOM { return "notatom"; }
-    if kind == ATN_TR_WILDCARD { return "wild"; }
-    if kind == ATN_TR_RULE { return "rule"; }
-    if kind == ATN_TR_PRECEDENCE { return "prec"; }
+    if kind == ATN_TR_EPSILON {
+        return "eps";
+    }
+    if kind == ATN_TR_ATOM {
+        return "atom";
+    }
+    if kind == ATN_TR_NOT_ATOM {
+        return "notatom";
+    }
+    if kind == ATN_TR_WILDCARD {
+        return "wild";
+    }
+    if kind == ATN_TR_RULE {
+        return "rule";
+    }
+    if kind == ATN_TR_PRECEDENCE {
+        return "prec";
+    }
     return "?";
 }
 
@@ -605,7 +663,9 @@ pub fn dump_atn(atn: &Atn, grammar: &Grammar) -> String {
     let mut out = String::with_capacity(1024);
     out.push_str(&`ATN: {atn.states.len()} states, {atn.decision_state.len()} decisions, {atn.num_tokens} tokens\n`);
     for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
-        out.push_str(&`rule {r} '{grammar.parser_rules[r].name}': start=s{atn.rule_start[r]} stop=s{atn.rule_stop[r]}\n`);
+        out.push_str(
+            &`rule {r} '{grammar.parser_rules[r].name}': start=s{atn.rule_start[r]} stop=s{atn.rule_stop[r]}\n`,
+        );
     }
     for let mut i = 0; i < atn.states.len(); i += 1 {
         let st = &atn.states[i];

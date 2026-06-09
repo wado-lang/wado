@@ -86,13 +86,14 @@ pub struct GenContext {
     /// paying an extra stack slot per recursive frame (the
     /// `Performance/ExpressionGrammar_2` stack-exhaustion regression).
     caller_follow_gate_seen: bool,
-    /// Set by lowering when it lowers a non-greedy optional (`??`). When
-    /// set, emit includes the runtime ATN simulator infrastructure (the
-    /// serialized `GALE_ATN_DATA` blob, the `Parser.atn`/`Parser.atn_stack`
-    /// fields, and the rule-entry stack push/pop) and routes the `??`
-    /// enter/skip decision through `atn_ng_optional_enter`. Grammars without
-    /// a non-greedy `??` stay byte-identical. (`*?`/`+?` keep the dedicated
-    /// non-greedy strategy and do not set this.)
+    /// Set by lowering when it lowers a non-greedy optional (`??`) or an
+    /// ATN-class LR rule. When set, emit includes the runtime ATN simulator
+    /// infrastructure (the serialized `GALE_ATN_DATA` blob, the shared
+    /// `GALE_ATN_SIM` global, the `Parser.atn_stack` field, and the
+    /// rule-entry stack push/pop) and routes the `??` enter/skip decision
+    /// through `atn_ng_optional_enter`. Grammars without either stay
+    /// byte-identical. (`*?`/`+?` keep the dedicated non-greedy strategy and
+    /// do not set this.)
     needs_atn_seen: bool,
     /// Set by lowering for an ATN-class LR rule. Gates the scan-side caller
     /// stack (`GALE_SCAN_STACK`) and the scan-side LR loop routing, so a
@@ -438,7 +439,13 @@ impl GenContext {
     /// expanded body may contribute multiple depths). Callers needing
     /// to follow the suffix past the walk must use the element count,
     /// not the depth count.
-    pub fn deep_position_first_sets_from(&mut self, elements: &List<Element>, start: i32, max_depth: i32, visiting: &mut List<String>) -> [List<List<String>>, i32] {
+    pub fn deep_position_first_sets_from(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        max_depth: i32,
+        visiting: &mut List<String>,
+    ) -> [List<List<String>>, i32] {
         let mut result: List<List<String>> = [];
         let final_cursor = self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
         return [result, final_cursor - start];
@@ -451,7 +458,14 @@ impl GenContext {
     /// return value tells callers whether subsequent elements can be
     /// safely indexed (when fully consumed) or whether the walk hit a
     /// non-deterministic position (halted).
-    fn deep_position_walk(&mut self, elements: &List<Element>, start: i32, max_depth: i32, result: &mut List<List<String>>, visiting: &mut List<String>) -> i32 {
+    fn deep_position_walk(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        max_depth: i32,
+        result: &mut List<List<String>>,
+        visiting: &mut List<String>,
+    ) -> i32 {
         let mut cursor = start;
         while result.len() < max_depth && cursor < elements.len() {
             // Suffix from `cursor` must consume ≥1 token — otherwise the
@@ -533,7 +547,12 @@ impl GenContext {
     /// multi-token element — preserving the input-offset alignment that
     /// makes the result a sound lookahead predictor. See
     /// [`alt_position_first_sets`] for the invariant details.
-    pub fn position_first_sets_from(&mut self, elements: &List<Element>, start: i32, max_depth: i32) -> List<List<String>> {
+    pub fn position_first_sets_from(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        max_depth: i32,
+    ) -> List<List<String>> {
         let mut result: List<List<String>> = [];
         let mut cursor = start;
         while result.len() < max_depth && cursor < elements.len() {

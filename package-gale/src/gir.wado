@@ -1076,7 +1076,11 @@ pub fn rule_alt_scan_body(rule: &Rule, alt_idx: i32) -> Option<&ScanBody> with s
     };
 }
 
-fn find_scan_body_in_array(alts: &List<AltBody>, scan_alts: &List<ScanBody>, alt_idx: i32) -> Option<&ScanBody> with stores[scan_alts] {
+fn find_scan_body_in_array(
+    alts: &List<AltBody>,
+    scan_alts: &List<ScanBody>,
+    alt_idx: i32,
+) -> Option<&ScanBody> with stores[scan_alts] {
     for let mut i = 0; i < alts.len(); i += 1 {
         if alts[i].alt_index == alt_idx {
             return Option::<&ScanBody>::Some(&scan_alts[i]);

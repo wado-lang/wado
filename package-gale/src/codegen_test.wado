@@ -1476,8 +1476,7 @@ C : 'c' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let generated = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert generated.source.len() > 0;
-    assert generated.diagnostics.len() == 1,
-        `expected 1 diagnostic, got {generated.diagnostics.len()}`;
+    assert generated.diagnostics.len() == 1, `expected 1 diagnostic, got {generated.diagnostics.len()}`;
     let d = &generated.diagnostics[0];
     assert str_contains(&d.rule, &"r"), `expected rule label to mention "r", got "{d.rule}"`;
     if let OverlapTournament = &d.kind {
@@ -1498,8 +1497,7 @@ B : 'b' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let generated = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert generated.source.len() > 0;
-    assert generated.diagnostics.is_empty(),
-        `expected no diagnostics, got {generated.diagnostics.len()}`;
+    assert generated.diagnostics.is_empty(), `expected no diagnostics, got {generated.diagnostics.len()}`;
 }
 
 fn str_contains(haystack: &String, needle: &String) -> bool {

@@ -129,8 +129,14 @@ test "intern_kind_set: stored tokens are sorted" {
 
 test "intern_follow_mask: same mask returns same id, empty returns null" {
     let mut ctx = mk_ctx();
-    let m1: List<List<String>> = [["TK_X"], ["TK_Y"]];
-    let m2: List<List<String>> = [["TK_X"], ["TK_Z"]];
+    let m1: List<List<String>> = [
+        ["TK_X"],
+        ["TK_Y"],
+    ];
+    let m2: List<List<String>> = [
+        ["TK_X"],
+        ["TK_Z"],
+    ];
     let id1 = ctx.intern_follow_mask(&m1);
     let id2 = ctx.intern_follow_mask(&m2);
     let id1_again = ctx.intern_follow_mask(&m1);

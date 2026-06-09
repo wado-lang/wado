@@ -648,7 +648,14 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
 /// `Skip` callers should not invoke this function at all; `Todo` causes
 /// the test to be `#[TODO]`-marked so a known-failing assertion is
 /// recorded on a separate axis from real failures (matches Stage A).
-fn emit_stage_b_test_file(category: &String, name: &String, input: &String, start: &String, expected_tree: &String, triage: &Triage) -> String {
+fn emit_stage_b_test_file(
+    category: &String,
+    name: &String,
+    input: &String,
+    start: &String,
+    expected_tree: &String,
+    triage: &Triage,
+) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -693,7 +700,15 @@ fn emit_stage_b_test_file(category: &String, name: &String, input: &String, star
 /// root rule name (extracted via `extract_root_rule_name`) must differ
 /// from `[start]`. The emitted test navigates from the full tree down
 /// to the first child node of that name via `find_first_child_node`.
-fn emit_stage_sub_b_test_file(category: &String, name: &String, input: &String, start: &String, expected_tree: &String, sub_rule: &String, triage: &Triage) -> String {
+fn emit_stage_sub_b_test_file(
+    category: &String,
+    name: &String,
+    input: &String,
+    start: &String,
+    expected_tree: &String,
+    sub_rule: &String,
+    triage: &Triage,
+) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -743,7 +758,13 @@ fn emit_stage_sub_b_test_file(category: &String, name: &String, input: &String, 
 ///
 /// Triage (`[stage_a_todo]` / `[stage_a_skip]`) decorates the emission
 /// the same way Stage B does.
-fn emit_stage_a_parse_test_file(category: &String, name: &String, input: &String, start: &String, triage: &Triage) -> String {
+fn emit_stage_a_parse_test_file(
+    category: &String,
+    name: &String,
+    input: &String,
+    start: &String,
+    triage: &Triage,
+) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -877,7 +898,14 @@ fn classify_output_for_tokens(raw: &String) -> Option<TokensTarget> {
 /// Eligibility is decided by the caller (Parser/Lexer type, non-empty
 /// `[input]`, non-empty `[errors]`, single grammar, category in the
 /// whitelist via `stage_a_err_category_eligible`).
-fn emit_stage_a_err_test_file(category: &String, name: &String, input: &String, start: &String, is_lexer: bool, triage: &Triage) -> String {
+fn emit_stage_a_err_test_file(
+    category: &String,
+    name: &String,
+    input: &String,
+    start: &String,
+    is_lexer: bool,
+    triage: &Triage,
+) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -937,7 +965,13 @@ fn emit_stage_a_err_test_file(category: &String, name: &String, input: &String, 
 /// Eligibility is decided by the caller (Lexer type, non-empty
 /// `[input]`, non-empty `[output]`, empty `[errors]`, single grammar,
 /// output is a clean `[@…]` dump).
-fn emit_stage_a_tokens_test_file(category: &String, name: &String, input: &String, expected: &String, triage: &Triage) -> String {
+fn emit_stage_a_tokens_test_file(
+    category: &String,
+    name: &String,
+    input: &String,
+    expected: &String,
+    triage: &Triage,
+) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -1425,7 +1459,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             let _ = remove_file(&oracle_pending_cat_dir, &oracle_start_filename);
             let oracle_triage = stage_b_oracle_triage_map.lookup(&key);
             let oracle_intrinsic = stage_b_oracle_eligible(&parsed);
-            let oracle_eligible = oracle_intrinsic && !(oracle_triage matches { Skip(_) });
+            let oracle_eligible = oracle_intrinsic && !oracle_triage matches { Skip(_) };
             if oracle_intrinsic && oracle_triage matches { Skip(_) } {
                 stage_b_oracle_suppressed += 1;
             }
@@ -1586,7 +1620,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     println(`extract:           {stage_b_todo} marked #[TODO]`);
     println(`extract:           {stage_b_skip} explicit skip`);
     println(`extract:           {stage_b_auto_skip} auto-skip (output is not a parse tree)`);
-    println(`extract: stage B' — JVM-oracle candidates: {stage_b_oracle_pending} pending (handed to scripts/extract-antlr4-descriptors.sh post-processor)`);
+    println(
+        `extract: stage B' — JVM-oracle candidates: {stage_b_oracle_pending} pending (handed to scripts/extract-antlr4-descriptors.sh post-processor)`,
+    );
     println(`extract:           {stage_b_oracle_suppressed} suppressed via [stage_b_oracle_skip]`);
     println(`extract: deferred — gaps blocked on missing infrastructure:`);
     println(
@@ -1627,9 +1663,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
 /// can't be pinned; ANTLR4's TestRig (unlike Gale) requires an explicit
 /// start rule. Composites and empty input/output are filtered earlier.
 fn stage_b_oracle_eligible(parsed: &ParsedDescriptor) -> bool {
-    return parsed.descriptor_type == "Parser"
-        && parsed.errors.is_empty()
-        && !parsed.start.is_empty();
+    return parsed.descriptor_type == "Parser" && parsed.errors.is_empty() && !parsed.start.is_empty();
 }
 
 /// On failure, rolls back the partial write so the caller sees an
@@ -1658,7 +1692,9 @@ fn write_oracle_pending_files(
 fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
     let pending_root = match open_dir(root, &"package-gale/tests/antlr4-compat/oracle-pending", false) {
         Ok(d) => d,
-        Err(_) => return,
+        Err(_) => {
+            return;
+        },
     };
     let compat_dir = match open_dir(root, &"package-gale/tests/antlr4-compat", true) {
         Ok(d) => d,
@@ -2271,4 +2307,3 @@ test "strip_eof_marker: does not strip ' <EOF>' that is not at the end" {
     let r = strip_eof_marker(&"(start <EOF> x)");
     assert r == "(start <EOF> x)", `got '{r}'`;
 }
-
