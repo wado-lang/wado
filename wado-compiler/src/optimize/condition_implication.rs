@@ -11,14 +11,23 @@
 //! This subsumes the WIR-level `bounds_check` pass, handling both strict `<`
 //! and inclusive `<=` guard patterns.
 //!
-//! The pass reads and mutates the arena [`Body`] directly. The eliminators
-//! drive a small [`ArenaOptVisitor`] whose default `visit_*` recurse into every
-//! child; condition replacement is an in-place `kind` rewrite.
+//! Runs on the worklist rewrite engine (combine migration; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! per-function standalone engine session whose `apply_block` fires once at
+//! the body root and runs the whole-function dominator / loop-guard walk.
+//! The single rewrite point (`condition → BoolLiteral(false)`) routes through
+//! `engine.replace_expr_kind` so the parent map and use index stay coherent.
+//!
+//! The eliminators share a small in-file [`ArenaOptVisitor`] whose default
+//! `visit_*` recurse into every child; only `set_false` mutates.
+
+use std::cell::Cell;
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
 use cranelift_entity::EntityRef;
@@ -91,20 +100,41 @@ type DefMap = IndexMap<u32, Def>;
 
 pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ConditionImplication, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
-        process_function(&mut func)
+        if func.body.is_none() {
+            return false;
+        }
+        let rule = ConditionImplicationRule {
+            applied: Cell::new(false),
+        };
+        let NirFunction { body, locals, .. } = &mut *func;
+        let body = body.as_mut().expect("checked above");
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.run(&[&rule])
     })
 }
 
-fn process_function(func: &mut NirFunction) -> bool {
-    let Some(body) = func.body.as_mut() else {
-        return false;
-    };
-    let tainted = collect_tainted_locals(body);
-    let mut defs = DefMap::default();
-    let root = body.root;
-    process_block(body, root, &mut defs, &tainted)
+/// Standalone-session rule whose single `apply_block` performs the whole-
+/// function condition-implication walk at the body root.
+pub(super) struct ConditionImplicationRule {
+    applied: Cell<bool>,
+}
+
+impl Rule for ConditionImplicationRule {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        if engine.parent_of(NodeRef::Block(block)).is_some() {
+            return false;
+        }
+        if self.applied.replace(true) {
+            return false;
+        }
+        let tainted = collect_tainted_locals(engine.body);
+        let mut defs = DefMap::default();
+        let root = engine.body.root;
+        process_block(engine, root, &mut defs, &tainted)
+    }
 }
 
 /// Per-function summary of locals and `(local, field_index)` pairs
@@ -252,33 +282,33 @@ fn taint_root_local(body: &Body, e: ExprId, taints: &mut Taints) {
     }
 }
 
-fn process_block(body: &mut Body, block: BlockId, defs: &mut DefMap, tainted: &Taints) -> bool {
+fn process_block(engine: &mut Engine, block: BlockId, defs: &mut DefMap, tainted: &Taints) -> bool {
     let mut changed = false;
     let mut guards: Vec<ShortCircuitGuard> = Vec::new();
-    let stmts = body.blocks[block].stmts.clone();
+    let stmts = engine.body.blocks[block].stmts.clone();
     for s in stmts {
-        record_def_from_stmt(body, s, defs, tainted);
-        record_defs_from_nested(body, s, defs, tainted);
+        record_def_from_stmt(engine.body, s, defs, tainted);
+        record_defs_from_nested(engine.body, s, defs, tainted);
         // Apply accumulated guards from previous early-exit stmts to this stmt
         for guard in &guards {
-            changed |= guard.eliminate_in_stmt(body, s, defs);
+            changed |= guard.eliminate_in_stmt(engine, s, defs);
         }
-        changed |= BitmaskEliminator { defs }.visit_stmt(body, s);
-        changed |= ShortCircuitEliminator { defs }.visit_stmt(body, s);
-        changed |= process_stmt(body, s, defs, tainted);
+        changed |= BitmaskEliminator { defs }.visit_stmt(engine, s);
+        changed |= ShortCircuitEliminator { defs }.visit_stmt(engine, s);
+        changed |= process_stmt(engine, s, defs, tainted);
         // If this is `if (var >= bound) { return/break }`, extract a guard
-        if let Some(guard) = extract_early_exit_guard(body, s, defs) {
+        if let Some(guard) = extract_early_exit_guard(engine.body, s, defs) {
             guards.push(guard);
         }
     }
     changed
 }
 
-fn process_stmt(body: &mut Body, s: StmtId, defs: &mut DefMap, tainted: &Taints) -> bool {
+fn process_stmt(engine: &mut Engine, s: StmtId, defs: &mut DefMap, tainted: &Taints) -> bool {
     // Record definitions from let bindings
-    record_def_from_stmt(body, s, defs, tainted);
+    record_def_from_stmt(engine.body, s, defs, tainted);
 
-    let shape = match &body.stmts[s].kind {
+    let shape = match &engine.body.stmts[s].kind {
         StmtKind::Loop { body: lb } => StmtShape::Loop(*lb),
         StmtKind::If {
             then_block,
@@ -289,15 +319,15 @@ fn process_stmt(body: &mut Body, s: StmtId, defs: &mut DefMap, tainted: &Taints)
         _ => StmtShape::None,
     };
     match shape {
-        StmtShape::Loop(lb) => process_loop(body, lb, defs, tainted),
+        StmtShape::Loop(lb) => process_loop(engine, lb, defs, tainted),
         StmtShape::If(then_b, else_b) => {
-            let mut changed = process_block(body, then_b, defs, tainted);
+            let mut changed = process_block(engine, then_b, defs, tainted);
             if let Some(eb) = else_b {
-                changed |= process_block(body, eb, defs, tainted);
+                changed |= process_block(engine, eb, defs, tainted);
             }
             changed
         }
-        StmtShape::Labeled(b) => process_block(body, b, defs, tainted),
+        StmtShape::Labeled(b) => process_block(engine, b, defs, tainted),
         StmtShape::None => false,
     }
 }
@@ -309,21 +339,21 @@ enum StmtShape {
     None,
 }
 
-fn process_loop(body: &mut Body, loop_body: BlockId, defs: &mut DefMap, tainted: &Taints) -> bool {
+fn process_loop(engine: &mut Engine, loop_body: BlockId, defs: &mut DefMap, tainted: &Taints) -> bool {
     // First, record defs inside the loop body (for copies like `let index = i`)
     // and recurse into nested structures
     let mut changed = false;
 
     // Collect defs from the loop body before eliminating
     let mut loop_defs = defs.clone();
-    let stmts = body.blocks[loop_body].stmts.clone();
+    let stmts = engine.body.blocks[loop_body].stmts.clone();
     for s in &stmts {
-        record_def_from_stmt(body, *s, &mut loop_defs, tainted);
-        record_defs_from_nested(body, *s, &mut loop_defs, tainted);
+        record_def_from_stmt(engine.body, *s, &mut loop_defs, tainted);
+        record_defs_from_nested(engine.body, *s, &mut loop_defs, tainted);
     }
 
     // Extract the loop guard from the first statement
-    let guard = extract_loop_guard(body, loop_body);
+    let guard = extract_loop_guard(engine.body, loop_body);
 
     if let Some(guard) = &guard {
         // Eliminate implied conditions in the loop body (skip the guard itself)
@@ -333,18 +363,18 @@ fn process_loop(body: &mut Body, loop_body: BlockId, defs: &mut DefMap, tainted:
             defs: &loop_defs,
         };
         for s in stmts.iter().skip(1) {
-            changed |= condition_elim.visit_stmt(body, *s);
+            changed |= condition_elim.visit_stmt(engine, *s);
         }
     }
 
     // Eliminate bitmask-bounded checks in the loop body
     for s in &stmts {
-        changed |= BitmaskEliminator { defs: &loop_defs }.visit_stmt(body, *s);
+        changed |= BitmaskEliminator { defs: &loop_defs }.visit_stmt(engine, *s);
     }
 
     // Recurse into nested loops
     for s in &stmts {
-        changed |= process_stmt_nested_loops(body, *s, defs, tainted);
+        changed |= process_stmt_nested_loops(engine, *s, defs, tainted);
     }
 
     changed
@@ -353,12 +383,12 @@ fn process_loop(body: &mut Body, loop_body: BlockId, defs: &mut DefMap, tainted:
 /// Recurse into nested structures to find inner loops, but don't re-process
 /// the current loop level.
 fn process_stmt_nested_loops(
-    body: &mut Body,
+    engine: &mut Engine,
     s: StmtId,
     defs: &mut DefMap,
     tainted: &Taints,
 ) -> bool {
-    let shape = match &body.stmts[s].kind {
+    let shape = match &engine.body.stmts[s].kind {
         StmtKind::Loop { body: lb } => StmtShape::Loop(*lb),
         StmtKind::If {
             then_block,
@@ -369,23 +399,23 @@ fn process_stmt_nested_loops(
         _ => StmtShape::None,
     };
     match shape {
-        StmtShape::Loop(lb) => process_loop(body, lb, defs, tainted),
+        StmtShape::Loop(lb) => process_loop(engine, lb, defs, tainted),
         StmtShape::If(then_b, else_b) => {
             let mut changed = false;
-            for s in body.blocks[then_b].stmts.clone() {
-                changed |= process_stmt_nested_loops(body, s, defs, tainted);
+            for s in engine.body.blocks[then_b].stmts.clone() {
+                changed |= process_stmt_nested_loops(engine, s, defs, tainted);
             }
             if let Some(eb) = else_b {
-                for s in body.blocks[eb].stmts.clone() {
-                    changed |= process_stmt_nested_loops(body, s, defs, tainted);
+                for s in engine.body.blocks[eb].stmts.clone() {
+                    changed |= process_stmt_nested_loops(engine, s, defs, tainted);
                 }
             }
             changed
         }
         StmtShape::Labeled(b) => {
             let mut changed = false;
-            for s in body.blocks[b].stmts.clone() {
-                changed |= process_stmt_nested_loops(body, s, defs, tainted);
+            for s in engine.body.blocks[b].stmts.clone() {
+                changed |= process_stmt_nested_loops(engine, s, defs, tainted);
             }
             changed
         }
@@ -904,8 +934,8 @@ fn record_defs_from_expr(body: &Body, e: ExprId, defs: &mut DefMap, tainted: &Ta
 }
 
 /// Replace the expression at `cond` with `false`, preserving its type and span.
-fn set_false(body: &mut Body, cond: ExprId) {
-    body.exprs[cond].kind = ExprKind::BoolLiteral(false);
+fn set_false(engine: &mut Engine, cond: ExprId) {
+    engine.replace_expr_kind(cond, ExprKind::BoolLiteral(false));
 }
 
 /// NIR visitor that eliminates loop-guard-implied false bounds checks.
@@ -920,8 +950,8 @@ struct ConditionEliminator<'a> {
 }
 
 impl ArenaOptVisitor for ConditionEliminator<'_> {
-    fn visit_stmt(&mut self, body: &mut Body, s: StmtId) -> bool {
-        let if_ids = match &body.stmts[s].kind {
+    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool {
+        let if_ids = match &engine.body.stmts[s].kind {
             StmtKind::If {
                 condition,
                 then_block,
@@ -932,35 +962,41 @@ impl ArenaOptVisitor for ConditionEliminator<'_> {
         if let Some((condition, then_block, else_block)) = if_ids {
             // Check if this statement is a bounds check that can be eliminated.
             if else_block.is_none()
-                && is_panic_block(body, then_block)
-                && is_implied_false_by_any(body, condition, self.guard, &self.dom_guards, self.defs)
+                && is_panic_block(engine.body, then_block)
+                && is_implied_false_by_any(
+                    engine.body,
+                    condition,
+                    self.guard,
+                    &self.dom_guards,
+                    self.defs,
+                )
             {
-                set_false(body, condition);
+                set_false(engine, condition);
                 return true;
             }
 
             // Extract a dominating guard from the condition to extend
             // elimination into the then-block.
-            let mut changed = self.visit_expr(body, condition);
-            let dom = extract_dominating_guard(body, condition, self.defs);
+            let mut changed = self.visit_expr(engine, condition);
+            let dom = extract_dominating_guard(engine.body, condition, self.defs);
             let saved = self.dom_guards.clone();
             if let Some(dg) = dom {
                 self.dom_guards.push(dg);
             }
-            changed |= self.visit_block(body, then_block);
+            changed |= self.visit_block(engine, then_block);
             self.dom_guards = saved;
             if let Some(eb) = else_block {
-                changed |= self.visit_block(body, eb);
+                changed |= self.visit_block(engine, eb);
             }
             return changed;
         }
 
-        arena_opt_walk(self, body, NodeRef::Stmt(s))
+        arena_opt_walk(self, engine, NodeRef::Stmt(s))
     }
 
-    fn visit_expr(&mut self, body: &mut Body, e: ExprId) -> bool {
+    fn visit_expr(&mut self, engine: &mut Engine, e: ExprId) -> bool {
         // For If exprs: extract a dominating guard and propagate into then-branch.
-        let if_ids = match &body.exprs[e].kind {
+        let if_ids = match &engine.body.exprs[e].kind {
             ExprKind::If {
                 condition,
                 then_branch,
@@ -969,20 +1005,20 @@ impl ArenaOptVisitor for ConditionEliminator<'_> {
             _ => None,
         };
         if let Some((condition, then_branch, else_branch)) = if_ids {
-            let mut changed = self.visit_expr(body, condition);
-            let dom = extract_dominating_guard(body, condition, self.defs);
+            let mut changed = self.visit_expr(engine, condition);
+            let dom = extract_dominating_guard(engine.body, condition, self.defs);
             let saved = self.dom_guards.clone();
             if let Some(dg) = dom {
                 self.dom_guards.push(dg);
             }
-            changed |= self.visit_block(body, then_branch);
+            changed |= self.visit_block(engine, then_branch);
             self.dom_guards = saved;
             if let Some(eb) = else_branch {
-                changed |= self.visit_block(body, eb);
+                changed |= self.visit_block(engine, eb);
             }
             return changed;
         }
-        arena_opt_walk(self, body, NodeRef::Expr(e))
+        arena_opt_walk(self, engine, NodeRef::Expr(e))
     }
 }
 
@@ -995,8 +1031,8 @@ struct BitmaskEliminator<'a> {
 }
 
 impl ArenaOptVisitor for BitmaskEliminator<'_> {
-    fn visit_stmt(&mut self, body: &mut Body, s: StmtId) -> bool {
-        let if_ids = match &body.stmts[s].kind {
+    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool {
+        let if_ids = match &engine.body.stmts[s].kind {
             StmtKind::If {
                 condition,
                 then_block,
@@ -1005,13 +1041,13 @@ impl ArenaOptVisitor for BitmaskEliminator<'_> {
             _ => None,
         };
         if let Some((condition, then_block)) = if_ids
-            && is_panic_block(body, then_block)
-            && is_bitmask_bounded(body, condition, self.defs)
+            && is_panic_block(engine.body, then_block)
+            && is_bitmask_bounded(engine.body, condition, self.defs)
         {
-            set_false(body, condition);
+            set_false(engine, condition);
             return true;
         }
-        arena_opt_walk(self, body, NodeRef::Stmt(s))
+        arena_opt_walk(self, engine, NodeRef::Stmt(s))
     }
 }
 
@@ -1061,8 +1097,8 @@ struct ShortCircuitEliminator<'a> {
 }
 
 impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
-    fn visit_expr(&mut self, body: &mut Body, e: ExprId) -> bool {
-        let or_ids = match &body.exprs[e].kind {
+    fn visit_expr(&mut self, engine: &mut Engine, e: ExprId) -> bool {
+        let or_ids = match &engine.body.exprs[e].kind {
             ExprKind::Binary {
                 left,
                 op: NirBinaryOp::Or,
@@ -1071,14 +1107,14 @@ impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
             _ => None,
         };
         if let Some((left, right)) = or_ids {
-            let mut changed = self.visit_expr(body, left);
-            if let Some(guard) = ShortCircuitGuard::extract(body, left, self.defs) {
-                changed |= guard.eliminate_in_expr(body, right, self.defs);
+            let mut changed = self.visit_expr(engine, left);
+            if let Some(guard) = ShortCircuitGuard::extract(engine.body, left, self.defs) {
+                changed |= guard.eliminate_in_expr(engine, right, self.defs);
             }
-            changed |= self.visit_expr(body, right);
+            changed |= self.visit_expr(engine, right);
             return changed;
         }
-        arena_opt_walk(self, body, NodeRef::Expr(e))
+        arena_opt_walk(self, engine, NodeRef::Expr(e))
     }
 }
 
@@ -1243,8 +1279,8 @@ impl ShortCircuitGuard {
         }
     }
 
-    fn eliminate_in_expr(&self, body: &mut Body, e: ExprId, defs: &DefMap) -> bool {
-        let walk = match &body.exprs[e].kind {
+    fn eliminate_in_expr(&self, engine: &mut Engine, e: ExprId, defs: &DefMap) -> bool {
+        let walk = match &engine.body.exprs[e].kind {
             ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => ScWalk::Block(*block),
             ExprKind::Binary { left, right, .. } => ScWalk::Exprs2(*left, *right),
             ExprKind::Unary { expr: inner, .. }
@@ -1258,18 +1294,18 @@ impl ShortCircuitGuard {
             _ => ScWalk::None,
         };
         match walk {
-            ScWalk::Block(b) => self.eliminate_in_block(body, b, defs),
+            ScWalk::Block(b) => self.eliminate_in_block(engine, b, defs),
             ScWalk::Exprs2(left, right) => {
-                let mut changed = self.eliminate_in_expr(body, left, defs);
-                changed |= self.eliminate_in_expr(body, right, defs);
+                let mut changed = self.eliminate_in_expr(engine, left, defs);
+                changed |= self.eliminate_in_expr(engine, right, defs);
                 changed
             }
-            ScWalk::Expr1(inner) => self.eliminate_in_expr(body, inner, defs),
+            ScWalk::Expr1(inner) => self.eliminate_in_expr(engine, inner, defs),
             ScWalk::If(condition, then_branch, else_branch) => {
-                let mut changed = self.eliminate_in_expr(body, condition, defs);
-                changed |= self.eliminate_in_block(body, then_branch, defs);
+                let mut changed = self.eliminate_in_expr(engine, condition, defs);
+                changed |= self.eliminate_in_block(engine, then_branch, defs);
                 if let Some(eb) = else_branch {
-                    changed |= self.eliminate_in_block(body, eb, defs);
+                    changed |= self.eliminate_in_block(engine, eb, defs);
                 }
                 changed
             }
@@ -1277,17 +1313,17 @@ impl ShortCircuitGuard {
         }
     }
 
-    fn eliminate_in_block(&self, body: &mut Body, block: BlockId, defs: &DefMap) -> bool {
+    fn eliminate_in_block(&self, engine: &mut Engine, block: BlockId, defs: &DefMap) -> bool {
         let mut changed = false;
-        for s in body.blocks[block].stmts.clone() {
-            changed |= self.eliminate_in_stmt(body, s, defs);
+        for s in engine.body.blocks[block].stmts.clone() {
+            changed |= self.eliminate_in_stmt(engine, s, defs);
         }
         changed
     }
 
-    fn eliminate_in_stmt(&self, body: &mut Body, s: StmtId, defs: &DefMap) -> bool {
+    fn eliminate_in_stmt(&self, engine: &mut Engine, s: StmtId, defs: &DefMap) -> bool {
         // Check if this is a bounds-check `if (index >= bound) { panic() }` implied false
-        let if_ids = match &body.stmts[s].kind {
+        let if_ids = match &engine.body.stmts[s].kind {
             StmtKind::If {
                 condition,
                 then_block,
@@ -1296,15 +1332,15 @@ impl ShortCircuitGuard {
             _ => None,
         };
         if let Some((condition, then_block)) = if_ids
-            && is_panic_block(body, then_block)
-            && self.implies_false(body, condition, defs)
+            && is_panic_block(engine.body, then_block)
+            && self.implies_false(engine.body, condition, defs)
         {
-            set_false(body, condition);
+            set_false(engine, condition);
             return true;
         }
 
         // Recurse into sub-expressions and sub-statements
-        let walk = match &body.stmts[s].kind {
+        let walk = match &engine.body.stmts[s].kind {
             StmtKind::Let { value, .. } => ScStmt::Expr(*value),
             StmtKind::Expr(expr) => ScStmt::Expr(*expr),
             StmtKind::If {
@@ -1322,16 +1358,16 @@ impl ShortCircuitGuard {
             _ => ScStmt::None,
         };
         match walk {
-            ScStmt::Expr(e) => self.eliminate_in_expr(body, e, defs),
+            ScStmt::Expr(e) => self.eliminate_in_expr(engine, e, defs),
             ScStmt::If(condition, then_block, else_block) => {
-                let mut changed = self.eliminate_in_expr(body, condition, defs);
-                changed |= self.eliminate_in_block(body, then_block, defs);
+                let mut changed = self.eliminate_in_expr(engine, condition, defs);
+                changed |= self.eliminate_in_block(engine, then_block, defs);
                 if let Some(eb) = else_block {
-                    changed |= self.eliminate_in_block(body, eb, defs);
+                    changed |= self.eliminate_in_block(engine, eb, defs);
                 }
                 changed
             }
-            ScStmt::Block(b) => self.eliminate_in_block(body, b, defs),
+            ScStmt::Block(b) => self.eliminate_in_block(engine, b, defs),
             ScStmt::None => false,
         }
     }
@@ -1768,29 +1804,29 @@ fn is_panic_call(body: &Body, e: ExprId) -> bool {
 /// `visit_*` delegate to [`arena_opt_walk`], which recurses into every
 /// id-bearing child; the eliminators override the nodes they rewrite.
 trait ArenaOptVisitor {
-    fn visit_stmt(&mut self, body: &mut Body, s: StmtId) -> bool
+    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool
     where
         Self: Sized,
     {
-        arena_opt_walk(self, body, NodeRef::Stmt(s))
+        arena_opt_walk(self, engine, NodeRef::Stmt(s))
     }
-    fn visit_expr(&mut self, body: &mut Body, e: ExprId) -> bool
+    fn visit_expr(&mut self, engine: &mut Engine, e: ExprId) -> bool
     where
         Self: Sized,
     {
-        arena_opt_walk(self, body, NodeRef::Expr(e))
+        arena_opt_walk(self, engine, NodeRef::Expr(e))
     }
-    fn visit_block(&mut self, body: &mut Body, b: BlockId) -> bool
+    fn visit_block(&mut self, engine: &mut Engine, b: BlockId) -> bool
     where
         Self: Sized,
     {
-        arena_opt_walk(self, body, NodeRef::Block(b))
+        arena_opt_walk(self, engine, NodeRef::Block(b))
     }
-    fn visit_pattern(&mut self, body: &mut Body, p: PatId) -> bool
+    fn visit_pattern(&mut self, engine: &mut Engine, p: PatId) -> bool
     where
         Self: Sized,
     {
-        arena_opt_walk(self, body, NodeRef::Pat(p))
+        arena_opt_walk(self, engine, NodeRef::Pat(p))
     }
 }
 
@@ -1798,16 +1834,16 @@ trait ArenaOptVisitor {
 /// OR the per-child change flags. The eliminators here only rewrite condition
 /// kinds in place (never add/remove nodes), so the upfront child snapshot stays
 /// valid through the walk.
-fn arena_opt_walk<V: ArenaOptVisitor>(v: &mut V, body: &mut Body, node: NodeRef) -> bool {
+fn arena_opt_walk<V: ArenaOptVisitor>(v: &mut V, engine: &mut Engine, node: NodeRef) -> bool {
     let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
+    engine.body.for_each_child(node, |c| kids.push(c));
     let mut changed = false;
     for c in kids {
         changed |= match c {
-            NodeRef::Stmt(s) => v.visit_stmt(body, s),
-            NodeRef::Expr(e) => v.visit_expr(body, e),
-            NodeRef::Block(b) => v.visit_block(body, b),
-            NodeRef::Pat(p) => v.visit_pattern(body, p),
+            NodeRef::Stmt(s) => v.visit_stmt(engine, s),
+            NodeRef::Expr(e) => v.visit_expr(engine, e),
+            NodeRef::Block(b) => v.visit_block(engine, b),
+            NodeRef::Pat(p) => v.visit_pattern(engine, p),
         };
     }
     changed
