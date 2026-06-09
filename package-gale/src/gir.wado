@@ -533,6 +533,13 @@ pub struct RuleCallOp {
     /// Pre-dedup base name (the surface RuleRef's `field_name`).
     /// See `TokenOp.dedup_base` for the role.
     pub dedup_base: String,
+    /// The originating surface `RuleRefElement.atn_call_site` id (`-1` if
+    /// none). Lets codegen look up this call's exact ATN return state in
+    /// `Atn.call_site_returns` and push it so the runtime simulator pops to
+    /// the precise caller continuation (P4.2b). Propagated through every
+    /// `RuleCallOp`-rebuilding lowering step. -1 for synthesized calls with
+    /// no surface origin.
+    pub atn_call_site: i32 = -1,
 }
 
 pub struct WildcardOp {

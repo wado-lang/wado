@@ -25,8 +25,10 @@ use {
     GroupElement,
     Visibility,
 } from "./ir.wado";
-use { LitToken } from "./lexer_gen.wado";
+use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
+use { assign_atn_call_sites } from "./ir.wado";
+use { parse } from "./g4/parser.wado";
 use { Rule, Op, ScanElement, MultiAltDispatch, GroupShape, FieldDecl, FieldKind, FollowArg, Diagnostic, DiagnosticKind } from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
@@ -2891,5 +2893,31 @@ test "lower Transparent Group does not contribute a CST field" {
         }
     } else {
         panic("expected Rule::Simple");
+    }
+}
+
+/// The surface `RuleRefElement.atn_call_site` id (assigned by
+/// `assign_atn_call_sites`) must thread onto the lowered `RuleCallOp` so
+/// codegen can push the call's exact ATN return state (P4.2b).
+fn rule_call_site(op: &Op) -> i32 {
+    if let RuleCall(rc) = op {
+        return rc.atn_call_site;
+    }
+    return -2;
+}
+
+test "atn_call_site threads from surface RuleRef to lowered RuleCallOp" {
+    let mut g = parse("grammar S;\na : b c ;\nb : 'x' ;\nc : 'y' ;\n").unwrap();
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+    // `a : b c` lowers to Simple with two top-level RuleCalls; the
+    // depth-first call-site numbering gives a->b = 0, a->c = 1.
+    if let Simple(s) = &lowered.parser_rules[0] {
+        assert s.body.ops.len() == 2, `rule a should have 2 ops, got {s.body.ops.len()}`;
+        assert rule_call_site(&s.body.ops[0]) == 0, "a's call to b is call site 0";
+        assert rule_call_site(&s.body.ops[1]) == 1, "a's call to c is call site 1";
+    } else {
+        panic("rule a should lower to Simple");
     }
 }

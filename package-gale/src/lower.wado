@@ -780,6 +780,7 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
             min_prec_arg: Option::<i32>::Some(prec),
             field: rc.field,
             dedup_base: rc.dedup_base,
+            atn_call_site: rc.atn_call_site,
         }),
         ListLabel(ll) => Op::ListLabel(ListLabelOp {
             field: ll.field,
@@ -812,6 +813,7 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
                     min_prec_arg: Option::<i32>::Some(prec),
                     field: rc.field,
                     dedup_base: rc.dedup_base,
+                    atn_call_site: rc.atn_call_site,
                 });
             } else {
                 Op::RuleCall(rc);
@@ -2243,6 +2245,7 @@ fn lower_op(elem: &Element, name_counts: &mut List<[String, i32]>, rule_name: &S
             min_prec_arg: null,
             field: dedup_name(&r.field_name, name_counts),
             dedup_base: r.field_name,
+            atn_call_site: r.atn_call_site,
         }),
         Wildcard(_) => Op::Wildcard(WildcardOp {
             field: dedup_name(&"wildcard", name_counts),
@@ -2723,6 +2726,7 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
             min_prec_arg: null,
             field: dedup_name(&r.field_name, counts),
             dedup_base: r.field_name,
+            atn_call_site: r.atn_call_site,
         });
     }
     panic("lower_simple_cst_alt_call: classifier permitted non-RuleRef leaf");
@@ -3751,6 +3755,7 @@ pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> O
             min_prec_arg: r.min_prec_arg,
             field: *new_field,
             dedup_base: *new_dedup_base,
+            atn_call_site: r.atn_call_site,
         }),
         Wildcard(_) => Op::Wildcard(WildcardOp { field: *new_field, dedup_base: *new_dedup_base }),
         Excluded(e) => Op::Excluded(ExcludedOp { kinds: e.kinds, field: *new_field, dedup_base: *new_dedup_base }),
