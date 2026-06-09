@@ -1683,6 +1683,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
+        struct_module: &ModuleSource,
+        receiver_type_args: Option<&[TypeId]>,
+        receiver_type_id: Option<TypeId>,
+    ) -> Option<super::types::TraitMethodMatch> {
+        // Resolving a trait method's signature here walks (possibly foreign)
+        // impl-block parameter / return type AST nodes. Those nodes are owned
+        // by the declaring module and already have their use→def edges
+        // recorded when that module is annotated; re-recording them under the
+        // consumer's perspective mis-keys the use and can clobber a real edge
+        // via an AstId collision in `bindings.references` (cf.
+        // `lookup_method_info` which suppresses for the same reason).
+        self.with_reference_recording_suppressed(|s| {
+            s.find_trait_method_for_type_uncached(
+                struct_name,
+                method_name,
+                struct_module,
+                receiver_type_args,
+                receiver_type_id,
+            )
+        })
+    }
+
+    fn find_trait_method_for_type_uncached(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
         _struct_module: &ModuleSource,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
