@@ -1,0 +1,68 @@
+#![TODO]
+// Repro for https://github.com/wado-lang/wado/issues/1328 — casts *from*
+// i128/u128 to primitive types are not lowered. `translate_cast` has no arm
+// for a wide-int source, so the boxed (ref $type) wide-int value is passed
+// through unconverted to a slot expecting f64/i64, producing invalid core
+// Wasm ("type mismatch: expected f64, found (ref $type)") at every opt
+// level. The stdlib hits this through `Visitor`'s default integer visit
+// methods (`visit_i128`/`visit_u128` default to `self.visit_f64(v as f64)`),
+// which are only monomorphized when an impl relies on the defaults.
+
+test "i128 as f64" {
+    let v: i128 = 5;
+    assert v as f64 == 5.0;
+    let neg: i128 = -5;
+    assert neg as f64 == -5.0;
+}
+
+test "u128 as f64" {
+    let v: u128 = 5;
+    assert v as f64 == 5.0;
+}
+
+test "large i128 as f64 uses the full 128-bit value" {
+    // 2^100, exactly representable in f64. A lowering that converts only the
+    // low 64 bits (which are all zero) would yield 0 instead.
+    let v: i128 = 1267650600228229401496703205376;
+    assert v as f64 == 1.2676506002282294e30;
+}
+
+test "i128 as i64 truncates to the low 64 bits" {
+    let v: i128 = 18446744073709551623;  // 2^64 + 7
+    assert v as i64 == 7;
+}
+
+trait Visitor {
+    type Value;
+    fn visit_f64(&mut self, v: f64) -> Result<Self::Value, String>;
+    // The default body contains the failing wide-int → f64 cast. It is only
+    // instantiated when an impl relies on the default, which is why the only
+    // pre-existing Visitor (core:value) never exposed the bug.
+    fn visit_i128(&mut self, v: i128) -> Result<Self::Value, String> {
+        return self.visit_f64(v as f64);
+    }
+}
+
+struct Pt {
+    x: i64,
+}
+
+struct PtVisitor {
+}
+impl Visitor for PtVisitor {
+    type Value = Pt;
+
+    fn visit_f64(&mut self, v: f64) -> Result<Pt, String> {
+        return Result::Ok(Pt { x: v as i64 });
+    }
+}
+
+test "trait default method casting i128 to f64" {
+    let mut v = PtVisitor {};
+    let n: i128 = 5;
+    let p = v.visit_i128(n).expect("visit");
+    assert p.x == 5;
+}
+
+__DATA__
+{"test": {}}
