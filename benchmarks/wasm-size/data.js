@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780928401132,
+  "lastUpdate": 1780969481704,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31561,6 +31561,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/05304cf269966fc3614df1039166ea12261f71ee"
         },
         "date": 1780928400569,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437035,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c11ac952ce759672889091f755b21a391443906d",
+          "message": "Merge pull request #1339 from wado-lang/claude/wado-compiler-perf-Zp1pk\n\nperf(optimize): start the NIR combine migration — pool engine buffers, fold 4 passes, drop local_count",
+          "timestamp": "2026-06-09T10:35:16+09:00",
+          "tree_id": "b621d420e61d4f0cdc0fd36089b9c573e0576826",
+          "url": "https://github.com/wado-lang/wado/commit/c11ac952ce759672889091f755b21a391443906d"
+        },
+        "date": 1780969481355,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
