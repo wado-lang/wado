@@ -4,43 +4,43 @@
 //! ordering rationale lives in [`docs/optimizer.md`](../../../docs/optimizer.md);
 //! the inventory below is just an index of the modules under `optimize/`.
 //!
-//! Dense `Match` → `Switch` lowering runs as `MatchToSwitchRule` inside the
-//! unified `peephole` session (item 5) for functions; global initializer bodies
-//! are lowered once by `match_to_switch_globals` before the loop.
-//!
-//! Fixed-point loop ([`run_optimization_passes`], in order):
-//! 2.  `container_sroa` — `AoS` → `SoA` for `List<Tuple<...>>` / `List<Struct>`.
-//! 5.  `peephole` (pre-inline) — unified engine pass: `MatchToSwitchRule`,
-//!     `ValueCopyElideRule` (strip `$value_copy$T<id>` wrappers on read-only
-//!     bindings), `string_push` (`buf.push_str("short")` → per-byte `push`),
-//!     `elide_local` (write-only local elimination), env-free `const_fold`
-//!     (literal arithmetic + pure CTFE), and `const_branch_prune` (trivial-block
-//!     / dead-statement cleanup). See `optimize/peephole.rs`.
-//! 4.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
+//! Fixed-point loop ([`run_optimization_passes`], in execution order):
+//! 1.  `container_sroa` — `AoS` → `SoA` for `List<Tuple<...>>` / `List<Struct>`.
+//! 2.  `peephole` (pre-inline) — unified engine session: `MatchToSwitchRule`
+//!     (dense `Match` → `Switch`), `ValueCopyElideRule` (strip `$value_copy$T<id>`
+//!     wrappers on read-only bindings), `string_push` (`buf.push_str("short")` →
+//!     per-byte `push`), `elide_local` (write-only local elimination), env-free
+//!     `const_fold` (literal arithmetic + pure CTFE), and `const_branch_prune`
+//!     (trivial-block / dead-statement cleanup). See `optimize/peephole.rs`.
+//! 3.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
 //!     copy when elements are provably immutable through the binding. Runs
 //!     *after* the pre-inline `peephole` so `ValueCopyElideRule` strips
 //!     fully-read-only copies first; demoting first would hide them behind a
 //!     shallow `array_clone` shape elide can no longer match.
-//! 6.  `inline` — function inlining.
-//! 7.  `peephole` (post-inline) — unified engine pass: `array_literal`
+//! 4.  `sroa_param` — single-field (`Box<T>`) parameter SROA.
+//! 5.  `inline` — function inlining.
+//! 6.  `peephole` (post-inline) — unified engine session: `RefElimRule` (drop
+//!     reference bindings inlining exposes), `ElideBoxLocalRule` (collapse
+//!     `let x = Box{value: inner}; … x.value …` shells), `array_literal`
 //!     (materialize `ArrayLiteral` from the `array_new + push` window),
-//!     `elide_local`, and env-free `const_fold`.
-//! 8.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
-//! 9.  `ref_elim` (`RefElimRule`, in the post-inline `peephole` session) —
-//!     drop unnecessary reference bindings exposed by inlining.
-//! 10. `sroa` — Scalar Replacement of Aggregates.
-//! 11. `copy_prop` — copy propagation.
-//! 12. `dae` — Dead Argument Elimination.
-//! 13. `drve` — Dead Return Value Elimination.
-//! 14. `cse` — Loop-level Common Subexpression Elimination.
-//! 15. `store_load_forward` — store-to-load forwarding.
-//! 16. `const_folding` — partial evaluation via [`crate::niri`] (also drives
+//!     `elide_local`, env-free `const_fold`, and `const_branch_prune`.
+//! 7.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
+//! 8.  `sroa` — Scalar Replacement of Aggregates.
+//! 9.  `copy_prop` — copy propagation.
+//! 10. `dae` — Dead Argument Elimination.
+//! 11. `drve` — Dead Return Value Elimination.
+//! 12. `cse` — Loop-level Common Subexpression Elimination.
+//! 13. `store_load_forward` — store-to-load forwarding.
+//! 14. `const_folding` — partial evaluation via [`crate::niri`] (also drives
 //!     alias-aware field-knowledge tracking; see `alias`). The flow-sensitive
-//!     half; the env-free folds and trivial-block pruning run in `peephole`
-//!     (`const_branch_prune` in the pre-inline run).
-//! 19. `licm` — Loop-Invariant Code Motion.
-//! 20. `condition_implication` — eliminate conditions implied by dominators.
-//! 21. `tmpl_hoist` — hoist template-string backing buffers out of loops.
+//!     half; the env-free folds and trivial-block pruning run in `peephole`.
+//! 15. `licm` — Loop-Invariant Code Motion.
+//! 16. `condition_implication` — eliminate conditions implied by dominators.
+//! 17. `tmpl_hoist` — hoist template-string backing buffers out of loops.
+//!
+//! Dense `Match` → `Switch` on global initializer bodies runs once before the
+//! loop (`match_to_switch_globals`); `-O0` skips the loop and lowers everything
+//! via `match_to_switch_all`.
 //!
 //! Once after the loop converges: `field_scalarize` (Hot Field Scalarization).
 //!
