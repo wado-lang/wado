@@ -952,14 +952,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let type_id = *param_types
                 .get(p_idx)
                 .expect("resolve_function records one param type per func.params entry");
-            // The function-param default is expanded (and re-reified) at each
-            // call site by `reify_pad_args_with_defaults`; monomorphize drops
-            // this field to `None` and nothing downstream reads it. Reifying it
-            // into the function's own `ctx` here would allocate stray locals for
-            // a control-flow default (the `match` / `if` value local), which
-            // then surface as a parameter-shadowing `let` in the function body
-            // at -O0 (returning the zero-initialised shadow). Leave it unbuilt,
-            // matching `item.rs`.
+            // Do not reify the parameter's default here: defaults are expanded
+            // (and reified) at each call site by `reify_pad_args_with_defaults`.
+            // Reifying one into this function's own `ctx` would allocate a
+            // control-flow default's value local in the callee, surfacing as a
+            // parameter-shadowing `let` in the body at -O0 (returning the
+            // zero-initialised shadow).
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             params.push(tir::TirParam {
                 name: param.name.clone(),

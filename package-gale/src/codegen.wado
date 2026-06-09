@@ -183,11 +183,13 @@ fn gen_runtime(w: &mut CodeWriter, ctx: &GenContext, highlight: bool) {
     }
 }
 
-/// Append a runtime fragment, dropping its sibling-module imports. A `use`
-/// statement may span multiple lines, so a sibling import is stripped from the
-/// `use` keyword through its terminating `;` (semicolons are mandatory).
-/// Fragments must import only sibling `runtime/*.wado` files — nothing that
-/// needs to survive into generated output passes through this strip.
+/// Append a runtime fragment, dropping only its sibling-runtime imports
+/// (`from "./..."`) — those siblings are inlined too, so the import would be
+/// redundant and unresolvable in the generated file. A `use` may span multiple
+/// lines, so a sibling import is stripped from the `use` keyword through its
+/// terminating `;` (semicolons are mandatory). Standard-library imports
+/// (`core:` / `wasi:`) are kept verbatim and flow into the generated parser
+/// (none are needed today, but they are permitted).
 fn emit_runtime_fragment(w: &mut CodeWriter, src: &String) {
     // Lines of an open `use ...;` statement whose siblingness is not yet known.
     let mut block: List<String> = [];

@@ -271,12 +271,13 @@ generated parser carries only the fragments it needs:
 
 Each fragment is a real module for dev/test and imports its siblings via
 `use { ... } from "./lex.wado"` etc.; `emit_runtime_fragment` strips those
-relative imports when concatenating, since every fragment lands in the single
-generated module (with `lex` first). Fragments must therefore import only from
-sibling `runtime/*.wado` files (no `core:` / `wasi:` imports). `lex.wado` is
-also imported as a normal module by Gale's own front end (`token`/`lexer`/
-`parser`/`ir`); `atn.wado`'s wire-format constants are imported by the builder
-in `src/atn.wado`. See [WEP: Compile-Time File Inclusion](../docs/wep-2026-03-02-include-str.md).
+sibling-runtime imports when concatenating, since every fragment lands in the
+single generated module (with `lex` first). A fragment may also import the
+standard library (`core:` / `wasi:`); those imports are kept verbatim and flow
+into the generated parser (none are needed today, but they are permitted).
+`lex.wado` is also imported as a normal module by Gale's own front end
+(`token`/`lexer`/`parser`/`ir`); `atn.wado`'s wire-format constants are imported
+by the builder in `src/atn.wado`. See [WEP: Compile-Time File Inclusion](../docs/wep-2026-03-02-include-str.md).
 
 ## Generated Parser Rules
 
@@ -390,9 +391,9 @@ Implementation references:
   `lower_scan_element` and set on `RuleCallOp.follow_arg` /
   `RepeatOp.gate_caller_follow`.
 - `package-gale/src/parser_gen.wado` — `add_follow_param`,
-  `emit_caller_follow_gate` (+ scan mirror), `follow_arg_expr`,
-  `gen_follow_mask_globals`, the optional-gate hook in
-  `gen_op_repeat_optional_{leaf,rulecall}`.
+  `emit_caller_follow_gate` (parse side; the scan side emits the same
+  `follow_yields` gate inline), `follow_arg_expr`, `gen_follow_mask_globals`,
+  the optional-gate hook in `gen_op_repeat_optional_{leaf,rulecall}`.
 - `package-gale/src/follow_env.wado` — pure analysis (`FollowEnv`'s
   `tail_greedy` snapshot and the call-graph `rule_follow` fixed-point).
 - `package-gale/src/gir.wado` — `FollowArg`, `RuleCallOp.follow_arg`,
