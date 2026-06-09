@@ -547,10 +547,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `(current_module_source, ast_id)` and reading under the same pair
     /// (reify swaps `current_module_source` while walking foreign AST)
     /// makes the lookup unambiguous.
+    ///
+    /// Resolving *foreign* default AST (a callee's default argument, a
+    /// struct field's default) redirects two perspectives in lockstep:
+    /// scope/ident resolution follows [`Self::default_scope_module`], and
+    /// the fact-key perspective must follow the same module so the
+    /// default's dense `AstId`s land under their owning module — reify
+    /// reads them there (it swaps its whole module triple to the callee).
+    /// Keying them under the construction site instead overwrites the
+    /// caller's same-numbered local node, the recurring cross-module
+    /// `AstId` collision (e.g. issue #1342, where a callee default that
+    /// builds a struct clobbered an unrelated local struct literal sharing
+    /// the dense `AstId`). `ann_module_override` (set by const-body and
+    /// trait-default resolution) takes precedence; `default_scope_module`
+    /// covers the default-argument paths so a site that redirects scope
+    /// cannot forget to redirect keying.
     pub(super) fn ann_key(&self, ast_id: crate::ast::AstId) -> SymbolKey {
         let module = self
             .ann_module_override
             .as_ref()
+            .or(self.default_scope_module.as_ref())
             .unwrap_or(&self.current_module_source);
         SymbolKey::new(module.clone(), ast_id)
     }

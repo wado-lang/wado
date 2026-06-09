@@ -1,0 +1,88 @@
+// Surface-pattern guard for issue #1342: a nested `for x of &structField
+// { … break }` inside an outer indexed loop + conditional must compile to a
+// valid core Wasm module and produce the correct result at every optimization
+// level. This is the exact shape of `atn.wado::lr_loop_entry_decision`, whose
+// compilation ICE'd ("WIR pipeline generated invalid core Wasm module").
+//
+// The underlying root cause was a cross-module default-argument AstId collision
+// (see `bug_default_arg_xmod.wado` for the minimal reproduction and the fix in
+// `Elaborator::ann_key`); this single-module test does not reproduce it but
+// pins the user-facing pattern so it keeps compiling and running correctly.
+
+struct Transition {
+    kind: i32,
+}
+
+struct State {
+    kind: i32,
+    rule: i32,
+    decision: i32,
+    transitions: List<Transition>,
+}
+
+global STAR_LOOP_ENTRY: i32 = 9;
+global TR_PRECEDENCE: i32 = 5;
+
+// Faithful reduction of `lr_loop_entry_decision`: outer indexed `for` over a
+// list, a guarding `if`, an inner `for x of &st.transitions { … break }`, and a
+// `has_prec` flag read after the inner loop.
+fn loop_entry_decision(states: &List<State>, rule: i32) -> i32 {
+    for let mut i = 0; i < states.len(); i += 1 {
+        let st = &states[i];
+        if st.kind == STAR_LOOP_ENTRY && st.rule == rule && st.decision >= 0 {
+            let mut has_prec = false;
+            for let t of &st.transitions {
+                if t.kind == TR_PRECEDENCE {
+                    has_prec = true;
+                    break;
+                }
+            }
+            if has_prec {
+                return st.decision;
+            }
+        }
+    }
+    return -1;
+}
+
+test "nested for-of with break selects the precedence loop entry" {
+    let states: List<State> = [
+        // An ordinary star-loop entry with NO precedence edge: must be skipped.
+        State {
+            kind: STAR_LOOP_ENTRY,
+            rule: 0,
+            decision: 0,
+            transitions: [Transition { kind: 1 }, Transition { kind: 2 }],
+        },
+        // The dedicated LR loop entry: carries a precedence edge.
+        State {
+            kind: STAR_LOOP_ENTRY,
+            rule: 0,
+            decision: 1,
+            transitions: [Transition { kind: 1 }, Transition { kind: TR_PRECEDENCE }],
+        },
+    ];
+    // Must select decision 1 (the precedence one), not 0; if store-load-forward
+    // wrongly kept `has_prec == false`, the first matching state would return 0.
+    assert loop_entry_decision(&states, 0) == 1;
+    // A rule with no matching loop entry returns -1.
+    assert loop_entry_decision(&states, 7) == -1;
+}
+
+test "inner break stops at the first precedence edge" {
+    // The `break` must fire on the first precedence transition without reading
+    // past it; a transition list whose first element already matches exercises
+    // the single-iteration break path.
+    let states: List<State> = [
+        State {
+            kind: STAR_LOOP_ENTRY,
+            rule: 3,
+            decision: 4,
+            transitions: [Transition { kind: TR_PRECEDENCE }, Transition { kind: 1 }],
+        },
+    ];
+    assert loop_entry_decision(&states, 3) == 4;
+}
+
+__DATA__
+{"test": {}}
