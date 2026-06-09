@@ -224,12 +224,15 @@ impl<'a> Builder<'a> {
             } => {
                 let cond_v = self.walk_expr(condition);
                 let saved = self.current_value.clone();
+                let saved_heap = self.heap_state.snapshot();
                 self.walk_block(then_block);
                 let then_state = std::mem::replace(&mut self.current_value, saved.clone());
+                self.heap_state.restore(saved_heap.clone());
                 if let Some(eb) = else_block {
                     self.walk_block(eb);
                 }
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
+                self.heap_state.restore(saved_heap);
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
                 // Conservative bump_all after the merge — per-arm join is
                 // a follow-up.
@@ -377,12 +380,15 @@ impl<'a> Builder<'a> {
             } => {
                 let cond_v = self.walk_expr(condition);
                 let saved = self.current_value.clone();
+                let saved_heap = self.heap_state.snapshot();
                 self.walk_block(then_branch);
                 let then_state = std::mem::replace(&mut self.current_value, saved.clone());
+                self.heap_state.restore(saved_heap.clone());
                 if let Some(eb) = else_branch {
                     self.walk_block(eb);
                 }
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
+                self.heap_state.restore(saved_heap);
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
                 self.heap_state.bump_all();
                 None
@@ -1337,6 +1343,46 @@ mod tests {
         let r = build(&body, &[param_seed()]);
         // The read inside arm 1 must share a VN with the pre-switch read.
         assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_arm]);
+    }
+
+    #[test]
+    fn if_branch_field_writes_do_not_leak_into_else() {
+        // fn(obj) {
+        //     let g_pre = obj.g;
+        //     if true { obj.f = 1; }
+        //     else    { let g_in_else = obj.g; }
+        // }
+        // The else-branch `obj.g` read must share a VN with the pre-If
+        // read: the then-branch's `bump_field(f)` is rolled back at the
+        // arm boundary so it does not pollute the else-branch heap state.
+        let mut body = empty_body();
+        let recv_pre = local_ref(&mut body, 0);
+        let read_pre = field_access(&mut body, recv_pre, 1);
+        let let_pre = let_stmt(&mut body, 1, read_pre, false);
+
+        let cond = bool_lit(&mut body, true);
+
+        let recv_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let then_write = field_assign_stmt(&mut body, recv_w, 0, one);
+        let then_block = block_with(&mut body, vec![then_write]);
+
+        let recv_else = local_ref(&mut body, 0);
+        let read_in_else = field_access(&mut body, recv_else, 1);
+        let let_in_else = let_stmt(&mut body, 2, read_in_else, false);
+        let else_block = block_with(&mut body, vec![let_in_else]);
+
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: Some(else_block),
+            },
+        );
+        root_with(&mut body, vec![let_pre, if_s]);
+        let r = build(&body, &[param_seed()]);
+        assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_else]);
     }
 
     // ----- LabeledBlock break-only-path writes -----
