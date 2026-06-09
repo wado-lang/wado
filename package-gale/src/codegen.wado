@@ -118,8 +118,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // until the runtime-follow conversion wires repair call sites.
     gen_follow_mask_globals(&mut w, &ctx);
     // Serialized ATN blob for the runtime simulator. Only emitted when
-    // lowering saw a construct that needs it (a non-greedy repeat), so
-    // gate-free grammars stay byte-identical.
+    // lowering saw a construct that needs it (a non-greedy `??` or an
+    // ATN-class LR rule), so gate-free grammars stay byte-identical.
     if ctx.needs_atn() {
         gen_atn_data_global(&mut w, &atn, ctx.needs_scan_atn());
     }
@@ -130,7 +130,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
 }
 
 /// Emit `global GALE_ATN_DATA: List<i32> = [...]`: the serialized
-/// whole-grammar ATN the inlined runtime decodes once per parser.
+/// whole-grammar ATN the inlined runtime decodes once into the module-level
+/// `GALE_ATN_SIM`.
 fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
     let blob = serialize_atn(atn);
     let mut body = String::with_capacity(blob.len() * 6);

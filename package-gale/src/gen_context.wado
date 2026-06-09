@@ -94,10 +94,10 @@ pub struct GenContext {
     /// a non-greedy `??` stay byte-identical. (`*?`/`+?` keep the dedicated
     /// non-greedy strategy and do not set this.)
     needs_atn_seen: bool,
-    /// Set by lowering for an ATN-class LR rule. Gates the scan-side ATN
-    /// globals (`GALE_ATN_SIM` / `GALE_SCAN_STACK`) so non-greedy-`??`-only
-    /// grammars (which need the ATN simulator but no scan-side LR routing)
-    /// do not carry a redundant decoded ATN / dead scan stack.
+    /// Set by lowering for an ATN-class LR rule. Gates the scan-side caller
+    /// stack (`GALE_SCAN_STACK`) and the scan-side LR loop routing, so a
+    /// non-greedy-`??`-only grammar (which shares the same `GALE_ATN_SIM` but
+    /// needs no scan-side LR routing) does not carry a dead scan stack.
     needs_scan_atn_seen: bool,
     /// The ATN call-site → return-state correspondence (`Atn.call_site_returns`,
     /// indexed by `RuleRefElement.atn_call_site`). Populated after lowering
@@ -175,15 +175,17 @@ impl GenContext {
         return self.caller_follow_gate_seen;
     }
 
-    /// Record that lowering encountered a non-greedy repeat, so emit must
+    /// Record that lowering encountered a construct that needs the runtime
+    /// simulator (a non-greedy `??` or an ATN-class LR rule), so emit must
     /// include the ATN simulator infrastructure.
     pub fn mark_needs_atn(&mut self) {
         self.needs_atn_seen = true;
     }
 
     /// Whether the generated parser should emit the ATN simulator
-    /// infrastructure (blob, `Parser.atn`/`atn_stack`, rule-entry
-    /// stack maintenance). True iff lowering saw a non-greedy repeat.
+    /// infrastructure (blob + the shared `GALE_ATN_SIM` global,
+    /// `Parser.atn_stack`, rule-entry stack maintenance). True iff lowering
+    /// saw a non-greedy `??` or an ATN-class LR rule.
     pub fn needs_atn(&self) -> bool {
         return self.needs_atn_seen;
     }
@@ -194,8 +196,9 @@ impl GenContext {
         self.needs_scan_atn_seen = true;
     }
 
-    /// Whether to emit the scan-side ATN globals (`GALE_ATN_SIM` /
-    /// `GALE_SCAN_STACK`). True iff an ATN-class LR rule exists.
+    /// Whether to emit the scan-side caller stack (`GALE_SCAN_STACK`) and
+    /// route the scan LR loop through the ATN. True iff an ATN-class LR rule
+    /// exists. (`GALE_ATN_SIM` itself is emitted whenever `needs_atn`.)
     pub fn needs_scan_atn(&self) -> bool {
         return self.needs_scan_atn_seen;
     }
