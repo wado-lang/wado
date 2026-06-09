@@ -1,0 +1,18 @@
+// A public struct whose field default calls a module-private function.
+// Constructing `Widget` from another module while omitting `size`
+// synthesizes `helper()` at the construction site; it must resolve in
+// this (the declaring) module's scope. Regression for the
+// private-function-*call* gap in struct field defaults (issue #1308).
+
+fn helper() -> i32 {
+    return 7;
+}
+
+pub struct Widget {
+    pub name: String,
+    size: i32 = helper(),
+}
+
+pub fn widget_size(w: Widget) -> i32 {
+    return w.size;
+}

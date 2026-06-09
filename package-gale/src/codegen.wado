@@ -6,7 +6,7 @@ use { gen_visitor } from "./visitor_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
-use { lower_with_ctx } from "./lower.wado";
+use { lower } from "./lower.wado";
 use { build_atn, serialize_atn } from "./atn.wado";
 use {
     LoweredGrammar,
@@ -71,7 +71,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     ctx.set_trace(options.trace);
-    let lowered = lower_with_ctx(grammar, &lit_tokens, &mut ctx);
+    let lowered = lower(grammar, &lit_tokens, &mut ctx);
     gen_header(&mut w, grammar);
     if options.trace {
         // Trace logging writes to stderr via the ambient logger.
@@ -79,7 +79,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         w.blank();
     }
     gen_grammar_metadata(&mut w, grammar);
-    gen_runtime(&mut w);
+    gen_runtime(&mut w, &ctx, options.highlight);
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_cst_types(&mut w, &lowered, grammar);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
@@ -154,9 +154,88 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
     w.blank();
 }
 
-fn gen_runtime(w: &mut CodeWriter) {
-    w.raw(&#include_str("./runtime.wado"));
-    w.raw(&"\n");
+/// Emit the inlined runtime, split across `src/runtime/*.wado` and gated so
+/// a generated parser carries only the fragments it actually needs:
+///
+/// - `lex` / `cst` / `tools` are always emitted (core vocabulary, the
+///   generic tree + `Visitor`, and the consumer-facing tree/token utilities).
+/// - `follow` only when lowering built a caller-FOLLOW gate (`emit_follow`).
+/// - `highlight` only when the `highlight` generator option is on.
+/// - `atn` only when lowering needs the runtime simulator (`needs_atn`).
+///
+/// Each fragment is a real module for dev/test, importing its siblings via
+/// `use { ... } from "./lex.wado"` etc.; `emit_runtime_fragment` drops those
+/// relative imports because every fragment is concatenated into the single
+/// generated module (with `lex` first), where such imports are both
+/// redundant and unresolvable.
+fn gen_runtime(w: &mut CodeWriter, ctx: &GenContext, highlight: bool) {
+    emit_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
+    emit_runtime_fragment(w, &#include_str("./runtime/cst.wado"));
+    emit_runtime_fragment(w, &#include_str("./runtime/tools.wado"));
+    if ctx.emit_follow() {
+        emit_runtime_fragment(w, &#include_str("./runtime/follow.wado"));
+    }
+    if highlight {
+        emit_runtime_fragment(w, &#include_str("./runtime/highlight.wado"));
+    }
+    if ctx.needs_atn() {
+        emit_runtime_fragment(w, &#include_str("./runtime/atn.wado"));
+    }
+}
+
+/// Append a runtime fragment, dropping only its sibling-runtime imports
+/// (`from "./..."`) — those siblings are inlined too, so the import would be
+/// redundant and unresolvable in the generated file. A `use` may span multiple
+/// lines, so a sibling import is stripped from the `use` keyword through its
+/// terminating `;` (semicolons are mandatory). Standard-library imports
+/// (`core:` / `wasi:`) are kept verbatim and flow into the generated parser
+/// (none are needed today, but they are permitted).
+fn emit_runtime_fragment(w: &mut CodeWriter, src: &String) {
+    // Lines of an open `use ...;` statement whose siblingness is not yet known.
+    let mut block: List<String> = [];
+    let mut in_use = false;
+    for let line of src.lines() {
+        if in_use {
+            block.push(line);
+            if line.contains(";") {
+                flush_use_block(w, &block);
+                block = [];
+                in_use = false;
+            }
+        } else if line.trim_start().starts_with("use ") {
+            block.push(line);
+            if line.contains(";") {
+                flush_use_block(w, &block);
+                block = [];
+            } else {
+                in_use = true;
+            }
+        } else {
+            w.raw(&line);
+            w.raw(&"\n");
+        }
+    }
+    // A well-formed fragment never ends mid-`use`; emit any stray buffer
+    // verbatim rather than silently dropping it.
+    for let l of &block {
+        w.raw(l);
+        w.raw(&"\n");
+    }
+}
+
+/// Emit a complete (possibly multi-line) `use ...;` statement unless it is a
+/// sibling import (`from "./..."`), which is dropped because the symbols are
+/// already inlined ahead of this fragment.
+fn flush_use_block(w: &mut CodeWriter, block: &List<String>) {
+    for let l of block {
+        if l.contains("from \"./") {
+            return;
+        }
+    }
+    for let l of block {
+        w.raw(l);
+        w.raw(&"\n");
+    }
 }
 
 /// Surface grammar-level options and named actions from the .g4 prequel as

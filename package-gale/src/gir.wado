@@ -624,7 +624,7 @@ pub struct RepeatOp {
     pub body_has_field: bool,
     /// Lowered emit-shape classifier for the body op. Drives emit's
     /// dispatch in `gen_op_repeat_*` so the `op_is_leaf` /
-    /// `op_is_rulecall` / `is Group(_)` × `body_has_field` predicates
+    /// `is RuleCall(_)` / `is Group(_)` × `body_has_field` predicates
     /// don't have to be re-checked at every dispatch site, and so the
     /// fall-through panics ("op-driven dispatch did not cover this
     /// body shape") become unreachable: every reachable body op has a
@@ -679,7 +679,7 @@ pub struct GroupOp {
 /// emit's `gen_op_repeat_*` dispatch — every reachable shape lower
 /// produces has a named variant, so emit's per-Repeat dispatcher is
 /// an exhaustive `match rep_op.body_shape { ... }` rather than a
-/// cascade of `op_is_leaf` / `op_is_rulecall` / `let Group(_) = ...`
+/// cascade of `op_is_leaf` / `is RuleCall(_)` / `let Group(_) = ...`
 /// probes guarded by an "unhandled body shape" panic. Lower asserts
 /// at construction time that the body op falls into one of the four
 /// variants; ListLabel / Repeat shapes never reach `lower_repeat_op`.

@@ -93,7 +93,7 @@ use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field
 /// (`ctx.emit_follow()`); guarded at every call site so grammars with
 /// no FOLLOW repair pay no per-frame cost. Repair call sites pass a
 /// `FOLLOW_MASK_<id>` constant or forward their own `follow`. See
-/// `follow_yields` in `runtime.wado`.
+/// `follow_yields` in `runtime/follow.wado`.
 fn add_follow_param(f: &mut FnSpec) {
     f.add_param_spec(ParamSpec {
         name: "follow",
@@ -2321,19 +2321,6 @@ fn op_is_leaf(op: &Op) -> bool {
     };
 }
 
-/// True when the lowered op is a `RuleCall` (possibly wrapped in a
-/// single `Op::ListLabel`). Op-level analogue of surface
-/// `is_ruleref_optional`'s check on `Repeat.element`.
-fn op_is_rulecall(op: &Op) -> bool {
-    if let RuleCall(_) = op {
-        return true;
-    }
-    if let ListLabel(ll) = op {
-        return op_is_rulecall(&ll.inner);
-    }
-    return false;
-}
-
 /// Emit a single leaf-op parse line, reading the deduped field name
 /// and resolved token / follow-arg / min-prec values straight from
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
@@ -3539,14 +3526,6 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 fn emit_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp) {
     if rep_op.gate_caller_follow {
         w.line(&"if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }");
-    }
-}
-
-/// Scan-side mirror of `emit_caller_follow_gate`. Keeps the
-/// longest-match tournament's yield decision in lockstep with parse.
-fn emit_caller_follow_gate_scan(w: &mut CodeWriter, gate: bool, fail_or_break: &String) {
-    if gate {
-        w.line(&`if follow_yields(tokens, pos, follow, TK_EOF) \{ {*fail_or_break} \}`);
     }
 }
 

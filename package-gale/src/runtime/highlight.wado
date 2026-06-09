@@ -1,0 +1,194 @@
+//! Syntax-highlighting runtime: a `Visitor` that collects capture ranges
+//! during a CST walk plus the HTML renderer. Emitted into a generated
+//! parser only when the `highlight` generator option is on. The
+//! `./lex.wado` / `./cst.wado` imports are stripped at `#include_str` time.
+
+use { Span, Token } from "./lex.wado";
+use { Visitor } from "./cst.wado";
+
+/// Highlight override: when inside a specific rule, override the capture for a token kind.
+pub struct HighlightOverride {
+    pub rule_name: String,
+    pub token_kind: i32,
+    pub capture: String,
+}
+
+/// Highlight mapping: defaults by token kind + context-aware overrides.
+///
+/// `rule_names` is the canonical name table used to resolve override
+/// `rule_name`s into integer ids that match what the generated walker
+/// passes to `Visitor::enter_rule`. The generator emits the names in
+/// parser-rule declaration order; index = rule id.
+pub struct HighlightMapping {
+    pub defaults: List<String>,
+    pub rule_names: List<String>,
+    pub overrides: List<HighlightOverride>,
+}
+
+/// A single highlight capture: a named range in the source text.
+pub struct HighlightCapture {
+    pub capture: String,
+    pub start: i32,
+    pub end: i32,
+}
+
+/// Internal override form with the rule resolved to an integer id so the
+/// per-token classify loop avoids a String compare on every iteration.
+struct ResolvedOverride {
+    rule_id: i32,
+    token_kind: i32,
+    capture: String,
+}
+
+/// HighlightVisitor collects highlight captures during a CST walk.
+pub struct HighlightVisitor {
+    defaults: List<String>,
+    overrides: List<ResolvedOverride>,
+    rule_stack: List<i32>,
+    pub captures: List<HighlightCapture>,
+}
+
+impl HighlightVisitor {
+    pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
+        let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
+        for let ov of &mapping.overrides {
+            let mut id: i32 = -1;
+            for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
+                if mapping.rule_names[i] == ov.rule_name {
+                    id = i;
+                    break;
+                }
+            }
+            // Skip overrides whose rule_name doesn't match any known rule —
+            // they can never fire (no rule_id on the stack is ever < 0) and
+            // would otherwise waste a comparison on every classify() call.
+            if id < 0 {
+                continue;
+            }
+            overrides.push(ResolvedOverride {
+                rule_id: id,
+                token_kind: ov.token_kind,
+                capture: ov.capture,
+            });
+        }
+        return HighlightVisitor {
+            defaults: mapping.defaults,
+            overrides,
+            rule_stack: [],
+            captures: [],
+        };
+    }
+
+    fn classify(&self, kind: i32) -> String {
+        for let ov of &self.overrides {
+            if ov.token_kind == kind {
+                for let rule_id of &self.rule_stack {
+                    if *rule_id == ov.rule_id {
+                        return ov.capture;
+                    }
+                }
+            }
+        }
+        if kind >= 0 && kind < self.defaults.len() {
+            return self.defaults[kind];
+        }
+        return "";
+    }
+}
+
+impl Visitor for HighlightVisitor {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.push(rule_id);
+    }
+
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.pop();
+    }
+
+    fn visit_token(&mut self, token: &Token) {
+        for let trivia of &token.leading_trivia {
+            let cap = self.classify(trivia.kind);
+            if !cap.is_empty() {
+                self.captures.push(HighlightCapture { capture: cap, start: trivia.span.start, end: trivia.span.end });
+            }
+        }
+        if token.text.is_empty() {
+            return;
+        }
+        let cap = self.classify(token.kind);
+        if !cap.is_empty() {
+            self.captures.push(HighlightCapture { capture: cap, start: token.span.start, end: token.span.end });
+        }
+    }
+}
+
+fn escape_html(out: &mut String, text: &String) {
+    for let c of text.chars() {
+        if c == '&' {
+            out.push_str(&"&amp;");
+        } else if c == '<' {
+            out.push_str(&"&lt;");
+        } else if c == '>' {
+            out.push_str(&"&gt;");
+        } else if c == '"' {
+            out.push_str(&"&quot;");
+        } else {
+            out.push(c);
+        }
+    }
+}
+
+fn escape_html_char(out: &mut String, c: char) {
+    if c == '&' {
+        out.push_str(&"&amp;");
+    } else if c == '<' {
+        out.push_str(&"&lt;");
+    } else if c == '>' {
+        out.push_str(&"&gt;");
+    } else if c == '"' {
+        out.push_str(&"&quot;");
+    } else {
+        out.push(c);
+    }
+}
+
+fn push_class(out: &mut String, capture: &String) {
+    for let c of capture.chars() {
+        if c == '.' {
+            out.push(' ');
+        } else {
+            out.push(c);
+        }
+    }
+}
+
+/// Produce a highlighted HTML fragment from source text and captures.
+/// Captures must be sorted by start position (as produced by HighlightVisitor).
+pub fn highlight_html(source: &String, captures: &List<HighlightCapture>) -> String {
+    let mut out = String::with_capacity(source.len() * 5);
+    let mut pos = 0;
+    let mut iter = source.chars();
+    for let cap of captures {
+        while pos < cap.start {
+            if let Some(c) = iter.next() {
+                escape_html_char(&mut out, c);
+            }
+            pos += 1;
+        }
+        out.push_str(&"<span class=\"");
+        push_class(&mut out, &cap.capture);
+        out.push_str(&"\">");
+        let end = cap.end;
+        while pos < end {
+            if let Some(c) = iter.next() {
+                escape_html_char(&mut out, c);
+            }
+            pos += 1;
+        }
+        out.push_str(&"</span>");
+    }
+    while let Some(c) = iter.next() {
+        escape_html_char(&mut out, c);
+    }
+    return out;
+}

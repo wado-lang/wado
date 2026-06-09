@@ -243,7 +243,7 @@ test "tree: nested object with array" {
 
 - `to_string_tree()` outputs `(ruleName child1 child2 ...)` with tokens as their text. EOF is omitted.
 - `normalize_tree()` collapses whitespace (preserving quoted strings) so multi-line indented expected values compare correctly with compact single-line output.
-- Both functions are defined in `runtime.wado` and available in all generated parsers.
+- Both functions are defined in the inlined runtime (`src/runtime/cst.wado` and `src/runtime/tools.wado`) and available in all generated parsers.
 
 #### Adding a new e2e test grammar
 
@@ -257,7 +257,27 @@ The upstream `runtime-testsuite/` is extracted into per-category Wado tests as a
 
 ## Inlined Runtime
 
-`runtime.wado` is included verbatim into every generated file via `#include_str` in `codegen.wado`. It must remain self-contained (no imports from other source files). See [WEP: Compile-Time File Inclusion](../docs/wep-2026-03-02-include-str.md).
+The runtime is split across `src/runtime/*.wado` and inlined into every
+generated file via `#include_str` in `gen_runtime` (`codegen.wado`), gated so a
+generated parser carries only the fragments it needs:
+
+- `lex.wado` (Span / LexerSlice / Token / ParseError), `cst.wado` (generic
+  `CstNode` tree + `Visitor` + `to_tree`), and `tools.wado` (consumer-facing
+  `normalize_tree` / `find_first_child_node` / `to_lexer_string`) are **always**
+  emitted.
+- `follow.wado` only when lowering built a caller-FOLLOW gate (`emit_follow`).
+- `highlight.wado` only when the `highlight` generator option is on.
+- `atn.wado` only when lowering needs the runtime simulator (`needs_atn`).
+
+Each fragment is a real module for dev/test and imports its siblings via
+`use { ... } from "./lex.wado"` etc.; `emit_runtime_fragment` strips those
+sibling-runtime imports when concatenating, since every fragment lands in the
+single generated module (with `lex` first). A fragment may also import the
+standard library (`core:` / `wasi:`); those imports are kept verbatim and flow
+into the generated parser (none are needed today, but they are permitted).
+`lex.wado` is also imported as a normal module by Gale's own front end
+(`token`/`lexer`/`parser`/`ir`); `atn.wado`'s wire-format constants are imported
+by the builder in `src/atn.wado`. See [WEP: Compile-Time File Inclusion](../docs/wep-2026-03-02-include-str.md).
 
 ## Generated Parser Rules
 
@@ -358,8 +378,8 @@ caused (TypeScript shed ~17% / all 508 `__follow_` functions; Rust ~20%).
 
 Implementation references:
 
-- `package-gale/src/runtime.wado` — `follow_yields`, `follow_prepend`,
-  `EMPTY_FOLLOW` (inlined into every generated parser).
+- `package-gale/src/runtime/follow.wado` — `follow_yields`, `follow_prepend`,
+  `EMPTY_FOLLOW` (inlined into a generated parser when `emit_follow`).
 - `package-gale/src/gen_context.wado` —
   `tail_greedy_first_of_rule`, `deep_position_first_sets_from`,
   `compute_call_site_follow` (handles the first-exact deep-nullable
@@ -371,9 +391,9 @@ Implementation references:
   `lower_scan_element` and set on `RuleCallOp.follow_arg` /
   `RepeatOp.gate_caller_follow`.
 - `package-gale/src/parser_gen.wado` — `add_follow_param`,
-  `emit_caller_follow_gate` (+ scan mirror), `follow_arg_expr`,
-  `gen_follow_mask_globals`, the optional-gate hook in
-  `gen_op_repeat_optional_{leaf,rulecall}`.
+  `emit_caller_follow_gate` (parse side; the scan side emits the same
+  `follow_yields` gate inline), `follow_arg_expr`, `gen_follow_mask_globals`,
+  the optional-gate hook in `gen_op_repeat_optional_{leaf,rulecall}`.
 - `package-gale/src/follow_env.wado` — pure analysis (`FollowEnv`'s
   `tail_greedy` snapshot and the call-graph `rule_follow` fixed-point).
 - `package-gale/src/gir.wado` — `FollowArg`, `RuleCallOp.follow_arg`,

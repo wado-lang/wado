@@ -210,6 +210,17 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// the liveness pass found unreachable from the export boundary, which
     /// downstream phases would discard anyway. `None` reifies everything.
     pub(crate) live_items: Option<&'a IndexSet<crate::symbol::SymbolKey>>,
+    /// Active parameter-name → already-reified-argument substitutions for
+    /// the default-argument expression currently being reified. A
+    /// cross-module default is reified under the *callee's* module
+    /// perspective (so its own items resolve), but a default may reference
+    /// an earlier parameter, whose substituted value is the *caller's*
+    /// argument expression — already reified under the caller's
+    /// perspective in the surrounding call. `reify_ident` returns the
+    /// pre-reified TIR for such names instead of re-resolving the spliced
+    /// caller AST under the wrong perspective. Empty outside a default
+    /// walk. See [`Self::reify_pad_args_with_defaults`].
+    pub(crate) default_arg_overrides: IndexMap<String, TirExpr>,
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
@@ -251,6 +262,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
             live_items,
+            default_arg_overrides: IndexMap::default(),
         }
     }
 
@@ -940,17 +952,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let type_id = *param_types
                 .get(p_idx)
                 .expect("resolve_function records one param type per func.params entry");
-            let default_expr = param
-                .default
-                .as_ref()
-                .map(|default_ast| Box::new(self.reify_expr(default_ast, &mut ctx, Some(type_id))));
+            // Do not reify the parameter's default here: defaults are expanded
+            // (and reified) at each call site by `reify_pad_args_with_defaults`.
+            // Reifying one into this function's own `ctx` would allocate a
+            // control-flow default's value local in the callee, surfacing as a
+            // parameter-shadowing `let` in the body at -O0 (returning the
+            // zero-initialised shadow).
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             params.push(tir::TirParam {
                 name: param.name.clone(),
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
-                default_expr,
                 span: param.span,
             });
         }
@@ -1378,17 +1391,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             } else {
                 "self".to_string()
             };
-            let default_expr = p
-                .default
-                .as_ref()
-                .map(|d| Box::new(self.reify_expr(d, &mut ctx, Some(type_id))));
+            // See the free-function param loop: the param default is expanded
+            // at call sites and monomorphize drops this field, so reifying it
+            // into the method's `ctx` only pollutes its locals (a control-flow
+            // default's value local shadows the parameter at -O0). Leave it
+            // unbuilt.
             let local_index = ctx.add_local(name.clone(), type_id, p.is_mut, Some(p.id));
             params.push(crate::tir::TirParam {
                 name,
                 type_id,
                 local_index,
                 is_mut: p.is_mut,
-                default_expr,
                 span: p.span,
             });
         }
@@ -1967,6 +1980,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// Run `f` with the default-argument override map suppressed. Mirrors
+    /// `Expr::substitute_idents` leaving binder / control forms (closure,
+    /// block, `if`, `match`, …) untouched on the annotate side: a reference
+    /// shadowed by a binding introduced *inside* such a form must resolve to
+    /// that binding, not to an outer parameter's substituted argument. No-op
+    /// outside a default-argument walk. See `reify_pad_args_with_defaults`.
+    fn with_defaults_suppressed<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        if self.default_arg_overrides.is_empty() {
+            return f(self);
+        }
+        let saved = std::mem::take(&mut self.default_arg_overrides);
+        let r = f(self);
+        self.default_arg_overrides = saved;
+        r
+    }
+
     /// Reify an expression. Reads `sem.types.expression_types` for the
     /// type, `sem.types.coercions` for any coercion wrap,
     /// `sem.types.method_dispatch` for method calls,
@@ -2013,10 +2042,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         match expr {
             ast::Expr::Literal(lit) => self.reify_literal(lit, recorded_type, ctx),
-            ast::Expr::Block(block) => {
-                let block_tir = self.reify_block(block, ctx, expected_type);
+            ast::Expr::Block(block) => self.with_defaults_suppressed(|s| {
+                let block_tir = s.reify_block(block, ctx, expected_type);
                 TirExpr::new(TirExprKind::Block(block_tir), recorded_type, span)
-            }
+            }),
             ast::Expr::Ident(ident) => self.reify_ident(ident, recorded_type, ctx),
             ast::Expr::TupleLiteral(tuple_lit) => {
                 // SequenceLiteralBuilder coercion: when the elaborator
@@ -2218,9 +2247,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
-            ast::Expr::Match(match_expr) => {
-                self.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
-            }
+            ast::Expr::Match(match_expr) => self.with_defaults_suppressed(|s| {
+                s.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
+            }),
             ast::Expr::StructLiteral(struct_lit) => {
                 self.reify_struct_literal(struct_lit, ctx, recorded_type)
             }
@@ -2228,14 +2257,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::TemplateString(template) => {
                 self.reify_template_string(template, ctx, recorded_type)
             }
-            ast::Expr::Matches(m) => self.reify_matches(m, ctx),
+            ast::Expr::Matches(m) => self.with_defaults_suppressed(|s| s.reify_matches(m, ctx)),
             ast::Expr::CompoundAssign(compound) => {
                 self.reify_compound_assign(compound, ctx, recorded_type)
             }
             ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx, recorded_type),
-            ast::Expr::Closure(closure) => {
-                self.reify_closure(closure, ctx, recorded_type, expected_type)
-            }
+            ast::Expr::Closure(closure) => self.with_defaults_suppressed(|s| {
+                s.reify_closure(closure, ctx, recorded_type, expected_type)
+            }),
             ast::Expr::Index(index) => self.reify_index(index, ctx, recorded_type),
             ast::Expr::ComparisonChain(chain) => self.reify_comparison_chain(chain, ctx),
             ast::Expr::StaticMethodCall(static_call) => {
@@ -2260,7 +2289,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::LabeledBlock(lb) => {
+            ast::Expr::LabeledBlock(lb) => self.with_defaults_suppressed(|s| {
                 // Match `Elaborator::resolve_expr`'s `LabeledBlock`
                 // arm (expr.rs:234–305): push a `LabeledBlockTarget`
                 // so any `break label: expr` inside lowers via this
@@ -2279,7 +2308,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     expected_type: expected_type.or(Some(recorded_type)),
                 });
                 ctx.active_labels.push(lb.label.clone());
-                let tir_block = self.reify_block(&lb.block, ctx, expected_type);
+                let tir_block = s.reify_block(&lb.block, ctx, expected_type);
                 ctx.active_labels.pop();
                 let _target = ctx.labeled_block_targets.pop();
                 TirExpr::new(
@@ -2291,7 +2320,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     recorded_type,
                     span,
                 )
-            }
+            }),
             ast::Expr::Spread(_, _) => {
                 // `Spread` is only valid inside a tuple literal; the
                 // elaborator panics if it sees one at top level.
@@ -2299,9 +2328,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // diagnosed a stray spread.
                 panic!("reify_expr: bare Spread is invalid outside TupleLiteral")
             }
-            ast::Expr::If(if_expr) => {
-                self.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
-            }
+            ast::Expr::If(if_expr) => self.with_defaults_suppressed(|s| {
+                s.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
+            }),
             ast::Expr::Assign(assign) => {
                 // IndexAssign rewrite: `arr[i] = v` lowers to
                 // `arr.index_assign(i, v)`. The elaborator's
@@ -6311,7 +6340,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_pad_args_with_defaults(
         &mut self,
         callee: &ast::Expr,
-        call_args_ast: &[ast::Expr],
         args: &mut Vec<crate::tir::CallArg>,
         callee_module: &ModuleSource,
         callee_name: &str,
@@ -6327,23 +6355,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if func_params.is_empty() || args.len() >= func_params.len() {
             return;
         }
-        let mut subs: IndexMap<String, ast::Expr> = IndexMap::default();
-        for (i, arg_ast) in call_args_ast.iter().enumerate() {
+        // A default may reference an earlier parameter. The substituted
+        // value is the caller's argument, already reified under the
+        // caller's perspective in `args[i]` (and, for later defaults,
+        // the synthesized value reified below). Map parameter name →
+        // reified TIR so `reify_ident` returns it directly: re-resolving
+        // the spliced caller AST under the callee's swapped perspective
+        // (below) would key its AstIds against the wrong module's
+        // annotations and mis-type the node. Save / restore so nested
+        // defaults compose.
+        let mut overrides: IndexMap<String, TirExpr> = IndexMap::default();
+        for (i, arg) in args.iter().enumerate() {
             if let Some((name, _)) = func_params.get(i) {
-                subs.insert(name.clone(), arg_ast.clone());
+                overrides.insert(name.clone(), arg.expr.clone());
             }
         }
-        // A default expression resolves in the *callee's* lexical scope:
-        // it may reference items private to the callee module that the
-        // caller cannot see (`paint(c = DEFAULT_VALUE)` where
-        // `DEFAULT_VALUE` is a callee-module-private global). Production
-        // routes this through `default_scope_module`, consulted during
-        // ident resolution (expr.rs:914). Reify's `reify_ident` reads
-        // globals from `self.sem.decls.current_module_globals` keyed to the
-        // module-context triple, so swap that triple to the callee module
-        // around the default walk when the callee is a different, loaded
-        // module. The caller's `ctx` (locals) stays — earlier positional
-        // args were already AST-substituted into `subs`.
+        let saved_overrides = std::mem::replace(&mut self.default_arg_overrides, overrides);
+
+        // A default expression otherwise resolves in the *callee's*
+        // lexical scope: it may reference items private to the callee
+        // module that the caller cannot see (`paint(c = DEFAULT_VALUE)`
+        // where `DEFAULT_VALUE` is a callee-module-private global).
+        // Production routes this through `default_scope_module`, consulted
+        // during ident resolution (expr.rs:914). Reify reads recorded
+        // facts keyed by `AstId` from `self.sem`, so swap the module
+        // triple to the callee around the default walk when the callee is
+        // a different, loaded module. The caller's `ctx` (locals) stays so
+        // any earlier-param substitutions resolved above keep their
+        // bindings.
         let loaded = self.loaded_modules;
         let all_sem = self.all_module_semantics;
         let callee_ctx: Option<(&[Item], &ModuleSemantics)> =
@@ -6368,11 +6407,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some((n, Some(d))) => (n.clone(), d.clone()),
                 _ => break,
             };
-            let mut default_expr = default_ast;
-            default_expr.substitute_idents(&subs);
-            let resolved = self.reify_expr(&default_expr, ctx, None);
+            let resolved = self.reify_expr(&default_ast, ctx, None);
+            // Later defaults may reference this one's parameter.
+            self.default_arg_overrides.insert(name, resolved.clone());
             args.push(crate::tir::CallArg::new(resolved, false));
-            subs.insert(name, default_expr);
         }
 
         if let Some((src, items, sem)) = saved {
@@ -6380,6 +6418,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.current_module_items = items;
             self.sem = sem;
         }
+        self.default_arg_overrides = saved_overrides;
     }
 
     /// Wrap `Ord::cmp` into a `bool`: `<` → `cmp == Less`, `>` →
@@ -6590,7 +6629,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .collect();
             self.reify_pad_args_with_defaults(
                 &call.callee,
-                &call.args,
                 &mut arg_exprs,
                 &dispatch.function_ref.module_source,
                 &dispatch.function_ref.name,
@@ -7490,6 +7528,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         use crate::tir::TirExprKind;
+
+        // Default-argument parameter substitution: while reifying a default
+        // expression, a free reference to an earlier parameter resolves to the
+        // caller's already-reified argument (kept under the caller's
+        // perspective). `reify_expr` clears this map before descending into a
+        // binder / control form (closure, block, …) — exactly the forms
+        // `Expr::substitute_idents` leaves untouched on the annotate side — so
+        // a reference shadowed by an inner binding is never reached here. See
+        // `reify_pad_args_with_defaults`.
+        if !self.default_arg_overrides.is_empty()
+            && let Some(tir) = self.default_arg_overrides.get(&ident.name)
+        {
+            return tir.clone();
+        }
 
         // Canonicalize `ns::member` to its `ns$member` alias, matching
         // `resolve_ident` at annotate time (expr.rs) so reify consults the

@@ -1,0 +1,50 @@
+// Regression: a binding introduced INSIDE a default expression — a closure
+// parameter, a match / if-let pattern binding, or a labeled-block `let` — that
+// shadows an EARLIER parameter must win inside that form. The earlier
+// parameter's substituted argument must not leak past the shadow.
+//
+// `Expr::substitute_idents` (annotate side) leaves these binder / control
+// forms untouched, so the shadowing binding resolves there; reify must agree.
+// Before the fix, reify's default-argument override map (keyed by parameter
+// name) hijacked the shadowed name inside the form, so the inner binding was
+// ignored in favour of the outer argument. `reify_expr` now suppresses the
+// override map while descending into these forms (`with_defaults_suppressed`).
+
+global OPT: Option<i32> = Option::Some(99);
+
+// closure parameter shadows `x`
+fn via_closure(x: i32, f: fn(i32) -> i32 = |x| x + 1) -> i32 {
+    // Call with a value distinct from `x` so a hijacked body (which would
+    // ignore its parameter) is observable.
+    return f(x * 100);
+}
+
+// match pattern binding shadows `x`
+fn via_match(x: i32, y: i32 = match OPT { Some(x) => x + 1, None => 0 }) -> i32 {
+    return y;
+}
+
+// if-let pattern binding shadows `x`
+fn via_if_let(x: i32, y: i32 = if let Some(x) = OPT { x + 1 } else { 0 }) -> i32 {
+    return y;
+}
+
+// labeled-block `let` shadows `x`
+fn via_labeled_block(x: i32, y: i32 = blk: { let x = 99; break blk: x + 1 }) -> i32 {
+    return y;
+}
+
+export fn run() {
+    // Closure: f defaults to `|x| x + 1`; via_closure(10) = f(1000) = 1001.
+    // A hijacked closure body would ignore its parameter and yield 10 + 1 = 11.
+    assert via_closure(10) == 1001;
+    assert via_closure(10, |x| x * 2) == 2000;
+    // match / if-let / labeled-block: the inner binding is 99, so y = 100.
+    // A hijacked body would read the outer argument 10 and yield 10 + 1 = 11.
+    assert via_match(10) == 100;
+    assert via_if_let(10) == 100;
+    assert via_labeled_block(10) == 100;
+}
+
+__DATA__
+{"stdout": ""}

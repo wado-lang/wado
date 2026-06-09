@@ -3709,9 +3709,6 @@ pub struct TirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// Resolved default expression for trailing parameters with `= expr`.
-    /// Used by the elaborator to synthesize arguments at call sites.
-    pub default_expr: Option<Box<TirExpr>>,
     pub span: Span,
 }
 

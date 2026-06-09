@@ -1,0 +1,23 @@
+// Regression: a cross-module default argument that references an earlier
+// parameter via field access (`ctx: &mut Ctx = &mut Ctx::new(&grammar.rules)`)
+// must reify the substituted caller argument under the caller's
+// perspective. The default is reified under the callee module's
+// perspective so its own items (`Ctx::new`) resolve, but the spliced-in
+// caller argument (`&g`) carries the caller's AstIds. Before the fix,
+// reifying the whole default under the callee perspective mis-typed the
+// caller node and ICE'd in WIR build
+// ("FieldAccess receiver expected Ref WirType, got I32").
+
+use { Grammar, Rule, Ctx, process } from "./sub/default_arg_cross_module_param_ref_lib.wado";
+
+export fn run() {
+    let g = Grammar { rules: [Rule { name: "a" }, Rule { name: "b" }] };
+    // Defaulted `ctx` — the regression path.
+    assert process(&g) == 2;
+    // Explicit `ctx` still works.
+    let mut ctx = Ctx::new(&g.rules);
+    assert process(&g, &mut ctx) == 2;
+}
+
+__DATA__
+{"stdout": ""}

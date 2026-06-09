@@ -1,0 +1,32 @@
+// Regression: trait-method lookup (here, `IntoIterator::into_iter` resolved
+// for a `List<i32>` receiver) walks impl-block signature AST nodes that live
+// in the standard library. Before the fix, those walks recorded use→def
+// edges keyed under the *current* (consumer) module — clobbering a real
+// edge at the same `AstId` and dropping a free function whose call site
+// shared that id. `find_trait_method_for_type` now mirrors the
+// `lookup_method_info` design and suppresses reference recording for the
+// duration of the lookup.
+
+fn helper() -> i32 { return 42; }
+
+pub fn caller() -> i32 { return helper(); }
+
+pub struct P { pub y: i32 }
+impl P {
+    fn sum_excluded(&self, excluded: List<i32>) -> i32 {
+        let mut total = 0;
+        for let x of excluded {
+            total += x;
+        }
+        return total + self.y;
+    }
+}
+
+export fn run() {
+    assert caller() == 42;
+    let p = P { y: 5 };
+    assert p.sum_excluded([1, 2, 3]) == 11;
+}
+
+__DATA__
+{"stdout": ""}

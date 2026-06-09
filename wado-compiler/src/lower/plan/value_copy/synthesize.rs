@@ -181,7 +181,6 @@ fn generate_copy_function(
         local_index: 0,
         is_mut: false,
         span,
-        default_expr: None,
     };
 
     let mut locals = vec![TirLocal {

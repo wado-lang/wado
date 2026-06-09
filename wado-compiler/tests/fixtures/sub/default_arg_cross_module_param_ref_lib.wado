@@ -1,0 +1,21 @@
+// A public function whose trailing default argument references an
+// earlier parameter via a field access (`&grammar.rules`). When called
+// from another module with the default omitted, the default is reified
+// at the call site under the callee's module perspective, while the
+// substituted caller argument must keep the caller's perspective.
+// Regression support for the cross-module default + earlier-param
+// reference path.
+
+pub struct Rule { pub name: String }
+pub struct Grammar { pub rules: List<Rule> }
+pub struct Ctx { pub count: i32 }
+
+impl Ctx {
+    pub fn new(rules: &List<Rule>) -> Ctx {
+        return Ctx { count: rules.len() };
+    }
+}
+
+pub fn process(grammar: &Grammar, ctx: &mut Ctx = &mut Ctx::new(&grammar.rules)) -> i32 {
+    return ctx.count;
+}

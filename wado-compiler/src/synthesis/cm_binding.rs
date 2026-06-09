@@ -1221,7 +1221,6 @@ mod tests {
             type_id,
             local_index: 0,
             is_mut: false,
-            default_expr: None,
             span: crate::token::Span::new(0, 0, 0, 0),
         }
     }

@@ -207,7 +207,7 @@ scan.
 ### `core:cbor`/`core:serde` for the ATN blob codec — NO-GO (2026-06)
 
 **Goal.** Replace the hand-written ATN wire-format codec (`serialize_atn`
-in `atn.wado` + `atn_decode` in `runtime.wado`) with derived
+in `atn.wado` + `atn_decode` in `runtime/atn.wado`) with derived
 `Serialize`/`Deserialize` + `core:cbor` `to_bytes`/`from_bytes`, so the
 field layout is generated from the struct (maximal DRY — no hand codec,
 no shared constants) instead of two hand-kept-in-lockstep functions.
@@ -228,15 +228,15 @@ on every ATN-using parser. `report-wasm-size` is a tracked budget.
 **Other costs.** (1) Decode runs once per `parse()` (per-`Parser`); a
 generic `Deserializer` + base64/byte parse is structurally slower than a
 single linear `array.get i32` walk — the wrong direction for parse speed.
-(2) `runtime.wado` is `#include_str`'d and cannot import, so
-`impl Deserialize for AtnSim` can't live with the struct; codegen would
-have to emit the `core:serde`/`core:cbor` imports + impls into every
-generated parser.
+(2) the runtime is inlined verbatim into every generated parser, so a
+`core:serde`/`core:cbor`-based codec would carry those imports plus the
+derived impls into every ATN-using parser — the size hit measured above —
+where the hand codec stays dependency-free.
 
 **Decision.** Keep the hand-written codec. After the wire-format DRY
 refactor it is one writer (`serialize_atn`) + one reader (`atn_decode`)
 
-- one shared constant set in `runtime.wado` — fast, zero-dependency, and
+- one shared constant set in `runtime/atn.wado` — fast, zero-dependency, and
   round-trip-tested (`atn_test.wado` drives `serialize_atn` → `atn_decode`
   field-for-field). The codec/reader pair is the irreducible minimum;
   serde would trade ~95 LOC for a heavyweight per-parser dependency.

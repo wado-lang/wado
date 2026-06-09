@@ -1,6 +1,14 @@
-use { Token, LexerSlice } from "../runtime.wado";
+use { Token, LexerSlice } from "../runtime/lex.wado";
 use { G4Token } from "./token.wado";
-use { tokenize } from "./lexer.wado";
+use { tokenize_chars } from "./lexer.wado";
+
+/// Test convenience wrapper: collect a `String` into a char buffer and
+/// tokenize it. Production callers use `tokenize_chars` directly to
+/// share the buffer with the parser.
+fn tokenize(input: String) -> List<Token> {
+    let chars: List<char> = input.chars().collect();
+    return tokenize_chars(&chars);
+}
 
 fn assert_token(tok: &Token, expected_kind: G4Token, expected_text: String) {
     assert tok.kind == expected_kind as i32, `expected kind {expected_kind.name()}, got {tok.kind}`;

@@ -1,0 +1,18 @@
+// Regression (issue #1308): a default argument may call a private
+// function of the callee's declaring module. The caller's module cannot
+// see `helper`, but the default `BASE + helper()` resolves in the
+// defining module's scope. Before the fix this errored with
+// `unknown function 'helper'` (only `resolve_ident` consulted the
+// default-scope fallback; `resolve_call` did not).
+
+use { make } from "./sub/default_arg_private_fn_call_lib.wado";
+
+export fn run() {
+    // Default applied — `BASE + helper()` == 42 + 7.
+    assert make() == 49;
+    // Explicit argument still works.
+    assert make(10) == 10;
+}
+
+__DATA__
+{"stdout": ""}

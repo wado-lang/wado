@@ -1032,6 +1032,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     effective_name.to_string(),
                 )
             }
+        }
+        // Fallback: when resolving a default expression, a free-function
+        // call may target a private function of the callee's declaring
+        // module (see `default_scope_module`). `resolve_ident` already
+        // consults this fallback for bare identifiers / function refs;
+        // mirror it here for the *call* case so `helper()` in a default
+        // resolves in the defining module instead of erroring at the use
+        // site. The `CalleeRef`'s module drives `lookup_function_return_type`
+        // / `lookup_function_param_types`, so the signature resolves in the
+        // defining module too.
+        else if let Some(fallback) = self.default_scope_module.clone()
+            && fallback != self.current_module_source
+            && Self::lookup_func_in_loaded_module(
+                self.loaded_modules,
+                &self.tysys.loaded_module_func_indices,
+                &fallback,
+                effective_name,
+            )
+            .is_some()
+        {
+            (
+                Some(CalleeRef::new(fallback, effective_name.to_string())),
+                effective_name.to_string(),
+            )
         } else {
             // Unknown function - will report error
             (None, effective_name.to_string())
@@ -1801,6 +1825,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                 return self.with_module_perspective(
                     src.clone(),
+                    imported_type_sources,
+                    import_original_names,
+                    |s| params.iter().map(|p| s.resolve_type(&p.ty)).collect(),
+                );
+            }
+        }
+
+        // Fallback: a default expression may call a private free function
+        // of its declaring module (see `default_scope_module`). Resolve its
+        // parameter types in that module's perspective, mirroring the
+        // callee-resolution fallback in `resolve_call`.
+        if let Some(fallback) = self.default_scope_module.clone()
+            && fallback != self.current_module_source
+        {
+            let params = Self::lookup_func_in_loaded_module(
+                self.loaded_modules,
+                &self.tysys.loaded_module_func_indices,
+                &fallback,
+                name,
+            )
+            .map(|func| func.params.clone());
+            if let Some(params) = params {
+                let (imported_type_sources, import_original_names) =
+                    if let Some(module) = self.loaded_modules.get(&fallback) {
+                        Self::build_imported_type_sources(
+                            &mut self.interner.borrow_mut(),
+                            module,
+                            &fallback,
+                            Some(&self.entry_module_source),
+                            &self.invocations,
+                        )
+                    } else {
+                        (IndexMap::default(), IndexMap::default())
+                    };
+                return self.with_module_perspective(
+                    fallback,
                     imported_type_sources,
                     import_original_names,
                     |s| params.iter().map(|p| s.resolve_type(&p.ty)).collect(),

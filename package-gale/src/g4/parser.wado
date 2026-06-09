@@ -1,4 +1,4 @@
-use { Span, Token, ParseError } from "../runtime.wado";
+use { Span, Token, ParseError } from "../runtime/lex.wado";
 use {
     Grammar,
     GrammarKind,
@@ -1739,6 +1739,14 @@ pub fn parse(input: String) -> Result<Grammar, ParseError> {
 /// self-contained grammar translation unit. Split-grammar halves that
 /// rely on a sibling translation unit should still go through `parse`
 /// and call `check_references` after `merge_grammars`.
+///
+/// NOTE: currently exercised only by tests. Gale's CLI and Kiln generator
+/// always take the split-grammar path (`parse` + `merge_grammars` +
+/// `check_references`), so this single-call convenience has no production
+/// caller yet; whether Gale exposes a library API is still undecided.
+/// `#[allow(dead_code)]` keeps it as a documented public entry without a
+/// "never used" warning until that decision is made.
+#[allow(dead_code)]
 pub fn parse_checked(input: String) -> Result<Grammar, ParseError> {
     let mut grammar = parse(input)?;
     // Must run before `check_references`. See `ir.wado` for rationale.
