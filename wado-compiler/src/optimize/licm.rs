@@ -4,18 +4,26 @@
 //! It identifies field accesses on variables that don't change within a loop and moves
 //! those accesses before the loop.
 //!
-//! The pass reads and mutates the arena [`Body`] directly. The hoist-candidate
-//! and replacement walks share a `*_child_nodes` enumerator that mirrors the
-//! tree walk's child set exactly (expression and block children, excluding
-//! patterns); `collect_modified_vars` keeps its own walk because it special-
-//! cases assignments, calls, and pattern bindings.
+//! Runs on the worklist rewrite engine (combine migration; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! per-function standalone engine session whose `apply_block` fires once at
+//! the body root and applies LICM to every loop in the function. All
+//! mutations route through the engine edit API (`alloc_expr`, `alloc_stmt`,
+//! `alloc_local`, `clone_expr`, `set_block_stmts`, `replace_expr_kind`) so
+//! the parent map and use index stay coherent.
+//!
+//! The hoist-candidate and replacement walks share a `*_child_nodes`
+//! enumerator that mirrors the tree walk's child set exactly (expression and
+//! block children, excluding patterns); `collect_modified_vars` keeps its own
+//! walk because it special-cases assignments, calls, and pattern bindings.
+
+use std::cell::Cell;
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::nir::{NirFunction, NirLocal, NirUnaryOp};
-use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, ExprNode, PatKind, StmtId, StmtKind, StmtNode,
-};
+use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatKind, StmtId, StmtKind};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -133,37 +141,42 @@ impl ModifiedVars {
 pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::Licm, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
-        licm_function(&mut func, &type_table)
+        if func.body.is_none() {
+            return false;
+        }
+        let rule = LicmRule {
+            type_table: &type_table,
+            applied: Cell::new(false),
+        };
+        let NirFunction { body, locals, .. } = &mut *func;
+        let body = body.as_mut().expect("checked above");
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.run(&[&rule])
     })
 }
 
-/// Apply LICM to a function
-fn licm_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
-    if func.body.is_none() {
-        return false;
+/// Standalone-session rule whose single `apply_block` performs the whole-
+/// function LICM walk at the body root.
+pub(super) struct LicmRule<'a> {
+    type_table: &'a TypeTable,
+    applied: Cell<bool>,
+}
+
+impl Rule for LicmRule<'_> {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        if engine.parent_of(NodeRef::Block(block)).is_some() {
+            return false;
+        }
+        if self.applied.replace(true) {
+            return false;
+        }
+        let root = engine.body.root;
+        let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
+        licm_block(engine, root, self.type_table, &mut outer_aliases)
     }
-    let mut local_count = func.local_count();
-    // The local list is read (original local types) *and* grown (hoist locals,
-    // including second-level ones) during the walk, so thread an owned clone and
-    // write it back once the body borrow ends.
-    let mut locals = func.locals.clone();
-    let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
-    let changed = {
-        let body = func.body.as_mut().unwrap();
-        let root = body.root;
-        licm_block(
-            body,
-            root,
-            &mut local_count,
-            &mut locals,
-            type_table,
-            &mut outer_aliases,
-        )
-    };
-    func.locals = locals;
-    changed
 }
 
 /// Apply LICM to all loops in a block.
@@ -174,17 +187,15 @@ fn licm_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
 /// that a write to one alias inside the loop body invalidates hoist
 /// candidates targeting the other alias.
 fn licm_block(
-    body: &mut Body,
+    engine: &mut Engine,
     block: BlockId,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     outer_aliases: &mut Vec<(u32, u32)>,
 ) -> bool {
     let mut changed = false;
     let mut new_stmts = Vec::new();
 
-    for s in std::mem::take(&mut body.blocks[block].stmts) {
+    for s in std::mem::take(&mut engine.body.blocks[block].stmts) {
         // Classify without holding the borrow across the mutable recursion.
         enum Shape {
             Loop(BlockId),
@@ -193,7 +204,7 @@ fn licm_block(
             Let(u32, ExprId),
             Other,
         }
-        let shape = match &body.stmts[s].kind {
+        let shape = match &engine.body.stmts[s].kind {
             StmtKind::Loop { body: lb } => Shape::Loop(*lb),
             StmtKind::If {
                 then_block,
@@ -210,15 +221,8 @@ fn licm_block(
         match shape {
             Shape::Loop(lb) => {
                 let empty_set = IndexSet::default();
-                let hoist_stmts = licm_loop(
-                    body,
-                    lb,
-                    local_count,
-                    locals,
-                    type_table,
-                    &empty_set,
-                    outer_aliases,
-                );
+                let hoist_stmts =
+                    licm_loop(engine, lb, type_table, &empty_set, outer_aliases);
                 if !hoist_stmts.is_empty() {
                     changed = true;
                 }
@@ -229,20 +233,20 @@ fn licm_block(
                 // Sharing the alias accumulator across sibling branches is safe:
                 // aliasing is monotone-correct (extra aliases only cause
                 // conservative misses, never wrong hoists).
-                changed |= licm_block(body, then_b, local_count, locals, type_table, outer_aliases);
+                changed |= licm_block(engine, then_b, type_table, outer_aliases);
                 if let Some(eb) = else_b {
-                    changed |= licm_block(body, eb, local_count, locals, type_table, outer_aliases);
+                    changed |= licm_block(engine, eb, type_table, outer_aliases);
                 }
                 new_stmts.push(s);
             }
             Shape::Labeled(inner) => {
-                changed |= licm_block(body, inner, local_count, locals, type_table, outer_aliases);
+                changed |= licm_block(engine, inner, type_table, outer_aliases);
                 new_stmts.push(s);
             }
             Shape::Let(local_index, value) => {
                 // Track outer-scope aliases so a subsequent loop's LICM can see them.
-                if let Some(src_idx) = extract_alias_source(body, value)
-                    && is_gc_heap_type(body.exprs[value].type_id, type_table)
+                if let Some(src_idx) = extract_alias_source(engine.body, value)
+                    && is_gc_heap_type(engine.body.exprs[value].type_id, type_table)
                 {
                     outer_aliases.push((local_index, src_idx));
                 }
@@ -254,16 +258,14 @@ fn licm_block(
         }
     }
 
-    body.blocks[block].stmts = new_stmts;
+    engine.set_block_stmts(block, new_stmts);
     changed
 }
 
 /// Apply LICM to a single loop, returning hoisting statement ids to prepend.
 fn licm_loop(
-    body: &mut Body,
+    engine: &mut Engine,
     loop_body: BlockId,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     extra_modified: &IndexSet<u32>,
     outer_aliases: &[(u32, u32)],
@@ -280,17 +282,20 @@ fn licm_loop(
         for &(a, b) in outer_aliases {
             modified_vars.add_alias(a, b);
         }
-        collect_modified_vars_in_block(body, loop_body, &mut modified_vars, type_table);
+        collect_modified_vars_in_block(engine.body, loop_body, &mut modified_vars, type_table);
 
         // Step 2: Collect immutable reference bindings for look-through.
-        let ref_bindings = collect_immutable_ref_bindings(body, loop_body, type_table);
+        let ref_bindings = collect_immutable_ref_bindings(engine.body, loop_body, type_table);
 
-        // Step 3: Find field accesses that can be hoisted.
+        // Step 3: Find field accesses that can be hoisted. `next_local` is a
+        // local placeholder counter that `find_hoist_candidates_in_block`
+        // increments to dedup candidates by (local, field); the actual local
+        // indices are assigned at allocation time in step 4.
         let mut candidates = Vec::new();
         let mut seen = IndexSet::default();
-        let mut next_local = *local_count;
+        let mut next_local = engine.locals().len() as u32;
         find_hoist_candidates_in_block(
-            body,
+            engine.body,
             loop_body,
             &modified_vars,
             &ref_bindings,
@@ -302,6 +307,7 @@ fn licm_loop(
         // Step 3.5: Drop `x.f` candidates where `x` is a reference and that
         // pointee field is written elsewhere in the loop.
         candidates.retain(|c| {
+            let locals = engine.locals();
             let root_ty = if (c.local_index as usize) < locals.len() {
                 locals[c.local_index as usize].type_id
             } else {
@@ -318,11 +324,9 @@ fn licm_loop(
             // `_licm_*` locals it created are visible as loop-invariant
             // operands.
             if hoist_invariant_arith(
-                body,
+                engine,
                 loop_body,
                 &modified_vars,
-                local_count,
-                locals,
                 &mut all_hoist_stmts,
             ) {
                 continue;
@@ -330,83 +334,73 @@ fn licm_loop(
             break;
         }
 
-        // Renumber the surviving hoist locals contiguously from `*local_count`.
-        next_local = *local_count;
+        // Step 4: Create hoisting statements. Each candidate gets its actual
+        // `new_local_index` from `engine.alloc_local` (which also pushes the
+        // `NirLocal` entry), so the surviving hoist locals are contiguous
+        // from the function's current local count.
         for candidate in &mut candidates {
-            candidate.new_local_index = next_local;
-            next_local += 1;
-        }
-
-        // Step 4: Create hoisting statements.
-        for candidate in &candidates {
-            let local_type_id = if (candidate.local_index as usize) < locals.len() {
-                locals[candidate.local_index as usize].type_id
-            } else {
-                candidate.type_id
+            let local_type_id = {
+                let locals = engine.locals();
+                if (candidate.local_index as usize) < locals.len() {
+                    locals[candidate.local_index as usize].type_id
+                } else {
+                    candidate.type_id
+                }
             };
 
-            // Build `local.field` as fresh arena nodes.
-            let local_expr = body.exprs.push(ExprNode {
-                kind: ExprKind::Local {
+            let hoist_name = format!(
+                "_licm_{}_{}",
+                candidate.field_name,
+                engine.locals().len()
+            );
+            let new_local_index = engine.alloc_local(
+                hoist_name.clone(),
+                candidate.type_id,
+                /* is_mut */ false,
+            );
+            candidate.new_local_index = new_local_index;
+
+            // Build `local.field` as fresh arena nodes via the engine.
+            let local_expr = engine.alloc_expr(
+                ExprKind::Local {
                     index: candidate.local_index,
                     name: candidate.local_name.clone(),
                 },
-                type_id: local_type_id,
-                span: Span::new(0, 0, 0, 0),
-            });
-            let field_access_expr = body.exprs.push(ExprNode {
-                kind: ExprKind::FieldAccess {
+                local_type_id,
+                Span::new(0, 0, 0, 0),
+            );
+            let field_access_expr = engine.alloc_expr(
+                ExprKind::FieldAccess {
                     expr: local_expr,
                     field_index: candidate.field_index,
                     field_name: candidate.field_name.clone(),
                 },
-                type_id: candidate.type_id,
-                span: Span::new(0, 0, 0, 0),
-            });
-
-            let hoist_name = format!(
-                "_licm_{}_{}",
-                candidate.field_name, candidate.new_local_index
+                candidate.type_id,
+                Span::new(0, 0, 0, 0),
             );
-            let hoist_stmt = body.stmts.push(StmtNode {
-                kind: StmtKind::Let {
-                    name: hoist_name.clone(),
-                    local_index: candidate.new_local_index,
+            let hoist_stmt = engine.alloc_stmt(
+                StmtKind::Let {
+                    name: hoist_name,
+                    local_index: new_local_index,
                     is_mut: false,
                     is_reactive: false,
                     type_id: candidate.type_id,
                     value: field_access_expr,
                     skip_value_copy: true,
                 },
-                span: Span::new(0, 0, 0, 0),
-            });
+                Span::new(0, 0, 0, 0),
+            );
             all_hoist_stmts.push(hoist_stmt);
-
-            // Add the local entry mirroring the let above.
-            locals.push(NirLocal {
-                name: hoist_name,
-                type_id: candidate.type_id,
-                is_mut: false,
-            });
         }
 
-        *local_count = next_local;
-
         // Step 5: Replace field accesses in the loop body with the hoisted locals.
-        replace_hoisted_in_block(body, loop_body, &candidates, &ref_bindings);
+        replace_hoisted_in_block(engine, loop_body, &candidates, &ref_bindings);
     }
 
     // Nested loops: recurse. The nested `licm_block` accumulates aliases from
     // the outer loop's `let` statements on its own walk.
     let mut nested_aliases: Vec<(u32, u32)> = outer_aliases.to_vec();
-    licm_block(
-        body,
-        loop_body,
-        local_count,
-        locals,
-        type_table,
-        &mut nested_aliases,
-    );
+    licm_block(engine, loop_body, type_table, &mut nested_aliases);
 
     all_hoist_stmts
 }
@@ -1420,15 +1414,13 @@ fn collect_invariant_arith_in_expr(
 /// Returns whether anything was hoisted. The pre-header `let`s are appended
 /// to `all_hoist_stmts` (prepended before the loop by the caller).
 fn hoist_invariant_arith(
-    body: &mut Body,
+    engine: &mut Engine,
     loop_body: BlockId,
     modified: &ModifiedVars,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
     all_hoist_stmts: &mut Vec<StmtId>,
 ) -> bool {
     let mut found = Vec::new();
-    collect_invariant_arith_in_block(body, loop_body, modified, &mut found);
+    collect_invariant_arith_in_block(engine.body, loop_body, modified, &mut found);
     if found.is_empty() {
         return false;
     }
@@ -1437,7 +1429,7 @@ fn hoist_invariant_arith(
     let mut groups: Vec<Vec<ExprId>> = Vec::new();
     'next: for e in found {
         for g in &mut groups {
-            if arith_exprs_equal(body, g[0], e) {
+            if arith_exprs_equal(engine.body, g[0], e) {
                 g.push(e);
                 continue 'next;
             }
@@ -1447,16 +1439,15 @@ fn hoist_invariant_arith(
 
     for occ in groups {
         let rep = occ[0];
-        let type_id = body.exprs[rep].type_id;
-        let new_idx = *local_count;
-        *local_count += 1;
-        let name = format!("_licm_arith_{new_idx}");
+        let type_id = engine.body.exprs[rep].type_id;
+        let name = format!("_licm_arith_{}", engine.locals().len());
+        let new_idx = engine.alloc_local(name.clone(), type_id, /* is_mut */ false);
 
         // Clone the representative into the pre-header `let` *before* rewriting
         // the in-loop occurrences (which include `rep` itself) to a `Local`.
-        let value = body.clone_expr(rep);
-        let let_stmt = body.stmts.push(StmtNode {
-            kind: StmtKind::Let {
+        let value = engine.clone_expr(rep);
+        let let_stmt = engine.alloc_stmt(
+            StmtKind::Let {
                 name: name.clone(),
                 local_index: new_idx,
                 is_mut: false,
@@ -1465,20 +1456,18 @@ fn hoist_invariant_arith(
                 value,
                 skip_value_copy: true,
             },
-            span: Span::new(0, 0, 0, 0),
-        });
+            Span::new(0, 0, 0, 0),
+        );
         all_hoist_stmts.push(let_stmt);
-        locals.push(NirLocal {
-            name: name.clone(),
-            type_id,
-            is_mut: false,
-        });
 
         for o in occ {
-            body.exprs[o].kind = ExprKind::Local {
-                index: new_idx,
-                name: name.clone(),
-            };
+            engine.replace_expr_kind(
+                o,
+                ExprKind::Local {
+                    index: new_idx,
+                    name: name.clone(),
+                },
+            );
         }
     }
 
@@ -1490,32 +1479,32 @@ fn hoist_invariant_arith(
 // ---------------------------------------------------------------------------
 
 fn replace_hoisted_in_block(
-    body: &mut Body,
+    engine: &mut Engine,
     block: BlockId,
     candidates: &[HoistCandidate],
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
 ) {
-    for s in body.blocks[block].stmts.clone() {
-        replace_hoisted_in_stmt(body, s, candidates, ref_bindings);
+    for s in engine.body.blocks[block].stmts.clone() {
+        replace_hoisted_in_stmt(engine, s, candidates, ref_bindings);
     }
 }
 
 fn replace_hoisted_in_stmt(
-    body: &mut Body,
+    engine: &mut Engine,
     s: StmtId,
     candidates: &[HoistCandidate],
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
 ) {
-    for child in stmt_child_nodes(body, s) {
+    for child in stmt_child_nodes(engine.body, s) {
         match child {
-            Child::Expr(e) => replace_hoisted_in_expr(body, e, candidates, ref_bindings),
-            Child::Block(b) => replace_hoisted_in_block(body, b, candidates, ref_bindings),
+            Child::Expr(e) => replace_hoisted_in_expr(engine, e, candidates, ref_bindings),
+            Child::Block(b) => replace_hoisted_in_block(engine, b, candidates, ref_bindings),
         }
     }
 }
 
 fn replace_hoisted_in_expr(
-    body: &mut Body,
+    engine: &mut Engine,
     e: ExprId,
     candidates: &[HoistCandidate],
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
@@ -1525,8 +1514,8 @@ fn replace_hoisted_in_expr(
         expr: inner,
         field_index,
         ..
-    } = &body.exprs[e].kind
-        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+    } = &engine.body.exprs[e].kind
+        && let ExprKind::Local { index, .. } = &engine.body.exprs[*inner].kind
     {
         let index = *index;
         let field_index = *field_index;
@@ -1549,18 +1538,21 @@ fn replace_hoisted_in_expr(
         None
     };
     if let Some((new_local_index, field_name)) = matched {
-        body.exprs[e].kind = ExprKind::Local {
-            index: new_local_index,
-            name: format!("_licm_{field_name}_{new_local_index}"),
-        };
+        engine.replace_expr_kind(
+            e,
+            ExprKind::Local {
+                index: new_local_index,
+                name: format!("_licm_{field_name}_{new_local_index}"),
+            },
+        );
         return;
     }
 
     // Recurse into sub-expressions / sub-blocks.
-    for child in expr_child_nodes(body, e) {
+    for child in expr_child_nodes(engine.body, e) {
         match child {
-            Child::Expr(c) => replace_hoisted_in_expr(body, c, candidates, ref_bindings),
-            Child::Block(b) => replace_hoisted_in_block(body, b, candidates, ref_bindings),
+            Child::Expr(c) => replace_hoisted_in_expr(engine, c, candidates, ref_bindings),
+            Child::Block(b) => replace_hoisted_in_block(engine, b, candidates, ref_bindings),
         }
     }
 }
