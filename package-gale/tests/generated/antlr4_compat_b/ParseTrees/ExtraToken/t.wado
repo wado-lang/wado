@@ -1,6 +1,12 @@
 #![generated(by = "local:src/generator.wado", sources = ["../../grammars/ParseTrees/ExtraToken.g4"])]
 #![generated(by = "gale", sources = ["T.g4"])]
 
+//! Core lexing vocabulary shared by every generated parser and by Gale's
+//! own front end: source spans, lazy token-text slices, tokens, and the
+//! parse-error type. Prelude-only and self-contained so it can be both
+//! imported as a module (by Gale's `token`/`lexer`/`parser`/`ir`) and
+//! `#include_str`'d verbatim into generated parsers.
+
 /// Span represents a byte range in source text.
 pub struct Span {
     pub start: i32,
@@ -145,75 +151,6 @@ impl Token {
 // with reference-containing fields triggers a compiler bug
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
-/// Runtime FOLLOW-continuation gate for tail-greedy loops.
-///
-/// `follow` is the caller's deterministic K-prefix continuation:
-/// `follow[d]` is the set of token kinds that may appear at input depth
-/// `d` if control belongs to the caller rather than to another iteration
-/// of the loop. An empty `follow` (the common, non-repair case) disables
-/// the gate. The loop yields to the caller — breaking `*`/`+` or skipping
-/// `?` — exactly when EVERY non-empty depth-set matches the upcoming
-/// input, i.e. when the next tokens are unambiguously the caller's
-/// continuation.
-///
-/// Threaded as a defaulted `&EMPTY_FOLLOW` argument through the generated
-/// `parse_*` / `scan_*` functions; repair call sites pass a `FOLLOW_MASK_*`
-/// constant (or forward their own `follow`). This replaces the previous
-/// per-(rule, mask) cloned `__follow_<id>` variants: the mask is data
-/// carried at runtime, not code baked into a specialised function.
-///
-/// `eof_kind` is the token kind reported past the end of the stream, so a
-/// caller continuation ending in EOF gates correctly. Used by both the
-/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
-/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
-/// lockstep with parse.
-pub global EMPTY_FOLLOW: List<List<i32>> = [];
-
-/// Prepend a static local prefix to an inherited FOLLOW continuation.
-/// Used for the `FollowArg::Combined` case: a callee at the current
-/// rule's tail whose preceding local suffix is nullable, so its
-/// continuation is `prefix` (the optional local elements' per-depth
-/// first sets) followed by the caller's own `follow`. Bounded by
-/// `FOLLOW_MASK_MAX_K` so the result stays small; the only
-/// allocating point on a repaired path (the common Static/Forward
-/// cases pass a reference directly).
-pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
-    for let depth of prefix {
-        combined.push(*depth);
-    }
-    for let depth of follow {
-        combined.push(*depth);
-    }
-    return combined;
-}
-
-pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
-    if follow.is_empty() {
-        return false;
-    }
-    for let mut d = 0; d < follow.len(); d += 1 {
-        let set = &follow[d];
-        if set.is_empty() {
-            // No constraint at this depth — a vacuous match, keep going.
-            continue;
-        }
-        let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens[idx].kind } else { eof_kind };
-        let mut hit = false;
-        for let t of set {
-            if kind == *t {
-                hit = true;
-                break;
-            }
-        }
-        if !hit {
-            return false;
-        }
-    }
-    return true;
-}
-
 /// ParseError represents a parse failure with location and expected tokens.
 ///
 /// `message` is the local "expected X, got Y" description, kept free of
@@ -278,6 +215,13 @@ impl Display for ParseError {
         }
     }
 }
+//! Generic (untyped) concrete syntax tree, the `Visitor` trait every
+//! generated walker drives, and the `TreeRecorder` that materialises a
+//! `CstNode` tree from a walk (`to_tree`). Always emitted into generated
+//! parsers. Imports its lexing vocabulary from `lex.wado`; that import is
+//! stripped at `#include_str` time (see `gen_runtime` in `codegen.wado`),
+//! where `lex.wado` is concatenated first.
+
 
 /// CstChild is either a terminal token or a non-terminal sub-tree.
 pub variant CstChild {
@@ -317,6 +261,98 @@ fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
     }
     out.push_str(&")");
 }
+
+/// Visitor trait for walking typed CST nodes.
+/// Default methods are no-ops; override to add behavior.
+///
+/// `rule_id` is the parser-rule's index in the grammar's parser_rules array
+/// (0..n in declaration order). It's passed alongside `name` so visitors
+/// that want cheap dispatch (HighlightVisitor's rule stack) can avoid
+/// String compares while visitors that care about the name (TreeRecorder)
+/// can still use it.
+pub trait Visitor {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+    }
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+    }
+    fn visit_token(&mut self, token: &Token) {
+    }
+}
+
+/// TreeRecorder is a Visitor that records events for building a CstNode tree.
+pub struct TreeRecorder {
+    events: List<TreeEvent>,
+}
+
+variant TreeEvent {
+    Enter(TreeEnterInfo),
+    Exit,
+    VisitToken(Token),
+}
+
+struct TreeEnterInfo {
+    name: String,
+    span: Span,
+}
+
+impl TreeRecorder {
+    pub fn new() -> TreeRecorder {
+        return TreeRecorder { events: [] };
+    }
+
+    pub fn build(&self) -> CstNode {
+        let mut pos = 0;
+        return tree_build_node(&self.events, &mut pos);
+    }
+}
+
+impl Visitor for TreeRecorder {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+    }
+
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.events.push(TreeEvent::Exit);
+    }
+
+    fn visit_token(&mut self, token: &Token) {
+        self.events.push(TreeEvent::VisitToken(*token));
+    }
+}
+
+fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
+    if let Enter(info) = events[*pos] {
+        *pos += 1;
+        let mut children: List<CstChild> = [];
+        loop {
+            if *pos >= events.len() {
+                break;
+            }
+            let ev = events[*pos];
+            if let Exit = ev {
+                *pos += 1;
+                break;
+            }
+            if let Enter(_) = ev {
+                children.push(CstChild::Node(tree_build_node(events, pos)));
+            } else if let VisitToken(t) = ev {
+                children.push(CstChild::Token(t));
+                *pos += 1;
+            }
+        }
+        return CstNode { name: info.name, span: info.span, children };
+    }
+    panic("TreeRecorder: expected Enter event");
+    return CstNode { name: "", span: Span::new(0, 0), children: [] };
+}
+//! Consumer-facing tree / token utilities exposed by every generated
+//! parser: S-expression normalisation, child-node lookup, and the
+//! ANTLR4-format token-stream dump used by the compatibility suite. Always
+//! emitted. The generated parser code never calls these itself; consumers
+//! (driver tests, the ANTLR4-compat suite) import them from the generated
+//! module. The
+//! `./lex.wado` / `./cst.wado` imports are stripped at `#include_str` time.
+
 
 /// Normalize a multi-line S-expression string for comparison.
 /// Collapses whitespace runs to single spaces and trims, while preserving
@@ -463,716 +499,6 @@ fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     }
     return [line, col];
 }
-
-/// Highlight override: when inside a specific rule, override the capture for a token kind.
-pub struct HighlightOverride {
-    pub rule_name: String,
-    pub token_kind: i32,
-    pub capture: String,
-}
-
-/// Highlight mapping: defaults by token kind + context-aware overrides.
-///
-/// `rule_names` is the canonical name table used to resolve override
-/// `rule_name`s into integer ids that match what the generated walker
-/// passes to `Visitor::enter_rule`. The generator emits the names in
-/// parser-rule declaration order; index = rule id.
-pub struct HighlightMapping {
-    pub defaults: List<String>,
-    pub rule_names: List<String>,
-    pub overrides: List<HighlightOverride>,
-}
-
-/// A single highlight capture: a named range in the source text.
-pub struct HighlightCapture {
-    pub capture: String,
-    pub start: i32,
-    pub end: i32,
-}
-
-/// Internal override form with the rule resolved to an integer id so the
-/// per-token classify loop avoids a String compare on every iteration.
-struct ResolvedOverride {
-    rule_id: i32,
-    token_kind: i32,
-    capture: String,
-}
-
-/// HighlightVisitor collects highlight captures during a CST walk.
-pub struct HighlightVisitor {
-    defaults: List<String>,
-    overrides: List<ResolvedOverride>,
-    rule_stack: List<i32>,
-    pub captures: List<HighlightCapture>,
-}
-
-impl HighlightVisitor {
-    pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
-        for let ov of &mapping.overrides {
-            let mut id: i32 = -1;
-            for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
-                if mapping.rule_names[i] == ov.rule_name {
-                    id = i;
-                    break;
-                }
-            }
-            // Skip overrides whose rule_name doesn't match any known rule —
-            // they can never fire (no rule_id on the stack is ever < 0) and
-            // would otherwise waste a comparison on every classify() call.
-            if id < 0 {
-                continue;
-            }
-            overrides.push(ResolvedOverride {
-                rule_id: id,
-                token_kind: ov.token_kind,
-                capture: ov.capture,
-            });
-        }
-        return HighlightVisitor {
-            defaults: mapping.defaults,
-            overrides,
-            rule_stack: [],
-            captures: [],
-        };
-    }
-
-    fn classify(&self, kind: i32) -> String {
-        for let ov of &self.overrides {
-            if ov.token_kind == kind {
-                for let rule_id of &self.rule_stack {
-                    if *rule_id == ov.rule_id {
-                        return ov.capture;
-                    }
-                }
-            }
-        }
-        if kind >= 0 && kind < self.defaults.len() {
-            return self.defaults[kind];
-        }
-        return "";
-    }
-}
-
-impl Visitor for HighlightVisitor {
-    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
-        self.rule_stack.push(rule_id);
-    }
-
-    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
-        self.rule_stack.pop();
-    }
-
-    fn visit_token(&mut self, token: &Token) {
-        for let trivia of &token.leading_trivia {
-            let cap = self.classify(trivia.kind);
-            if !cap.is_empty() {
-                self.captures.push(HighlightCapture { capture: cap, start: trivia.span.start, end: trivia.span.end });
-            }
-        }
-        if token.text.is_empty() {
-            return;
-        }
-        let cap = self.classify(token.kind);
-        if !cap.is_empty() {
-            self.captures.push(HighlightCapture { capture: cap, start: token.span.start, end: token.span.end });
-        }
-    }
-}
-
-fn escape_html(out: &mut String, text: &String) {
-    for let c of text.chars() {
-        if c == '&' {
-            out.push_str(&"&amp;");
-        } else if c == '<' {
-            out.push_str(&"&lt;");
-        } else if c == '>' {
-            out.push_str(&"&gt;");
-        } else if c == '"' {
-            out.push_str(&"&quot;");
-        } else {
-            out.push(c);
-        }
-    }
-}
-
-fn escape_html_char(out: &mut String, c: char) {
-    if c == '&' {
-        out.push_str(&"&amp;");
-    } else if c == '<' {
-        out.push_str(&"&lt;");
-    } else if c == '>' {
-        out.push_str(&"&gt;");
-    } else if c == '"' {
-        out.push_str(&"&quot;");
-    } else {
-        out.push(c);
-    }
-}
-
-fn push_class(out: &mut String, capture: &String) {
-    for let c of capture.chars() {
-        if c == '.' {
-            out.push(' ');
-        } else {
-            out.push(c);
-        }
-    }
-}
-
-/// Produce a highlighted HTML fragment from source text and captures.
-/// Captures must be sorted by start position (as produced by HighlightVisitor).
-pub fn highlight_html(source: &String, captures: &List<HighlightCapture>) -> String {
-    let mut out = String::with_capacity(source.len() * 5);
-    let mut pos = 0;
-    let mut iter = source.chars();
-    for let cap of captures {
-        while pos < cap.start {
-            if let Some(c) = iter.next() {
-                escape_html_char(&mut out, c);
-            }
-            pos += 1;
-        }
-        out.push_str(&"<span class=\"");
-        push_class(&mut out, &cap.capture);
-        out.push_str(&"\">");
-        let end = cap.end;
-        while pos < end {
-            if let Some(c) = iter.next() {
-                escape_html_char(&mut out, c);
-            }
-            pos += 1;
-        }
-        out.push_str(&"</span>");
-    }
-    while let Some(c) = iter.next() {
-        escape_html_char(&mut out, c);
-    }
-    return out;
-}
-
-fn substr(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut out = String::with_capacity(end - start);
-    let mut i = start;
-    while i < end && i < chars.len() {
-        out.push(chars[i]);
-        i += 1;
-    }
-    return out;
-}
-
-/// Visitor trait for walking typed CST nodes.
-/// Default methods are no-ops; override to add behavior.
-///
-/// `rule_id` is the parser-rule's index in the grammar's parser_rules array
-/// (0..n in declaration order). It's passed alongside `name` so visitors
-/// that want cheap dispatch (HighlightVisitor's rule stack) can avoid
-/// String compares while visitors that care about the name (TreeRecorder)
-/// can still use it.
-pub trait Visitor {
-    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
-    }
-    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
-    }
-    fn visit_token(&mut self, token: &Token) {
-    }
-}
-
-/// TreeRecorder is a Visitor that records events for building a CstNode tree.
-pub struct TreeRecorder {
-    events: List<TreeEvent>,
-}
-
-variant TreeEvent {
-    Enter(TreeEnterInfo),
-    Exit,
-    VisitToken(Token),
-}
-
-struct TreeEnterInfo {
-    name: String,
-    span: Span,
-}
-
-impl TreeRecorder {
-    pub fn new() -> TreeRecorder {
-        return TreeRecorder { events: [] };
-    }
-
-    pub fn build(&self) -> CstNode {
-        let mut pos = 0;
-        return tree_build_node(&self.events, &mut pos);
-    }
-}
-
-impl Visitor for TreeRecorder {
-    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
-        self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
-    }
-
-    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
-        self.events.push(TreeEvent::Exit);
-    }
-
-    fn visit_token(&mut self, token: &Token) {
-        self.events.push(TreeEvent::VisitToken(*token));
-    }
-}
-
-fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
-    if let Enter(info) = events[*pos] {
-        *pos += 1;
-        let mut children: List<CstChild> = [];
-        loop {
-            if *pos >= events.len() {
-                break;
-            }
-            let ev = events[*pos];
-            if let Exit = ev {
-                *pos += 1;
-                break;
-            }
-            if let Enter(_) = ev {
-                children.push(CstChild::Node(tree_build_node(events, pos)));
-            } else if let VisitToken(t) = ev {
-                children.push(CstChild::Token(t));
-                *pos += 1;
-            }
-        }
-        return CstNode { name: info.name, span: info.span, children };
-    }
-    panic("TreeRecorder: expected Enter event");
-    return CstNode { name: "", span: Span::new(0, 0), children: [] };
-}
-
-
-// ===========================================================================
-// Runtime ATN simulator (hybrid ALL(*)) — full-context SLL prediction.
-//
-// Inlined into every generated parser. Invoked only at the cold decisions
-// that need it (today, non-greedy `??`) — the compiled fast path handles
-// everything else, so this never runs on the hot path.
-//
-// Full context without a per-call-site GIR<->ATN mapping: the caller passes
-// its current *rule-invocation stack* (a list of rule indices, cheaply
-// maintained by the rule-entry wrapper). When a config exhausts a rule it
-// branches into every ATN return-state where the caller rule invokes the
-// callee (rule-context precision). The bottom of a real stack is the start
-// rule, whose follow is EOF — so a config that returns past it accepts only
-// EOF (`ATN_ACCEPT_EOF`), not any token. An empty stack falls back to plain
-// SLL (rule-stop = wildcard follow).
-//
-// Clean-room: follows the published ALL(*) description, not ANTLR4 sources
-// (License hygiene, AGENTS.md). The wire-format constants below are the
-// single source of truth; `atn.wado`'s builder imports them. The blob
-// carries a version word `atn_decode` asserts.
-// ===========================================================================
-
-// ATN wire-format constants — the single source of truth for the serialized
-// blob layout, shared by the builder/serializer in `src/atn.wado` (which
-// `use`s these) and the decoder/simulator below. They live here, not in
-// `atn.wado`, because this runtime is `#include_str`'d verbatim into every
-// generated parser and so cannot import from the compiler crate — whereas
-// the compiler crate is free to `use` the runtime. Bump `ATN_BLOB_VERSION`
-// on any layout change so a stale committed blob fails loudly.
-pub global ATN_BLOB_MAGIC: i32 = 0x47_41_54_4e;
-pub global ATN_BLOB_VERSION: i32 = 1;
-
-// State kinds. `atn_decode` copies every state's kind through verbatim and
-// the simulator only interprets `RULE_STOP` / `BLOCK_START` / `BLOCK_END`,
-// but the builder writes the full enumeration, so the whole set lives here
-// to keep one numbering authority (no split-numbering hazard across files).
-pub global ATN_BASIC: i32 = 1;
-pub global ATN_RULE_START: i32 = 2;
-pub global ATN_RULE_STOP: i32 = 3;
-pub global ATN_BLOCK_START: i32 = 4;
-pub global ATN_BLOCK_END: i32 = 5;
-pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
-pub global ATN_STAR_LOOP_BACK: i32 = 7;
-pub global ATN_PLUS_LOOP_BACK: i32 = 8;
-pub global ATN_LOOP_END: i32 = 9;
-
-// Transition kinds. `label`/`follow`/`prec` carry kind-specific data
-// (see `AtnTransition` in `atn.wado`).
-pub global ATN_TR_EPSILON: i32 = 0;
-pub global ATN_TR_ATOM: i32 = 1;
-pub global ATN_TR_NOT_ATOM: i32 = 2;
-pub global ATN_TR_WILDCARD: i32 = 3;
-pub global ATN_TR_RULE: i32 = 4;
-
-/// Sentinel "state": a config that has returned past the real stack bottom
-/// and is viable only if the next token is EOF (the start rule's follow).
-global ATN_ACCEPT_EOF: i32 = -2;
-
-/// Bounds that keep a pathological closure (deep recursion, config blow-up)
-/// from looping forever. On overflow the predictor bails to the lowest
-/// viable alt — the same conservative answer it gives on a true conflict.
-global ATN_MAX_STACK: i32 = 64;
-global ATN_MAX_CONFIGS: i32 = 6000;
-
-/// The decoded ATN, in struct-of-arrays form. Built once per parser from
-/// the serialized blob and read (never mutated) during prediction.
-pub struct AtnSim {
-    pub state_kind: List<i32>,
-    pub state_rule: List<i32>,
-    pub state_decision: List<i32>,
-    pub state_tr_start: List<i32>,
-    pub state_tr_count: List<i32>,
-    pub tr_kind: List<i32>,
-    pub tr_src: List<i32>,
-    pub tr_target: List<i32>,
-    pub tr_label: List<i32>,
-    pub tr_follow: List<i32>,
-    pub tr_prec: List<i32>,
-    pub decision_state: List<i32>,
-    pub rule_start: List<i32>,
-    pub rule_stop: List<i32>,
-    pub num_tokens: i32,
-}
-
-/// One ATN configuration. `stack` is the precise return-state stack for
-/// rules entered *during* this prediction; `rs` indexes the caller's
-/// pre-existing rule-invocation stack (the next outer frame to return into,
-/// or -1 once exhausted / for SLL).
-struct AtnConfig {
-    state: i32,
-    alt: i32,
-    stack: List<i32>,
-    rs: i32,
-}
-
-/// Decode the serialized ATN blob into `AtnSim`. Mirrors the layout of
-/// `atn.wado::serialize_atn`.
-pub fn atn_decode(data: &List<i32>) -> AtnSim {
-    let mut p = 0;
-    let magic = data[p]; p += 1;
-    let version = data[p]; p += 1;
-    assert magic == ATN_BLOB_MAGIC, `ATN blob magic mismatch: {magic}`;
-    assert version == ATN_BLOB_VERSION, `ATN blob version mismatch: {version}`;
-    let num_tokens = data[p]; p += 1;
-
-    let nrules = data[p]; p += 1;
-    let mut rule_start: List<i32> = [];
-    for let mut i = 0; i < nrules; i += 1 {
-        rule_start.push(data[p]); p += 1;
-    }
-    let mut rule_stop: List<i32> = [];
-    for let mut i = 0; i < nrules; i += 1 {
-        rule_stop.push(data[p]); p += 1;
-    }
-    let ndec = data[p]; p += 1;
-    let mut decision_state: List<i32> = [];
-    for let mut i = 0; i < ndec; i += 1 {
-        decision_state.push(data[p]); p += 1;
-    }
-
-    let nstates = data[p]; p += 1;
-    let mut state_kind: List<i32> = [];
-    let mut state_rule: List<i32> = [];
-    let mut state_decision: List<i32> = [];
-    let mut state_tr_start: List<i32> = [];
-    let mut state_tr_count: List<i32> = [];
-    let mut tr_kind: List<i32> = [];
-    let mut tr_src: List<i32> = [];
-    let mut tr_target: List<i32> = [];
-    let mut tr_label: List<i32> = [];
-    let mut tr_follow: List<i32> = [];
-    let mut tr_prec: List<i32> = [];
-    for let mut i = 0; i < nstates; i += 1 {
-        let kind = data[p]; p += 1;
-        let rule = data[p]; p += 1;
-        let decision = data[p]; p += 1;
-        let ntrans = data[p]; p += 1;
-        state_kind.push(kind);
-        state_rule.push(rule);
-        state_decision.push(decision);
-        state_tr_start.push(tr_kind.len());
-        state_tr_count.push(ntrans);
-        for let mut j = 0; j < ntrans; j += 1 {
-            tr_kind.push(data[p]); p += 1;
-            tr_src.push(i);
-            tr_target.push(data[p]); p += 1;
-            tr_label.push(data[p]); p += 1;
-            tr_follow.push(data[p]); p += 1;
-            tr_prec.push(data[p]); p += 1;
-        }
-    }
-    return AtnSim {
-        state_kind, state_rule, state_decision, state_tr_start, state_tr_count,
-        tr_kind, tr_src, tr_target, tr_label, tr_follow, tr_prec,
-        decision_state, rule_start, rule_stop, num_tokens,
-    };
-}
-
-/// Return states at which `caller` rule invokes `callee` rule. Used to
-/// continue a config into its real caller on rule exit (cold path; a linear
-/// transition scan is fine).
-fn atn_call_return_states(sim: &AtnSim, caller: i32, callee: i32) -> List<i32> {
-    let mut out: List<i32> = [];
-    for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
-        if sim.tr_kind[j] == ATN_TR_RULE && sim.tr_label[j] == callee && sim.state_rule[sim.tr_src[j]] == caller {
-            out.push(sim.tr_follow[j]);
-        }
-    }
-    return out;
-}
-
-/// True when `state`'s outgoing edges consume a token (atom / wildcard /
-/// not-atom). Such a state is a resting point: closure stops there and
-/// `atn_move` reads the edge. Epsilon / rule states are expanded instead.
-fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
-    let cnt = sim.state_tr_count[state];
-    if cnt == 0 {
-        return false;
-    }
-    let k = sim.tr_kind[sim.state_tr_start[state]];
-    return k == ATN_TR_ATOM || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
-}
-
-/// Expand a seed set to its closure: resting configs (consuming states;
-/// rule-stop "at-end"; and `ATN_ACCEPT_EOF`). Follows epsilon edges and
-/// rule invocations (precise `stack`), pops rule-stops against `stack`,
-/// and on a fully-exhausted rule branches into the caller via `rstk` (the
-/// pre-existing rule-invocation stack). Dedups to break cycles.
-fn atn_closure(sim: &AtnSim, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<AtnConfig> {
-    let mut result: List<AtnConfig> = [];
-    let mut work: List<AtnConfig> = *seeds;
-    let mut seen: List<AtnConfig> = [];
-    while let Some(c) = work.pop() {
-        if seen.len() > ATN_MAX_CONFIGS {
-            break;
-        }
-        if seen.contains(&c) {
-            continue;
-        }
-        seen.push(c);
-
-        if c.state == ATN_ACCEPT_EOF {
-            result.push(c);
-            continue;
-        }
-
-        if sim.state_kind[c.state] == ATN_RULE_STOP {
-            if !c.stack.is_empty() {
-                let mut ns = c.stack;
-                let ret = ns.pop().unwrap();
-                work.push(AtnConfig { state: ret, alt: c.alt, stack: ns, rs: c.rs });
-            } else if c.rs > 0 {
-                let callee = rstk[c.rs];
-                let caller = rstk[c.rs - 1];
-                let sites = atn_call_return_states(sim, caller, callee);
-                if sites.is_empty() {
-                    result.push(c);
-                } else {
-                    for let st of &sites {
-                        work.push(AtnConfig { state: *st, alt: c.alt, stack: [], rs: c.rs - 1 });
-                    }
-                }
-            } else if rstk.is_empty() {
-                // SLL: caller unknown, rule-stop matches any follow.
-                result.push(c);
-            } else {
-                // Real stack exhausted to the start rule: follow is EOF.
-                result.push(AtnConfig { state: ATN_ACCEPT_EOF, alt: c.alt, stack: [], rs: -1 });
-            }
-            continue;
-        }
-
-        if atn_state_consumes(sim, c.state) {
-            result.push(c);
-            continue;
-        }
-
-        let start = sim.state_tr_start[c.state];
-        let cnt = sim.state_tr_count[c.state];
-        for let mut j = 0; j < cnt; j += 1 {
-            let k = sim.tr_kind[start + j];
-            let target = sim.tr_target[start + j];
-            if k == ATN_TR_EPSILON {
-                work.push(AtnConfig { state: target, alt: c.alt, stack: c.stack, rs: c.rs });
-            } else if k == ATN_TR_RULE {
-                if c.stack.len() >= ATN_MAX_STACK || target < 0 {
-                    continue;
-                }
-                let mut ns = c.stack;
-                ns.push(sim.tr_follow[start + j]);
-                work.push(AtnConfig { state: target, alt: c.alt, stack: ns, rs: c.rs });
-            }
-        }
-    }
-    return result;
-}
-
-/// Advance a resting config set by one input token. At-end and accept-EOF
-/// configs carry only when still viable; consuming configs follow whichever
-/// edge matches `token`.
-fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> List<AtnConfig> {
-    let mut out: List<AtnConfig> = [];
-    for let c of configs {
-        if c.state == ATN_ACCEPT_EOF {
-            if token == eof {
-                out.push(*c);
-            }
-            continue;
-        }
-        if sim.state_kind[c.state] == ATN_RULE_STOP {
-            out.push(*c);
-            continue;
-        }
-        let start = sim.state_tr_start[c.state];
-        let cnt = sim.state_tr_count[c.state];
-        for let mut j = 0; j < cnt; j += 1 {
-            let k = sim.tr_kind[start + j];
-            let label = sim.tr_label[start + j];
-            let matched = if k == ATN_TR_ATOM {
-                label == token;
-            } else if k == ATN_TR_WILDCARD {
-                token != eof;
-            } else if k == ATN_TR_NOT_ATOM {
-                token != label && token != eof;
-            } else {
-                false;
-            };
-            if matched {
-                out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, stack: c.stack, rs: c.rs });
-            }
-        }
-    }
-    return out;
-}
-
-fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
-    let mut alts: List<i32> = [];
-    for let c of configs {
-        if !alts.contains(&c.alt) {
-            alts.push(c.alt);
-        }
-    }
-    alts.sort();
-    return alts;
-}
-
-fn atn_min_alt(alts: &List<i32>) -> i32 {
-    if alts.is_empty() {
-        return -1;
-    }
-    let mut m = alts[0];
-    for let a of alts {
-        if *a < m {
-            m = *a;
-        }
-    }
-    return m;
-}
-
-fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
-    if configs.is_empty() {
-        return false;
-    }
-    for let c of configs {
-        if c.state != ATN_ACCEPT_EOF && sim.state_kind[c.state] != ATN_RULE_STOP {
-            return false;
-        }
-    }
-    return true;
-}
-
-/// Predict the winning alternative at `decision` against `tokens` from
-/// `start_pos`, with full context: `rule_stack` is the caller's current
-/// rule-invocation chain (rule indices, outermost first, the decision's own
-/// rule last). Pass an empty `rule_stack` for plain SLL. Returns the 0-based
-/// alternative index (the decision state's edge order), or -1 if no
-/// alternative is viable.
-///
-/// Resolution: simulate until one alt survives (return it), the config set
-/// empties (return the previous step's lowest alt), or all survivors are
-/// at-end together (a genuine conflict — return the lowest alt, matching
-/// ANTLR4's rule-order tie-break; non-greedy repeats order their exit edge
-/// first so this yields the exit).
-pub fn atn_predict_with_stack(sim: &AtnSim, decision: i32, rule_stack: &List<i32>, tokens: &List<Token>, start_pos: i32, eof: i32) -> i32 {
-    let dstate = sim.decision_state[decision];
-    let start = sim.state_tr_start[dstate];
-    let cnt = sim.state_tr_count[dstate];
-    let rs_init = rule_stack.len() - 1;
-    let mut seeds: List<AtnConfig> = [];
-    for let mut j = 0; j < cnt; j += 1 {
-        seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, stack: [], rs: rs_init });
-    }
-    let mut configs = atn_closure(sim, &seeds, rule_stack);
-    let mut pos = start_pos;
-    let mut prev = atn_unique_alts(&configs);
-    let limit = tokens.len() - start_pos + 8;
-    let mut guard = 0;
-    loop {
-        guard += 1;
-        if guard > limit {
-            return atn_min_alt(&prev);
-        }
-        let alts = atn_unique_alts(&configs);
-        if alts.is_empty() {
-            return atn_min_alt(&prev);
-        }
-        if alts.len() == 1 {
-            return alts[0];
-        }
-        if atn_all_at_end(sim, &configs) {
-            return atn_min_alt(&alts);
-        }
-        prev = alts;
-        let token = if pos < tokens.len() { tokens[pos].kind } else { eof };
-        let moved = atn_move(sim, &configs, token, eof);
-        pos += 1;
-        configs = atn_closure(sim, &moved, rule_stack);
-    }
-}
-
-/// SLL convenience wrapper: predict with an empty rule stack. Correct for
-/// top-level decisions; deeper decisions whose disambiguation depends on the
-/// caller's follow need `atn_predict_with_stack` with the real rule stack.
-pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &List<Token>, start_pos: i32, eof: i32) -> i32 {
-    let empty: List<i32> = [];
-    return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
-}
-
-/// Decide whether a non-greedy optional (`(...)?? `) should ENTER (consume
-/// its body) or SKIP, using full-context ATN prediction. The current rule
-/// is the top of `rule_stack` (maintained by the rule-entry wrapper); the
-/// decision is that rule's unique exit-first BlockStart (an optional whose
-/// edge 0 goes straight to BlockEnd — the non-greedy ordering). Returns
-/// true to ENTER.
-///
-/// Falls back to ENTER (the prior greedy behaviour) when context is absent
-/// or the decision can't be uniquely identified (0 or >1 candidates), so a
-/// mapping miss degrades gracefully instead of mispredicting.
-pub fn atn_ng_optional_enter(sim: &AtnSim, rule_stack: &List<i32>, tokens: &List<Token>, pos: i32, eof: i32) -> bool {
-    if rule_stack.is_empty() {
-        return true;
-    }
-    let rule = rule_stack[rule_stack.len() - 1];
-    let mut dec = -1;
-    let mut found = 0;
-    for let mut d = 0; d < sim.decision_state.len(); d += 1 {
-        let ds = sim.decision_state[d];
-        if sim.state_kind[ds] != ATN_BLOCK_START || sim.state_rule[ds] != rule {
-            continue;
-        }
-        if sim.state_tr_count[ds] < 1 {
-            continue;
-        }
-        let first_target = sim.tr_target[sim.state_tr_start[ds]];
-        if sim.state_kind[first_target] == ATN_BLOCK_END {
-            dec = d;
-            found += 1;
-        }
-    }
-    if found != 1 {
-        return true;
-    }
-    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof);
-    // Non-greedy optional edges are ordered [exit=0, enter=1].
-    return alt == 1;
-}
-
 pub enum TokenKind {
     Z,
     Eof,
