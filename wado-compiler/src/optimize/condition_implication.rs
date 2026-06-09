@@ -339,7 +339,12 @@ enum StmtShape {
     None,
 }
 
-fn process_loop(engine: &mut Engine, loop_body: BlockId, defs: &mut DefMap, tainted: &Taints) -> bool {
+fn process_loop(
+    engine: &mut Engine,
+    loop_body: BlockId,
+    defs: &mut DefMap,
+    tainted: &Taints,
+) -> bool {
     // First, record defs inside the loop body (for copies like `let index = i`)
     // and recurse into nested structures
     let mut changed = false;

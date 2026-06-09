@@ -511,7 +511,9 @@ fn apply_in_node(
         NodeRef::Block(b) => apply_in_block(engine, b, substitutions, dead_locals),
         NodeRef::Stmt(s) => {
             let mut kids = Vec::new();
-            engine.body.for_each_child(NodeRef::Stmt(s), |c| kids.push(c));
+            engine
+                .body
+                .for_each_child(NodeRef::Stmt(s), |c| kids.push(c));
             for c in kids {
                 apply_in_node(engine, c, substitutions, dead_locals);
             }
@@ -563,7 +565,9 @@ fn apply_in_expr(
     }
 
     let mut kids = Vec::new();
-    engine.body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+    engine
+        .body
+        .for_each_child(NodeRef::Expr(id), |c| kids.push(c));
     for c in kids {
         apply_in_node(engine, c, substitutions, dead_locals);
     }
@@ -580,11 +584,7 @@ fn emit_ref(
     inner_type_id: TypeId,
 ) {
     let span = engine.body.exprs[id].span;
-    let inner = engine.alloc_expr(
-        ExprKind::Local { index, name },
-        inner_type_id,
-        span,
-    );
+    let inner = engine.alloc_expr(ExprKind::Local { index, name }, inner_type_id, span);
     engine.replace_expr_kind(id, ExprKind::Unary { op, expr: inner });
 }
 
@@ -598,8 +598,7 @@ fn propagate_at_root(
 ) -> bool {
     let mut ever_changed = false;
     loop {
-        let analysis =
-            analyze_function_body(engine.body, type_table, first_param_types);
+        let analysis = analyze_function_body(engine.body, type_table, first_param_types);
         if analysis.bindings.is_empty() {
             break;
         }

@@ -100,11 +100,7 @@ impl Rule for TmplHoistRule<'_> {
     }
 }
 
-fn hoist_in_block(
-    engine: &mut Engine,
-    block: BlockId,
-    type_table: &RefCell<TypeTable>,
-) -> bool {
+fn hoist_in_block(engine: &mut Engine, block: BlockId, type_table: &RefCell<TypeTable>) -> bool {
     let mut changed = false;
     let mut new_stmts: Vec<StmtId> = Vec::new();
 
@@ -1265,8 +1261,11 @@ fn transform_fmts_in_tmpl_block(
         // fallback when no `Let` is found, so matching names mainly
         // improves fallback / debug output consistency.
         let hoisted_name = format!("__fmt_buf_{}", engine.locals().len());
-        let fmt_local_index =
-            engine.alloc_local(hoisted_name.clone(), candidate.formatter_type, /* is_mut */ true);
+        let fmt_local_index = engine.alloc_local(
+            hoisted_name.clone(),
+            candidate.formatter_type,
+            /* is_mut */ true,
+        );
 
         // Find the next candidate that shares the same fmt_local_index
         let rename_end = sorted_candidates[pos + 1..]

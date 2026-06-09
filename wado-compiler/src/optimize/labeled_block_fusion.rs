@@ -144,9 +144,7 @@ fn node_yields_value(engine: &Engine, node: NodeRef) -> bool {
             StmtKind::Let { .. }
             | StmtKind::LetDestructure { .. }
             | StmtKind::Return { value: Some(_) }
-            | StmtKind::Break {
-                value: Some(_), ..
-            } => true,
+            | StmtKind::Break { value: Some(_), .. } => true,
             StmtKind::Expr(_) => node_yields_value(engine, NodeRef::Stmt(ps)),
             // For a block under a stmt-form `If` (a branch), mirror the
             // standalone driver's Shape::If propagation: the branch yields iff
@@ -1161,9 +1159,8 @@ fn transform_lb_stmt(
             let ExprKind::VariantConstruct { payload, .. } = &engine.body.exprs[v].kind else {
                 unreachable!()
             };
-            let payload_expr = payload.unwrap_or_else(|| {
-                engine.alloc_expr(ExprKind::Unit, payload_type, span)
-            });
+            let payload_expr =
+                payload.unwrap_or_else(|| engine.alloc_expr(ExprKind::Unit, payload_type, span));
 
             // Emit: let __payload = payload_expr;
             let let_stmt = engine.alloc_stmt(
@@ -1851,4 +1848,3 @@ fn expr_has_free_unlabeled_loop_exit(body: &Body, e: ExprId, loop_depth: u32) ->
         _ => false,
     }
 }
-

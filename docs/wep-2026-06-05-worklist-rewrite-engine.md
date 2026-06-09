@@ -141,17 +141,32 @@ pass is removed — the old and new paths co-exist during migration.
 - [x] Per-function dirty-set gate over the existing loop (Phase 6).
 - [x] Reduce per-session allocation (`EngineBuffers` pooling; `Engine::new`
       allocations cut, byte-identical).
-- [ ] Migrate the position-flexible structural rules into the shared session:
-      `ref_elim`, `elide_box_local`, `labeled_block_fusion`, `container_sroa`,
-      `sroa`, `value_copy_elide` / `value_copy_demote`, `tmpl_hoist`.
-- [ ] Add the engine-maintained value-numbering / reaching-def side-table;
-      migrate `copy_prop`, `store_load_forward`, `condition_implication`, and
-      the flow-sensitive half of `const_folding` into rules over it.
+- [x] Migrate the position-flexible structural rules to the engine:
+      `ref_elim`, `elide_box_local`, `value_copy_elide`,
+      `labeled_block_fusion` (all four fold into the shared post-inline
+      peephole session); `sroa`, `container_sroa` (per-function standalone
+      engine sessions whose `apply_block` fires once at the body root). The
+      driver of every migrated pass routes its mutations through the engine
+      edit API so the parent map and use index stay coherent — preparation
+      for the interprocedural worklist below.
+- [x] Migrate the flow-sensitive intra-procedural passes onto per-function
+      standalone engine sessions: `store_load_forward`, `copy_prop`, `cse`,
+      `licm`, `condition_implication`, `tmpl_hoist`. Each one fires once at
+      the body root and runs its whole-function analysis + rewrite in one
+      shot, with mutations through the engine edit API. The value-numbering
+      / reaching-def side-table is still pending — these rules carry their
+      own dataflow walkers in the meantime.
+- [ ] Add the engine-maintained value-numbering / reaching-def side-table so
+      `copy_prop` / `store_load_forward` / `condition_implication` / the
+      flow-sensitive half of `const_folding` (which still has its own driver
+      and calls into the `niri` CTFE interpreter for in-place mutations)
+      consult it instead of reconstructing their own per-function dataflow.
 - [ ] CSE / GVN over the same numbering (or Layer 2, only if measured
       necessary).
 - [ ] Replace the global fixed-point loop with the interprocedural call-graph
-      worklist driving `inline` / `dae` / `drve` / `sroa_param` plus targeted
-      re-combine; remove `OptConfig::iterations`.
+      worklist driving `inline` / `dae` / `drve` / `sroa_param` /
+      `value_copy_demote` (the surviving interprocedural passes) plus
+      targeted re-combine; remove `OptConfig::iterations`.
 - [ ] Keep terminal / once-only stages explicit pre- or post-combine, not loop
       members: `match_to_switch`, `select_lowering`, `multi_value_return`,
       `field_scalarize`, `const_object_globalization`, and `dce`.

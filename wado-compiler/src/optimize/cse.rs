@@ -220,8 +220,11 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
             // Create a new local for the CSE'd expression via the engine, so
             // the `locals` list grows coherently with the body.
             let cse_local_name_seed = format!("__cse_{}", engine.locals().len());
-            let cse_local_idx =
-                engine.alloc_local(cse_local_name_seed.clone(), *type_id, /* is_mut */ false);
+            let cse_local_idx = engine.alloc_local(
+                cse_local_name_seed.clone(),
+                *type_id,
+                /* is_mut */ false,
+            );
             let cse_local_name = cse_local_name_seed;
 
             // Clone the matching expression out of the guard for the Let value.
@@ -251,14 +254,7 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
                 *type_id,
             );
             for stmt in &remaining_stmts {
-                replace_matching_stmt(
-                    engine,
-                    *stmt,
-                    key,
-                    cse_local_idx,
-                    &cse_local_name,
-                    *type_id,
-                );
+                replace_matching_stmt(engine, *stmt, key, cse_local_idx, &cse_local_name, *type_id);
             }
 
             // Insert the Let at the beginning of the loop body. The

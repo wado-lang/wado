@@ -423,8 +423,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     // Also track which `ListMethodKind`s were observed on each whitelisted use,
     // so step 3 can demand only the monomorphizations that will actually be
     // emitted per field (rather than unconditionally requiring all four kinds).
-    let (safe_indices, used_kinds_map) =
-        compute_safe_set(engine.body, &candidates, rule.sig_kinds);
+    let (safe_indices, used_kinds_map) = compute_safe_set(engine.body, &candidates, rule.sig_kinds);
     if safe_indices.is_empty() {
         return false;
     }
@@ -1538,8 +1537,7 @@ impl Rewriter<'_, '_> {
                 .cloned()
                 .expect("Query monomorphization must exist for decomposed element type");
             let span = engine.body.exprs[e].span;
-            let new_receiver =
-                build_receiver(engine, field_local, field_name, arr_ty, false, span);
+            let new_receiver = build_receiver(engine, field_local, field_name, arr_ty, false, span);
             engine.replace_expr_kind(
                 e,
                 ExprKind::MethodCall {

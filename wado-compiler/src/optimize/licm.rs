@@ -221,8 +221,7 @@ fn licm_block(
         match shape {
             Shape::Loop(lb) => {
                 let empty_set = IndexSet::default();
-                let hoist_stmts =
-                    licm_loop(engine, lb, type_table, &empty_set, outer_aliases);
+                let hoist_stmts = licm_loop(engine, lb, type_table, &empty_set, outer_aliases);
                 if !hoist_stmts.is_empty() {
                     changed = true;
                 }
@@ -323,12 +322,7 @@ fn licm_loop(
             // every iteration). Runs here, after field-hoisting, so the
             // `_licm_*` locals it created are visible as loop-invariant
             // operands.
-            if hoist_invariant_arith(
-                engine,
-                loop_body,
-                &modified_vars,
-                &mut all_hoist_stmts,
-            ) {
+            if hoist_invariant_arith(engine, loop_body, &modified_vars, &mut all_hoist_stmts) {
                 continue;
             }
             break;
@@ -348,11 +342,7 @@ fn licm_loop(
                 }
             };
 
-            let hoist_name = format!(
-                "_licm_{}_{}",
-                candidate.field_name,
-                engine.locals().len()
-            );
+            let hoist_name = format!("_licm_{}_{}", candidate.field_name, engine.locals().len());
             let new_local_index = engine.alloc_local(
                 hoist_name.clone(),
                 candidate.type_id,

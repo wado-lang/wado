@@ -205,10 +205,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
             let new_name = format!("__sroa_{}_{}", candidate.local_name, field_name);
             let new_index = engine.alloc_local(new_name.clone(), *field_type, candidate.is_mut);
             field_local_map.insert((candidate.local_index, i as u32), new_index);
-            field_info_map.insert(
-                (candidate.local_index, i as u32),
-                (new_name, *field_type),
-            );
+            field_info_map.insert((candidate.local_index, i as u32), (new_name, *field_type));
         }
     }
 
@@ -915,7 +912,9 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
     }
 
     let mut kids = Vec::new();
-    engine.body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+    engine
+        .body
+        .for_each_child(NodeRef::Expr(id), |c| kids.push(c));
     for c in kids {
         rewrite_node(engine, c, ctx);
     }
