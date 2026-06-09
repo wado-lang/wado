@@ -696,10 +696,18 @@ test "u128 alternate hex format" {
     assert `{a:#x}` == "0xff";
 }
 
-test "i128 hex format negative" {
-    // abs(i64::MIN) = 2^63 = 0x8000_0000_0000_0000
-    let a: i128 = -9223372036854775808;
-    assert `{a:x}` == "-8000000000000000";
+test "i128 base formats print the two's complement bits" {
+    // Negative values format as their 128-bit two's complement pattern,
+    // matching Rust's {:x}/{:b}/{:o} semantics.
+    let a: i128 = -9223372036854775808;  // i64::MIN as i128
+    assert `{a:x}` == "ffffffffffffffff8000000000000000";
+    let neg_one: i128 = -1;
+    assert `{neg_one:x}` == "ffffffffffffffffffffffffffffffff";
+    let min = i128::from_pair(0, i64::MIN);
+    assert `{min:x}` == "80000000000000000000000000000000";
+    assert `{min:o}` == "2000000000000000000000000000000000000000000";
+    let neg42: i128 = -42;
+    assert `{neg42:X}` == "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD6";
 }
 
 test "i128 binary format" {

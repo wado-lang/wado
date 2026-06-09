@@ -66,6 +66,7 @@ Where `spec` follows Rust's format specification mini-language.
 
 - No `g`/`G` format specifiers. Users must explicitly choose between default `{}` and exponential `{:e}/{:E}`.
 - No `p` (Pointer) format specifier. Wado does not have pointer types.
+- Negative signed integers format as the two's complement bit pattern of the value's own width under `b`/`o`/`x`/`X` (e.g. `{-1 as i32:x}` → `"ffffffff"`), matching Rust.
 
 ### Format Parameters
 
