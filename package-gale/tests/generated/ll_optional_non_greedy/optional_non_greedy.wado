@@ -704,7 +704,8 @@ global CTX_EMPTY: i32 = 0;
 /// maps a canonical edge-set key to its id; `merge_cache` memoizes `merge`.
 struct CtxArena {
     edges: List<List<[i32, i32, i32]>>,
-    intern: TreeMap<String, i32>,
+    // Hash -> candidate node ids (collision buckets; edges compared on lookup).
+    intern: TreeMap<i64, List<i32>>,
     merge_cache: TreeMap<i64, i32>,
 }
 
@@ -727,32 +728,41 @@ impl CtxArena {
         let empty: List<[i32, i32, i32]> = [];
         return CtxArena {
             edges: [empty],
-            intern: TreeMap::<String, i32>::new(),
+            intern: TreeMap::<i64, List<i32>>::new(),
             merge_cache: TreeMap::<i64, i32>::new(),
         };
     }
 
-    /// Canonical key for a sorted edge set (sort done by the caller).
-    fn key_of(edges: &List<[i32, i32, i32]>) -> String {
-        let mut s = String::with_capacity(edges.len() * 8);
+    /// FNV-style hash of a sorted edge set (the interning key).
+    fn hash_of(edges: &List<[i32, i32, i32]>) -> i64 {
+        let mut h: i64 = 1469598103934665603;
         for let e of edges {
-            s.push_str(&`{e.0},{e.1},{e.2};`);
+            h = (h ^ (e.0 as i64 + 1)) * 1099511628211;
+            h = (h ^ (e.1 as i64 + 1)) * 1099511628211;
+            h = (h ^ (e.2 as i64 + 1)) * 1099511628211;
         }
-        return s;
+        return h & 4611686018427387903;
     }
 
     /// Intern a (already sorted, deduped) edge set, returning its node id.
+    /// Collisions on the i64 hash are resolved by comparing edge lists.
     fn intern_edges(&mut self, sorted: &List<[i32, i32, i32]>) -> i32 {
         if sorted.is_empty() {
             return CTX_EMPTY;
         }
-        let k = CtxArena::key_of(sorted);
-        if let Some(id) = self.intern.get(k) {
-            return id;
+        let h = CtxArena::hash_of(sorted);
+        if let Some(cands) = self.intern.get(h) {
+            for let id of &cands {
+                if edge_lists_eq(&self.edges[*id], sorted) {
+                    return *id;
+                }
+            }
         }
         let id = self.edges.len();
         self.edges.push(*sorted);
-        self.intern[k] = id;
+        let mut cands = if let Some(c) = self.intern.get(h) { c } else { [] as List<i32> };
+        cands.push(id);
+        self.intern[h] = cands;
         return id;
     }
 
@@ -840,6 +850,21 @@ fn ctx_edge_gt(a: &[i32, i32, i32], b: &[i32, i32, i32]) -> bool {
     if a.0 != b.0 { return a.0 > b.0; }
     if a.1 != b.1 { return a.1 > b.1; }
     return a.2 > b.2;
+}
+
+/// Structural equality of two (sorted) edge lists, for interning-collision
+/// disambiguation.
+#[allow(dead_code)]
+fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for let mut i = 0; i < a.len(); i += 1 {
+        if a[i].0 != b[i].0 || a[i].1 != b[i].1 || a[i].2 != b[i].2 {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// Decode the serialized ATN blob into `AtnSim`. Mirrors the layout of
@@ -1190,6 +1215,10 @@ pub fn atn_predict_with_stack(sim: &AtnSim, decision: i32, rule_stack: &List<i32
     let start = sim.state_tr_start[dstate];
     let cnt = sim.state_tr_count[dstate];
     let rs_init = rule_stack.len() - 1;
+    // Fresh context arena per prediction. (A persistent per-Parser arena was
+    // measured to hurt: it accumulates every prediction's contexts, growing
+    // the intern buckets; and full-context LR results are not memoizable
+    // since the context encodes the whole nesting depth — see git history.)
     let mut arena = CtxArena::new();
     let mut seeds: List<AtnConfig> = [];
     for let mut j = 0; j < cnt; j += 1 {
