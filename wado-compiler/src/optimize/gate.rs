@@ -68,11 +68,10 @@ pub enum GatedPass {
     StoreLoadForward,
     TmplHoist,
     ContainerSroa,
-    LabeledBlockFusion,
 }
 
 impl GatedPass {
-    const COUNT: usize = 11;
+    const COUNT: usize = 10;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.
@@ -254,7 +253,6 @@ mod tests {
             GatedPass::StoreLoadForward,
             GatedPass::TmplHoist,
             GatedPass::ContainerSroa,
-            GatedPass::LabeledBlockFusion,
         ];
         for p in all {
             match p {
@@ -267,8 +265,7 @@ mod tests {
                 | GatedPass::ConditionImplication
                 | GatedPass::StoreLoadForward
                 | GatedPass::TmplHoist
-                | GatedPass::ContainerSroa
-                | GatedPass::LabeledBlockFusion => {}
+                | GatedPass::ContainerSroa => {}
             }
         }
         assert_eq!(all.len(), GatedPass::COUNT);

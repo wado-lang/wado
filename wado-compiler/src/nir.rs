@@ -149,7 +149,7 @@ pub enum NirBinaryOp {
     RefNotEq,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NirUnaryOp {
     Neg,
     Not,

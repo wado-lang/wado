@@ -32,9 +32,12 @@
 //! (where `ValueCopyElideRule` runs in the same session, so `string_push` sees
 //! the value-copy-stripped receiver via the shared worklist; `value_copy_demote`
 //! then runs after) and after `inline` (so `array_literal` sees the exposed
-//! `array_new + push` window). `array_literal` no-ops in the first run and
-//! `string_push` no-ops in the second; both bail immediately on a non-matching
-//! node, so the wasted dispatch is negligible.
+//! `array_new + push` window, `RefElimRule` cleans up the ref bindings
+//! inlining exposes, `ElideBoxLocalRule` collapses the `Box<T>` shells, and
+//! `LabeledBlockFusionRule` folds inlined `Option`/`Result` allocations into
+//! the consumer's `if-let`/`match` site). `array_literal` no-ops in the first
+//! run and `string_push` no-ops in the second; both bail immediately on a
+//! non-matching node, so the wasted dispatch is negligible.
 
 use cranelift_entity::EntityRef;
 
@@ -48,6 +51,7 @@ use super::const_folding::{ConstFoldRule, build_callee_map};
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
+use super::labeled_block_fusion::build_labeled_block_fusion;
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
@@ -120,13 +124,20 @@ pub(super) fn run_peephole(
                     .map(|b| build_elide_box_local(b, &func.address_taken_locals, &stores_aliased))
             })
             .flatten();
+        // Labeled-block fusion runs post-inline only: the `let temp = LB { ...;
+        // break L: Some(v); }; if VariantTest(temp, …)` shape it folds is what
+        // `inline` exposes when an `Option`/`Result`-returning helper is copied
+        // into an if-let caller. The rule allocates fresh `__fused_payload_N`
+        // locals via the engine, so it sits next to the other block-level
+        // rules.
+        let labeled_block_fusion_rule = (!pre_inline).then(build_labeled_block_fusion);
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
         let NirFunction { body, locals, .. } = &mut *func;
         let Some(body) = body.as_mut() else {
             return false;
         };
-        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(9);
+        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(10);
         if pre_inline {
             rules.push(&match_rule);
         }
@@ -138,6 +149,9 @@ pub(super) fn run_peephole(
         }
         if let Some(elide_box_rule) = elide_box_rule.as_ref() {
             rules.push(elide_box_rule);
+        }
+        if let Some(labeled_block_fusion_rule) = labeled_block_fusion_rule.as_ref() {
+            rules.push(labeled_block_fusion_rule);
         }
         rules.extend([
             &array_rule as &dyn Rule,

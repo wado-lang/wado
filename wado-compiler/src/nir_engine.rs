@@ -92,6 +92,11 @@ pub struct Engine<'a> {
     /// pass a scratch `Vec`; those bodies have no locals and their rules never
     /// allocate, so it stays empty.
     locals: &'a mut Vec<NirLocal>,
+    /// Lazy per-session `ValueGraph` cache. `None` until the first
+    /// [`Engine::value`] / [`Engine::value_kind`] call; cleared by
+    /// [`Engine::invalidate_value_graph`]. See [`crate::nir_value_graph`]
+    /// for the data model.
+    value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
 }
 
 impl<'a> Engine<'a> {
@@ -106,11 +111,81 @@ impl<'a> Engine<'a> {
         locals: &'a mut Vec<NirLocal>,
     ) -> Self {
         buf.reset_for(body);
-        let mut engine = Self { body, buf, locals };
+        let mut engine = Self {
+            body,
+            buf,
+            locals,
+            value_graph: None,
+        };
         engine.build_parents();
         engine.build_uses();
         engine.seed_post_order();
         engine
+    }
+
+    /// Return the [`ValueId`] of `expr` if the per-function `ValueGraph`
+    /// assigned one. Returns `None` for impure / allocation-bearing /
+    /// control-flow expressions and for any `ExprId` allocated after the
+    /// cache was built. Built lazily on first call.
+    ///
+    /// # Invalidation contract
+    ///
+    /// Edits via `replace_expr_kind` / `set_block_stmts` / `alloc_*` do
+    /// **not** invalidate this cache — it keeps returning the VNs from
+    /// build time. Snapshot any VN results before editing, or call
+    /// [`Engine::invalidate_value_graph`] to force a rebuild. See
+    /// `optimize/cse.rs` and `optimize/store_load_forward.rs`.
+    pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
+        self.ensure_value_graph();
+        self.value_graph.as_ref()?.value_of.get(&expr).copied()
+    }
+
+    /// Read-only view of a value's kind. The returned reference borrows the
+    /// engine's value-graph cache; callers that need to hold the kind across
+    /// further `engine` calls should clone it.
+    pub fn value_kind(
+        &mut self,
+        id: crate::nir_value_graph::ValueId,
+    ) -> &crate::nir_value_graph::ValueKind {
+        self.ensure_value_graph();
+        self.value_graph.as_ref().unwrap().pool.kind(id)
+    }
+
+    /// First `ExprId` observed producing the given literal `ValueId`. Returns
+    /// `None` if `id` is not a literal kind (or no expression produced it).
+    /// Lets a rewrite reuse the original literal `ExprKind` — including its
+    /// source `repr` — when substituting a literal at a use site.
+    pub fn literal_source(&mut self, id: crate::nir_value_graph::ValueId) -> Option<ExprId> {
+        self.ensure_value_graph();
+        self.value_graph.as_ref()?.literal_source.get(&id).copied()
+    }
+
+    /// Drop the cached `ValueGraph` so the next [`Engine::value`] call
+    /// rebuilds. Used by rules that intend to query the value graph again
+    /// after a structural rewrite that would invalidate the prior build.
+    pub fn invalidate_value_graph(&mut self) {
+        self.value_graph = None;
+    }
+
+    fn ensure_value_graph(&mut self) {
+        if self.value_graph.is_some() {
+            return;
+        }
+        // Pass `&[]` for params: the builder's `read_local` fallback caches
+        // an `Opaque` on first read, which is observationally identical to
+        // up-front seeding as long as the engine never needs non-`Opaque`
+        // parameter values. Wire `params` through `Engine::new` if that
+        // changes.
+        let build = crate::nir_value_graph::builder::build(&*self.body, &[]);
+        self.value_graph = Some(build);
+    }
+
+    /// Read-only view of the owning function's local list. Some rules
+    /// (`labeled_block_fusion`) need to inspect existing locals' declared types
+    /// (e.g. to confirm a pattern's payload binding slot matches the
+    /// constructed payload's type).
+    pub fn locals(&self) -> &[NirLocal] {
+        self.locals
     }
 
     /// Allocate a fresh function local, returning its index. `locals.len()` is
@@ -448,7 +523,13 @@ impl<'a> Engine<'a> {
         self.alloc_expr(kind, node.type_id, node.span)
     }
 
-    fn clone_block(&mut self, id: BlockId) -> BlockId {
+    /// Deep-copy the block subtree rooted at `id` into fresh arena nodes,
+    /// returning the new root. Recurses through every nested stmt / expr / pat
+    /// via the engine's `alloc_*` and `clone_*` paths, so the new subtree is
+    /// fully registered in the parent map and use index. Needed for rewrites
+    /// like `labeled_block_fusion` that splice cloned THEN/ELSE branches at
+    /// each break site of an LB.
+    pub fn clone_block(&mut self, id: BlockId) -> BlockId {
         let node = self.body.blocks[id].clone();
         let stmts = node.stmts.iter().map(|s| self.clone_stmt(*s)).collect();
         self.alloc_block(stmts, node.span)

@@ -34,17 +34,23 @@
 //! the result must be bound to a Let variable that is only used as a method
 //! receiver (`self`), never passed as a regular function argument.
 //!
-//! The pass reads and mutates the arena [`Body`] directly. New nodes (the
-//! hoisted `Let`, the field-reset `Assign`, the normalized Formatter literal)
-//! are pushed straight into the arena; the analysis and rename walks navigate
-//! by id.
+//! Runs on the worklist rewrite engine (combine migration; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! per-function standalone engine session whose `apply_block` fires once at
+//! the body root and walks every loop in the function, applying the template-
+//! string buffer hoist per loop. All mutations route through the engine edit
+//! API (`alloc_expr`, `alloc_stmt`, `alloc_local`, `set_block_stmts`,
+//! `replace_expr_kind`) so the parent map and use index stay coherent.
+
+use std::cell::{Cell, RefCell};
 
 use crate::compiler_item::SeqField;
 use crate::hashmap::IndexSet;
-use crate::nir::{NirFunction, NirLocal, NirUnaryOp};
+use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    ArenaStructField, BlockId, Body, ExprId, ExprKind, ExprNode, StmtId, StmtKind, StmtNode,
+    ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind,
 };
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
@@ -57,40 +63,50 @@ use cranelift_entity::EntityRef;
 pub fn hoist_template_buffers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.clone();
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::TmplHoist, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
-        hoist_in_function(&mut func, &type_table)
+        if func.body.is_none() {
+            return false;
+        }
+        let rule = TmplHoistRule {
+            type_table: &type_table,
+            applied: Cell::new(false),
+        };
+        let NirFunction { body, locals, .. } = &mut *func;
+        let body = body.as_mut().expect("checked above");
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.run(&[&rule])
     })
 }
 
-fn hoist_in_function(func: &mut NirFunction, type_table: &std::cell::RefCell<TypeTable>) -> bool {
-    if func.body.is_none() {
-        return false;
-    }
-    let mut local_count = func.local_count();
-    // New locals are append-only, so collect them separately and extend the
-    // function's list once the body borrow ends (the body borrows `func` too).
-    let mut new_locals: Vec<NirLocal> = Vec::new();
-    let body = func.body.as_mut().unwrap();
-    let root = body.root;
-    let changed = hoist_in_block(body, root, &mut local_count, &mut new_locals, type_table);
-    func.locals.extend(new_locals);
-    changed
+/// Standalone-session rule whose single `apply_block` performs the whole-
+/// function template-buffer hoist at the body root.
+pub(super) struct TmplHoistRule<'a> {
+    type_table: &'a RefCell<TypeTable>,
+    applied: Cell<bool>,
 }
 
-fn hoist_in_block(
-    body: &mut Body,
-    block: BlockId,
-    local_count: &mut u32,
-    new_locals: &mut Vec<NirLocal>,
-    type_table: &std::cell::RefCell<TypeTable>,
-) -> bool {
+impl Rule for TmplHoistRule<'_> {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        if engine.parent_of(NodeRef::Block(block)).is_some() {
+            return false;
+        }
+        if self.applied.replace(true) {
+            return false;
+        }
+        let root = engine.body.root;
+        hoist_in_block(engine, root, self.type_table)
+    }
+}
+
+fn hoist_in_block(engine: &mut Engine, block: BlockId, type_table: &RefCell<TypeTable>) -> bool {
     let mut changed = false;
     let mut new_stmts: Vec<StmtId> = Vec::new();
 
-    for s in body.blocks[block].stmts.clone() {
+    for s in engine.body.blocks[block].stmts.clone() {
         // Classify without holding the borrow across the mutable recursion.
-        let (loop_b, if_blocks, lab_b) = match &body.stmts[s].kind {
+        let (loop_b, if_blocks, lab_b) = match &engine.body.stmts[s].kind {
             StmtKind::Loop { body } => (Some(*body), None, None),
             StmtKind::If {
                 then_block,
@@ -103,29 +119,29 @@ fn hoist_in_block(
 
         if let Some(lb) = loop_b {
             // Recurse into loop body first (for nested loops).
-            changed |= hoist_in_block(body, lb, local_count, new_locals, type_table);
+            changed |= hoist_in_block(engine, lb, type_table);
             // Try to hoist template buffers out of this loop.
-            let hoist_stmts = hoist_tmpl_from_loop(body, lb, local_count, new_locals, type_table);
+            let hoist_stmts = hoist_tmpl_from_loop(engine, lb, type_table);
             if !hoist_stmts.is_empty() {
                 changed = true;
                 new_stmts.extend(hoist_stmts);
             }
             new_stmts.push(s);
         } else if let Some((tb, eb)) = if_blocks {
-            changed |= hoist_in_block(body, tb, local_count, new_locals, type_table);
+            changed |= hoist_in_block(engine, tb, type_table);
             if let Some(eb) = eb {
-                changed |= hoist_in_block(body, eb, local_count, new_locals, type_table);
+                changed |= hoist_in_block(engine, eb, type_table);
             }
             new_stmts.push(s);
         } else if let Some(inner) = lab_b {
-            changed |= hoist_in_block(body, inner, local_count, new_locals, type_table);
+            changed |= hoist_in_block(engine, inner, type_table);
             new_stmts.push(s);
         } else {
             new_stmts.push(s);
         }
     }
 
-    body.blocks[block].stmts = new_stmts;
+    engine.set_block_stmts(block, new_stmts);
     changed
 }
 
@@ -163,25 +179,21 @@ struct FmtCandidate {
 /// Scan a loop body for `__tmpl` labeled blocks and hoist their buffer allocations.
 /// Returns hoisting statements to prepend before the loop.
 fn hoist_tmpl_from_loop(
-    body: &mut Body,
+    engine: &mut Engine,
     loop_body: BlockId,
-    local_count: &mut u32,
-    new_locals: &mut Vec<NirLocal>,
-    type_table: &std::cell::RefCell<TypeTable>,
+    type_table: &RefCell<TypeTable>,
 ) -> Vec<StmtId> {
     // Phase 1: Collect all Let bindings whose value is a __tmpl LabeledBlock,
     // and check if the bound variable escapes (used as a non-self argument).
-    let escaping_locals = collect_escaping_locals(body, loop_body);
+    let escaping_locals = collect_escaping_locals(engine.body, loop_body);
 
     // Phase 2: Transform safe __tmpl blocks
     let mut hoist_stmts = Vec::new();
     transform_stmts_in_block(
-        body,
+        engine,
         loop_body,
         &escaping_locals,
         &mut hoist_stmts,
-        local_count,
-        new_locals,
         type_table,
     );
     hoist_stmts
@@ -464,82 +476,56 @@ fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
 
 /// Recursively transform statements, looking for Let bindings with __tmpl blocks.
 fn transform_stmts_in_block(
-    body: &mut Body,
+    engine: &mut Engine,
     block: BlockId,
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<StmtId>,
-    local_count: &mut u32,
-    new_locals: &mut Vec<NirLocal>,
-    type_table: &std::cell::RefCell<TypeTable>,
+    type_table: &RefCell<TypeTable>,
 ) {
-    for s in body.blocks[block].stmts.clone() {
-        transform_stmt(
-            body,
-            s,
-            escaping_locals,
-            hoist_stmts,
-            local_count,
-            new_locals,
-            type_table,
-        );
+    for s in engine.body.blocks[block].stmts.clone() {
+        transform_stmt(engine, s, escaping_locals, hoist_stmts, type_table);
     }
 }
 
 fn transform_stmt(
-    body: &mut Body,
+    engine: &mut Engine,
     s: StmtId,
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<StmtId>,
-    local_count: &mut u32,
-    new_locals: &mut Vec<NirLocal>,
-    type_table: &std::cell::RefCell<TypeTable>,
+    type_table: &RefCell<TypeTable>,
 ) {
     // `let x = __tmpl: { ... }` — the only statement shape that can hoist.
     let let_info = if let StmtKind::Let {
         local_index, value, ..
-    } = &body.stmts[s].kind
+    } = &engine.body.stmts[s].kind
     {
         Some((*local_index, *value))
     } else {
         None
     };
     if let Some((local_index, value)) = let_info {
-        let tmpl_block = match &body.exprs[value].kind {
+        let tmpl_block = match &engine.body.exprs[value].kind {
             ExprKind::LabeledBlock { label, block, .. } if label == "__tmpl" => Some(*block),
             _ => None,
         };
         if let Some(tb) = tmpl_block
             && !escaping_locals.contains(&local_index)
-            && let Some(candidate) = extract_tmpl_candidate(body, tb)
+            && let Some(candidate) = extract_tmpl_candidate(engine.body, tb)
         {
-            transform_tmpl_block(
-                body,
-                tb,
-                &candidate,
-                hoist_stmts,
-                local_count,
-                new_locals,
-                type_table,
-            );
+            transform_tmpl_block(engine, tb, &candidate, hoist_stmts, type_table);
             // The hoisted String is reused; skip deep copy so `s` aliases `__tmpl_buf`.
+            // This is a non-id field on `Let` and does not affect the engine's
+            // parent map / use index, so the in-place write is safe.
             if let StmtKind::Let {
                 skip_value_copy, ..
-            } = &mut body.stmts[s].kind
+            } = &mut engine.body.stmts[s].kind
             {
                 *skip_value_copy = true;
             }
             return;
         }
         // Recurse into the value expression
-        transform_expr(
-            body,
-            value,
-            escaping_locals,
-            hoist_stmts,
-            local_count,
-            new_locals,
-            type_table,
-        );
+        transform_expr(engine, value, escaping_locals, hoist_stmts, type_table);
         return;
     }
 
@@ -551,7 +537,7 @@ fn transform_stmt(
         Break(ExprId),
         None,
     }
-    let shape = match &body.stmts[s].kind {
+    let shape = match &engine.body.stmts[s].kind {
         StmtKind::Expr(e) => Shape::Expr(*e),
         StmtKind::If {
             condition,
@@ -564,67 +550,29 @@ fn transform_stmt(
         _ => Shape::None,
     };
     match shape {
-        Shape::Expr(e) | Shape::Break(e) => transform_expr(
-            body,
-            e,
-            escaping_locals,
-            hoist_stmts,
-            local_count,
-            new_locals,
-            type_table,
-        ),
+        Shape::Expr(e) | Shape::Break(e) => {
+            transform_expr(engine, e, escaping_locals, hoist_stmts, type_table);
+        }
         Shape::If(cond, tb, eb) => {
-            transform_expr(
-                body,
-                cond,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                new_locals,
-                type_table,
-            );
-            transform_stmts_in_block(
-                body,
-                tb,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                new_locals,
-                type_table,
-            );
+            transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table);
+            transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table);
             if let Some(eb) = eb {
-                transform_stmts_in_block(
-                    body,
-                    eb,
-                    escaping_locals,
-                    hoist_stmts,
-                    local_count,
-                    new_locals,
-                    type_table,
-                );
+                transform_stmts_in_block(engine, eb, escaping_locals, hoist_stmts, type_table);
             }
         }
-        Shape::Labeled(b) => transform_stmts_in_block(
-            body,
-            b,
-            escaping_locals,
-            hoist_stmts,
-            local_count,
-            new_locals,
-            type_table,
-        ),
+        Shape::Labeled(b) => {
+            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table);
+        }
         Shape::None => {}
     }
 }
 
 fn transform_expr(
-    body: &mut Body,
+    engine: &mut Engine,
     e: ExprId,
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<StmtId>,
-    local_count: &mut u32,
-    new_locals: &mut Vec<NirLocal>,
-    type_table: &std::cell::RefCell<TypeTable>,
+    type_table: &RefCell<TypeTable>,
 ) {
     // Mirror the original's restricted arm set: __tmpl in non-Let contexts is
     // not hoisted, so only these shapes recurse.
@@ -634,7 +582,7 @@ fn transform_expr(
         Block(BlockId),
         None,
     }
-    let walk = match &body.exprs[e].kind {
+    let walk = match &engine.body.exprs[e].kind {
         ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr).collect()),
         ExprKind::MethodCall { receiver, args, .. } => {
             let mut v = vec![*receiver];
@@ -657,57 +605,19 @@ fn transform_expr(
     match walk {
         Walk::Exprs(v) => {
             for id in v {
-                transform_expr(
-                    body,
-                    id,
-                    escaping_locals,
-                    hoist_stmts,
-                    local_count,
-                    new_locals,
-                    type_table,
-                );
+                transform_expr(engine, id, escaping_locals, hoist_stmts, type_table);
             }
         }
         Walk::CondBlocks(cond, tb, eb) => {
-            transform_expr(
-                body,
-                cond,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                new_locals,
-                type_table,
-            );
-            transform_stmts_in_block(
-                body,
-                tb,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                new_locals,
-                type_table,
-            );
+            transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table);
+            transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table);
             if let Some(eb) = eb {
-                transform_stmts_in_block(
-                    body,
-                    eb,
-                    escaping_locals,
-                    hoist_stmts,
-                    local_count,
-                    new_locals,
-                    type_table,
-                );
+                transform_stmts_in_block(engine, eb, escaping_locals, hoist_stmts, type_table);
             }
         }
-        Walk::Block(b) => transform_stmts_in_block(
-            body,
-            b,
-            escaping_locals,
-            hoist_stmts,
-            local_count,
-            new_locals,
-            type_table,
-        ),
+        Walk::Block(b) => {
+            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table);
+        }
         Walk::None => {}
     }
 }
@@ -825,10 +735,10 @@ struct FmtFields {
 ///      `let __f = label: { let buf = &mut __tmpl_buf; break: Formatter { ..., buf } }`
 ///      or `__local_N = label: { ... break: Formatter { ... } }`
 fn extract_fmt_candidates(
-    body: &mut Body,
+    engine: &mut Engine,
     block: BlockId,
     hoisted_buf_index: u32,
-    type_table: &std::cell::RefCell<TypeTable>,
+    type_table: &RefCell<TypeTable>,
 ) -> Vec<FmtCandidate> {
     // Phase A (read): decide candidacy without mutating the arena.
     struct Raw {
@@ -840,7 +750,7 @@ fn extract_fmt_candidates(
     let mut raws: Vec<Raw> = Vec::new();
     {
         let type_table = type_table.borrow();
-        let stmts = body.blocks[block].stmts.clone();
+        let stmts = engine.body.blocks[block].stmts.clone();
         let len = stmts.len();
         for (i, s) in stmts.iter().enumerate() {
             if i == 0 || i == len - 1 {
@@ -848,12 +758,12 @@ fn extract_fmt_candidates(
             }
 
             // Try to extract (local_index, value_expr_id) from the statement.
-            let (fmt_local_index, value_expr): (u32, ExprId) = match &body.stmts[*s].kind {
+            let (fmt_local_index, value_expr): (u32, ExprId) = match &engine.body.stmts[*s].kind {
                 StmtKind::Expr(expr) => {
-                    let ExprKind::Assign { target, value } = &body.exprs[*expr].kind else {
+                    let ExprKind::Assign { target, value } = &engine.body.exprs[*expr].kind else {
                         continue;
                     };
-                    let ExprKind::Local { index, .. } = &body.exprs[*target].kind else {
+                    let ExprKind::Local { index, .. } = &engine.body.exprs[*target].kind else {
                         continue;
                     };
                     (*index, *value)
@@ -864,7 +774,8 @@ fn extract_fmt_candidates(
                 _ => continue,
             };
 
-            let Some(ff) = extract_formatter_fields(body, value_expr, hoisted_buf_index) else {
+            let Some(ff) = extract_formatter_fields(engine.body, value_expr, hoisted_buf_index)
+            else {
                 continue;
             };
 
@@ -885,7 +796,7 @@ fn extract_fmt_candidates(
                 if name == "buf" {
                     return true;
                 }
-                is_constant_expr(body, *value)
+                is_constant_expr(engine.body, *value)
             });
             if !all_const {
                 continue;
@@ -916,27 +827,27 @@ fn extract_fmt_candidates(
         for (name, field_index, value) in &raw.ff.fields {
             let new_value = if name == "buf" {
                 // Normalize buf to &mut __tmpl_buf
-                let buf_ty = body.exprs[*value].type_id;
-                let local = body.exprs.push(ExprNode {
-                    kind: ExprKind::Local {
+                let buf_ty = engine.body.exprs[*value].type_id;
+                let local = engine.alloc_expr(
+                    ExprKind::Local {
                         index: hoisted_buf_index,
                         name: format!("__tmpl_buf_{hoisted_buf_index}"),
                     },
-                    type_id: buf_ty,
-                    span: value_span,
-                });
-                body.exprs.push(ExprNode {
-                    kind: ExprKind::Unary {
+                    buf_ty,
+                    value_span,
+                );
+                engine.alloc_expr(
+                    ExprKind::Unary {
                         op: NirUnaryOp::MutRef,
                         expr: local,
                     },
-                    type_id: buf_ty,
-                    span: value_span,
-                })
+                    buf_ty,
+                    value_span,
+                )
             } else {
                 // A verified constant leaf — a shallow node copy is a full copy.
-                let node = body.exprs[*value].clone();
-                body.exprs.push(node)
+                let node = engine.body.exprs[*value].clone();
+                engine.alloc_expr(node.kind, node.type_id, node.span)
             };
             init_fields.push(ArenaStructField {
                 name: name.clone(),
@@ -944,15 +855,15 @@ fn extract_fmt_candidates(
                 field_index: *field_index,
             });
         }
-        let init_value = body.exprs.push(ExprNode {
-            kind: ExprKind::StructLiteral {
+        let init_value = engine.alloc_expr(
+            ExprKind::StructLiteral {
                 struct_type,
                 struct_name: raw.ff.struct_name.clone(),
                 fields: init_fields,
             },
-            type_id: value_type_id,
-            span: value_span,
-        });
+            value_type_id,
+            value_span,
+        );
         candidates.push(FmtCandidate {
             stmt_index: raw.stmt_index,
             fmt_local_index: raw.fmt_local_index,
@@ -1198,31 +1109,24 @@ fn array_new_has_capacity(body: &Body, e: ExprId) -> bool {
 /// renamed to `__tmpl_buf`. The outer Let binding gets `skip_value_copy = true`
 /// so the bound variable aliases the hoisted String directly.
 fn transform_tmpl_block(
-    body: &mut Body,
+    engine: &mut Engine,
     block: BlockId,
     candidate: &TmplCandidate,
     hoist_stmts: &mut Vec<StmtId>,
-    local_count: &mut u32,
-    new_locals: &mut Vec<NirLocal>,
-    type_table: &std::cell::RefCell<TypeTable>,
+    type_table: &RefCell<TypeTable>,
 ) {
     let span = candidate.span;
     let string_type = candidate.string_type;
 
-    // Allocate a new local for the hoisted String
-    let buf_local_index = *local_count;
-    *local_count += 1;
-    let buf_local_name = format!("__tmpl_buf_{buf_local_index}");
-    new_locals.push(NirLocal {
-        name: buf_local_name.clone(),
-        type_id: string_type,
-        is_mut: true,
-    });
+    // Allocate a new local for the hoisted String via the engine.
+    let buf_local_name = format!("__tmpl_buf_{}", engine.locals().len());
+    let buf_local_index =
+        engine.alloc_local(buf_local_name.clone(), string_type, /* is_mut */ true);
 
     // Hoist statement: let mut __tmpl_buf_N = String { repr: array_new(N), used: 0 };
     // Reuse the original init-value subtree (its old `Let` is replaced below).
-    let hoist_let = body.stmts.push(StmtNode {
-        kind: StmtKind::Let {
+    let hoist_let = engine.alloc_stmt(
+        StmtKind::Let {
             name: buf_local_name.clone(),
             local_index: buf_local_index,
             is_mut: true,
@@ -1232,13 +1136,13 @@ fn transform_tmpl_block(
             skip_value_copy: false,
         },
         span,
-    });
+    );
     hoist_stmts.push(hoist_let);
 
     // Replace the first statement (let mut __r = String { ... }) with a field reset:
     // __tmpl_buf_N.used = 0;
     let reset_stmt = build_field_reset(
-        body,
+        engine,
         buf_local_index,
         &buf_local_name,
         string_type,
@@ -1246,35 +1150,30 @@ fn transform_tmpl_block(
         SeqField::Len.field_name(),
         span,
     );
-    body.blocks[block].stmts[0] = reset_stmt;
+    let mut new_stmts = engine.body.blocks[block].stmts.clone();
+    new_stmts[0] = reset_stmt;
+    engine.set_block_stmts(block, new_stmts);
 
     // Rename all references from __r (old local index) to __tmpl_buf_N (new local index)
     let old_index = candidate.buf_local_index;
-    for s in body.blocks[block].stmts.clone() {
-        rename_local_in_stmt(body, s, old_index, buf_local_index, &buf_local_name);
+    for s in engine.body.blocks[block].stmts.clone() {
+        rename_local_in_stmt(engine, s, old_index, buf_local_index, &buf_local_name);
     }
 
     // Phase 2: Hoist Formatter struct literals as well.
     // After the String rename above, the block may contain one or more Formatter
     // creations (direct struct literals or inlined Formatter::new LabeledBlocks).
     // Each distinct Formatter is hoisted to its own local before the loop.
-    let fmt_candidates = extract_fmt_candidates(body, block, buf_local_index, type_table);
+    let fmt_candidates = extract_fmt_candidates(engine, block, buf_local_index, type_table);
     if !fmt_candidates.is_empty() {
-        transform_fmts_in_tmpl_block(
-            body,
-            block,
-            &fmt_candidates,
-            hoist_stmts,
-            local_count,
-            new_locals,
-        );
+        transform_fmts_in_tmpl_block(engine, block, &fmt_candidates, hoist_stmts);
     }
 }
 
 /// Build a `target_local.<field> = 0` statement (an `Expr(Assign)` over a
 /// `FieldAccess`), returning its arena id.
 fn build_field_reset(
-    body: &mut Body,
+    engine: &mut Engine,
     local_index: u32,
     local_name: &str,
     local_type: TypeId,
@@ -1282,43 +1181,40 @@ fn build_field_reset(
     field_name: &str,
     span: Span,
 ) -> StmtId {
-    let local = body.exprs.push(ExprNode {
-        kind: ExprKind::Local {
+    let local = engine.alloc_expr(
+        ExprKind::Local {
             index: local_index,
             name: local_name.to_string(),
         },
-        type_id: local_type,
+        local_type,
         span,
-    });
-    let field = body.exprs.push(ExprNode {
-        kind: ExprKind::FieldAccess {
+    );
+    let field = engine.alloc_expr(
+        ExprKind::FieldAccess {
             expr: local,
             field_index,
             field_name: field_name.to_string(),
         },
-        type_id: TypeTable::I32,
+        TypeTable::I32,
         span,
-    });
-    let zero = body.exprs.push(ExprNode {
-        kind: ExprKind::IntLiteral {
+    );
+    let zero = engine.alloc_expr(
+        ExprKind::IntLiteral {
             value: 0,
             repr: "0".to_string(),
         },
-        type_id: TypeTable::I32,
+        TypeTable::I32,
         span,
-    });
-    let assign = body.exprs.push(ExprNode {
-        kind: ExprKind::Assign {
+    );
+    let assign = engine.alloc_expr(
+        ExprKind::Assign {
             target: field,
             value: zero,
         },
-        type_id: TypeTable::UNIT,
+        TypeTable::UNIT,
         span,
-    });
-    body.stmts.push(StmtNode {
-        kind: StmtKind::Expr(assign),
-        span,
-    })
+    );
+    engine.alloc_stmt(StmtKind::Expr(assign), span)
 }
 
 /// Hoist Formatter struct literals out of a `__tmpl` block.
@@ -1329,12 +1225,10 @@ fn build_field_reset(
 /// Processes candidates in reverse order so that `stmt_index` values remain valid
 /// as we replace statements.
 fn transform_fmts_in_tmpl_block(
-    body: &mut Body,
+    engine: &mut Engine,
     block: BlockId,
     candidates: &[FmtCandidate],
     hoist_stmts: &mut Vec<StmtId>,
-    local_count: &mut u32,
-    new_locals: &mut Vec<NirLocal>,
 ) {
     // Sort by stmt_index ascending to compute rename ranges
     let mut sorted_candidates: Vec<_> = candidates.iter().collect();
@@ -1357,22 +1251,21 @@ fn transform_fmts_in_tmpl_block(
         init_value: ExprId,
         span: Span,
     }
-    let block_len = body.blocks[block].stmts.len();
+    let block_len = engine.body.blocks[block].stmts.len();
     let mut hoist_infos = Vec::new();
 
     for (pos, candidate) in sorted_candidates.iter().enumerate() {
-        let fmt_local_index = *local_count;
-        *local_count += 1;
         // Keep this name aligned with the corresponding `Let` statement
         // built below. WIR naming is primarily derived from discovered
         // `Let`s by local index, with `tir_func.locals[idx].name` used as a
         // fallback when no `Let` is found, so matching names mainly
         // improves fallback / debug output consistency.
-        new_locals.push(NirLocal {
-            name: format!("__fmt_buf_{fmt_local_index}"),
-            type_id: candidate.formatter_type,
-            is_mut: true,
-        });
+        let hoisted_name = format!("__fmt_buf_{}", engine.locals().len());
+        let fmt_local_index = engine.alloc_local(
+            hoisted_name.clone(),
+            candidate.formatter_type,
+            /* is_mut */ true,
+        );
 
         // Find the next candidate that shares the same fmt_local_index
         let rename_end = sorted_candidates[pos + 1..]
@@ -1383,7 +1276,7 @@ fn transform_fmts_in_tmpl_block(
 
         hoist_infos.push(HoistInfo {
             hoisted_index: fmt_local_index,
-            hoisted_name: format!("__fmt_buf_{fmt_local_index}"),
+            hoisted_name,
             stmt_index: candidate.stmt_index,
             rename_start: candidate.stmt_index,
             rename_end,
@@ -1398,8 +1291,8 @@ fn transform_fmts_in_tmpl_block(
     for info in &hoist_infos {
         // Hoist statement: let mut __fmt_buf_N = Formatter { fill: ..., buf: ... };
         // Reuse the normalized Formatter literal built during extraction.
-        let hoist_let = body.stmts.push(StmtNode {
-            kind: StmtKind::Let {
+        let hoist_let = engine.alloc_stmt(
+            StmtKind::Let {
                 name: info.hoisted_name.clone(),
                 local_index: info.hoisted_index,
                 is_mut: true,
@@ -1408,8 +1301,8 @@ fn transform_fmts_in_tmpl_block(
                 value: info.init_value,
                 skip_value_copy: false,
             },
-            span: info.span,
-        });
+            info.span,
+        );
         hoist_stmts.push(hoist_let);
 
         // Replace the Formatter struct literal with an indent field reset:
@@ -1420,7 +1313,7 @@ fn transform_fmts_in_tmpl_block(
         // during formatting. Without this reset, the indent value would
         // accumulate across loop iterations, causing incorrect indentation.
         let indent_reset = build_field_reset(
-            body,
+            engine,
             info.hoisted_index,
             &info.hoisted_name,
             info.formatter_type,
@@ -1428,16 +1321,18 @@ fn transform_fmts_in_tmpl_block(
             "indent",
             info.span,
         );
-        body.blocks[block].stmts[info.stmt_index] = indent_reset;
+        let mut new_stmts = engine.body.blocks[block].stmts.clone();
+        new_stmts[info.stmt_index] = indent_reset;
+        engine.set_block_stmts(block, new_stmts);
 
         // Rename references from the old Formatter local to the hoisted one,
         // only within [rename_start, rename_end) to avoid clobbering other
         // candidates that share the same original local.
         let range_stmts: Vec<StmtId> =
-            body.blocks[block].stmts[info.rename_start..info.rename_end].to_vec();
+            engine.body.blocks[block].stmts[info.rename_start..info.rename_end].to_vec();
         for s in range_stmts {
             rename_local_in_stmt(
-                body,
+                engine,
                 s,
                 info.old_fmt_index,
                 info.hoisted_index,
@@ -1448,7 +1343,7 @@ fn transform_fmts_in_tmpl_block(
 }
 
 fn rename_local_in_stmt(
-    body: &mut Body,
+    engine: &mut Engine,
     s: StmtId,
     old_index: u32,
     new_index: u32,
@@ -1460,7 +1355,7 @@ fn rename_local_in_stmt(
         Block(BlockId),
         None,
     }
-    let shape = match &body.stmts[s].kind {
+    let shape = match &engine.body.stmts[s].kind {
         StmtKind::Let { value, .. } => Shape::Expr(*value),
         StmtKind::Expr(expr) => Shape::Expr(*expr),
         StmtKind::Return { value: Some(expr) } => Shape::Expr(*expr),
@@ -1477,33 +1372,33 @@ fn rename_local_in_stmt(
         _ => Shape::None,
     };
     match shape {
-        Shape::Expr(e) => rename_local_in_expr(body, e, old_index, new_index, new_name),
+        Shape::Expr(e) => rename_local_in_expr(engine, e, old_index, new_index, new_name),
         Shape::If(cond, tb, eb) => {
-            rename_local_in_expr(body, cond, old_index, new_index, new_name);
-            rename_local_in_block(body, tb, old_index, new_index, new_name);
+            rename_local_in_expr(engine, cond, old_index, new_index, new_name);
+            rename_local_in_block(engine, tb, old_index, new_index, new_name);
             if let Some(eb) = eb {
-                rename_local_in_block(body, eb, old_index, new_index, new_name);
+                rename_local_in_block(engine, eb, old_index, new_index, new_name);
             }
         }
-        Shape::Block(b) => rename_local_in_block(body, b, old_index, new_index, new_name),
+        Shape::Block(b) => rename_local_in_block(engine, b, old_index, new_index, new_name),
         Shape::None => {}
     }
 }
 
 fn rename_local_in_block(
-    body: &mut Body,
+    engine: &mut Engine,
     block: BlockId,
     old_index: u32,
     new_index: u32,
     new_name: &str,
 ) {
-    for s in body.blocks[block].stmts.clone() {
-        rename_local_in_stmt(body, s, old_index, new_index, new_name);
+    for s in engine.body.blocks[block].stmts.clone() {
+        rename_local_in_stmt(engine, s, old_index, new_index, new_name);
     }
 }
 
 fn rename_local_in_expr(
-    body: &mut Body,
+    engine: &mut Engine,
     e: ExprId,
     old_index: u32,
     new_index: u32,
@@ -1516,7 +1411,7 @@ fn rename_local_in_expr(
         Block(BlockId),
         None,
     }
-    let walk = match &body.exprs[e].kind {
+    let walk = match &engine.body.exprs[e].kind {
         ExprKind::Local { index, .. } if *index == old_index => Walk::Local,
         ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr).collect()),
         ExprKind::MethodCall { receiver, args, .. } => {
@@ -1548,24 +1443,31 @@ fn rename_local_in_expr(
     };
     match walk {
         Walk::Local => {
-            if let ExprKind::Local { index, name } = &mut body.exprs[e].kind {
-                *index = new_index;
-                *name = new_name.to_string();
-            }
+            // The Local kind's `index` field is what the engine's use index
+            // is keyed on, so route the rename through `replace_expr_kind`
+            // to drop the old `old_index` mention and register a new
+            // `new_index` mention.
+            engine.replace_expr_kind(
+                e,
+                ExprKind::Local {
+                    index: new_index,
+                    name: new_name.to_string(),
+                },
+            );
         }
         Walk::Exprs(v) => {
             for id in v {
-                rename_local_in_expr(body, id, old_index, new_index, new_name);
+                rename_local_in_expr(engine, id, old_index, new_index, new_name);
             }
         }
         Walk::CondBlocks(cond, tb, eb) => {
-            rename_local_in_expr(body, cond, old_index, new_index, new_name);
-            rename_local_in_block(body, tb, old_index, new_index, new_name);
+            rename_local_in_expr(engine, cond, old_index, new_index, new_name);
+            rename_local_in_block(engine, tb, old_index, new_index, new_name);
             if let Some(eb) = eb {
-                rename_local_in_block(body, eb, old_index, new_index, new_name);
+                rename_local_in_block(engine, eb, old_index, new_index, new_name);
             }
         }
-        Walk::Block(b) => rename_local_in_block(body, b, old_index, new_index, new_name),
+        Walk::Block(b) => rename_local_in_block(engine, b, old_index, new_index, new_name),
         Walk::None => {}
     }
 }
@@ -1573,7 +1475,7 @@ fn rename_local_in_expr(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nir_arena::{BlockNode, StmtNode};
+    use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::tir::TypeId;
 
     /// Build a `Body` whose root holds a single expression (built by `build`)

@@ -4,17 +4,23 @@
 //! `let x = &y`, or `let x = &mut y` by propagating the source value to all
 //! uses of the target variable. See `can_propagate_copy` for the safety gates.
 //!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the binding / usage
-//! analysis and the substitute-and-remove rewrite read and mutate the arena
-//! `Body` directly.
+//! Runs on the worklist rewrite engine (combine migration; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! per-function standalone engine session whose `apply_block` fires once at
+//! the body root and runs the analyse/substitute fixpoint to convergence in
+//! one shot. The substitute-and-remove rewrites route through
+//! `engine.replace_expr_kind`, `engine.alloc_expr`, and
+//! `engine.set_block_stmts` so the parent map and use index stay coherent.
+
+use std::cell::Cell;
 
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -472,42 +478,44 @@ fn can_propagate_copy(
 }
 
 fn apply_in_block(
-    body: &mut Body,
+    engine: &mut Engine,
     block: BlockId,
     substitutions: &IndexMap<u32, CopySource>,
     dead_locals: &IndexSet<u32>,
 ) {
-    let kept: Vec<StmtId> = body.blocks[block]
+    let kept: Vec<StmtId> = engine.body.blocks[block]
         .stmts
         .iter()
         .copied()
-        .filter(|s| match &body.stmts[*s].kind {
+        .filter(|s| match &engine.body.stmts[*s].kind {
             StmtKind::Let { local_index, .. } => !dead_locals.contains(local_index),
             _ => true,
         })
         .collect();
-    body.blocks[block].stmts = kept;
+    engine.set_block_stmts(block, kept);
 
-    let stmts = body.blocks[block].stmts.clone();
+    let stmts = engine.body.blocks[block].stmts.clone();
     for stmt in stmts {
-        apply_in_node(body, NodeRef::Stmt(stmt), substitutions, dead_locals);
+        apply_in_node(engine, NodeRef::Stmt(stmt), substitutions, dead_locals);
     }
 }
 
 fn apply_in_node(
-    body: &mut Body,
+    engine: &mut Engine,
     node: NodeRef,
     substitutions: &IndexMap<u32, CopySource>,
     dead_locals: &IndexSet<u32>,
 ) {
     match node {
-        NodeRef::Expr(id) => apply_in_expr(body, id, substitutions, dead_locals),
-        NodeRef::Block(b) => apply_in_block(body, b, substitutions, dead_locals),
+        NodeRef::Expr(id) => apply_in_expr(engine, id, substitutions, dead_locals),
+        NodeRef::Block(b) => apply_in_block(engine, b, substitutions, dead_locals),
         NodeRef::Stmt(s) => {
             let mut kids = Vec::new();
-            body.for_each_child(NodeRef::Stmt(s), |c| kids.push(c));
+            engine
+                .body
+                .for_each_child(NodeRef::Stmt(s), |c| kids.push(c));
             for c in kids {
-                apply_in_node(body, c, substitutions, dead_locals);
+                apply_in_node(engine, c, substitutions, dead_locals);
             }
         }
         NodeRef::Pat(_) => {}
@@ -515,12 +523,12 @@ fn apply_in_node(
 }
 
 fn apply_in_expr(
-    body: &mut Body,
+    engine: &mut Engine,
     id: ExprId,
     substitutions: &IndexMap<u32, CopySource>,
     dead_locals: &IndexSet<u32>,
 ) {
-    let sub = if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
+    let sub = if let ExprKind::Local { index, .. } = &engine.body.exprs[id].kind {
         substitutions.get(index).cloned()
     } else {
         None
@@ -528,75 +536,69 @@ fn apply_in_expr(
     if let Some(source) = sub {
         match source {
             CopySource::Local { index, name } => {
-                body.exprs[id].kind = ExprKind::Local { index, name };
+                engine.replace_expr_kind(id, ExprKind::Local { index, name });
             }
             CopySource::IntLiteral { value, repr } => {
-                body.exprs[id].kind = ExprKind::IntLiteral { value, repr };
+                engine.replace_expr_kind(id, ExprKind::IntLiteral { value, repr });
             }
             CopySource::FloatLiteral { value, repr } => {
-                body.exprs[id].kind = ExprKind::FloatLiteral { value, repr };
+                engine.replace_expr_kind(id, ExprKind::FloatLiteral { value, repr });
             }
             CopySource::BoolLiteral(b) => {
-                body.exprs[id].kind = ExprKind::BoolLiteral(b);
+                engine.replace_expr_kind(id, ExprKind::BoolLiteral(b));
             }
             CopySource::CharLiteral(c) => {
-                body.exprs[id].kind = ExprKind::CharLiteral(c);
+                engine.replace_expr_kind(id, ExprKind::CharLiteral(c));
             }
             CopySource::Ref {
                 index,
                 name,
                 inner_type_id,
-            } => emit_ref(body, id, NirUnaryOp::Ref, index, name, inner_type_id),
+            } => emit_ref(engine, id, NirUnaryOp::Ref, index, name, inner_type_id),
             CopySource::MutRef {
                 index,
                 name,
                 inner_type_id,
-            } => emit_ref(body, id, NirUnaryOp::MutRef, index, name, inner_type_id),
+            } => emit_ref(engine, id, NirUnaryOp::MutRef, index, name, inner_type_id),
         }
         return;
     }
 
     let mut kids = Vec::new();
-    body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+    engine
+        .body
+        .for_each_child(NodeRef::Expr(id), |c| kids.push(c));
     for c in kids {
-        apply_in_node(body, c, substitutions, dead_locals);
+        apply_in_node(engine, c, substitutions, dead_locals);
     }
 }
 
 /// Replace expression `id` with `&src` / `&mut src` (the propagated ref source),
 /// keeping `id`'s own `type_id` / span.
 fn emit_ref(
-    body: &mut Body,
+    engine: &mut Engine,
     id: ExprId,
     op: NirUnaryOp,
     index: u32,
     name: String,
     inner_type_id: TypeId,
 ) {
-    let span = body.exprs[id].span;
-    let inner = body.exprs.push(ExprNode {
-        kind: ExprKind::Local { index, name },
-        type_id: inner_type_id,
-        span,
-    });
-    body.exprs[id].kind = ExprKind::Unary { op, expr: inner };
+    let span = engine.body.exprs[id].span;
+    let inner = engine.alloc_expr(ExprKind::Local { index, name }, inner_type_id, span);
+    engine.replace_expr_kind(id, ExprKind::Unary { op, expr: inner });
 }
 
-fn propagate_copies_in_function(
-    func: &mut NirFunction,
+/// Whole-function copy-propagation fixpoint driven from the engine session
+/// root. Mirrors the standalone driver's loop: analyse → filter → substitute
+/// until no further bindings can be propagated.
+fn propagate_at_root(
+    engine: &mut Engine,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
 ) -> bool {
-    if func.body.is_none() {
-        return false;
-    }
     let mut ever_changed = false;
-
     loop {
-        let analysis = {
-            let body = func.body.as_ref().unwrap();
-            analyze_function_body(body, type_table, first_param_types)
-        };
+        let analysis = analyze_function_body(engine.body, type_table, first_param_types);
         if analysis.bindings.is_empty() {
             break;
         }
@@ -628,16 +630,34 @@ fn propagate_copies_in_function(
             break;
         }
         let dead_locals: IndexSet<u32> = substitutions.keys().copied().collect();
-        let body = func.body.as_mut().unwrap();
-        let root = body.root;
-        apply_in_block(body, root, &substitutions, &dead_locals);
+        let root = engine.body.root;
+        apply_in_block(engine, root, &substitutions, &dead_locals);
         ever_changed = true;
         if !has_deferred {
             break;
         }
     }
-
     ever_changed
+}
+
+/// Standalone-session rule whose single `apply_block` performs the whole-
+/// function copy-propagation fixpoint at the body root.
+pub(super) struct CopyPropRule<'a> {
+    type_table: &'a TypeTable,
+    first_param_types: &'a FirstParamTypes,
+    applied: Cell<bool>,
+}
+
+impl Rule for CopyPropRule<'_> {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        if engine.parent_of(NodeRef::Block(block)).is_some() {
+            return false;
+        }
+        if self.applied.replace(true) {
+            return false;
+        }
+        propagate_at_root(engine, self.type_table, self.first_param_types)
+    }
 }
 
 pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
@@ -651,8 +671,20 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
         }
     }
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::CopyProp, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
-        propagate_copies_in_function(&mut func, &type_table, &first_param_types)
+        if func.body.is_none() {
+            return false;
+        }
+        let rule = CopyPropRule {
+            type_table: &type_table,
+            first_param_types: &first_param_types,
+            applied: Cell::new(false),
+        };
+        let NirFunction { body, locals, .. } = &mut *func;
+        let body = body.as_mut().expect("checked above");
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.run(&[&rule])
     })
 }

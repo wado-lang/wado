@@ -1,0 +1,1505 @@
+//! Per-function `ValueGraph` builder.
+//!
+//! Walks the `SkelTree` (`Body`) once and assigns a [`ValueId`] to every pure
+//! [`ExprId`]. Impure or allocation-bearing expressions (calls, struct/array
+//! literals, control flow, etc.) get no entry in `value_of`.
+//!
+//! Consumed lazily by [`crate::nir_engine::Engine::value`]; see the WEP at
+//! `docs/wep-2026-06-05-worklist-rewrite-engine.md`.
+//!
+//! # Flow handling
+//!
+//! - Parameters seed `current_value` with a fresh `Opaque` each.
+//! - `Let` / `Assign`-to-bare-`Local` updates `current_value[local_idx]` to
+//!   the RHS's value (or `Opaque` if the RHS is impure).
+//! - `If` snapshots `current_value`, walks both branches, then merges:
+//!   diverging locals hash-cons a [`ValueKind::Select`] keyed on the
+//!   condition's value, falling back to `Opaque` if the condition is impure.
+//! - `Match` / `Switch` walk every arm and merge n-ary: if every arm agrees
+//!   on a local, that value carries; otherwise the local goes `Opaque`.
+//!   N-ary `Select` chains are not yet constructed.
+//! - `Loop` pre-scans the body for locals it may write and reassigns each
+//!   to a fresh `Opaque` before walking the body; post-loop those locals
+//!   stay `Opaque`. Stage 6 swaps recurring-pattern locals to `LoopPhi`.
+//! - `LabeledBlock` marks every local written in its subtree `Opaque` on
+//!   exit, since `break` paths can carry writes the fall-through state
+//!   never observes.
+//! - Pattern bindings (`LetDestructure`, `Match` arm bindings) are seeded
+//!   with `Opaque`.
+
+use crate::hashmap::IndexMap;
+use crate::nir::{NirBinaryOp, NirParam, NirUnaryOp};
+use crate::nir_arena::{
+    ArmData, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
+};
+
+use super::{HeapVersion, ValueId, ValuePool};
+
+/// Per-function heap-version tracker. The builder threads one `HeapState`
+/// through the walk; on every Skel node that may write the heap, the
+/// appropriate field's version (or every field's version, for opaque
+/// writes) bumps to a fresh value.
+///
+/// Granularity is per `field_index`: a direct write to `obj.f` bumps the
+/// `f` slot only, so a later read of `obj.g` keeps its prior version and
+/// shares a `ValueId` with earlier reads. Opaque writes (Call,
+/// `Index` / `Deref` assign target, Loop entry, branch merge) call
+/// [`HeapState::bump_all`], invalidating every field. Refinement to
+/// `(receiver_root, field)` granularity via `mod_ref.rs` is a follow-up.
+struct HeapState {
+    /// Next fresh version to hand out.
+    next: HeapVersion,
+    /// Current version of each `field_index` we have seen written.
+    per_field: IndexMap<u32, HeapVersion>,
+    /// Version returned for `field_indices` not yet in `per_field`.
+    /// `bump_all` advances this; `bump_field` does not.
+    default_version: HeapVersion,
+}
+
+impl HeapState {
+    fn new() -> Self {
+        Self {
+            next: HeapVersion::INITIAL.bump(),
+            per_field: IndexMap::default(),
+            default_version: HeapVersion::INITIAL,
+        }
+    }
+
+    fn fresh(&mut self) -> HeapVersion {
+        let v = self.next;
+        self.next = self.next.bump();
+        v
+    }
+
+    fn version_of(&self, field_index: u32) -> HeapVersion {
+        self.per_field
+            .get(&field_index)
+            .copied()
+            .unwrap_or(self.default_version)
+    }
+
+    fn bump_field(&mut self, field_index: u32) {
+        let v = self.fresh();
+        self.per_field.insert(field_index, v);
+    }
+
+    fn bump_all(&mut self) {
+        let v = self.fresh();
+        self.per_field.clear();
+        self.default_version = v;
+    }
+
+    /// Snapshot the read-visible state (`per_field`, `default_version`)
+    /// only. `next` is a monotonic counter shared across the whole
+    /// function, so arms restored from the snapshot never reuse a version
+    /// another arm allocated.
+    fn snapshot(&self) -> HeapSnapshot {
+        HeapSnapshot {
+            per_field: self.per_field.clone(),
+            default_version: self.default_version,
+        }
+    }
+
+    fn restore(&mut self, snap: HeapSnapshot) {
+        self.per_field = snap.per_field;
+        self.default_version = snap.default_version;
+    }
+}
+
+#[derive(Clone)]
+struct HeapSnapshot {
+    per_field: IndexMap<u32, HeapVersion>,
+    default_version: HeapVersion,
+}
+
+/// The result of running [`build`] over a function body: the populated
+/// pool plus the side-table mapping pure `ExprId`s to their `ValueId`.
+///
+/// Impure positions are absent from `value_of`. A rule that wants "this
+/// expression's value" should look it up and treat the absence as "no
+/// value-graph identity available" rather than panicking.
+#[derive(Debug)]
+pub struct ValueGraphBuild {
+    pub pool: ValuePool,
+    pub value_of: IndexMap<ExprId, ValueId>,
+    /// For each literal `ValueId`, the first `ExprId` we observed producing
+    /// it. Lets a consumer (e.g. store-load-forward) clone the original
+    /// literal `ExprKind` — including its source `repr` — when replacing a
+    /// `Local` read with the forwarded literal, avoiding `repr` churn in
+    /// diagnostic output and NIR dumps.
+    pub literal_source: IndexMap<ValueId, ExprId>,
+}
+
+/// Build the `ValueGraph` for one function body.
+///
+/// `params` seed `current_value` with one fresh `Opaque` per parameter, so a
+/// `Local { index: param.local_index }` read returns that Opaque every time
+/// until the parameter is reassigned (which the builder picks up the same
+/// way as any other `Assign`).
+pub fn build(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
+    let mut b = Builder::new(body);
+    b.seed_params(params);
+    b.walk_block(body.root);
+    ValueGraphBuild {
+        pool: b.pool,
+        value_of: b.value_of,
+        literal_source: b.literal_source,
+    }
+}
+
+struct Builder<'a> {
+    body: &'a Body,
+    pool: ValuePool,
+    value_of: IndexMap<ExprId, ValueId>,
+    /// `local_index → current Value` at the current program point. Cloned at
+    /// branch entries so each arm walks from the pre-branch snapshot.
+    current_value: IndexMap<u32, ValueId>,
+    /// Heap-version tracker. See [`HeapState`].
+    heap_state: HeapState,
+    /// `ValueId` → first source `ExprId` for literal values, so consumers can
+    /// reuse the original `repr`. See [`ValueGraphBuild::literal_source`].
+    literal_source: IndexMap<ValueId, ExprId>,
+}
+
+impl<'a> Builder<'a> {
+    fn new(body: &'a Body) -> Self {
+        Self {
+            body,
+            pool: ValuePool::new(),
+            value_of: IndexMap::default(),
+            current_value: IndexMap::default(),
+            heap_state: HeapState::new(),
+            literal_source: IndexMap::default(),
+        }
+    }
+
+    fn seed_params(&mut self, params: &[NirParam]) {
+        for param in params {
+            let opaque = self.pool.fresh_opaque();
+            self.current_value.insert(param.local_index, opaque);
+        }
+    }
+
+    fn walk_block(&mut self, block: crate::nir_arena::BlockId) {
+        let stmts = self.body.blocks[block].stmts.clone();
+        for s in stmts {
+            self.walk_stmt(s);
+        }
+    }
+
+    fn walk_stmt(&mut self, stmt: StmtId) {
+        match self.body.stmts[stmt].kind.clone() {
+            StmtKind::Let {
+                local_index, value, ..
+            } => {
+                let v = self
+                    .walk_expr(value)
+                    .unwrap_or_else(|| self.pool.fresh_opaque());
+                self.current_value.insert(local_index, v);
+            }
+            StmtKind::LetDestructure { pattern, value, .. } => {
+                self.walk_expr(value);
+                // Destructured bindings are Opaque for now; field-projection
+                // Value kinds for them are a follow-up.
+                self.bind_pattern_opaque(pattern);
+            }
+            StmtKind::Expr(e) => {
+                self.walk_expr(e);
+            }
+            StmtKind::Return { value } => {
+                if let Some(v) = value {
+                    self.walk_expr(v);
+                }
+            }
+            StmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.walk_expr(v);
+                }
+            }
+            StmtKind::Continue => {}
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let cond_v = self.walk_expr(condition);
+                let saved = self.current_value.clone();
+                let saved_heap = self.heap_state.snapshot();
+                self.walk_block(then_block);
+                let then_state = std::mem::replace(&mut self.current_value, saved.clone());
+                self.heap_state.restore(saved_heap.clone());
+                if let Some(eb) = else_block {
+                    self.walk_block(eb);
+                }
+                let else_state = std::mem::replace(&mut self.current_value, saved.clone());
+                self.heap_state.restore(saved_heap);
+                self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
+                // Conservative bump_all after the merge — per-arm join is
+                // a follow-up.
+                self.heap_state.bump_all();
+            }
+            StmtKind::Loop { body: lb } => {
+                self.walk_loop(lb);
+            }
+            StmtKind::LabeledBlock { block, .. } => {
+                // A `break` to this label (or an enclosing one) can carry a
+                // write whose effect never reaches the fall-through state.
+                // Mark every local written anywhere in the subtree Opaque;
+                // a fall-through-diff check would miss break-only-path
+                // writes.
+                self.walk_block(block);
+                self.dirty_all_writes_in_block(block);
+                self.heap_state.bump_all();
+            }
+        }
+    }
+
+    /// Walk `expr` and return its `ValueGraph` id if the expression is pure.
+    /// Impure expressions return `None`; their pure children are still walked
+    /// for their side of the side-table.
+    fn walk_expr(&mut self, expr: ExprId) -> Option<ValueId> {
+        let id = self.compute_value(expr);
+        if let Some(id) = id {
+            self.value_of.insert(expr, id);
+        }
+        id
+    }
+
+    fn compute_value(&mut self, expr: ExprId) -> Option<ValueId> {
+        match self.body.exprs[expr].kind.clone() {
+            // ---- Literals ----
+            ExprKind::IntLiteral { value, .. } => {
+                let v = self.pool.int(value);
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::FloatLiteral { value, .. } => {
+                let v = self.pool.float(value);
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::BoolLiteral(b) => {
+                let v = self.pool.bool(b);
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::CharLiteral(c) => {
+                let v = self.pool.char(c);
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::StringLiteral(s) => {
+                let v = self.pool.string(s);
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::Null => {
+                let v = self.pool.null();
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::Unit => {
+                let v = self.pool.unit();
+                self.record_literal(expr, v);
+                Some(v)
+            }
+
+            // ---- Local read ----
+            ExprKind::Local { index, .. } => Some(self.read_local(index)),
+
+            // ---- Pure arithmetic ----
+            ExprKind::Binary { left, op, right } => {
+                // Always walk both operands for their side effects on
+                // `current_value` and `heap_state`, even when one of them is
+                // impure (a `?` short-circuit on `lhs` would skip the rhs
+                // walk and miss any local assignments / heap writes inside
+                // it).
+                let lhs = self.walk_expr(left);
+                let rhs = if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
+                    // Short-circuit logical ops: the rhs is conditionally
+                    // evaluated at runtime. Walk it inside a snapshot, then
+                    // model "may or may not have happened" by dirtying any
+                    // local the walk mutated and bumping the heap. Without
+                    // this, a write inside the rhs (e.g. `false && { x =
+                    // 2; true }`) would commit unconditionally to
+                    // `current_value` and let store-load forwarding
+                    // substitute later reads with the never-stored value.
+                    let saved_cur = self.current_value.clone();
+                    let rhs = self.walk_expr(right);
+                    let changed: Vec<u32> = self
+                        .current_value
+                        .iter()
+                        .filter_map(|(&k, &v)| {
+                            saved_cur.get(&k).and_then(|s| (*s != v).then_some(k))
+                        })
+                        .collect();
+                    for k in changed {
+                        let opaque = self.pool.fresh_opaque();
+                        self.current_value.insert(k, opaque);
+                    }
+                    self.heap_state.bump_all();
+                    rhs
+                } else {
+                    self.walk_expr(right)
+                };
+                let lhs = lhs?;
+                let rhs = rhs?;
+                Some(self.pool.binary(op, lhs, rhs))
+            }
+            ExprKind::Unary { op, expr: inner } => {
+                // `Ref` / `MutRef` / `Deref` are address-taking / heap-bearing
+                // operations — not pure values. Walk the child (so pure
+                // subtrees still land in `value_of`) but do not assign an id
+                // to this expr.
+                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
+                    self.walk_expr(inner);
+                    None
+                } else {
+                    let operand = self.walk_expr(inner)?;
+                    Some(self.pool.unary(op, operand))
+                }
+            }
+            ExprKind::Cast {
+                expr: inner,
+                target_type,
+            } => {
+                let operand = self.walk_expr(inner)?;
+                Some(self.pool.cast(operand, target_type))
+            }
+
+            // ---- Mutation: side-effect, never pure ----
+            ExprKind::Assign { target, value } => {
+                // Walk target operands FIRST: runtime evaluates the place
+                // (receiver / index / deref operand) before the stored
+                // value, so a write inside `value` must not be visible to
+                // those reads.
+                let target_kind = self.body.exprs[target].kind.clone();
+                match &target_kind {
+                    ExprKind::Local { .. } => {}
+                    ExprKind::FieldAccess { expr: recv, .. } => {
+                        self.walk_expr(*recv);
+                    }
+                    _ => {
+                        self.walk_expr(target);
+                    }
+                }
+                let v = self
+                    .walk_expr(value)
+                    .unwrap_or_else(|| self.pool.fresh_opaque());
+                match target_kind {
+                    ExprKind::Local { index, .. } => {
+                        self.current_value.insert(index, v);
+                    }
+                    ExprKind::FieldAccess { field_index, .. } => {
+                        self.heap_state.bump_field(field_index);
+                    }
+                    _ => {
+                        self.heap_state.bump_all();
+                    }
+                }
+                None
+            }
+            ExprKind::GlobalVarSet { value, .. } => {
+                self.walk_expr(value);
+                // Globals share the heap from the optimizer's perspective.
+                self.heap_state.bump_all();
+                None
+            }
+
+            // ---- Control-flow expressions ----
+            ExprKind::Block(block) => {
+                // Block expressions are walked for the side-table but get
+                // no `ValueId`.
+                self.walk_block(block);
+                None
+            }
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond_v = self.walk_expr(condition);
+                let saved = self.current_value.clone();
+                let saved_heap = self.heap_state.snapshot();
+                self.walk_block(then_branch);
+                let then_state = std::mem::replace(&mut self.current_value, saved.clone());
+                self.heap_state.restore(saved_heap.clone());
+                if let Some(eb) = else_branch {
+                    self.walk_block(eb);
+                }
+                let else_state = std::mem::replace(&mut self.current_value, saved.clone());
+                self.heap_state.restore(saved_heap);
+                self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
+                self.heap_state.bump_all();
+                None
+            }
+            ExprKind::LabeledBlock { block, .. } => {
+                // Same break-only-write hazard as the `StmtKind::LabeledBlock` arm.
+                self.walk_block(block);
+                self.dirty_all_writes_in_block(block);
+                self.heap_state.bump_all();
+                None
+            }
+            ExprKind::Match { expr: scrut, arms } => {
+                self.walk_expr(scrut);
+                self.walk_match_arms(&arms);
+                self.heap_state.bump_all();
+                None
+            }
+            ExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.walk_expr(scrutinee);
+                let saved = self.current_value.clone();
+                let saved_heap = self.heap_state.snapshot();
+                let mut arm_states: Vec<IndexMap<u32, ValueId>> =
+                    Vec::with_capacity(arms.len() + 1);
+                for arm in &arms {
+                    self.current_value = saved.clone();
+                    self.heap_state.restore(saved_heap.clone());
+                    self.walk_block(*arm);
+                    arm_states.push(self.current_value.clone());
+                }
+                self.current_value = saved.clone();
+                self.heap_state.restore(saved_heap);
+                self.walk_block(default);
+                arm_states.push(std::mem::replace(&mut self.current_value, saved.clone()));
+                self.merge_n_arms(&saved, &arm_states);
+                self.heap_state.bump_all();
+                None
+            }
+
+            // ---- Heap-bearing reads ----
+            ExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                ..
+            } => {
+                // The receiver must be a pure value for the FieldAccess to
+                // get a ValueId — an impure receiver (a Call result, for
+                // instance) propagates None.
+                let recv = self.walk_expr(inner)?;
+                let heap_ver = self.heap_state.version_of(field_index);
+                Some(self.pool.field_access(recv, field_index, heap_ver))
+            }
+            ExprKind::Index { expr: inner, index } => {
+                self.walk_expr(inner);
+                self.walk_expr(index);
+                None
+            }
+            ExprKind::VariantTag { expr: inner }
+            | ExprKind::VariantTest { expr: inner, .. }
+            | ExprKind::VariantPayload { expr: inner, .. } => {
+                self.walk_expr(inner);
+                None
+            }
+
+            // ---- Allocation-bearing constructors (Skel-side per Q1) ----
+            ExprKind::StructLiteral { fields, .. } => {
+                for f in fields {
+                    self.walk_expr(f.value);
+                }
+                None
+            }
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                for e in elements {
+                    self.walk_expr(e);
+                }
+                None
+            }
+            ExprKind::VariantConstruct { payload, .. } => {
+                if let Some(p) = payload {
+                    self.walk_expr(p);
+                }
+                None
+            }
+            ExprKind::EnumConstruct { .. } => None,
+            ExprKind::ClosureToCanonical { functor, .. } => {
+                self.walk_expr(functor);
+                None
+            }
+
+            // ---- Calls (effectful, may write the heap) ----
+            ExprKind::Call { args, .. } => {
+                for a in args {
+                    self.walk_expr(a.expr);
+                }
+                self.heap_state.bump_all();
+                None
+            }
+            ExprKind::CmRawCall { args, .. } => {
+                for a in args {
+                    self.walk_expr(a);
+                }
+                self.heap_state.bump_all();
+                None
+            }
+            ExprKind::MethodCall { receiver, args, .. } => {
+                self.walk_expr(receiver);
+                for a in args {
+                    self.walk_expr(a.expr);
+                }
+                self.heap_state.bump_all();
+                None
+            }
+            ExprKind::IndirectCall { callee, args } => {
+                self.walk_expr(callee);
+                for a in args {
+                    self.walk_expr(a);
+                }
+                self.heap_state.bump_all();
+                None
+            }
+
+            // ---- Other Skel-side leaves ----
+            ExprKind::GlobalVarGet { .. } | ExprKind::BytesLiteral(_) => None,
+        }
+    }
+
+    fn record_literal(&mut self, expr: ExprId, value: ValueId) {
+        self.literal_source.entry(value).or_insert(expr);
+    }
+
+    fn read_local(&mut self, idx: u32) -> ValueId {
+        if let Some(&v) = self.current_value.get(&idx) {
+            v
+        } else {
+            // Unbound locals shouldn't occur on well-typed NIR; cache a
+            // fresh Opaque so subsequent reads agree.
+            let v = self.pool.fresh_opaque();
+            self.current_value.insert(idx, v);
+            v
+        }
+    }
+
+    fn bind_pattern_opaque(&mut self, pat: PatId) {
+        match self.body.pats[pat].kind.clone() {
+            PatKind::Binding { local_index, .. } => {
+                let v = self.pool.fresh_opaque();
+                self.current_value.insert(local_index, v);
+            }
+            PatKind::Tuple(children, _) => {
+                for c in children {
+                    self.bind_pattern_opaque(c);
+                }
+            }
+            PatKind::Or(children) => {
+                for c in children {
+                    self.bind_pattern_opaque(c);
+                }
+            }
+            PatKind::Variant { bindings, .. } => {
+                for c in bindings {
+                    self.bind_pattern_opaque(c);
+                }
+            }
+            PatKind::Struct { fields, .. } => {
+                for f in fields {
+                    self.bind_pattern_opaque(f.pattern);
+                }
+            }
+            PatKind::ConstantValue { expr } => {
+                self.walk_expr(expr);
+            }
+            PatKind::Wildcard
+            | PatKind::Literal(_)
+            | PatKind::Enum { .. }
+            | PatKind::Range { .. } => {}
+        }
+    }
+
+    /// Merge an if-style two-arm structural endpoint. For each local that
+    /// existed before the branch:
+    /// - Both arms agree → keep that value.
+    /// - Arms differ AND `cond_v` is known → hash-cons a `Select`.
+    /// - Otherwise → fresh `Opaque` (the merged value is unknown).
+    ///
+    /// New bindings introduced inside a single arm are dropped from the
+    /// post-merge state — they are scoped to the arm in well-formed NIR.
+    fn merge_two_arms(
+        &mut self,
+        cond_v: Option<ValueId>,
+        saved: &IndexMap<u32, ValueId>,
+        then_state: &IndexMap<u32, ValueId>,
+        else_state: &IndexMap<u32, ValueId>,
+    ) {
+        for (&idx, &saved_v) in saved {
+            let then_v = then_state.get(&idx).copied().unwrap_or(saved_v);
+            let else_v = else_state.get(&idx).copied().unwrap_or(saved_v);
+            let merged = if then_v == else_v {
+                then_v
+            } else if let Some(cond) = cond_v {
+                self.pool.select(cond, then_v, else_v)
+            } else {
+                self.pool.fresh_opaque()
+            };
+            self.current_value.insert(idx, merged);
+        }
+    }
+
+    /// Merge n arms (Match / Switch). For each pre-branch local: if every
+    /// arm agrees, keep that value; otherwise fall back to `Opaque`. N-ary
+    /// `Select` chains are not yet constructed.
+    fn merge_n_arms(
+        &mut self,
+        saved: &IndexMap<u32, ValueId>,
+        arm_states: &[IndexMap<u32, ValueId>],
+    ) {
+        for (&idx, &saved_v) in saved {
+            let mut consensus: Option<ValueId> = None;
+            let mut diverged = false;
+            for arm in arm_states {
+                let arm_v = arm.get(&idx).copied().unwrap_or(saved_v);
+                match consensus {
+                    None => consensus = Some(arm_v),
+                    Some(c) if c == arm_v => {}
+                    Some(_) => {
+                        diverged = true;
+                        break;
+                    }
+                }
+            }
+            let merged = if diverged {
+                self.pool.fresh_opaque()
+            } else {
+                consensus.unwrap_or(saved_v)
+            };
+            self.current_value.insert(idx, merged);
+        }
+    }
+
+    fn walk_match_arms(&mut self, arms: &[ArmData]) {
+        // Guards are evaluated sequentially at runtime: when guard 0 has
+        // side effects and returns false, guard 1 and arm 1's body run
+        // with those effects visible. Restoring the heap state and
+        // outer locals to the pre-match snapshot between arms would
+        // hide those effects from later arms. To stay sound without
+        // threading the post-guard state forward, conservatively dirty
+        // every outer local any guard could write and bump the heap
+        // once before walking arms.
+        let mut guard_writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
+        let mut any_guard = false;
+        for arm in arms {
+            if let Some(g) = arm.guard {
+                any_guard = true;
+                collect_writes_in_expr(self.body, g, &mut guard_writes);
+            }
+        }
+        for idx in &guard_writes {
+            if self.current_value.contains_key(idx) {
+                let opaque = self.pool.fresh_opaque();
+                self.current_value.insert(*idx, opaque);
+            }
+        }
+        if any_guard {
+            self.heap_state.bump_all();
+        }
+
+        let saved = self.current_value.clone();
+        let saved_heap = self.heap_state.snapshot();
+        let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());
+        for arm in arms {
+            self.current_value = saved.clone();
+            self.heap_state.restore(saved_heap.clone());
+            self.bind_pattern_opaque(arm.pattern);
+            if let Some(g) = arm.guard {
+                self.walk_expr(g);
+            }
+            self.walk_expr(arm.body);
+            states.push(self.current_value.clone());
+        }
+        self.current_value = saved.clone();
+        self.heap_state.restore(saved_heap);
+        self.merge_n_arms(&saved, &states);
+    }
+
+    /// Reassign every local the body may write to a fresh `Opaque` before
+    /// and after the walk, and bump the heap state on both sides. The body
+    /// may run 0..N times, so in-body reads must not share `ValueId`s
+    /// with pre-loop reads, and post-loop reads must not share them with
+    /// in-body reads. (Locals declared inside the loop need no pre-seed:
+    /// they get fresh `Opaque`s as the body walks.)
+    fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
+        let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
+        collect_writes_in_block(self.body, body_block, &mut writes);
+        for idx in &writes {
+            if self.current_value.contains_key(idx) {
+                let opaque = self.pool.fresh_opaque();
+                self.current_value.insert(*idx, opaque);
+            }
+        }
+        self.heap_state.bump_all();
+        self.walk_block(body_block);
+        for idx in &writes {
+            if self.current_value.contains_key(idx) {
+                let opaque = self.pool.fresh_opaque();
+                self.current_value.insert(*idx, opaque);
+            }
+        }
+        self.heap_state.bump_all();
+    }
+
+    /// After a flow-opaque construct (`LabeledBlock` with potential breaks),
+    /// every local written anywhere in `block`'s subtree becomes Opaque —
+    /// including locals written on a `break`-only path that fall-through
+    /// never sees. Locals not written in the subtree keep their pre-block
+    /// value.
+    fn dirty_all_writes_in_block(&mut self, block: crate::nir_arena::BlockId) {
+        let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
+        collect_writes_in_block(self.body, block, &mut writes);
+        for idx in &writes {
+            if self.current_value.contains_key(idx) {
+                let opaque = self.pool.fresh_opaque();
+                self.current_value.insert(*idx, opaque);
+            }
+        }
+    }
+}
+
+/// Collect every local index that an `Assign`-to-bare-`Local`, a `Let`, or
+/// a `LetDestructure` binding writes anywhere in `block`'s subtree. Used
+/// by `walk_loop` and `dirty_all_writes_in_block` to mark the right set
+/// of locals `Opaque` on entry/exit of flow-opaque constructs.
+fn collect_writes_in_block(
+    body: &Body,
+    block: crate::nir_arena::BlockId,
+    out: &mut crate::hashmap::IndexSet<u32>,
+) {
+    let stmts = body.blocks[block].stmts.clone();
+    for s in stmts {
+        collect_writes_in_stmt(body, s, out);
+    }
+}
+
+fn collect_writes_in_stmt(body: &Body, stmt: StmtId, out: &mut crate::hashmap::IndexSet<u32>) {
+    match &body.stmts[stmt].kind {
+        StmtKind::Let {
+            local_index, value, ..
+        } => {
+            out.insert(*local_index);
+            collect_writes_in_expr(body, *value, out);
+        }
+        StmtKind::LetDestructure { pattern, value, .. } => {
+            collect_writes_in_pattern(body, *pattern, out);
+            collect_writes_in_expr(body, *value, out);
+        }
+        _ => {
+            let mut kids = Vec::new();
+            body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
+            for c in kids {
+                match c {
+                    NodeRef::Expr(e) => collect_writes_in_expr(body, e, out),
+                    NodeRef::Stmt(s) => collect_writes_in_stmt(body, s, out),
+                    NodeRef::Block(b) => collect_writes_in_block(body, b, out),
+                    NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out),
+                }
+            }
+        }
+    }
+}
+
+fn collect_writes_in_expr(body: &Body, expr: ExprId, out: &mut crate::hashmap::IndexSet<u32>) {
+    if let ExprKind::Assign { target, .. } = &body.exprs[expr].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+    {
+        out.insert(*index);
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(NodeRef::Expr(expr), |c| kids.push(c));
+    for c in kids {
+        match c {
+            NodeRef::Expr(e) => collect_writes_in_expr(body, e, out),
+            NodeRef::Stmt(s) => collect_writes_in_stmt(body, s, out),
+            NodeRef::Block(b) => collect_writes_in_block(body, b, out),
+            NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out),
+        }
+    }
+}
+
+fn collect_writes_in_pattern(body: &Body, pat: PatId, out: &mut crate::hashmap::IndexSet<u32>) {
+    if let PatKind::Binding { local_index, .. } = &body.pats[pat].kind {
+        out.insert(*local_index);
+    } else {
+        let mut kids = Vec::new();
+        body.for_each_child(NodeRef::Pat(pat), |c| kids.push(c));
+        for c in kids {
+            match c {
+                NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out),
+                NodeRef::Expr(e) => collect_writes_in_expr(body, e, out),
+                _ => {}
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nir::{NirBinaryOp, NirParam};
+    use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
+    use crate::nir_value_graph::ValueKind;
+    use crate::tir::TypeTable;
+    use crate::token::Span;
+
+    // ----- Body builders for tests -----
+
+    fn empty_body() -> Body {
+        Body::empty()
+    }
+
+    fn alloc_expr(body: &mut Body, kind: ExprKind) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind,
+            type_id: TypeTable::UNIT,
+            span: Span::default(),
+        })
+    }
+
+    fn alloc_stmt(body: &mut Body, kind: StmtKind) -> StmtId {
+        body.stmts.push(StmtNode {
+            kind,
+            span: Span::default(),
+        })
+    }
+
+    fn root_with(body: &mut Body, stmts: Vec<StmtId>) {
+        body.root = body.blocks.push(BlockNode {
+            stmts,
+            span: Span::default(),
+        });
+    }
+
+    fn int_lit(body: &mut Body, value: u64) -> ExprId {
+        alloc_expr(
+            body,
+            ExprKind::IntLiteral {
+                value,
+                repr: value.to_string(),
+            },
+        )
+    }
+
+    fn local_ref(body: &mut Body, idx: u32) -> ExprId {
+        alloc_expr(
+            body,
+            ExprKind::Local {
+                index: idx,
+                name: format!("__l{idx}"),
+            },
+        )
+    }
+
+    fn let_stmt(body: &mut Body, idx: u32, value: ExprId, is_mut: bool) -> StmtId {
+        alloc_stmt(
+            body,
+            StmtKind::Let {
+                name: format!("__l{idx}"),
+                local_index: idx,
+                is_mut,
+                is_reactive: false,
+                type_id: TypeTable::UNIT,
+                value,
+                skip_value_copy: false,
+            },
+        )
+    }
+
+    fn assign_stmt(body: &mut Body, idx: u32, value: ExprId) -> StmtId {
+        let target = local_ref(body, idx);
+        let assign = alloc_expr(body, ExprKind::Assign { target, value });
+        alloc_stmt(body, StmtKind::Expr(assign))
+    }
+
+    fn binary(body: &mut Body, op: NirBinaryOp, left: ExprId, right: ExprId) -> ExprId {
+        alloc_expr(body, ExprKind::Binary { left, op, right })
+    }
+
+    fn bool_lit(body: &mut Body, b: bool) -> ExprId {
+        alloc_expr(body, ExprKind::BoolLiteral(b))
+    }
+
+    fn block_with(body: &mut Body, stmts: Vec<StmtId>) -> crate::nir_arena::BlockId {
+        body.blocks.push(BlockNode {
+            stmts,
+            span: Span::default(),
+        })
+    }
+
+    fn field_access(body: &mut Body, expr: ExprId, field_index: u32) -> ExprId {
+        alloc_expr(
+            body,
+            ExprKind::FieldAccess {
+                expr,
+                field_index,
+                field_name: format!("__f{field_index}"),
+            },
+        )
+    }
+
+    fn field_assign_stmt(body: &mut Body, recv: ExprId, field_index: u32, value: ExprId) -> StmtId {
+        let target = field_access(body, recv, field_index);
+        let assign = alloc_expr(body, ExprKind::Assign { target, value });
+        alloc_stmt(body, StmtKind::Expr(assign))
+    }
+
+    fn call_void(body: &mut Body) -> ExprId {
+        use crate::module_source::ModuleSource;
+        use crate::nir::FunctionRef;
+        alloc_expr(
+            body,
+            ExprKind::Call {
+                func: FunctionRef {
+                    module_source: ModuleSource::entry_point_synthetic(),
+                    name: "foo".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: vec![],
+                args: vec![],
+            },
+        )
+    }
+
+    fn param_seed() -> NirParam {
+        NirParam {
+            name: "obj".to_string(),
+            type_id: TypeTable::UNIT,
+            local_index: 0,
+            is_mut: false,
+            span: Span::default(),
+        }
+    }
+
+    // ----- Tests -----
+
+    #[test]
+    fn literal_int_gets_value_id() {
+        let mut body = empty_body();
+        let lit = int_lit(&mut body, 42);
+        let s = alloc_stmt(&mut body, StmtKind::Expr(lit));
+        root_with(&mut body, vec![s]);
+        let r = build(&body, &[]);
+        let v = r.value_of[&lit];
+        assert_eq!(r.pool.kind(v), &ValueKind::Int(42));
+    }
+
+    #[test]
+    fn let_then_read_returns_same_value() {
+        // let x = 1; x
+        let mut body = empty_body();
+        let lit = int_lit(&mut body, 1);
+        let let_s = let_stmt(&mut body, 0, lit, false);
+        let read = local_ref(&mut body, 0);
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read));
+        root_with(&mut body, vec![let_s, s2]);
+        let r = build(&body, &[]);
+        let lit_v = r.value_of[&lit];
+        let read_v = r.value_of[&read];
+        assert_eq!(lit_v, read_v);
+        assert_eq!(r.pool.kind(read_v), &ValueKind::Int(1));
+    }
+
+    #[test]
+    fn equivalent_arithmetic_dedupes() {
+        // let a = 1 + 2; let b = 1 + 2;
+        let mut body = empty_body();
+        let one_a = int_lit(&mut body, 1);
+        let two_a = int_lit(&mut body, 2);
+        let add_a = binary(&mut body, NirBinaryOp::Add, one_a, two_a);
+        let let_a = let_stmt(&mut body, 0, add_a, false);
+        let one_b = int_lit(&mut body, 1);
+        let two_b = int_lit(&mut body, 2);
+        let add_b = binary(&mut body, NirBinaryOp::Add, one_b, two_b);
+        let let_b = let_stmt(&mut body, 1, add_b, false);
+        root_with(&mut body, vec![let_a, let_b]);
+        let r = build(&body, &[]);
+        assert_eq!(r.value_of[&add_a], r.value_of[&add_b]);
+    }
+
+    #[test]
+    fn reassignment_updates_local_value() {
+        // let mut x = 1; x = 2; x
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let let_s = let_stmt(&mut body, 0, one, true);
+        let two = int_lit(&mut body, 2);
+        let assign = assign_stmt(&mut body, 0, two);
+        let read = local_ref(&mut body, 0);
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        root_with(&mut body, vec![let_s, assign, s_read]);
+        let r = build(&body, &[]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
+    }
+
+    #[test]
+    fn if_merge_builds_select() {
+        // let mut x = 1; if true { x = 2; } else { x = 3; }; x
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let let_s = let_stmt(&mut body, 0, one, true);
+        let cond = bool_lit(&mut body, true);
+        let two = int_lit(&mut body, 2);
+        let assign_then = assign_stmt(&mut body, 0, two);
+        let then_block = block_with(&mut body, vec![assign_then]);
+        let three = int_lit(&mut body, 3);
+        let assign_else = assign_stmt(&mut body, 0, three);
+        let else_block = block_with(&mut body, vec![assign_else]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: Some(else_block),
+            },
+        );
+        let read = local_ref(&mut body, 0);
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        root_with(&mut body, vec![let_s, if_s, s_read]);
+        let r = build(&body, &[]);
+        let read_v = r.value_of[&read];
+        match r.pool.kind(read_v) {
+            ValueKind::Select { cond, then, else_ } => {
+                assert_eq!(r.pool.kind(*cond), &ValueKind::Bool(true));
+                assert_eq!(r.pool.kind(*then), &ValueKind::Int(2));
+                assert_eq!(r.pool.kind(*else_), &ValueKind::Int(3));
+            }
+            other => panic!("expected Select, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn if_without_else_merges_with_pre_value() {
+        // let mut x = 1; if true { x = 2; }; x
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let let_s = let_stmt(&mut body, 0, one, true);
+        let cond = bool_lit(&mut body, true);
+        let two = int_lit(&mut body, 2);
+        let assign_then = assign_stmt(&mut body, 0, two);
+        let then_block = block_with(&mut body, vec![assign_then]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+        let read = local_ref(&mut body, 0);
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        root_with(&mut body, vec![let_s, if_s, s_read]);
+        let r = build(&body, &[]);
+        match r.pool.kind(r.value_of[&read]) {
+            ValueKind::Select { cond, then, else_ } => {
+                assert_eq!(r.pool.kind(*cond), &ValueKind::Bool(true));
+                assert_eq!(r.pool.kind(*then), &ValueKind::Int(2));
+                assert_eq!(r.pool.kind(*else_), &ValueKind::Int(1));
+            }
+            other => panic!("expected Select, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn if_with_agreeing_arms_skips_select() {
+        // let mut x = 1; if true { x = 2; } else { x = 2; }; x
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let let_s = let_stmt(&mut body, 0, one, true);
+        let cond = bool_lit(&mut body, true);
+        let two_a = int_lit(&mut body, 2);
+        let assign_then = assign_stmt(&mut body, 0, two_a);
+        let then_block = block_with(&mut body, vec![assign_then]);
+        let two_b = int_lit(&mut body, 2);
+        let assign_else = assign_stmt(&mut body, 0, two_b);
+        let else_block = block_with(&mut body, vec![assign_else]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: Some(else_block),
+            },
+        );
+        let read = local_ref(&mut body, 0);
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        root_with(&mut body, vec![let_s, if_s, s_read]);
+        let r = build(&body, &[]);
+        // Both arms wrote Int(2); the merge picks that without a Select.
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
+    }
+
+    #[test]
+    fn loop_modified_local_becomes_opaque() {
+        // let mut i = 0; loop { i = i + 1; }; i
+        let mut body = empty_body();
+        let zero = int_lit(&mut body, 0);
+        let let_s = let_stmt(&mut body, 0, zero, true);
+        let i_read = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let plus = binary(&mut body, NirBinaryOp::Add, i_read, one);
+        let assign = assign_stmt(&mut body, 0, plus);
+        let lb = block_with(&mut body, vec![assign]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        let read = local_ref(&mut body, 0);
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        root_with(&mut body, vec![let_s, loop_s, s_read]);
+        let r = build(&body, &[]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::Opaque(_)
+        ));
+    }
+
+    #[test]
+    fn loop_unmodified_local_keeps_value() {
+        // let x = 1; let mut i = 0; loop { i = i + 1; }; x
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let let_x = let_stmt(&mut body, 0, one, false);
+        let zero = int_lit(&mut body, 0);
+        let let_i = let_stmt(&mut body, 1, zero, true);
+        let i_read = local_ref(&mut body, 1);
+        let lit_one = int_lit(&mut body, 1);
+        let plus = binary(&mut body, NirBinaryOp::Add, i_read, lit_one);
+        let assign = assign_stmt(&mut body, 1, plus);
+        let lb = block_with(&mut body, vec![assign]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        let read = local_ref(&mut body, 0);
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        root_with(&mut body, vec![let_x, let_i, loop_s, s_read]);
+        let r = build(&body, &[]);
+        // `x` is not touched by the loop, so it retains its Int(1).
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+    }
+
+    #[test]
+    fn function_parameter_is_opaque_and_reads_dedup() {
+        // fn(x: i32) { x; x; }
+        let mut body = empty_body();
+        let read1 = local_ref(&mut body, 0);
+        let read2 = local_ref(&mut body, 0);
+        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2));
+        root_with(&mut body, vec![s1, s2]);
+        let param = NirParam {
+            name: "x".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 0,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build(&body, &[param]);
+        let v1 = r.value_of[&read1];
+        let v2 = r.value_of[&read2];
+        assert_eq!(v1, v2);
+        assert!(matches!(r.pool.kind(v1), ValueKind::Opaque(_)));
+    }
+
+    #[test]
+    fn binary_on_param_reads_dedupes() {
+        // fn(x: i32) { x + 1; x + 1; }
+        let mut body = empty_body();
+        let read1 = local_ref(&mut body, 0);
+        let one_a = int_lit(&mut body, 1);
+        let add_a = binary(&mut body, NirBinaryOp::Add, read1, one_a);
+        let read2 = local_ref(&mut body, 0);
+        let one_b = int_lit(&mut body, 1);
+        let add_b = binary(&mut body, NirBinaryOp::Add, read2, one_b);
+        let s1 = alloc_stmt(&mut body, StmtKind::Expr(add_a));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(add_b));
+        root_with(&mut body, vec![s1, s2]);
+        let param = NirParam {
+            name: "x".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 0,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build(&body, &[param]);
+        // Both `x + 1` expressions share a ValueId because `x` is a stable
+        // (write-once) Opaque and `1` is hash-consed.
+        assert_eq!(r.value_of[&add_a], r.value_of[&add_b]);
+    }
+
+    #[test]
+    fn impure_let_value_gets_opaque_binding() {
+        // let x = call(); x
+        // We synthesise a Call node here; the builder treats it as impure so
+        // `x` gets a fresh Opaque rather than tracking the Call's value.
+        use crate::module_source::ModuleSource;
+        use crate::nir::FunctionRef;
+        let mut body = empty_body();
+        let call = alloc_expr(
+            &mut body,
+            ExprKind::Call {
+                func: FunctionRef {
+                    module_source: ModuleSource::entry_point_synthetic(),
+                    name: "foo".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: vec![],
+                args: vec![],
+            },
+        );
+        let let_s = let_stmt(&mut body, 0, call, false);
+        let read = local_ref(&mut body, 0);
+        let s = alloc_stmt(&mut body, StmtKind::Expr(read));
+        root_with(&mut body, vec![let_s, s]);
+        let r = build(&body, &[]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::Opaque(_)
+        ));
+        // The call itself has no value_of entry.
+        assert!(!r.value_of.contains_key(&call));
+    }
+
+    // ----- FieldAccess heap-version behavior -----
+
+    #[test]
+    fn two_field_reads_same_field_share_value_id() {
+        // fn(obj) { obj.f; obj.f; }
+        let mut body = empty_body();
+        let recv1 = local_ref(&mut body, 0);
+        let read1 = field_access(&mut body, recv1, 0);
+        let recv2 = local_ref(&mut body, 0);
+        let read2 = field_access(&mut body, recv2, 0);
+        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2));
+        root_with(&mut body, vec![s1, s2]);
+        let r = build(&body, &[param_seed()]);
+        assert_eq!(r.value_of[&read1], r.value_of[&read2]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read1]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn field_write_invalidates_only_that_field() {
+        // fn(obj) {
+        //     let a = obj.f;
+        //     let b = obj.g;
+        //     obj.f = 1;
+        //     let a2 = obj.f;   // distinct VN from `a` (different heap_ver)
+        //     let b2 = obj.g;   // same VN as `b` (bump_field(f) did not touch g)
+        // }
+        let mut body = empty_body();
+        let recv_a = local_ref(&mut body, 0);
+        let read_a = field_access(&mut body, recv_a, 0);
+        let let_a = let_stmt(&mut body, 1, read_a, false);
+
+        let recv_b = local_ref(&mut body, 0);
+        let read_b = field_access(&mut body, recv_b, 1);
+        let let_b = let_stmt(&mut body, 2, read_b, false);
+
+        let one = int_lit(&mut body, 1);
+        let recv_w = local_ref(&mut body, 0);
+        let write = field_assign_stmt(&mut body, recv_w, 0, one);
+
+        let recv_a2 = local_ref(&mut body, 0);
+        let read_a2 = field_access(&mut body, recv_a2, 0);
+        let let_a2 = let_stmt(&mut body, 3, read_a2, false);
+
+        let recv_b2 = local_ref(&mut body, 0);
+        let read_b2 = field_access(&mut body, recv_b2, 1);
+        let let_b2 = let_stmt(&mut body, 4, read_b2, false);
+
+        root_with(&mut body, vec![let_a, let_b, write, let_a2, let_b2]);
+        let r = build(&body, &[param_seed()]);
+
+        // `obj.f` reads straddle a write of `f`: different heap versions, distinct VN.
+        assert_ne!(r.value_of[&read_a], r.value_of[&read_a2]);
+        // `obj.g` is not touched by writing `obj.f`: heap version unchanged, same VN.
+        assert_eq!(r.value_of[&read_b], r.value_of[&read_b2]);
+    }
+
+    #[test]
+    fn call_invalidates_all_fields() {
+        // fn(obj) {
+        //     let a = obj.f;
+        //     foo();
+        //     let a2 = obj.f;  // bump_all invalidates -> distinct VN
+        // }
+        let mut body = empty_body();
+        let recv1 = local_ref(&mut body, 0);
+        let read1 = field_access(&mut body, recv1, 0);
+        let let_1 = let_stmt(&mut body, 1, read1, false);
+
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+
+        let recv2 = local_ref(&mut body, 0);
+        let read2 = field_access(&mut body, recv2, 0);
+        let let_2 = let_stmt(&mut body, 2, read2, false);
+
+        root_with(&mut body, vec![let_1, call_s, let_2]);
+        let r = build(&body, &[param_seed()]);
+        assert_ne!(r.value_of[&read1], r.value_of[&read2]);
+    }
+
+    #[test]
+    fn field_access_with_impure_receiver_yields_no_value() {
+        // fn() { call().f; }
+        let mut body = empty_body();
+        let call = call_void(&mut body);
+        let fa = field_access(&mut body, call, 0);
+        let s = alloc_stmt(&mut body, StmtKind::Expr(fa));
+        root_with(&mut body, vec![s]);
+        let r = build(&body, &[]);
+        assert!(!r.value_of.contains_key(&fa));
+    }
+
+    // ----- Per-arm heap snapshot -----
+
+    #[test]
+    fn switch_arm_field_writes_do_not_leak_across_arms() {
+        // fn(obj) {
+        //     switch (0) {
+        //         0 => { obj.f = 1; }
+        //         1 => { obj.g; }                  // VN must match obj.g read at TOP
+        //         default => {}
+        //     }
+        // }
+        // The two `obj.g` reads (one inside arm 1, one before the switch) must
+        // share a VN: arm 0's `obj.f = 1` bumps field `f` only, but without
+        // per-arm snapshot the bump would leak into arm 1's heap state and
+        // give `obj.g` a fresh heap version.
+        let mut body = empty_body();
+        // Read obj.g before the switch.
+        let recv_pre = local_ref(&mut body, 0);
+        let read_pre = field_access(&mut body, recv_pre, 1);
+        let let_pre = let_stmt(&mut body, 1, read_pre, false);
+
+        // Arm 0: obj.f = 1
+        let recv_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let arm0_write = field_assign_stmt(&mut body, recv_w, 0, one);
+        let arm0 = block_with(&mut body, vec![arm0_write]);
+
+        // Arm 1: read obj.g
+        let recv_in = local_ref(&mut body, 0);
+        let read_in_arm = field_access(&mut body, recv_in, 1);
+        let let_in_arm = let_stmt(&mut body, 2, read_in_arm, false);
+        let arm1 = block_with(&mut body, vec![let_in_arm]);
+
+        // Default: empty
+        let default = block_with(&mut body, vec![]);
+
+        let scrut = int_lit(&mut body, 0);
+        let switch_e = alloc_expr(
+            &mut body,
+            ExprKind::Switch {
+                scrutinee: scrut,
+                min_value: 0,
+                arms: vec![arm0, arm1],
+                default,
+            },
+        );
+        let switch_s = alloc_stmt(&mut body, StmtKind::Expr(switch_e));
+
+        root_with(&mut body, vec![let_pre, switch_s]);
+        let r = build(&body, &[param_seed()]);
+        // The read inside arm 1 must share a VN with the pre-switch read.
+        assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_arm]);
+    }
+
+    #[test]
+    fn if_branch_field_writes_do_not_leak_into_else() {
+        // fn(obj) {
+        //     let g_pre = obj.g;
+        //     if true { obj.f = 1; }
+        //     else    { let g_in_else = obj.g; }
+        // }
+        // The else-branch `obj.g` read must share a VN with the pre-If
+        // read: the then-branch's `bump_field(f)` is rolled back at the
+        // arm boundary so it does not pollute the else-branch heap state.
+        let mut body = empty_body();
+        let recv_pre = local_ref(&mut body, 0);
+        let read_pre = field_access(&mut body, recv_pre, 1);
+        let let_pre = let_stmt(&mut body, 1, read_pre, false);
+
+        let cond = bool_lit(&mut body, true);
+
+        let recv_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let then_write = field_assign_stmt(&mut body, recv_w, 0, one);
+        let then_block = block_with(&mut body, vec![then_write]);
+
+        let recv_else = local_ref(&mut body, 0);
+        let read_in_else = field_access(&mut body, recv_else, 1);
+        let let_in_else = let_stmt(&mut body, 2, read_in_else, false);
+        let else_block = block_with(&mut body, vec![let_in_else]);
+
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: Some(else_block),
+            },
+        );
+        root_with(&mut body, vec![let_pre, if_s]);
+        let r = build(&body, &[param_seed()]);
+        assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_else]);
+    }
+
+    // ----- LabeledBlock break-only-path writes -----
+
+    #[test]
+    fn labeled_block_break_only_write_marks_local_opaque() {
+        // fn() {
+        //     let mut x = 1;
+        //     'lb: { if cond { x = 2; break 'lb; } else {} }
+        //     x   // must be Opaque — the break path wrote 2 but fall-through didn't
+        // }
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let let_x = let_stmt(&mut body, 0, one, true);
+
+        // Inside the LB: `if true { x = 2; break 'lb; }`
+        let cond = bool_lit(&mut body, true);
+        let two = int_lit(&mut body, 2);
+        let assign_then = assign_stmt(&mut body, 0, two);
+        let break_stmt = alloc_stmt(
+            &mut body,
+            StmtKind::Break {
+                label: Some("lb".to_string()),
+                value: None,
+            },
+        );
+        let then_block = block_with(&mut body, vec![assign_then, break_stmt]);
+        let else_block = block_with(&mut body, vec![]);
+        let if_inside = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: Some(else_block),
+            },
+        );
+        let lb_block = block_with(&mut body, vec![if_inside]);
+        let lb_stmt = alloc_stmt(
+            &mut body,
+            StmtKind::LabeledBlock {
+                label: "lb".to_string(),
+                block: lb_block,
+            },
+        );
+
+        let read = local_ref(&mut body, 0);
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        root_with(&mut body, vec![let_x, lb_stmt, s_read]);
+        let r = build(&body, &[]);
+        // Post-LB `x` must be Opaque — the break-path write of 2 means the
+        // value is unknown, even though fall-through never observes it.
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::Opaque(_)
+        ));
+    }
+}

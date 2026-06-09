@@ -20,22 +20,30 @@
 //!
 //! Copy propagation then eliminates the trivial copies.
 //!
-//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
-//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): candidate collection,
-//! escape analysis, and the decomposition rewrite read and mutate the arena
-//! `Body` directly. New scalar locals are pushed to `func.locals` (reached via
-//! disjoint-field access from `func.body`).
+//! Runs on the worklist rewrite engine (combine migration; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
+//! per-function standalone engine session whose `apply_block` fires once at
+//! the function root and performs the whole-function decomposition in one
+//! shot. The analysis phases (candidate collection, escape / soft-escape) read
+//! `engine.body` directly; the rewrite routes every mutation through the
+//! engine edit API (`set_block_stmts`, `replace_expr_kind`, `alloc_stmt`,
+//! `alloc_expr`, `alloc_local`) so the parent map and use index stay
+//! coherent. Locals discovered to be `&local`-aliased by a decomposed field
+//! flow back into `func.stores_aliased_locals` via a `RefCell` the driver
+//! merges after `engine.run` returns.
+
+use std::cell::{Cell, RefCell};
 
 use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirFunction, NirLocal};
+use crate::nir::{FunctionRef, NirFunction};
 use crate::nir_arena::{
-    ArenaStructField, BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtId, StmtKind,
-    StmtNode,
+    ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind,
 };
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -82,43 +90,91 @@ fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
 pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let stores_lookup = build_stores_lookup(project);
     let len = project.functions.len();
+    let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::Sroa, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
+        if func.body.is_none() {
+            return false;
+        }
         let module_source = func.module_source.clone();
-        sroa_in_function(&mut func, &stores_lookup, &module_source)
+        let stores_aliased_snapshot = func.stores_aliased_locals.clone();
+        let rule = SroaRule {
+            stores_lookup: &stores_lookup,
+            current_module: module_source,
+            stores_aliased: stores_aliased_snapshot,
+            newly_aliased: RefCell::new(IndexSet::default()),
+            applied: Cell::new(false),
+        };
+        let changed = {
+            let NirFunction { body, locals, .. } = &mut *func;
+            let body = body.as_mut().expect("checked above");
+            let mut engine = Engine::new(body, &mut buffers, locals);
+            engine.run(&[&rule])
+        };
+        let newly = rule.newly_aliased.into_inner();
+        if !newly.is_empty() {
+            func.stores_aliased_locals.extend(newly);
+        }
+        changed
     })
 }
 
-fn sroa_in_function(
-    func: &mut NirFunction,
-    stores_lookup: &StoresLookup,
-    current_module: &ModuleSource,
-) -> bool {
-    if func.body.is_none() {
-        return false;
-    }
+// -----------------------------------------------------------------------
+// Rule
+// -----------------------------------------------------------------------
 
+/// Standalone-session rule whose single `apply_block` performs the whole-
+/// function SROA at the body root.
+pub(super) struct SroaRule<'a> {
+    stores_lookup: &'a StoresLookup,
+    current_module: ModuleSource,
+    /// Snapshot of `func.stores_aliased_locals` at session start. Used as a
+    /// blacklist when picking candidates so a local that the existing alias
+    /// analysis already flagged is never decomposed.
+    stores_aliased: IndexSet<u32>,
+    /// Locals discovered to be aliased by a decomposed candidate's `&local`
+    /// field value (step 3b). Merged into `func.stores_aliased_locals` by the
+    /// driver after the engine session ends.
+    newly_aliased: RefCell<IndexSet<u32>>,
+    /// Whole-function rewrite: only run once per session. The engine's
+    /// re-try-after-success loop and any block re-enqueue triggered by edits
+    /// could otherwise call `apply_block` at the root again.
+    applied: Cell<bool>,
+}
+
+impl Rule for SroaRule<'_> {
+    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
+        if engine.parent_of(NodeRef::Block(block)).is_some() {
+            return false;
+        }
+        if self.applied.replace(true) {
+            return false;
+        }
+        sroa_at_root(engine, self)
+    }
+}
+
+fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     // Step 1: identify candidate Let bindings (struct/tuple literals).
-    let candidates = collect_candidates(func.body.as_ref().unwrap());
+    let candidates = collect_candidates(engine.body);
     if candidates.is_empty() {
         return false;
     }
 
     // Step 2: escape analysis.
-    let body_ref = func.body.as_ref().unwrap();
-    let escaped = find_escaped_locals(body_ref, &candidates);
+    let escaped = find_escaped_locals(engine.body, &candidates);
     let soft_escaped = find_soft_escaped_locals(
-        body_ref,
+        engine.body,
         &candidates,
         &escaped,
-        stores_lookup,
-        current_module,
+        rule.stores_lookup,
+        &rule.current_module,
     );
 
     let mut safe_set: IndexSet<u32> = IndexSet::default();
     let mut reconstruct_set: IndexSet<u32> = IndexSet::default();
     for c in &candidates {
-        if func.stores_aliased_locals.contains(&c.local_index) {
+        if rule.stores_aliased.contains(&c.local_index) {
             continue;
         }
         if !escaped.contains(&c.local_index) {
@@ -137,27 +193,19 @@ fn sroa_in_function(
         return false;
     }
 
-    // Step 3: allocate scalar locals for each field of each SROA'd candidate.
+    // Step 3: allocate scalar locals for each field of each SROA'd candidate,
+    // through the engine so the locals list grows coherently.
     let mut field_local_map: IndexMap<(u32, u32), u32> = IndexMap::default();
     let mut field_info_map: IndexMap<(u32, u32), (String, TypeId)> = IndexMap::default();
     for candidate in &candidates {
         if !all_sroa.contains(&candidate.local_index) {
             continue;
         }
-        let base = func.local_count();
         for (i, (field_name, field_type)) in candidate.fields.iter().enumerate() {
-            let new_index = base + i as u32;
-            field_local_map.insert((candidate.local_index, i as u32), new_index);
             let new_name = format!("__sroa_{}_{}", candidate.local_name, field_name);
-            field_info_map.insert(
-                (candidate.local_index, i as u32),
-                (new_name.clone(), *field_type),
-            );
-            func.locals.push(NirLocal {
-                name: new_name,
-                type_id: *field_type,
-                is_mut: candidate.is_mut,
-            });
+            let new_index = engine.alloc_local(new_name.clone(), *field_type, candidate.is_mut);
+            field_local_map.insert((candidate.local_index, i as u32), new_index);
+            field_info_map.insert((candidate.local_index, i as u32), (new_name, *field_type));
         }
     }
 
@@ -181,11 +229,12 @@ fn sroa_in_function(
     }
 
     // Step 3b: mark locals referenced via &local in decomposed struct fields.
+    // The delta is collected here and merged into `func.stores_aliased_locals`
+    // by the driver after the session closes (rules can't touch
+    // function-scope fields directly).
     {
-        let body = func.body.as_ref().unwrap();
-        let mut newly_aliased: IndexSet<u32> = IndexSet::default();
-        mark_ref_field_locals_as_aliased(body, body.root, &all_sroa, &mut newly_aliased);
-        func.stores_aliased_locals.extend(newly_aliased);
+        let mut newly = rule.newly_aliased.borrow_mut();
+        mark_ref_field_locals_as_aliased(engine.body, engine.body.root, &all_sroa, &mut newly);
     }
 
     // Step 4: rewrite — expand candidate Lets and replace field accesses.
@@ -196,9 +245,8 @@ fn sroa_in_function(
         candidate_mut: &candidate_mut,
         reconstruct_info: &reconstruct_info,
     };
-    let body = func.body.as_mut().unwrap();
-    let root = body.root;
-    rewrite_block(body, root, &ctx);
+    let root = engine.body.root;
+    rewrite_block(engine, root, &ctx);
 
     true
 }
@@ -750,7 +798,7 @@ fn callee_stores_param_at(
 }
 
 // -----------------------------------------------------------------------
-// Rewrite
+// Rewrite (engine-routed)
 // -----------------------------------------------------------------------
 
 struct Rewrite<'a> {
@@ -761,87 +809,93 @@ struct Rewrite<'a> {
     reconstruct_info: &'a IndexMap<u32, ReconstructInfo>,
 }
 
-fn rewrite_block(body: &mut Body, block: BlockId, ctx: &Rewrite) {
-    let old_stmts = body.blocks[block].stmts.clone();
+fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
+    let old_stmts = engine.body.blocks[block].stmts.clone();
     let mut new_stmts: Vec<StmtId> = Vec::with_capacity(old_stmts.len());
     for stmt in old_stmts {
-        let candidate = match &body.stmts[stmt].kind {
+        let candidate = match &engine.body.stmts[stmt].kind {
             StmtKind::Let { local_index, .. } if ctx.safe_set.contains(local_index) => {
                 Some(*local_index)
             }
             _ => None,
         };
         if let Some(local_idx) = candidate {
-            let span = body.stmts[stmt].span;
+            let span = engine.body.stmts[stmt].span;
             let is_mut = ctx.candidate_mut.get(&local_idx).copied().unwrap_or(false);
-            let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
+            let StmtKind::Let { value, .. } = &engine.body.stmts[stmt].kind else {
                 unreachable!("candidate must be Let statement");
             };
             let value = *value;
-            expand_struct_let(body, value, local_idx, is_mut, span, ctx, &mut new_stmts);
+            expand_struct_let(engine, value, local_idx, is_mut, span, ctx, &mut new_stmts);
             continue;
         }
-        rewrite_node(body, NodeRef::Stmt(stmt), ctx);
+        rewrite_node(engine, NodeRef::Stmt(stmt), ctx);
         new_stmts.push(stmt);
     }
-    body.blocks[block].stmts = new_stmts;
+    engine.set_block_stmts(block, new_stmts);
 }
 
-fn rewrite_node(body: &mut Body, node: NodeRef, ctx: &Rewrite) {
+fn rewrite_node(engine: &mut Engine, node: NodeRef, ctx: &Rewrite) {
     match node {
-        NodeRef::Expr(id) => rewrite_expr(body, id, ctx),
-        NodeRef::Block(b) => rewrite_block(body, b, ctx),
+        NodeRef::Expr(id) => rewrite_expr(engine, id, ctx),
+        NodeRef::Block(b) => rewrite_block(engine, b, ctx),
         _ => {
             let mut kids = Vec::new();
-            body.for_each_child(node, |c| kids.push(c));
+            engine.body.for_each_child(node, |c| kids.push(c));
             for c in kids {
-                rewrite_node(body, c, ctx);
+                rewrite_node(engine, c, ctx);
             }
         }
     }
 }
 
-fn rewrite_expr(body: &mut Body, id: ExprId, ctx: &Rewrite) {
+fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
     // Field read: candidate.field -> scalar local.
     if let ExprKind::FieldAccess {
         expr: inner,
         field_index,
         ..
-    } = &body.exprs[id].kind
+    } = &engine.body.exprs[id].kind
     {
         let (inner, field_index) = (*inner, *field_index);
-        if let Some(local_idx) = is_candidate_local(body, inner, ctx.safe_set) {
+        if let Some(local_idx) = is_candidate_local(engine.body, inner, ctx.safe_set) {
             let key = (local_idx, field_index);
             if let Some(&new_local) = ctx.field_map.get(&key) {
                 let new_name = ctx.info_map[&key].0.clone();
-                body.exprs[id].kind = ExprKind::Local {
-                    index: new_local,
-                    name: new_name,
-                };
+                engine.replace_expr_kind(
+                    id,
+                    ExprKind::Local {
+                        index: new_local,
+                        name: new_name,
+                    },
+                );
                 return;
             }
         }
     }
 
     // Field write: candidate.field = value -> scalar_local = value.
-    if let ExprKind::Assign { target, value } = &body.exprs[id].kind {
+    if let ExprKind::Assign { target, value } = &engine.body.exprs[id].kind {
         let (target, value) = (*target, *value);
         if let ExprKind::FieldAccess {
             expr: inner,
             field_index,
             ..
-        } = &body.exprs[target].kind
+        } = &engine.body.exprs[target].kind
         {
             let (inner, field_index) = (*inner, *field_index);
-            if let Some(local_idx) = is_candidate_local(body, inner, ctx.safe_set) {
+            if let Some(local_idx) = is_candidate_local(engine.body, inner, ctx.safe_set) {
                 let key = (local_idx, field_index);
                 if let Some(&new_local) = ctx.field_map.get(&key) {
                     let new_name = ctx.info_map[&key].0.clone();
-                    body.exprs[target].kind = ExprKind::Local {
-                        index: new_local,
-                        name: new_name,
-                    };
-                    rewrite_expr(body, value, ctx);
+                    engine.replace_expr_kind(
+                        target,
+                        ExprKind::Local {
+                            index: new_local,
+                            name: new_name,
+                        },
+                    );
+                    rewrite_expr(engine, value, ctx);
                     return;
                 }
             }
@@ -849,25 +903,27 @@ fn rewrite_expr(body: &mut Body, id: ExprId, ctx: &Rewrite) {
     }
 
     // Reconstruct: bare Local of a soft-escape candidate -> re-materialize.
-    if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
+    if let ExprKind::Local { index, .. } = &engine.body.exprs[id].kind {
         let index = *index;
         if ctx.reconstruct_info.contains_key(&index) {
-            reconstruct_aggregate(body, id, index, ctx);
+            reconstruct_aggregate(engine, id, index, ctx);
             return;
         }
     }
 
     let mut kids = Vec::new();
-    body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+    engine
+        .body
+        .for_each_child(NodeRef::Expr(id), |c| kids.push(c));
     for c in kids {
-        rewrite_node(body, c, ctx);
+        rewrite_node(engine, c, ctx);
     }
 }
 
 /// Expand a candidate `Let` value into one per-field `Let`, rewriting each
 /// field expression as it goes.
 fn expand_struct_let(
-    body: &mut Body,
+    engine: &mut Engine,
     value: ExprId,
     local_idx: u32,
     is_mut: bool,
@@ -876,7 +932,7 @@ fn expand_struct_let(
     new_stmts: &mut Vec<StmtId>,
 ) {
     // (field_index, value_expr) pairs in field-index order.
-    let mut pairs: Vec<(u32, ExprId)> = match &body.exprs[value].kind {
+    let mut pairs: Vec<(u32, ExprId)> = match &engine.body.exprs[value].kind {
         ExprKind::StructLiteral { fields, .. } => {
             fields.iter().map(|f| (f.field_index, f.value)).collect()
         }
@@ -889,9 +945,9 @@ fn expand_struct_let(
     };
     pairs.sort_by_key(|(fi, _)| *fi);
     for (field_index, field_value) in pairs {
-        rewrite_expr(body, field_value, ctx);
+        rewrite_expr(engine, field_value, ctx);
         push_field_let(
-            body,
+            engine,
             (local_idx, field_index),
             is_mut,
             span,
@@ -903,7 +959,7 @@ fn expand_struct_let(
 }
 
 fn push_field_let(
-    body: &mut Body,
+    engine: &mut Engine,
     key: (u32, u32),
     is_mut: bool,
     span: Span,
@@ -913,8 +969,8 @@ fn push_field_let(
 ) {
     let new_local = ctx.field_map[&key];
     let (new_name, field_type) = ctx.info_map[&key].clone();
-    let stmt = body.stmts.push(StmtNode {
-        kind: StmtKind::Let {
+    let stmt = engine.alloc_stmt(
+        StmtKind::Let {
             name: new_name,
             local_index: new_local,
             is_mut,
@@ -926,15 +982,15 @@ fn push_field_let(
             skip_value_copy: true,
         },
         span,
-    });
+    );
     new_stmts.push(stmt);
 }
 
 /// Build a reconstructed struct or tuple literal from SROA'd scalar locals,
 /// replacing the bare-`Local` node `id` in place (keeping its `type_id` / span).
-fn reconstruct_aggregate(body: &mut Body, id: ExprId, local_idx: u32, ctx: &Rewrite) {
+fn reconstruct_aggregate(engine: &mut Engine, id: ExprId, local_idx: u32, ctx: &Rewrite) {
     let info = &ctx.reconstruct_info[&local_idx];
-    let span = body.exprs[id].span;
+    let span = engine.body.exprs[id].span;
     let is_tuple = info.struct_name.is_empty();
     let field_specs: Vec<(String, TypeId)> = info.fields.clone();
     let struct_name = info.struct_name.clone();
@@ -946,41 +1002,44 @@ fn reconstruct_aggregate(body: &mut Body, id: ExprId, local_idx: u32, ctx: &Rewr
             let key = (local_idx, i as u32);
             let field_local = ctx.field_map[&key];
             let field_name = ctx.info_map[&key].0.clone();
-            let e = body.exprs.push(ExprNode {
-                kind: ExprKind::Local {
+            let e = engine.alloc_expr(
+                ExprKind::Local {
                     index: field_local,
                     name: field_name,
                 },
-                type_id: *type_id,
+                *type_id,
                 span,
-            });
+            );
             elements.push(e);
         }
-        body.exprs[id].kind = ExprKind::TupleLiteral { elements };
+        engine.replace_expr_kind(id, ExprKind::TupleLiteral { elements });
     } else {
         let mut fields: Vec<ArenaStructField> = Vec::with_capacity(field_specs.len());
         for (i, (name, type_id)) in field_specs.iter().enumerate() {
             let key = (local_idx, i as u32);
             let field_local = ctx.field_map[&key];
             let field_name = ctx.info_map[&key].0.clone();
-            let value = body.exprs.push(ExprNode {
-                kind: ExprKind::Local {
+            let value = engine.alloc_expr(
+                ExprKind::Local {
                     index: field_local,
                     name: field_name,
                 },
-                type_id: *type_id,
+                *type_id,
                 span,
-            });
+            );
             fields.push(ArenaStructField {
                 name: name.clone(),
                 value,
                 field_index: i as u32,
             });
         }
-        body.exprs[id].kind = ExprKind::StructLiteral {
-            struct_type,
-            struct_name,
-            fields,
-        };
+        engine.replace_expr_kind(
+            id,
+            ExprKind::StructLiteral {
+                struct_type,
+                struct_name,
+                fields,
+            },
+        );
     }
 }
