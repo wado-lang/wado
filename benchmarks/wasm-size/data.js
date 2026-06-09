@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780975388603,
+  "lastUpdate": 1781015948729,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31669,6 +31669,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 437035,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0ccccb120c181fd87b5f443c8d8716d075b93e79",
+          "message": "Merge pull request #1341 from wado-lang/claude/tender-galileo-2hkx1u\n\nperf(optimize): ValueGraph foundation + Stage 3/5 rule migrations",
+          "timestamp": "2026-06-09T23:27:05+09:00",
+          "tree_id": "b61b7bb2f3542d11b0c35a68c7504ab9a84679fb",
+          "url": "https://github.com/wado-lang/wado/commit/0ccccb120c181fd87b5f443c8d8716d075b93e79"
+        },
+        "date": 1781015948187,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437037,
             "unit": "bytes"
           }
         ]
