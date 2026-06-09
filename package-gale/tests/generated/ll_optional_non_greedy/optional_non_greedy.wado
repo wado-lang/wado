@@ -969,7 +969,7 @@ fn atn_compute_first_nullable(sim: &mut AtnSim) {
             }
             let mut v2: List<i32> = [];
             let mut f: List<i32> = [];
-            if atn_cont_first(sim, sim.rule_start[r], &mut v2, &mut f) && !sim.rule_first_open[r] {
+            if atn_cont_first(sim, sim.rule_start[r], &mut v2, &mut f, true) && !sim.rule_first_open[r] {
                 sim.rule_first_open[r] = true;
                 changed = true;
             }
@@ -1021,7 +1021,7 @@ fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool 
 /// Uses `sim.rule_first` / `rule_first_open` / `rule_nullable` for rule-ref
 /// edges; `visited` breaks within-rule cycles.
 #[allow(dead_code)]
-fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>) -> bool {
+fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>, forbid_prec: bool = false) -> bool {
     if visited.contains(&state) {
         return false;
     }
@@ -1040,8 +1040,24 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
             }
         } else if k == ATN_TR_WILDCARD || k == ATN_TR_NOT_ATOM {
             open = true;
-        } else if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
-            if atn_cont_first(sim, sim.tr_target[s + j], visited, out) {
+        } else if k == ATN_TR_PRECEDENCE {
+            // A precedence edge only exists at an LR rule's loop entry, i.e.
+            // *after* the left operand. Reaching one while computing a rule's
+            // FIRST set (`forbid_prec`) means the rule's atom prefix is
+            // nullable, so the operator tokens behind this edge would leak
+            // into FIRST and the caller-mandate test would mis-fire. That
+            // ATN-class shape (a nullable atom alternative in an LR rule) is
+            // not handled by the loop-entry predictor; fail loudly instead of
+            // mis-predicting. Non-FIRST callers (the loop-entry decision and
+            // the caller-mandate walk) legitimately cross precedence edges.
+            if forbid_prec {
+                panic(`ATN-class LR rule with a nullable atom alternative is unsupported (operator leaks into FIRST)`);
+            }
+            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, forbid_prec) {
+                open = true;
+            }
+        } else if k == ATN_TR_EPSILON {
+            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, forbid_prec) {
                 open = true;
             }
         } else if k == ATN_TR_RULE {
@@ -1055,7 +1071,7 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
                 if sim.rule_first_open[callee] {
                     open = true;
                 }
-                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out) {
+                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out, forbid_prec) {
                     open = true;
                 }
             }
@@ -1105,7 +1121,16 @@ impl CfgSet {
     fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, rs: i32, pr: i32, ctx: i32) -> [i32, bool] {
         // Packed integer key (avoids per-config string allocation on the hot
         // closure path). Fields are small; `state`/`alt`/`rs`/`pr` offset so
-        // the -2/-1 sentinels stay non-negative.
+        // the -2/-1 sentinels stay non-negative. Each of `pr`, `rs`, `alt`
+        // gets a 3-decimal-digit slot: a value that overflows its slot would
+        // carry into the neighbouring field and alias a *different* config
+        // onto the same key — a silent mis-merge yielding a wrong prediction.
+        // These bounds hold for every grammar the simulator handles today (LR
+        // precedence and caller-stack depth are far below 998); fail loudly
+        // rather than corrupt the key if a future grammar exceeds them.
+        assert pr + 2 < 1000, `ATN config precedence {pr} exceeds packed-key slot (max 997)`;
+        assert rs + 2 < 1000, `ATN config caller-stack depth {rs} exceeds packed-key slot (max 997)`;
+        assert alt + 1 < 1000, `ATN config alt {alt} exceeds packed-key slot (max 998)`;
         let k = ((state + 2) as i64) * 1000000000 + ((alt + 1) as i64) * 1000000 + ((rs + 2) as i64) * 1000 + ((pr + 2) as i64);
         if let Some(i) = self.index.get(k) {
             let merged = arena.merge(self.ctx[i], ctx);
