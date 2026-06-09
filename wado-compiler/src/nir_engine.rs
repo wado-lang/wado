@@ -92,7 +92,7 @@ pub struct Engine<'a> {
     /// pass a scratch `Vec`; those bodies have no locals and their rules never
     /// allocate, so it stays empty.
     locals: &'a mut Vec<NirLocal>,
-    /// Lazy per-session ValueGraph cache. `None` until the first
+    /// Lazy per-session `ValueGraph` cache. `None` until the first
     /// [`Engine::value`] / [`Engine::value_kind`] call; cleared by
     /// [`Engine::invalidate_value_graph`]. See [`crate::nir_value_graph`]
     /// for the data model.
@@ -123,7 +123,7 @@ impl<'a> Engine<'a> {
         engine
     }
 
-    /// Return the [`ValueId`] of `expr` if the per-function ValueGraph
+    /// Return the [`ValueId`] of `expr` if the per-function `ValueGraph`
     /// assigned one. Returns `None` for impure / allocation-bearing /
     /// control-flow expressions and for any `ExprId` allocated after the
     /// cache was built. Built lazily on first call.
@@ -160,7 +160,7 @@ impl<'a> Engine<'a> {
         self.value_graph.as_ref()?.literal_source.get(&id).copied()
     }
 
-    /// Drop the cached ValueGraph so the next [`Engine::value`] call
+    /// Drop the cached `ValueGraph` so the next [`Engine::value`] call
     /// rebuilds. Used by rules that intend to query the value graph again
     /// after a structural rewrite that would invalidate the prior build.
     pub fn invalidate_value_graph(&mut self) {

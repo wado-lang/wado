@@ -1,7 +1,7 @@
 //! Store-to-Load Forwarding optimization for Wado NIR.
 //!
 //! Replace `Local` reads with the literal that reaches them. The engine's
-//! ValueGraph handles flow-sensitive reaching-defs, branch merges, loop
+//! `ValueGraph` handles flow-sensitive reaching-defs, branch merges, loop
 //! and heap-write invalidation, so this rule only inspects each read's
 //! `ValueKind` and substitutes when it is a literal.
 //!

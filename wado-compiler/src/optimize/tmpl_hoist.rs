@@ -551,7 +551,7 @@ fn transform_stmt(
     };
     match shape {
         Shape::Expr(e) | Shape::Break(e) => {
-            transform_expr(engine, e, escaping_locals, hoist_stmts, type_table)
+            transform_expr(engine, e, escaping_locals, hoist_stmts, type_table);
         }
         Shape::If(cond, tb, eb) => {
             transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table);
@@ -561,7 +561,7 @@ fn transform_stmt(
             }
         }
         Shape::Labeled(b) => {
-            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table)
+            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table);
         }
         Shape::None => {}
     }
@@ -616,7 +616,7 @@ fn transform_expr(
             }
         }
         Walk::Block(b) => {
-            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table)
+            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table);
         }
         Walk::None => {}
     }

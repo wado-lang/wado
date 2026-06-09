@@ -1,6 +1,6 @@
-//! Per-function ValueGraph builder.
+//! Per-function `ValueGraph` builder.
 //!
-//! Walks the SkelTree (`Body`) once and assigns a [`ValueId`] to every pure
+//! Walks the `SkelTree` (`Body`) once and assigns a [`ValueId`] to every pure
 //! [`ExprId`]. Impure or allocation-bearing expressions (calls, struct/array
 //! literals, control flow, etc.) get no entry in `value_of`.
 //!
@@ -51,7 +51,7 @@ struct HeapState {
     next: HeapVersion,
     /// Current version of each `field_index` we have seen written.
     per_field: IndexMap<u32, HeapVersion>,
-    /// Version returned for field_indices not yet in `per_field`.
+    /// Version returned for `field_indices` not yet in `per_field`.
     /// `bump_all` advances this; `bump_field` does not.
     default_version: HeapVersion,
 }
@@ -130,7 +130,7 @@ pub struct ValueGraphBuild {
     pub literal_source: IndexMap<ValueId, ExprId>,
 }
 
-/// Build the ValueGraph for one function body.
+/// Build the `ValueGraph` for one function body.
 ///
 /// `params` seed `current_value` with one fresh `Opaque` per parameter, so a
 /// `Local { index: param.local_index }` read returns that Opaque every time
@@ -254,7 +254,7 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Walk `expr` and return its ValueGraph id if the expression is pure.
+    /// Walk `expr` and return its `ValueGraph` id if the expression is pure.
     /// Impure expressions return `None`; their pure children are still walked
     /// for their side of the side-table.
     fn walk_expr(&mut self, expr: ExprId) -> Option<ValueId> {
@@ -680,8 +680,7 @@ impl<'a> Builder<'a> {
         // threading the post-guard state forward, conservatively dirty
         // every outer local any guard could write and bump the heap
         // once before walking arms.
-        let mut guard_writes: crate::hashmap::IndexSet<u32> =
-            crate::hashmap::IndexSet::default();
+        let mut guard_writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
         let mut any_guard = false;
         for arm in arms {
             if let Some(g) = arm.guard {
@@ -743,7 +742,7 @@ impl<'a> Builder<'a> {
         self.heap_state.bump_all();
     }
 
-    /// After a flow-opaque construct (LabeledBlock with potential breaks),
+    /// After a flow-opaque construct (`LabeledBlock` with potential breaks),
     /// every local written anywhere in `block`'s subtree becomes Opaque —
     /// including locals written on a `break`-only path that fall-through
     /// never sees. Locals not written in the subtree keep their pre-block
@@ -821,19 +820,16 @@ fn collect_writes_in_expr(body: &Body, expr: ExprId, out: &mut crate::hashmap::I
 }
 
 fn collect_writes_in_pattern(body: &Body, pat: PatId, out: &mut crate::hashmap::IndexSet<u32>) {
-    match &body.pats[pat].kind {
-        PatKind::Binding { local_index, .. } => {
-            out.insert(*local_index);
-        }
-        _ => {
-            let mut kids = Vec::new();
-            body.for_each_child(NodeRef::Pat(pat), |c| kids.push(c));
-            for c in kids {
-                match c {
-                    NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out),
-                    NodeRef::Expr(e) => collect_writes_in_expr(body, e, out),
-                    _ => {}
-                }
+    if let PatKind::Binding { local_index, .. } = &body.pats[pat].kind {
+        out.insert(*local_index);
+    } else {
+        let mut kids = Vec::new();
+        body.for_each_child(NodeRef::Pat(pat), |c| kids.push(c));
+        for c in kids {
+            match c {
+                NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out),
+                NodeRef::Expr(e) => collect_writes_in_expr(body, e, out),
+                _ => {}
             }
         }
     }

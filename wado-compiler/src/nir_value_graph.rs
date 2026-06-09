@@ -2,7 +2,7 @@
 //!
 //! Hash-consed DAG of pure values. Each value has a [`ValueId`] (newtype
 //! over `u32`); two structurally-equivalent values share one `ValueId`. The
-//! SkelTree (Layer 1 — see [`crate::nir_arena`]) references pure operands by
+//! `SkelTree` (Layer 1 — see [`crate::nir_arena`]) references pure operands by
 //! `ValueId`; pure values live exclusively here.
 //!
 //! Consumed by [`crate::nir_engine::Engine::value`] (which lazily builds the
@@ -48,7 +48,7 @@ impl OpaqueId {
 }
 
 /// Heap-version tag carried by [`ValueKind::FieldAccess`]. The Stage-2
-/// builder bumps the version on every SkelTree node that may write the heap;
+/// builder bumps the version on every `SkelTree` node that may write the heap;
 /// reads at the same `(receiver, field, heap_ver)` triple share a
 /// `ValueId`, automatically forwarding stored values. Granularity is
 /// per-field in the MVP.
@@ -75,7 +75,7 @@ impl HeapVersion {
 /// A pure-value expression. Hash-consed by structural equality.
 ///
 /// Side-effecting nodes (`Call`, `MethodCall`, `Assign`-to-heap, …) stay
-/// in the SkelTree. Pure operand positions connect to their `ValueId`s
+/// in the `SkelTree`. Pure operand positions connect to their `ValueId`s
 /// through the per-function side-table `value_of: IndexMap<ExprId,
 /// ValueId>` populated by [`crate::nir_value_graph::builder`]. Stage 7
 /// of the WEP would replace that table with `Operand::Value(ValueId)` on
@@ -415,7 +415,7 @@ mod tests {
             (ValueKind::Opaque(ia), ValueKind::Opaque(ib)) => {
                 assert_eq!(ib.index(), ia.index() + 1);
             }
-            other => panic!("unexpected kinds: {:?}", other),
+            other => panic!("unexpected kinds: {other:?}"),
         }
     }
 

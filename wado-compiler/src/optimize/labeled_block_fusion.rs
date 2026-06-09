@@ -1486,7 +1486,7 @@ fn recurse_block(
 /// Replace `VariantPayload { expr: Local(temp_local), case_index }` with
 /// `Local(payload_local)` throughout a block. Engine-routed so each rewrite
 /// updates the use index (the new Local mention is registered, the old
-/// VariantPayload's children are orphaned but never queried again).
+/// `VariantPayload`'s children are orphaned but never queried again).
 fn subst_variant_payload_in_block(
     engine: &mut Engine,
     block: BlockId,

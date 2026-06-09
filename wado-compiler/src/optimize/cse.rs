@@ -24,7 +24,7 @@
 //! ```
 //!
 //! Identity check: two expressions are "the same" iff `engine.value(e1) ==
-//! engine.value(e2)`. The ValueGraph already encodes reassignment between
+//! engine.value(e2)`. The `ValueGraph` already encodes reassignment between
 //! occurrences, so this pass needs no separate modification guard.
 //!
 //! Runs as a per-function standalone engine session whose `apply_block`
@@ -214,10 +214,10 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
     false
 }
 
-/// Collect every `Binary` subexpression of `expr` paired with its ValueId.
+/// Collect every `Binary` subexpression of `expr` paired with its `ValueId`.
 /// Recurses through Binary/Unary so candidates like `!(p * p <= limit)`
 /// are reached. Two-pass: pass 1 collects candidates under `&body`;
-/// pass 2 attaches ValueIds (which needs `&mut engine`).
+/// pass 2 attaches `ValueIds` (which needs `&mut engine`).
 fn collect_binary_candidates(
     engine: &mut Engine,
     expr: ExprId,
@@ -262,7 +262,7 @@ fn any_stmt_contains_value(engine: &mut Engine, stmts: &[StmtId], target: ValueI
     false
 }
 
-/// Replace every expression in `stmt`'s subtree whose ValueId equals
+/// Replace every expression in `stmt`'s subtree whose `ValueId` equals
 /// `target` with a `Local { cse_local_idx, cse_local_name }` read. Re-asserts
 /// the new type on the rewritten node (Local takes a `TypeId` and the
 /// CSE'd value may differ from the surrounding context's type).
