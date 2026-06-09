@@ -1,5 +1,5 @@
-#![generated(by = "local:src/generator.wado", sources = ["grammars/ll_empty_alt_group.g4"])]
-#![generated(by = "gale", sources = ["EmptyAltGroup.g4"])]
+#![generated(by = "local:src/generator.wado", sources = ["grammars/lr_scan_caller.g4"])]
+#![generated(by = "gale", sources = ["LrScanCaller.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -498,78 +498,6 @@ fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
         }
     }
     return [line, col];
-}
-//! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
-//! generated parser only when lowering constructed a caller-FOLLOW gate
-//! (`GenContext::emit_follow`); gate-free grammars carry none of this. The
-//! `./lex.wado` import is stripped at `#include_str` time.
-
-
-/// `follow` is the caller's deterministic K-prefix continuation:
-/// `follow[d]` is the set of token kinds that may appear at input depth
-/// `d` if control belongs to the caller rather than to another iteration
-/// of the loop. An empty `follow` (the common, non-repair case) disables
-/// the gate. The loop yields to the caller — breaking `*`/`+` or skipping
-/// `?` — exactly when EVERY non-empty depth-set matches the upcoming
-/// input, i.e. when the next tokens are unambiguously the caller's
-/// continuation.
-///
-/// Threaded as a defaulted `&EMPTY_FOLLOW` argument through the generated
-/// `parse_*` / `scan_*` functions; repair call sites pass a `FOLLOW_MASK_*`
-/// constant (or forward their own `follow`). This replaces the previous
-/// per-(rule, mask) cloned `__follow_<id>` variants: the mask is data
-/// carried at runtime, not code baked into a specialised function.
-///
-/// `eof_kind` is the token kind reported past the end of the stream, so a
-/// caller continuation ending in EOF gates correctly. Used by both the
-/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
-/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
-/// lockstep with parse.
-pub global EMPTY_FOLLOW: List<List<i32>> = [];
-
-/// Prepend a static local prefix to an inherited FOLLOW continuation.
-/// Used for the `FollowArg::Combined` case: a callee at the current
-/// rule's tail whose preceding local suffix is nullable, so its
-/// continuation is `prefix` (the optional local elements' per-depth
-/// first sets) followed by the caller's own `follow`. Bounded by
-/// `FOLLOW_MASK_MAX_K` so the result stays small; the only
-/// allocating point on a repaired path (the common Static/Forward
-/// cases pass a reference directly).
-pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
-    for let depth of prefix {
-        combined.push(*depth);
-    }
-    for let depth of follow {
-        combined.push(*depth);
-    }
-    return combined;
-}
-
-pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
-    if follow.is_empty() {
-        return false;
-    }
-    for let mut d = 0; d < follow.len(); d += 1 {
-        let set = &follow[d];
-        if set.is_empty() {
-            // No constraint at this depth — a vacuous match, keep going.
-            continue;
-        }
-        let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens[idx].kind } else { eof_kind };
-        let mut hit = false;
-        for let t of set {
-            if kind == *t {
-                hit = true;
-                break;
-            }
-        }
-        if !hit {
-            return false;
-        }
-    }
-    return true;
 }
 //! Runtime ATN simulator (hybrid ALL(*)) — full-context SLL prediction.
 //!
@@ -1691,47 +1619,59 @@ pub enum TokenKind {
     Error,
 }
 
-pub struct StartNode {
+pub variant StatNode {
+    Alt0(StatAlt0),
+    Alt1(StatAlt1),
+}
+
+pub struct StatAlt0 {
     pub span: Span,
-    pub statement_list: List<StatementNode>,
+    pub expr: ExprNode,
+    pub lit_and: Token,
+    pub id: Token,
+    pub bang: Token,
 }
 
-pub variant StatementNode {
-    Alt0(StatementAlt0),
-    Alt1(StatementAlt1),
-}
-
-pub struct StatementAlt0 {
+pub struct StatAlt1 {
     pub span: Span,
-    pub lit_x: Token,
+    pub expr: ExprNode,
+    pub semicolon: Token,
 }
 
-pub struct StatementAlt1 {
+pub variant ExprNode {
+    Alt0(ExprAlt0),
+    Alt1(ExprAlt1),
+    Alt2(ExprAlt2),
+}
+
+pub struct ExprAlt0 {
     pub span: Span,
-    pub if_statement: IfStatementNode,
+    pub id: Token,
 }
 
-pub struct LitElseStatementItem {
-    pub lit_else: Token,
-    pub statement: StatementNode,
-}
-
-pub struct IfStatementNode {
+pub struct ExprAlt1 {
     pub span: Span,
-    pub lit_if: Token,
-    pub lit_y: Token,
-    pub statement: StatementNode,
-    pub lit_else_statement: Option<LitElseStatementItem>,
+    pub expr: ExprNode,
+    pub lit_and: Token,
+    pub expr_2: ExprNode,
+}
+
+pub struct ExprAlt2 {
+    pub span: Span,
+    pub lit_between: Token,
+    pub expr: ExprNode,
+    pub lit_and: Token,
+    pub expr_2: ExprNode,
 }
 
 global TK_ID: i32 = 0;
 global TK_WS: i32 = 1;
 global TK_EOF: i32 = 2;
 global TK_ERROR: i32 = 3;
-global TK_LIT_X: i32 = 4;
-global TK_LIT_IF: i32 = 5;
-global TK_LIT_Y: i32 = 6;
-global TK_LIT_ELSE: i32 = 7;
+global TK_LIT_AND: i32 = 4;
+global TK_LIT_BANG: i32 = 5;
+global TK_LIT_SEMI: i32 = 6;
+global TK_LIT_BETWEEN: i32 = 7;
 
 struct Lexer {
     chars: List<char>,
@@ -1754,12 +1694,14 @@ impl Lexer {
 
 fn try_id(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { return -1; }
+    if pos >= chars.len() { return -1; }
+    if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
-            if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { break rep_0; }
+            if pos >= chars.len() { break rep_0; }
+            if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_' || '0' <= chars[pos] <= '9') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1771,52 +1713,53 @@ fn try_id(chars: &List<char>, start: i32) -> i32 {
 
 fn try_ws(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_1 = pos;
-    let mut alts_ok_1 = false;
-    alts_1_0: {
-        pos = alts_saved_1;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_1_0; }
-        pos += 1;
-        alts_ok_1 = true;
-    }
-    if !alts_ok_1 {
-        alts_1_1: {
-            pos = alts_saved_1;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_1_1; }
+    if pos >= chars.len() { return -1; }
+    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_1 = pos;
+        rep_1: {
+            if pos >= chars.len() { break rep_1; }
+            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_1; }
             pos += 1;
-            alts_ok_1 = true;
+            continue;
         }
+        pos = rep_saved_1;
+        break;
     }
-    if !alts_ok_1 { return -1; }
     return pos;
 }
 
-fn try_lit_x(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_and(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'x' { return -1; }
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'a' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != 'n' { return -1; }
+    if pos + 2 >= chars.len() || chars[pos + 2] != 'd' { return -1; }
+    return pos + 3;
+}
+
+fn try_lit_bang(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '!' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_if(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_semi(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'i' { return -1; }
-    if pos + 1 >= chars.len() || chars[pos + 1] != 'f' { return -1; }
-    return pos + 2;
-}
-
-fn try_lit_y(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'y' { return -1; }
+    if pos + 0 >= chars.len() || chars[pos + 0] != ';' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_else(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_between(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'e' { return -1; }
-    if pos + 1 >= chars.len() || chars[pos + 1] != 'l' { return -1; }
-    if pos + 2 >= chars.len() || chars[pos + 2] != 's' { return -1; }
-    if pos + 3 >= chars.len() || chars[pos + 3] != 'e' { return -1; }
-    return pos + 4;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'b' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != 'e' { return -1; }
+    if pos + 2 >= chars.len() || chars[pos + 2] != 't' { return -1; }
+    if pos + 3 >= chars.len() || chars[pos + 3] != 'w' { return -1; }
+    if pos + 4 >= chars.len() || chars[pos + 4] != 'e' { return -1; }
+    if pos + 5 >= chars.len() || chars[pos + 5] != 'e' { return -1; }
+    if pos + 6 >= chars.len() || chars[pos + 6] != 'n' { return -1; }
+    return pos + 7;
 }
 
 pub fn tokenize(input: &String) -> List<Token> {
@@ -1829,34 +1772,35 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        let mut best_channel: i32 = 0;
-        if first_char == '\n' || first_char == ' ' {
+        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
             end = try_ws(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; best_channel = 1; }
-        } else if first_char == 'e' {
-            end = try_lit_else(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_ELSE; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char == '!' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_BANG; }
+        } else if first_char == ';' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SEMI; }
+        } else if first_char == '_' {
             end = try_id(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; best_channel = 0; }
-        } else if first_char == 'i' {
-            end = try_lit_if(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_IF; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if first_char == 'a' {
+            end = try_lit_and(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_AND; }
             end = try_id(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; best_channel = 0; }
-        } else if first_char == 'x' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_X; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if first_char == 'b' {
+            end = try_lit_between(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_BETWEEN; }
             end = try_id(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; best_channel = 0; }
-        } else if first_char == 'y' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_Y; best_channel = 0; }
-            end = try_id(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if 'a' <= first_char <= 'z' {
             end = try_id(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if 'A' <= first_char <= 'Z' {
+            end = try_id(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {
             end = try_id(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ID; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
@@ -1865,11 +1809,9 @@ pub fn tokenize(input: &String) -> List<Token> {
             lexer.pos = start + 1;
         } else {
             let tok_start = start;
-            let is_skip = false;
+            let is_skip = best_kind matches { TK_WS };
             if is_skip {
                 trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));
-            } else if best_channel != 0 {
-                trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));
             } else {
                 let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);
                 tokens.push(tok);
@@ -1888,10 +1830,10 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_X => "TK_LIT_X",
-        TK_LIT_IF => "TK_LIT_IF",
-        TK_LIT_Y => "TK_LIT_Y",
-        TK_LIT_ELSE => "TK_LIT_ELSE",
+        TK_LIT_AND => "TK_LIT_AND",
+        TK_LIT_BANG => "TK_LIT_BANG",
+        TK_LIT_SEMI => "TK_LIT_SEMI",
+        TK_LIT_BETWEEN => "TK_LIT_BETWEEN",
         _ => "Unknown",
     };
 }
@@ -2025,36 +1967,73 @@ impl Parser {
     }
 }
 
-fn scan_start(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-        let sp = pos;
-        pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
-fn scan_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_stat(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_LIT_X {
+        if _gale_kind_set_0(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break try_0; }
+                GALE_SCAN_STACK.push(8);
+                pos = scan_expr(tokens, pos, 0);
+                GALE_SCAN_STACK.pop();
+                if pos < 0 { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { break try_0; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_0; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BANG { break try_0; }
+                pos += 1;
+                if pos > best { best = pos; }
+            }
+            pos = start;
+            try_1: {
+                GALE_SCAN_STACK.push(17);
+                pos = scan_expr(tokens, pos, 0);
+                GALE_SCAN_STACK.pop();
+                if pos < 0 { break try_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { break try_1; }
+                pos += 1;
+                if pos > best { best = pos; }
+            }
+            if best >= 0 { pos = best; break scan_alts; }
+            return -1;
+        } else {
+            return -1;
+        }
+    }
+    return pos;
+}
+
+fn scan_expr_atom(tokens: &List<Token>, pos: i32) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    scan_alts: {
+        if alt_kind == TK_ID {
+            pos = start;
+            try_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_IF {
+        } else if alt_kind == TK_LIT_BETWEEN {
             pos = start;
             try_1: {
-                pos = scan_if_statement(tokens, pos, follow, 0);
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BETWEEN { break try_1; }
+                pos += 1;
+                GALE_SCAN_STACK.push(29);
+                pos = scan_expr(tokens, pos, 0);
+                GALE_SCAN_STACK.pop();
+                if pos < 0 { break try_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { break try_1; }
+                pos += 1;
+                GALE_SCAN_STACK.push(33);
+                pos = scan_expr(tokens, pos, 0);
+                GALE_SCAN_STACK.pop();
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -2066,154 +2045,209 @@ fn scan_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_if_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_expr_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_IF { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_Y { return -1; }
-    pos += 1;
-    pos = scan_statement(tokens, pos, follow, 0);
+    GALE_SCAN_STACK.push(41);
+    pos = scan_expr(tokens, pos, 2);
+    GALE_SCAN_STACK.pop();
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind == TK_LIT_ELSE {
-        let sp = pos;
-        sg_0_done: {
-            sg_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_ELSE { break sg_0; }
-                pos += 1;
-                pos = scan_statement(tokens, pos, follow, 0);
-                if pos < 0 { break sg_0; }
-                break sg_0_done;
-            }
-            pos = -1;
+    return pos;
+}
+
+fn scan_expr(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_expr_atom(tokens, pos);
+    if pos < 0 { return -1; }
+    loop {
+        let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &GALE_SCAN_STACK, 2, tokens, pos, TK_EOF, min_prec);
+        let _lr_pos0 = pos;
+        if _atn_alt == 0 {
+            pos = scan_expr_lr_1(tokens, pos);
+            if pos < 0 { return -1; }
+        } else {
+            break;
         }
-        if pos < 0 { pos = sp; }
+        if pos == _lr_pos0 {
+            break;
+        }
     }
     return pos;
 }
 
-fn _parse_start__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StartNode, ParseError> {
+fn _parse_stat__inner_bt_0(p: &mut Parser) -> Result<StatNode, ParseError> {
     let start = p.peek().span.start;
-    let mut statement_list: List<StatementNode> = [];
-    let mut _plus_first = true;
-    loop {
-        if !_plus_first {
-            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                let tokens = &p.tokens;
-                let mut pos: i32 = p.pos;
-                pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break rep_scan; }
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos < 0 {
-                if _gale_kind_set_0(p.peek_kind()) {
-                    let _rec_pos = p.pos;
-                    if let Err(_rec_e) = _parse_statement(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
-                    p.pos = _rec_pos;
-                }
-                break;
-            }
-        }
-        _plus_first = false;
-        p.atn_ret_pending = 10;
-        let statement = _parse_statement(p, &EMPTY_FOLLOW)?;
-        statement_list.push(statement);
-    }
-    return Result::<StartNode, ParseError>::Ok(StartNode {
+    p.atn_ret_pending = 8;
+    let expr = _parse_expr(p)?;
+    let lit_and = p.expect(TK_LIT_AND)?;
+    let id = p.expect(TK_ID)?;
+    let bang = p.expect(TK_LIT_BANG)?;
+    return Result::<StatNode, ParseError>::Ok(StatNode::Alt0(StatAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
-        statement_list,
-    });
+        expr,
+        lit_and,
+        id,
+        bang,
+    }));
 }
 
-fn _parse_start(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StartNode, ParseError> {
-    let _atn_ret = p.atn_ret_pending;
-    p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
-    let r = _parse_start__inner(p, follow);
-    p.atn_stack.pop();
-    if let Err(mut e) = r {
-        e.rule_stack.push("start");
-        return Result::<StartNode, ParseError>::Err(e);
-    }
-    return r;
+fn _parse_stat__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    GALE_SCAN_STACK.push(8);
+    pos = scan_expr(tokens, pos, 0);
+    GALE_SCAN_STACK.pop();
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BANG { return -1; }
+    pos += 1;
+    return pos;
 }
 
-fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
+fn _parse_stat__inner_bt_1(p: &mut Parser) -> Result<StatNode, ParseError> {
+    let start = p.peek().span.start;
+    p.atn_ret_pending = 17;
+    let expr = _parse_expr(p)?;
+    let semicolon = p.expect(TK_LIT_SEMI)?;
+    return Result::<StatNode, ParseError>::Ok(StatNode::Alt1(StatAlt1 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        expr,
+        semicolon,
+    }));
+}
+
+fn _parse_stat__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    GALE_SCAN_STACK.push(17);
+    pos = scan_expr(tokens, pos, 0);
+    GALE_SCAN_STACK.pop();
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn _parse_stat__inner(p: &mut Parser) -> Result<StatNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind == TK_LIT_X {
-        let lit_x = p.expect(TK_LIT_X)?;
-        return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt0(StatementAlt0 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            lit_x,
-        }));
+    if _gale_kind_set_0(kind) {
+        if _gale_kind_set_0(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = _parse_stat__inner_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_stat__inner_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
+                return _parse_stat__inner_bt_0(p);
+            }
+            if _sd_best_i == 1 {
+                return _parse_stat__inner_bt_1(p);
+            }
+            return _parse_stat__inner_bt_1(p);
+        }
     }
-    if kind == TK_LIT_IF {
-        p.atn_ret_pending = 20;
-        let if_statement = _parse_if_statement(p, follow)?;
-        return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt1(StatementAlt1 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            if_statement,
-        }));
-    }
-    return Result::<StatementNode, ParseError>::Err(p.error(
-        "expected statement",
+    return Result::<StatNode, ParseError>::Err(p.error(
+        "expected stat",
         p.peek().span,
-        ["TK_LIT_X", "TK_LIT_IF"],
+        ["TK_ID", "TK_LIT_BETWEEN"],
     ));
 }
 
-fn _parse_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
+fn _parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     p.atn_stack.push(_atn_ret);
-    let r = _parse_statement__inner(p, follow);
+    let r = _parse_stat__inner(p);
     p.atn_stack.pop();
     if let Err(mut e) = r {
-        e.rule_stack.push("statement");
-        return Result::<StatementNode, ParseError>::Err(e);
+        e.rule_stack.push("stat");
+        return Result::<StatNode, ParseError>::Err(e);
     }
     return r;
 }
 
-fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<IfStatementNode, ParseError> {
+fn _parse_expr__inner_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
-    let lit_if = p.expect(TK_LIT_IF)?;
-    let lit_y = p.expect(TK_LIT_Y)?;
-    p.atn_ret_pending = 29;
-    let statement = _parse_statement(p, follow)?;
-    let lit_else_statement: Option<LitElseStatementItem> = if atn_ng_optional_enter(&GALE_ATN_SIM, 2, &p.atn_stack, &p.tokens, p.pos, TK_EOF) {
-        let lit_else = p.expect(TK_LIT_ELSE)?;
-        p.atn_ret_pending = 38;
-        let statement = _parse_statement(p, follow)?;
-        let lit_else_statement = LitElseStatementItem {
-            lit_else,
-            statement,
-        };
-        Option::<LitElseStatementItem>::Some(lit_else_statement)
-    } else {
-        null
-    };
-    return Result::<IfStatementNode, ParseError>::Ok(IfStatementNode {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        lit_if,
-        lit_y,
-        statement,
-        lit_else_statement,
-    });
+    let kind = p.peek_kind();
+    if kind == TK_ID {
+        let id = p.expect(TK_ID)?;
+        return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt0(ExprAlt0 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            id,
+        }));
+    }
+    if kind == TK_LIT_BETWEEN {
+        let lit_between = p.expect(TK_LIT_BETWEEN)?;
+        p.atn_ret_pending = 29;
+        let expr = _parse_expr(p)?;
+        let lit_and = p.expect(TK_LIT_AND)?;
+        p.atn_ret_pending = 33;
+        let expr_2 = _parse_expr(p, 1)?;
+        return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt2(ExprAlt2 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            lit_between,
+            expr,
+            lit_and,
+            expr_2,
+        }));
+    }
+    return Result::<ExprNode, ParseError>::Err(p.error(
+        "expected expr",
+        p.peek().span,
+        ["TK_ID", "TK_LIT_BETWEEN"],
+    ));
 }
 
-fn _parse_if_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<IfStatementNode, ParseError> {
+fn _parse_expr__inner_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+    let lit_and = p.expect(TK_LIT_AND)?;
+    p.atn_ret_pending = 41;
+    let expr_2 = _parse_expr__inner(p, 2)?;
+    return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt1(ExprAlt1 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        expr: left,
+        lit_and,
+        expr_2,
+    }));
+}
+
+fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
+    let start = p.peek().span.start;
+    let mut result = _parse_expr__inner_atom(p)?;
+    loop {
+        let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, 2, &p.tokens, p.pos, TK_EOF, min_prec);
+        let _lr_pos0 = p.pos;
+        if _atn_alt == 0 {
+            result = _parse_expr__inner_lr_1(p, result, start)?;
+        } else {
+            break;
+        }
+        if p.pos == _lr_pos0 {
+            break;
+        }
+    }
+    return Result::<ExprNode, ParseError>::Ok(result);
+}
+
+fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     p.atn_stack.push(_atn_ret);
-    let r = _parse_if_statement__inner(p, follow);
+    let r = _parse_expr__inner(p, min_prec);
     p.atn_stack.pop();
     if let Err(mut e) = r {
-        e.rule_stack.push("ifStatement");
-        return Result::<IfStatementNode, ParseError>::Err(e);
+        e.rule_stack.push("expr");
+        return Result::<ExprNode, ParseError>::Err(e);
     }
     return r;
 }
@@ -2233,85 +2267,83 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
     return e;
 }
 
-pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
+pub fn parse_stat(input: &String) -> Result<StatNode, ParseError> {
     let mut parser = _gale_new_parser(input);
-    let _result = _parse_start(&mut parser);
+    let _result = _parse_stat(&mut parser);
     if let Err(_e) = _result {
-        return Result::<StartNode, ParseError>::Err(_gale_pick_error(&parser, _e));
+        return Result::<StatNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
-pub fn parse_statement(input: &String) -> Result<StatementNode, ParseError> {
+pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
     let mut parser = _gale_new_parser(input);
-    let _result = _parse_statement(&mut parser);
+    let _result = _parse_expr(&mut parser, 0);
     if let Err(_e) = _result {
-        return Result::<StatementNode, ParseError>::Err(_gale_pick_error(&parser, _e));
+        return Result::<ExprNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
-pub fn parse_if_statement(input: &String) -> Result<IfStatementNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_if_statement(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<IfStatementNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+pub fn parse(input: &String) -> Result<StatNode, ParseError> {
+    return parse_stat(input);
 }
 
-pub fn parse(input: &String) -> Result<StartNode, ParseError> {
-    return parse_start(input);
-}
-
-pub fn walk_start<V: Visitor>(v: &mut V, node: &StartNode) {
-    v.enter_rule(0, &"start", &node.span);
-    for let item of &node.statement_list {
-        walk_statement(v, item);
-    }
-    v.exit_rule(0, &"start", &node.span);
-}
-
-pub fn walk_statement<V: Visitor>(v: &mut V, node: &StatementNode) {
+pub fn walk_stat<V: Visitor>(v: &mut V, node: &StatNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(1, &"statement", &n.span);
-            v.visit_token(&n.lit_x);
-            v.exit_rule(1, &"statement", &n.span);
+            v.enter_rule(0, &"stat", &n.span);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.lit_and);
+            v.visit_token(&n.id);
+            v.visit_token(&n.bang);
+            v.exit_rule(0, &"stat", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(1, &"statement", &n.span);
-            walk_ifStatement(v, &n.if_statement);
-            v.exit_rule(1, &"statement", &n.span);
+            v.enter_rule(0, &"stat", &n.span);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.semicolon);
+            v.exit_rule(0, &"stat", &n.span);
         }
     }
 }
 
-pub fn walk_ifStatement<V: Visitor>(v: &mut V, node: &IfStatementNode) {
-    v.enter_rule(2, &"ifStatement", &node.span);
-    v.visit_token(&node.lit_if);
-    v.visit_token(&node.lit_y);
-    walk_statement(v, &node.statement);
-    if let Some(item) = &node.lit_else_statement {
-        v.visit_token(&item.lit_else);
-        walk_statement(v, &item.statement);
+pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(1, &"expr", &n.span);
+            v.visit_token(&n.id);
+            v.exit_rule(1, &"expr", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(1, &"expr", &n.span);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.lit_and);
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(1, &"expr", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(1, &"expr", &n.span);
+            v.visit_token(&n.lit_between);
+            walk_expr(v, &n.expr);
+            v.visit_token(&n.lit_and);
+            walk_expr(v, &n.expr_2);
+            v.exit_rule(1, &"expr", &n.span);
+        }
     }
-    v.exit_rule(2, &"ifStatement", &node.span);
 }
 
-pub fn to_tree(node: &StartNode) -> CstNode {
+pub fn to_tree(node: &StatNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
-    walk_start(&mut recorder, node);
+    walk_stat(&mut recorder, node);
     return recorder.build();
 }
 
 fn _gale_kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_IF | TK_LIT_X };
+    return k matches { TK_ID | TK_LIT_BETWEEN };
 }
 
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_Y]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_IF, TK_LIT_X]];
-
-global GALE_ATN_DATA: List<i32> = [1195463758, 2, 8, 3, 0, 2, 4, 1, 3, 5, 3, 11, 13, 30, 39, 2, 0, -1, 1, 0, 6, -1, -1, 0, 3, 0, -1, 0, 2, 1, -1, 1, 0, 13, -1, -1, 0, 3, 1, -1, 0, 2, 2, -1, 1, 0, 21, -1, -1, 0, 3, 2, -1, 0, 4, 0, -1, 1, 0, 8, -1, -1, 0, 5, 0, -1, 1, 0, 1, -1, -1, 0, 1, 0, -1, 1, 0, 9, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 10, 0, 1, 0, -1, 1, 0, 11, -1, -1, 0, 8, 0, 0, 2, 0, 9, -1, -1, 0, 0, 12, -1, -1, 0, 9, 0, -1, 1, 0, 7, -1, -1, 0, 4, 1, 1, 2, 0, 15, -1, -1, 0, 0, 18, -1, -1, 0, 5, 1, -1, 1, 0, 3, -1, -1, 0, 1, 1, -1, 1, 0, 16, -1, -1, 0, 1, 1, -1, 1, 1, 17, 4, -1, 0, 1, 1, -1, 1, 0, 14, -1, -1, 0, 1, 1, -1, 1, 0, 19, -1, -1, 0, 1, 1, -1, 1, 4, 4, 2, 20, 0, 1, 1, -1, 1, 0, 14, -1, -1, 0, 4, 2, -1, 1, 0, 23, -1, -1, 0, 5, 2, -1, 1, 0, 5, -1, -1, 0, 1, 2, -1, 1, 0, 24, -1, -1, 0, 1, 2, -1, 1, 1, 25, 5, -1, 0, 1, 2, -1, 1, 0, 26, -1, -1, 0, 1, 2, -1, 1, 1, 27, 6, -1, 0, 1, 2, -1, 1, 0, 28, -1, -1, 0, 1, 2, -1, 1, 4, 2, 1, 29, 0, 1, 2, -1, 1, 0, 30, -1, -1, 0, 4, 2, 2, 2, 0, 31, -1, -1, 0, 0, 32, -1, -1, 0, 5, 2, -1, 1, 0, 22, -1, -1, 0, 4, 2, -1, 1, 0, 34, -1, -1, 0, 5, 2, -1, 1, 0, 31, -1, -1, 0, 1, 2, -1, 1, 0, 35, -1, -1, 0, 1, 2, -1, 1, 1, 36, 7, -1, 0, 1, 2, -1, 1, 0, 37, -1, -1, 0, 1, 2, -1, 1, 4, 2, 1, 38, 0, 1, 2, -1, 1, 0, 33, -1, -1, 0];
+global GALE_ATN_DATA: List<i32> = [1195463758, 2, 8, 2, 0, 2, 1, 3, 3, 4, 20, 34, 42, 2, 0, -1, 1, 0, 4, -1, -1, 0, 3, 0, -1, 0, 2, 1, -1, 1, 0, 20, -1, -1, 0, 3, 1, -1, 0, 4, 0, 0, 2, 0, 6, -1, -1, 0, 0, 15, -1, -1, 0, 5, 0, -1, 1, 0, 1, -1, -1, 0, 1, 0, -1, 1, 0, 7, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 8, 0, 1, 0, -1, 1, 0, 9, -1, -1, 0, 1, 0, -1, 1, 1, 10, 4, -1, 0, 1, 0, -1, 1, 0, 11, -1, -1, 0, 1, 0, -1, 1, 1, 12, 0, -1, 0, 1, 0, -1, 1, 0, 13, -1, -1, 0, 1, 0, -1, 1, 1, 14, 5, -1, 0, 1, 0, -1, 1, 0, 5, -1, -1, 0, 1, 0, -1, 1, 0, 16, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 17, 0, 1, 0, -1, 1, 0, 18, -1, -1, 0, 1, 0, -1, 1, 1, 19, 6, -1, 0, 1, 0, -1, 1, 0, 5, -1, -1, 0, 4, 1, 1, 2, 0, 22, -1, -1, 0, 0, 25, -1, -1, 0, 5, 1, -1, 1, 0, 34, -1, -1, 0, 1, 1, -1, 1, 0, 23, -1, -1, 0, 1, 1, -1, 1, 1, 24, 0, -1, 0, 1, 1, -1, 1, 0, 21, -1, -1, 0, 1, 1, -1, 1, 0, 26, -1, -1, 0, 1, 1, -1, 1, 1, 27, 7, -1, 0, 1, 1, -1, 1, 0, 28, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 29, 0, 1, 1, -1, 1, 0, 30, -1, -1, 0, 1, 1, -1, 1, 1, 31, 4, -1, 0, 1, 1, -1, 1, 0, 32, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 33, 0, 1, 1, -1, 1, 0, 21, -1, -1, 0, 6, 1, 2, 2, 5, 37, -1, -1, 1, 0, 35, -1, -1, 0, 9, 1, -1, 1, 0, 3, -1, -1, 0, 7, 1, -1, 1, 0, 34, -1, -1, 0, 1, 1, -1, 1, 0, 38, -1, -1, 0, 1, 1, -1, 1, 1, 39, 4, -1, 0, 1, 1, -1, 1, 0, 40, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 41, 2, 1, 1, -1, 1, 0, 36, -1, -1, 0];
 global GALE_ATN_SIM: AtnSim = atn_decode(&GALE_ATN_DATA);
+global GALE_SCAN_STACK: List<i32> = [];
 

@@ -1028,13 +1028,7 @@ fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool 
 /// non-nullable atom the walk stops at the atom before ever reaching the loop
 /// entry, so no operator enters FIRST.)
 #[allow(dead_code)]
-fn atn_cont_first(
-    sim: &AtnSim,
-    state: i32,
-    visited: &mut List<i32>,
-    out: &mut List<i32>,
-    neg: &mut List<i32>,
-) -> bool {
+fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>, neg: &mut List<i32>) -> bool {
     if visited.contains(&state) {
         return false;
     }
@@ -1077,8 +1071,7 @@ fn atn_cont_first(
                 if sim.rule_first_open[callee] {
                     open = true;
                 }
-                if sim.rule_nullable[callee]
-                    && atn_cont_first(sim, sim.tr_follow[s + j], visited, out, neg) {
+                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out, neg) {
                     open = true;
                 }
             }
@@ -1975,7 +1968,9 @@ impl Parser {
 
 fn scan_stat(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
+    GALE_SCAN_STACK.push(8);
     pos = scan_expr(tokens, pos, 0);
+    GALE_SCAN_STACK.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
     pos += 1;

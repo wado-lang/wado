@@ -547,17 +547,14 @@ fn gen_scan_function_named(
                 non_lr_indices.push(alt.alt_index);
             }
             // ATN-class LR rule: route the scan loop through the simulator and
-            // bracket self-ref operand scans with the scan caller stack
-            // (`gen_scan_op_element` keys on `scan_atn_rule`). The decision
-            // number is the rule's ATN loop-entry.
+            // route the scan loop through `atn_lr_loop_decision`. The decision
+            // number is the rule's ATN loop-entry; every scan rule call brackets
+            // with the scan caller stack via `gen_scan_op_element`.
             let atn_loop_dec = if l.atn_class && ctx.needs_atn() {
                 ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name));
             } else {
                 -1;
             };
-            if atn_loop_dec >= 0 {
-                ctx.set_scan_atn_rule(&rule.snake_name);
-            }
             gen_scan_lr_functions(
                 w,
                 rule,
@@ -569,7 +566,6 @@ fn gen_scan_function_named(
                 fn_name,
                 atn_loop_dec,
             );
-            ctx.set_scan_atn_rule(&String::from(""));
             return;
         }
     }
@@ -1333,11 +1329,12 @@ fn gen_scan_op_element(
         } else {
             min_prec_override;
         };
-        // ATN-class scan: bracket a self-ref operand scan with the scan caller
-        // stack so the callee's LR loop yields this rule's mandatory
-        // continuation (e.g. `between`'s `'and'`). Pop before the fail check so
-        // an early return never leaks the frame.
-        let push_ret = ctx.scan_atn_push_return(&rc.target_snake, rc.atn_call_site);
+        // ATN-class scan: bracket every rule-call scan with the scan caller
+        // stack so the callee's LR loop yields the caller's mandatory
+        // continuation (e.g. `between`'s `'and'`), exactly as the parse side's
+        // rule-entry wrapper does. Pop before the fail check so an early return
+        // never leaks the frame.
+        let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
         if push_ret >= 0 {
             w.line(&`GALE_SCAN_STACK.push({push_ret});`);
             w.line(&`pos = {fn_name}(tokens, pos{follow_sep}, {min_prec});`);
