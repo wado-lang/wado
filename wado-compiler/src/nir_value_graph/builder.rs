@@ -28,7 +28,7 @@
 //!   with `Opaque`.
 
 use crate::hashmap::IndexMap;
-use crate::nir::{NirParam, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirParam, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
 };
@@ -309,8 +309,41 @@ impl<'a> Builder<'a> {
 
             // ---- Pure arithmetic ----
             ExprKind::Binary { left, op, right } => {
-                let lhs = self.walk_expr(left)?;
-                let rhs = self.walk_expr(right)?;
+                // Always walk both operands for their side effects on
+                // `current_value` and `heap_state`, even when one of them is
+                // impure (a `?` short-circuit on `lhs` would skip the rhs
+                // walk and miss any local assignments / heap writes inside
+                // it).
+                let lhs = self.walk_expr(left);
+                let rhs = if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
+                    // Short-circuit logical ops: the rhs is conditionally
+                    // evaluated at runtime. Walk it inside a snapshot, then
+                    // model "may or may not have happened" by dirtying any
+                    // local the walk mutated and bumping the heap. Without
+                    // this, a write inside the rhs (e.g. `false && { x =
+                    // 2; true }`) would commit unconditionally to
+                    // `current_value` and let store-load forwarding
+                    // substitute later reads with the never-stored value.
+                    let saved_cur = self.current_value.clone();
+                    let rhs = self.walk_expr(right);
+                    let changed: Vec<u32> = self
+                        .current_value
+                        .iter()
+                        .filter_map(|(&k, &v)| {
+                            saved_cur.get(&k).and_then(|s| (*s != v).then_some(k))
+                        })
+                        .collect();
+                    for k in changed {
+                        let opaque = self.pool.fresh_opaque();
+                        self.current_value.insert(k, opaque);
+                    }
+                    self.heap_state.bump_all();
+                    rhs
+                } else {
+                    self.walk_expr(right)
+                };
+                let lhs = lhs?;
+                let rhs = rhs?;
                 Some(self.pool.binary(op, lhs, rhs))
             }
             ExprKind::Unary { op, expr: inner } => {
@@ -336,24 +369,31 @@ impl<'a> Builder<'a> {
 
             // ---- Mutation: side-effect, never pure ----
             ExprKind::Assign { target, value } => {
+                // Walk target operands FIRST: runtime evaluates the place
+                // (receiver / index / deref operand) before the stored
+                // value, so a write inside `value` must not be visible to
+                // those reads.
+                let target_kind = self.body.exprs[target].kind.clone();
+                match &target_kind {
+                    ExprKind::Local { .. } => {}
+                    ExprKind::FieldAccess { expr: recv, .. } => {
+                        self.walk_expr(*recv);
+                    }
+                    _ => {
+                        self.walk_expr(target);
+                    }
+                }
                 let v = self
                     .walk_expr(value)
                     .unwrap_or_else(|| self.pool.fresh_opaque());
-                let target_kind = self.body.exprs[target].kind.clone();
                 match target_kind {
                     ExprKind::Local { index, .. } => {
                         self.current_value.insert(index, v);
                     }
-                    ExprKind::FieldAccess {
-                        expr: recv,
-                        field_index,
-                        ..
-                    } => {
-                        self.walk_expr(recv);
+                    ExprKind::FieldAccess { field_index, .. } => {
                         self.heap_state.bump_field(field_index);
                     }
                     _ => {
-                        self.walk_expr(target);
                         self.heap_state.bump_all();
                     }
                 }
@@ -632,6 +672,33 @@ impl<'a> Builder<'a> {
     }
 
     fn walk_match_arms(&mut self, arms: &[ArmData]) {
+        // Guards are evaluated sequentially at runtime: when guard 0 has
+        // side effects and returns false, guard 1 and arm 1's body run
+        // with those effects visible. Restoring the heap state and
+        // outer locals to the pre-match snapshot between arms would
+        // hide those effects from later arms. To stay sound without
+        // threading the post-guard state forward, conservatively dirty
+        // every outer local any guard could write and bump the heap
+        // once before walking arms.
+        let mut guard_writes: crate::hashmap::IndexSet<u32> =
+            crate::hashmap::IndexSet::default();
+        let mut any_guard = false;
+        for arm in arms {
+            if let Some(g) = arm.guard {
+                any_guard = true;
+                collect_writes_in_expr(self.body, g, &mut guard_writes);
+            }
+        }
+        for idx in &guard_writes {
+            if self.current_value.contains_key(idx) {
+                let opaque = self.pool.fresh_opaque();
+                self.current_value.insert(*idx, opaque);
+            }
+        }
+        if any_guard {
+            self.heap_state.bump_all();
+        }
+
         let saved = self.current_value.clone();
         let saved_heap = self.heap_state.snapshot();
         let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());

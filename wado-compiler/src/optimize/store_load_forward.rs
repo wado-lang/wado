@@ -15,7 +15,7 @@
 use std::cell::Cell;
 
 use crate::hashmap::IndexSet;
-use crate::nir::NirFunction;
+use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -33,11 +33,17 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
         if func.body.is_none() {
             return false;
         }
-        // Forwarding-ineligible locals: address-taken (`&x` / `&mut x`)
-        // plus those flowing through a `stores` clause. The builder models
-        // writes through neither.
+        // Forwarding-ineligible locals: the canonical `address_taken_locals`
+        // / `stores_aliased_locals` sets, plus a body re-scan for live
+        // `&x` / `&mut x` over `Local`. The canonical sets are static
+        // records from elaboration and are stale after `inline` /
+        // `ref_elim` may have copied `Ref` / `MutRef` nodes for remapped
+        // callee locals (see the comment on `elide_local::ElideRule`).
+        // The body scan catches those transient post-inline aliases.
         let mut unsafe_locals = func.address_taken_locals.clone();
         unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
+        let body_ref = func.body.as_ref().expect("checked above");
+        collect_address_taken_in_body(body_ref, &mut unsafe_locals);
         let rule = StoreLoadForwardRule {
             applied: Cell::new(false),
             unsafe_locals,
@@ -47,6 +53,32 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule])
     })
+}
+
+/// Scan `body` for `Unary::Ref(Local)` / `Unary::MutRef(Local)` and insert
+/// every targeted local into `out`. Mirrors the live-`&local` source used
+/// by `elide_local`; catches locals whose address-taken status is not in
+/// the function's static `address_taken_locals` set (e.g. callee locals
+/// that the inliner remapped into this body without updating the set).
+fn collect_address_taken_in_body(body: &Body, out: &mut IndexSet<u32>) {
+    collect_address_taken_node(body, NodeRef::Block(body.root), out);
+}
+
+fn collect_address_taken_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
+    if let NodeRef::Expr(id) = node
+        && let ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } = &body.exprs[id].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+    {
+        out.insert(*index);
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        collect_address_taken_node(body, c, out);
+    }
 }
 
 /// Standalone-session rule whose single `apply_block` performs the whole-
