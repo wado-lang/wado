@@ -255,27 +255,34 @@ WIR output stays byte-identical.
 
 #### Stage 3 — CSE migration
 
-- [ ] `CseRule` uses `engine.value(e1) == engine.value(e2)` for
+- [x] `CseRule` uses `engine.value(e1) == engine.value(e2)` for
       equality. The structural `CseKey` and its supporting walks are
       deleted after byte-identical confirmation. First end-to-end proof
       that Stage 1 + 2 are correctly wired.
 
-#### Stage 4 — copy_prop migration
+#### Stage 4 — copy_prop migration _(deferred)_
 
-- [ ] `let x = y` where `engine.value(y_def) == engine.value(let_value)`
-      is a copy. Source-stability follows from ValueIds being equal
-      across the target's scope. The independent block-writes precompute
-      folds into ValueGraph maintenance.
+Skipped on the required path: `copy_prop`'s source-stability check is
+not subsumed by `ValueId` equality alone. A `let x = y` where the
+target `x` is later observed with the same `ValueId` as a literal does
+not imply the read is stable to substitute — write-once `x` whose
+reassigned source `y` invalidates can still see equal `ValueId`s at the
+two reads while being unsafe to fold. Revisit alongside Stage 6's
+algebraic rules over `Select` and `Opaque` provenance.
 
 #### Stage 5 — store_load_forward + heap-version activation
 
-- [ ] Activate the `FieldAccess` ValueKind with per-field heap versions.
+- [x] Activate the `FieldAccess` ValueKind with per-field heap versions.
       The builder bumps the appropriate field's version on each
       heap-write Skel node. `FieldAccess(r, f, v)` reads at the same
       `(r, f, v)` return the same `ValueId`, automatically forwarding
       stored literals.
-- [ ] `store_load_forward`'s `KnownValues` walker collapses into a thin
-      rule that consults `engine.value(local_read)` for a Literal kind.
+- [x] `store_load_forward`'s `KnownValues` / `ModifiedLocalsCache`
+      walker collapses into a thin rule: walk `Local` mentions, consult
+      `engine.value(read)`, replace with the source literal when the
+      `ValueKind` is `Int`/`Float`/`Bool`/`Char`. Address-taken locals
+      are excluded (the builder does not yet model writes through
+      pointers).
 
 #### Stage 6 — const_folding, condition_implication, licm
 

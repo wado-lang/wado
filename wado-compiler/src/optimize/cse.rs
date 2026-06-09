@@ -201,7 +201,14 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
 
         // Replace every matching subexpression (in the guard's stmt and in
         // every remaining stmt) with a `Local(cse_local_idx)` read.
-        replace_matching_in_stmt(engine, first_stmt, cand_vn, cse_local_idx, &cse_local_name, type_id);
+        replace_matching_in_stmt(
+            engine,
+            first_stmt,
+            cand_vn,
+            cse_local_idx,
+            &cse_local_name,
+            type_id,
+        );
         for s in &remaining_stmts {
             replace_matching_in_stmt(engine, *s, cand_vn, cse_local_idx, &cse_local_name, type_id);
         }

@@ -41,7 +41,67 @@ use crate::nir_arena::{
     ArmData, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
 };
 
-use super::{ValueId, ValuePool};
+use super::{HeapVersion, ValueId, ValuePool};
+
+/// Per-function heap-version tracker. The builder threads one `HeapState`
+/// through the walk; on every Skel node that may write the heap, the
+/// appropriate field's version (or every field's version, for opaque
+/// writes) bumps to a fresh value.
+///
+/// Granularity is **per field_index** (Q3 / Stage 5). A direct write to
+/// `obj.f` bumps only the `f` slot — a subsequent read of `obj.g` keeps
+/// its previous version, so the hash-cons key
+/// `(receiver, field, heap_ver)` agrees with prior reads and they share a
+/// `ValueId`. An opaque write (a Call, an `Index` / `Deref` assign target,
+/// a Loop entry, an If/Match/Switch merge) calls [`HeapState::bump_all`],
+/// invalidating every field's version.
+///
+/// Phase 2 may refine to `(receiver_root, field)` granularity using
+/// `mod_ref.rs` — at that point a Call that provably cannot alias one
+/// receiver root would bump only the others. MVP keeps it field-only.
+struct HeapState {
+    /// Next fresh version to hand out.
+    next: HeapVersion,
+    /// Current version of each `field_index` we have seen written.
+    per_field: IndexMap<u32, HeapVersion>,
+    /// Version returned for field_indices not yet in `per_field`.
+    /// `bump_all` advances this; `bump_field` does not.
+    default_version: HeapVersion,
+}
+
+impl HeapState {
+    fn new() -> Self {
+        Self {
+            next: HeapVersion::INITIAL.bump(),
+            per_field: IndexMap::default(),
+            default_version: HeapVersion::INITIAL,
+        }
+    }
+
+    fn fresh(&mut self) -> HeapVersion {
+        let v = self.next;
+        self.next = self.next.bump();
+        v
+    }
+
+    fn version_of(&self, field_index: u32) -> HeapVersion {
+        self.per_field
+            .get(&field_index)
+            .copied()
+            .unwrap_or(self.default_version)
+    }
+
+    fn bump_field(&mut self, field_index: u32) {
+        let v = self.fresh();
+        self.per_field.insert(field_index, v);
+    }
+
+    fn bump_all(&mut self) {
+        let v = self.fresh();
+        self.per_field.clear();
+        self.default_version = v;
+    }
+}
 
 /// The result of running [`build`] over a function body: the populated
 /// pool plus the side-table mapping pure `ExprId`s to their `ValueId`.
@@ -53,6 +113,12 @@ use super::{ValueId, ValuePool};
 pub struct ValueGraphBuild {
     pub pool: ValuePool,
     pub value_of: IndexMap<ExprId, ValueId>,
+    /// For each literal `ValueId`, the first `ExprId` we observed producing
+    /// it. Lets a consumer (e.g. store-load-forward) clone the original
+    /// literal `ExprKind` — including its source `repr` — when replacing a
+    /// `Local` read with the forwarded literal, avoiding `repr` churn in
+    /// diagnostic output and NIR dumps.
+    pub literal_source: IndexMap<ValueId, ExprId>,
 }
 
 /// Build the ValueGraph for one function body.
@@ -68,6 +134,7 @@ pub fn build(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
     ValueGraphBuild {
         pool: b.pool,
         value_of: b.value_of,
+        literal_source: b.literal_source,
     }
 }
 
@@ -78,6 +145,11 @@ struct Builder<'a> {
     /// `local_index → current Value` at the current program point. Cloned at
     /// branch entries so each arm walks from the pre-branch snapshot.
     current_value: IndexMap<u32, ValueId>,
+    /// Heap-version tracker. See [`HeapState`].
+    heap_state: HeapState,
+    /// `ValueId` → first source `ExprId` for literal values, so consumers can
+    /// reuse the original `repr`. See [`ValueGraphBuild::literal_source`].
+    literal_source: IndexMap<ValueId, ExprId>,
 }
 
 impl<'a> Builder<'a> {
@@ -87,6 +159,8 @@ impl<'a> Builder<'a> {
             pool: ValuePool::new(),
             value_of: IndexMap::default(),
             current_value: IndexMap::default(),
+            heap_state: HeapState::new(),
+            literal_source: IndexMap::default(),
         }
     }
 
@@ -153,6 +227,9 @@ impl<'a> Builder<'a> {
                 }
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
+                // Branches may have written to heap; bump_all conservatively
+                // (Stage 5 MVP). Stage 6 may refine to per-arm join.
+                self.heap_state.bump_all();
             }
             StmtKind::Loop { body: lb } => {
                 self.walk_loop(lb);
@@ -165,6 +242,7 @@ impl<'a> Builder<'a> {
                 let saved = self.current_value.clone();
                 self.walk_block(block);
                 self.dirty_changed_locals(&saved);
+                self.heap_state.bump_all();
             }
         }
     }
@@ -187,13 +265,41 @@ impl<'a> Builder<'a> {
     fn compute_value(&mut self, expr: ExprId) -> Option<ValueId> {
         match self.body.exprs[expr].kind.clone() {
             // ---- Literals ----
-            ExprKind::IntLiteral { value, .. } => Some(self.pool.int(value)),
-            ExprKind::FloatLiteral { value, .. } => Some(self.pool.float(value)),
-            ExprKind::BoolLiteral(b) => Some(self.pool.bool(b)),
-            ExprKind::CharLiteral(c) => Some(self.pool.char(c)),
-            ExprKind::StringLiteral(s) => Some(self.pool.string(s)),
-            ExprKind::Null => Some(self.pool.null()),
-            ExprKind::Unit => Some(self.pool.unit()),
+            ExprKind::IntLiteral { value, .. } => {
+                let v = self.pool.int(value);
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::FloatLiteral { value, .. } => {
+                let v = self.pool.float(value);
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::BoolLiteral(b) => {
+                let v = self.pool.bool(b);
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::CharLiteral(c) => {
+                let v = self.pool.char(c);
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::StringLiteral(s) => {
+                let v = self.pool.string(s);
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::Null => {
+                let v = self.pool.null();
+                self.record_literal(expr, v);
+                Some(v)
+            }
+            ExprKind::Unit => {
+                let v = self.pool.unit();
+                self.record_literal(expr, v);
+                Some(v)
+            }
 
             // ---- Local read ----
             ExprKind::Local { index, .. } => Some(self.read_local(index)),
@@ -230,22 +336,34 @@ impl<'a> Builder<'a> {
                 let v = self
                     .walk_expr(value)
                     .unwrap_or_else(|| self.pool.fresh_opaque());
-                // Bare `Local` target = local reassignment. Anything else
-                // (FieldAccess, Index, Unary::Deref) is a heap write — Stage
-                // 5 will bump heap_version here; for MVP we just walk the
-                // target's children.
-                match &self.body.exprs[target].kind {
+                // Bare `Local` target = local reassignment (no heap write).
+                // `FieldAccess { field_index }` target = heap write to that
+                // field. `Index` / `Unary::Deref` targets are opaque heap
+                // writes — bump every field's version.
+                let target_kind = self.body.exprs[target].kind.clone();
+                match target_kind {
                     ExprKind::Local { index, .. } => {
-                        self.current_value.insert(*index, v);
+                        self.current_value.insert(index, v);
+                    }
+                    ExprKind::FieldAccess {
+                        expr: recv,
+                        field_index,
+                        ..
+                    } => {
+                        self.walk_expr(recv);
+                        self.heap_state.bump_field(field_index);
                     }
                     _ => {
                         self.walk_expr(target);
+                        self.heap_state.bump_all();
                     }
                 }
                 None
             }
             ExprKind::GlobalVarSet { value, .. } => {
                 self.walk_expr(value);
+                // Globals share the heap from the optimizer's perspective.
+                self.heap_state.bump_all();
                 None
             }
 
@@ -271,17 +389,20 @@ impl<'a> Builder<'a> {
                 }
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
+                self.heap_state.bump_all();
                 None
             }
             ExprKind::LabeledBlock { block, .. } => {
                 let saved = self.current_value.clone();
                 self.walk_block(block);
                 self.dirty_changed_locals(&saved);
+                self.heap_state.bump_all();
                 None
             }
             ExprKind::Match { expr: scrut, arms } => {
                 self.walk_expr(scrut);
                 self.walk_match_arms(&arms);
+                self.heap_state.bump_all();
                 None
             }
             ExprKind::Switch {
@@ -303,16 +424,22 @@ impl<'a> Builder<'a> {
                 self.walk_block(default);
                 arm_states.push(std::mem::replace(&mut self.current_value, saved.clone()));
                 self.merge_n_arms(&saved, &arm_states);
+                self.heap_state.bump_all();
                 None
             }
 
-            // ---- Heap-bearing reads (MVP: Skel-side, no Value id) ----
-            ExprKind::FieldAccess { expr: inner, .. } => {
-                // Stage 5 activates `ValueKind::FieldAccess` with heap-version
-                // tracking. For now the receiver is walked but the read itself
-                // gets no id.
-                self.walk_expr(inner);
-                None
+            // ---- Heap-bearing reads ----
+            ExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                ..
+            } => {
+                // The receiver must be a pure value for the FieldAccess to
+                // get a ValueId — an impure receiver (a Call result, for
+                // instance) propagates None.
+                let recv = self.walk_expr(inner)?;
+                let heap_ver = self.heap_state.version_of(field_index);
+                Some(self.pool.field_access(recv, field_index, heap_ver))
             }
             ExprKind::Index { expr: inner, index } => {
                 self.walk_expr(inner);
@@ -351,17 +478,19 @@ impl<'a> Builder<'a> {
                 None
             }
 
-            // ---- Calls (effectful) ----
+            // ---- Calls (effectful, may write the heap) ----
             ExprKind::Call { args, .. } => {
                 for a in args {
                     self.walk_expr(a.expr);
                 }
+                self.heap_state.bump_all();
                 None
             }
             ExprKind::CmRawCall { args, .. } => {
                 for a in args {
                     self.walk_expr(a);
                 }
+                self.heap_state.bump_all();
                 None
             }
             ExprKind::MethodCall { receiver, args, .. } => {
@@ -369,6 +498,7 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_expr(a.expr);
                 }
+                self.heap_state.bump_all();
                 None
             }
             ExprKind::IndirectCall { callee, args } => {
@@ -376,12 +506,17 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_expr(a);
                 }
+                self.heap_state.bump_all();
                 None
             }
 
             // ---- Other Skel-side leaves ----
             ExprKind::GlobalVarGet { .. } | ExprKind::BytesLiteral(_) => None,
         }
+    }
+
+    fn record_literal(&mut self, expr: ExprId, value: ValueId) {
+        self.literal_source.entry(value).or_insert(expr);
     }
 
     fn read_local(&mut self, idx: u32) -> ValueId {
@@ -538,6 +673,10 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
+        // Same reasoning for heap: the body may have run 0..N times before
+        // the body walk begins, so reads inside the body must not share
+        // heap versions with pre-loop reads.
+        self.heap_state.bump_all();
         self.walk_block(body_block);
         // After the body walks, an in-loop `Assign` may have overwritten a
         // pre-seeded Opaque with a derived value (e.g., `i = i + 1` writes
@@ -550,6 +689,7 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
+        self.heap_state.bump_all();
     }
 
     /// After a flow-opaque construct (LabeledBlock with potential breaks),
@@ -741,6 +881,51 @@ mod tests {
             stmts,
             span: Span::default(),
         })
+    }
+
+    fn field_access(body: &mut Body, expr: ExprId, field_index: u32) -> ExprId {
+        alloc_expr(
+            body,
+            ExprKind::FieldAccess {
+                expr,
+                field_index,
+                field_name: format!("__f{field_index}"),
+            },
+        )
+    }
+
+    fn field_assign_stmt(body: &mut Body, recv: ExprId, field_index: u32, value: ExprId) -> StmtId {
+        let target = field_access(body, recv, field_index);
+        let assign = alloc_expr(body, ExprKind::Assign { target, value });
+        alloc_stmt(body, StmtKind::Expr(assign))
+    }
+
+    fn call_void(body: &mut Body) -> ExprId {
+        use crate::module_source::ModuleSource;
+        use crate::nir::FunctionRef;
+        alloc_expr(
+            body,
+            ExprKind::Call {
+                func: FunctionRef {
+                    module_source: ModuleSource::entry_point_synthetic(),
+                    name: "foo".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: vec![],
+                args: vec![],
+            },
+        )
+    }
+
+    fn param_seed() -> NirParam {
+        NirParam {
+            name: "obj".to_string(),
+            type_id: TypeTable::UNIT,
+            local_index: 0,
+            is_mut: false,
+            span: Span::default(),
+        }
     }
 
     // ----- Tests -----
@@ -1026,5 +1211,101 @@ mod tests {
         ));
         // The call itself has no value_of entry.
         assert!(!r.value_of.contains_key(&call));
+    }
+
+    // ----- Stage 5: FieldAccess heap-version behavior -----
+
+    #[test]
+    fn two_field_reads_same_field_share_value_id() {
+        // fn(obj) { obj.f; obj.f; }
+        let mut body = empty_body();
+        let recv1 = local_ref(&mut body, 0);
+        let read1 = field_access(&mut body, recv1, 0);
+        let recv2 = local_ref(&mut body, 0);
+        let read2 = field_access(&mut body, recv2, 0);
+        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2));
+        root_with(&mut body, vec![s1, s2]);
+        let r = build(&body, &[param_seed()]);
+        assert_eq!(r.value_of[&read1], r.value_of[&read2]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read1]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn field_write_invalidates_only_that_field() {
+        // fn(obj) {
+        //     let a = obj.f;
+        //     let b = obj.g;
+        //     obj.f = 1;
+        //     let a2 = obj.f;   // distinct VN from `a` (different heap_ver)
+        //     let b2 = obj.g;   // same VN as `b` (bump_field(f) did not touch g)
+        // }
+        let mut body = empty_body();
+        let recv_a = local_ref(&mut body, 0);
+        let read_a = field_access(&mut body, recv_a, 0);
+        let let_a = let_stmt(&mut body, 1, read_a, false);
+
+        let recv_b = local_ref(&mut body, 0);
+        let read_b = field_access(&mut body, recv_b, 1);
+        let let_b = let_stmt(&mut body, 2, read_b, false);
+
+        let one = int_lit(&mut body, 1);
+        let recv_w = local_ref(&mut body, 0);
+        let write = field_assign_stmt(&mut body, recv_w, 0, one);
+
+        let recv_a2 = local_ref(&mut body, 0);
+        let read_a2 = field_access(&mut body, recv_a2, 0);
+        let let_a2 = let_stmt(&mut body, 3, read_a2, false);
+
+        let recv_b2 = local_ref(&mut body, 0);
+        let read_b2 = field_access(&mut body, recv_b2, 1);
+        let let_b2 = let_stmt(&mut body, 4, read_b2, false);
+
+        root_with(&mut body, vec![let_a, let_b, write, let_a2, let_b2]);
+        let r = build(&body, &[param_seed()]);
+
+        // `obj.f` reads straddle a write of `f`: different heap versions, distinct VN.
+        assert_ne!(r.value_of[&read_a], r.value_of[&read_a2]);
+        // `obj.g` is not touched by writing `obj.f`: heap version unchanged, same VN.
+        assert_eq!(r.value_of[&read_b], r.value_of[&read_b2]);
+    }
+
+    #[test]
+    fn call_invalidates_all_fields() {
+        // fn(obj) {
+        //     let a = obj.f;
+        //     foo();
+        //     let a2 = obj.f;  // bump_all invalidates -> distinct VN
+        // }
+        let mut body = empty_body();
+        let recv1 = local_ref(&mut body, 0);
+        let read1 = field_access(&mut body, recv1, 0);
+        let let_1 = let_stmt(&mut body, 1, read1, false);
+
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+
+        let recv2 = local_ref(&mut body, 0);
+        let read2 = field_access(&mut body, recv2, 0);
+        let let_2 = let_stmt(&mut body, 2, read2, false);
+
+        root_with(&mut body, vec![let_1, call_s, let_2]);
+        let r = build(&body, &[param_seed()]);
+        assert_ne!(r.value_of[&read1], r.value_of[&read2]);
+    }
+
+    #[test]
+    fn field_access_with_impure_receiver_yields_no_value() {
+        // fn() { call().f; }
+        let mut body = empty_body();
+        let call = call_void(&mut body);
+        let fa = field_access(&mut body, call, 0);
+        let s = alloc_stmt(&mut body, StmtKind::Expr(fa));
+        root_with(&mut body, vec![s]);
+        let r = build(&body, &[]);
+        assert!(!r.value_of.contains_key(&fa));
     }
 }

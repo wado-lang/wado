@@ -147,9 +147,21 @@ impl<'a> Engine<'a> {
     /// Read-only view of a value's kind. The returned reference borrows the
     /// engine's value-graph cache; callers that need to hold the kind across
     /// further `engine` calls should clone it.
-    pub fn value_kind(&mut self, id: crate::nir_value_graph::ValueId) -> &crate::nir_value_graph::ValueKind {
+    pub fn value_kind(
+        &mut self,
+        id: crate::nir_value_graph::ValueId,
+    ) -> &crate::nir_value_graph::ValueKind {
         self.ensure_value_graph();
         self.value_graph.as_ref().unwrap().pool.kind(id)
+    }
+
+    /// First `ExprId` observed producing the given literal `ValueId`. Returns
+    /// `None` if `id` is not a literal kind (or no expression produced it).
+    /// Lets a rewrite reuse the original literal `ExprKind` — including its
+    /// source `repr` — when substituting a literal at a use site.
+    pub fn literal_source(&mut self, id: crate::nir_value_graph::ValueId) -> Option<ExprId> {
+        self.ensure_value_graph();
+        self.value_graph.as_ref()?.literal_source.get(&id).copied()
     }
 
     /// Drop the cached ValueGraph so the next [`Engine::value`] call
