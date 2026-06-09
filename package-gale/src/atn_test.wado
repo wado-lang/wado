@@ -311,3 +311,42 @@ test "lr_loop_entry_decision selects the precedence loop entry, not an atom star
     }
     assert has_prec, "lr_loop_entry_decision must return the precedence-bearing loop entry, not the atom's ID* loop";
 }
+
+// An ATN-class rule (made so by the `'between' …` atom) with a `~SEMI`-led LR
+// suffix has an empty static `suffix_first`, which the dispatcher drops from
+// `valid_lr_alts` — misaligning the ATN edge index. Until the dispatcher is
+// aligned to the edge list, `build_atn` must fail loudly rather than emit a
+// mis-dispatching parser.
+global LR_OPEN_SUFFIX_G4: String = "
+grammar T;
+e : 'between' e 'and' e
+  | e 'and' e
+  | e ~SEMI e
+  | ID ;
+ID : 'a'..'z'+ ;
+SEMI : ';' ;
+WS : ' ' -> skip ;
+";
+
+#[expect_trap]
+test "build_atn traps on an open-ended LR suffix in an ATN-class rule" {
+    let g = parse(LR_OPEN_SUFFIX_G4).unwrap();
+    let _ = build_atn(&g);
+}
+
+// An LR suffix whose recursive operand is nested inside a Repeat (`('and' e)+`)
+// would be built with the wrong precedence floor. `build_atn` must trap rather
+// than emit an ATN that models a different language than the parser.
+global LR_NESTED_SELFREF_G4: String = "
+grammar T;
+e : e ('and' e)+
+  | ID ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+#[expect_trap]
+test "build_atn traps on a nested self-reference in an LR suffix" {
+    let g = parse(LR_NESTED_SELFREF_G4).unwrap();
+    let _ = build_atn(&g);
+}

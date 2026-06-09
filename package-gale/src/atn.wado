@@ -360,20 +360,20 @@ fn build_lr_body(
     // One precedence-guarded enter edge per LR alt with a non-empty suffix
     // (a degenerate `expr : expr` with no suffix is skipped). The edge index
     // `atn_lr_loop_decision` returns is over THIS list.
-    //
-    // KNOWN GAP (tracked): the parse/scan dispatchers map that edge index onto
-    // `LrDispatchData.valid_lr_alts`, which additionally filters out alts with
-    // an empty static `suffix_first` (a `.` / `~X`-led suffix). For a grammar
-    // with such a suffix the two lists diverge and the index misaligns. The
-    // runtime decision itself handles a `~X` suffix correctly (via the
-    // negated-label FIRST), so the fix is to align the dispatcher with this
-    // edge list rather than to drop the edge. No corpus grammar has a
-    // `.`/`~X`-led LR suffix, so this is latent.
     for let a of &lr.lr_alts {
         let alt = &rule.alternatives[a.alt_index];
         if alt.elements.len() <= 1 {
             continue;
         }
+        // The parse/scan dispatchers map the edge index onto
+        // `LrDispatchData.valid_lr_alts`, which drops alts with an empty static
+        // `suffix_first` (a `.` / `~X`-led suffix). For an ATN-class rule that
+        // would misalign the edge index against the suffix helpers and
+        // silently mis-dispatch. Aligning the dispatcher to this edge list is a
+        // real (but unimplemented) fix; until then, fail loudly at codegen
+        // rather than emit a parser that mis-parses such a grammar. No corpus
+        // grammar has a `.`/`~X`-led LR suffix.
+        assert !(lr.atn_class && a.suffix_first.is_empty()), `Gale does not yet support an open-ended (\`.\`/\`~X\`-led) LR suffix in an ATN-class rule (\`{rule.name}\`)`;
         let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, r, rule_index);
         b.add_trans(entry, AtnTransition { kind: ATN_TR_PRECEDENCE, target: suffix_seg.0, prec: a.own_prec });
         b.add_eps(suffix_seg.1, back);
@@ -405,20 +405,48 @@ fn build_lr_suffix(
             let prec = if i == lr_alt.last_self_ref_idx { lr_alt.conflict_min } else { 0 };
             self_ref_segment(b, r, prec, self_ref_call_site(&alt.elements[i]));
         } else {
-            // KNOWN GAP (tracked): a self-ref *nested* inside a Group/Repeat
-            // suffix element is built by the generic path with `prec = 0`,
-            // whereas lowering stamps it with `conflict_min`. This only skews
-            // the *general* simulator (non-greedy `??` traversing such an LR
-            // rule); the dedicated `atn_lr_loop_decision` uses the loop-entry
-            // precedence edges, not the nested operand's floor. No corpus
-            // grammar has a nested-self-ref LR suffix. Fixing it needs a
-            // precedence-aware recursive element builder.
+            // A self-ref *nested* inside a Group/Repeat suffix element would be
+            // built by the generic path with `prec = 0`, whereas lowering
+            // stamps it with `conflict_min` — so the ATN would model a
+            // different language than the parser (skewing the general simulator
+            // for a non-greedy `??` traversing this rule). Fixing it needs a
+            // precedence-aware recursive element builder; until then fail
+            // loudly rather than emit a divergent ATN. No corpus grammar has a
+            // nested-self-ref LR suffix.
+            assert !element_contains_self_ref(&alt.elements[i], rule_name), `Gale does not yet support a self-reference nested inside a group/repeat in an LR suffix (\`{*rule_name}\`)`;
             build_element(b, &alt.elements[i], r, rule_index);
         };
         b.add_eps(cursor, seg.0);
         cursor = seg.1;
     }
     return [entry, cursor];
+}
+
+/// True iff `elem` contains a self-reference to `rule_name` anywhere —
+/// including nested inside a Group / Repeat / Not / Label. Used to detect
+/// an unsupported nested self-ref in an LR suffix (the top-level case is
+/// `element_is_self_ref`). Flag-based walk (no early `break`/`return` inside
+/// the nested loop) to sidestep a known compiler codegen ICE.
+fn element_contains_self_ref(elem: &Element, rule_name: &String) -> bool {
+    return match *elem {
+        RuleRef(rr) => rr.name == *rule_name,
+        Label(lab) => element_contains_self_ref(&lab.element, rule_name),
+        Repeat(rep) => element_contains_self_ref(&rep.element, rule_name),
+        Not(n) => element_contains_self_ref(&n.element, rule_name),
+        Group(g) => {
+            let mut found = false;
+            for let mut i = 0; i < g.alternatives.len(); i += 1 {
+                let alt = &g.alternatives[i];
+                for let mut j = 0; j < alt.elements.len(); j += 1 {
+                    if element_contains_self_ref(&alt.elements[j], rule_name) {
+                        found = true;
+                    }
+                }
+            }
+            found;
+        },
+        _ => false,
+    };
 }
 
 /// The `atn_call_site` id of a self-ref element (unwrapping labels), or -1.
