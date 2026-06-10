@@ -112,6 +112,11 @@ pub struct GenContext {
     /// exit-first decision to predict (the caller stack now holds return
     /// states, not rule indices). -1 outside rule-body emission.
     current_rule_index: i32,
+    /// Monotonic counter for scan-group label uniqueness (`sg_<n>` etc.).
+    /// Lives on the context — fresh per generation — so that generating two
+    /// grammars in one process produces deterministic, run-order-independent
+    /// labels. (Was a module-global that never reset.)
+    scan_group_counter: i32,
     /// Per-rule ATN loop-entry (`STAR_LOOP_ENTRY`) decision number, indexed
     /// by rule, or -1 for a rule with no LR loop. Populated after `build_atn`
     /// (only when `needs_atn`); read by the LR dispatch emitter to route an
@@ -148,9 +153,19 @@ impl GenContext {
             needs_scan_atn_seen: false,
             atn_call_site_returns: [],
             current_rule_index: -1,
+            scan_group_counter: 0,
             lr_loop_entry_decisions: [],
             trace: false,
         };
+    }
+
+    /// Return the next scan-group id and advance the counter. Replaces the
+    /// former module-global `SCAN_GROUP_COUNTER`, which never reset between
+    /// generations.
+    pub fn next_scan_group(&mut self) -> i32 {
+        let id = self.scan_group_counter;
+        self.scan_group_counter += 1;
+        return id;
     }
 
     /// Record that lowering emitted a tail-greedy caller-FOLLOW gate.

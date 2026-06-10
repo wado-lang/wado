@@ -12,20 +12,45 @@ type "functype//wado-compiler/tests/fixtures/tuple_pack_len.wado/__cm_export____
 
 type "functype//wado-compiler/tests/fixtures/tuple_pack_len.wado/__cm_export____test_2_pack_len_through_a_forwarding_generic_call" = fn();  // TypeId(4)
 
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(5)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/tuple_pack_len.wado/__cm_export____test_0_pack_len_yields_the_monomorphized_arity"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/tuple_pack_len.wado/__cm_export____test_1_pack_len_through_a_reference_receiver"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/tuple_pack_len.wado/__cm_export____test_2_pack_len_through_a_forwarding_generic_call"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/tuple_pack_len.wado/__cm_export____test_0_pack_len_yields_the_monomorphized_arity" as "__test_0_pack_len_yields_the_monomorphized_arity"

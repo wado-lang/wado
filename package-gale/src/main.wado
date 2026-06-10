@@ -1,5 +1,5 @@
-use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
-use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 use { parse } from "./g4/parser.wado";
 use { Grammar, merge_grammars, check_references, synthesize_implicit_tokens, normalize_caches } from "./ir.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
@@ -9,7 +9,7 @@ use { GenContext } from "./gen_context.wado";
 use { render_dump } from "./dump.wado";
 use { build_atn, dump_atn } from "./atn.wado";
 
-export fn run() with Stdout, Stderr, Environment, Preopens {
+export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let arguments = args();
 
     if arguments.len() >= 2 && arguments[0] == "gen" {
@@ -44,59 +44,15 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
 
     eprintln("Usage: gale gen [--highlight] [--trace] <grammar.g4> [grammar2.g4 ...]");
     eprintln("       gale dump [--atn] <grammar.g4> [grammar2.g4 ...]");
+    exit(1);
 }
 
-fn cmd_gen(paths: List<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens {
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("gale: no preopened directories available (try without --no-dir)");
-        return;
+fn cmd_gen(paths: List<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens, Exit {
+    if paths.len() == 0 {
+        eprintln("gale gen: no grammar files given");
+        exit(1);
     }
-    let root = dirs[0].0;
-
-    let mut grammars: List<Grammar> = [];
-    for let path of paths {
-        let open_result = root.open_at(
-            PathFlags::none(),
-            path,
-            OpenFlags::none(),
-            DescriptorFlags::Read,
-        ).wait();
-
-        if let Err(_) = open_result {
-            eprintln(`gale: {path}: cannot open file`);
-            return;
-        }
-        let file = open_result.unwrap();
-
-        let bytes = read_all(&file);
-        let content = String::from_utf8_unchecked(bytes);
-
-        let mut grammar = match parse(content) {
-            Ok(g) => g,
-            Err(e) => {
-                eprintln(`gale: {path}: parse error: {e.message}`);
-                return;
-            },
-        };
-        // Record the source path on the grammar so gen_header can emit it as
-        // provenance metadata (`#![generated(sources = [...])]`).
-        grammar.source_files.push(path);
-        grammars.push(grammar);
-    }
-
-    let mut merged = merge_grammars(grammars);
-    // Must run before `check_references`. See `ir.wado` for rationale.
-    synthesize_implicit_tokens(&mut merged);
-    // Run ANTLR4-compatible semantic rule-reference validation after the
-    // split-grammar halves are combined. This is the same check ANTLR4's
-    // `SymbolChecks.checkForUnresolvedRuleRefs` performs; we defer it
-    // until post-merge so cross-grammar refs (parser-grammar token refs
-    // resolving against a sibling lexer grammar) validate cleanly.
-    if let Err(e) = check_references(&merged) {
-        eprintln(`gale: {e.message}`);
-        return;
-    }
+    let mut merged = load_and_merge(&paths);
 
     // Generate once and surface the prediction-strategy diagnostics the
     // single lowering raised. `generate` runs `normalize_caches` and lowers
@@ -111,53 +67,12 @@ fn cmd_gen(paths: List<String>, options: &GenerateOptions) with Stdout, Stderr, 
     print(generated.source);
 }
 
-fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens {
+fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens, Exit {
     if paths.len() == 0 {
         eprintln("gale dump: no grammar files given");
-        return;
+        exit(1);
     }
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("gale: no preopened directories available (try without --no-dir)");
-        return;
-    }
-    let root = dirs[0].0;
-
-    let mut grammars: List<Grammar> = [];
-    for let path of paths {
-        let open_result = root.open_at(
-            PathFlags::none(),
-            path,
-            OpenFlags::none(),
-            DescriptorFlags::Read,
-        ).wait();
-        if let Err(_) = open_result {
-            eprintln(`gale: {path}: cannot open file`);
-            return;
-        }
-        let file = open_result.unwrap();
-        let bytes = read_all(&file);
-        let content = String::from_utf8_unchecked(bytes);
-        let mut grammar = match parse(content) {
-            Ok(g) => g,
-            Err(e) => {
-                eprintln(`gale: {path}: parse error: {e.message}`);
-                return;
-            },
-        };
-        grammar.source_files.push(path);
-        grammars.push(grammar);
-    }
-
-    // Mirror cmd_gen's front-end so lowering sees a valid grammar:
-    // merge the split halves, synthesize implicit tokens, then run the
-    // ANTLR4-compatible reference check before lowering to GIR.
-    let mut merged = merge_grammars(grammars);
-    synthesize_implicit_tokens(&mut merged);
-    if let Err(e) = check_references(&merged) {
-        eprintln(`gale: {e.message}`);
-        return;
-    }
+    let mut merged = load_and_merge(&paths);
 
     // `--atn` short-circuits the GIR dump: build the surface-IR ATN (the
     // data the runtime simulator walks) and print it.
@@ -180,8 +95,73 @@ fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens {
     print(render_dump(&merged, &lowered, &mut ctx));
 }
 
+/// Shared CLI front end for `gen` and `dump`: read every grammar file,
+/// parse, merge the split halves, synthesize implicit tokens, and run the
+/// rule-reference check (deferred until post-merge so cross-grammar refs
+/// resolve). Any failure prints a message and exits with code 1.
+fn load_and_merge(paths: &List<String>) -> Grammar with Stdout, Stderr, Preopens, Exit {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("gale: no preopened directories available (try without --no-dir)");
+        exit(1);
+    }
+    let root = dirs[0].0;
+
+    let mut grammars: List<Grammar> = [];
+    for let path of paths {
+        let open_result = root.open_at(
+            PathFlags::none(),
+            *path,
+            OpenFlags::none(),
+            DescriptorFlags::Read,
+        ).wait();
+        if let Err(_) = open_result {
+            eprintln(`gale: {*path}: cannot open file`);
+            exit(1);
+        }
+        let file = open_result.unwrap();
+        let bytes = read_all(&file);
+        let content = match String::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(_) => {
+                eprintln(`gale: {*path}: not valid UTF-8`);
+                exit(1);
+            },
+        };
+        let mut grammar = match parse(content) {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln(`gale: {*path}: parse error: {e.message}`);
+                exit(1);
+            },
+        };
+        // Record the source path on the grammar so gen_header can emit it as
+        // provenance metadata (`#![generated(sources = [...])]`).
+        grammar.source_files.push(*path);
+        grammars.push(grammar);
+    }
+
+    let mut merged = merge_grammars(grammars);
+    // Must run before `check_references`. See `ir.wado` for rationale.
+    synthesize_implicit_tokens(&mut merged);
+    if let Err(e) = check_references(&merged) {
+        eprintln(`gale: {e.message}`);
+        exit(1);
+    }
+    return merged;
+}
+
+/// Read a file to EOF.
+///
+/// TODO(compiler): the stream's completion future SHOULD be consumed here
+/// so a mid-stream error is not silently treated as EOF (truncated input),
+/// but reading a `Future<Result<(), ErrorCode>>` currently ICEs the
+/// compiler in the CLI world (unit-payload result lifting at the CM
+/// boundary — same bug family as the `Exit::exit(Result<(),()>)` ICE noted
+/// in wado-compiler/lib/core/cli.wado). Re-add the `done.read()` check
+/// once that is fixed.
 fn read_all(file: &Descriptor) -> List<u8> {
-    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let [read_stream, done] = file.read_via_stream(0 as Filesize);
     let mut result: List<u8> = [];
     loop {
         let chunk = read_stream.read(4096);
@@ -193,5 +173,6 @@ fn read_all(file: &Descriptor) -> List<u8> {
         }
     }
     read_stream.drop();
+    done.drop();
     return result;
 }

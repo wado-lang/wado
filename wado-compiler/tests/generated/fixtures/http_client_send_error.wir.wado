@@ -300,21 +300,23 @@ type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wad
 
 type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(66)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(67)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(67)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_error.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(68)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(68)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(69)
+type "functype//wado-compiler/tests/fixtures/http_client_send_error.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(69)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(70)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(70)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(71)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(71)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(72)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(72)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(73)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(73)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(74)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(74)
+
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(75)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -333,6 +335,8 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/http_client_send_error.wado/handle"(request) with Client {
     let headers: i32;
@@ -472,6 +476,12 @@ fn "wado-compiler/tests/fixtures/http_client_send_error.wado/handle"(request) wi
     let __local_156: i32;
     let __local_157: i32;
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     headers = "wado-compiler/tests/fixtures/http_client_send_error.wado/__cm_binding__Fields_new"();
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -1229,6 +1239,12 @@ fn "wado-compiler/tests/fixtures/http_client_send_error.wado/__cm_lift__Client_s
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_error.wado/__cm_export__handle"(request) {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/http_client_send_error.wado/handle"(request);
 }
 
@@ -1239,9 +1255,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     i = 0;
     b133: block {
         l134: loop {
-            if i >= len {
-                break b133;
-            }
+            break_if b133 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
             continue l134;
@@ -1253,14 +1267,12 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b136: block {
-        l137: loop {
-            if i >= len {
-                break b136;
-            }
+    b135: block {
+        l136: loop {
+            break_if b135 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l137;
+            continue l136;
         };
     };
 }
@@ -1289,6 +1301,9 @@ fn "core:internal/cm_waitable_set_wait"(ws) {
     return code, evt_handle, payload;
 }
 
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
+}
+
 fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
     let ws_3: i32;
@@ -1297,16 +1312,14 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/t
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
-        b140: block {
-            l141: loop {
+        b138: block {
+            l139: loop {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
-                if event_mv_payload == 2 {
-                    break b140;
-                }
-                continue l141;
+                break_if b138 event_mv_payload == 2;
+                continue l139;
             };
         };
         "wasi/subtask-drop"(handle_1);

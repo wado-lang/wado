@@ -1199,7 +1199,7 @@ WS : [ \\t]+ -> skip ;";
     assert str_contains(&output, &"    VIRTUAL_TOK,  // virtual");
     assert str_contains(&output, &"global TK_VIRTUAL_TOK: i32 = ") && str_contains(&output, &";  // virtual");
     assert str_contains(&output, &"TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual");
-    assert !str_contains(&output, &"fn try_virtual_tok(");
+    assert !str_contains(&output, &"fn try_VIRTUAL_TOK(");
 }
 
 test "caseInsensitive does not fold non-letters" {
@@ -1384,8 +1384,8 @@ WS : [ \\t\\n\\r]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"fn try_a(");
-    assert str_contains(&output, &"fn try_b(");
+    assert str_contains(&output, &"fn try_A(");
+    assert str_contains(&output, &"fn try_B(");
     assert str_contains(&output, &"first_char == 'A'");
     assert str_contains(&output, &"first_char == 'B'");
 }
@@ -1438,7 +1438,7 @@ WS : [ \\t\\n\\r]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert !str_contains(&output, &"fn try_a(");
+    assert !str_contains(&output, &"fn try_A(");
     assert str_contains(&output, &"classify_keyword");
 }
 
@@ -1458,7 +1458,7 @@ C : 'c' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"fn try_b(");
+    assert str_contains(&output, &"fn try_B(");
 }
 
 test "generate returns source and lowering diagnostics from one lowering" {

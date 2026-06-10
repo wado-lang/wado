@@ -12,20 +12,45 @@ type "functype//wado-compiler/tests/fixtures/fn_ref_generic_outer.wado/__cm_expo
 
 type "functype//wado-compiler/tests/fixtures/fn_ref_generic_outer.wado/__cm_export____test_2_turbofish_funcref_inside_generic_outer" = fn();  // TypeId(4)
 
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(5)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/fn_ref_generic_outer.wado/__cm_export____test_0_inferred_funcref_inside_generic_outer__i32_"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/fn_ref_generic_outer.wado/__cm_export____test_1_inferred_funcref_inside_generic_outer__bool_"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/fn_ref_generic_outer.wado/__cm_export____test_2_turbofish_funcref_inside_generic_outer"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/fn_ref_generic_outer.wado/__cm_export____test_0_inferred_funcref_inside_generic_outer__i32_" as "__test_0_inferred_funcref_inside_generic_outer__i32_"

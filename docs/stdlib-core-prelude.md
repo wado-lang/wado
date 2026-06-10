@@ -2100,6 +2100,16 @@ Creates an f32 from its bit representation.
 
 #### `pub const NAN: f64`
 
+#### `pub const MAX_SAFE_INTEGER: f64`
+
+The largest integer exactly representable in f64: 2^53 - 1.
+Mirrors JS `Number.MAX_SAFE_INTEGER`.
+
+#### `pub const MIN_SAFE_INTEGER: f64`
+
+The smallest integer exactly representable in f64: -(2^53 - 1).
+Mirrors JS `Number.MIN_SAFE_INTEGER`.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn abs(x: f64) -> f64`

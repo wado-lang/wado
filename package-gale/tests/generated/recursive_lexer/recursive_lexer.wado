@@ -538,14 +538,14 @@ impl Lexer {
     }
 }
 
-fn try_block(chars: &List<char>, start: i32) -> i32 {
+fn try_BLOCK(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    pos = try_braced(chars, pos);
+    pos = try_BRACED(chars, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn try_braced(chars: &List<char>, start: i32) -> i32 {
+fn try_BRACED(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '{' { return -1; }
     pos += 1;
@@ -556,7 +556,7 @@ fn try_braced(chars: &List<char>, start: i32) -> i32 {
             let mut alts_ok_1 = false;
             alts_1_0: {
                 pos = alts_saved_1;
-                pos = try_braced(chars, pos);
+                pos = try_BRACED(chars, pos);
                 if pos < 0 { break alts_1_0; }
                 alts_ok_1 = true;
             }
@@ -580,7 +580,7 @@ fn try_braced(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ident(chars: &List<char>, start: i32) -> i32 {
+fn try_IDENT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { return -1; }
@@ -599,7 +599,7 @@ fn try_ident(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
@@ -629,22 +629,22 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '_' {
-            end = try_ident(&lexer.chars, start);
+            end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
         } else if first_char == '{' {
-            end = try_block(&lexer.chars, start);
+            end = try_BLOCK(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK; }
         } else if 'a' <= first_char <= 'z' {
-            end = try_ident(&lexer.chars, start);
+            end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
         } else if 'A' <= first_char <= 'Z' {
-            end = try_ident(&lexer.chars, start);
+            end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
         } else {
-            end = try_ident(&lexer.chars, start);
+            end = try_IDENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENT; }
         }
         if best_end <= start {

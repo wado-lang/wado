@@ -1,0 +1,74 @@
+// Regression: a static trait-method call `T::method()` must dispatch on the
+// type parameter named `T`, not positionally on the lowest-index type param.
+// `fn f<U, T: Trait>` used to route `T::make()` to `U` (silent wrong value,
+// or an ICE when `U` did not implement the trait), because monomorphization
+// picked the lowest-index substitution entry as the receiver.
+
+trait Maker {
+    fn make() -> Self;
+    fn val(&self) -> i32;
+}
+
+struct A {
+    v: i32,
+}
+impl Maker for A {
+    fn make() -> A {
+        return A { v: 10 };
+    }
+    fn val(&self) -> i32 {
+        return self.v;
+    }
+}
+
+struct B {
+    v: i32,
+}
+impl Maker for B {
+    fn make() -> B {
+        return B { v: 20 };
+    }
+    fn val(&self) -> i32 {
+        return self.v;
+    }
+}
+
+struct C {
+    v: i32,
+}
+impl Maker for C {
+    fn make() -> C {
+        return C { v: 33 };
+    }
+    fn val(&self) -> i32 {
+        return self.v;
+    }
+}
+
+// The trait-bound receiver T is the SECOND param.
+fn build_second<U, T: Maker>(u: U) -> i32 {
+    let t = T::make();
+    return t.val();
+}
+
+// The trait-bound receiver T is in the MIDDLE of three params.
+fn build_middle<X, T: Maker, Z>(x: X, z: Z) -> i32 {
+    let t = T::make();
+    return t.val();
+}
+
+test "receiver is the second type param" {
+    assert build_second::<A, B>(A { v: 0 }) == 20;
+}
+
+test "receiver param whose sibling does not implement the trait" {
+    // U = String does not implement Maker; routing to U used to ICE.
+    assert build_second::<String, B>("ignored") == 20;
+}
+
+test "receiver is the middle of three type params" {
+    assert build_middle::<i32, C, bool>(1, true) == 33;
+}
+
+__DATA__
+{"test": {}}

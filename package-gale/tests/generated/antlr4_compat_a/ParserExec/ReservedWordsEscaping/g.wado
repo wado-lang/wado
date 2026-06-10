@@ -666,7 +666,7 @@ impl Lexer {
     }
 }
 
-fn try_for(chars: &List<char>, start: i32) -> i32 {
+fn try_FOR(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'f' { return -1; }
     pos += 1;
@@ -679,7 +679,7 @@ fn try_for(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_break(chars: &List<char>, start: i32) -> i32 {
+fn try_BREAK(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'b' { return -1; }
     pos += 1;
@@ -696,7 +696,7 @@ fn try_break(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_if(chars: &List<char>, start: i32) -> i32 {
+fn try_IF(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
@@ -707,7 +707,7 @@ fn try_if(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_continue_(chars: &List<char>, start: i32) -> i32 {
+fn try_CONTINUE_(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -739,16 +739,16 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == 'b' {
-            end = try_break(&lexer.chars, start);
+            end = try_BREAK(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BREAK; }
         } else if first_char == 'c' {
-            end = try_continue_(&lexer.chars, start);
+            end = try_CONTINUE_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_CONTINUE_; }
         } else if first_char == 'f' {
-            end = try_for(&lexer.chars, start);
+            end = try_FOR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FOR; }
         } else if first_char == 'i' {
-            end = try_if(&lexer.chars, start);
+            end = try_IF(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IF; }
         }
         if best_end <= start {

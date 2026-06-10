@@ -37,15 +37,17 @@ type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_expo
 
 type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(12)
 
-type "functype//core:prelude/types.wado/AsyncCall<()>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<()>");  // TypeId(13)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__Closure_2::__call" = fn(i32);  // TypeId(14)
+type "functype//core:prelude/types.wado/AsyncCall<()>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<()>");  // TypeId(14)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
+type "functype//wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__Closure_2::__call" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(16)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(17)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(17)
+
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(18)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -57,6 +59,8 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(how_long) with MonotonicClock {
     let __subtask_packed: i32;
     return struct.new "core:prelude/types.wado//AsyncCall<()>" { __cm_packed: local.tee __subtask_packed("wasi/wasi:clocks/MonotonicClock::wait_for"(how_long)), __cm_outptr: 0, __cm_size: 0, __cm_align: 0, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_newtype_literal.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__closure_wrapper_0" } };
@@ -67,6 +71,12 @@ fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_lift__MonotonicC
 }
 
 fn "wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_export____test_0_literal_coercion_to_duration_via_effect_fn"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "core:prelude/types.wado/AsyncCall<()>::wait"("wado-compiler/tests/fixtures/wasi_newtype_literal.wado/__cm_binding__MonotonicClock_wait_for"(0_i64));
     "wasi/task-return"(0);
 }
@@ -84,6 +94,9 @@ fn "core:internal/cm_waitable_set_wait"(ws) {
     return code, evt_handle, payload;
 }
 
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
+}
+
 fn "core:prelude/types.wado/AsyncCall<()>::wait"(self) {
     let handle_1: i32;
     let ws_3: i32;
@@ -97,9 +110,7 @@ fn "core:prelude/types.wado/AsyncCall<()>::wait"(self) {
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
-                if event_mv_payload == 2 {
-                    break b1;
-                }
+                break_if b1 event_mv_payload == 2;
                 continue l2;
             };
         };

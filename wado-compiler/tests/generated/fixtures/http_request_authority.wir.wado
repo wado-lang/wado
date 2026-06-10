@@ -237,17 +237,19 @@ type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);
 
 type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(47)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(48)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(48)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(49)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(49)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(50)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(50)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(51)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(51)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(52)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(52)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(53)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(53)
+
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(54)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -261,6 +263,8 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/http_request_authority.wado/handle"(request) {
     let headers: i32;
@@ -400,6 +404,12 @@ fn "wado-compiler/tests/fixtures/http_request_authority.wado/handle"(request) {
     let __local_156: i32;
     let __local_157: i32;
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     drop("wado-compiler/tests/fixtures/http_request_authority.wado/__cm_binding__Request_get_authority"(request));
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -764,6 +774,12 @@ fn "wado-compiler/tests/fixtures/http_request_authority.wado/__cm_binding__Respo
 }
 
 fn "wado-compiler/tests/fixtures/http_request_authority.wado/__cm_export__handle"(request) {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/http_request_authority.wado/handle"(request);
 }
 
@@ -774,9 +790,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     i = 0;
     b64: block {
         l65: loop {
-            if i >= len {
-                break b64;
-            }
+            break_if b64 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
             continue l65;
@@ -788,14 +802,12 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b67: block {
-        l68: loop {
-            if i >= len {
-                break b67;
-            }
+    b66: block {
+        l67: loop {
+            break_if b66 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l68;
+            continue l67;
         };
     };
 }
@@ -809,6 +821,9 @@ fn "core:internal/cm_lower_string"(s) {
     ptr = "mem/realloc"(0, 0, 1, len);
     "core:internal/gc_array_to_memory"(bytes, ptr, len);
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/http_request_authority.wado/__cm_export__handle" as "handle"

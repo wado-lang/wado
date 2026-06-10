@@ -536,21 +536,21 @@ impl Lexer {
     }
 }
 
-fn try_backslash(chars: &List<char>, start: i32) -> i32 {
+fn try_Backslash(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\\' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_slash(chars: &List<char>, start: i32) -> i32 {
+fn try_Slash(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_vee(chars: &List<char>, start: i32) -> i32 {
+fn try_Vee(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\\' { return -1; }
     pos += 1;
@@ -559,7 +559,7 @@ fn try_vee(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_wedge(chars: &List<char>, start: i32) -> i32 {
+fn try_Wedge(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -568,7 +568,7 @@ fn try_wedge(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t') { return -1; }
@@ -587,17 +587,17 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '/' {
-            end = try_slash(&lexer.chars, start);
+            end = try_Slash(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Slash; }
-            end = try_wedge(&lexer.chars, start);
+            end = try_Wedge(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Wedge; }
         } else if first_char == '\\' {
-            end = try_backslash(&lexer.chars, start);
+            end = try_Backslash(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Backslash; }
-            end = try_vee(&lexer.chars, start);
+            end = try_Vee(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Vee; }
         }
         if best_end <= start {

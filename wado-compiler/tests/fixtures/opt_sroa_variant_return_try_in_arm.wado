@@ -1,0 +1,77 @@
+// Test: variant-return SROA rewrites `?`-desugared returns embedded in
+// non-tail positions of a returned `match`/`if` value.
+//
+// Regression for an ICE ("WIR pipeline generated invalid core Wasm module:
+// type mismatch: expected (ref null $type), found (ref (exact $type))").
+//
+// When a function `return match … { Ok(v) => { let x = helper(v)?; … } }` is
+// SROA'd into a multi-value return, the `?` desugars to an early
+// `return Err(…)` buried inside the `let x = …` binding (a *non-tail*
+// statement of the match arm). The variant-return rewriter only walked
+// value/tail positions, so that embedded `return Err(…)` kept its boxed
+// `struct.new` shape while the function signature became multi-value —
+// producing invalid Wasm. The fix rewrites embedded returns in non-tail
+// positions too.
+//
+// The bug only manifested when the `?` operand's Result type (`Result<f64, E>`)
+// differs from the enclosing function's return type (`Result<i64, E>`): same
+// error type, different Ok payload type, so two distinct GC struct types.
+
+variant NumError {
+    NotWhole,
+    OutOfRange,
+}
+
+// Returns `Result<f64, NumError>` — distinct from the caller's return type.
+#[inline("never")]
+fn check_whole(v: f64) -> Result<f64, NumError> {
+    if v != f64::floor(v) {
+        return Result::Err(NumError::NotWhole);
+    }
+    return Result::Ok(v);
+}
+
+// Returns `Result<i64, NumError>`. The `?` inside the `Ok` arm propagates a
+// `Result<f64, NumError>` error into this `Result<i64, NumError>` return.
+fn to_i64(text: String) -> Result<i64, NumError> {
+    return match f64::from_str(&text) {
+        Ok(v) => {
+            let checked = check_whole(v)?;
+            if checked >= 1000000000000000000.0 {
+                return Result::Err(NumError::OutOfRange);
+            }
+            Result::Ok(checked as i64);
+        },
+        Err(_) => Result::Err(NumError::OutOfRange),
+    };
+}
+
+#[inline("never")]
+fn classify(text: String) -> i64 {
+    return match to_i64(text) {
+        Ok(n) => n,
+        Err(NumError::NotWhole) => -1,
+        Err(NumError::OutOfRange) => -2,
+    };
+}
+
+export fn run() {
+    // Ok path through the `?`.
+    assert classify("42") == 42;
+    assert classify("100") == 100;
+    // `?` propagates the NotWhole error (the embedded early return).
+    assert classify("4.5") == -1;
+    // Non-tail early return inside the arm (range check).
+    assert classify("1e19") == -2;
+    // Unparseable input — the Err arm of the outer match.
+    assert classify("abc") == -2;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O1": [
+        "-> [i32, i64, ref null",
+        "multivalue_bind ["
+    ]
+}

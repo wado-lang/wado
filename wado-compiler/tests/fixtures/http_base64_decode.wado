@@ -3,7 +3,7 @@ use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 use { decode } from "core:base64";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let result = decode("YWJj");
+    let result = decode(&"YWJj");
     assert result matches { Some(bytes) && bytes.len() == 3 };
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
@@ -13,7 +13,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     task return Result::<Response, ErrorCode>::Ok(response);
 
-    let text = if let Some(bytes) = decode("YWJj") {
+    let text = if let Some(bytes) = decode(&"YWJj") {
         String::from_utf8_lossy(bytes);
     } else {
         "FAIL";

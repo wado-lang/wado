@@ -27,19 +27,32 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
 
 type "functype//wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__cm_export____test_0_fn_mut_through_a_call_result_root_is_allowed" = fn();  // TypeId(7)
 
-type "functype//wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//__Closure_2");  // TypeId(8)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(8)
+
+type "functype//wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//__Closure_2");  // TypeId(9)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__cm_export____test_0_fn_mut_through_a_call_result_root_is_allowed"() {
     let count: ref "core:prelude/types.wado//Box<i32>";
     let inc: ref struct;
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     let __indirect_call_0: ref "canonical//CanonicalClosure_0";
     __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(count = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }; inc = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//__Closure_2" { __capture_0: count }, func: ref.func "closure/wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__closure_wrapper_0" }; struct.new "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//Counter" { f: inc }.f);
     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__Closure_2::__call"(self) {

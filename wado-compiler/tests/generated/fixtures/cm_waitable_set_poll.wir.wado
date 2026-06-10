@@ -241,19 +241,21 @@ type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wad
 
 type "functype//core:internal/cm_waitable_set_poll" = fn(i32) -> ref null "core:prelude/types.wado//WaitEvent";  // TypeId(47)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(48)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(48)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(49)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(49)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(50)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(50)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(51)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(51)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(52)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(52)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(53)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(53)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(54)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(54)
+
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(55)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -268,6 +270,8 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
     let ws: i32;
@@ -546,6 +550,12 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request) with
     let __local_314: i32;
     let __local_316: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let __pattern_temp_3: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     event = "core:internal/cm_waitable_set_poll"(local.tee ws("wasi/waitable-set-new"()));
     if ref.is_null(event) == 0 {
         "wasi/waitable-set-drop"(ws);
@@ -1211,6 +1221,12 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Respons
 }
 
 fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_export__handle"(request) {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"(request);
 }
 
@@ -1219,9 +1235,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     i = 0;
     b126: block {
         l127: loop {
-            if i >= len {
-                break b126;
-            }
+            break_if b126 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
             continue l127;
@@ -1255,6 +1269,9 @@ fn "core:internal/cm_waitable_set_poll"(ws) {
     payload = builtin::load_i32(out_ptr + 4);
     drop("mem/realloc"(out_ptr, 8, 4, 0));
     return struct.new "core:prelude/types.wado//WaitEvent" { code: code, handle: evt_handle, payload: payload };
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_export__handle" as "handle"

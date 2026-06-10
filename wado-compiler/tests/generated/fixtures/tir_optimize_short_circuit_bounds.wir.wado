@@ -65,21 +65,23 @@ type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(22)
 
 type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(24)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(26)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(26)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(27)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(27)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(28)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(28)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(29)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(31)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(32)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -94,6 +96,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(arr, pos, ch) {
     if (if pos >= arr.used -> i32 {
         1;
@@ -106,7 +110,7 @@ fn "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_ch
 }
 
 fn "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//List<char>";
+    let __b: ref "core:prelude//List<char>";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/string.wado//String";
@@ -115,27 +119,33 @@ fn "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/run"() w
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    let self_28: bool;
-    let self_34: bool;
-    let self_40: bool;
-    let self_46: bool;
-    __b_0 = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(104, 101, 108, 108, 111), used: 5 };
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_28 = "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(__b_0, 0, 104); "core:prelude/format.wado/Formatter::pad"(__local_3, (if self_28 -> ref "core:prelude/string.wado//String" {
+    let self_27: bool;
+    let self_33: bool;
+    let self_39: bool;
+    let self_45: bool;
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    __b = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(104, 101, 108, 108, 111), used: 5 };
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_27 = "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(__b, 0, 104); "core:prelude/format.wado/Formatter::pad"(__local_3, (if self_27 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     })); __local_2);
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; self_34 = "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(__b_0, 4, 111); "core:prelude/format.wado/Formatter::pad"(__local_5, (if self_34 -> ref "core:prelude/string.wado//String" {
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; self_33 = "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(__b, 4, 111); "core:prelude/format.wado/Formatter::pad"(__local_5, (if self_33 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     })); __local_4);
-    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; self_40 = "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(__b_0, 5, 120); "core:prelude/format.wado/Formatter::pad"(__local_7, (if self_40 -> ref "core:prelude/string.wado//String" {
+    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; self_39 = "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(__b, 5, 120); "core:prelude/format.wado/Formatter::pad"(__local_7, (if self_39 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     })); __local_6);
-    "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; self_46 = "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(__b_0, 2, 120); "core:prelude/format.wado/Formatter::pad"(__local_9, (if self_46 -> ref "core:prelude/string.wado//String" {
+    "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; self_45 = "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/check_char"(__b, 2, 120); "core:prelude/format.wado/Formatter::pad"(__local_9, (if self_45 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -147,6 +157,12 @@ fn "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/__cm_bin
 }
 
 fn "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/tir_optimize_short_circuit_bounds.wado/run"();
     "wasi/task-return"(0);
 }
@@ -185,9 +201,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     i = 0;
     b7: block {
         l8: loop {
-            if i >= len {
-                break b7;
-            }
+            break_if b7 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
             continue l8;
@@ -228,6 +242,9 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
         drop("core:internal/wait_for_blocked"(handle));
     }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -292,14 +309,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b18: block {
-        l19: loop {
-            if i >= n {
-                break b18;
-            }
+    b17: block {
+        l18: loop {
+            break_if b17 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l19;
+            continue l18;
         };
     };
 }

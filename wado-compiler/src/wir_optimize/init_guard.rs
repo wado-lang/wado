@@ -233,7 +233,7 @@ fn is_trivial_init_block(instr: &WirInstr) -> Option<&str> {
     };
     let WirInstr::GlobalGet {
         name: guard_name, ..
-    } = condition.as_ref()
+    } = condition.peel_hint()
     else {
         return None;
     };

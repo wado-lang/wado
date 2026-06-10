@@ -2903,7 +2903,7 @@ impl Lexer {
     }
 }
 
-fn try_identifier(chars: &List<char>, start: i32) -> i32 {
+fn try_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
     let mut alts_ok_0 = false;
@@ -3077,7 +3077,7 @@ fn try_identifier(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_numeric_literal(chars: &List<char>, start: i32) -> i32 {
+fn try_NUMERIC_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_12 = pos;
     let mut alts_ok_12 = false;
@@ -3208,7 +3208,7 @@ fn try_numeric_literal(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_bind_parameter(chars: &List<char>, start: i32) -> i32 {
+fn try_BIND_PARAMETER(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_23 = pos;
     let mut alts_ok_23 = false;
@@ -3235,7 +3235,7 @@ fn try_bind_parameter(chars: &List<char>, start: i32) -> i32 {
             if pos >= chars.len() { break alts_23_1; }
             if !(false || chars[pos] == ':' || chars[pos] == '@' || chars[pos] == '$') { break alts_23_1; }
             pos += 1;
-            pos = try_identifier(chars, pos);
+            pos = try_IDENTIFIER(chars, pos);
             if pos < 0 { break alts_23_1; }
             alts_ok_23 = true;
         }
@@ -3244,7 +3244,7 @@ fn try_bind_parameter(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_string_literal(chars: &List<char>, start: i32) -> i32 {
+fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
@@ -3289,17 +3289,17 @@ fn try_string_literal(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_blob_literal(chars: &List<char>, start: i32) -> i32 {
+fn try_BLOB_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == 'x' || chars[pos] == 'X') { return -1; }
     pos += 1;
-    pos = try_string_literal(chars, pos);
+    pos = try_STRING_LITERAL(chars, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn try_single_line_comment(chars: &List<char>, start: i32) -> i32 {
+fn try_SINGLE_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
@@ -3319,7 +3319,7 @@ fn try_single_line_comment(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_multiline_comment(chars: &List<char>, start: i32) -> i32 {
+fn try_MULTILINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -3359,7 +3359,7 @@ fn try_multiline_comment(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_spaces(chars: &List<char>, start: i32) -> i32 {
+fn try_SPACES(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\u{b}' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
@@ -3367,7 +3367,7 @@ fn try_spaces(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_unexpected_char(chars: &List<char>, start: i32) -> i32 {
+fn try_UNEXPECTED_CHAR(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     pos += 1;
@@ -3766,23 +3766,23 @@ pub fn tokenize(input: &String) -> List<Token> {
         let first_char = lexer.chars[start];
         let mut best_channel: i32 = 0;
         if first_char == '\t' || first_char == '\n' || first_char == '\u{b}' || first_char == '\r' || first_char == ' ' {
-            end = try_spaces(&lexer.chars, start);
+            end = try_SPACES(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SPACES; best_channel = 1; }
         } else if first_char == '!' {
             end = try_lit_bangeq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; best_channel = 0; }
         } else if first_char == '"' || first_char == '[' || first_char == '_' || first_char == '`' {
-            end = try_identifier(&lexer.chars, start);
+            end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
         } else if first_char == '$' || first_char == ':' || first_char == '?' || first_char == '@' {
-            end = try_bind_parameter(&lexer.chars, start);
+            end = try_BIND_PARAMETER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BIND_PARAMETER; best_channel = 0; }
         } else if first_char == '%' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PERCENT; best_channel = 0; }
         } else if first_char == '&' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_AMP; best_channel = 0; }
         } else if first_char == '\'' {
-            end = try_string_literal(&lexer.chars, start);
+            end = try_STRING_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_channel = 0; }
         } else if first_char == '(' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LPAREN; best_channel = 0; }
@@ -3796,15 +3796,15 @@ pub fn tokenize(input: &String) -> List<Token> {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_COMMA; best_channel = 0; }
         } else if first_char == '-' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_MINUS; best_channel = 0; }
-            end = try_single_line_comment(&lexer.chars, start);
+            end = try_SINGLE_LINE_COMMENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SINGLE_LINE_COMMENT; best_channel = 1; }
         } else if first_char == '.' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_DOT; best_channel = 0; }
-            end = try_numeric_literal(&lexer.chars, start);
+            end = try_NUMERIC_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
         } else if first_char == '/' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SLASH; best_channel = 0; }
-            end = try_multiline_comment(&lexer.chars, start);
+            end = try_MULTILINE_COMMENT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_MULTILINE_COMMENT; best_channel = 1; }
         } else if first_char == ';' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SEMI; best_channel = 0; }
@@ -3827,9 +3827,9 @@ pub fn tokenize(input: &String) -> List<Token> {
             end = try_lit_gteq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; best_channel = 0; }
         } else if first_char == 'X' || first_char == 'x' {
-            end = try_identifier(&lexer.chars, start);
+            end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
-            end = try_blob_literal(&lexer.chars, start);
+            end = try_BLOB_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOB_LITERAL; best_channel = 0; }
         } else if first_char == '|' {
             end = try_lit_pipepipe(&lexer.chars, start);
@@ -3838,20 +3838,20 @@ pub fn tokenize(input: &String) -> List<Token> {
         } else if first_char == '~' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_TILDE; best_channel = 0; }
         } else if 'a' <= first_char <= 'z' {
-            end = try_identifier(&lexer.chars, start);
+            end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
         } else if 'A' <= first_char <= 'Z' {
-            end = try_identifier(&lexer.chars, start);
+            end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
         } else if '0' <= first_char <= '9' {
-            end = try_numeric_literal(&lexer.chars, start);
+            end = try_NUMERIC_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
         } else {
-            end = try_identifier(&lexer.chars, start);
+            end = try_IDENTIFIER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
-            end = try_numeric_literal(&lexer.chars, start);
+            end = try_NUMERIC_LITERAL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
-            end = try_unexpected_char(&lexer.chars, start);
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         }
         if best_end > start {

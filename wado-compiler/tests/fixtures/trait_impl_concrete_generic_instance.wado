@@ -1,0 +1,39 @@
+// Trait impls on fully-instantiated generic types (`List<i32>`,
+// `List<String>`), dispatched both directly and through a generic trait
+// bound. Regression test: the monomorphizer used to route the substituted
+// call `List<i32>^Tag::tag` to List's own module instead of the impl
+// block's module, which made WIR translation panic with an unresolved
+// MethodCall.
+
+trait Tag {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for List<i32> {
+    fn tag(&self) -> i32 {
+        return self.len();
+    }
+}
+
+impl Tag for List<String> {
+    fn tag(&self) -> i32 {
+        return -self.len();
+    }
+}
+
+fn tag_of<T: Tag>(x: &T) -> i32 {
+    return x.tag();
+}
+
+export fn run() {
+    let nums: List<i32> = [1, 2, 3];
+    assert nums.tag() == 3;
+    assert tag_of(&nums) == 3;
+
+    let names: List<String> = ["a", "b"];
+    assert names.tag() == -2;
+    assert tag_of(&names) == -2;
+}
+
+__DATA__
+{"stdout": ""}

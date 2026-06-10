@@ -532,7 +532,7 @@ impl Lexer {
     }
 }
 
-fn try_i(chars: &List<char>, start: i32) -> i32 {
+fn try_I(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     loop {
         let ng_saved_0 = pos;
@@ -569,7 +569,7 @@ fn try_i(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_2 = pos;
     let mut alts_ok_2 = false;
@@ -591,7 +591,7 @@ fn try_ws(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_j(chars: &List<char>, start: i32) -> i32 {
+fn try_J(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     pos += 1;
@@ -609,14 +609,14 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\n' || first_char == ' ' {
-            end = try_i(&lexer.chars, start);
+            end = try_I(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_I; }
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else {
-            end = try_i(&lexer.chars, start);
+            end = try_I(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_I; }
-            end = try_j(&lexer.chars, start);
+            end = try_J(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_J; }
         }
         if best_end <= start {

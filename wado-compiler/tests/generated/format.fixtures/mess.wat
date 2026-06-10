@@ -116,14 +116,31 @@
     (type (;0;) (func (param i32 i32 i32 i32) (result i32)))
     (type (;1;) (func (param i32)))
     (type (;2;) (func))
+    (type (;3;) (func))
     (import "mem" "realloc" (func (;0;) (type 0)))
     (import "wasi" "task-return" (func (;1;) (type 1)))
     (import "mem" "memory" (memory (;0;) 1))
+    (global (;0;) (mut i32) (i32.const 0))
     (export "run" (func $wado-compiler/tests/format.fixtures/mess-dirty.wado/__cm_export__run))
     (func $wado-compiler/tests/format.fixtures/mess-dirty.wado/__cm_export__run (;2;) (type 2)
+      (block ;; label = @1
+        (br_if 0 (;@1;)
+          (global.get 0)
+          (@metadata.code.branch_hint "\01"))
+        (call $core:prelude/fpfmt.wado/__initialize_module)
+        (global.set 0
+          (i32.const 1)))
+      (block ;; label = @1
+        (br_if 0 (;@1;)
+          (global.get 0)
+          (@metadata.code.branch_hint "\01"))
+        (call $core:prelude/fpfmt.wado/__initialize_module)
+        (global.set 0
+          (i32.const 1)))
       (call 1
         (i32.const 0))
     )
+    (func $core:prelude/fpfmt.wado/__initialize_module (;3;) (type 3))
   )
   (core instance $wasi-instance (;1;)
     (export "task-return" (func $task.return))

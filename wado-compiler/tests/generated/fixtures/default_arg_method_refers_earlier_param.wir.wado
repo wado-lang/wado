@@ -18,16 +18,14 @@ global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/default_arg_method_refers_earlier_param.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     __inline_run_0____inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline_run_0____inline___initialize_modules_0;
-        }
+        break_if __inline_run_0____inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };

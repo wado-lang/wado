@@ -214,7 +214,7 @@ pub fn route(request: Request, method_str: String, path: String, query: String) 
 
     if path.starts_with("/base64/") {
         let encoded = path.substr_bytes(8, path.len());
-        if let Some(decoded_bytes) = decode(encoded) {
+        if let Some(decoded_bytes) = decode(&encoded) {
             let text = String::from_utf8_lossy(decoded_bytes);
             return [200, "text/plain", text];
         }

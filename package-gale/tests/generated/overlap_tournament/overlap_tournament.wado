@@ -551,28 +551,28 @@ impl Lexer {
     }
 }
 
-fn try_a(chars: &List<char>, start: i32) -> i32 {
+fn try_A(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_b(chars: &List<char>, start: i32) -> i32 {
+fn try_B(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'b' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_c(chars: &List<char>, start: i32) -> i32 {
+fn try_C(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
@@ -602,16 +602,16 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == 'a' {
-            end = try_a(&lexer.chars, start);
+            end = try_A(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_A; }
         } else if first_char == 'b' {
-            end = try_b(&lexer.chars, start);
+            end = try_B(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_B; }
         } else if first_char == 'c' {
-            end = try_c(&lexer.chars, start);
+            end = try_C(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_C; }
         }
         if best_end <= start {

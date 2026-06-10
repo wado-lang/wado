@@ -21,7 +21,7 @@
 //!
 //! Default categories (Phase 1): Sets, LexerExec, ParseTrees.
 
-use { args, env, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { args, env, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use {
     Preopens,
     Descriptor,
@@ -440,6 +440,15 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
         }
     }
     stream.drop();
+    // TODO(compiler): the completion future SHOULD be consumed here — it
+    // distinguishes clean EOF from a mid-stream error, and dropping it
+    // unchecked could commit a silently truncated grammar. But reading a
+    // `Future<Result<(), ErrorCode>>` currently ICEs the compiler in the
+    // CLI world (unit-payload result lifting at the CM boundary; "WIR
+    // pipeline generated invalid core Wasm module ... values remaining on
+    // stack at end of block" in the consuming fn). Same bug family as the
+    // `Exit::exit(Result<(),()>)` ICE noted in wado-compiler/lib/core/cli.wado.
+    // Re-add the `done.read()` check once that is fixed.
     done.drop();
     return match String::from_utf8(bytes) {
         Ok(s) => Result::Ok(s),
@@ -464,6 +473,10 @@ fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Resul
     let sub = file.write_via_stream(rx, 0 as Filesize);
     tx.write(bytes);
     tx.drop();
+    // TODO(compiler): `sub.read()` should be awaited here — dropping the
+    // future unchecked reports Ok(()) for a failed or partial write — but
+    // reading a `Future<Result<(), ErrorCode>>` currently ICEs the
+    // compiler (see read_file_to_string above).
     sub.drop();
     return Result::Ok(());
 }
@@ -1044,7 +1057,7 @@ fn parse_cli_args(arguments: List<String>) -> CliArgs {
     return CliArgs { want_all, categories, finalize_stage_b_oracle };
 }
 
-export fn run() with Stdout, Stderr, Environment, Preopens {
+export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let cli = parse_cli_args(args());
     let want_all = cli.want_all;
     let mut categories = cli.categories;
@@ -1052,7 +1065,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("extract: no preopened directories available (run via `wado run`)");
-        return;
+        exit(1);
     }
     let root = dirs[0].0;
 
@@ -1069,7 +1082,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             eprintln("extract: the antlr4 submodule appears to be missing.");
             eprintln("extract: run: git submodule update --init --recommend-shallow vendor/antlr4");
             eprintln("extract: (this script never auto-initializes submodules)");
-            return;
+            exit(1);
         },
     };
 
@@ -1094,7 +1107,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot open 'package-gale/tests' for writing");
-            return;
+            exit(1);
         },
     };
 
@@ -1103,7 +1116,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/");
-            return;
+            exit(1);
         },
     };
 
@@ -1121,7 +1134,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/grammars/");
-            return;
+            exit(1);
         },
     };
 
@@ -1129,7 +1142,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/stage_b/");
-            return;
+            exit(1);
         },
     };
 
@@ -1137,7 +1150,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/stage_a/");
-            return;
+            exit(1);
         },
     };
 
@@ -1147,7 +1160,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/oracle-pending/");
-            return;
+            exit(1);
         },
     };
 
@@ -1239,6 +1252,20 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                     if let Err(_) = remove_file(&stage_a_cat_dir, &stale) {
                     }
                 }
+                // Also sweep the grammar file and its slaves — a [skip]
+                // descriptor's .g4 usually carries StringTemplate directives,
+                // i.e. it is not even a valid grammar, and leaving it behind
+                // makes the committed corpus look larger than the supported
+                // set. (Slave names are `{base}.slave<N>.g4`; enumerate by
+                // prefix since N is unknown without parsing the descriptor.)
+                if let Err(_) = remove_file(&cat_out_dir, &`{base}.g4`) {
+                }
+                let slave_prefix = `{base}.slave`;
+                for let existing of list_files_with_suffix(&cat_out_dir, &".g4") {
+                    if existing.starts_with(slave_prefix) {
+                        let _ = remove_file(&cat_out_dir, &existing);
+                    }
+                }
                 continue;
             }
 
@@ -1268,13 +1295,23 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
 
             // Write slave grammars if present.
             let mut slave_relpaths: List<String> = [];
+            let mut slave_failed = false;
             for let mut i = 0; i < parsed.slave_grammars.len(); i += 1 {
                 let slave_name = `{base}.slave{i + 1}.g4`;
                 if let Err(_) = write_file_string(&cat_out_dir, &slave_name, &parsed.slave_grammars[i]) {
-                    eprintln(`extract: cannot write {key} slave {i}`);
-                    continue;
+                    eprintln(`extract: cannot write {key} {slave_name}`);
+                    slave_failed = true;
+                    break;
                 }
                 slave_relpaths.push(`{*category}/{slave_name}`);
+            }
+            if slave_failed {
+                // Skip emitting the whole descriptor — a composite that
+                // references a slave we failed to write is corrupt. Count it
+                // like a failed main-grammar write so the "leave previous
+                // files untouched" protection fires for the category.
+                category_errors += 1;
+                continue;
             }
 
             if let Todo(_) = &triage {
@@ -1505,6 +1542,10 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             if let Skip(reason) = &stage_b_triage {
                 println(`  skipB: {key} — {*reason}`);
                 stage_b_skip += 1;
+                // Sweep the stale Stage B test, mirroring the Stage A skip
+                // branch: flipping a previously-emitted descriptor into
+                // [stage_b_skip] must not leave the old test behind.
+                let _ = remove_file(&stage_b_cat_dir, &`{base}_test.wado`);
                 continue;
             }
             let stage_b_filename = `{base}_test.wado`;
@@ -1689,7 +1730,7 @@ fn write_oracle_pending_files(
 /// shell wrapper successfully ran the oracle); sweep any prior test
 /// whose `.input` has gone away. `ORACLE_VERSION` env stamps the test
 /// header with the resolved jar version.
-fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
+fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, Exit {
     let pending_root = match open_dir(root, &"package-gale/tests/antlr4-compat/oracle-pending", false) {
         Ok(d) => d,
         Err(_) => {
@@ -1700,14 +1741,14 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
         Ok(d) => d,
         Err(_) => {
             eprintln("finalize: cannot open antlr4-compat/");
-            return;
+            exit(1);
         },
     };
     let oracle_out_root = match ensure_dir(&compat_dir, &"stage_b_oracle") {
         Ok(d) => d,
         Err(_) => {
             eprintln("finalize: cannot create stage_b_oracle/");
-            return;
+            exit(1);
         },
     };
     let status_text = match read_file_to_string(root, &status_file_path()) {
@@ -1749,10 +1790,17 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
             let test_filename = `{base}_test.wado`;
             keep_test_files.push(test_filename);
             let key = `{category}/{base}`;
+            // A broken manifest (unreadable .start / .input) is the same
+            // state as a missing .expected: the descriptor cannot be
+            // (re-)emitted this run, so the previously committed test is
+            // stale and must be dropped — keeping it would pin an outcome
+            // that no longer has a manifest behind it.
             let start_text = match read_file_to_string(&pending_cat, &start_filename) {
                 Ok(s) => s,
                 Err(_) => {
-                    eprintln(`finalize: missing oracle-pending/{category}/{start_filename}`);
+                    eprintln(`finalize: missing oracle-pending/{category}/{start_filename} — dropping stale test`);
+                    pending_no_expected += 1;
+                    let _ = remove_file(&oracle_cat, &test_filename);
                     continue;
                 },
             };
@@ -1768,7 +1816,9 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
             let input_text = match read_file_to_string(&pending_cat, input_filename) {
                 Ok(s) => s,
                 Err(_) => {
-                    eprintln(`finalize: cannot read oracle-pending/{category}/{*input_filename}`);
+                    eprintln(`finalize: cannot read oracle-pending/{category}/{*input_filename} — dropping stale test`);
+                    pending_no_expected += 1;
+                    let _ = remove_file(&oracle_cat, &test_filename);
                     continue;
                 },
             };
@@ -1820,13 +1870,40 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
 /// stays untouched.
 fn strip_eof_marker(raw: &String) -> String {
     let trimmed = raw.trim();
-    let suffix = " <EOF>)";
-    if trimmed.ends_with(suffix) {
-        let n = trimmed.len();
-        let prefix = trimmed.substr_bytes(0, n - suffix.len());
-        return `{prefix})`;
+    return strip_tail_eof_marker(&trimmed);
+}
+
+/// Drop a ` <EOF>` marker in tail position — i.e. followed by nothing but
+/// closing parens — so the tree matches Gale's `to_string_tree()` shape
+/// (which omits EOF). EOF can only ever be the last token of a parse, so
+/// this covers both the top-level trailing form `(s a <EOF>)` and the
+/// nested-at-end form `(s (t <EOF>))`. Any other ` <EOF>` occurrence is
+/// token *text* and must survive untouched (the Stage B normalizer's
+/// `<` / `>` rejection then auto-skips the descriptor instead of silently
+/// corrupting the pinned tree).
+fn strip_tail_eof_marker(s: &String) -> String {
+    let chars: List<char> = s.chars().collect();
+    let mut end = chars.len();
+    while end > 0 && chars[end - 1] == ')' {
+        end -= 1;
     }
-    return trimmed;
+    // " <EOF>" is 6 chars; check chars[end-6 .. end] spell it.
+    if end < 6 {
+        return *s;
+    }
+    let marker: List<char> = [' ', '<', 'E', 'O', 'F', '>'];
+    for let mut i = 0; i < 6; i += 1 {
+        if chars[end - 6 + i] != marker[i] {
+            return *s;
+        }
+    }
+    let mut out = String::with_capacity(s.len());
+    for let mut i = 0; i < chars.len(); i += 1 {
+        if i < end - 6 || i >= end {
+            out.push(chars[i]);
+        }
+    }
+    return out;
 }
 
 fn emit_stage_b_oracle_test_file(
@@ -1906,7 +1983,11 @@ fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
     if s.contains("${") {
         return null;
     }
-    let stripped = s.replace(" <EOF>", "");
+    // Tail-position-only strip (shared with the oracle path): a global
+    // ` <EOF>` replace would silently corrupt a tree whose token text
+    // contains the marker; leaving it in place lets the `<` / `>` check
+    // below auto-skip such descriptors instead.
+    let stripped = strip_tail_eof_marker(&s);
     if stripped.contains("<") || stripped.contains(">") {
         return null;
     }
@@ -1978,6 +2059,29 @@ test "normalize: empty output is not Stage B testable" {
     assert normalize_output_for_stage_b(&"") matches { None };
     assert normalize_output_for_stage_b(&"\n") matches { None };
     assert normalize_output_for_stage_b(&"   ") matches { None };
+}
+
+test "normalize: nested-at-end EOF marker is stripped" {
+    // EOF consumed by a sub-rule still sits at the tree's end, just inside
+    // extra closing parens.
+    let result = normalize_output_for_stage_b(&"(s (t a <EOF>))");
+    assert result matches { Some(_) };
+    if let Some(s) = result {
+        assert s == "(s (t a))", `got '{s}'`;
+    }
+}
+
+test "normalize: mid-tree EOF-looking token text auto-skips, not corrupts" {
+    // ` <EOF>` NOT in tail position is token text; the old global replace
+    // silently deleted it. It must survive the strip and then hit the
+    // `<` / `>` rejection (auto-skip).
+    assert normalize_output_for_stage_b(&"(r <EOF> y)") matches { None };
+}
+
+test "strip_eof_marker: mid-tree marker untouched, tail marker stripped" {
+    assert strip_eof_marker(&"(s a <EOF>)\n") == "(s a)";
+    assert strip_eof_marker(&"(s (t <EOF>))") == "(s (t))";
+    assert strip_eof_marker(&"(r <EOF> y)") == "(r <EOF> y)";
 }
 
 test "normalize: action $text echo is not a tree" {

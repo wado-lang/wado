@@ -100,33 +100,35 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(35)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(36)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(37)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(38)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(39)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(40)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(40)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(41)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(41)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(42)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(42)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(43)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(43)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(44)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(44)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(45)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(45)
 
-type "functype//core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>", ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>") -> bool;  // TypeId(46)
+type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(46)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
+type "functype//core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>", ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>") -> bool;  // TypeId(47)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(49)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -141,6 +143,8 @@ import memory (1) from "mem/memory";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_ref_type"() with Stdout {
     let __local_2: ref "core:prelude/string.wado//String";
@@ -182,6 +186,18 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/__cm_binding__Stdout_write_v
 }
 
 fn "wado-compiler/tests/fixtures/trait_bound_7.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    __inline___initialize_modules_2: block {
+        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_ref_type"();
     "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_result_eq"();
     "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_struct_field_bounded"();
@@ -222,9 +238,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     i = 0;
     b4: block {
         l5: loop {
-            if i >= len {
-                break b4;
-            }
+            break_if b4 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
             continue l5;
@@ -309,14 +323,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b10: block {
-        l11: loop {
-            if t <= 0_i64 {
-                break b10;
-            }
+    b9: block {
+        l10: loop {
+            break_if b9 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l11;
+            continue l10;
         };
     };
     return n;
@@ -330,18 +342,19 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b14: block {
-            l15: loop {
-                if temp <= 0_i64 {
-                    break b14;
-                }
+        b12: block {
+            l13: loop {
+                break_if b12 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l15;
+                continue l13;
             };
         };
     }
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
@@ -412,16 +425,14 @@ fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b22: block {
-        l23: loop {
-            if i >= len {
-                break b22;
-            }
+    b19: block {
+        l20: loop {
+            break_if b19 i >= len;
             if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l23;
+            continue l20;
         };
     };
     return 1;
@@ -458,14 +469,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b30: block {
-        l31: loop {
-            if i >= n {
-                break b30;
-            }
+    b26: block {
+        l27: loop {
+            break_if b26 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l31;
+            continue l27;
         };
     };
 }
@@ -566,11 +575,9 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(self) {
     i = 1;
     _licm_used_14 = self.used;
     _licm_repr_15 = self.repr;
-    b51: block {
-        l52: loop {
-            if i >= _licm_used_14 {
-                break b51;
-            }
+    b46: block {
+        l47: loop {
+            break_if b46 i >= _licm_used_14;
             if __inline_i32_Ord__cmp_3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 __sroa_self_value = builtin::array_get<i32>(_licm_repr_15, i);
                 __sroa_other_value = m;
@@ -585,7 +592,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(self) {
                 m = builtin::array_get<i32>(_licm_repr_15, i);
             }
             i = i + 1;
-            continue l52;
+            continue l47;
         };
     };
     return m;

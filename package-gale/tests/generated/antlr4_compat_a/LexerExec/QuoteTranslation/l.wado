@@ -528,7 +528,7 @@ impl Lexer {
     }
 }
 
-fn try_quote(chars: &List<char>, start: i32) -> i32 {
+fn try_QUOTE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
@@ -546,7 +546,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '"' {
-            end = try_quote(&lexer.chars, start);
+            end = try_QUOTE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_QUOTE; }
         }
         if best_end <= start {

@@ -10,18 +10,26 @@ type "functype//wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm
 
 type "functype//wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/__cm_export__run" = fn();  // TypeId(3)
 
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(4)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/run"() {
     let i: i32;
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     i = 0;
     b0: block {
         l1: loop {
-            if i >= 2 {
-                break b0;
-            }
+            break_if b0 i >= 2;
             let __match_scrut_0: i32;
             __match_scrut_0 = i;
             if __match_scrut_0 == 0 {
@@ -34,8 +42,17 @@ fn "wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/run"()
 }
 
 fn "wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/match_arm_struct_field_invalid_wasm.wado/__cm_export__run" as "run"

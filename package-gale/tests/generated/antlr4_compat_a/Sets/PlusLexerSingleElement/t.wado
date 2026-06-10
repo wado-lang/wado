@@ -533,7 +533,7 @@ impl Lexer {
     }
 }
 
-fn try_a(chars: &List<char>, start: i32) -> i32 {
+fn try_A(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let mut accept_0: i32 = -1;
     if pos >= chars.len() || chars[pos] != 'b' { return -1; }
@@ -590,7 +590,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == 'b' {
-            end = try_a(&lexer.chars, start);
+            end = try_A(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_A; }
         }
         if best_end <= start {

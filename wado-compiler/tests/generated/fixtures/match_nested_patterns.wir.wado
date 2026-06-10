@@ -404,13 +404,11 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_tuple
         __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(b_6, __local_19);
         __local_18;
-    __local_32 = pair.0;
-    __local_33 = pair.1;
-    } else if (if __local_32.discriminant == 1 -> i32 {
+    } else if @likely(__local_32 = pair.0; __local_33 = pair.1; (if __local_32.discriminant == 1 -> i32 {
         __local_33.discriminant == 1;
     } else {
         0;
-    }) -> ref "core:prelude/string.wado//String" {
+    })) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("neither"), used: 7 };
     } else {
         unreachable;
@@ -488,13 +486,11 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_tuple
         __local_25 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_24 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(b_12, __local_25);
         __local_24;
-    __local_40 = pair2.0;
-    __local_41 = pair2.1;
-    } else if (if __local_40.discriminant == 1 -> i32 {
+    } else if @likely(__local_40 = pair2.0; __local_41 = pair2.1; (if __local_40.discriminant == 1 -> i32 {
         __local_41.discriminant == 1;
     } else {
         0;
-    }) -> ref "core:prelude/string.wado//String" {
+    })) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("neither"), used: 7 };
     } else {
         unreachable;
@@ -611,8 +607,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_struc
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(n, __local_4);
         __local_3;
-    __local_6 = t.value;
-    } else if __local_6.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+    } else if @likely(__local_6 = t.value; __local_6.discriminant == 1) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty"), used: 5 };
     } else {
         unreachable;
@@ -809,9 +804,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/enum_inside_tuple"()
         __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(n_2, __local_8);
         __local_7;
-    __local_13 = 0;
-    n_3 = 100;
-    } else if __local_13 == 2 -> ref "core:prelude/string.wado//String" {
+    } else if @likely(__local_13 = 0; n_3 = 100; __local_13 == 2) -> ref "core:prelude/string.wado//String" {
         __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
         "core:prelude/string.wado/String::push"(__local_9, 98);
         "core:prelude/string.wado/String::push"(__local_9, 108);
@@ -1240,9 +1233,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/struct_inside_varian
 
 fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/run"() with Stdout {
     __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
@@ -1268,9 +1260,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/__cm_binding__Stdout
 
 fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
@@ -1310,14 +1301,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b80: block {
-        l81: loop {
-            if i >= len {
-                break b80;
-            }
+    b78: block {
+        l79: loop {
+            break_if b78 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l81;
+            continue l79;
         };
     };
 }
@@ -1427,39 +1416,39 @@ fn "core:prelude/fpfmt.wado/unrounded_div"(u, d) {
 }
 
 fn "core:prelude/fpfmt.wado/pow10_coarse"(i) {
-    b87: block {
-        b88: block {
-            b89: block {
-                b90: block {
-                    b91: block {
-                        b92: block {
-                            b93: block {
-                                b94: block {
-                                    b95: block {
-                                        b96: block {
-                                            b97: block {
-                                                b98: block {
-                                                    b99: block {
-                                                        b100: block {
-                                                            b101: block {
-                                                                b102: block {
-                                                                    b103: block {
-                                                                        b104: block {
-                                                                            b105: block {
-                                                                                b106: block {
-                                                                                    b107: block {
-                                                                                        b108: block {
-                                                                                            b109: block {
-                                                                                                b110: block {
-                                                                                                    b111: block {
-                                                                                                        b112: block {
-                                                                                                            b113: block {
-                                                                                                                b114: block {
+    b84: block {
+        b85: block {
+            b86: block {
+                b87: block {
+                    b88: block {
+                        b89: block {
+                            b90: block {
+                                b91: block {
+                                    b92: block {
+                                        b93: block {
+                                            b94: block {
+                                                b95: block {
+                                                    b96: block {
+                                                        b97: block {
+                                                            b98: block {
+                                                                b99: block {
+                                                                    b100: block {
+                                                                        b101: block {
+                                                                            b102: block {
+                                                                                b103: block {
+                                                                                    b104: block {
+                                                                                        b105: block {
+                                                                                            b106: block {
+                                                                                                b107: block {
+                                                                                                    b108: block {
+                                                                                                        b109: block {
+                                                                                                            b110: block {
+                                                                                                                b111: block {
                                                                                                                     br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26] default=0;
                                                                                                                 };
                                                                                                                 "core:internal/unreachable"();
                                                                                                                 unreachable;
-                                                                                                                break b87;
+                                                                                                                break b84;
                                                                                                             };
                                                                                                             return -9202643304706469457_i64, -2331608335343510137_i64;
                                                                                                         };
@@ -1516,118 +1505,118 @@ fn "core:prelude/fpfmt.wado/pow10_coarse"(i) {
 }
 
 fn "core:prelude/fpfmt.wado/pow10_fine"(i) {
-    return b115: block -> u64 {
-        b116: block {
-            b117: block {
-                b118: block {
-                    b119: block {
-                        b120: block {
-                            b121: block {
-                                b122: block {
-                                    b123: block {
-                                        b124: block {
-                                            b125: block {
-                                                b126: block {
-                                                    b127: block {
-                                                        b128: block {
-                                                            b129: block {
-                                                                b130: block {
-                                                                    b131: block {
-                                                                        b132: block {
-                                                                            b133: block {
-                                                                                b134: block {
-                                                                                    b135: block {
-                                                                                        b136: block {
-                                                                                            b137: block {
-                                                                                                b138: block {
-                                                                                                    b139: block {
-                                                                                                        b140: block {
-                                                                                                            b141: block {
-                                                                                                                b142: block {
-                                                                                                                    b143: block {
+    return b112: block -> u64 {
+        b113: block {
+            b114: block {
+                b115: block {
+                    b116: block {
+                        b117: block {
+                            b118: block {
+                                b119: block {
+                                    b120: block {
+                                        b121: block {
+                                            b122: block {
+                                                b123: block {
+                                                    b124: block {
+                                                        b125: block {
+                                                            b126: block {
+                                                                b127: block {
+                                                                    b128: block {
+                                                                        b129: block {
+                                                                            b130: block {
+                                                                                b131: block {
+                                                                                    b132: block {
+                                                                                        b133: block {
+                                                                                            b134: block {
+                                                                                                b135: block {
+                                                                                                    b136: block {
+                                                                                                        b137: block {
+                                                                                                            b138: block {
+                                                                                                                b139: block {
+                                                                                                                    b140: block {
                                                                                                                         br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27] default=0;
                                                                                                                     };
                                                                                                                     "core:internal/unreachable"();
                                                                                                                     unreachable;
-                                                                                                                    break b115;
+                                                                                                                    break b112;
                                                                                                                 };
                                                                                                                 -9223372036854775808_i64;
-                                                                                                                break b115;
+                                                                                                                break b112;
                                                                                                             };
                                                                                                             -6917529027641081856_i64;
-                                                                                                            break b115;
+                                                                                                            break b112;
                                                                                                         };
                                                                                                         -4035225266123964416_i64;
-                                                                                                        break b115;
+                                                                                                        break b112;
                                                                                                     };
                                                                                                     -432345564227567616_i64;
-                                                                                                    break b115;
+                                                                                                    break b112;
                                                                                                 };
                                                                                                 -7187745005283311616_i64;
-                                                                                                break b115;
+                                                                                                break b112;
                                                                                             };
                                                                                             -4372995238176751616_i64;
-                                                                                            break b115;
+                                                                                            break b112;
                                                                                         };
                                                                                         -854558029293551616_i64;
-                                                                                        break b115;
+                                                                                        break b112;
                                                                                     };
                                                                                     -7451627795949551616_i64;
-                                                                                    break b115;
+                                                                                    break b112;
                                                                                 };
                                                                                 -4702848726509551616_i64;
-                                                                                break b115;
+                                                                                break b112;
                                                                             };
                                                                             -1266874889709551616_i64;
-                                                                            break b115;
+                                                                            break b112;
                                                                         };
                                                                         -7709325833709551616_i64;
-                                                                        break b115;
+                                                                        break b112;
                                                                     };
                                                                     -5024971273709551616_i64;
-                                                                    break b115;
+                                                                    break b112;
                                                                 };
                                                                 -1669528073709551616_i64;
-                                                                break b115;
+                                                                break b112;
                                                             };
                                                             -7960984073709551616_i64;
-                                                            break b115;
+                                                            break b112;
                                                         };
                                                         -5339544073709551616_i64;
-                                                        break b115;
+                                                        break b112;
                                                     };
                                                     -2062744073709551616_i64;
-                                                    break b115;
+                                                    break b112;
                                                 };
                                                 -8206744073709551616_i64;
-                                                break b115;
+                                                break b112;
                                             };
                                             -5646744073709551616_i64;
-                                            break b115;
+                                            break b112;
                                         };
                                         -2446744073709551616_i64;
-                                        break b115;
+                                        break b112;
                                     };
                                     -8446744073709551616_i64;
-                                    break b115;
+                                    break b112;
                                 };
                                 -5946744073709551616_i64;
-                                break b115;
+                                break b112;
                             };
                             -2821744073709551616_i64;
-                            break b115;
+                            break b112;
                         };
                         -8681119073709551616_i64;
-                        break b115;
+                        break b112;
                     };
                     -6239712823709551616_i64;
-                    break b115;
+                    break b112;
                 };
                 -3187955011209551616_i64;
-                break b115;
+                break b112;
             };
             -8910000909647051616_i64;
-            break b115;
+            break b112;
         };
         -6525815118631426616_i64;
     };
@@ -1894,17 +1883,15 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     v = val;
     idx = (offset + nd) - 1;
     _licm_repr_9 = buf.repr;
-    b165: block {
-        l166: loop {
-            if idx < offset {
-                break b165;
-            }
+    b162: block {
+        l163: loop {
+            break_if b162 idx < offset;
             index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
             builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
-            continue l166;
+            continue l163;
         };
     };
 }
@@ -1993,14 +1980,12 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
         trailing_9 = (precision - leading_zeros) - digits_to_output;
         trim_d_10 = d;
         skip_11 = nd - digits_to_output;
-        b174: block {
-            l175: loop {
-                if skip_11 <= 0 {
-                    break b174;
-                }
+        b170: block {
+            l171: loop {
+                break_if b170 skip_11 <= 0;
                 trim_d_10 = trim_d_10 /u 10_i64;
                 skip_11 = skip_11 - 1;
-                continue l175;
+                continue l171;
             };
         };
         digit_offset = buf.used;
@@ -2023,14 +2008,12 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
             output_nd = decimal_pos + precision;
             trim_d_16 = d;
             skip_17 = nd - output_nd;
-            b180: block {
-                l181: loop {
-                    if skip_17 <= 0 {
-                        break b180;
-                    }
+            b175: block {
+                l176: loop {
+                    break_if b175 skip_17 <= 0;
                     trim_d_16 = trim_d_16 /u 10_i64;
                     skip_17 = skip_17 - 1;
-                    continue l181;
+                    continue l176;
                 };
             };
             total = output_nd + 1;
@@ -2084,14 +2067,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b188: block {
-        l189: loop {
-            if t <= 0_i64 {
-                break b188;
-            }
+    b182: block {
+        l183: loop {
+            break_if b182 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l189;
+            continue l183;
         };
     };
     return n;
@@ -2105,15 +2086,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b192: block {
-            l193: loop {
-                if temp <= 0_i64 {
-                    break b192;
-                }
+        b185: block {
+            l186: loop {
+                break_if b185 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l193;
+                continue l186;
             };
         };
     }
@@ -2347,14 +2326,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b223: block {
-        l224: loop {
-            if i >= n {
-                break b223;
-            }
+    b215: block {
+        l216: loop {
+            break_if b215 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l224;
+            continue l216;
         };
     };
 }
@@ -2442,31 +2419,27 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         _licm_buf_29 = self.buf;
         _licm_arith_30 = start_pos + left_pad;
         _licm_repr_35 = _licm_buf_29.repr;
-        b234: block {
-            l235: loop {
-                if i_8 < 0 {
-                    break b234;
-                }
+        b225: block {
+            l226: loop {
+                break_if b225 i_8 < 0;
                 index_14 = _licm_arith_30 + i_8;
                 index_17 = start_pos + i_8;
                 value_15 = builtin::array_get_u8(_licm_repr_35, index_17);
                 builtin::array_set_u8(_licm_repr_35, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l235;
+                continue l226;
             };
         };
         j_9 = 0;
         _licm_buf_31 = self.buf;
         _licm_repr_36 = _licm_buf_31.repr;
-        b237: block {
-            l238: loop {
-                if j_9 >= left_pad {
-                    break b237;
-                }
+        b227: block {
+            l228: loop {
+                break_if b227 j_9 >= left_pad;
                 index_19 = start_pos + j_9;
                 builtin::array_set_u8(_licm_repr_36, index_19, fill_byte);
                 j_9 = j_9 + 1;
-                continue l238;
+                continue l228;
             };
         };
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, right_pad);
@@ -2476,31 +2449,27 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         _licm_buf_32 = self.buf;
         _licm_arith_33 = start_pos + padding;
         _licm_repr_37 = _licm_buf_32.repr;
-        b240: block {
-            l241: loop {
-                if i_10 < 0 {
-                    break b240;
-                }
+        b229: block {
+            l230: loop {
+                break_if b229 i_10 < 0;
                 index_22 = _licm_arith_33 + i_10;
                 index_25 = start_pos + i_10;
                 value_23 = builtin::array_get_u8(_licm_repr_37, index_25);
                 builtin::array_set_u8(_licm_repr_37, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l241;
+                continue l230;
             };
         };
         j_11 = 0;
         _licm_buf_34 = self.buf;
         _licm_repr_38 = _licm_buf_34.repr;
-        b243: block {
-            l244: loop {
-                if j_11 >= padding {
-                    break b243;
-                }
+        b231: block {
+            l232: loop {
+                break_if b231 j_11 >= padding;
                 index_27 = start_pos + j_11;
                 builtin::array_set_u8(_licm_repr_38, index_27, fill_byte);
                 j_11 = j_11 + 1;
-                continue l244;
+                continue l232;
             };
         };
     }

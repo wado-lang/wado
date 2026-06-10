@@ -7,29 +7,24 @@ Base64 encoding and decoding (RFC 4648).
 
 ## Functions
 
-### `pub fn encode(data: &List<u8>) -> String`
+### `pub fn encode<S: AsByteSlice>(data: &S) -> String`
 
 Encodes bytes as standard Base64 (RFC 4648 §4, padded).
 
-### `pub fn encode_url(data: &List<u8>) -> String`
+### `pub fn encode_url<S: AsByteSlice>(data: &S) -> String`
 
 Encodes bytes as URL-safe Base64 (RFC 4648 §5, no padding).
 Equivalent to `encode_with(data, Encoding::UrlSafe | Encoding::NoPadding)`.
 
-### `pub fn encode_with(data: &List<u8>, encoding: Encoding) -> String`
+### `pub fn encode_with<S: AsByteSlice>(data: &S, encoding: Encoding) -> String`
 
 Encodes bytes as Base64 with custom flags.
 
-### `pub fn decode(encoded: String) -> Option<List<u8>>`
+### `pub fn decode<S: AsByteSlice>(encoded: &S) -> Option<ByteList>`
 
-Decodes a Base64 string.
+Decodes Base64 from text or raw bytes (e.g., HTTP body, file content).
 Accepts both standard (+/) and URL-safe (-_) alphabets, with or without padding.
 Returns null on invalid input.
-
-### `pub fn decode_bytes(encoded: &List<u8>) -> Option<List<u8>>`
-
-Decodes Base64 from raw bytes (e.g., HTTP body, file content).
-Same lenient behavior as `decode`.
 
 ## Flags
 

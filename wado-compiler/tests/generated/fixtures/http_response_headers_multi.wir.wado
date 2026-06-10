@@ -257,17 +257,19 @@ type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wad
 
 type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(51)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(52)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(52)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(53)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(53)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(54)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(54)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(55)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(55)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(56)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(56)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(57)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(57)
+
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(58)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -281,6 +283,8 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/http_response_headers_multi.wado/handle"(request) {
     let headers: i32;
@@ -422,6 +426,12 @@ fn "wado-compiler/tests/fixtures/http_response_headers_multi.wado/handle"(reques
     let __local_159: i32;
     let __local_160: i32;
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
     let __mv_lo_1: i32;
@@ -822,6 +832,12 @@ fn "wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_binding__
 }
 
 fn "wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_export__handle"(request) {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/http_response_headers_multi.wado/handle"(request);
 }
 
@@ -832,9 +848,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     i = 0;
     b69: block {
         l70: loop {
-            if i >= len {
-                break b69;
-            }
+            break_if b69 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
             continue l70;
@@ -846,14 +860,12 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b72: block {
-        l73: loop {
-            if i >= len {
-                break b72;
-            }
+    b71: block {
+        l72: loop {
+            break_if b71 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l73;
+            continue l72;
         };
     };
 }
@@ -874,6 +886,9 @@ fn "core:internal/cm_lower_list_u8"(data, len) {
     ptr = "mem/realloc"(0, 0, 1, len);
     "core:internal/gc_array_to_memory"(data, ptr, len);
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_export__handle" as "handle"

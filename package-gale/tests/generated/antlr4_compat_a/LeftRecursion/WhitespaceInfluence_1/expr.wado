@@ -799,7 +799,7 @@ impl Lexer {
     }
 }
 
-fn try_id(chars: &List<char>, start: i32) -> i32 {
+fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
     let mut alts_ok_0 = false;
@@ -900,7 +900,7 @@ fn try_id(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_number(chars: &List<char>, start: i32) -> i32 {
+fn try_NUMBER(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || !('0' <= chars[pos] <= '9') { return -1; }
     pos += 1;
@@ -995,7 +995,7 @@ fn try_number(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_date(chars: &List<char>, start: i32) -> i32 {
+fn try_DATE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
@@ -1068,7 +1068,7 @@ fn try_date(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_sq_string(chars: &List<char>, start: i32) -> i32 {
+fn try_SQ_STRING(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
@@ -1113,7 +1113,7 @@ fn try_sq_string(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_dq_string(chars: &List<char>, start: i32) -> i32 {
+fn try_DQ_STRING(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
@@ -1158,7 +1158,7 @@ fn try_dq_string(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\n' || chars[pos] == '\r') { return -1; }
@@ -1177,7 +1177,7 @@ fn try_ws(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_comments(chars: &List<char>, start: i32) -> i32 {
+fn try_COMMENTS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_23 = pos;
     let mut alts_ok_23 = false;
@@ -1402,23 +1402,23 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '!' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_BANG; }
             end = try_lit_bangeq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; }
         } else if first_char == '"' {
-            end = try_dq_string(&lexer.chars, start);
+            end = try_DQ_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DQ_STRING; }
         } else if first_char == '%' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PERCENT; }
         } else if first_char == '&' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_AMP; }
         } else if first_char == '\'' {
-            end = try_date(&lexer.chars, start);
+            end = try_DATE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DATE; }
-            end = try_sq_string(&lexer.chars, start);
+            end = try_SQ_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SQ_STRING; }
         } else if first_char == '(' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LPAREN; }
@@ -1434,7 +1434,7 @@ pub fn tokenize(input: &String) -> List<Token> {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_MINUS; }
         } else if first_char == '/' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SLASH; }
-            end = try_comments(&lexer.chars, start);
+            end = try_COMMENTS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COMMENTS; }
         } else if first_char == '<' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LT; }
@@ -1455,18 +1455,18 @@ pub fn tokenize(input: &String) -> List<Token> {
         } else if first_char == '|' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PIPE; }
         } else if 'a' <= first_char <= 'z' {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if 'A' <= first_char <= 'Z' {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if '0' <= first_char <= '9' {
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         }
         if best_end <= start {

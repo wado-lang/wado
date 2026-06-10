@@ -8,12 +8,31 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(1)
 
 type "functype//wado-compiler/tests/fixtures/dead_fn_used_not_reported.wado/__cm_export__run" = fn();  // TypeId(2)
 
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(3)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/dead_fn_used_not_reported.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    __inline___initialize_modules_2: block {
+        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/dead_fn_used_not_reported.wado/__cm_export__run" as "run"

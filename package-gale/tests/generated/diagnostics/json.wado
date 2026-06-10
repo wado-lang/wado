@@ -647,7 +647,7 @@ impl Lexer {
     }
 }
 
-fn try_string(chars: &List<char>, start: i32) -> i32 {
+fn try_STRING(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
@@ -712,7 +712,7 @@ fn try_string(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_number(chars: &List<char>, start: i32) -> i32 {
+fn try_NUMBER(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let opt_saved_3 = pos;
     let mut opt_ok_3 = false;
@@ -808,7 +808,7 @@ fn try_number(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\n' || chars[pos] == '\r') { return -1; }
@@ -902,56 +902,56 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '"' {
-            end = try_string(&lexer.chars, start);
+            end = try_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STRING; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else if first_char == ',' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_COMMA; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else if first_char == ':' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_COLON; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else if first_char == '[' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LBRACKET; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else if first_char == ']' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RBRACKET; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else if first_char == 'f' {
             end = try_lit_false(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_FALSE; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else if first_char == 'n' {
             end = try_lit_null(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_NULL; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else if first_char == 't' {
             end = try_lit_true(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_TRUE; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else if first_char == '{' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LBRACE; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else if first_char == '}' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RBRACE; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else {
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         }
         if best_end <= start {

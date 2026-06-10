@@ -529,7 +529,7 @@ impl Lexer {
     }
 }
 
-fn try_t_ffff(chars: &List<char>, start: i32) -> i32 {
+fn try_T_FFFF(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'F' { return -1; }
     pos += 1;
@@ -553,7 +553,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == 'F' {
-            end = try_t_ffff(&lexer.chars, start);
+            end = try_T_FFFF(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_65535; }
         }
         if best_end <= start {

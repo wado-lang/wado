@@ -532,7 +532,7 @@ impl Lexer {
     }
 }
 
-fn try_start_block(chars: &List<char>, start: i32) -> i32 {
+fn try_START_BLOCK(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
@@ -547,7 +547,7 @@ fn try_start_block(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_id(chars: &List<char>, start: i32) -> i32 {
+fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
     let mut alts_ok_0 = false;
@@ -572,7 +572,7 @@ fn try_id(chars: &List<char>, start: i32) -> i32 {
         }
     }
     if !alts_ok_0 { return -1; }
-    pos = try_separator(chars, pos);
+    pos = try_SEPARATOR(chars, pos);
     if pos < 0 { return -1; }
     let alts_saved_2 = pos;
     let mut alts_ok_2 = false;
@@ -597,7 +597,7 @@ fn try_id(chars: &List<char>, start: i32) -> i32 {
         }
     }
     if !alts_ok_2 { return -1; }
-    pos = try_separator(chars, pos);
+    pos = try_SEPARATOR(chars, pos);
     if pos < 0 { return -1; }
     loop {
         let rep_saved_1 = pos;
@@ -625,7 +625,7 @@ fn try_id(chars: &List<char>, start: i32) -> i32 {
                 }
             }
             if !alts_ok_3 { break rep_1; }
-            pos = try_separator(chars, pos);
+            pos = try_SEPARATOR(chars, pos);
             if pos < 0 { break rep_1; }
             continue;
         }
@@ -635,7 +635,7 @@ fn try_id(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_separator(chars: &List<char>, start: i32) -> i32 {
+fn try_SEPARATOR(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '!' { return -1; }
     pos += 1;
@@ -653,15 +653,15 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '!' {
-            end = try_separator(&lexer.chars, start);
+            end = try_SEPARATOR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SEPARATOR; }
         } else if first_char == '-' {
-            end = try_start_block(&lexer.chars, start);
+            end = try_START_BLOCK(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_START_BLOCK; }
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if first_char == '.' {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         }
         if best_end <= start {

@@ -98,6 +98,16 @@ pub fn cwd() -> Option<String> with Environment {
     return Environment::get_initial_cwd();
 }
 
+// TODO(compiler): calling `exit_success` / `exit_error` ICEs the compiler —
+// the CM lowering of a unit-payload `Result<(), ()>` argument is missing
+// ("[WIR] unresolved Call: name=\"Err\"" at wir_build/translate.rs, or the
+// "cast crosses Wasm representations" assert in wir_build/primitive_ops.rs
+// with an explicit `Result::<(),()>::Err(())`). Minimal repro:
+//   use { exit_error, Exit } from "core:cli";
+//   export fn run() with Exit { exit_error(); }
+// Until that is fixed, use `exit(code)` (exit-with-code), which lowers fine.
+// When fixing, add an e2e fixture covering both `Exit::exit` paths.
+
 /// Exits with success (code 0).
 pub fn exit_success() -> ! with Exit {
     Exit::exit(Ok(()));

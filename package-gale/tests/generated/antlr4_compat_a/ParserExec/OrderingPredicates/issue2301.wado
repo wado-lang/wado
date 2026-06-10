@@ -640,7 +640,7 @@ impl Lexer {
     }
 }
 
-fn try_spaces(chars: &List<char>, start: i32) -> i32 {
+fn try_SPACES(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
@@ -659,7 +659,7 @@ fn try_spaces(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_at(chars: &List<char>, start: i32) -> i32 {
+fn try_AT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'A' { return -1; }
     pos += 1;
@@ -668,21 +668,21 @@ fn try_at(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_x(chars: &List<char>, start: i32) -> i32 {
+fn try_X(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'X' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_y(chars: &List<char>, start: i32) -> i32 {
+fn try_Y(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'Y' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_id(chars: &List<char>, start: i32) -> i32 {
+fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || 'A' <= chars[pos] <= 'Z') { return -1; }
@@ -722,33 +722,33 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
-            end = try_spaces(&lexer.chars, start);
+            end = try_SPACES(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SPACES; }
         } else if first_char == 'A' {
-            end = try_at(&lexer.chars, start);
+            end = try_AT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_AT; }
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if first_char == 'D' {
             end = try_lit_dummy(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_DUMMY; }
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if first_char == 'X' {
-            end = try_x(&lexer.chars, start);
+            end = try_X(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_X; }
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if first_char == 'Y' {
-            end = try_y(&lexer.chars, start);
+            end = try_Y(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Y; }
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if 'A' <= first_char <= 'Z' {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         }
         if best_end <= start {

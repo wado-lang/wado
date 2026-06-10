@@ -1,0 +1,40 @@
+use g from "./grammars/ll_consume_group.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/ll_consume_group",
+        },
+    };
+use { normalize_tree } from "./grammars/ll_consume_group.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// Alts 1/2 share the ID prefix: the prediction tree is
+// `Consume(ID) -> Dispatch{X -> alt 1, Y -> alt 2}`. The consumed-prefix
+// bookkeeping must be validated against the group's own alts (1 and 2),
+// not alternative 0 — alt 0's first element is `A`, so an alts[0] check
+// spuriously fails and the dispatch peeks one token early.
+test "tree: i x i picks alt 1 through the consume" {
+    assert_tree(&"i x i", &"
+        (r i x i)
+    ");
+}
+
+test "tree: i y i picks alt 2 through the consume" {
+    assert_tree(&"i y i", &"
+        (r i y i)
+    ");
+}
+
+test "tree: a picks alt 0" {
+    assert_tree(&"a", &"
+        (r a)
+    ");
+}

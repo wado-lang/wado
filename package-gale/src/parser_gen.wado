@@ -33,7 +33,7 @@ use {
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
-use { PredictionNode, build_prediction } from "./prediction.wado";
+use { PredictionNode, build_prediction, prediction_collect_all_indices } from "./prediction.wado";
 use {
     alt_is_wildcard_led,
     compute_overlap_groups,
@@ -1550,8 +1550,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
         // Element failure → break sg_N, falls to fail_stmt.
         // Success → break sg_N_done, skips fail_stmt.
-        let gc = SCAN_GROUP_COUNTER;
-        SCAN_GROUP_COUNTER += 1;
+        let gc = ctx.next_scan_group();
         let body = `sg_{gc}`;
         let done = `sg_{gc}_done`;
         let save_var = `sg_{gc}_save`;
@@ -1572,8 +1571,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         return;
     }
     // Multi-alternative group: try each alternative, fall through to fail.
-    let gc = SCAN_GROUP_COUNTER;
-    SCAN_GROUP_COUNTER += 1;
+    let gc = ctx.next_scan_group();
     let outer = `sg_{gc}`;
     let gp_var = `gp_{gc}`;
     let best_var = `sg_{gc}_best`;
@@ -1687,8 +1685,7 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         } else {
             w.else_begin(&`else if {cond}`);
         }
-        let gc = SCAN_GROUP_COUNTER;
-        SCAN_GROUP_COUNTER += 1;
+        let gc = ctx.next_scan_group();
         let shape_label = `sol_{gc}`;
         let fail = `break {shape_label};`;
         w.begin(&`{shape_label}:`);
@@ -1735,8 +1732,6 @@ fn gen_scan_op_elements_in_block(
         gen_scan_op_element(w, &scan_elems[i], ctx, &fail);
     }
 }
-
-global mut SCAN_GROUP_COUNTER: i32 = 0;
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
     // Track which rule's body we are emitting so a non-greedy `??` inside it
@@ -4777,6 +4772,8 @@ fn gen_consume_group_store_optional_op(
                 emit_atn_ret_pending(w, ctx, rc.atn_call_site);
                 w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
+            } else {
+                panic("gen_consume_group_store_optional_op: SimpleCst alt op is not RuleCall");
             }
         } else {
             let mut sorted_group = group.sorted();
@@ -5773,12 +5770,23 @@ fn gen_prediction_code_inner(
         return;
     }
     if let Consume(c) = node {
-        // Verify the consumed element matches the expected element at position skip.
-        // If it doesn't (e.g. a RuleRef at position skip was expanded via Dispatch
-        // and the Consume is actually for a later element), the skip count would be
-        // wrong and the Leaf would generate incorrect code. In that case, don't
-        // increment skip — the Leaf will fall back to the scan-tournament helper.
-        let elem_matches = elements_match(&c.element, &alts[0].elements[skip]);
+        // The consumed element at position `skip` must match every alt
+        // reachable below this node — `skip` is applied to whichever Leaf the
+        // dispatch lands on. Validating against the whole rule's `alts[0]`
+        // mismatched, since the tree is built over a sorted overlap group that
+        // need not contain alt 0 (regression fixture ll_consume_group.g4). On
+        // any mismatch, skip the consume — the Leaf falls back to the scan
+        // tournament.
+        let mut node_alts: List<i32> = [];
+        prediction_collect_all_indices(&c.child, &mut node_alts);
+        let mut elem_matches = !node_alts.is_empty();
+        for let a of &node_alts {
+            if skip >= alts[*a].elements.len()
+                || !elements_match(&c.element, &alts[*a].elements[skip]) {
+                elem_matches = false;
+                break;
+            }
+        }
         if elem_matches {
             gen_element(w, &c.element, ctx, name_counts);
             gen_prediction_code_inner(

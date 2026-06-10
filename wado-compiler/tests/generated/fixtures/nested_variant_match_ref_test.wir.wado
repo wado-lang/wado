@@ -25,17 +25,30 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
 type "functype//wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado/__cm_export____test_0_nested_variant_match_on_reference" = fn();  // TypeId(6)
 
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(7)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado/__cm_export____test_0_nested_variant_match_on_reference"() {
     let node: ref "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Outer";
     let inner: ref "core:prelude/types.wado//Box<Inner>";
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     node = struct.new "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Outer::W" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Inner" { 0 } };
     inner = struct.new "core:prelude/types.wado//Box<Inner>" { value: ref.cast "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Outer::W"(node).payload_0 };
     drop(inner.value);
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado/__cm_export____test_0_nested_variant_match_on_reference" as "__test_0_nested_variant_match_on_reference"

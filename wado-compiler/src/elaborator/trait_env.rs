@@ -456,7 +456,7 @@ impl TraitEnv {
                             modules.push(module_source.clone());
                         }
                     } else {
-                        let key = (type_name.clone(), trait_name);
+                        let key = (type_name.clone(), trait_name.clone());
                         let modules = trait_impl_modules.entry(key.clone()).or_default();
                         if !modules.contains(module_source) {
                             modules.push(module_source.clone());
@@ -464,7 +464,11 @@ impl TraitEnv {
                         // Track the concrete subset separately: only impl
                         // blocks with no type parameters at all qualify
                         // (e.g. `impl Display for String`, not
-                        // `impl<T> Inspect for List<T>`).
+                        // `impl<T> Inspect for List<T>`). Indexed by the bare
+                        // head only; a concrete impl on a generic head
+                        // (`impl Trait for List<u8>`) is additionally indexed
+                        // under its resolved instantiated name post-resolution
+                        // by `synthesis::collect_synthesised_impls`.
                         if impl_block.type_params.is_empty() {
                             let cmodules = concrete_trait_impl_modules.entry(key).or_default();
                             if !cmodules.contains(module_source) {
@@ -1129,7 +1133,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 }
 
-/// Extract a type name from an AST type without needing a Elaborator instance.
+/// Extract a type name from an AST type without needing an Elaborator instance.
 fn get_type_name_static(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),

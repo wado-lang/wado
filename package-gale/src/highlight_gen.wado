@@ -1,5 +1,5 @@
 use { Grammar, LexerRule, ParserRule, Alternative, Element } from "./ir.wado";
-use { LitToken } from "./lexer_gen.wado";
+use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
 use { CodeWriter, FnSpec, GlobalSpec } from "./wadopoet.wado";
 use { escape_string } from "./gen_util.wado";
 
@@ -20,21 +20,27 @@ fn gen_highlight_mapping(
     f.set_return_type(&"HighlightMapping");
     f.emit_begin(w);
 
+    // The runtime indexes this table by token kind (`defaults[kind]`), so
+    // the rows must follow the exact token numbering — including deferred
+    // `more` / `type(...)` rules and the conditional `TK_ERROR` sentinel —
+    // which `token_slot_order` is the single source of truth for.
     w.line(&"let defaults: List<String> = [");
     w.indent();
-
-    for let rule of lexer_rules {
-        if !rule.is_fragment {
-            let capture = classify_lexer_rule(rule);
-            w.line(&`{escape_string(&capture)},  // TK_{rule.name}`);
+    for let slot of token_slot_order(lexer_rules, lit_tokens) {
+        match slot {
+            Rule(ri) => {
+                let rule = &lexer_rules[ri];
+                let capture = classify_lexer_rule(rule);
+                w.line(&`{escape_string(&capture)},  // TK_{rule.name}`);
+            },
+            Eof => w.line(&`"",  // TK_EOF`),
+            Error => w.line(&`"",  // TK_ERROR`),
+            Lit(li) => {
+                let lit = &lit_tokens[li];
+                let capture = classify_literal(&lit.text);
+                w.line(&`{escape_string(&capture)},  // {lit.const_name}`);
+            },
         }
-    }
-    w.line(&`"",  // TK_EOF`);
-    w.line(&`"",  // TK_ERROR`);
-
-    for let lit of lit_tokens {
-        let capture = classify_literal(&lit.text);
-        w.line(&`{escape_string(&capture)},  // {lit.const_name}`);
     }
     w.dedent();
     w.line(&"];");
@@ -57,8 +63,6 @@ fn gen_highlight_mapping(
 }
 
 fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &List<ParserRule>) {
-    let root_rule = if parser_rules.len() > 0 { parser_rules[0].name } else { "" };
-
     let mut f = FnSpec::new("highlight");
     f.set_pub();
     f.add_param(&"input", &"&String");
@@ -67,15 +71,26 @@ fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &List<ParserRule>) {
 
     w.line(&"let mapping = highlight_mapping();");
     w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
-    w.line(&"let parse_result = parse(input);");
-    w.begin(&"if let Ok(tree) = parse_result");
-    w.line(&`walk_{root_rule}(&mut visitor, &tree);`);
-    w.else_begin(&"else");
-    w.line(&"let tokens = tokenize(input);");
-    w.begin(&"for let token of &tokens");
-    w.line(&"visitor.visit_token(token);");
-    w.end();
-    w.end();
+    if parser_rules.len() > 0 {
+        let root_rule = parser_rules[0].name;
+        w.line(&"let parse_result = parse(input);");
+        w.begin(&"if let Ok(tree) = parse_result");
+        w.line(&`walk_{root_rule}(&mut visitor, &tree);`);
+        w.else_begin(&"else");
+        w.line(&"let tokens = tokenize(input);");
+        w.begin(&"for let token of &tokens");
+        w.line(&"visitor.visit_token(token);");
+        w.end();
+        w.end();
+    } else {
+        // Lexer-only grammar: there is no `parse` / `walk_*` in the
+        // generated module, so highlighting is tokenize-only. The old
+        // fallback emitted `walk_(...)` — invalid code.
+        w.line(&"let tokens = tokenize(input);");
+        w.begin(&"for let token of &tokens");
+        w.line(&"visitor.visit_token(token);");
+        w.end();
+    }
     w.line(&"return highlight_html(input, &visitor.captures);");
 
     w.end();

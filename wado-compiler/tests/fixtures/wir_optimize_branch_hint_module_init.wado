@@ -1,0 +1,24 @@
+// Module-init guard hinting: the `__modules_initialized` early-return guard
+// is taken on every call after the first, so the synthesized init body marks
+// its fall-through cold — the guard is hinted likely-taken, including the
+// copies inlined into each export entry at O2.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn compute_seed() -> i32 {
+    return 41 + 1;
+}
+
+global mut SEED: i32 = compute_seed();
+
+export fn run() with Stdout {
+    println(`{SEED}`);
+}
+
+__DATA__
+{
+    "stdout": "42\n",
+    "wir_expect:O0": ["@likely(global:__modules_initialized)"],
+    "wir_expect:O2": ["@likely(global:__modules_initialized)"]
+}

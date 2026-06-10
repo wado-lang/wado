@@ -235,19 +235,21 @@ type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wad
 
 type "functype//core:internal/cm_error_context_new" = fn(ref "core:prelude/string.wado//String") -> i32;  // TypeId(46)
 
-type "functype//wasi/error-context-drop" = fn(i32);  // TypeId(47)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(47)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(48)
+type "functype//wasi/error-context-drop" = fn(i32);  // TypeId(48)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(49)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(49)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(50)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(50)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(51)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(51)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(52)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(52)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(53)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(53)
+
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(54)
 
 import fn wasi/error-context-new from "wasi/error-context-new";
 import fn mem/realloc from "mem/realloc";
@@ -262,6 +264,8 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/cm_error_context.wado/handle"(request) with ErrorContext {
     let ec: i32;
@@ -402,6 +406,12 @@ fn "wado-compiler/tests/fixtures/cm_error_context.wado/handle"(request) with Err
     let __local_156: i32;
     let __local_157: i32;
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wasi/error-context-drop"(local.tee ec("core:internal/cm_error_context_new"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test error message"), used: 18 })));
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -747,6 +757,12 @@ fn "wado-compiler/tests/fixtures/cm_error_context.wado/__cm_binding__Response_ne
 }
 
 fn "wado-compiler/tests/fixtures/cm_error_context.wado/__cm_export__handle"(request) {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/cm_error_context.wado/handle"(request);
 }
 
@@ -755,9 +771,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     i = 0;
     b63: block {
         l64: loop {
-            if i >= len {
-                break b63;
-            }
+            break_if b63 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
             continue l64;
@@ -786,6 +800,9 @@ fn "core:internal/cm_error_context_new"(msg) {
     handle = "wasi/error-context-new"(ptr, len);
     drop("mem/realloc"(ptr, len, 1, 0));
     return handle;
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/cm_error_context.wado/__cm_export__handle" as "handle"

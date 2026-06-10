@@ -246,21 +246,23 @@ type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);
 
 type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(50)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(51)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(51)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(52)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(52)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(53)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(53)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(54)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(54)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(55)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(55)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(56)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(56)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(57)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(57)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(58)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(58)
+
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(59)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -275,6 +277,8 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/http_routing_created.wado/handle"(request) {
     let path: ref null "core:prelude/string.wado//String";
@@ -416,6 +420,12 @@ fn "wado-compiler/tests/fixtures/http_routing_created.wado/handle"(request) {
     let __local_157: i32;
     let __local_158: i32;
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     path = "wado-compiler/tests/fixtures/http_routing_created.wado/__cm_binding__Request_get_path_with_query"(request);
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -800,6 +810,12 @@ fn "wado-compiler/tests/fixtures/http_routing_created.wado/__cm_binding__Respons
 }
 
 fn "wado-compiler/tests/fixtures/http_routing_created.wado/__cm_export__handle"(request) {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/http_routing_created.wado/handle"(request);
 }
 
@@ -810,9 +826,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     i = 0;
     b67: block {
         l68: loop {
-            if i >= len {
-                break b67;
-            }
+            break_if b67 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
             continue l68;
@@ -824,14 +838,12 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b70: block {
-        l71: loop {
-            if i >= len {
-                break b70;
-            }
+    b69: block {
+        l70: loop {
+            break_if b69 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l71;
+            continue l70;
         };
     };
 }
@@ -847,6 +859,9 @@ fn "core:internal/cm_lower_string"(s) {
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
+}
+
 fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
     let len_a: i32;
     len_a = self.used;
@@ -859,16 +874,14 @@ fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b74: block {
-        l75: loop {
-            if i >= len {
-                break b74;
-            }
+    b72: block {
+        l73: loop {
+            break_if b72 i >= len;
             if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l75;
+            continue l73;
         };
     };
     return 1;

@@ -1,0 +1,77 @@
+// br_if selection: `if cond { break }` (an `If` whose then-arm is a single
+// `br` and whose else is empty) collapses to a single `br_if` at O1+,
+// rendered as `break_if` / `continue_if` in the WIR. Branch hints carried by
+// the condition survive the rewrite, and a `br_if` whose fall-through always
+// traps is inferred likely-taken.
+
+// Plain break guard → `break_if`.
+#[inline(never)]
+fn count_to(n: i32) -> i32 {
+    let mut i = 0;
+    while true {
+        if i == n {
+            break;
+        }
+        i = i + 1;
+    }
+    return i;
+}
+
+// Continue guard → `continue_if`.
+#[inline(never)]
+fn sum_odd(n: i32) -> i32 {
+    let mut total = 0;
+    let mut i = 0;
+    while i < n {
+        i = i + 1;
+        if i % 2 == 0 {
+            continue;
+        }
+        total = total + i;
+    }
+    return total;
+}
+
+// Cold break guard: the `cold_path()` hint lands on the `if` condition at
+// build time and must survive the br_if rewrite.
+#[inline(never)]
+fn find_limit(n: i32) -> i32 {
+    let mut i = 0;
+    while true {
+        if i >= n {
+            builtin::cold_path();
+            break;
+        }
+        i = i + 1;
+    }
+    return i;
+}
+
+// Trap fall-through: the only non-trapping path is the taken branch, so the
+// `br_if` is inferred likely-taken. (`i` is mutated inside the loop so the
+// condition is not LICM-hoisted out of the hinted position.)
+#[inline(never)]
+fn must_finish(n: i32) -> i32 {
+    let mut i = 0;
+    while true {
+        i = i + 1;
+        if i == n {
+            break;
+        }
+        builtin::unreachable();
+    }
+    return i;
+}
+
+export fn run() {
+    assert count_to(3) == 3;
+    assert sum_odd(4) == 4;
+    assert find_limit(2) == 2;
+    assert must_finish(1) == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["break_if", "continue_if", "@unlikely(i >= n)", "@likely(i == n)"]
+}

@@ -6,7 +6,7 @@
 
 use { Grammar } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
-use { collect_literal_tokens, gen_token_constants, LitToken } from "./lexer_gen.wado";
+use { collect_literal_tokens, gen_token_constants, gen_lexer, lexer_try_fn_name, LitToken } from "./lexer_gen.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
 fn parse_grammar(input: String) -> Grammar {
@@ -31,6 +31,19 @@ test "collect_literal_tokens: plain top-level literals" {
     assert names.len() == 2, `len={names.len()}`;
     assert names[0] == "TK_LIT_X", names[0];
     assert names[1] == "TK_LIT_Y", names[1];
+}
+
+test "collect_literal_tokens: case-folding collision is disambiguated" {
+    // `'and'` and `'AND'` both fold to the base name `TK_LIT_AND`. Without
+    // disambiguation the generated module emits duplicate globals / fns /
+    // match arms and fails to compile. The second occurrence must get a
+    // distinct const name.
+    let g = parse_grammar("grammar T; a : 'and' 'AND' ;");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let names = const_names(&lits);
+    assert names.len() == 2, `len={names.len()}`;
+    assert names[0] == "TK_LIT_AND", names[0];
+    assert names[1] != names[0], `collision: both named {names[0]}`;
 }
 
 test "collect_literal_tokens: literals inside Group alternatives" {
@@ -119,6 +132,24 @@ fn count_occurrences(haystack: &String, needle: String) -> i32 {
         }
     }
     return count;
+}
+
+test "lexer_try_fn_name: rule name is case-preserved" {
+    // `ID` and `Id` would both fold to `try_id` if lowercased, defining the
+    // same function twice. Preserving case keeps them distinct without any
+    // collision bookkeeping.
+    assert lexer_try_fn_name(&"ID") == "try_ID";
+    assert lexer_try_fn_name(&"Id") == "try_Id";
+}
+
+test "gen_lexer: case-colliding rule names emit distinct try fns" {
+    let g = parse_grammar("lexer grammar T; ID : 'a' ; Id : 'b' ;");
+    let lits: List<LitToken> = [];
+    let mut w = CodeWriter::new();
+    gen_lexer(&mut w, &g, &lits);
+    let out = w.to_string();
+    assert out.contains("fn try_ID("), out;
+    assert out.contains("fn try_Id("), out;
 }
 
 test "gen_token_constants: more rules numbered after non-more rules (ANTLR4 order)" {

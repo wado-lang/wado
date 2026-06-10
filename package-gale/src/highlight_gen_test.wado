@@ -1,0 +1,95 @@
+//! Tests for `highlight_gen.wado`. Focus: the `defaults` capture table is
+//! indexed by token kind at runtime (`defaults[kind]`), so its row order
+//! must match the token numbering emitted by `gen_token_constants` —
+//! deferred `more` / `type(...)` rules at the back, and no sentinel
+//! `TK_ERROR` row when a user rule named `ERROR` claims the id.
+
+use { Grammar } from "./ir.wado";
+use { parse } from "./g4/parser.wado";
+use { collect_literal_tokens } from "./lexer_gen.wado";
+use { gen_highlight } from "./highlight_gen.wado";
+use { CodeWriter } from "./wadopoet.wado";
+
+fn parse_grammar(input: String) -> Grammar {
+    let mut g = parse(input).unwrap();
+    g.source_files.push("(test)");
+    return g;
+}
+
+fn highlight_output(input: String) -> String {
+    let g = parse_grammar(input);
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let mut w = CodeWriter::new();
+    gen_highlight(&mut w, &g, &lits);
+    return w.to_string();
+}
+
+fn index_of(haystack: &String, needle: String) -> i32 {
+    return match haystack.find(needle) {
+        Some(idx) => idx,
+        None => -1,
+    };
+}
+
+fn count_occurrences(haystack: &String, needle: String) -> i32 {
+    let needle_len = needle.len();
+    if needle_len == 0 {
+        return 0;
+    }
+    let mut count = 0;
+    let mut remainder = *haystack;
+    loop {
+        match remainder.find(needle) {
+            Some(idx) => {
+                count += 1;
+                remainder = remainder.substr_bytes(idx + needle_len, remainder.len());
+            },
+            None => {
+                break;
+            },
+        }
+    }
+    return count;
+}
+
+test "highlight defaults: more rule rows are deferred like token numbering" {
+    // `A -> more` gets a deferred (high) token id in gen_token_constants,
+    // so its defaults row must also come after the non-deferred rules.
+    let out = highlight_output("grammar T;
+r : B ;
+A : 'a' -> more ;
+B : 'b' ;
+WS : ' ' -> skip ;
+");
+    let a = index_of(&out, "// TK_A");
+    let b = index_of(&out, "// TK_B");
+    let ws = index_of(&out, "// TK_WS");
+    assert a >= 0 && b >= 0 && ws >= 0, out;
+    assert b < a, `TK_B row must precede deferred TK_A row: b={b} a={a}`;
+    assert ws < a, `TK_WS row must precede deferred TK_A row: ws={ws} a={a}`;
+}
+
+test "highlight fn: lexer-only grammar is tokenize-only (no walk_ call)" {
+    // A lexer-only grammar has no parser rules, so the generated module has
+    // no `parse` / `walk_*`. The highlight fn must fall back to tokenizing
+    // instead of emitting an invalid `walk_(...)` call.
+    let out = highlight_output("lexer grammar L;
+B : 'b' ;
+WS : ' ' -> skip ;
+");
+    assert index_of(&out, "walk_(") == -1, out;
+    assert index_of(&out, "tokenize(input)") >= 0, out;
+}
+
+test "highlight defaults: user ERROR rule suppresses the sentinel row" {
+    // gen_token_constants emits no TK_ERROR sentinel when a user rule named
+    // ERROR exists; the defaults table must not insert one either (every
+    // later row would shift by one).
+    let out = highlight_output("grammar T;
+r : B ;
+B : 'b' ;
+ERROR : . ;
+");
+    let n = count_occurrences(&out, "// TK_ERROR");
+    assert n == 1, `expected exactly one TK_ERROR row (the user rule), got {n}:\n{out}`;
+}

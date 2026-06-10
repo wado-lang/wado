@@ -170,6 +170,60 @@ HEX : [0-9a-fA-F] ;";
     }
 }
 
+test "char class with \\u{...} brace escape (astral code point)" {
+    // ANTLR4 lexicon: `\u{XXXXXX}` covers all code points (lexicon.md).
+    // The fixed-4-digit path used to read `{` as a hex digit and panic.
+    let input = "grammar Test;
+EMOJI : [\\u{1F600}] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.ranges.len() == 1;
+        assert cc.ranges[0].start == '\u{1F600}', `start={cc.ranges[0].start as i32}`;
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "char class with \\uXXXX and \\b \\f escapes" {
+    let input = "grammar Test;
+C : [\\u0041\\b\\f] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.ranges.len() == 3, `len={cc.ranges.len()}`;
+        assert cc.ranges[0].start == 'A', `0={cc.ranges[0].start as i32}`;
+        assert cc.ranges[1].start == '\u0008', `1={cc.ranges[1].start as i32}`;  // backspace
+        assert cc.ranges[2].start == '\u000C', `2={cc.ranges[2].start as i32}`;  // form feed
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "multi-char range endpoint is rejected, not silently truncated" {
+    // ANTLR4 rejects a multi-character range endpoint. The start is already
+    // validated (single char); the end must be too, rather than silently
+    // taking its first char (`'a'..'bc'` -> 'a'..'b') or panicking on empty.
+    assert parse("grammar Test;\nR : 'a' .. 'bc' ;") matches { Err(_) },
+        "multi-char range end should be rejected";
+    assert parse("grammar Test;\nR : 'a' .. '' ;") matches { Err(_) },
+        "empty range end should be rejected, not panic";
+}
+
+test "char class \\uXXXX range endpoint" {
+    let input = "grammar Test;
+R : [\\u0041-\\u005A] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.ranges.len() == 1;
+        assert cc.ranges[0].start == 'A' && cc.ranges[0].end == 'Z',
+            `{cc.ranges[0].start as i32}-{cc.ranges[0].end as i32}`;
+    } else {
+        panic("expected CharClass");
+    }
+}
+
 test "unicode property class L" {
     let input = "grammar Test;
 ID : [\\p{L}] ;";
@@ -361,6 +415,16 @@ rule : ID ;";
     assert g.channels.len() == 2;
     assert g.channels[0] == "CHAN_A";
     assert g.channels[1] == "CHAN_B";
+}
+
+test "lexer rule with undeclared channel name is rejected" {
+    // ANTLR4 errors on a `channel(X)` whose name is neither a predefined
+    // channel nor declared in `channels { }`. The old behavior silently
+    // resolved it to channel 0 (DEFAULT), inverting the author's intent.
+    let input = "lexer grammar Test;
+channels { COMMENTS }
+WS : ' ' -> channel(TYPO) ;";
+    assert parse(input) matches { Err(_) }, "undeclared channel name should be rejected";
 }
 
 test "lexer rule with named channel resolves to user channel id" {
@@ -817,6 +881,23 @@ COMMENT : '#' ~[\\r\\n]* -> channel(2) ;";
     assert g.lexer_rules[0].channel == 2;
 }
 
+test "malformed lexer command is rejected, not panicked" {
+    // `channel HIDDEN` is missing the parens ANTLR4 requires. The parser
+    // must return an Err (it threads Result) rather than trapping on the
+    // internal `expect(LParen).unwrap()`.
+    let input = "lexer grammar Test;
+WS : [ \\t]+ -> channel HIDDEN ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected malformed channel command to be rejected";
+}
+
+test "lexer command type without parens is rejected, not panicked" {
+    let input = "lexer grammar Test;
+A : 'a' -> type ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected malformed type command to be rejected";
+}
+
 test "lexer command channel with HIDDEN" {
     let input = "lexer grammar Test;
 WS : [ \\t]+ -> channel(HIDDEN) ;";
@@ -1068,6 +1149,19 @@ r : FOO ;";
     assert g.parser_rules.len() == 1;
 }
 
+test "channels block trailing junk is tolerated then closed" {
+    // Permissive recovery: non-identifier junk inside `channels { }` is
+    // silently skipped (mirrors the `tokens { }` behavior) as long as the
+    // block is closed. Without the anti-hang advance this input loops forever.
+    let input = "lexer grammar Test;
+channels { COMMENTS ; DOCS }
+WS : ' ' -> channel(COMMENTS) ;";
+    let g = parse(input).unwrap();
+    assert g.channels.len() == 2;
+    assert g.channels[0] == "COMMENTS";
+    assert g.channels[1] == "DOCS";
+}
+
 test "parser rule tilde applied to block" {
     // ANTLR4 allows `~` on a set expressed as a block of alternatives, not
     // just a single token reference: `~( 'a' | 'b' | 'c' )`.
@@ -1108,6 +1202,18 @@ NON_AB : ~( 'a' | 'b' ) ;";
     } else {
         panic("expected LexerElement::Not");
     }
+}
+
+test "lexer rule tilde applied to rule ref is rejected" {
+    // ANTLR4 restricts lexer `~` to a single char, a char set/range, or a
+    // block of those — a fragment/rule reference is not a set element.
+    assert parse("lexer grammar Test;\nfragment A : 'a' ;\nB : ~A ;") matches { Err(_) },
+        "~RuleRef in a lexer rule should be rejected";
+}
+
+test "lexer rule tilde applied to wildcard is rejected" {
+    assert parse("lexer grammar Test;\nB : ~. ;") matches { Err(_) },
+        "~. (not wildcard) in a lexer rule should be rejected";
 }
 
 test "block label single-value" {

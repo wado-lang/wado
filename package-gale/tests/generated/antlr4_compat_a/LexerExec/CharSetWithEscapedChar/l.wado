@@ -530,7 +530,7 @@ impl Lexer {
     }
 }
 
-fn try_dashbrack(chars: &List<char>, start: i32) -> i32 {
+fn try_DASHBRACK(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == '-' || chars[pos] == ']') { return -1; }
@@ -549,7 +549,7 @@ fn try_dashbrack(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\n') { return -1; }
@@ -579,10 +579,10 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\n' || first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '-' || first_char == ']' {
-            end = try_dashbrack(&lexer.chars, start);
+            end = try_DASHBRACK(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DASHBRACK; }
         }
         if best_end <= start {

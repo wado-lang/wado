@@ -535,7 +535,7 @@ impl Lexer {
     }
 }
 
-fn try_letters(chars: &List<char>, start: i32) -> i32 {
+fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
     let mut alts_ok_0 = false;
@@ -574,15 +574,15 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == 'a' {
-            end = try_letters(&lexer.chars, start);
+            end = try_LETTERS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LETTERS; }
         } else if first_char == 'd' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_D; }
         } else if '\u{1f600}' <= first_char <= '\u{1f943}' {
-            end = try_letters(&lexer.chars, start);
+            end = try_LETTERS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LETTERS; }
         } else {
-            end = try_letters(&lexer.chars, start);
+            end = try_LETTERS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LETTERS; }
         }
         if best_end <= start {

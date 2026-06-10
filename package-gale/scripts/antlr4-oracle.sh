@@ -30,13 +30,13 @@ set -euo pipefail
 
 # We deliberately do NOT pin a specific ANTLR4 jar version. Each
 # extract resolves the current latest release from Maven Central and
-# caches it locally; the resolved version is exposed to the caller via
-# `ORACLE_RESOLVED_VERSION` (set in the env before exec'ing TestRig) so
-# the descriptor extractor can stamp it into the generated test files.
-# Reproducibility is preserved via that comment in the committed test
-# file: any drift in the oracle's answer (caused by an ANTLR4 patch
-# release) surfaces as a diff in the re-extract output, which surfaces
-# in commit history.
+# caches it locally; the resolved version is written to
+# `$CACHE_DIR/antlr4-resolved-version` on every run so the descriptor
+# extractor (a separate process — an `export` here could never reach
+# it) can stamp it into the generated test files. Reproducibility is
+# preserved via that comment in the committed test file: any drift in
+# the oracle's answer (caused by an ANTLR4 patch release) surfaces as a
+# diff in the re-extract output, which surfaces in commit history.
 #
 # Override: setting ANTLR4_VERSION in the environment skips the
 # Maven-Central lookup. Useful when offline or to reproduce an older
@@ -83,7 +83,10 @@ if [ -z "$ANTLR4_VERSION" ]; then
 fi
 ANTLR4_URL="https://www.antlr.org/download/antlr-${ANTLR4_VERSION}-complete.jar"
 JAR_PATH="$CACHE_DIR/antlr-${ANTLR4_VERSION}-complete.jar"
-export ORACLE_RESOLVED_VERSION="$ANTLR4_VERSION"
+# Record the version actually used (pinned or resolved) for the wrapper's
+# Phase 3 stamping. The latest-version cache is NOT suitable for this: it
+# is bypassed when ANTLR4_VERSION is pinned and goes stale across runs.
+printf '%s' "$ANTLR4_VERSION" > "$CACHE_DIR/antlr4-resolved-version"
 
 usage() {
     cat >&2 <<EOF
@@ -116,10 +119,13 @@ fi
 
 # ANTLR4 requires the source file name to match the declared
 # `grammar Name;` identifier, so use that rather than the caller's
-# basename (descriptor-derived inputs often disagree).
+# basename (descriptor-derived inputs often disagree). `sed -n .. p`
+# prints only on a successful substitution: the legal layout with the
+# `;` on a later line (`grammar Foo\n;`) must extract `Foo`, not pass
+# the raw line through as the "name".
 declared_name=$(grep -E '^[[:space:]]*(lexer[[:space:]]+grammar|parser[[:space:]]+grammar|grammar)[[:space:]]+[A-Za-z_]' "$GRAMMAR_PATH" 2>/dev/null \
     | head -1 \
-    | sed -E 's/^[[:space:]]*(lexer[[:space:]]+grammar|parser[[:space:]]+grammar|grammar)[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*;.*/\2/')
+    | sed -nE 's/^[[:space:]]*(lexer[[:space:]]+grammar|parser[[:space:]]+grammar|grammar)[[:space:]]+([A-Za-z_][A-Za-z0-9_]*).*/\2/p')
 if [ -n "$declared_name" ]; then
     GRAMMAR_NAME="$declared_name"
 else

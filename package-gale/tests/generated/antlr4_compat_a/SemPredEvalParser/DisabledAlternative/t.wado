@@ -554,7 +554,7 @@ impl Lexer {
     }
 }
 
-fn try_any_char(chars: &List<char>, start: i32) -> i32 {
+fn try_ANY_CHAR(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == '_' || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || '0' <= chars[pos] <= '9') { return -1; }
@@ -573,19 +573,19 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '_' {
-            end = try_any_char(&lexer.chars, start);
+            end = try_ANY_CHAR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ANY_CHAR; }
         } else if 'a' <= first_char <= 'z' {
-            end = try_any_char(&lexer.chars, start);
+            end = try_ANY_CHAR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ANY_CHAR; }
         } else if 'A' <= first_char <= 'Z' {
-            end = try_any_char(&lexer.chars, start);
+            end = try_ANY_CHAR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ANY_CHAR; }
         } else if '0' <= first_char <= '9' {
-            end = try_any_char(&lexer.chars, start);
+            end = try_ANY_CHAR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ANY_CHAR; }
         } else {
-            end = try_any_char(&lexer.chars, start);
+            end = try_ANY_CHAR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ANY_CHAR; }
         }
         if best_end <= start {

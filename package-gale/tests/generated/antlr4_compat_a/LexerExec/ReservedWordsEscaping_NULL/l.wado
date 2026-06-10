@@ -528,7 +528,7 @@ impl Lexer {
     }
 }
 
-fn try_null(chars: &List<char>, start: i32) -> i32 {
+fn try_NULL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
     let mut alts_ok_0 = false;
@@ -612,7 +612,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == 'N' || first_char == 'n' {
-            end = try_null(&lexer.chars, start);
+            end = try_NULL(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NULL; }
         }
         if best_end <= start {
