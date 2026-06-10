@@ -36,7 +36,7 @@ use std::cell::Cell;
 use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
-use crate::nir::NirFunction;
+use crate::nir::{NirBinaryOp, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -218,6 +218,15 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
 /// Recurses through Binary/Unary so candidates like `!(p * p <= limit)`
 /// are reached. Two-pass: pass 1 collects candidates under `&body`;
 /// pass 2 attaches `ValueIds` (which needs `&mut engine`).
+///
+/// The right operand of a short-circuit `&&` / `||` is not descended into:
+/// it only evaluates when the left side allows, and the hoisted `let __cse`
+/// at the top of the loop body evaluates unconditionally — extracting a
+/// candidate from inside the conditional operand would introduce evaluation
+/// (and a possible trap, e.g. a division) the source program never performs.
+/// A candidate that *is* the `&&` / `||` node hoists the whole operator,
+/// whose clone still short-circuits, so only the descent is restricted. See
+/// `cse_short_circuit_no_trap.wado`.
 fn collect_binary_candidates(
     engine: &mut Engine,
     expr: ExprId,
@@ -228,10 +237,12 @@ fn collect_binary_candidates(
         let mut stack: Vec<ExprId> = vec![expr];
         while let Some(e) = stack.pop() {
             match &body.exprs[e].kind {
-                ExprKind::Binary { left, right, .. } => {
+                ExprKind::Binary { left, op, right } => {
                     binary_exprs.push((e, body.exprs[e].type_id, body.exprs[e].span));
                     stack.push(*left);
-                    stack.push(*right);
+                    if !matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
+                        stack.push(*right);
+                    }
                 }
                 ExprKind::Unary { expr: inner, .. } => {
                     stack.push(*inner);

@@ -1,0 +1,33 @@
+// CSE must not hoist a subexpression out of a short-circuit operator's
+// right operand: in `i < n && sum / i > limit`, the division only runs
+// when `i < n` holds. Hoisting `sum / i` to the top of the loop body
+// (because the body repeats the expression) would evaluate it before
+// the short-circuit and introduce a divide-by-zero trap the source
+// program can never raise (here the loop exits immediately at i == 0,
+// n == 0).
+
+use { println, Stdout } from "core:cli";
+
+fn probe(n: i32, limit: i32) -> i32 {
+    let mut i = 0;
+    let mut sum = 0;
+    while i < n && sum / i > limit {
+        sum += sum / i;
+        i += 1;
+    }
+    return sum;
+}
+
+fn opaque(v: i32) -> i32 {
+    if v <= 0 {
+        return 0;
+    }
+    return opaque(v - 1);
+}
+
+export fn run() with Stdout {
+    println(`{probe(opaque(5), 1)}`);
+}
+
+__DATA__
+{"stdout": "0\n"}
