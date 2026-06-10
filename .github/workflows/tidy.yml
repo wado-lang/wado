@@ -138,6 +138,7 @@ jobs:
           MISE_VERBOSE: ${{ runner.debug }}
 
       - run: cargo build --bin wado --bin wado-dev-tools
+      - run: mise run format-wado
       - run: mise run update-golden-fixtures
       - run: mise run update-golden-format-fixtures
       - run: mise run doc-stdlib
@@ -299,6 +300,6 @@ jobs:
             # agents.
             echo "::notice::Tidy produced changes and pushed a 'chore: tidy' commit. Pull the latest before continuing."
           else
-            echo "::error::Tidy produced changes. Fork PRs cannot be auto-pushed; run 'mise run clippy-fix && cargo fmt --all && mise run update-golden-fixtures && mise run update-golden-format-fixtures && mise run doc-stdlib && cargo run -p wado-dev-tools -- format-md' locally and push the result."
+            echo "::error::Tidy produced changes. Fork PRs cannot be auto-pushed; run 'mise run clippy-fix && cargo fmt --all && mise run format-wado && mise run update-golden-fixtures && mise run update-golden-format-fixtures && mise run doc-stdlib && cargo run -p wado-dev-tools -- format-md' locally and push the result."
             exit 1
           fi
