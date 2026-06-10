@@ -1604,7 +1604,25 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_matches(&mut self, m: &crate::ast::MatchesExpr) {
-        self.unparse_expr(&m.expr);
+        // `matches` is a postfix-level operator (parsed in `parse_postfix_expr`),
+        // so its scrutinee must be a postfix-or-higher expression. A
+        // lower-precedence scrutinee needs parentheses, otherwise the output
+        // reparses with `matches` bound to the wrong operand — e.g.
+        // `(!x) matches {..}` (Matches over Unary) printed bare becomes
+        // `!x matches {..}`, which reparses as `!(x matches {..})`. Mirrors the
+        // method-call receiver rule (`.` is the same precedence level).
+        let needs_parens = matches!(
+            &m.expr,
+            Expr::Unary(_)
+                | Expr::Binary(_)
+                | Expr::Cast(_)
+                | Expr::Assign(_)
+                | Expr::CompoundAssign(_)
+                | Expr::ComparisonChain(_)
+                | Expr::Range(_)
+                | Expr::Closure(_)
+        );
+        self.with_parens_if(needs_parens, |s| s.unparse_expr(&m.expr));
         self.output.push_str(" matches { ");
         self.unparse_pattern(&m.pattern);
         if let Some(guard) = &m.guard {

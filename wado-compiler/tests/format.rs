@@ -471,6 +471,34 @@ fn run() {
     );
 }
 
+/// `matches` is a postfix-level operator, so it binds tighter than the
+/// unary operators. `(!x) matches { ... }` is `Matches(Unary(x))` and must
+/// keep its parentheses: dropping them yields `!x matches { ... }`, which
+/// reparses as `Unary(Matches(x))` — a different expression. The unparser
+/// used to emit the scrutinee with no parens, silently changing semantics.
+#[test]
+fn test_format_matches_scrutinee_keeps_parens() {
+    // Scrutinee is a lower-precedence expression → parens are load-bearing.
+    for source in [
+        "fn run() -> bool {\n    return (!x) matches { Some(_) };\n}\n",
+        "fn run() -> bool {\n    return (-x) matches { 0 };\n}\n",
+        "fn run() -> bool {\n    return (a + b) matches { 0 };\n}\n",
+        "fn run() -> bool {\n    return (x as i32) matches { 0 };\n}\n",
+    ] {
+        assert_format_preserves_ast(source);
+    }
+    // The unary-outer form drops its now-redundant parens but keeps meaning.
+    let unary_outer = "fn run() -> bool {\n    return !(x matches { Some(_) });\n}\n";
+    let formatted = wado_compiler::format(unary_outer).expect("format failed");
+    assert!(
+        formatted.contains("!x matches { Some(_) }"),
+        "redundant parens around a matches-inside-unary should be dropped:\n{formatted}"
+    );
+    assert_format_preserves_ast(unary_outer);
+    // And the paren-free unary-outer form is stable / preserved.
+    assert_format_preserves_ast("fn run() -> bool {\n    return !x matches { Some(_) };\n}\n");
+}
+
 /// A trailing comment after a declaration whose type is a generic
 /// (`Foo<...>`) used to be dropped: the generic type's span ended at its
 /// name token rather than at the closing `>`, so an inner type-argument
