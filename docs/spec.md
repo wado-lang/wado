@@ -955,12 +955,23 @@ WebAssembly has no native 128-bit integer type, so Wado represents them as pairs
 
 Available operations:
 
-| Category   | Operations                                    |
-| ---------- | --------------------------------------------- |
-| Arithmetic | `+`, `-`, `*`, `/`, `%`, unary `-` (i128)     |
-| Comparison | `==`, `!=`, `<`, `<=`, `>`, `>=`              |
-| Bitwise    | `&`, `\|`, `^`, `~`, `<<`, `>>`               |
-| Conversion | `from_u64()`, `from_i64()`, `low()`, `high()` |
+| Category   | Operations                                                     |
+| ---------- | -------------------------------------------------------------- |
+| Arithmetic | `+`, `-`, `*`, `/`, `%`, unary `-` (i128)                      |
+| Comparison | `==`, `!=`, `<`, `<=`, `>`, `>=`                               |
+| Bitwise    | `&`, `\|`, `^`, `~`, `<<`, `>>`                                |
+| Conversion | `from_u64()`, `from_i64()`, `low()`, `high()`, `as`, `TryFrom` |
+
+`as` casts follow Rust semantics in both directions:
+
+```wado
+let a = 42 as u128;           // numeric → wide int
+let b = a as f64;             // wide int → float, correctly rounded (ties to even)
+let c = a as i64;             // wide int → int, truncates to the low bits
+let d = (-1 as i128) as u128; // i128 ↔ u128 reinterprets the bits (u128::MAX)
+```
+
+Checked conversions are available through `TryFrom` (e.g. `i64::try_from(a)`, `u128::try_from(n)`), returning `Err` when the value is out of range for the target type.
 
 ### SIMD Types (v128)
 
