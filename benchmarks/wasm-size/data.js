@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781074360580,
+  "lastUpdate": 1781088654727,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31933,6 +31933,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 437037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5dd280b51b75105674388bf0e44621c59edad637",
+          "message": "Merge pull request #1347 from wado-lang/claude/dazzling-volta-0ymubk\n\nperf(optimizer): branch-hint-aware WIR optimization and cold-call-site inlining suppression",
+          "timestamp": "2026-06-10T19:42:24+09:00",
+          "tree_id": "dcdefc6f0b1aac5d918c4281be66c84c2ca26ed1",
+          "url": "https://github.com/wado-lang/wado/commit/5dd280b51b75105674388bf0e44621c59edad637"
+        },
+        "date": 1781088654193,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432037,
             "unit": "bytes"
           }
         ]
