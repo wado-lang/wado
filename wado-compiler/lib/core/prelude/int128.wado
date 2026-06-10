@@ -144,20 +144,16 @@ impl u128 {
             return self.low as f64;
         }
         let [m, exp] = self.round_to_mantissa(53);
-        // `m` has exactly 53 bits so the conversion is exact, and scaling
-        // by a power of two is exact: the result is the correctly rounded
-        // conversion of the original value.
-        let mut result = m as f64;
-        let mut k = exp - 52;
-        while k >= 16 {
-            result *= 65536.0;
-            k -= 16;
-        }
-        while k > 0 {
-            result *= 2.0;
-            k -= 1;
-        }
-        return result;
+        // Assemble the IEEE-754 double directly: biased exponent in bits
+        // 62..=52, the 52-bit mantissa (the leading 1 is implicit) in bits
+        // 51..=0. `exp` is 64..=128 (128 when rounding overflowed the
+        // mantissa, e.g. u128::MAX → 2^128), biasing to 1087..=1151 — far
+        // below the infinity pattern (2047), so the result is always a
+        // finite normal and no special-casing is needed.
+        let biased = (exp + 1023) as u64;
+        let mantissa: u64 = m & (1 << 52) - 1;
+        let bits: u64 = biased << 52 | mantissa;
+        return builtin::f64_reinterpret_i64(bits as i64);
     }
 
     /// Convert to `f32`, rounding to the nearest representable value with
@@ -171,19 +167,15 @@ impl u128 {
             return self.low as f32;
         }
         let [m, exp] = self.round_to_mantissa(24);
-        // The scaling overflows to infinity for values above f32::MAX,
-        // matching Rust's cast semantics.
-        let mut result = m as f32;
-        let mut k = exp - 23;
-        while k >= 16 {
-            result *= 65536.0;
-            k -= 16;
-        }
-        while k > 0 {
-            result *= 2.0;
-            k -= 1;
-        }
-        return result;
+        // Assemble the IEEE-754 single directly. `exp` is 64..=127, biasing
+        // to 191..=254; a mantissa that rounded up to exp 128 biases to 255,
+        // which is exactly the +infinity pattern (mantissa field 0) — so
+        // values above f32::MAX saturate to infinity for free, matching
+        // Rust's cast semantics.
+        let biased = (exp + 127) as u32;
+        let mantissa: u32 = m as u32 & (1 << 23) - 1;
+        let bits: u32 = biased << 23 | mantissa;
+        return builtin::f32_reinterpret_i32(bits as i32);
     }
 
     /// Divide self by divisor, returning (quotient, remainder)
