@@ -302,12 +302,34 @@ retires) land as a follow-up diff-reviewed commit.
 
 ### Increment 6.4 — licm
 
-Invariant arithmetic on the graph. `is_invariant_arith` +
-`arith_exprs_equal` collapse onto `engine.is_loop_invariant(loop, v)` +
-`ValueId`-keyed dedup of maximal invariant subtrees. The trap-safety
-filter stays a Skel-shape check (`Div` / `Mod` / `Cast` excluded, the
-existing `is_hoistable_binop` list), since hoisting moves the _Skel
-computation_ into the pre-header.
+Invariant arithmetic on the graph (landed). `is_invariant_arith` +
+`arith_exprs_equal` collapsed onto a leaf-stability check +
+`ValueId`-keyed dedup of maximal subtrees. The trap-safety filter stays
+a Skel-shape check (`Div` / `Mod` / `Cast` excluded, the existing
+`is_hoistable_binop` list), since hoisting moves the _Skel computation_
+into the pre-header.
+
+Design finding (landed differently than planned):
+`engine.is_loop_invariant` is the wrong predicate for
+clone-to-pre-header hoisting. Invariance answers "same value on every
+iteration", but the hoisted clone evaluates _in the pre-header_:
+`loop { x = 5; … x + n … }` has an invariant use value (`5 + n`) that
+differs from what the pre-header clone reads (the pre-loop `x`).
+The correct predicate is pre-header stability — each `Local` leaf's
+use-site `ValueId` equals the loop-entry snapshot value
+(`Engine::loop_entry_value`, fed by a builder-side `current_value`
+clone taken just before the entry opaques are seeded). It subsumes
+`ModifiedVars.fully` (reassignment, loop-scoped bindings) in one
+comparison; address-taken locals are excluded (the graph does not
+model reference writes), and pending `_licm_*` pre-header temps —
+whose `let`s the caller prepends only after `licm_loop` returns — are
+accepted as stable by construction. Two enabling changes: parameters
+must be seeded up front (`Engine::set_param_locals`) to appear in
+entry snapshots, and `licm_block` iterates a clone instead of
+`mem::take`-ing the statement list so the mid-walk graph rebuild sees
+an intact body. `is_loop_invariant` remains for consumers that need
+per-iteration invariance (not movement), e.g. future bound-implication
+strengthening.
 
 Field hoisting keeps its Skel-side legality analysis for now.
 `ModifiedVars` (alias sets, written-field-types, clobbered pointees,

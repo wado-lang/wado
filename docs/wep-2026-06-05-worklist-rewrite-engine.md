@@ -278,9 +278,15 @@ Detailed design: [Stage 6 Value Rules](./wep-2026-06-10-stage6-value-rules.md).
       `ValueId` equality; dominating-guard tracking stays Skel-side.
       All guard kinds unified into one ValueId-based `GuardFact`; the
       `DefMap` / taint / kill machinery deleted (1,940 → ~750 lines).
-- [ ] `licm` recognises loop-invariance as "this `ValueId` does not
-      depend on any `LoopPhi` for the current loop". Hoisting becomes a
-      Skel rewrite over invariant operand subgraphs.
+- [x] `licm`'s arithmetic hoisting moves onto the ValueGraph. Note a
+      design refinement over the original wording: clone-to-pre-header
+      hoisting needs _pre-header stability_ (each `Local` leaf's
+      use-site `ValueId` equals the loop-entry snapshot value), not
+      mere cross-iteration invariance — `loop { x = 5; … x+n … }` has
+      an invariant use value that differs from the pre-header `x`.
+      Dedup is by `ValueId` (copies share one temp). The field-hoist
+      half keeps `ModifiedVars` until per-receiver heap precision
+      lands (see the detailed design).
 - [ ] Simple induction-variable recognition: a Loop body whose update
       to local `i` is `Local + constant_step` and has no other writes
       tags `current_value[i]` with `Opaque { induction: { base, step } }`.
