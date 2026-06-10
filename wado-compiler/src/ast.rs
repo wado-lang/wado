@@ -3,21 +3,18 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
 
-/// Identity of one dense `AstId` allocation space.
+/// Identity of one `AstId` allocation space — one per parse.
 ///
-/// Every top-level [`crate::parser::Parser`] instance draws a fresh space
-/// from a process-global counter and stamps it into every id it allocates,
-/// making a full [`AstId`] globally unique within the process while the
-/// [`AstId::local`] halves stay dense per module. Template-interpolation
-/// sub-parsers inherit the parent parser's space (and continue its local
-/// counter); post-parse synthesis continues a module's space via
-/// [`Module::alloc_ast_id`].
+/// Every top-level [`crate::parser::Parser`] draws a fresh space from a
+/// process-global counter and stamps it into each id it allocates, so a full
+/// [`AstId`] is globally unique while [`AstId::local`] stays dense per module.
+/// Template-interpolation sub-parsers and [`Module::alloc_ast_id`] continue an
+/// existing space (one module tree = one space).
 ///
-/// A space identifies *one parse*, not a `ModuleSource`: re-parsing the same
-/// source yields a new space. Nothing may rely on ids being reproducible
-/// across separate parses — stdlib ASTs are parsed once per process and
-/// shared (`loader::cached_stdlib_module`), and user-module facts never
-/// outlive the parse that produced them.
+/// A space identifies a *parse*, not a `ModuleSource`: re-parsing mints a new
+/// one. Nothing relies on ids being stable across parses — stdlib ASTs are
+/// parsed once per process and shared (`loader::cached_stdlib_module`), and
+/// user-module facts never outlive their parse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstIdSpace(u32);
 
@@ -37,24 +34,18 @@ impl AstIdSpace {
     }
 }
 
-/// Globally-unique identifier for AST nodes that bear semantic significance
-/// (items, named members, parameters).
+/// Globally-unique identifier for a semantically-significant AST node (items,
+/// named members, parameters).
 ///
-/// An `AstId` pairs an [`AstIdSpace`] (which parse allocated it) with a
-/// module-local dense index. The parser assigns `local` in DFS order starting
-/// from `0`; locals for a given module are densely packed in
-/// `0..Module::ast_id_count()`. Every AST node observed by the compiler has a
-/// real id within its module — there is no sentinel value. Builtin modules
-/// (`lib/core/*.wado`) are parsed like any other module and receive their own
-/// space + dense local range.
+/// An `AstId` is an [`AstIdSpace`] (which parse made it) plus a module-local
+/// dense index assigned in DFS order (`0..Module::ast_id_count()`). Every node
+/// has a real id; there is no sentinel. Builtins are parsed like any module.
 ///
-/// Because the space half differs between modules, two nodes from different
-/// modules can never share an `AstId` — keying per-node facts by `AstId`
-/// cannot collide across modules even when the keying module perspective is
-/// wrong (the historic cross-module collision class, see issue #1342).
-///
-/// Ordering is `(space, local)`: within one module (one space) ids order by
-/// allocation order, which is what parser checkpoint rollback and
+/// Because the space differs per module, nodes from different modules can
+/// never share an `AstId` — so per-node fact maps key by bare `AstId` without
+/// cross-module collisions even under a wrong keying perspective (issue
+/// #1342). Ordering is `(space, local)`, so within one module ids order by
+/// allocation — what parser checkpoint rollback and
 /// [`crate::comment::TriviaMap`] rely on.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstId {
@@ -90,18 +81,11 @@ impl AstId {
         self.space
     }
 
-    /// Allocate a fresh `AstId` for a transient AST node that is never owned
-    /// by a parsed [`Module`].
-    ///
-    /// Use cases:
-    /// - Synthesized `Type::Named` / `Type::Generic` operands passed to type
-    ///   query functions (`cm_size_with_registry`, `synthesize_lift_*`), which
-    ///   only read the type's `name` and structural fields.
-    /// - Unit test fixtures that fabricate AST nodes to exercise registries.
-    ///
-    /// The returned id is globally unique within a process: it lives in the
-    /// reserved [`AstIdSpace::FRESH`] space, so it can never collide with a
-    /// parser-allocated id.
+    /// A globally-unique `AstId` for a transient node never owned by a
+    /// [`Module`] — synthesized `Type::Named` / `Type::Generic` operands for
+    /// type-query functions, and test fixtures. It lives in the reserved
+    /// [`AstIdSpace::FRESH`] space, so it never collides with a
+    /// parser-allocated id (and must never become a fact / symbol key).
     #[must_use]
     pub fn fresh() -> Self {
         use core::sync::atomic::{AtomicU32, Ordering};

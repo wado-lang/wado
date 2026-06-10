@@ -421,14 +421,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for associated constants (e.g., f64::PI, i32::MAX). The
-        // constant's body is *foreign* AST owned by `const_module`. We
-        // re-resolve it here for the consumer's inference/typecheck side
-        // effects; the per-`AstId` facts this records carry the const body's
-        // own globally-unique ids, so they cannot clobber a consumer node
-        // sharing a dense local index (the historic cross-module collision,
-        // issue #1342). Reify produces the const's TIR under
-        // `with_const_module_perspective(const_module)`, so it does not
-        // depend on these consumer-side entries.
+        // constant's body is *foreign* AST owned by `const_module`; we
+        // re-resolve it here only for the consumer's inference side effects.
+        // Its per-`AstId` facts carry the const body's own globally-unique
+        // ids, so they cannot clobber a consumer node (the historic
+        // cross-module collision, issue #1342). Reify produces the const's
+        // TIR under `with_const_module_perspective(const_module)` and does
+        // not read these consumer-side entries.
         if let Some((_const_module, type_id, const_expr)) = self
             .sem
             .decls
@@ -3050,20 +3049,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
-                    // The default expression is *foreign* AST owned by the
-                    // struct's declaring module. Its free identifiers (e.g. a
-                    // private `global` of the struct module) resolve in that
-                    // module's scope via `default_scope_module`, the
-                    // callee-scope fallback `pad_args_with_defaults` also
-                    // uses for function default arguments. Fact-key
-                    // redirection is no longer needed: the default's nodes
-                    // carry their own globally-unique `AstId`s, so the facts
-                    // this consumer-side walk records cannot collide with a
-                    // local node. Reify reifies the default under the struct
-                    // module's perspective.
-                    //
-                    // Only scope is redirected; `expected_type_id` still
-                    // drives literal and `null → None` coercion.
+                    // The default is *foreign* AST owned by the struct's
+                    // declaring module. Its free identifiers (e.g. a private
+                    // `global` of that module) resolve in its scope via
+                    // `default_scope_module` (the same callee-scope fallback
+                    // `pad_args_with_defaults` uses for function defaults).
+                    // Only scope is redirected, not fact keying: the default's
+                    // nodes carry their own globally-unique `AstId`s, so its
+                    // facts can't collide with a local node. `expected_type_id`
+                    // still drives literal / `null → None` coercion.
                     let resolved = if struct_module_source == self.current_module_source {
                         self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                     } else {

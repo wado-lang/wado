@@ -30,15 +30,13 @@ use crate::symbol::Symbol;
 
 /// `use → def` edges and locally defined symbols for one module.
 ///
-/// Use-side keys are bare [`AstId`]s — globally unique, so an edge recorded
-/// while a walk visits foreign AST (e.g. inside
-/// [`super::super::Elaborator::with_module_perspective`]) still identifies
-/// its node exactly, regardless of which module's `ModuleBindings` it landed
-/// in. The sole consumer ([`crate::semantics::semantics_with_logger`])
-/// flattens every module's bindings into single `Semantics` maps, so these
-/// are flat-stores-by-construction. Def-side values are the defining
-/// node's [`AstId`]; the owning module is recovered from the id's space
-/// when navigation needs it (`Semantics::module_of_id`).
+/// Keys are bare [`AstId`]s — globally unique, so an edge recorded while a
+/// walk visits foreign AST (e.g. under
+/// [`super::super::Elaborator::with_module_perspective`]) still names its node
+/// exactly, whichever module's `ModuleBindings` it lands in; the sole consumer
+/// ([`crate::semantics::semantics_with_logger`]) flattens them into single
+/// `Semantics` maps. Def-side values are bare `AstId`s too; navigation
+/// recovers a def's module from its space (`Semantics::module_of_id`).
 #[derive(Default, Clone)]
 pub(crate) struct ModuleBindings {
     /// `IdentExpr.id → defining AstId`.
