@@ -153,6 +153,10 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             type_table: &type_table,
             applied: Cell::new(false),
         };
+        // Canonical reference-aliased locals — same exclusion discipline as
+        // the other value-graph sessions (see store_load_forward).
+        let mut alias_unsafe = func.address_taken_locals.clone();
+        alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction {
             body,
             locals,
@@ -161,6 +165,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_unsafe_locals(alias_unsafe);
         // Seed parameters in the value graph so they appear in the loop-entry
         // snapshots the arithmetic hoist's leaf-stability check reads.
         engine.set_param_locals(params.iter().map(|p| p.local_index).collect());

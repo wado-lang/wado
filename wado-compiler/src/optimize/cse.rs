@@ -55,9 +55,16 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
         let rule = CseRule {
             applied: Cell::new(false),
         };
+        // Canonical reference-aliased locals: the builder's own body scan
+        // catches live `&local` shapes, but only these sets know aliases
+        // with no surviving Ref node (`with stores[p]`). Field store→load
+        // seeding must stay off for them.
+        let mut alias_unsafe = func.address_taken_locals.clone();
+        alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_unsafe_locals(alias_unsafe);
         engine.run(&[&rule])
     })
 }

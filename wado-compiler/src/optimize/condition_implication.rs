@@ -59,9 +59,17 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut Functio
         let rule = ConditionImplicationRule {
             applied: Cell::new(false),
         };
+        // Canonical reference-aliased locals: guard facts consume seeded
+        // field values, so the value graph must apply the same
+        // no-forwarding-for-aliased-locals exclusion store_load_forward
+        // uses (the builder's body scan alone misses aliases with no
+        // surviving Ref node, e.g. `with stores[p]`).
+        let mut alias_unsafe = func.address_taken_locals.clone();
+        alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_unsafe_locals(alias_unsafe);
         engine.run(&[&rule])
     })
 }
