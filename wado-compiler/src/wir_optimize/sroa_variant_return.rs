@@ -909,7 +909,15 @@ fn check_return_variant_struct_new(
             // strict (StructNew-only) variant is used for nested branching
             // value contexts where a Call leaf would leak multi-value
             // results past the merge point.
+            //
+            // `top_return_value_compatible` validates the value/tail leaves;
+            // `embedded_returns_compatible` additionally validates every
+            // `return` statement embedded in non-tail positions of `v` (e.g. a
+            // `?`-desugared `return Err(…)` nested in a `let x = if …` binding),
+            // since `rewrite_variant_returns_to_multi_value` will rewrite those
+            // too and must find a shape it can lower.
             top_return_value_compatible(v, valid_type_indices, tail_call_candidates)
+                && embedded_returns_compatible(v, valid_type_indices, tail_call_candidates)
         }
         WirInstr::Return { value: None } => true,
         WirInstr::Block { body, result, .. } => {
@@ -937,7 +945,7 @@ fn check_return_variant_struct_new(
             // `if expr? == x { … }`). Validate those returns too, so the apply
             // phase (which now rewrites condition returns) never finds a return
             // shape it cannot lower.
-            condition_returns_compatible(condition, valid_type_indices, tail_call_candidates)
+            embedded_returns_compatible(condition, valid_type_indices, tail_call_candidates)
                 && all_returns_are_variant_struct_new(
                     then_body,
                     valid_type_indices,
@@ -957,12 +965,14 @@ fn check_return_variant_struct_new(
     }
 }
 
-/// Validate every `Return` embedded anywhere in an expression subtree (e.g. an
-/// `if`/`while` condition that contains a `?`-desugared `return Err(…)`). Each
-/// must be a shape the apply phase can lower to the multi-value return; if any
-/// is not, the function is rejected as an SROA candidate so its signature is
-/// never rewritten out from under a boxed return.
-fn condition_returns_compatible(
+/// Validate every `Return` embedded anywhere in an expression subtree — an
+/// `if`/`while` condition that contains a `?`-desugared `return Err(…)`, or a
+/// non-tail statement of a returned `match`/`if` value (e.g. `return match … {
+/// Ok(v) => { let x = helper(v)?; … } }`). Each must be a shape the apply phase
+/// can lower to the multi-value return; if any is not, the function is rejected
+/// as an SROA candidate so its signature is never rewritten out from under a
+/// boxed return.
+fn embedded_returns_compatible(
     instr: &WirInstr,
     valid_type_indices: &IndexSet<u32>,
     tail_call_candidates: &IndexSet<u32>,
@@ -974,7 +984,7 @@ fn condition_returns_compatible(
     }
     let mut ok = true;
     instr.for_each_child(&mut |child| {
-        if ok && !condition_returns_compatible(child, valid_type_indices, tail_call_candidates) {
+        if ok && !embedded_returns_compatible(child, valid_type_indices, tail_call_candidates) {
             ok = false;
         }
     });
@@ -2167,28 +2177,48 @@ fn lift_return_into_variant_leaves(
             }
         }
         WirInstr::Seq(items) => {
-            if let Some(last) = items.last_mut() {
+            if let Some((last, prefix)) = items.split_last_mut() {
+                // Only the last item is in value (tail) position; the prefix
+                // statements may still contain `return` statements (e.g. a
+                // `?`-desugared early `return Err(…)` nested in a `let x = if …`
+                // binding). Those must be rewritten to the multi-value shape.
+                rewrite_variant_returns_to_multi_value(prefix, vi, result_types);
                 lift_return_into_variant_leaves(last, vi, result_types);
             }
         }
         WirInstr::If {
+            condition,
             then_body,
             else_body,
             result,
-            ..
         } => {
             *result = None;
-            if let Some(last) = then_body.last_mut() {
+            // A `?` in the condition desugars to a `return Err(…)` embedded in
+            // the condition expression; rewrite those too.
+            rewrite_variant_returns_to_multi_value(
+                std::slice::from_mut(condition.as_mut()),
+                vi,
+                result_types,
+            );
+            if let Some((last, prefix)) = then_body.split_last_mut() {
+                rewrite_variant_returns_to_multi_value(prefix, vi, result_types);
                 lift_return_into_variant_leaves(last, vi, result_types);
             }
             if let Some(eb) = else_body
-                && let Some(last) = eb.last_mut()
+                && let Some((last, prefix)) = eb.split_last_mut()
             {
+                rewrite_variant_returns_to_multi_value(prefix, vi, result_types);
                 lift_return_into_variant_leaves(last, vi, result_types);
             }
         }
         WirInstr::Block { body, result, .. } => {
             if result.is_some() {
+                // The block's value flows through `[StructNew, Br]` exits and
+                // the fallthrough tail; non-tail statements may still hold
+                // `return` statements that need the multi-value rewrite.
+                if let Some((_, prefix)) = body.split_last_mut() {
+                    rewrite_variant_returns_to_multi_value(prefix, vi, result_types);
+                }
                 rewrite_variant_struct_new_br_to_return(body, 0, vi, result_types);
                 *result = None;
             }
