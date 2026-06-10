@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781067445570,
+  "lastUpdate": 1781074360580,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31869,6 +31869,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e61c7222cfbb05e43d52af7e48c046f3fe00e85f"
         },
         "date": 1781067445137,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5fa61874288dc3f52cdaf94b292884f96151f9b8",
+          "message": "Merge pull request #1346 from wado-lang/claude/nested-for-ice-bug-cu3sf5\n\nfix(#1342): make AstId globally unique and retire SymbolKey — kill the cross-module fact-collision class",
+          "timestamp": "2026-06-10T15:43:18+09:00",
+          "tree_id": "890ea2521c52181c5841d9d1fc15e7012f2de1f2",
+          "url": "https://github.com/wado-lang/wado/commit/5fa61874288dc3f52cdaf94b292884f96151f9b8"
+        },
+        "date": 1781074360101,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
