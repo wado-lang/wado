@@ -2782,39 +2782,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Normal cast
         let source_type = self.resolve_expr(&cast.expr, ctx, None);
 
-        // Casts *from* i128/u128 support: f64/f32 (correctly rounded), the
-        // integer widths (truncating), and i128 ↔ u128 (bit reinterpret).
-        // Reify lowers them (`try_reify_int128_source_cast`); here reject
-        // anything else, so an unsupported target fails with a diagnostic
-        // instead of leaking the wide-int struct ref into codegen. `char`
-        // targets are excluded: the char-cast diagnostic below already
-        // covers them.
-        let source_is_wide_int = matches!(
-            self.tysys.type_table.borrow().get(source_type),
-            ResolvedType::Struct { name, .. } if name == "i128" || name == "u128"
-        );
-        if source_is_wide_int {
+        // Casts *from* i128/u128 (including newtypes of them) support:
+        // f64/f32 (correctly rounded), the integer widths (truncating),
+        // and i128 ↔ u128 (bit reinterpret) — each modulo newtypes, which
+        // share their base's representation. Reify lowers them
+        // (`try_reify_int128_source_cast`); here reject anything else, so
+        // an unsupported target fails with a diagnostic instead of leaking
+        // the wide-int struct ref into codegen. `char` targets are
+        // excluded: the char-cast diagnostic below already covers them.
+        {
             use crate::tir::PrimitiveType;
-            let target_supported = match self.tysys.type_table.borrow().get(target_type) {
-                ResolvedType::Primitive(
-                    PrimitiveType::F64
-                    | PrimitiveType::F32
-                    | PrimitiveType::I64
-                    | PrimitiveType::U64
-                    | PrimitiveType::I32
-                    | PrimitiveType::U32
-                    | PrimitiveType::I16
-                    | PrimitiveType::U16
-                    | PrimitiveType::I8
-                    | PrimitiveType::U8
-                    | PrimitiveType::Char,
-                ) => true,
-                ResolvedType::Struct { name, .. } => name == "i128" || name == "u128",
-                _ => false,
-            };
+            let tt = self.tysys.type_table.borrow();
+            let source_is_wide_int = matches!(
+                tt.get(tt.get_ultimate_base_type(source_type)),
+                ResolvedType::Struct { name, .. } if name == "i128" || name == "u128"
+            );
+            let target_supported = !source_is_wide_int
+                || match tt.get(tt.get_ultimate_base_type(target_type)) {
+                    ResolvedType::Primitive(
+                        PrimitiveType::F64
+                        | PrimitiveType::F32
+                        | PrimitiveType::I64
+                        | PrimitiveType::U64
+                        | PrimitiveType::I32
+                        | PrimitiveType::U32
+                        | PrimitiveType::I16
+                        | PrimitiveType::U16
+                        | PrimitiveType::I8
+                        | PrimitiveType::U8
+                        | PrimitiveType::Char,
+                    ) => true,
+                    ResolvedType::Struct { name, .. } => name == "i128" || name == "u128",
+                    _ => false,
+                };
             if !target_supported {
-                let from_name = self.tysys.type_table.borrow().type_name(source_type);
-                let to_name = self.tysys.type_table.borrow().type_name(target_type);
+                let from_name = tt.type_name(source_type);
+                let to_name = tt.type_name(target_type);
+                drop(tt);
                 let _ = self.logger.error(TypeError::InvalidCast {
                     from: from_name,
                     to: to_name,

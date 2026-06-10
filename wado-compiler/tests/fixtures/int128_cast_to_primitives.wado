@@ -97,6 +97,29 @@ test "i128 and u128 reinterpret into each other" {
     assert max as u128 == max;
 }
 
+type WideI = i128;
+type WideU = u128;
+type Meters = f64;
+
+test "newtype of i128/u128 casts like its base" {
+    // Reinterpret to/from the newtype (regression: an added validation
+    // once rejected these even though they are repr-compatible no-ops).
+    let v = 5 as i128 as WideI;
+    let back = v as i128;
+    assert back.low() == 5;
+
+    // Newtype source lowers through the same prelude calls as its base.
+    assert v as i64 == 5;
+    assert v as f64 == 5.0;
+    let m = v as Meters;
+    assert m as f64 == 5.0;
+
+    let neg = -1 as i128 as WideI;
+    let max: u128 = 340282366920938463463374607431768211455;
+    assert neg as u128 == max;
+    assert neg as WideU as u128 == max;
+}
+
 trait Visitor {
     type Value;
     fn visit_f64(&mut self, v: f64) -> Result<Self::Value, String>;

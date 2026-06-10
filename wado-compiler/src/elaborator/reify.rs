@@ -8109,7 +8109,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
 
         let source_type = self.ann_expression_types(cast.expr.id())?;
-        let source_name = match self.tysys.type_table.borrow().get(source_type).clone() {
+        // Newtypes share their base's representation, so dispatch on the
+        // ultimate base of both sides; explicit repr-compatible `Cast`
+        // nodes bridge the newtype boundaries below.
+        let (source_base, target_base) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.get_ultimate_base_type(source_type),
+                tt.get_ultimate_base_type(target_type),
+            )
+        };
+        let source_name = match self.tysys.type_table.borrow().get(source_base).clone() {
             ResolvedType::Struct { name, .. } if name == "u128" || name == "i128" => name,
             _ => return None,
         };
@@ -8125,7 +8135,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             /// Static bit-reinterpreting constructor of the other wide type.
             Reinterpret(CompilerItem),
         }
-        let lowering = match self.tysys.type_table.borrow().get(target_type).clone() {
+        let lowering = match self.tysys.type_table.borrow().get(target_base).clone() {
             ResolvedType::Primitive(PrimitiveType::F64) => Lowering::Method(if signed_source {
                 CompilerItem::I128AsF64
             } else {
@@ -8146,7 +8156,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | PrimitiveType::I8
                 | PrimitiveType::U8,
             ) => Lowering::LowThenCast,
-            ResolvedType::Struct { name, .. } if name == source_name => Lowering::Identity,
+            ResolvedType::Struct { name, .. } if name == source_name => {
+                if target_type == source_type {
+                    Lowering::Identity
+                } else {
+                    // Same wide base but a newtype on either side: the
+                    // bare `Cast` emitted by the caller is the correct
+                    // repr-compatible reinterpret.
+                    return None;
+                }
+            }
             ResolvedType::Struct { name, .. } if name == "i128" => {
                 Lowering::Reinterpret(CompilerItem::I128FromU128)
             }
@@ -8170,9 +8189,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 method_info: Some(method_info),
             }
         };
+        // Repr-compatible `Cast` bridging a newtype boundary (no-op in
+        // codegen); identity when the types already match.
+        let bridge = |expr: TirExpr, to: TypeId, span: crate::token::Span| {
+            if expr.type_id == to {
+                return expr;
+            }
+            TirExpr::new(
+                crate::tir::TirExprKind::Cast {
+                    expr: Box::new(expr),
+                    target_type: to,
+                },
+                to,
+                span,
+            )
+        };
 
         let inner = self.reify_expr(&cast.expr, ctx, None);
         let span = cast.span;
+        // A newtype source first reinterprets to its wide base so the
+        // prelude calls below see their declared receiver/argument type.
+        let inner = bridge(inner, source_base, span);
         match lowering {
             Lowering::Identity => Some(inner),
             Lowering::Method(item) => {
@@ -8184,14 +8221,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                     &self.tysys.type_table,
                 );
-                Some(super::Elaborator::<H>::build_tir_method_call(
+                let call = super::Elaborator::<H>::build_tir_method_call(
                     receiver,
                     func,
                     vec![],
                     vec![],
-                    target_type,
+                    target_base,
                     span,
-                ))
+                );
+                Some(bridge(call, target_type, span))
             }
             Lowering::LowThenCast => {
                 let item = if signed_source {
@@ -8215,29 +8253,32 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     TypeTable::U64,
                     span,
                 );
-                if target_type == TypeTable::U64 {
-                    return Some(low_call);
-                }
-                Some(TirExpr::new(
-                    crate::tir::TirExprKind::Cast {
-                        expr: Box::new(low_call),
-                        target_type,
-                    },
-                    target_type,
-                    span,
-                ))
+                let converted = if target_base == TypeTable::U64 {
+                    low_call
+                } else {
+                    TirExpr::new(
+                        crate::tir::TirExprKind::Cast {
+                            expr: Box::new(low_call),
+                            target_type: target_base,
+                        },
+                        target_base,
+                        span,
+                    )
+                };
+                Some(bridge(converted, target_type, span))
             }
             Lowering::Reinterpret(item) => {
                 let func = make_func_ref(&self.tysys, item);
-                Some(TirExpr::new(
+                let call = TirExpr::new(
                     crate::tir::TirExprKind::Call {
                         func,
                         type_args: vec![],
                         args: vec![crate::tir::CallArg::new(inner, false)],
                     },
-                    target_type,
+                    target_base,
                     span,
-                ))
+                );
+                Some(bridge(call, target_type, span))
             }
         }
     }
