@@ -401,9 +401,11 @@ fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
     }
 }
 
-/// Try to evaluate a WIR condition to a boolean constant.
+/// Try to evaluate a WIR condition to a boolean constant. Looks through a
+/// `BranchHint` wrapper — a hinted branch whose condition became constant
+/// must still fold (the hint disappears with the branch).
 fn try_fold_wir_to_bool(instr: &WirInstr) -> Option<bool> {
-    match instr {
+    match instr.peel_hint() {
         WirInstr::I32Const(v) => Some(*v != 0),
         _ => None,
     }
@@ -703,7 +705,7 @@ fn fold_branchless_increment_in(instr: &mut WirInstr) {
     let WirInstr::I32Const(1) = rhs.as_ref() else {
         return;
     };
-    if !is_boolean_valued(condition.as_ref()) {
+    if !is_boolean_valued(condition.peel_hint()) {
         return;
     }
     // The fold turns `if cond { x = x + 1 }` into `x = x + cond`, which is
@@ -713,11 +715,13 @@ fn fold_branchless_increment_in(instr: &mut WirInstr) {
     // store. This pattern arises from HFS's call-site sync wrapper,
     // whose re-read inserts `local.set _hfs_v` inside an expression
     // when the HFS scalar is being incremented in the if's then-branch.
-    if writes_local(condition.as_ref(), name) {
+    if writes_local(condition.peel_hint(), name) {
         return;
     }
-    // Transform: x = x + condition
-    let cond = std::mem::replace(condition, Box::new(WirInstr::Nop));
+    // Transform: x = x + condition. The branch is gone, so a branch hint on
+    // the condition is dropped rather than kept around the added operand.
+    let mut cond = std::mem::replace(condition, Box::new(WirInstr::Nop));
+    cond.take_branch_hint();
     let get = Box::new(WirInstr::LocalGet {
         name: name.clone(),
         result_ty: WirType::I32,
@@ -1287,6 +1291,66 @@ mod tests {
             type_id: tid(index),
             nullable,
         }
+    }
+
+    #[test]
+    fn const_if_folds_through_branch_hint() {
+        // A hinted `if` whose condition became constant must still fold; the
+        // hint disappears together with the eliminated branch.
+        let mut instr = WirInstr::If {
+            condition: Box::new(WirInstr::BranchHint {
+                likely: false,
+                expr: Box::new(WirInstr::I32Const(0)),
+            }),
+            result: Some(WirType::I32),
+            then_body: vec![WirInstr::I32Const(1)],
+            else_body: Some(vec![WirInstr::I32Const(7)]),
+        };
+        eliminate_const_if(&mut instr);
+        match &instr {
+            WirInstr::Block { body, .. } => {
+                assert!(matches!(body.as_slice(), [WirInstr::I32Const(7)]));
+            }
+            other => panic!("expected folded Block, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn branchless_increment_folds_through_branch_hint() {
+        // `if @unlikely(x < 0) { c = c + 1 }` → `c = c + (x < 0)`; the branch
+        // is gone, so the hint wrapper must be dropped, not kept around the
+        // added operand.
+        let cond = WirInstr::I32LtS(
+            Box::new(local_get("x", WirType::I32)),
+            Box::new(WirInstr::I32Const(0)),
+        );
+        let mut instr = WirInstr::If {
+            condition: Box::new(WirInstr::BranchHint {
+                likely: false,
+                expr: Box::new(cond),
+            }),
+            result: None,
+            then_body: vec![WirInstr::LocalSet {
+                name: "c".to_string(),
+                value: Box::new(WirInstr::I32Add(
+                    Box::new(local_get("c", WirType::I32)),
+                    Box::new(WirInstr::I32Const(1)),
+                )),
+            }],
+            else_body: None,
+        };
+        fold_branchless_increment_in(&mut instr);
+        let WirInstr::LocalSet { name, value } = &instr else {
+            panic!("expected branchless LocalSet, got {instr:?}");
+        };
+        assert_eq!(name, "c");
+        let WirInstr::I32Add(_, rhs) = value.as_ref() else {
+            panic!("expected I32Add, got {value:?}");
+        };
+        assert!(
+            matches!(rhs.as_ref(), WirInstr::I32LtS(..)),
+            "hint wrapper must be dropped from the folded operand: {rhs:?}"
+        );
     }
 
     #[test]

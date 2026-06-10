@@ -1,0 +1,61 @@
+// Trap-based branch-hint inference: an `if` arm that always reaches an
+// `unreachable` trap is hinted cold without any `cold_path()` marker. The
+// inference runs at every optimization level. Arms that merely diverge
+// (break / return) must NOT be hinted — divergence is not a trap.
+
+// Then-arm traps: the condition is hinted unlikely-true.
+#[inline(never)]
+fn checked(x: i32) -> i32 {
+    if x > 1000 {
+        builtin::unreachable();
+    }
+    return x + 1;
+}
+
+// Else-arm traps: the condition is hinted likely-true.
+#[inline(never)]
+fn pick(x: i32) -> i32 {
+    if x >= 0 {
+        return x;
+    } else {
+        builtin::unreachable();
+    }
+}
+
+// Break guard: the then-arm diverges but does not trap — no hint.
+#[inline(never)]
+fn count_to(n: i32) -> i32 {
+    let mut i = 0;
+    while true {
+        if i == n {
+            break;
+        }
+        i = i + 1;
+    }
+    return i;
+}
+
+// Return guard: the then-arm diverges but does not trap — no hint.
+#[inline(never)]
+fn early(n: i32) -> i32 {
+    if n == 99 {
+        return 0;
+    }
+    return n * 2;
+}
+
+export fn run() {
+    assert checked(5) == 6;
+    assert pick(7) == 7;
+    assert count_to(3) == 3;
+    assert early(4) == 8;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O0": ["@unlikely(x > 1000)", "@likely(x >= 0)"],
+    "wir_expect:O2": ["@unlikely(x > 1000)", "@likely(x >= 0)"],
+    "wir_not_expect:O0": ["@likely(i == n)", "@unlikely(i == n)", "@likely(n == 99)", "@unlikely(n == 99)"],
+    "wir_not_expect:O2": ["@likely(i == n)", "@unlikely(i == n)", "@likely(n == 99)", "@unlikely(n == 99)"]
+}

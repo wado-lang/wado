@@ -585,8 +585,8 @@ fn compile_after_load<H: CompilerHost>(
                 severity: compiler_host::Severity::Error,
                 code: compiler_host::Code::UnsupportedFeature,
                 message: format!(
-                    "unknown codegen flag: `-f {flag}` \
-                     (supported: `array-copy`, optionally prefixed with `no-`)"
+                    "unknown codegen flag: `-f {flag}` (supported: `array-copy`, \
+                     `branch-hinting`, optionally prefixed with `no-`)"
                 ),
                 span: None,
             });
@@ -777,7 +777,12 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(&mut wir_package, options.opt_level, logger);
+        wir_optimize::optimize_wir(
+            &mut wir_package,
+            options.opt_level,
+            nir.codegen_flags,
+            logger,
+        );
     }
 
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
@@ -838,7 +843,7 @@ pub async fn dump_with_host<H: CompilerHost>(
     filename: Option<&str>,
     opt_level: OptLevel,
 ) -> Result<DumpResult, Bail> {
-    dump_with_host_and_world(source, host, filename, opt_level, None, None, None).await
+    dump_with_host_and_world(source, host, filename, opt_level, None, None, None, &[]).await
 }
 
 /// Dump compiler internal state with an explicit target world.
@@ -853,6 +858,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     target_world: Option<&str>,
     inline_threshold: Option<usize>,
     opt_iterations: Option<u32>,
+    codegen_flags: &[String],
 ) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
@@ -996,6 +1002,21 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 package.target_world = world.to_string();
             }
             package.wasm_assets.clone_from(&load_result.wasm_assets);
+            package.codegen_flags = match codegen_flags::CodegenFlags::parse(codegen_flags) {
+                Ok(flags) => flags,
+                Err(flag) => {
+                    let _ = logger.error(compiler_host::Diagnostic {
+                        severity: compiler_host::Severity::Error,
+                        code: compiler_host::Code::UnsupportedFeature,
+                        message: format!(
+                            "unknown codegen flag: `-f {flag}` (supported: `array-copy`, \
+                                 `branch-hinting`, optionally prefixed with `no-`)"
+                        ),
+                        span: None,
+                    });
+                    return Err(Bail);
+                }
+            };
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()
@@ -1071,7 +1092,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // WIR: Translate optimized NirPackage to WirPackage for inspection.
             let wir_package = Some({
                 let mut wir = wir_build::build_wir_package(&nir);
-                wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
+                wir_optimize::optimize_wir(&mut wir, opt_level, nir.codegen_flags, &logger);
                 wir
             });
 

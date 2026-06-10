@@ -79,25 +79,27 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(30)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(31)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(31)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(32)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(33)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(34)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(35)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(35)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(36)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(36)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(37)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(39)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(40)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -113,6 +115,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global mut global:__modules_initialized: bool = 0;
 global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30, 40)), used: 4 };
 
 fn "wado-compiler/tests/fixtures/const_global_dedup.wado/sum_a"(n) {
@@ -127,9 +130,7 @@ fn "wado-compiler/tests/fixtures/const_global_dedup.wado/sum_a"(n) {
     _licm_repr_19 = global:__const_obj_0.repr;
     b0: block {
         l1: loop {
-            if i >= n {
-                break b0;
-            }
+            break_if b0 i >= n;
             s = s + index = i % 4; if @unlikely(index >= _licm_used_18) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -152,18 +153,16 @@ fn "wado-compiler/tests/fixtures/const_global_dedup.wado/sum_b"(n) {
     i = 0;
     _licm_used_18 = global:__const_obj_0.used;
     _licm_repr_19 = global:__const_obj_0.repr;
-    b4: block {
-        l5: loop {
-            if i >= n {
-                break b4;
-            }
+    b3: block {
+        l4: loop {
+            break_if b3 i >= n;
             s = s + index = i % 4; if @unlikely(index >= _licm_used_18) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(_licm_repr_19, index);
             i = i + 1;
-            continue l5;
+            continue l4;
         };
     };
     return s;
@@ -172,11 +171,17 @@ fn "wado-compiler/tests/fixtures/const_global_dedup.wado/sum_b"(n) {
 fn "wado-compiler/tests/fixtures/const_global_dedup.wado/run"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/format.wado//Formatter";
-    let f_6: ref "core:prelude/format.wado//Formatter";
-    let self_7: i32;
-    let f_11: ref "core:prelude/format.wado//Formatter";
-    let self_12: i32;
-    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; f_6 = __local_1; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_7("wado-compiler/tests/fixtures/const_global_dedup.wado/sum_a"(4)), f_6); "core:prelude/string.wado/String::push"(__local_0, 44); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; f_11 = __local_1; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_12("wado-compiler/tests/fixtures/const_global_dedup.wado/sum_b"(4)), f_11); __local_0);
+    let f_5: ref "core:prelude/format.wado//Formatter";
+    let self_6: i32;
+    let f_10: ref "core:prelude/format.wado//Formatter";
+    let self_11: i32;
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; f_5 = __local_1; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_6("wado-compiler/tests/fixtures/const_global_dedup.wado/sum_a"(4)), f_5); "core:prelude/string.wado/String::push"(__local_0, 44); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; f_10 = __local_1; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_11("wado-compiler/tests/fixtures/const_global_dedup.wado/sum_b"(4)), f_10); __local_0);
 }
 
 fn "wado-compiler/tests/fixtures/const_global_dedup.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -184,6 +189,12 @@ fn "wado-compiler/tests/fixtures/const_global_dedup.wado/__cm_binding__Stdout_wr
 }
 
 fn "wado-compiler/tests/fixtures/const_global_dedup.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/const_global_dedup.wado/run"();
     "wasi/task-return"(0);
 }
@@ -220,14 +231,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b9: block {
-        l10: loop {
-            if i >= len {
-                break b9;
-            }
+    b7: block {
+        l8: loop {
+            break_if b7 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l10;
+            continue l8;
         };
     };
 }
@@ -309,14 +318,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b15: block {
-        l16: loop {
-            if t <= 0_i64 {
-                break b15;
-            }
+    b12: block {
+        l13: loop {
+            break_if b12 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l16;
+            continue l13;
         };
     };
     return n;
@@ -330,18 +337,19 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b19: block {
-            l20: loop {
-                if temp <= 0_i64 {
-                    break b19;
-                }
+        b15: block {
+            l16: loop {
+                break_if b15 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l20;
+                continue l16;
             };
         };
     }
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
@@ -431,14 +439,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b30: block {
-        l31: loop {
-            if i >= n {
-                break b30;
-            }
+    b25: block {
+        l26: loop {
+            break_if b25 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l31;
+            continue l26;
         };
     };
 }

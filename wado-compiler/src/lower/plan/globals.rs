@@ -727,6 +727,19 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     );
     init_stmts.push(if_already_init);
 
+    // The fall-through below the guard runs once per program: mark it cold so
+    // the guard is hinted likely-taken (`hint_guard_fall_through`), including
+    // the copies inlined into each export entry, and the inliner excludes the
+    // one-shot init calls from its cost estimate.
+    init_stmts.push(TirStmt::new(
+        TirStmtKind::Expr(crate::synthesis::common::builtin_call(
+            "cold_path",
+            Vec::new(),
+            TypeTable::UNIT,
+        )),
+        span,
+    ));
+
     // Call each module's __initialize_module
     for module_source in &modules_with_init {
         let call = TirExpr::new(

@@ -1,0 +1,51 @@
+// Call sites in a cold context (after a `cold_path()` marker in the same
+// block) are not inlined: the callee body would bloat the hot caller with
+// code that rarely runs. An explicit `#[inline(always)]` still wins. A callee
+// referenced only from cold sites therefore survives as a standalone function
+// (`cold_helper` below), while hot-site and forced callees inline and DCE
+// away (`hot_helper`, `forced_helper`).
+
+fn cold_helper(x: i32) -> i32 {
+    return x + 1000;
+}
+
+fn hot_helper(x: i32) -> i32 {
+    return x + 2000;
+}
+
+#[inline(always)]
+fn forced_helper(x: i32) -> i32 {
+    return x + 3000;
+}
+
+#[inline(never)]
+fn f(x: i32) -> i32 {
+    if x < 0 {
+        builtin::cold_path();
+        return cold_helper(x);
+    }
+    return hot_helper(x);
+}
+
+#[inline(never)]
+fn g(x: i32) -> i32 {
+    if x < 0 {
+        builtin::cold_path();
+        return forced_helper(x);
+    }
+    return x;
+}
+
+export fn run() {
+    assert f(5) == 2005;
+    assert f(-5) == 995;
+    assert g(-5) == 2995;
+    assert g(7) == 7;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["cold_helper"],
+    "wir_not_expect:O2": ["hot_helper", "forced_helper"]
+}

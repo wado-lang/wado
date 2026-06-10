@@ -70,16 +70,14 @@ fn "wado-compiler/tests/fixtures/type_cast.wado/__cm_binding__Stdout_write_via_s
 
 fn "wado-compiler/tests/fixtures/type_cast.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_2;
-        }
+        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
@@ -123,14 +121,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b3: block {
-        l4: loop {
-            if i >= len {
-                break b3;
-            }
+    b1: block {
+        l2: loop {
+            break_if b1 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l4;
+            continue l2;
         };
     };
 }

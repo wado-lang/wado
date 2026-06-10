@@ -14,9 +14,13 @@ type "functype//wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_
 
 type "functype//wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado/__cm_export__run" = fn();  // TypeId(4)
 
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(5)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado/build"() {
     let result: ref "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado//S";
@@ -26,9 +30,7 @@ fn "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado/bu
     i = 0;
     b0: block {
         l1: loop {
-            if i >= 3 {
-                break b0;
-            }
+            break_if b0 i >= 3;
             s = struct.new "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado//S" { a: 0 };
             s.a = 1;
             s.a = 2;
@@ -43,8 +45,23 @@ fn "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado/bu
 }
 
 fn "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    __inline___initialize_modules_2: block {
+        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     drop("wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado/build"());
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/hfs_match_arm_local_hoisted_out_of_loop.wado/__cm_export__run" as "run"

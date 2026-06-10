@@ -14,6 +14,7 @@
 //! | `peephole`            | Constant folding, copy elision              |
 //! | `elide_local`     | Write-only local elim for WIR-only locals  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
+//! | `branch_hint`     | `br_if` selection + trap-based hint inference |
 //! | `init_guard`      | Trivial init-guard global removal           |
 //! | `dce`             | Dead code / type / global elimination       |
 //!
@@ -39,6 +40,7 @@
 //! are never read.
 
 mod array;
+mod branch_hint;
 mod cleanup;
 mod const_forward;
 mod const_global;
@@ -52,6 +54,7 @@ mod peephole;
 mod sroa_variant_return;
 mod util;
 
+use crate::codegen_flags::CodegenFlags;
 use crate::compiler_host::SpanEmitter;
 use crate::optimize::OptLevel;
 use crate::wir::WirPackage;
@@ -59,6 +62,7 @@ use crate::wir::WirPackage;
 pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};
 
 use array::{promote_constant_arrays_to_data, split_large_array_literals};
+use branch_hint::{infer_branch_hints, select_br_ifs};
 use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
 use const_global::promote_const_global_inits;
@@ -109,11 +113,23 @@ fn wir_pass(
 /// `Option<&T>` global stores `ref.null` but `if let Some(_) = ...`
 /// expects a `struct.new`-shaped subtype-hierarchy value, trapping in
 /// `ref.as_non_null` on the first read.
-pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
+pub fn optimize_wir(
+    module: &mut WirPackage,
+    opt_level: OptLevel,
+    flags: CodegenFlags,
+    profiler: &dyn SpanEmitter,
+) {
     // Always run NullableRef before anything else — see comment above.
     optimize_nullable_refs(module);
 
     if opt_level == OptLevel::O0 {
+        // Trap-based hint inference runs even at -O0: like the build-time
+        // `apply_cold_path_hints`, branch hints are independent of `-O`.
+        if flags.branch_hinting {
+            wir_pass("wir/infer_branch_hints", module, profiler, |m| {
+                infer_branch_hints(m);
+            });
+        }
         dce::compact_dead_items(module);
         return;
     }
@@ -224,6 +240,18 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     });
     remove_trivial_init_globals(module);
     cleanup(module);
+    // Branch-hint finalization: collapse `if cond { br N }` break/continue
+    // guards into `br_if` (after `init_guard`, whose matcher keys on the
+    // `If { GlobalGet, [Br] }` shape), then infer trap-based hints on the
+    // final branch structure.
+    wir_pass("wir/select_br_if", module, profiler, |m| {
+        select_br_ifs(m);
+    });
+    if flags.branch_hinting {
+        wir_pass("wir/infer_branch_hints", module, profiler, |m| {
+            infer_branch_hints(m);
+        });
+    }
     profiler.span_end("wir/phase7_global_cleanup");
 
     // Phase 8: Final DCE & compaction

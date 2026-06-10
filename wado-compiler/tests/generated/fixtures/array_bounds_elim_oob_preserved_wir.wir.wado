@@ -58,11 +58,13 @@ type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(23)
 
 type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(24)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(25)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -83,9 +85,9 @@ global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "co
 
 fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_preserved_wir.wado/run"() with Stdout {
     __inline___initialize_modules_0: block {
-        if @likely(global:__modules_initialized) {
-            break __inline___initialize_modules_0;
-        }
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     cold_path;
@@ -101,9 +103,9 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_preserved_wir.wado/__cm_b
 
 fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_preserved_wir.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/array_bounds_elim_oob_preserved_wir.wado/run"();
@@ -142,14 +144,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b3: block {
-        l4: loop {
-            if i >= len {
-                break b3;
-            }
+    b1: block {
+        l2: loop {
+            break_if b1 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l4;
+            continue l2;
         };
     };
 }
@@ -221,6 +221,9 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
         drop("core:internal/wait_for_blocked"(handle));
     }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_preserved_wir.wado/__cm_export__run" as "run"

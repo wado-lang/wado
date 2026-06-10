@@ -62,17 +62,19 @@ type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i
 
 type "functype//core:prelude/string.wado/decode_utf8_scalar" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>", i32, i32) -> [u32, i32, bool];  // TypeId(22)
 
-type "functype//core:prelude/slice.wado/ArraySlice<u8>::to_array" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref Array<u8>;  // TypeId(23)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(23)
 
-type "functype//core:prelude/slice.wado/ArrayIter<u8>::collect" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(24)
+type "functype//core:prelude/slice.wado/ArraySlice<u8>::to_array" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref Array<u8>;  // TypeId(24)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>::collect" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(25)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
-type "functype//core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
+
+type "functype//core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(29)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -87,25 +89,33 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//List<u8>";
+    let __b: ref "core:prelude//List<u8>";
     let arr: ref "core:prelude//List<u8>";
     let s: ref "core:prelude/string.wado//String";
     let bytes: ref "core:prelude/slice.wado//ArrayIter<u8>";
     let collected: ref "core:prelude//List<u8>";
-    let repr_22: ref Array<u8>;
-    let end_24: i32;
-    let repr_27: ref Array<u8>;
-    let end_29: i32;
-    __b_0 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
-    arr = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__b_0.repr)), used: 5 };
+    let repr_21: ref Array<u8>;
+    let end_23: i32;
+    let repr_26: ref Array<u8>;
+    let end_28: i32;
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
+    arr = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__b.repr)), used: 5 };
     let __sroa___match_3_discriminant: i32;
     let __sroa___match_3_payload_0: ref null "core:prelude/string.wado//String";
-    repr_22 = arr.repr;
-    end_24 = 5;
-    bytes = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr_22, index: 0, end: end_24 };
+    repr_21 = arr.repr;
+    end_23 = 5;
+    bytes = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr_21, index: 0, end: end_23 };
     collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(bytes);
-    multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/string.wado/String::from_utf8_slice"(repr_27 = collected.repr; end_29 = collected.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_27, start: 0, end: end_29 });
+    multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/string.wado/String::from_utf8_slice"(repr_26 = collected.repr; end_28 = collected.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_26, start: 0, end: end_28 });
     if __sroa___match_3_discriminant == 0 {
         s = ref.as_non_null(__sroa___match_3_payload_0);
         "core:cli/println"(s);
@@ -118,6 +128,12 @@ fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/__cm_binding_
 }
 
 fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/run"();
     "wasi/task-return"(0);
 }
@@ -156,9 +172,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     i = 0;
     b2: block {
         l3: loop {
-            if i >= len {
-                break b2;
-            }
+            break_if b2 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
             continue l3;
@@ -350,17 +364,18 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     return 0, 1, 0;
 }
 
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
+}
+
 fn "core:prelude/string.wado/String::from_utf8_slice"(bytes) {
     let len_1: i32;
     let i: i32;
     let bytes_5: ref Array<u8>;
     len_1 = bytes.end - bytes.start;
     i = 0;
-    b37: block {
-        l38: loop {
-            if i >= len_1 {
-                break b37;
-            }
+    b36: block {
+        l37: loop {
+            break_if b36 i >= len_1;
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
@@ -370,7 +385,7 @@ fn "core:prelude/string.wado/String::from_utf8_slice"(bytes) {
                 return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8"), used: 13 };
             }
             i = i + scalar_mv_advance;
-            continue l38;
+            continue l37;
         };
     };
     return 0, ref.as_non_null(bytes_5 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes); struct.new "core:prelude/string.wado//String" { repr: bytes_5, used: len_1 });
