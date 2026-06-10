@@ -10,8 +10,12 @@ Implements the `core:serde` `Serializer` and `Deserializer` traits for JSON.
 Usage:
 use { to_string, from_string } from "core:json";
 
-let json = to_string::<i32>(&42); // "42"
+let json = to_string(&42); // "42"
 let val = from_string::<i32>("42"); // Result::Ok(42)
+
+Serde I/O is bytes-primary: prefer `to_bytes` / `from_bytes` when the data
+is consumed as bytes. `to_bytes_pretty` and `to_bytes_canonical` cover the
+indented and the deterministic (sorted-key) forms.
 
 ## Functions
 
@@ -185,21 +189,23 @@ Advances past a JSON number in `self.input` without allocating a String.
 
 #### `pub fn parse_i32_direct(&mut self) -> Result<i32, DeserializeError>`
 
-Single-pass i32 parsing directly from self.input. No intermediate String allocation
-for the common case of pure integer literals.
+Parses an i32 directly from `self.input`, without an intermediate
+String allocation.
 
 #### `pub fn parse_i64_direct(&mut self) -> Result<i64, DeserializeError>`
 
-Single-pass i64 parsing directly from self.input.
+Parses an i64 directly from `self.input`, without an intermediate
+String allocation.
 
 #### `pub fn parse_u64_direct(&mut self) -> Result<u64, DeserializeError>`
 
-Single-pass u64 parsing directly from self.input.
+Parses a u64 directly from `self.input`; only the rare token with one
+digit more than `FPFMT_DIGITS_MAX` allocates (for an exact re-parse).
 
 #### `pub fn parse_f64_direct(&mut self) -> Result<f64, DeserializeError>`
 
-Single-pass f64 parsing directly from self.input using fpfmt.
-No intermediate String allocation.
+Parses an f64 directly from `self.input` using fpfmt, without an
+intermediate String allocation.
 
 #### `pub fn skip_string(&mut self) -> Result<(), DeserializeError>`
 

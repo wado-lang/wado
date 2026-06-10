@@ -6,8 +6,12 @@
 //! Usage:
 //!   use { to_string, from_string } from "core:json";
 //!
-//!   let json = to_string::<i32>(&42);            // "42"
-//!   let val = from_string::<i32>("42");           // Result::Ok(42)
+//!   let json = to_string(&42);          // "42"
+//!   let val = from_string::<i32>("42"); // Result::Ok(42)
+//!
+//! Serde I/O is bytes-primary: prefer `to_bytes` / `from_bytes` when the data
+//! is consumed as bytes. `to_bytes_pretty` and `to_bytes_canonical` cover the
+//! indented and the deterministic (sorted-key) forms.
 
 
 use {
@@ -47,6 +51,7 @@ global TWO_POW_64: f64 = 18446744073709551616.0;
 /// Writes a byte string as a base64url (no padding) JSON string into buf.
 /// Matches RFC 8949 §6.1 advice for representing binary data as JSON text.
 fn write_base64_string(buf: &mut String, v: ByteSlice) {
+    // core:base64 encodes from a List, so the slice is copied once here.
     let mut bytes: List<u8> = List::with_capacity(v.len());
     bytes.extend_from_slice(v as ArraySlice<u8>);
     buf.push('"');
@@ -663,14 +668,19 @@ pub struct JsonDeserializer {
     pub pos: i32,
 }
 
-/// A scanned JSON number token: sign, the first `FPFMT_DIGITS_MAX`
-/// significant digits, the digit counts needed to reconstruct the scale,
-/// and the explicit exponent.
+/// A scanned JSON number token: sign, leading digits, the digit counts
+/// needed to reconstruct the scale, and the explicit exponent. JSON forbids
+/// leading zeros, so `int_digits` doubles as a magnitude proxy for the
+/// integer parsers' range checks.
 struct ScannedNumber {
     neg: bool,
+    /// The first `FPFMT_DIGITS_MAX` digits, integer part first.
     digits: u64,
+    /// All digits before the '.', including ones dropped from `digits`.
     int_digits: i32,
+    /// Fraction digits accumulated into `digits`.
     frac_digits: i32,
+    /// Explicit `e`/`E` exponent, saturating past fpfmt's domain.
     exp: i32,
     has_frac_or_exp: bool,
 }
@@ -883,8 +893,8 @@ impl JsonDeserializer {
         }
         self.pos += 1;
 
-        // Phase 1: scan ahead to find the end of the escape-free prefix.
-        // This lets us pre-size the allocation exactly, avoiding repeated grow() calls.
+        // Scan ahead to the end of the escape-free prefix so it can be built
+        // in one exactly-sized allocation.
         let prefix_start = self.pos;
         let mut scan_pos = self.pos;
         while scan_pos < input_len {
@@ -1226,8 +1236,8 @@ impl JsonDeserializer {
         });
     }
 
-    /// Single-pass i32 parsing directly from self.input. No intermediate String allocation
-    /// for the common case of pure integer literals.
+    /// Parses an i32 directly from `self.input`, without an intermediate
+    /// String allocation.
     pub fn parse_i32_direct(&mut self) -> Result<i32, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
@@ -1265,7 +1275,8 @@ impl JsonDeserializer {
         return Result::Ok(v as i32);
     }
 
-    /// Single-pass i64 parsing directly from self.input.
+    /// Parses an i64 directly from `self.input`, without an intermediate
+    /// String allocation.
     pub fn parse_i64_direct(&mut self) -> Result<i64, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
@@ -1309,7 +1320,8 @@ impl JsonDeserializer {
         return Result::Ok(v as i64);
     }
 
-    /// Single-pass u64 parsing directly from self.input.
+    /// Parses a u64 directly from `self.input`; only the rare token with one
+    /// digit more than `FPFMT_DIGITS_MAX` allocates (for an exact re-parse).
     pub fn parse_u64_direct(&mut self) -> Result<u64, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
@@ -1367,8 +1379,8 @@ impl JsonDeserializer {
         return Result::Ok(v as u64);
     }
 
-    /// Single-pass f64 parsing directly from self.input using fpfmt.
-    /// No intermediate String allocation.
+    /// Parses an f64 directly from `self.input` using fpfmt, without an
+    /// intermediate String allocation.
     pub fn parse_f64_direct(&mut self) -> Result<f64, DeserializeError> {
         self.skip_whitespace();
         let n = self.scan_number()?;
@@ -1861,6 +1873,7 @@ impl Deserializer for JsonDeserializer {
             self.expect_false()?;
             return Result::Ok(false);
         }
+        builtin::cold_path();
         return Result::Err(
             DeserializeError::unexpected_type("expected bool", self.pos as i64),
         );
