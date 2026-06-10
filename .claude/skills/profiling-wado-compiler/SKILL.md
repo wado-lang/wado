@@ -41,7 +41,7 @@ SAMPLY_PID=$!
 kill -TERM "$(pgrep -P "$SAMPLY_PID" | head -1)"; wait "$SAMPLY_PID"
 
 # 4. Analyze
-python3 .claude/skills/profile-compiler/scripts/analyze_native_profile.py /tmp/prof.json
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts /tmp/prof.json
 ```
 
 For one-shot commands (`wado compile foo.wado`, `wado test foo.wado`)
@@ -57,6 +57,10 @@ Interactive call tree (and correct kernel symbols):
 `samply load /tmp/prof.json` opens a browser-based call-tree UI. The
 CLI analyzer below is for grep-able, transcript-friendly summaries.
 
+The analyzer is a TypeScript script run directly by Node.js (>= 23.6,
+which strips types with no flags). No build step or dependencies are
+needed; `node analyze_native_profile.ts ...` just works.
+
 ## Linux setup
 
 ```sh
@@ -67,7 +71,7 @@ echo '1' | sudo tee /proc/sys/kernel/perf_event_paranoid
 addr2line --version >/dev/null || sudo apt-get install -y binutils
 ```
 
-## How `analyze_native_profile.py` works
+## How `analyze_native_profile.ts` works
 
 samply's `--save-only` profile is **unsymbolicated**: `funcTable.name`
 holds the hex relative-virtual-address (RVA), keyed by `(lib_index,
@@ -101,14 +105,14 @@ Common invocations:
 
 ```sh
 # Default: top 30, auto-symbolicator
-python3 .claude/skills/profile-compiler/scripts/analyze_native_profile.py /tmp/prof.json
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts /tmp/prof.json
 
 # Wider view; force Linux symbolicator even on macOS
-python3 .claude/skills/profile-compiler/scripts/analyze_native_profile.py \
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
   /tmp/prof.json --top 60 --symbolicator addr2line
 
 # Profile a different binary
-python3 .claude/skills/profile-compiler/scripts/analyze_native_profile.py \
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
   /tmp/prof.json --binary wado-lsp
 ```
 
