@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781059167969,
+  "lastUpdate": 1781067445570,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31825,6 +31825,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/92e971b470d459b247ed8de27e5cd2278ed6ad8c"
         },
         "date": 1781059167540,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e61c7222cfbb05e43d52af7e48c046f3fe00e85f",
+          "message": "Merge pull request #1345 from wado-lang/claude/wide-int-cast-followup\n\nfix(wir): guard representation-crossing casts; perf: IEEE bit assembly for wide-int float conversions",
+          "timestamp": "2026-06-10T13:50:01+09:00",
+          "tree_id": "7024a5d23a994a54b6776d1fabbc3fe95b5192ab",
+          "url": "https://github.com/wado-lang/wado/commit/e61c7222cfbb05e43d52af7e48c046f3fe00e85f"
+        },
+        "date": 1781067445137,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
