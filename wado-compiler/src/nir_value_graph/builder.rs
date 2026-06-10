@@ -112,6 +112,15 @@ struct HeapSnapshot {
     default_version: HeapVersion,
 }
 
+impl HeapSnapshot {
+    fn version_of(&self, field_index: u32) -> HeapVersion {
+        self.per_field
+            .get(&field_index)
+            .copied()
+            .unwrap_or(self.default_version)
+    }
+}
+
 /// The result of running [`build`] over a function body: the populated
 /// pool plus the side-table mapping pure `ExprId`s to their `ValueId`.
 ///
@@ -227,16 +236,24 @@ impl<'a> Builder<'a> {
                 let saved_heap = self.heap_state.snapshot();
                 self.walk_block(then_block);
                 let then_state = std::mem::replace(&mut self.current_value, saved.clone());
+                let then_heap = self.heap_state.snapshot();
+                let then_falls = self.block_falls_through(then_block);
                 self.heap_state.restore(saved_heap.clone());
-                if let Some(eb) = else_block {
+                let (else_heap, else_falls) = if let Some(eb) = else_block {
                     self.walk_block(eb);
-                }
+                    let h = self.heap_state.snapshot();
+                    let f = self.block_falls_through(eb);
+                    self.heap_state.restore(saved_heap.clone());
+                    (h, f)
+                } else {
+                    (saved_heap.clone(), true)
+                };
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
-                self.heap_state.restore(saved_heap);
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
-                // Conservative bump_all after the merge — per-arm join is
-                // a follow-up.
-                self.heap_state.bump_all();
+                self.join_heap(
+                    &saved_heap,
+                    &[(then_heap, then_falls), (else_heap, else_falls)],
+                );
             }
             StmtKind::Loop { body: lb } => {
                 self.walk_loop(lb);
@@ -423,14 +440,24 @@ impl<'a> Builder<'a> {
                 let saved_heap = self.heap_state.snapshot();
                 self.walk_block(then_branch);
                 let then_state = std::mem::replace(&mut self.current_value, saved.clone());
+                let then_heap = self.heap_state.snapshot();
+                let then_falls = self.block_falls_through(then_branch);
                 self.heap_state.restore(saved_heap.clone());
-                if let Some(eb) = else_branch {
+                let (else_heap, else_falls) = if let Some(eb) = else_branch {
                     self.walk_block(eb);
-                }
+                    let h = self.heap_state.snapshot();
+                    let f = self.block_falls_through(eb);
+                    self.heap_state.restore(saved_heap.clone());
+                    (h, f)
+                } else {
+                    (saved_heap.clone(), true)
+                };
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
-                self.heap_state.restore(saved_heap);
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
-                self.heap_state.bump_all();
+                self.join_heap(
+                    &saved_heap,
+                    &[(then_heap, then_falls), (else_heap, else_falls)],
+                );
                 None
             }
             ExprKind::LabeledBlock { block, .. } => {
@@ -443,7 +470,6 @@ impl<'a> Builder<'a> {
             ExprKind::Match { expr: scrut, arms } => {
                 self.walk_expr(scrut);
                 self.walk_match_arms(&arms);
-                self.heap_state.bump_all();
                 None
             }
             ExprKind::Switch {
@@ -457,18 +483,24 @@ impl<'a> Builder<'a> {
                 let saved_heap = self.heap_state.snapshot();
                 let mut arm_states: Vec<IndexMap<u32, ValueId>> =
                     Vec::with_capacity(arms.len() + 1);
+                let mut arm_heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len() + 1);
                 for arm in &arms {
                     self.current_value.clone_from(&saved);
                     self.heap_state.restore(saved_heap.clone());
                     self.walk_block(*arm);
                     arm_states.push(self.current_value.clone());
+                    arm_heaps.push((self.heap_state.snapshot(), self.block_falls_through(*arm)));
                 }
                 self.current_value.clone_from(&saved);
-                self.heap_state.restore(saved_heap);
+                self.heap_state.restore(saved_heap.clone());
                 self.walk_block(default);
+                arm_heaps.push((
+                    self.heap_state.snapshot(),
+                    self.block_falls_through(default),
+                ));
                 arm_states.push(std::mem::replace(&mut self.current_value, saved.clone()));
                 self.merge_n_arms(&saved, &arm_states);
-                self.heap_state.bump_all();
+                self.join_heap(&saved_heap, &arm_heaps);
                 None
             }
 
@@ -671,6 +703,101 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// Join the heap state at a branch endpoint over the fall-through arms.
+    ///
+    /// `pre` is the heap state before the branch; each `arms` entry is an
+    /// arm's post-walk snapshot paired with whether the arm falls through
+    /// (a `break` / `return` / `continue`-terminated arm does not, so its
+    /// writes never reach code after the branch). A field whose version
+    /// every fall-through arm left at the pre-branch version keeps it; a
+    /// field some fall-through arm wrote (or that an arm's `bump_all`
+    /// invalidated) gets a fresh version, since its post-merge value is
+    /// unknown. With no fall-through arm the post-state is `pre` (code
+    /// after the branch is unreachable).
+    ///
+    /// This replaces the previous unconditional `bump_all`, which split
+    /// the heap version of every field read after any branch — including
+    /// the `if !(cond) { break }` guard that opens every desugared loop,
+    /// so `arr.used` read in the guard never shared a `ValueId` with a
+    /// later bounds-check read.
+    fn join_heap(&mut self, pre: &HeapSnapshot, arms: &[(HeapSnapshot, bool)]) {
+        let live: Vec<&HeapSnapshot> = arms
+            .iter()
+            .filter_map(|(h, falls)| falls.then_some(h))
+            .collect();
+        if live.is_empty() {
+            self.heap_state.restore(pre.clone());
+            return;
+        }
+        let default_changed = live
+            .iter()
+            .any(|a| a.default_version != pre.default_version);
+        let new_default = if default_changed {
+            self.heap_state.fresh()
+        } else {
+            pre.default_version
+        };
+        let mut field_keys: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
+        for k in pre.per_field.keys() {
+            field_keys.insert(*k);
+        }
+        for a in &live {
+            for k in a.per_field.keys() {
+                field_keys.insert(*k);
+            }
+        }
+        let mut new_per_field: IndexMap<u32, HeapVersion> = IndexMap::default();
+        for f in field_keys {
+            let pre_v = pre.version_of(f);
+            let unchanged = live.iter().all(|a| a.version_of(f) == pre_v);
+            if unchanged {
+                // Only fields differing from the default need an explicit
+                // entry; a default-changed join must pin survivors so they
+                // are not read at the fresh default.
+                if pre_v != new_default {
+                    new_per_field.insert(f, pre_v);
+                }
+            } else {
+                let fresh = self.heap_state.fresh();
+                new_per_field.insert(f, fresh);
+            }
+        }
+        self.heap_state.per_field = new_per_field;
+        self.heap_state.default_version = new_default;
+    }
+
+    /// Whether control can reach the bottom of `block`. Mirrors
+    /// `const_folding`'s `block_falls_through` minus never-type detection
+    /// (the builder has no `TypeTable`): a `panic()`-terminated arm is
+    /// conservatively treated as falling through, which only costs
+    /// precision — it modifies no field, so including it in a heap join
+    /// keeps the pre-branch versions anyway.
+    fn block_falls_through(&self, block: crate::nir_arena::BlockId) -> bool {
+        match self.body.blocks[block].stmts.last() {
+            None => true,
+            Some(&last) => self.stmt_falls_through(last),
+        }
+    }
+
+    fn stmt_falls_through(&self, s: StmtId) -> bool {
+        match &self.body.stmts[s].kind {
+            StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => false,
+            StmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.block_falls_through(*then_block)
+                    || else_block.is_none_or(|eb| self.block_falls_through(eb))
+            }
+            StmtKind::LabeledBlock { block, .. } => self.block_falls_through(*block),
+            // A `Loop` falls through only via `break`, which we do not
+            // analyse here; treat it as falling through.
+            StmtKind::Loop { .. } => true,
+            _ => true,
+        }
+    }
+
     fn walk_match_arms(&mut self, arms: &[ArmData]) {
         // Guards are evaluated sequentially at runtime: when guard 0 has
         // side effects and returns false, guard 1 and arm 1's body run
@@ -701,6 +828,7 @@ impl<'a> Builder<'a> {
         let saved = self.current_value.clone();
         let saved_heap = self.heap_state.snapshot();
         let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());
+        let mut arm_heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len());
         for arm in arms {
             self.current_value.clone_from(&saved);
             self.heap_state.restore(saved_heap.clone());
@@ -710,10 +838,16 @@ impl<'a> Builder<'a> {
             }
             self.walk_expr(arm.body);
             states.push(self.current_value.clone());
+            // Match arm bodies are expressions; without a `TypeTable` the
+            // builder cannot detect a never-typed (`=> return …`) body, so
+            // every arm is conservatively treated as falling through. A
+            // returning arm contributes only its field writes to the join,
+            // which is sound (those fields bump) if imprecise.
+            arm_heaps.push((self.heap_state.snapshot(), true));
         }
         self.current_value.clone_from(&saved);
-        self.heap_state.restore(saved_heap);
         self.merge_n_arms(&saved, &states);
+        self.join_heap(&saved_heap, &arm_heaps);
     }
 
     /// Reassign every local the body may write to a fresh `Opaque` before
@@ -1501,5 +1635,133 @@ mod tests {
             r.pool.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
         ));
+    }
+
+    // ----- Reachability-aware heap join at branch endpoints -----
+
+    #[test]
+    fn break_guard_does_not_split_field_versions() {
+        // fn(obj) {
+        //     let a = obj.f;
+        //     if cond { break; }      // guard arm: no field write, does not fall through
+        //     let b = obj.f;          // must share VN with `a`
+        // }
+        // The previous unconditional `bump_all` after the `if` split the
+        // heap version, denying every desugared loop's guard/body field VN
+        // sharing. The reachability-aware join keeps it.
+        let mut body = empty_body();
+        let recv_a = local_ref(&mut body, 0);
+        let read_a = field_access(&mut body, recv_a, 0);
+        let let_a = let_stmt(&mut body, 1, read_a, false);
+
+        let cond = bool_lit(&mut body, true);
+        let brk = alloc_stmt(
+            &mut body,
+            StmtKind::Break {
+                label: None,
+                value: None,
+            },
+        );
+        let then_block = block_with(&mut body, vec![brk]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+
+        let recv_b = local_ref(&mut body, 0);
+        let read_b = field_access(&mut body, recv_b, 0);
+        let let_b = let_stmt(&mut body, 2, read_b, false);
+
+        root_with(&mut body, vec![let_a, if_s, let_b]);
+        let r = build(&body, &[param_seed()]);
+        assert_eq!(r.value_of[&read_a], r.value_of[&read_b]);
+    }
+
+    #[test]
+    fn if_arm_field_write_bumps_after_merge() {
+        // fn(obj) {
+        //     let a = obj.f;
+        //     if cond { obj.f = 1; }   // fall-through arm writes f
+        //     let b = obj.f;           // value now unknown -> distinct VN
+        // }
+        let mut body = empty_body();
+        let recv_a = local_ref(&mut body, 0);
+        let read_a = field_access(&mut body, recv_a, 0);
+        let let_a = let_stmt(&mut body, 1, read_a, false);
+
+        let cond = bool_lit(&mut body, true);
+        let recv_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let write = field_assign_stmt(&mut body, recv_w, 0, one);
+        let then_block = block_with(&mut body, vec![write]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+
+        let recv_b = local_ref(&mut body, 0);
+        let read_b = field_access(&mut body, recv_b, 0);
+        let let_b = let_stmt(&mut body, 2, read_b, false);
+
+        root_with(&mut body, vec![let_a, if_s, let_b]);
+        let r = build(&body, &[param_seed()]);
+        assert_ne!(r.value_of[&read_a], r.value_of[&read_b]);
+    }
+
+    #[test]
+    fn if_writing_other_field_keeps_unwritten_field_version() {
+        // fn(obj) {
+        //     let g0 = obj.g;
+        //     if cond { obj.f = 1; }   // writes f, not g
+        //     let g1 = obj.g;          // g unchanged -> same VN
+        //     let f1 = obj.f;          // f written on a fall-through arm
+        //     let f2 = obj.f;          // two reads at the same post-merge version share
+        // }
+        let mut body = empty_body();
+        let recv_g0 = local_ref(&mut body, 0);
+        let read_g0 = field_access(&mut body, recv_g0, 1);
+        let let_g0 = let_stmt(&mut body, 1, read_g0, false);
+
+        let cond = bool_lit(&mut body, true);
+        let recv_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let write = field_assign_stmt(&mut body, recv_w, 0, one);
+        let then_block = block_with(&mut body, vec![write]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+
+        let recv_g1 = local_ref(&mut body, 0);
+        let read_g1 = field_access(&mut body, recv_g1, 1);
+        let let_g1 = let_stmt(&mut body, 2, read_g1, false);
+        let recv_f1 = local_ref(&mut body, 0);
+        let read_f1 = field_access(&mut body, recv_f1, 0);
+        let let_f1 = let_stmt(&mut body, 3, read_f1, false);
+        let recv_f2 = local_ref(&mut body, 0);
+        let read_f2 = field_access(&mut body, recv_f2, 0);
+        let let_f2 = let_stmt(&mut body, 4, read_f2, false);
+
+        root_with(&mut body, vec![let_g0, if_s, let_g1, let_f1, let_f2]);
+        let r = build(&body, &[param_seed()]);
+        // `g` untouched across the if: same VN.
+        assert_eq!(r.value_of[&read_g0], r.value_of[&read_g1]);
+        // `f` reads after the merge are at one fresh post-merge version.
+        assert_eq!(r.value_of[&read_f1], r.value_of[&read_f2]);
+        // …but distinct from the pre-if `f` value (there was none here) is
+        // not asserted; the merge gave `f` a fresh version, which the two
+        // post reads share.
     }
 }
