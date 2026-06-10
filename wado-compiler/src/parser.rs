@@ -2934,18 +2934,14 @@ impl Parser {
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
         let expr = self.parse_assignment_expr()?;
-        // `matches` is a postfix operator (parsed in `parse_postfix_expr`), so
-        // its scrutinee must be a postfix expression. When a `matches` token
-        // remains after a full expression, the scrutinee was a lower-precedence
-        // form — a cast (`x as T`), a unary (`-x`), or a binary (`a + b`) — that
-        // `matches` cannot bind to, and the default error would be a bare
-        // "expected `;`". Point at the real fix: parenthesize the scrutinee.
+        // A `matches` left over after a full expression means a lower-precedence
+        // scrutinee (`x as T`, `-x`, `a + b`) that postfix `matches` can't bind.
+        // Suggest parens instead of a bare "expected `;`".
         if self.check(&TokenKind::Matches) {
             return Err(ParseError {
-                message: "the scrutinee of `matches` must be parenthesized here: \
-                          write `(expr) matches { pattern }`. `matches` binds tighter \
-                          than unary, `as`, and binary operators, so it cannot apply \
-                          to such an expression directly."
+                message: "`matches` binds tighter than unary, `as`, and binary \
+                          operators; parenthesize the scrutinee: \
+                          `(expr) matches { pattern }`"
                     .to_owned(),
                 span: self.peek().span,
             });
@@ -4498,10 +4494,8 @@ impl Parser {
             if self.check(&TokenKind::Lt) {
                 self.advance();
                 let args = self.parse_type_args()?;
-                // Span must cover `namespace::type<...>` through the closing
-                // `>`, not stop at the namespace token: a short span lets an
-                // inner type-argument node (textually to the right) win
-                // trailing-comment ownership, dropping the comment.
+                // Span through the closing `>`; otherwise an inner type-arg node
+                // to the right wins trailing-comment ownership (drops the comment).
                 let end_span = self.tokens[self.pos - 1].span;
 
                 return Ok(Type::NamespacedGeneric(NamespacedGenericType {
@@ -4527,10 +4521,7 @@ impl Parser {
         if self.check(&TokenKind::Lt) {
             self.advance();
             let args = self.parse_type_args()?;
-            // Span must cover `Name<...>` through the closing `>`, not stop at
-            // the name token: a short span lets an inner type-argument node
-            // (textually to the right) win trailing-comment ownership, which
-            // silently drops the declaration's trailing comment.
+            // Span through the closing `>` (see the namespaced case above).
             let end_span = self.tokens[self.pos - 1].span;
 
             Ok(Type::Generic(GenericType {
@@ -5955,11 +5946,8 @@ mod tests {
         (module, errors)
     }
 
-    /// `matches` is postfix (binds tighter than unary/cast/binary), so its
-    /// scrutinee must be a postfix expression. A lower-precedence scrutinee
-    /// like `x as i32` strands the `matches` token; the parser should guide
-    /// the user to parenthesize the scrutinee rather than emit a bare
-    /// "expected `;`".
+    /// A `matches` on a lower-precedence scrutinee (`x as i32`) should suggest
+    /// parentheses, not emit a bare "expected `;`".
     #[test]
     fn test_matches_on_low_precedence_scrutinee_suggests_parens() {
         for src in [

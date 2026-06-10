@@ -471,11 +471,8 @@ fn run() {
     );
 }
 
-/// `matches` is a postfix-level operator, so it binds tighter than the
-/// unary operators. `(!x) matches { ... }` is `Matches(Unary(x))` and must
-/// keep its parentheses: dropping them yields `!x matches { ... }`, which
-/// reparses as `Unary(Matches(x))` — a different expression. The unparser
-/// used to emit the scrutinee with no parens, silently changing semantics.
+/// `(!x) matches {P}` (`Matches(Unary)`) must keep its parens: bare
+/// `!x matches {P}` reparses as `Unary(Matches)` — a different expression.
 #[test]
 fn test_format_matches_scrutinee_keeps_parens() {
     // Scrutinee is a lower-precedence expression → parens are load-bearing.
@@ -499,12 +496,9 @@ fn test_format_matches_scrutinee_keeps_parens() {
     assert_format_preserves_ast("fn run() -> bool {\n    return !x matches { Some(_) };\n}\n");
 }
 
-/// A trailing comment after a declaration whose type is a generic
-/// (`Foo<...>`) used to be dropped: the generic type's span ended at its
-/// name token rather than at the closing `>`, so an inner type-argument
-/// node (textually to the right) became the comment's owner and the
-/// unparser never emitted trailing comments for inner type arguments.
-/// Regression guard for variant cases and struct fields.
+/// A trailing comment after a generic-typed (`Foo<...>`) variant case or
+/// struct field used to be dropped (the generic span stopped at the name,
+/// so an inner type-arg stole comment ownership). Regression guard.
 #[test]
 fn test_format_preserves_trailing_comment_on_generic_type() {
     let source = r"pub variant Value {

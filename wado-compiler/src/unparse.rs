@@ -1604,13 +1604,9 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_matches(&mut self, m: &crate::ast::MatchesExpr) {
-        // `matches` is a postfix-level operator (parsed in `parse_postfix_expr`),
-        // so its scrutinee must be a postfix-or-higher expression. A
-        // lower-precedence scrutinee needs parentheses, otherwise the output
-        // reparses with `matches` bound to the wrong operand — e.g.
-        // `(!x) matches {..}` (Matches over Unary) printed bare becomes
-        // `!x matches {..}`, which reparses as `!(x matches {..})`. Mirrors the
-        // method-call receiver rule (`.` is the same precedence level).
+        // The scrutinee is postfix-level; a lower-precedence one needs parens
+        // or it reparses wrong, e.g. `(!x) matches {P}` → `!x matches {P}` =
+        // `!(x matches {P})`. Same rule as a method-call receiver.
         let needs_parens = matches!(
             &m.expr,
             Expr::Unary(_)
