@@ -1068,6 +1068,19 @@ r : FOO ;";
     assert g.parser_rules.len() == 1;
 }
 
+test "channels block trailing junk is tolerated then closed" {
+    // Permissive recovery: non-identifier junk inside `channels { }` is
+    // silently skipped (mirrors the `tokens { }` behavior) as long as the
+    // block is closed. Without the anti-hang advance this input loops forever.
+    let input = "lexer grammar Test;
+channels { COMMENTS ; DOCS }
+WS : ' ' -> channel(COMMENTS) ;";
+    let g = parse(input).unwrap();
+    assert g.channels.len() == 2;
+    assert g.channels[0] == "COMMENTS";
+    assert g.channels[1] == "DOCS";
+}
+
 test "parser rule tilde applied to block" {
     // ANTLR4 allows `~` on a set expressed as a block of alternatives, not
     // just a single token reference: `~( 'a' | 'b' | 'c' )`.

@@ -33,6 +33,19 @@ test "collect_literal_tokens: plain top-level literals" {
     assert names[1] == "TK_LIT_Y", names[1];
 }
 
+test "collect_literal_tokens: case-folding collision is disambiguated" {
+    // `'and'` and `'AND'` both fold to the base name `TK_LIT_AND`. Without
+    // disambiguation the generated module emits duplicate globals / fns /
+    // match arms and fails to compile. The second occurrence must get a
+    // distinct const name.
+    let g = parse_grammar("grammar T; a : 'and' 'AND' ;");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let names = const_names(&lits);
+    assert names.len() == 2, `len={names.len()}`;
+    assert names[0] == "TK_LIT_AND", names[0];
+    assert names[1] != names[0], `collision: both named {names[0]}`;
+}
+
 test "collect_literal_tokens: literals inside Group alternatives" {
     // `('x' | 'y')` — Group with two single-literal alts. The walker
     // already handles this through the `Group` arm.

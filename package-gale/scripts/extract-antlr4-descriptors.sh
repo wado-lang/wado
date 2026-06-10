@@ -5,7 +5,9 @@
 #   3. Wado finalize (drain oracle-pending into stage_b_oracle/)
 #
 # Phase 2 is skipped with a warning when java/javac is missing, so
-# Stage A/B regeneration still works on a JDK-less environment.
+# Stage A/B regeneration still works on a JDK-less environment. Phase 3
+# (finalize) is then skipped too, so the committed Stage B′ tests are
+# left intact rather than deleted as "stale".
 #
 # Usage:
 #   extract-antlr4-descriptors.sh                # all categories
@@ -48,10 +50,12 @@ cargo run --quiet --bin wado -- run \
 
 # ----- Phase 2: Stage B′ oracle invocation.
 echo "==> Phase 2/3: Stage B′ oracle invocation"
+oracle_ran=0
 if ! command -v java >/dev/null 2>&1 || ! command -v javac >/dev/null 2>&1; then
     echo "extract: skipping Stage B′ oracle invocation — neither 'java' nor 'javac' on PATH." >&2
     echo "extract: install a JDK 17+ (e.g. apt install default-jdk) to enable Stage B′." >&2
 else
+    oracle_ran=1
     if [ ! -d "$PENDING_ROOT" ]; then
         echo "extract: no oracle-pending/ — nothing to invoke the oracle on."
     else
@@ -134,6 +138,15 @@ else
 fi
 
 # ----- Phase 3: Wado finalize.
+# Finalize drains oracle-pending into stage_b_oracle/, dropping any test
+# whose `.expected` is absent as "stale". When Phase 2 was skipped (no
+# JDK), Phase 1 has just re-created the pending manifests WITHOUT any
+# `.expected`, so running finalize would delete every committed Stage B′
+# test. Gate Phase 3 on the oracle having actually run.
+if [ "$oracle_ran" -eq 0 ]; then
+    echo "==> Phase 3/3: skipped — oracle did not run; leaving committed stage_b_oracle/ tests intact." >&2
+    exit 0
+fi
 echo "==> Phase 3/3: Wado finalize stage_b_oracle/"
 # Stamp emitted tests with the jar version phase 2 actually used.
 oracle_version_cache="${XDG_CACHE_HOME:-$HOME/.cache}/gale/antlr4-latest-version"

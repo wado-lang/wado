@@ -98,6 +98,30 @@ pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken>
     return result;
 }
 
+/// Case-folding in `literal_const_name` (lowercase → uppercase) can map two
+/// distinct literals (`'and'`, `'AND'`) onto the same base const name. That
+/// would emit duplicate globals / `try_lit_*` fns / `token_kind_name` arms and
+/// break compilation, so the second and later occurrences get a numeric
+/// suffix (`TK_LIT_AND`, `TK_LIT_AND_2`, …). Deterministic in source order.
+fn disambiguate_const_name(base: &String, result: &List<LitToken>) -> String {
+    let mut candidate = *base;
+    let mut n = 2;
+    while const_name_taken(result, &candidate) {
+        candidate = `{*base}_{n}`;
+        n += 1;
+    }
+    return candidate;
+}
+
+fn const_name_taken(result: &List<LitToken>, name: &String) -> bool {
+    for let lit of result {
+        if lit.const_name == *name {
+            return true;
+        }
+    }
+    return false;
+}
+
 fn collect_lits_from_elements(elements: &List<Element>, seen: &mut List<String>, result: &mut List<LitToken>) {
     for let elem of elements {
         collect_lits_from_element(elem, seen, result);
@@ -109,7 +133,9 @@ fn collect_lits_from_element(elem: &Element, seen: &mut List<String>, result: &m
         Literal(l) => {
             if !seen_contains(seen, &l.text) {
                 seen.push(l.text);
-                result.push(LitToken { text: l.text, const_name: literal_const_name(&l.text) });
+                let base = literal_const_name(&l.text);
+                let const_name = disambiguate_const_name(&base, result);
+                result.push(LitToken { text: l.text, const_name });
             }
         },
         Repeat(rep) => collect_lits_from_element(&rep.element, seen, result),

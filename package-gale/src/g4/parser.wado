@@ -450,6 +450,11 @@ impl G4Parser {
                     self.channels.push(name);
                 }
                 self.advance();
+            } else {
+                // Unknown token — advance to avoid an infinite loop on
+                // malformed input, mirroring `parse_tokens_block`. Channel
+                // bodies are not semantically meaningful beyond the names.
+                self.advance();
             }
             if self.is_kind(G4Token::Comma) {
                 self.advance();
