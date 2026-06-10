@@ -1,5 +1,14 @@
 # WEP: Elaborator Re-architecture — TypeSystem / Annotate / Reify
 
+> Partially superseded (2026-06): this WEP's identity model — body facts
+> keyed by `SymbolKey` (`(ModuleSource, AstId)`) and the per-walk
+> "module perspective" that fills the module half — was retired as the
+> root fix for the recurring cross-module `AstId`-collision class (issue
+> #1342). `AstId` is now globally unique (`(AstIdSpace, local)`), so every
+> fact map keys by bare `AstId` and `SymbolKey` no longer exists. References
+> to `SymbolKey` / `ann_module_override` below are historical. The current
+> identity model lives in `docs/compiler.md` and `wado-compiler/AGENTS.md`.
+
 ## Context
 
 The `elaborate` phase is the largest and most entangled part of the

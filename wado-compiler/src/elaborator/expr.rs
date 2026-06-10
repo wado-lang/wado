@@ -421,27 +421,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for associated constants (e.g., f64::PI, i32::MAX). The
-        // constant's body is *foreign* AST owned by `const_module`. Inference
-        // re-runs here against the consumer's scope (so the emitted TIR stays
-        // identical), but the per-`AstId` facts the walk records are keyed
-        // under `const_module` via `ann_module_override`: a const-body node
-        // and a consumer node sharing the same dense `AstId` would otherwise
-        // collide (e.g. `primitive.wado`'s `INFINITY = 1.0 / 0.0` body,
-        // resolved while compiling `core:json`, overwriting a `core:json`
-        // `i32` literal's type with `f64`). Reify reads these facts under the
-        // same key after `with_const_module_perspective` swaps to `const_module`.
-        if let Some((const_module, type_id, const_expr)) = self
+        // constant's body is *foreign* AST owned by `const_module`; we
+        // re-resolve it here only for the consumer's inference side effects.
+        // Its per-`AstId` facts carry the const body's own globally-unique
+        // ids, so they cannot clobber a consumer node (the historic
+        // cross-module collision, issue #1342). Reify produces the const's
+        // TIR under `with_const_module_perspective(const_module)` and does
+        // not read these consumer-side entries.
+        if let Some((_const_module, type_id, const_expr)) = self
             .sem
             .decls
             .associated_constants
             .get(&ident.name)
             .cloned()
         {
-            let prev_override = self.ann_module_override.replace(const_module);
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
             self.resolve_expr(&const_expr, ctx, Some(type_id));
-            self.ann_module_override = prev_override;
             return type_id;
         }
 
@@ -459,12 +455,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|(_, c)| c.name == suffix)
                     .map(|(i, c)| (i, c.clone()))
                 {
-                    self.record_qualified_case(
-                        ident,
-                        prefix,
-                        &variant_info.module_source,
-                        case_data.ast_id,
-                    );
+                    self.record_qualified_case(ident, prefix, case_data.ast_id);
                     // Unit variant - payload must be unit type
                     let payload_is_unit = matches!(
                         self.tysys.type_table.borrow().get(case_data.payload),
@@ -515,12 +506,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(enum_info) = self.lookup_enum_case(prefix).cloned()
                 && let Some(case_data) = enum_info.find_case(suffix).cloned()
             {
-                self.record_qualified_case(
-                    ident,
-                    prefix,
-                    &enum_info.module_source,
-                    case_data.ast_id,
-                );
+                self.record_qualified_case(ident, prefix, case_data.ast_id);
                 // Use canonical name (not import alias) for consistent TypeId interning
                 let enum_type = self
                     .tysys
@@ -541,7 +527,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|m| m.name == suffix)
                     .cloned()
             {
-                self.record_qualified_case(ident, prefix, &flags_info.module_source, member.ast_id);
+                self.record_qualified_case(ident, prefix, member.ast_id);
                 // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
                 return flags_info.type_id;
             }
@@ -888,7 +874,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if type_args.is_empty() {
             return;
         }
-        let key = self.ann_key(ident_id);
+        let key = ident_id;
         self.sem.types.generic_instantiations.insert(
             key,
             super::sem::types::GenericInstantiation {
@@ -1103,7 +1089,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
-                    self.record_reference_to_decl(use_id, &module_source, *fid);
+                    self.record_reference_to_def(use_id, *fid);
                     return;
                 }
             }
@@ -2970,7 +2956,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .unwrap_or_default();
         for (use_id, def_id) in field_refs {
-            self.record_reference_to_decl(use_id, &struct_module_source, def_id);
+            self.record_reference_to_def(use_id, def_id);
         }
 
         // Resolve field expressions, converting tuple literals to arrays when needed.
@@ -3109,37 +3095,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
-                    // The default expression is *foreign* AST owned by the
-                    // struct's declaring module, so its resolution must follow
-                    // that module, not the construction site:
-                    //
-                    // - Its nodes carry the struct module's dense `AstId`s; keyed
-                    //   under the current module they would collide with
-                    //   same-numbered local nodes and overwrite their recorded
-                    //   types. `ann_module_override` keys the facts under the
-                    //   struct's module — the key reify reads back after
-                    //   `with_const_module_perspective`.
-                    // - Its free identifiers (e.g. a private `global` of the
-                    //   struct module) resolve in that module's scope via
-                    //   `default_scope_module`, the callee-scope fallback
-                    //   `pad_args_with_defaults` also uses for function default
-                    //   arguments.
-                    //
-                    // Only resolution is redirected; `expected_type_id` still
-                    // drives literal and `null → None` coercion.
+                    // The default is *foreign* AST owned by the struct's
+                    // declaring module. Its free identifiers (e.g. a private
+                    // `global` of that module) resolve in its scope via
+                    // `default_scope_module` (the same callee-scope fallback
+                    // `pad_args_with_defaults` uses for function defaults).
+                    // Only scope is redirected, not fact keying: the default's
+                    // nodes carry their own globally-unique `AstId`s, so its
+                    // facts can't collide with a local node. `expected_type_id`
+                    // still drives literal / `null → None` coercion.
                     let resolved = if struct_module_source == self.current_module_source {
                         self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                     } else {
-                        let prev_override = self
-                            .ann_module_override
-                            .replace(struct_module_source.clone());
                         let prev_scope = self
                             .default_scope_module
                             .replace(struct_module_source.clone());
                         let resolved =
                             self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
                         self.default_scope_module = prev_scope;
-                        self.ann_module_override = prev_override;
                         resolved
                     };
                     self.typecheck(resolved, *expected_type_id, struct_lit.span);
@@ -3778,7 +3751,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Find the module source that provides the From impl
         let module_source = self.find_from_impl_module(&target_name, &from_name);
 
-        let key = self.ann_key(caller_id);
+        let key = caller_id;
         self.sem.types.from_call_facts.insert(
             key,
             super::sem::types::FromCallFacts {

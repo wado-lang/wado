@@ -498,7 +498,10 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
             };
             println!(
                 "  [ast#{}] {} :: {} = {}",
-                symbol.defined_at.ast_id.0, module_path, symbol.name, kind_str
+                symbol.defined_at.local(),
+                module_path,
+                symbol.name,
+                kind_str
             );
         }
         println!();

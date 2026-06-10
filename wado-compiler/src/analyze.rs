@@ -50,8 +50,8 @@ fn is_wasm_asset_use_decl(use_decl: &UseDecl) -> bool {
 }
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
-    ResourceSymbol, StructSymbol, Symbol, SymbolKey, SymbolKind, SymbolTable, TraitSymbol,
-    VariantSymbol, WorldExportSymbol, WorldImportSymbol, WorldSymbol,
+    ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
+    WorldExportSymbol, WorldImportSymbol, WorldSymbol,
 };
 use crate::token::Span;
 
@@ -276,7 +276,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         name: &str,
         kind: SymbolKind,
         span: Span,
-    ) -> Option<SymbolKey> {
+    ) -> Option<crate::ast::AstId> {
         if let Some(first) = self.symbols.defined_span_in_module(module_source, name) {
             let _ = self.logger.error(AnalyzeError::DuplicateDefinition {
                 name: name.to_string(),
@@ -809,7 +809,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             if let Some(symbol) =
                                 self.symbols.lookup_in_module(&module_source, name)
                             {
-                                let key = symbol.defined_at.clone();
+                                let key = symbol.defined_at;
                                 let import_name = alias.as_ref().unwrap_or(name);
                                 self.symbols
                                     .register_import(from_module_source, import_name, key);
@@ -830,7 +830,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 if let Some(symbol) =
                                     self.symbols.lookup_in_module(&module_source, &lookup_name)
                                 {
-                                    let key = symbol.defined_at.clone();
+                                    let key = symbol.defined_at;
                                     let import_name =
                                         func_item.alias.as_ref().unwrap_or(&func_item.name);
                                     self.symbols.register_import(
@@ -856,14 +856,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // under its `ns$member` alias, matching how the
                             // elaborator canonicalizes `ns::member` at lookup
                             // time (`ModuleImports::canonical_ns_ref`).
-                            let symbols: Vec<(String, SymbolKey)> = self
+                            let symbols: Vec<(String, crate::ast::AstId)> = self
                                 .symbols
                                 .get_module_symbols(&module_source)
                                 .into_iter()
                                 .map(|s| {
                                     (
                                         crate::name::namespace_member_alias(ns, &s.name),
-                                        s.defined_at.clone(),
+                                        s.defined_at,
                                     )
                                 })
                                 .collect();

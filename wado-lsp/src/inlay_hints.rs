@@ -26,8 +26,7 @@ use serde::{Deserialize, Serialize};
 use wado_compiler::ast::{
     self, AstVisitor, ClosureParam, Expr, ForOfStmt, Function, LetStmt, Pattern, Stmt,
 };
-use wado_compiler::module_source::ModuleSource;
-use wado_compiler::symbol::{SymbolKey, SymbolKind};
+use wado_compiler::symbol::SymbolKind;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
@@ -70,7 +69,6 @@ pub(crate) fn inlay_hints(ctx: &QueryContext, range: Range) -> Vec<InlayHint> {
     };
     let mut collector = HintCollector {
         ctx,
-        module_source: entry,
         hints: Vec::new(),
     };
     for item in &module.items {
@@ -89,15 +87,10 @@ fn in_range(hint: &InlayHint, range: Range) -> bool {
 
 struct HintCollector<'a> {
     ctx: &'a QueryContext<'a>,
-    module_source: &'a ModuleSource,
     hints: Vec<InlayHint>,
 }
 
 impl HintCollector<'_> {
-    fn key(&self, ast_id: ast::AstId) -> SymbolKey {
-        SymbolKey::new(self.module_source.clone(), ast_id)
-    }
-
     /// Position immediately after `span` ends — where a `: T` label is anchored.
     fn position_after(&self, span: Span) -> Position {
         let line = span.end_line.saturating_sub(1) as u32;
@@ -121,7 +114,7 @@ impl HintCollector<'_> {
     /// type for `binding_id` (e.g. the binding sits inside a function whose
     /// body the elaborator bailed on).
     fn push_type_hint(&mut self, binding_id: ast::AstId, name_span: Span) {
-        let Some(type_name) = self.ctx.sem.local_type_name(&self.key(binding_id)) else {
+        let Some(type_name) = self.ctx.sem.local_type_name(binding_id) else {
             return;
         };
         self.hints.push(InlayHint {
@@ -213,14 +206,14 @@ impl HintCollector<'_> {
         let def_key = self
             .ctx
             .sem
-            .referenced_symbol(&self.key(trailing_id))
-            .or_else(|| self.ctx.sem.referenced_symbol(&self.key(ident.id)))?;
-        if let Some(symbol) = self.ctx.sem.symbol_at(&def_key)
+            .referenced_symbol(trailing_id)
+            .or_else(|| self.ctx.sem.referenced_symbol(ident.id))?;
+        if let Some(symbol) = self.ctx.sem.symbol_at(def_key)
             && let SymbolKind::Function(f) = &symbol.kind
         {
             return Some(f.params.clone());
         }
-        let func = self.ctx.sem.function_at(&def_key)?;
+        let func = self.ctx.sem.function_at(def_key)?;
         Some(filter_non_self_param_names(func))
     }
 
@@ -251,11 +244,8 @@ impl HintCollector<'_> {
     /// is the use→def target of `method_id_at_call`. Returns `None` for
     /// synthetic / unresolved call sites.
     fn method_param_names(&self, method_id_at_call: ast::AstId) -> Option<Vec<String>> {
-        let def_key = self
-            .ctx
-            .sem
-            .referenced_symbol(&self.key(method_id_at_call))?;
-        let func = self.ctx.sem.function_at(&def_key)?;
+        let def_key = self.ctx.sem.referenced_symbol(method_id_at_call)?;
+        let func = self.ctx.sem.function_at(def_key)?;
         Some(filter_non_self_param_names(func))
     }
 

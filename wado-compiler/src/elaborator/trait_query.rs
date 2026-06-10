@@ -37,14 +37,14 @@ pub(crate) fn canonical_decl_key_with(
             .unwrap_or_else(|| name.to_string());
         let canonical = symbols
             .lookup_in_module(src, &original)
-            .map(|sym| sym.defined_at.module.clone())
+            .map(|sym| sym.module_source().clone())
             .unwrap_or_else(|| src.clone());
         return (canonical, original);
     }
     if let Some(src) = imports.effect_sources.get(name) {
         let canonical = symbols
             .lookup_in_module(src, name)
-            .map(|sym| sym.defined_at.module.clone())
+            .map(|sym| sym.module_source().clone())
             .unwrap_or_else(|| src.clone());
         return (canonical, name.to_string());
     }
@@ -56,7 +56,7 @@ pub(crate) fn canonical_decl_key_with(
         return (current_module_source.clone(), name.to_string());
     }
     if let Some(sym) = symbols.lookup(current_module_source, name) {
-        return (sym.defined_at.module.clone(), name.to_string());
+        return (sym.module_source().clone(), name.to_string());
     }
     if let Some(key) = trait_env.find_trait_decl_key(name) {
         return key;
@@ -119,11 +119,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Like [`Self::find_trait_decl_methods`] but also returns the module that
-    /// owns the trait declaration. Callers that resolve a trait *default*
-    /// method body need the owning module: the body's AST nodes belong to it,
-    /// so the per-`AstId` facts the walk records must be keyed under that
-    /// module (via `ann_module_override`), not the impl module that triggered
-    /// the synthesis.
+    /// owns the trait declaration, for callers that need to attribute a trait
+    /// *default* method body to its declaring module (e.g. diagnostics).
+    /// Fact keying needs no module qualifier: the body's nodes carry their
+    /// own globally-unique `AstId`s.
     pub(super) fn find_trait_decl_methods_with_module(
         &self,
         trait_name: &str,

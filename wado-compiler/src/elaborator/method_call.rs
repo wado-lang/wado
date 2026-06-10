@@ -855,7 +855,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(method_ast_id) =
                 self.find_impl_method_ast_id(&method_module_source, &base_struct_name, method_name)
         {
-            self.record_reference_to_decl(method_id, &method_module_source, method_ast_id);
+            self.record_reference_to_def(method_id, method_ast_id);
         }
 
         let func = FunctionRef {
@@ -1518,7 +1518,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(method_ast_id) =
             self.find_impl_method_ast_id(&struct_module, &struct_name, &static_call.method)
         {
-            self.record_reference_to_decl(static_call.method_id, &struct_module, method_ast_id);
+            self.record_reference_to_def(static_call.method_id, method_ast_id);
         }
 
         let func_ref = FunctionRef {
@@ -1536,7 +1536,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Result::<…>::Ok`), yielding an empty struct name. Keyed on the
         // `StaticMethodCallExpr`'s own `AstId`; variant-ctor turbofish
         // shapes are handled by reify before this fact is consulted.
-        let key = self.ann_key(static_call.id);
+        let key = static_call.id;
         self.sem.types.static_method_dispatch.insert(
             key,
             super::sem::types::StaticMethodDispatch {
@@ -2882,7 +2882,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, is_mut)| is_mut)
             .collect();
         self.sem.types.static_method_dispatch.insert(
-            self.ann_key(call_id),
+            call_id,
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref,
                 param_is_mut,

@@ -24,37 +24,24 @@
 //! driver re-installs the populated instance back into
 //! `state.module_semantics` afterwards.
 
+use crate::ast::AstId;
 use crate::hashmap::IndexMap;
-use crate::symbol::{Symbol, SymbolKey};
+use crate::symbol::Symbol;
 
 /// `use → def` edges and locally defined symbols for one module.
 ///
-/// # Caveat: transient cross-module entries
-///
-/// The keys *almost always* belong to the owning module: every record site
-/// (`Elaborator::record_reference` etc.) builds the use-side key from
-/// `self.current_module_source`. The exception is
-/// [`super::super::Elaborator::with_module_perspective`], which swaps
-/// `current_module_source` to a foreign module while leaving `self.sem`
-/// pointing at the outer module's `ModuleSemantics`. Any record calls inside
-/// that scope tag their use-key with the foreign module but still write into
-/// the outer module's bindings.
-///
-/// Today's only consumer ([`crate::semantics::semantics_with_logger`]) flattens
-/// every module's bindings into a single `Semantics::references` map keyed by
-/// the full `SymbolKey`, so the cross-module entries land in the right place
-/// regardless of which `ModuleBindings` they passed through. The future
-/// per-module reify pass (Stage 5) will need to either teach
-/// `with_module_perspective` to swap `bindings` / `types` too, or accept that
-/// these maps are a flat-store-by-construction.
+/// Keys are bare [`AstId`]s — globally unique, so an edge recorded while a
+/// walk visits foreign AST (e.g. under
+/// [`super::super::Elaborator::with_module_perspective`]) still names its node
+/// exactly, whichever module's `ModuleBindings` it lands in; the sole consumer
+/// ([`crate::semantics::semantics_with_logger`]) flattens them into single
+/// `Semantics` maps. Def-side values are bare `AstId`s too; navigation
+/// recovers a def's module from its space (`Semantics::module_of_id`).
 #[derive(Default, Clone)]
 pub(crate) struct ModuleBindings {
-    /// `(module, IdentExpr.id) → (module, defining AstId)`. See the
-    /// struct-level "Caveat: transient cross-module entries" note for when
-    /// the use-side key's module does not match the owning module.
-    pub(crate) references: IndexMap<SymbolKey, SymbolKey>,
+    /// `IdentExpr.id → defining AstId`.
+    pub(crate) references: IndexMap<AstId, AstId>,
     /// Locally-defined [`Symbol`]s (let bindings, parameters, closure
-    /// parameters) keyed by the binding's defining [`SymbolKey`]. See the
-    /// struct-level "Caveat: transient cross-module entries" note.
-    pub(crate) local_symbols: IndexMap<SymbolKey, Symbol>,
+    /// parameters) keyed by the binding's defining [`AstId`].
+    pub(crate) local_symbols: IndexMap<AstId, Symbol>,
 }

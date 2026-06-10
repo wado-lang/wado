@@ -417,7 +417,7 @@ impl TraitEnv {
                 return (ModuleSource::primitive(), name.to_string());
             }
             if let Some(sym) = symbols.lookup_in_module(module_source, name) {
-                return (sym.defined_at.module.clone(), sym.name.clone());
+                return (sym.module_source().clone(), sym.name.clone());
             }
             if let Some(key) = decl_index.keys().find(|(_, n)| n == name) {
                 return key.clone();
