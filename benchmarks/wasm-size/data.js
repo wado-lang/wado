@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781125601516,
+  "lastUpdate": 1781135640813,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32089,6 +32089,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d3e4eec98d30d35fdc98a74b072b4bf523140099"
         },
         "date": 1781125601281,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0377454dbf856525e39135fa2687d9c4c53f26c0",
+          "message": "Merge pull request #1353 from wado-lang/claude/ci-tidy-mise-format-p2frfw\n\nfeat(formatter): enforce Wado formatting in CI and stop dropping comments",
+          "timestamp": "2026-06-11T08:46:05+09:00",
+          "tree_id": "f7a1f40370129c9f73a1ab19413a42881ac9b348",
+          "url": "https://github.com/wado-lang/wado/commit/0377454dbf856525e39135fa2687d9c4c53f26c0"
+        },
+        "date": 1781135640519,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
