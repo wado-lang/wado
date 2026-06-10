@@ -70,7 +70,9 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
 /// by `elide_local`; catches locals whose address-taken status is not in
 /// the function's static `address_taken_locals` set (e.g. callee locals
 /// that the inliner remapped into this body without updating the set).
-fn collect_address_taken_in_body(body: &Body, out: &mut IndexSet<u32>) {
+/// Also used by `licm`'s arithmetic hoisting to exclude leaves the
+/// `ValueGraph` cannot model writes through.
+pub(super) fn collect_address_taken_in_body(body: &Body, out: &mut IndexSet<u32>) {
     collect_address_taken_node(body, NodeRef::Block(body.root), out);
 }
 

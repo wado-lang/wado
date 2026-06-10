@@ -28,7 +28,7 @@
 //!   with `Opaque`.
 
 use crate::hashmap::IndexMap;
-use crate::nir::{NirBinaryOp, NirParam, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
 };
@@ -140,6 +140,15 @@ pub struct ValueGraphBuild {
     /// Per-loop variance thresholds, keyed by the loop body's `BlockId`.
     /// Consulted by [`ValueGraphBuild::is_loop_invariant`]; see [`LoopScope`].
     pub loop_scopes: IndexMap<BlockId, LoopScope>,
+    /// Per-loop snapshot of `current_value` taken right before loop entry
+    /// (before the reassigned-local opaques are seeded), keyed by the loop
+    /// body's `BlockId`. `entry[idx]` is the `ValueId` a read of local `idx`
+    /// would produce in the loop's pre-header. A hoisting pass may move a
+    /// pure computation out of the loop exactly when each `Local` leaf's
+    /// value *at the use site* equals its pre-header value — mere
+    /// cross-iteration invariance is not enough (`loop { x = 5; … x + n … }`
+    /// has an invariant use value that differs from the pre-header `x`).
+    pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
 /// Variance thresholds the builder records for one loop, so a consumer can
@@ -231,10 +240,13 @@ impl ValueGraphBuild {
 
 /// Build the `ValueGraph` for one function body.
 ///
-/// `params` seed `current_value` with one fresh `Opaque` per parameter, so a
-/// `Local { index: param.local_index }` read returns that Opaque every time
-/// until the parameter is reassigned (which the builder picks up the same
-/// way as any other `Assign`).
+/// `param_locals` are the local indices of the function's parameters; each
+/// seeds `current_value` with one fresh `Opaque`, so a `Local` read returns
+/// that Opaque every time until the parameter is reassigned (which the
+/// builder picks up the same way as any other `Assign`). An unseeded local's
+/// first read mints an equivalent fallback `Opaque`, but only up-front
+/// seeding makes parameters visible in the loop-entry snapshots
+/// (`loop_entry_values`), which are taken before any in-loop read.
 ///
 /// `alias_unsafe` are locals whose object is reference-aliased (the caller's
 /// `address_taken_locals` / `stores_aliased_locals`, e.g. the `with stores[p]`
@@ -244,17 +256,18 @@ impl ValueGraphBuild {
 /// effect's "no field forwarding for aliased locals" contract is upheld.
 pub fn build(
     body: &Body,
-    params: &[NirParam],
+    param_locals: &[u32],
     alias_unsafe: &crate::hashmap::IndexSet<u32>,
 ) -> ValueGraphBuild {
     let mut b = Builder::new(body, alias_unsafe);
-    b.seed_params(params);
+    b.seed_params(param_locals);
     b.walk_block(body.root);
     ValueGraphBuild {
         pool: b.pool,
         value_of: b.value_of,
         literal_source: b.literal_source,
         loop_scopes: b.loop_scopes,
+        loop_entry_values: b.loop_entry_values,
     }
 }
 
@@ -286,6 +299,9 @@ struct Builder<'a> {
     /// Per-loop variance thresholds recorded by [`Self::walk_loop`]. See
     /// [`LoopScope`] / [`ValueGraphBuild::is_loop_invariant`].
     loop_scopes: IndexMap<BlockId, LoopScope>,
+    /// Per-loop pre-header `current_value` snapshots. See
+    /// [`ValueGraphBuild::loop_entry_values`].
+    loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
 impl<'a> Builder<'a> {
@@ -302,13 +318,14 @@ impl<'a> Builder<'a> {
             field_store: IndexMap::default(),
             alias_unsafe: unsafe_locals,
             loop_scopes: IndexMap::default(),
+            loop_entry_values: IndexMap::default(),
         }
     }
 
-    fn seed_params(&mut self, params: &[NirParam]) {
-        for param in params {
+    fn seed_params(&mut self, param_locals: &[u32]) {
+        for &idx in param_locals {
             let opaque = self.pool.fresh_opaque();
-            self.current_value.insert(param.local_index, opaque);
+            self.current_value.insert(idx, opaque);
         }
     }
 
@@ -1060,6 +1077,11 @@ impl<'a> Builder<'a> {
         // candidate loop-variant — but only `Opaque`s actually vary; see
         // `is_variant`.
         let value_threshold = self.pool.len() as u32;
+        // Pre-header snapshot: the value each local has just before the
+        // loop, before the reassigned-local opaques below overwrite the
+        // written ones. See `ValueGraphBuild::loop_entry_values`.
+        self.loop_entry_values
+            .insert(body_block, self.current_value.clone());
         for idx in &writes {
             if self.current_value.contains_key(idx) {
                 let opaque = self.pool.fresh_opaque();
@@ -1227,7 +1249,8 @@ mod tests {
 
     /// `build` with no reference-aliased locals — the common test case.
     fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
-        build(body, params, &crate::hashmap::IndexSet::default())
+        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
+        build(body, &param_locals, &crate::hashmap::IndexSet::default())
     }
 
     fn empty_body() -> Body {
@@ -2170,7 +2193,7 @@ mod tests {
         root_with(&mut body, vec![write, let_y]);
         let mut aliased = crate::hashmap::IndexSet::default();
         aliased.insert(0u32);
-        let r = build(&body, &[param_seed()], &aliased);
+        let r = build(&body, &[param_seed().local_index], &aliased);
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }

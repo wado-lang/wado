@@ -104,6 +104,13 @@ pub struct Engine<'a> {
     /// sets it via [`Engine::set_alias_unsafe_locals`] before the first
     /// `value` query.
     alias_unsafe_locals: IndexSet<u32>,
+    /// Local indices of the owning function's parameters, seeded as stable
+    /// `Opaque`s by the `ValueGraph` builder. The builder's lazy
+    /// first-read fallback is observationally identical for value queries,
+    /// but only up-front seeding makes parameters visible in the loop-entry
+    /// snapshots [`Engine::loop_entry_value`] reads, so passes that consume
+    /// those (licm) must call [`Engine::set_param_locals`] first.
+    param_locals: Vec<u32>,
 }
 
 impl<'a> Engine<'a> {
@@ -124,6 +131,7 @@ impl<'a> Engine<'a> {
             locals,
             value_graph: None,
             alias_unsafe_locals: IndexSet::default(),
+            param_locals: Vec::new(),
         };
         engine.build_parents();
         engine.build_uses();
@@ -185,6 +193,28 @@ impl<'a> Engine<'a> {
             .is_loop_invariant(loop_body, v)
     }
 
+    /// The `ValueId` a read of `local` would produce in the pre-header of
+    /// the loop whose body block is `loop_body` (the builder's
+    /// `current_value` snapshot at loop entry). `None` when the loop is
+    /// unrecorded or the local was unbound at that point. A hoisting pass
+    /// may move a pure expression to the pre-header exactly when each of
+    /// its `Local` leaves' use-site value equals this pre-header value —
+    /// see `ValueGraphBuild::loop_entry_values`.
+    pub fn loop_entry_value(
+        &mut self,
+        loop_body: BlockId,
+        local: u32,
+    ) -> Option<crate::nir_value_graph::ValueId> {
+        self.ensure_value_graph();
+        self.value_graph
+            .as_ref()
+            .unwrap()
+            .loop_entry_values
+            .get(&loop_body)?
+            .get(&local)
+            .copied()
+    }
+
     /// Drop the cached `ValueGraph` so the next [`Engine::value`] call
     /// rebuilds. Used by rules that intend to query the value graph again
     /// after a structural rewrite that would invalidate the prior build.
@@ -204,17 +234,30 @@ impl<'a> Engine<'a> {
         }
     }
 
+    /// Record the owning function's parameter local indices so the
+    /// lazily-built `ValueGraph` seeds them up front (see the field doc on
+    /// `param_locals`). Must be called before the first value query; a later
+    /// change forces a rebuild on next query.
+    pub fn set_param_locals(&mut self, locals: Vec<u32>) {
+        if self.param_locals != locals {
+            self.param_locals = locals;
+            self.value_graph = None;
+        }
+    }
+
     fn ensure_value_graph(&mut self) {
         if self.value_graph.is_some() {
             return;
         }
-        // Pass `&[]` for params: the builder's `read_local` fallback caches
-        // an `Opaque` on first read, which is observationally identical to
-        // up-front seeding as long as the engine never needs non-`Opaque`
-        // parameter values. Wire `params` through `Engine::new` if that
-        // changes.
-        let build =
-            crate::nir_value_graph::builder::build(&*self.body, &[], &self.alias_unsafe_locals);
+        // `param_locals` is empty unless a pass set it: the builder's
+        // `read_local` fallback caches an `Opaque` on first read, which is
+        // observationally identical to up-front seeding for value queries.
+        // Passes consuming loop-entry snapshots set the params explicitly.
+        let build = crate::nir_value_graph::builder::build(
+            &*self.body,
+            &self.param_locals,
+            &self.alias_unsafe_locals,
+        );
         self.value_graph = Some(build);
     }
 
