@@ -5321,26 +5321,6 @@ pub fn u128::from_pair(low: u64, high: u64) -> u128 {
     return u128 { low: low, high: high };
 }
 
-pub fn u128::from_string(s: String) -> u128 {
-    let mut result: u128 = "core::prelude/int128.wado::u128::zero"();
-    let mut i: i32 = 0;
-    let len: i32 = s.String::len();
-    let bytes: Array<u8> = s.String::internal_raw_bytes();
-    let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
-    loop {
-        if !(i < len) {
-            break;
-        }
-        let byte: u8 = core::builtin::array_get_u8(&bytes, i);
-        let digit: i32 = (byte as i32 - '0' as i32);
-        if ((0 <= digit) && (digit <= 9)) {
-            result = result."u128^Mul::mul"(&ten)."u128^Add::add"(&"core::prelude/int128.wado::u128::from_u64"(digit as u64));
-        }
-        i = (i + 1);
-    }
-    return result;
-}
-
 pub fn u128::from_str_hex(s: &String) -> Result<u128, ParseIntError> {
     return "core::prelude/int128.wado::u128::from_str_radix"(s, 16);
 }
@@ -5381,14 +5361,143 @@ pub fn u128::high(self: &u128) -> u64 {
     return self.high;
 }
 
-pub fn u128::add(self: &u128, other: &u128) -> u128 {
-    let [lo, hi] = core::builtin::i64_add128(self.low as i64, self.high as i64, other.low as i64, other.high as i64);
-    return u128 { low: lo as u64, high: hi as u64 };
+pub fn u128::from_i128(val: i128) -> u128 {
+    return u128 { low: val.low, high: val.high as u64 };
 }
 
-pub fn u128::sub(self: &u128, other: &u128) -> u128 {
-    let [lo, hi] = core::builtin::i64_sub128(self.low as i64, self.high as i64, other.low as i64, other.high as i64);
-    return u128 { low: lo as u64, high: hi as u64 };
+fn u128::round_to_mantissa(self: &u128, mant_bits: i32) -> [u64, i64] {
+    __assert_0: {
+        let __v0: u64 = self.high;
+        let __cond: bool = (__v0 != 0);
+        if !__cond {
+            core::builtin::cold_path();
+            core::internal::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(128);
+                __r.String::push_str(&"Assertion failed in ");
+                __r.String::push_str(&"u128::round_to_mantissa");
+                __r.String::push_str(&" at ");
+                __r.String::push_str(&"core:prelude/int128.wado");
+                __r.String::push_str(&":");
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 97 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&"\ncondition: self.high != 0\n");
+                __r.String::push_str(&"self.high: ");
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<u64> { value: __v0 }."u64^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&"\n");
+                break __tmpl: __r;
+            });
+        }
+    }
+    let hbits: i64 = (64 - core::builtin::i64_clz(self.high as i64));
+    let shift: i64 = (hbits + (62 - mant_bits) as i64);
+    let mut a: u64 = 0;
+    let mut sticky: u64 = 0;
+    if (shift >= 64) {
+        let t: u64 = (shift - 64) as u64;
+        a = (self.high >> t);
+        if ((self.low != 0) || ((self.high & ((1 << t) - 1)) != 0)) {
+            sticky = 1;
+        }
+    } else {
+        let sh: u64 = shift as u64;
+        a = ((self.low >> sh) | (self.high << (64 - sh)));
+        if ((self.low & ((1 << sh) - 1)) != 0) {
+            sticky = 1;
+        }
+    }
+    a = (a | sticky);
+    if ((a & 4) != 0) {
+        a = (a | 1);
+    }
+    a = (a + 1);
+    a = (a >> 2);
+    let mut exp: i64 = ((64 + hbits) - 1);
+    if ((a >> mant_bits as u64) != 0) {
+        a = (a >> 1);
+        exp = (exp + 1);
+    }
+    __assert_1: {
+        let __v0: u64 = a;
+        let __v1: u64 = (__v0 >> (mant_bits - 1) as u64);
+        let __cond: bool = (__v1 == 1);
+        if !__cond {
+            core::builtin::cold_path();
+            core::internal::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(180);
+                __r.String::push_str(&"Assertion failed in ");
+                __r.String::push_str(&"u128::round_to_mantissa");
+                __r.String::push_str(&" at ");
+                __r.String::push_str(&"core:prelude/int128.wado");
+                __r.String::push_str(&":");
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 133 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&"\ncondition: a >> mant_bits - 1 as u64 == 1\n");
+                __r.String::push_str(&"a: ");
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<u64> { value: __v0 }."u64^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&"\n");
+                __r.String::push_str(&"a >> mant_bits - 1 as u64: ");
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<u64> { value: __v1 }."u64^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&"\n");
+                break __tmpl: __r;
+            });
+        }
+    }
+    return [a, exp];
+}
+
+pub fn u128::as_f64(self: &u128) -> f64 {
+    if (self.high == 0) {
+        return self.low as f64;
+    }
+    let __pattern_temp_0: [u64, i64] = self.u128::round_to_mantissa(53);
+    let m: u64 = __pattern_temp_0.0;
+    let exp: i64 = __pattern_temp_0.1;
+    let mut result: f64 = m as f64;
+    let mut k: i64 = (exp - 52);
+    loop {
+        if !(k >= 16) {
+            break;
+        }
+        result = (result * 65536.0);
+        k = (k - 16);
+    }
+    loop {
+        if !(k > 0) {
+            break;
+        }
+        result = (result * 2.0);
+        k = (k - 1);
+    }
+    return result;
+}
+
+pub fn u128::as_f32(self: &u128) -> f32 {
+    if (self.high == 0) {
+        return self.low as f32;
+    }
+    let __pattern_temp_0: [u64, i64] = self.u128::round_to_mantissa(24);
+    let m: u64 = __pattern_temp_0.0;
+    let exp: i64 = __pattern_temp_0.1;
+    let mut result: f32 = m as f32;
+    let mut k: i64 = (exp - 23);
+    loop {
+        if !(k >= 16) {
+            break;
+        }
+        result = (result * 65536.0);
+        k = (k - 16);
+    }
+    loop {
+        if !(k > 0) {
+            break;
+        }
+        result = (result * 2.0);
+        k = (k - 1);
+    }
+    return result;
 }
 
 pub fn u128::div_rem(self: &u128, divisor: &u128) -> [u128, u128] {
@@ -5455,6 +5564,10 @@ pub fn u128::to_string(self: &u128) -> String {
 }
 
 fn u128::fmt_decimal(self: &u128, f: &mut Formatter) {
+    self.u128::fmt_decimal_magnitude(f, false);
+}
+
+fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
     if *self."u128^Eq::eq"(&"core::prelude/int128.wado::u128::from_u64"(0)) {
         let offset: i32 = f.Formatter::prepare_int_write(false, "", 1);
         let mut arr: Array<u8> = f.buf.String::internal_raw_bytes();
@@ -5462,7 +5575,6 @@ fn u128::fmt_decimal(self: &u128, f: &mut Formatter) {
         return;
     }
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
-    let mut temp: u128 = "$value_copy$T106"(*self);
     let mut digit_count: i32 = 0;
     let mut temp: u128 = "$value_copy$T106"(*self);
     loop {
@@ -5474,7 +5586,7 @@ fn u128::fmt_decimal(self: &u128, f: &mut Formatter) {
         }
         temp = temp."u128^Div::div"(&ten);
     }
-    let offset: i32 = f.Formatter::prepare_int_write(false, "", digit_count);
+    let offset: i32 = f.Formatter::prepare_int_write(is_neg, "", digit_count);
     let mut arr: Array<u8> = f.buf.String::internal_raw_bytes();
     let mut pos: i32 = (offset + digit_count);
     let mut temp: u128 = "$value_copy$T106"(*self);
@@ -5488,6 +5600,34 @@ fn u128::fmt_decimal(self: &u128, f: &mut Formatter) {
             core::builtin::array_set_u8(&mut arr, pos, ('0' as i32 + digit) as u8);
         }
         temp = temp."u128^Div::div"(&ten);
+    }
+    __assert_0: {
+        let __v0: i32 = pos;
+        let __v1: i32 = offset;
+        let __cond: bool = (__v0 == __v1);
+        if !__cond {
+            core::builtin::cold_path();
+            core::internal::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(146);
+                __r.String::push_str(&"Assertion failed in ");
+                __r.String::push_str(&"u128::fmt_decimal_magnitude");
+                __r.String::push_str(&" at ");
+                __r.String::push_str(&"core:prelude/int128.wado");
+                __r.String::push_str(&":");
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 312 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&"\ncondition: pos == offset\n");
+                __r.String::push_str(&"pos: ");
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&"\n");
+                __r.String::push_str(&"offset: ");
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v1 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&"\n");
+                break __tmpl: __r;
+            });
+        }
     }
 }
 
@@ -5506,37 +5646,11 @@ fn u128::fmt_base(self: &u128, f: &mut Formatter, base: i32, upper: bool, prefix
     let digit_count: i32 = if is_zero {
         1;
     } else {
-        let mut highest_bit: i32 = 0;
-        let h: i64 = self.high as i64;
-        let l: i64 = self.low as i64;
-        let zero: i64 = 0;
-        if (h != zero) {
-            let mut b: i32 = 63;
-            loop {
-                if !(b >= 0) {
-                    break;
-                }
-                let one: i64 = 1;
-                if (((h >> b as i64) & one) != zero) {
-                    highest_bit = (64 + b);
-                    break;
-                }
-                b = (b - 1);
-            }
+        let highest_bit: i32 = if (self.high != 0) {
+            (127 - core::builtin::i64_clz(self.high as i64) as i32);
         } else {
-            let mut b: i32 = 63;
-            loop {
-                if !(b >= 0) {
-                    break;
-                }
-                let one: i64 = 1;
-                if (((l >> b as i64) & one) != zero) {
-                    highest_bit = b;
-                    break;
-                }
-                b = (b - 1);
-            }
-        }
+            (63 - core::builtin::i64_clz(self.low as i64) as i32);
+        };
         ((highest_bit / bits_per_digit) + 1);
     };
     let offset: i32 = f.Formatter::prepare_int_write(false, prefix, digit_count);
@@ -5567,6 +5681,34 @@ fn u128::fmt_base(self: &u128, f: &mut Formatter, base: i32, upper: bool, prefix
             let hi_bits: u64 = (hi << (64 - shift_u64));
             lo = ((lo >> shift_u64) | hi_bits);
             hi = (hi >> shift_u64);
+        }
+        __assert_0: {
+            let __v0: i32 = pos;
+            let __v1: i32 = offset;
+            let __cond: bool = (__v0 == __v1);
+            if !__cond {
+                core::builtin::cold_path();
+                core::internal::panic(__tmpl: {
+                    let mut __r: String = "core::prelude/string.wado::String::with_capacity"(146);
+                    __r.String::push_str(&"Assertion failed in ");
+                    __r.String::push_str(&"u128::fmt_base");
+                    __r.String::push_str(&" at ");
+                    __r.String::push_str(&"core:prelude/int128.wado");
+                    __r.String::push_str(&":");
+                    let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                    Box<i32> { value: 365 }."i32^Display::fmt"(&mut __f);
+                    __r.String::push_str(&"\ncondition: pos == offset\n");
+                    __r.String::push_str(&"pos: ");
+                    __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                    Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
+                    __r.String::push_str(&"\n");
+                    __r.String::push_str(&"offset: ");
+                    __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                    Box<i32> { value: __v1 }."i32^Inspect::inspect"(&mut __f);
+                    __r.String::push_str(&"\n");
+                    break __tmpl: __r;
+                });
+            }
         }
     }
 }
@@ -5735,40 +5877,6 @@ pub fn i128::from_pair(low: u64, high: i64) -> i128 {
     return i128 { low: low, high: high };
 }
 
-pub fn i128::from_string(s: String) -> i128 {
-    let len: i32 = s.String::len();
-    if (len == 0) {
-        return "core::prelude/int128.wado::i128::zero"();
-    }
-    let bytes: Array<u8> = s.String::internal_raw_bytes();
-    let first_byte: u8 = core::builtin::array_get_u8(&bytes, 0);
-    let is_negative: bool = (first_byte == '-' as u8);
-    let start_idx: i32 = if is_negative {
-        1;
-    } else {
-        0;
-    };
-    let mut abs_value: u128 = "core::prelude/int128.wado::u128::zero"();
-    let mut i: i32 = start_idx;
-    let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
-    loop {
-        if !(i < len) {
-            break;
-        }
-        let byte: u8 = core::builtin::array_get_u8(&bytes, i);
-        let digit: i32 = (byte as i32 - '0' as i32);
-        if ((0 <= digit) && (digit <= 9)) {
-            abs_value = abs_value."u128^Mul::mul"(&ten)."u128^Add::add"(&"core::prelude/int128.wado::u128::from_u64"(digit as u64));
-        }
-        i = (i + 1);
-    }
-    let result: i128 = i128 { low: abs_value.low, high: abs_value.high as i64 };
-    if is_negative {
-        return result.i128::neg();
-    }
-    return result;
-}
-
 pub fn i128::from_str_hex(s: &String) -> Result<i128, ParseIntError> {
     return "core::prelude/int128.wado::i128::from_str_radix"(s, 16);
 }
@@ -5779,7 +5887,7 @@ pub fn i128::from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntErro
 
 pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T179"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T181"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -5794,14 +5902,13 @@ pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) 
             if (v."u128^Ord::cmp"(&max_neg_abs) == Ordering::Greater) {
                 Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(IntErrorKind::NegOverflow));
             } else {
-                let pos: i128 = i128 { low: v.u128::low(), high: v.u128::high() as i64 };
-                Result<i128, ParseIntError>::Ok(pos.i128::neg());
+                Result<i128, ParseIntError>::Ok("core::prelude/int128.wado::i128::from_u128"(v)."i128^Neg::neg"());
             };
         } else {
             if (v."u128^Ord::cmp"(&max_pos) == Ordering::Greater) {
                 Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(IntErrorKind::PosOverflow));
             } else {
-                Result<i128, ParseIntError>::Ok(i128 { low: v.u128::low(), high: v.u128::high() as i64 });
+                Result<i128, ParseIntError>::Ok("core::prelude/int128.wado::i128::from_u128"(v));
             };
         },
         Err(k) => {
@@ -5835,30 +5942,31 @@ pub fn i128::is_negative(self: &i128) -> bool {
     return (self.high < 0);
 }
 
-pub fn i128::add(self: &i128, other: &i128) -> i128 {
-    let [lo, hi] = core::builtin::i64_add128(self.low as i64, self.high, other.low as i64, other.high);
-    return i128 { low: lo as u64, high: hi };
-}
-
-pub fn i128::sub(self: &i128, other: &i128) -> i128 {
-    let [lo, hi] = core::builtin::i64_sub128(self.low as i64, self.high, other.low as i64, other.high);
-    return i128 { low: lo as u64, high: hi };
-}
-
-pub fn i128::neg(self: &i128) -> i128 {
-    return "core::prelude/int128.wado::i128::zero"().i128::sub(self);
-}
-
 pub fn i128::abs_u128(self: &i128) -> u128 {
     if self.i128::is_negative() {
-        let neg: i128 = self.i128::neg();
-        return u128 { low: neg.low, high: neg.high as u64 };
+        return "core::prelude/int128.wado::u128::from_i128"(*self."i128^Neg::neg"());
     }
-    return u128 { low: self.low, high: self.high as u64 };
+    return "core::prelude/int128.wado::u128::from_i128"(*self);
 }
 
 pub fn i128::from_u128(val: u128) -> i128 {
     return i128 { low: val.low, high: val.high as i64 };
+}
+
+pub fn i128::as_f64(self: &i128) -> f64 {
+    let magnitude: f64 = self.i128::abs_u128().u128::as_f64();
+    if self.i128::is_negative() {
+        return -magnitude;
+    }
+    return magnitude;
+}
+
+pub fn i128::as_f32(self: &i128) -> f32 {
+    let magnitude: f32 = self.i128::abs_u128().u128::as_f32();
+    if self.i128::is_negative() {
+        return -magnitude;
+    }
+    return magnitude;
 }
 
 pub fn i128::div_rem(self: &i128, divisor: &i128) -> [i128, i128] {
@@ -5874,11 +5982,11 @@ pub fn i128::div_rem(self: &i128, divisor: &i128) -> [i128, i128] {
     let abs_remainder: u128 = result.1;
     let mut quotient: i128 = "core::prelude/int128.wado::i128::from_u128"(abs_quotient);
     if (dividend_neg != divisor_neg) {
-        quotient = quotient.i128::neg();
+        quotient = quotient."i128^Neg::neg"();
     }
     let mut remainder: i128 = "core::prelude/int128.wado::i128::from_u128"(abs_remainder);
     if dividend_neg {
-        remainder = remainder.i128::neg();
+        remainder = remainder."i128^Neg::neg"();
     }
     return [quotient, remainder];
 }
@@ -5895,124 +6003,7 @@ pub fn i128::to_string(self: &i128) -> String {
 }
 
 fn i128::fmt_decimal(self: &i128, f: &mut Formatter) {
-    let is_neg: bool = self.i128::is_negative();
-    let abs_val: u128 = self.i128::abs_u128();
-    if ((abs_val.low == 0) && (abs_val.high == 0)) {
-        let offset: i32 = f.Formatter::prepare_int_write(false, "", 1);
-        let mut arr: Array<u8> = f.buf.String::internal_raw_bytes();
-        core::builtin::array_set_u8(&mut arr, offset, '0' as u8);
-        return;
-    }
-    let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
-    let mut temp: u128 = "$value_copy$T106"(abs_val);
-    let mut digit_count: i32 = 0;
-    let mut temp: u128 = "$value_copy$T106"(abs_val);
-    loop {
-        if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
-            break;
-        }
-        __for_0_body: {
-            digit_count = (digit_count + 1);
-        }
-        temp = temp."u128^Div::div"(&ten);
-    }
-    let offset: i32 = f.Formatter::prepare_int_write(is_neg, "", digit_count);
-    let mut arr: Array<u8> = f.buf.String::internal_raw_bytes();
-    let mut pos: i32 = (offset + digit_count);
-    temp = "$value_copy$T106"(abs_val);
-    let mut temp: u128 = "$value_copy$T106"(abs_val);
-    loop {
-        if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
-            break;
-        }
-        __for_1_body: {
-            pos = (pos - 1);
-            let digit: i32 = temp."u128^Rem::rem"(&ten).u128::low() as i64 as i32;
-            core::builtin::array_set_u8(&mut arr, pos, ('0' as i32 + digit) as u8);
-        }
-        temp = temp."u128^Div::div"(&ten);
-    }
-}
-
-fn i128::fmt_base(self: &i128, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
-    let is_neg: bool = self.i128::is_negative();
-    let abs_val: u128 = self.i128::abs_u128();
-    let bits_per_digit: i32 = if (base == 2) {
-        1;
-    } else {
-        if (base == 8) {
-            3;
-        } else {
-            4;
-        };
-    };
-    let mask: u64 = (base - 1) as u64;
-    let is_zero: bool = abs_val."u128^Eq::eq"(&"core::prelude/int128.wado::u128::from_u64"(0));
-    let digit_count: i32 = if is_zero {
-        1;
-    } else {
-        let mut highest_bit: i32 = 0;
-        let h: i64 = abs_val.high as i64;
-        let l: i64 = abs_val.low as i64;
-        if (h != 0) {
-            let mut b: i32 = 63;
-            loop {
-                if !(b >= 0) {
-                    break;
-                }
-                let one: i64 = 1;
-                if (((h >> b as i64) & one) != 0) {
-                    highest_bit = (64 + b);
-                    break;
-                }
-                b = (b - 1);
-            }
-        } else {
-            let mut b: i32 = 63;
-            loop {
-                if !(b >= 0) {
-                    break;
-                }
-                let one: i64 = 1;
-                if (((l >> b as i64) & one) != 0) {
-                    highest_bit = b;
-                    break;
-                }
-                b = (b - 1);
-            }
-        }
-        ((highest_bit / bits_per_digit) + 1);
-    };
-    let offset: i32 = f.Formatter::prepare_int_write(is_neg, prefix, digit_count);
-    let mut arr: Array<u8> = f.buf.String::internal_raw_bytes();
-    if is_zero {
-        core::builtin::array_set_u8(&mut arr, offset, '0' as u8);
-    } else {
-        let mut pos: i32 = (offset + digit_count);
-        let mut lo: u64 = abs_val.low;
-        let mut hi: u64 = abs_val.high;
-        let shift_u64: u64 = bits_per_digit as u64;
-        loop {
-            if !((lo != 0) || (hi != 0)) {
-                break;
-            }
-            pos = (pos - 1);
-            let digit: i32 = (lo & mask) as i32;
-            let ch: i32 = if (digit < 10) {
-                ('0' as i32 + digit);
-            } else {
-                if upper {
-                    (('A' as i32 + digit) - 10);
-                } else {
-                    (('a' as i32 + digit) - 10);
-                };
-            };
-            core::builtin::array_set_u8(&mut arr, pos, ch as u8);
-            let hi_bits: u64 = (hi << (64 - shift_u64));
-            lo = ((lo >> shift_u64) | hi_bits);
-            hi = (hi >> shift_u64);
-        }
-    }
+    self.i128::abs_u128().u128::fmt_decimal_magnitude(f, self.i128::is_negative());
 }
 
 fn "i128^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<i128, ParseIntError> {
@@ -6036,35 +6027,35 @@ pub fn "i128^InspectAlt::inspect_alt"(self: &i128, f: &mut Formatter) {
 }
 
 pub fn "i128^Binary::fmt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 2, false, "");
+    "core::prelude/int128.wado::u128::from_i128"(*self).u128::fmt_base(f, 2, false, "");
 }
 
 pub fn "i128^Octal::fmt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 8, false, "");
+    "core::prelude/int128.wado::u128::from_i128"(*self).u128::fmt_base(f, 8, false, "");
 }
 
 pub fn "i128^LowerHex::fmt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 16, false, "");
+    "core::prelude/int128.wado::u128::from_i128"(*self).u128::fmt_base(f, 16, false, "");
 }
 
 pub fn "i128^UpperHex::fmt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 16, true, "");
+    "core::prelude/int128.wado::u128::from_i128"(*self).u128::fmt_base(f, 16, true, "");
 }
 
 pub fn "i128^BinaryAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 2, false, "0b");
+    "core::prelude/int128.wado::u128::from_i128"(*self).u128::fmt_base(f, 2, false, "0b");
 }
 
 pub fn "i128^OctalAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 8, false, "0o");
+    "core::prelude/int128.wado::u128::from_i128"(*self).u128::fmt_base(f, 8, false, "0o");
 }
 
 pub fn "i128^LowerHexAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 16, false, "0x");
+    "core::prelude/int128.wado::u128::from_i128"(*self).u128::fmt_base(f, 16, false, "0x");
 }
 
 pub fn "i128^UpperHexAlt::fmt_alt"(self: &i128, f: &mut Formatter) {
-    self.i128::fmt_base(f, 16, true, "0X");
+    "core::prelude/int128.wado::u128::from_i128"(*self).u128::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "i128^Eq::eq"(self: &i128, other: &i128) -> bool {
@@ -6107,7 +6098,7 @@ pub fn "i128^Mul::mul"(self: &i128, other: &i128) -> i128 {
 }
 
 pub fn "i128^Neg::neg"(self: &i128) -> i128 {
-    return "core::prelude/int128.wado::i128::zero"().i128::sub(self);
+    return "core::prelude/int128.wado::i128::zero"()."i128^Sub::sub"(&*self);
 }
 
 pub fn "i128^BitAnd::bitand"(self: &i128, other: &i128) -> i128 {
@@ -6226,19 +6217,53 @@ pub fn "u64^TryFrom<u128>::try_from"(value: u128) -> Result<u64, ConvertError> {
     return Result<u64, ConvertError>::Ok(value.u128::low());
 }
 
+pub fn "i64^TryFrom<u128>::try_from"(value: u128) -> Result<i64, ConvertError> {
+    if ((value.u128::high() != 0) || (value.u128::low() > 9223372036854775807 as u64)) {
+        return Result<i64, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for i64"));
+    }
+    return Result<i64, ConvertError>::Ok(value.u128::low() as i64);
+}
+
+pub fn "i128^TryFrom<u128>::try_from"(value: u128) -> Result<i128, ConvertError> {
+    if (value.u128::high() > 9223372036854775807 as u64) {
+        return Result<i128, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for i128"));
+    }
+    return Result<i128, ConvertError>::Ok("core::prelude/int128.wado::i128::from_u128"(value));
+}
+
 pub fn "i64^TryFrom<i128>::try_from"(value: i128) -> Result<i64, ConvertError> {
     let min: i128 = "core::prelude/int128.wado::i128::from_i64"(-9223372036854775808 as i64);
     let max: i128 = "core::prelude/int128.wado::i128::from_i64"(9223372036854775807 as i64);
-    if ((value."i128^Ord::cmp"(&min) == Ordering::Less) || (value."i128^Ord::cmp"(&max) == Ordering::Greater)) {
+    if !{
+        let __m0: i128 = value;
+        ((min."i128^Ord::cmp"(&__m0) != Ordering::Greater) && (__m0."i128^Ord::cmp"(&max) != Ordering::Greater));
+    } {
         return Result<i64, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for i64"));
     }
     return Result<i64, ConvertError>::Ok(value.i128::low() as i64);
 }
 
+pub fn "u64^TryFrom<i128>::try_from"(value: i128) -> Result<u64, ConvertError> {
+    if (value.i128::high() != 0) {
+        return Result<u64, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for u64"));
+    }
+    return Result<u64, ConvertError>::Ok(value.i128::low());
+}
+
+pub fn "u128^TryFrom<i128>::try_from"(value: i128) -> Result<u128, ConvertError> {
+    if value.i128::is_negative() {
+        return Result<u128, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for u128"));
+    }
+    return Result<u128, ConvertError>::Ok("core::prelude/int128.wado::u128::from_i128"(value));
+}
+
 pub fn "f64^TryFrom<i128>::try_from"(value: i128) -> Result<f64, ConvertError> {
     let max: i128 = "core::prelude/int128.wado::i128::from_i64"(9007199254740992);
     let min: i128 = "core::prelude/int128.wado::i128::from_pair"(18437736874454810624, -1);
-    if ((value."i128^Ord::cmp"(&min) == Ordering::Less) || (value."i128^Ord::cmp"(&max) == Ordering::Greater)) {
+    if !{
+        let __m0: i128 = value;
+        ((min."i128^Ord::cmp"(&__m0) != Ordering::Greater) && (__m0."i128^Ord::cmp"(&max) != Ordering::Greater));
+    } {
         return Result<f64, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for f64"));
     }
     return Result<f64, ConvertError>::Ok(value.i128::low() as i64 as f64);
@@ -6247,7 +6272,10 @@ pub fn "f64^TryFrom<i128>::try_from"(value: i128) -> Result<f64, ConvertError> {
 pub fn "f32^TryFrom<i128>::try_from"(value: i128) -> Result<f32, ConvertError> {
     let max: i128 = "core::prelude/int128.wado::i128::from_i64"(16777216);
     let min: i128 = "core::prelude/int128.wado::i128::from_pair"(18446744073692774400, -1);
-    if ((value."i128^Ord::cmp"(&min) == Ordering::Less) || (value."i128^Ord::cmp"(&max) == Ordering::Greater)) {
+    if !{
+        let __m0: i128 = value;
+        ((min."i128^Ord::cmp"(&__m0) != Ordering::Greater) && (__m0."i128^Ord::cmp"(&max) != Ordering::Greater));
+    } {
         return Result<f32, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for f32"));
     }
     return Result<f32, ConvertError>::Ok(value.i128::low() as i64 as f32);
@@ -6689,7 +6717,7 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 
 pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T179"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T181"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -7499,55 +7527,6 @@ fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, abs_val: i64, digit_co
     }
 }
 
-fn write_base_digits(arr: &mut Array<u8>, offset: i32, abs_val: i64, digit_count: i32, base: i32, upper: bool) {
-    let base64: i64 = base as i64;
-    let mut pos: i32 = (offset + digit_count);
-    if (abs_val == 0) {
-        core::builtin::array_set_u8(arr, offset, '0' as u8);
-    } else {
-        let mut temp: i64 = abs_val;
-        loop {
-            if !(temp > 0) {
-                break;
-            }
-            __for_0_body: {
-                pos = (pos - 1);
-                let digit: i32 = (temp % base64) as i32;
-                let ch: i32 = if (digit < 10) {
-                    ('0' as i32 + digit);
-                } else {
-                    if upper {
-                        (('A' as i32 + digit) - 10);
-                    } else {
-                        (('a' as i32 + digit) - 10);
-                    };
-                };
-                core::builtin::array_set_u8(arr, pos, ch as u8);
-            }
-            temp = (temp / base64);
-        }
-    }
-}
-
-fn count_digits_base(val: i64, base: i32) -> i32 {
-    if (val == 0) {
-        return 1;
-    }
-    let base64: i64 = base as i64;
-    let mut n: i32 = 0;
-    let mut t: i64 = val;
-    loop {
-        if !(t > 0) {
-            break;
-        }
-        __for_0_body: {
-            n = (n + 1);
-        }
-        t = (t / base64);
-    }
-    return n;
-}
-
 fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
     if (val_i64 == 0) {
         return 1;
@@ -8110,13 +8089,6 @@ fn i64::fmt_decimal(self: Box<i64>, f: &mut Formatter) {
         let offset: i32 = f.Formatter::prepare_int_write(is_negative, "", digit_count);
         "core::prelude/primitive.wado::write_decimal_digits"(&mut f.buf.String::internal_raw_bytes(), offset, abs_val, digit_count);
     }
-}
-
-fn i64::fmt_base(self: Box<i64>, is_negative: bool, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
-    let abs_val: i64 = self.value;
-    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_base"(abs_val, base);
-    let offset: i32 = f.Formatter::prepare_int_write(is_negative, prefix, digit_count);
-    "core::prelude/primitive.wado::write_base_digits"(&mut f.buf.String::internal_raw_bytes(), offset, abs_val, digit_count, base, upper);
 }
 
 fn i64::fmt_into(self: Box<i64>, f: &mut Formatter) {
@@ -9090,271 +9062,115 @@ pub fn "f64^UpperExp::fmt"(self: Box<f64>, f: &mut Formatter) {
 }
 
 pub fn "i8^Binary::fmt"(self: Box<i8>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
+    Box<u64> { value: self.value as u8 as u64 }.u64::fmt_base(f, 2, false, "");
 }
 
 pub fn "u8^Binary::fmt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 2, false, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 2, false, "");
 }
 
 pub fn "i16^Binary::fmt"(self: Box<i16>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
+    Box<u64> { value: self.value as u16 as u64 }.u64::fmt_base(f, 2, false, "");
 }
 
 pub fn "u16^Binary::fmt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 2, false, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 2, false, "");
 }
 
 pub fn "i32^Binary::fmt"(self: Box<i32>, f: &mut Formatter) {
-    let v: i32 = self.value;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 2, false, "");
 }
 
 pub fn "u32^Binary::fmt"(self: Box<u32>, f: &mut Formatter) {
-    let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
-        (val_i32 as i64 + 4294967296);
-    } else {
-        val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 2, false, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 2, false, "");
 }
 
 pub fn "i64^Binary::fmt"(self: Box<i64>, f: &mut Formatter) {
-    let v: i64 = self.value;
-    let is_neg: bool = (v < 0);
-    if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 2, false, "");
-    } else {
-        let abs_val: i64 = if is_neg {
-            (0 - v);
-        } else {
-            v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
-    }
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 2, false, "");
 }
 
 pub fn "i8^Octal::fmt"(self: Box<i8>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
+    Box<u64> { value: self.value as u8 as u64 }.u64::fmt_base(f, 8, false, "");
 }
 
 pub fn "u8^Octal::fmt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 8, false, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 8, false, "");
 }
 
 pub fn "i16^Octal::fmt"(self: Box<i16>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
+    Box<u64> { value: self.value as u16 as u64 }.u64::fmt_base(f, 8, false, "");
 }
 
 pub fn "u16^Octal::fmt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 8, false, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 8, false, "");
 }
 
 pub fn "i32^Octal::fmt"(self: Box<i32>, f: &mut Formatter) {
-    let v: i32 = self.value;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 8, false, "");
 }
 
 pub fn "u32^Octal::fmt"(self: Box<u32>, f: &mut Formatter) {
-    let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
-        (val_i32 as i64 + 4294967296);
-    } else {
-        val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 8, false, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 8, false, "");
 }
 
 pub fn "i64^Octal::fmt"(self: Box<i64>, f: &mut Formatter) {
-    let v: i64 = self.value;
-    let is_neg: bool = (v < 0);
-    if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 8, false, "");
-    } else {
-        let abs_val: i64 = if is_neg {
-            (0 - v);
-        } else {
-            v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
-    }
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 8, false, "");
 }
 
 pub fn "i8^LowerHex::fmt"(self: Box<i8>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
+    Box<u64> { value: self.value as u8 as u64 }.u64::fmt_base(f, 16, false, "");
 }
 
 pub fn "u8^LowerHex::fmt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, false, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, false, "");
 }
 
 pub fn "i16^LowerHex::fmt"(self: Box<i16>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
+    Box<u64> { value: self.value as u16 as u64 }.u64::fmt_base(f, 16, false, "");
 }
 
 pub fn "u16^LowerHex::fmt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, false, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, false, "");
 }
 
 pub fn "i32^LowerHex::fmt"(self: Box<i32>, f: &mut Formatter) {
-    let v: i32 = self.value;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 16, false, "");
 }
 
 pub fn "u32^LowerHex::fmt"(self: Box<u32>, f: &mut Formatter) {
-    let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
-        (val_i32 as i64 + 4294967296);
-    } else {
-        val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, false, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, false, "");
 }
 
 pub fn "i64^LowerHex::fmt"(self: Box<i64>, f: &mut Formatter) {
-    let v: i64 = self.value;
-    let is_neg: bool = (v < 0);
-    if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 16, false, "");
-    } else {
-        let abs_val: i64 = if is_neg {
-            (0 - v);
-        } else {
-            v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
-    }
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, false, "");
 }
 
 pub fn "i8^UpperHex::fmt"(self: Box<i8>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
+    Box<u64> { value: self.value as u8 as u64 }.u64::fmt_base(f, 16, true, "");
 }
 
 pub fn "u8^UpperHex::fmt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, true, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, "");
 }
 
 pub fn "i16^UpperHex::fmt"(self: Box<i16>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
+    Box<u64> { value: self.value as u16 as u64 }.u64::fmt_base(f, 16, true, "");
 }
 
 pub fn "u16^UpperHex::fmt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, true, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, "");
 }
 
 pub fn "i32^UpperHex::fmt"(self: Box<i32>, f: &mut Formatter) {
-    let v: i32 = self.value;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 16, true, "");
 }
 
 pub fn "u32^UpperHex::fmt"(self: Box<u32>, f: &mut Formatter) {
-    let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
-        (val_i32 as i64 + 4294967296);
-    } else {
-        val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, true, "");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, "");
 }
 
 pub fn "i64^UpperHex::fmt"(self: Box<i64>, f: &mut Formatter) {
-    let v: i64 = self.value;
-    let is_neg: bool = (v < 0);
-    if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 16, true, "");
-    } else {
-        let abs_val: i64 = if is_neg {
-            (0 - v);
-        } else {
-            v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
-    }
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, "");
 }
 
 pub fn "u64^Binary::fmt"(self: Box<u64>, f: &mut Formatter) {
@@ -9374,70 +9190,31 @@ pub fn "u64^UpperHex::fmt"(self: Box<u64>, f: &mut Formatter) {
 }
 
 pub fn "i8^BinaryAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+    Box<u64> { value: self.value as u8 as u64 }.u64::fmt_base(f, 2, false, "0b");
 }
 
 pub fn "u8^BinaryAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 2, false, "0b");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 2, false, "0b");
 }
 
 pub fn "i16^BinaryAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+    Box<u64> { value: self.value as u16 as u64 }.u64::fmt_base(f, 2, false, "0b");
 }
 
 pub fn "u16^BinaryAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 2, false, "0b");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 2, false, "0b");
 }
 
 pub fn "i32^BinaryAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
-    let v: i32 = self.value;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 2, false, "0b");
 }
 
 pub fn "u32^BinaryAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
-    let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
-        (val_i32 as i64 + 4294967296);
-    } else {
-        val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 2, false, "0b");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 2, false, "0b");
 }
 
 pub fn "i64^BinaryAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
-    let v: i64 = self.value;
-    let is_neg: bool = (v < 0);
-    if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 2, false, "0b");
-    } else {
-        let abs_val: i64 = if is_neg {
-            (0 - v);
-        } else {
-            v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
-    }
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 2, false, "0b");
 }
 
 pub fn "u64^BinaryAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
@@ -9445,70 +9222,31 @@ pub fn "u64^BinaryAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
 }
 
 pub fn "i8^OctalAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+    Box<u64> { value: self.value as u8 as u64 }.u64::fmt_base(f, 8, false, "0o");
 }
 
 pub fn "u8^OctalAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 8, false, "0o");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 8, false, "0o");
 }
 
 pub fn "i16^OctalAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+    Box<u64> { value: self.value as u16 as u64 }.u64::fmt_base(f, 8, false, "0o");
 }
 
 pub fn "u16^OctalAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 8, false, "0o");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 8, false, "0o");
 }
 
 pub fn "i32^OctalAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
-    let v: i32 = self.value;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 8, false, "0o");
 }
 
 pub fn "u32^OctalAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
-    let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
-        (val_i32 as i64 + 4294967296);
-    } else {
-        val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 8, false, "0o");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 8, false, "0o");
 }
 
 pub fn "i64^OctalAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
-    let v: i64 = self.value;
-    let is_neg: bool = (v < 0);
-    if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 8, false, "0o");
-    } else {
-        let abs_val: i64 = if is_neg {
-            (0 - v);
-        } else {
-            v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
-    }
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 8, false, "0o");
 }
 
 pub fn "u64^OctalAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
@@ -9516,70 +9254,31 @@ pub fn "u64^OctalAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
 }
 
 pub fn "i8^LowerHexAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+    Box<u64> { value: self.value as u8 as u64 }.u64::fmt_base(f, 16, false, "0x");
 }
 
 pub fn "u8^LowerHexAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, false, "0x");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, false, "0x");
 }
 
 pub fn "i16^LowerHexAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+    Box<u64> { value: self.value as u16 as u64 }.u64::fmt_base(f, 16, false, "0x");
 }
 
 pub fn "u16^LowerHexAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, false, "0x");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, false, "0x");
 }
 
 pub fn "i32^LowerHexAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
-    let v: i32 = self.value;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 16, false, "0x");
 }
 
 pub fn "u32^LowerHexAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
-    let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
-        (val_i32 as i64 + 4294967296);
-    } else {
-        val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, false, "0x");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, false, "0x");
 }
 
 pub fn "i64^LowerHexAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
-    let v: i64 = self.value;
-    let is_neg: bool = (v < 0);
-    if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 16, false, "0x");
-    } else {
-        let abs_val: i64 = if is_neg {
-            (0 - v);
-        } else {
-            v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
-    }
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, false, "0x");
 }
 
 pub fn "u64^LowerHexAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
@@ -9587,70 +9286,31 @@ pub fn "u64^LowerHexAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
 }
 
 pub fn "i8^UpperHexAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+    Box<u64> { value: self.value as u8 as u64 }.u64::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "u8^UpperHexAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, true, "0X");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "i16^UpperHexAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
-    let v: i32 = self.value as i32;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+    Box<u64> { value: self.value as u16 as u64 }.u64::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "u16^UpperHexAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
-    Box<i64> { value: self.value as i32 as i64 }.i64::fmt_base(false, f, 16, true, "0X");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "i32^UpperHexAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
-    let v: i32 = self.value;
-    let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
-        (0 - v as i64);
-    } else {
-        v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "u32^UpperHexAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
-    let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
-        (val_i32 as i64 + 4294967296);
-    } else {
-        val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, true, "0X");
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "i64^UpperHexAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
-    let v: i64 = self.value;
-    let is_neg: bool = (v < 0);
-    if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 16, true, "0X");
-    } else {
-        let abs_val: i64 = if is_neg {
-            (0 - v);
-        } else {
-            v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
-    }
+    Box<u64> { value: self.value as u64 }.u64::fmt_base(f, 16, true, "0X");
 }
 
 pub fn "u64^UpperHexAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
@@ -13721,7 +13381,7 @@ pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f:
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T315"(item));
+                f("$value_copy$T318"(item));
             },
             _ => {
                 break;
@@ -13735,7 +13395,7 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T315"(item)) {
+                if pred("$value_copy$T318"(item)) {
                     return Option<[i32, char]>::Some(item);
                 }
             },
@@ -13752,7 +13412,7 @@ pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T315"(item)) {
+                if pred("$value_copy$T318"(item)) {
                     return true;
                 }
             },
@@ -13769,7 +13429,7 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T315"(item)) {
+                if !pred("$value_copy$T318"(item)) {
                     return false;
                 }
             },
@@ -13822,7 +13482,7 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T315"(item)) {
+                if pred("$value_copy$T318"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -13839,12 +13499,12 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
     let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: [i32, char] = "$value_copy$T315"(first);
+            let mut acc: [i32, char] = "$value_copy$T318"(first);
             loop {
                 let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T315"(acc), "$value_copy$T315"(item));
+                        acc = f("$value_copy$T318"(acc), "$value_copy$T318"(item));
                     },
                     _ => {
                         break;
@@ -20871,7 +20531,7 @@ fn "$value_copy$T28"(v: [f64, f64]) -> [f64, f64] {
     return Tuple<f64,f64> { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T315"(v: [i32, char]) -> [i32, char] {
+fn "$value_copy$T318"(v: [i32, char]) -> [i32, char] {
     return Tuple<i32,char> { 0: v.0, 1: v.1 };
 }
 
@@ -20879,7 +20539,7 @@ fn "$value_copy$T41"(v: String) -> String {
     return String { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T179"(v: [bool, i32]) -> [bool, i32] {
+fn "$value_copy$T181"(v: [bool, i32]) -> [bool, i32] {
     return Tuple<bool,i32> { 0: v.0, 1: v.1 };
 }
 
