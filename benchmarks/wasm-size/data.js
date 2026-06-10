@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781051615773,
+  "lastUpdate": 1781059167969,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31781,6 +31781,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ad814e1ae876f3cb3ab15da7db538caa7d179886"
         },
         "date": 1781051615517,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "92e971b470d459b247ed8de27e5cd2278ed6ad8c",
+          "message": "Merge pull request #1344 from wado-lang/claude/wado-o2-wasm-bug-u3cku5\n\nfix: support casts from i128/u128 and two's-complement negative int formatting",
+          "timestamp": "2026-06-10T11:31:45+09:00",
+          "tree_id": "fdb98a68f35606999096b9617abe241066b5b196",
+          "url": "https://github.com/wado-lang/wado/commit/92e971b470d459b247ed8de27e5cd2278ed6ad8c"
+        },
+        "date": 1781059167540,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
