@@ -1,0 +1,38 @@
+// Bounds-check elimination through a chained derived cursor: the early
+// exit proves `pos + 3 < arr.len()`, and the access index is built in two
+// hops (`p = pos + 1; q = p + 2`). The guard-fact decomposition must sum
+// nested `Add` layers (`vn(q) = ((pos + 1) + 2)`) to match `pos + 3`, so
+// the check on `arr[q]` is eliminated at O2.
+
+use { println, Stdout } from "core:cli";
+
+fn pick(arr: List<i32>, pos: i32) -> i32 {
+    if pos + 3 >= arr.len() {
+        return 0;
+    }
+    let p = pos + 1;
+    let q = p + 2;
+    return arr[q];
+}
+
+fn opaque(n: i32) -> i32 {
+    if n <= 0 {
+        return 0;
+    }
+    return opaque(n - 1);
+}
+
+export fn run() with Stdout {
+    let arr: List<i32> = [10, 20, 30, 40, 50];
+    let base = opaque(7);
+    println(`{pick(arr, base)}`);
+    println(`{pick(arr, base + 4)}`);
+}
+
+__DATA__
+{
+    "stdout": "40\n0\n",
+    "wir_not_expect:O2": [
+        "index out of bounds"
+    ]
+}

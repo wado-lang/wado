@@ -183,24 +183,38 @@ impl GuardFact {
 }
 
 /// Decompose a value as `base + k` (`k >= 0` enforcement is the caller's):
-/// `Binary(Add, base, Int(k))` yields `(base, k)`, anything else `(v, 0)`.
-/// The `ValueGraph` already resolved copy chains and constant locals, so a
-/// source-level `i + offset_local` arrives here as `Add(vn(i), Int(k))` when
-/// the offset is a known constant.
+/// nested `Binary(Add, …, Int(k))` layers are peeled and their constants
+/// summed, so a chained derived cursor (`let p = pos + 1; let q = p + 2`)
+/// yields `(vn(pos), 3)` — the value graph resolves the copy chain, this
+/// resolves the addition chain. Constants that do not fit a non-negative
+/// `i64` (bit 63 set — a negative signed literal's bit pattern) and sums
+/// that would overflow stop the peel at the current layer, leaving the
+/// remaining `Add` opaque inside `base`, which only costs precision.
 fn decompose_add_const(engine: &mut Engine, v: ValueId) -> (ValueId, i64) {
-    if let ValueKind::Binary {
-        op: NirBinaryOp::Add,
-        lhs,
-        rhs,
-    } = engine.value_kind(v)
-    {
+    let mut base = v;
+    let mut total: i64 = 0;
+    loop {
+        let ValueKind::Binary {
+            op: NirBinaryOp::Add,
+            lhs,
+            rhs,
+        } = engine.value_kind(base)
+        else {
+            return (base, total);
+        };
         let (lhs, rhs) = (*lhs, *rhs);
-        if let ValueKind::Int(k) = engine.value_kind(rhs) {
-            #[allow(clippy::cast_possible_wrap)]
-            return (lhs, *k as i64);
-        }
+        let ValueKind::Int(k) = engine.value_kind(rhs) else {
+            return (base, total);
+        };
+        let Some(step) = i64::try_from(*k).ok().filter(|s| *s >= 0) else {
+            return (base, total);
+        };
+        let Some(sum) = total.checked_add(step) else {
+            return (base, total);
+        };
+        base = lhs;
+        total = sum;
     }
-    (v, 0)
 }
 
 /// The integer constant a value denotes, if its kind is `Int`. Bit patterns
