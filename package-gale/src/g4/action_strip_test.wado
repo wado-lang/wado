@@ -68,6 +68,17 @@ test "strip: preserves brace inside block comment" {
     assert result == g, `block-comment was modified: '{result}'`;
 }
 
+test "strip: char class with a literal '[' ends at the first unescaped ']'" {
+    // ANTLR4 char sets do not nest: a literal `[` inside is content and the
+    // set ends at the first unescaped `]` (lexer.wado:read_char_class).
+    // TypeScript's `~[*...[]` is the real corpus case. Depth tracking made
+    // action_strip stay "inside" past the true `]`, swallowing a following
+    // action `{ ... }` so it was never stripped (corrupting the oracle).
+    let g = "REGEX : ~[/[] ; r : 'a' { act(); } ;";
+    let result = strip_action_bodies(&g);
+    assert result == "REGEX : ~[/[] ; r : 'a'  ;", `got '{result}'`;
+}
+
 test "strip: removes catch [...] { ... } handlers" {
     let g = "start : 'a' ; catch [Exception e] { handle(e); }";
     let result = strip_action_bodies(&g);

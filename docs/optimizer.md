@@ -53,7 +53,7 @@ Gating affects only which functions a pass visits, never the IR a visit produces
 
 Allocation-elimination and aggregate passes:
 
-- `inline` — replace small pure non-recursive non-generic reference-free calls with their body; `#[inline]` ×5 threshold, `#[inline(always)]`/`(never)` force/block.
+- `inline` — replace small pure non-recursive non-generic reference-free calls with their body; `#[inline]` ×5 threshold, `#[inline(always)]`/`(never)` force/block. Cold call sites (after a `cold_path()` marker, mirroring the cost model's `block_cut`) are not inlined unless `#[inline(always)]` — the callee body would bloat the hot caller with code that rarely runs.
 - `sroa` — Scalar Replacement of Aggregates: decompose non-escaping (or reconstructible soft-escaping) struct/tuple locals into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — `List<Tuple<…>>` / `List<Struct>` → parallel `List<T_k>` (AoS → SoA) when every use matches the spine/index whitelist.
 - `sroa_param` — rewrite an internal `&S`/`&mut S` single-field-struct parameter to take the inner scalar, and the call-site allocation to the value; skips aliasing-sibling reference params.
@@ -109,7 +109,10 @@ NIR→WIR lowering (`wir_build/`) avoids redundant shapes in a few spots; these 
 5. Peephole + multi-field struct elimination — Wasm instruction-selection rewrites with no NIR analogue (constant-comparison/dead-`If` folding, `eqz`/negated-comparison folding, branchless increment, byte-mask/sign-extension folding, redundant `ref.cast`/`ref.test` elimination, nullability relaxation, `local.tee` fusion); multi-field struct local elimination; trivial labeled-block copy propagation.
 6. Write-only local elimination — for locals the WIR builder synthesises (`__match_scrut_N`, pair/multi-value temps) that no NIR pass can reach.
 7. Global cleanup — constant global-initializer promotion (`const_global.rs`); trivial init-guard removal.
-8. Final DCE + compaction — remove unreachable defined functions and unused GC types, then compact and reindex.
+8. Branch hints (`branch_hint.rs`) — `br_if` selection: `if cond { br N }` with an empty else collapses to `br_if N-1`, carrying any branch hint on the condition (runs after `init_guard`, whose matcher keys on the `If { GlobalGet, [Br] }` shape). Then trap-based hint inference: an `if` arm that always reaches an `unreachable` trap is hinted cold, and a `br_if` whose fall-through always traps is hinted likely-taken. Divergence alone (`br` / `return`) never counts as cold, and explicit hints (from `builtin::cold_path()`) always win. Inference also runs at `-O0`, keeping hints independent of the optimization level like the build-time `apply_cold_path_hints`.
+9. Final DCE + compaction — remove unreachable defined functions and unused GC types, then compact and reindex.
+
+Branch hints are transparent annotations: a `BranchHint` wraps an `if`/`br_if` condition, and any pass that matches on a condition's shape must look through it via `WirInstr::peel_hint` (or the hint blocks the rewrite). A pass that eliminates the branch drops the hint with it (`take_branch_hint`); a pass that logically negates a hinted condition or swaps hinted arms must flip `likely`. The emitter records a `metadata.code.branch_hint` entry for hints on `if` and `br_if` conditions; wasmtime (with `Config::wasm_branch_hinting`, which `wado run` enables) lays out the cold side out of line. For benchmarking, `-f no-branch-hinting` disables the feature: `cold_path()` lowers to a no-op at WIR build (keeping the NIR inliner's cold-cost exclusion identical in both configurations) and the inference pass is skipped, so no hint section is emitted.
 
 Shared facility: `optimize/mod_ref.rs` (`ModRef::of_expr`/`of_stmt`) returns a conservative mod/ref summary used by the move-safety predicates (`is_re_evaluation_safe`, `may_clobber`, `can_move_past`).
 

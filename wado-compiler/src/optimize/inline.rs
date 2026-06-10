@@ -687,6 +687,7 @@ pub fn inline_functions(
                     &project.type_table.borrow(),
                     &mut inlined_funcs,
                     &mut inline_counter,
+                    false,
                 );
             }
             func.locals = locals;
@@ -744,6 +745,13 @@ pub fn inline_functions(
 /// place (1:1); a `Let` / `Expr` / `Return` value gets a top-level inline
 /// attempt (which then re-scans the inlined body), while other statements
 /// recurse into their sub-expressions and sub-blocks.
+///
+/// `cold` marks a cold call-site context: once a `cold_path()` marker is seen,
+/// the rest of the block (and everything nested in it) is cold, mirroring
+/// [`block_cut`]. Calls at cold sites are not inlined (the callee body would
+/// bloat the hot caller with code that rarely runs) unless the callee is
+/// `#[inline(always)]`.
+#[allow(clippy::too_many_arguments)]
 fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
@@ -754,6 +762,7 @@ fn inline_calls_in_block(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
+    mut cold: bool,
 ) {
     enum Shape {
         TopLevel(ExprId),
@@ -763,6 +772,11 @@ fn inline_calls_in_block(
         None,
     }
     for stmt_id in body.blocks[block].stmts.clone() {
+        if let StmtKind::Expr(e) = &body.stmts[stmt_id].kind
+            && is_cold_path_call(body, *e)
+        {
+            cold = true;
+        }
         let shape = match &body.stmts[stmt_id].kind {
             StmtKind::Let { value, .. } => Shape::TopLevel(*value),
             StmtKind::Expr(expr) => Shape::TopLevel(*expr),
@@ -791,6 +805,7 @@ fn inline_calls_in_block(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    cold,
                 );
                 match &mut body.stmts[stmt_id].kind {
                     StmtKind::Let { value, .. } => *value = new_value,
@@ -809,6 +824,7 @@ fn inline_calls_in_block(
                 type_table,
                 inlined_funcs,
                 inline_counter,
+                cold,
             ),
             Shape::If(cond, tb, eb) => {
                 inline_calls_in_expr(
@@ -821,6 +837,7 @@ fn inline_calls_in_block(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    cold,
                 );
                 inline_calls_in_block(
                     body,
@@ -832,6 +849,7 @@ fn inline_calls_in_block(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    cold,
                 );
                 if let Some(eb) = eb {
                     inline_calls_in_block(
@@ -844,6 +862,7 @@ fn inline_calls_in_block(
                         type_table,
                         inlined_funcs,
                         inline_counter,
+                        cold,
                     );
                 }
             }
@@ -857,6 +876,7 @@ fn inline_calls_in_block(
                 type_table,
                 inlined_funcs,
                 inline_counter,
+                cold,
             ),
             Shape::None => {}
         }
@@ -877,6 +897,7 @@ fn inline_top_level(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
+    cold: bool,
 ) -> ExprId {
     let result = try_inline_call_expr(
         body,
@@ -887,6 +908,7 @@ fn inline_top_level(
         locals,
         type_table,
         inline_counter,
+        cold,
     )
     .or_else(|| {
         try_inline_method_call_expr(
@@ -898,6 +920,7 @@ fn inline_top_level(
             locals,
             type_table,
             inline_counter,
+            cold,
         )
     });
     if let Some((new_id, inlined_key)) = result {
@@ -914,6 +937,7 @@ fn inline_top_level(
             type_table,
             inlined_funcs,
             inline_counter,
+            cold,
         );
         new_id
     } else {
@@ -927,6 +951,7 @@ fn inline_top_level(
             type_table,
             inlined_funcs,
             inline_counter,
+            cold,
         );
         value
     }
@@ -1185,6 +1210,7 @@ fn try_inline_call_expr(
     locals: &mut Vec<NirLocal>,
     _type_table: &TypeTable,
     inline_counter: &mut u32,
+    cold: bool,
 ) -> Option<(ExprId, (ModuleSource, String))> {
     let (module_source, func_name, arg_ids): (ModuleSource, String, Vec<ExprId>) =
         match &caller.exprs[call_id].kind {
@@ -1197,6 +1223,11 @@ fn try_inline_call_expr(
         };
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
+    // A cold call site keeps the call: inlining there only bloats the hot
+    // caller. An explicit `#[inline(always)]` wins over the suppression.
+    if cold && candidate.inline_hint != InlineHint::Always {
+        return None;
+    }
     let callee = candidate.body.as_ref()?;
     let call_span = caller.exprs[call_id].span;
 
@@ -1238,6 +1269,7 @@ fn try_inline_method_call_expr(
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     inline_counter: &mut u32,
+    cold: bool,
 ) -> Option<(ExprId, (ModuleSource, String))> {
     let (module_source, func_name, receiver_id, arg_ids): (
         ModuleSource,
@@ -1260,6 +1292,11 @@ fn try_inline_method_call_expr(
     };
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
+    // A cold call site keeps the call: inlining there only bloats the hot
+    // caller. An explicit `#[inline(always)]` wins over the suppression.
+    if cold && candidate.inline_hint != InlineHint::Always {
+        return None;
+    }
     let callee = candidate.body.as_ref()?;
     let call_span = caller.exprs[call_id].span;
 
@@ -1925,6 +1962,7 @@ fn inline_calls_in_expr(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
+    cold: bool,
 ) {
     enum Call {
         Free,
@@ -1954,6 +1992,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    cold,
                 );
             }
             if let Some((new_id, inlined_key)) = try_inline_call_expr(
@@ -1965,6 +2004,7 @@ fn inline_calls_in_expr(
                 locals,
                 type_table,
                 inline_counter,
+                cold,
             ) {
                 if !inlined_funcs.contains(&inlined_key) {
                     inlined_funcs.push(inlined_key);
@@ -2003,6 +2043,7 @@ fn inline_calls_in_expr(
                 type_table,
                 inlined_funcs,
                 inline_counter,
+                cold,
             );
             for a in args {
                 inline_calls_in_expr(
@@ -2015,6 +2056,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    cold,
                 );
             }
             if let Some((new_id, inlined_key)) = try_inline_method_call_expr(
@@ -2026,6 +2068,7 @@ fn inline_calls_in_expr(
                 locals,
                 type_table,
                 inline_counter,
+                cold,
             ) {
                 if !inlined_funcs.contains(&inlined_key) {
                     inlined_funcs.push(inlined_key);
@@ -2060,6 +2103,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    cold,
                 );
             }
             for b in blocks {
@@ -2073,6 +2117,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    cold,
                 );
             }
         }

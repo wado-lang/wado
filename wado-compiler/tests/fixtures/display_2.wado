@@ -2,11 +2,7 @@ use { println, Stdout } from "core:cli";
 
 fn fmt_with(value: &i32, sign_plus: bool, zero_pad: bool, width: i32, align: Alignment) -> String {
     let mut buf = String::with_capacity(64);
-    let fill = if zero_pad {
-        '0';
-    } else {
-        ' ';
-    };
+    let fill = if zero_pad { '0' } else { ' ' };
     let mut f = Formatter {
         fill,
         align,
@@ -121,7 +117,7 @@ fn test_template_specifiers() with Stdout {
     assert `{big_i64:x}` == "7fffffffffffffff";
     let neg_i64: i64 = -1;
     assert `{neg_i64}` == "-1";
-    assert `{neg_i64:x}` == "-1";
+    assert `{neg_i64:x}` == "ffffffffffffffff";
     let u64_max: u64 = 18446744073709551615;
     assert `{u64_max:x}` == "ffffffffffffffff";
     assert `{u64_max:X}` == "FFFFFFFFFFFFFFFF";
@@ -136,8 +132,8 @@ fn test_template_specifiers() with Stdout {
     assert `{i128_val:o}` == "377";
     assert `{i128_val:#x}` == "0xff";
     let neg_i128: i128 = -1;
-    assert `{neg_i128:x}` == "-1";
-    assert `{neg_i128:b}` == "-1";
+    assert `{neg_i128:x}` == "ffffffffffffffffffffffffffffffff";
+    assert `{neg_i128:b}` == "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111";
     let u128_val: u128 = 256;
     assert `{u128_val:x}` == "100";
     assert `{u128_val:b}` == "100000000";
@@ -152,10 +148,10 @@ fn test_template_specifiers() with Stdout {
     assert `{true}` == "true";
     assert `{false}` == "false";
     let neg_i32 = -42;
-    assert `{neg_i32:b}` == "-101010";
-    assert `{neg_i32:o}` == "-52";
-    assert `{neg_i32:x}` == "-2a";
-    assert `{neg_i32:#x}` == "-0x2a";
+    assert `{neg_i32:b}` == "11111111111111111111111111010110";
+    assert `{neg_i32:o}` == "37777777726";
+    assert `{neg_i32:x}` == "ffffffd6";
+    assert `{neg_i32:#x}` == "0xffffffd6";
     println("ok");
 }
 

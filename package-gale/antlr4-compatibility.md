@@ -328,10 +328,11 @@ expensive complete simulation for the residual ambiguous tail. This is
 the standard ALL(\*)-with-shortcut shape; it is the deliberate trade-off
 for Gale's clean-room re-derivation.
 
-A wado compiler ICE found while implementing the precedence-edge check
-(a nested `for … break` miscompiling in the full `atn` module) is
-tracked separately as a GitHub issue and worked around in-tree (see the
-note at `state_has_precedence_edge` in `src/atn.wado`).
+The precedence-edge check in `lr_loop_entry_decision` once tripped a
+wado compiler ICE (a nested `for … break` miscompiling to an invalid
+core Wasm module in the full `atn` module context). That compiler bug
+has since been fixed, so the scan is now inlined directly into
+`lr_loop_entry_decision` (no helper indirection).
 
 ## The Descriptor Pipeline
 

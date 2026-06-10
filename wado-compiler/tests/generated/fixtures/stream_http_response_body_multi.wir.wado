@@ -252,15 +252,17 @@ type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(52)
 
 type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(53)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(54)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(54)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(55)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(55)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(56)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(56)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(57)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(57)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(58)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(58)
+
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(59)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -277,6 +279,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/stream_http_response_body_multi.wado/handle"(request) {
     let headers: i32;
@@ -418,6 +422,12 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body_multi.wado/handle"(re
     let __local_161: i32;
     let __local_162: i32;
     let __pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
     let __mv_lo_1: i32;
@@ -772,6 +782,12 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body_multi.wado/__cm_bindi
 }
 
 fn "wado-compiler/tests/fixtures/stream_http_response_body_multi.wado/__cm_export__handle"(request) {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/stream_http_response_body_multi.wado/handle"(request);
 }
 
@@ -780,9 +796,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     i = 0;
     b63: block {
         l64: loop {
-            if i >= len {
-                break b63;
-            }
+            break_if b63 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
             continue l64;
@@ -836,6 +850,9 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
         drop("core:internal/wait_for_blocked"(handle));
     }
     drop("mem/realloc"(ptr, len_4, 1, 0));
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/stream_http_response_body_multi.wado/__cm_export__handle" as "handle"

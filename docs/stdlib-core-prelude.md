@@ -1726,6 +1726,10 @@ Counts the number of set bits (population count).
 
 ##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
 
+#### `impl TryFrom<u128> for i64`
+
+##### `pub fn try_from(value: u128) -> Result<i64, ConvertError>`
+
 #### `impl TryFrom<i128> for i64`
 
 ##### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
@@ -1829,6 +1833,10 @@ Counts the number of set bits (population count).
 #### `impl TryFrom<u128> for u64`
 
 ##### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
+
+#### `impl TryFrom<i128> for u64`
+
+##### `pub fn try_from(value: i128) -> Result<u64, ConvertError>`
 
 #### `impl Step for u64`
 
@@ -2547,11 +2555,6 @@ Create a u128 from a u64 value (zero-extended)
 Create a u128 from low and high 64-bit parts
 Used by the compiler for efficient large literal construction
 
-#### `pub fn from_string(s: String) -> u128`
-
-Create a u128 from a string (decimal representation)
-Used for literal coercion: `let x: u128 = "12345678901234567890"`
-
 #### `pub fn from_str_hex(s: &String) -> Result<u128, ParseIntError>`
 
 Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
@@ -2576,18 +2579,29 @@ Creates a u128 with value 1
 #### `pub fn low(&self) -> u64`
 
 Gets the low 64 bits
+Used by the compiler to lower truncating `u128 as <int>` casts.
 
 #### `pub fn high(&self) -> u64`
 
 Gets the high 64 bits
 
-#### `pub fn add(&self, other: &u128) -> u128`
+#### `pub fn from_i128(val: i128) -> u128`
 
-Add two u128 values
+Create a u128 from an i128 (reinterpret bits)
+Used by the compiler to lower `i128 as u128` casts.
 
-#### `pub fn sub(&self, other: &u128) -> u128`
+#### `pub fn as_f64(&self) -> f64`
 
-Subtract two u128 values (self - other)
+Convert to `f64`, rounding to the nearest representable value with
+ties to even — the same semantics as Rust's `value as f64` cast.
+Used by the compiler to lower `u128 as f64` casts.
+
+#### `pub fn as_f32(&self) -> f32`
+
+Convert to `f32`, rounding to the nearest representable value with
+ties to even; values above `f32::MAX` become infinity — the same
+semantics as Rust's `value as f32` cast.
+Used by the compiler to lower `u128 as f32` casts.
 
 #### `pub fn div_rem(&self, divisor: &u128) -> [u128, u128]`
 
@@ -2727,6 +2741,10 @@ Convert u128 to String (for template string interpolation)
 
 ##### `pub fn from(value: u64) -> u128`
 
+#### `impl TryFrom<i128> for u128`
+
+##### `pub fn try_from(value: i128) -> Result<u128, ConvertError>`
+
 #### `impl Step for u128`
 
 ##### `fn next_step(&self) -> Option<u128>`
@@ -2746,11 +2764,6 @@ Create an i128 from an i64 value (sign-extended)
 
 Create an i128 from low and high 64-bit parts
 Used by the compiler for efficient large literal construction
-
-#### `pub fn from_string(s: String) -> i128`
-
-Create an i128 from a string (decimal representation, optionally prefixed with '-')
-Used for literal coercion: `let x: i128 = "-12345678901234567890"`
 
 #### `pub fn from_str_hex(s: &String) -> Result<i128, ParseIntError>`
 
@@ -2776,6 +2789,7 @@ Creates an i128 with value 1
 #### `pub fn low(&self) -> u64`
 
 Gets the low 64 bits (unsigned)
+Used by the compiler to lower truncating `i128 as <int>` casts.
 
 #### `pub fn high(&self) -> i64`
 
@@ -2785,18 +2799,6 @@ Gets the high 64 bits (signed)
 
 Checks if this i128 is negative
 
-#### `pub fn add(&self, other: &i128) -> i128`
-
-Adds two i128 values
-
-#### `pub fn sub(&self, other: &i128) -> i128`
-
-Subtract two i128 values (self - other)
-
-#### `pub fn neg(&self) -> i128`
-
-Negate this i128 value
-
 #### `pub fn abs_u128(&self) -> u128`
 
 Get absolute value as u128
@@ -2804,6 +2806,19 @@ Get absolute value as u128
 #### `pub fn from_u128(val: u128) -> i128`
 
 Create i128 from u128 (reinterpret bits)
+Used by the compiler to lower `u128 as i128` casts.
+
+#### `pub fn as_f64(&self) -> f64`
+
+Convert to `f64`, rounding to the nearest representable value with
+ties to even — the same semantics as Rust's `value as f64` cast.
+Used by the compiler to lower `i128 as f64` casts.
+
+#### `pub fn as_f32(&self) -> f32`
+
+Convert to `f32`, rounding to the nearest representable value with
+ties to even — the same semantics as Rust's `value as f32` cast.
+Used by the compiler to lower `i128 as f32` casts.
 
 #### `pub fn div_rem(&self, divisor: &i128) -> [i128, i128]`
 
@@ -2941,6 +2956,10 @@ Convert i128 to String (for template string interpolation)
 #### `impl From<i64> for i128`
 
 ##### `pub fn from(value: i64) -> i128`
+
+#### `impl TryFrom<u128> for i128`
+
+##### `pub fn try_from(value: u128) -> Result<i128, ConvertError>`
 
 #### `impl Step for i128`
 

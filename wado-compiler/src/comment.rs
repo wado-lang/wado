@@ -360,6 +360,16 @@ mod tests {
         Span::new(start, end, line, 1)
     }
 
+    /// Test [`AstId`] in a space shared by every id this test module
+    /// fabricates — `TriviaMap` ordering and `discard_from` thresholds
+    /// assume one space per map, like one parser produces.
+    fn aid(local: u32) -> AstId {
+        use std::sync::LazyLock;
+        static SPACE: LazyLock<crate::ast::AstIdSpace> =
+            LazyLock::new(crate::ast::AstIdSpace::next);
+        AstId::new(*SPACE, local)
+    }
+
     #[test]
     fn populate_picks_outermost_when_nodes_tie_at_same_end() {
         // Three nodes end on the same line as a trailing comment.
@@ -370,18 +380,18 @@ mod tests {
         // comment would land on B and the unparser — which only emits
         // trailing of stmt/item ids — would silently drop it.
         let nodes = vec![
-            (AstId(0), one_line_span(0, 10, 1)),
-            (AstId(1), one_line_span(5, 10, 1)),
-            (AstId(2), one_line_span(0, 8, 1)),
+            (aid(0), one_line_span(0, 10, 1)),
+            (aid(1), one_line_span(5, 10, 1)),
+            (aid(2), one_line_span(0, 8, 1)),
         ];
         let mut trivia = TriviaMap::new();
         trivia.set_dangling(vec![line_comment(" tail", 12, 18, 1, 13)]);
 
         populate_trailing_from_nodes(&mut trivia, &nodes);
 
-        assert_eq!(trivia.trailing_of(AstId(0)).len(), 1);
-        assert!(trivia.trailing_of(AstId(1)).is_empty());
-        assert!(trivia.trailing_of(AstId(2)).is_empty());
+        assert_eq!(trivia.trailing_of(aid(0)).len(), 1);
+        assert!(trivia.trailing_of(aid(1)).is_empty());
+        assert!(trivia.trailing_of(aid(2)).is_empty());
     }
 
     #[test]
@@ -393,8 +403,8 @@ mod tests {
         // following node on its end line. Pinned by the user-visible
         // `test_format_preserves_inline_block_comment_in_call_args`
         // formatter test as well; this is the algorithm-level guard.
-        let one_lit = (AstId(0), Span::new(0, 1, 1, 1));
-        let true_lit = (AstId(1), Span::new(12, 16, 1, 13));
+        let one_lit = (aid(0), Span::new(0, 1, 1, 1));
+        let true_lit = (aid(1), Span::new(12, 16, 1, 13));
         let nodes = vec![one_lit, true_lit];
         let mut trivia = TriviaMap::new();
         let inline = Comment {
@@ -402,16 +412,16 @@ mod tests {
             kind: CommentKind::Block,
             span: Span::new(3, 12, 1, 4),
         };
-        trivia.attach_leading(AstId(1), vec![inline]);
+        trivia.attach_leading(aid(1), vec![inline]);
 
         populate_trailing_from_nodes(&mut trivia, &nodes);
 
         assert!(
-            trivia.trailing_of(AstId(0)).is_empty(),
+            trivia.trailing_of(aid(0)).is_empty(),
             "interior block comment must not become trailing of the previous node",
         );
         assert_eq!(
-            trivia.leading_of(AstId(1)).len(),
+            trivia.leading_of(aid(1)).len(),
             1,
             "interior block comment must remain leading of the following node",
         );
@@ -419,14 +429,14 @@ mod tests {
 
     #[test]
     fn populate_moves_from_dangling_to_trailing() {
-        let nodes = vec![(AstId(0), one_line_span(0, 10, 1))];
+        let nodes = vec![(aid(0), one_line_span(0, 10, 1))];
         let mut trivia = TriviaMap::new();
         trivia.set_dangling(vec![line_comment(" tail", 12, 18, 1, 13)]);
 
         populate_trailing_from_nodes(&mut trivia, &nodes);
 
-        assert_eq!(trivia.trailing_of(AstId(0)).len(), 1);
-        assert_eq!(trivia.trailing_of(AstId(0))[0].text, " tail");
+        assert_eq!(trivia.trailing_of(aid(0)).len(), 1);
+        assert_eq!(trivia.trailing_of(aid(0))[0].text, " tail");
         assert!(trivia.dangling().is_empty());
     }
 
@@ -438,18 +448,18 @@ mod tests {
         // Parser would attach the comment as leading of next_node;
         // populate_trailing must move it to trailing of prev_node.
         let nodes = vec![
-            (AstId(0), one_line_span(0, 10, 1)),
-            (AstId(1), Span::new(30, 40, 2, 1)),
+            (aid(0), one_line_span(0, 10, 1)),
+            (aid(1), Span::new(30, 40, 2, 1)),
         ];
         let mut trivia = TriviaMap::new();
-        trivia.attach_leading(AstId(1), vec![line_comment(" tail", 12, 18, 1, 13)]);
+        trivia.attach_leading(aid(1), vec![line_comment(" tail", 12, 18, 1, 13)]);
 
         populate_trailing_from_nodes(&mut trivia, &nodes);
 
-        assert_eq!(trivia.trailing_of(AstId(0)).len(), 1);
-        assert_eq!(trivia.trailing_of(AstId(0))[0].text, " tail");
+        assert_eq!(trivia.trailing_of(aid(0)).len(), 1);
+        assert_eq!(trivia.trailing_of(aid(0))[0].text, " tail");
         assert!(
-            trivia.leading_of(AstId(1)).is_empty(),
+            trivia.leading_of(aid(1)).is_empty(),
             "comment must be removed from the leading slot it was repatriated out of",
         );
     }
@@ -459,16 +469,16 @@ mod tests {
         // Comment is a true header (different line from the node it
         // precedes), parser attaches it as leading; populate_trailing
         // should leave it alone.
-        let nodes = vec![(AstId(0), Span::new(20, 30, 3, 1))];
+        let nodes = vec![(aid(0), Span::new(20, 30, 3, 1))];
         let mut trivia = TriviaMap::new();
         let header = line_comment(" header", 0, 8, 2, 1);
-        trivia.attach_leading(AstId(0), vec![header]);
+        trivia.attach_leading(aid(0), vec![header]);
 
         populate_trailing_from_nodes(&mut trivia, &nodes);
 
-        assert_eq!(trivia.leading_of(AstId(0)).len(), 1);
-        assert_eq!(trivia.leading_of(AstId(0))[0].text, " header");
-        assert!(trivia.trailing_of(AstId(0)).is_empty());
+        assert_eq!(trivia.leading_of(aid(0)).len(), 1);
+        assert_eq!(trivia.leading_of(aid(0))[0].text, " header");
+        assert!(trivia.trailing_of(aid(0)).is_empty());
     }
 
     #[test]
@@ -477,25 +487,25 @@ mod tests {
         // byte 70 is contained by both — innermost (= smallest end)
         // should win.
         let blocks = vec![
-            (AstId(1), 10, 100), // outer
-            (AstId(2), 50, 80),  // inner
+            (aid(1), 10, 100), // outer
+            (aid(2), 50, 80),  // inner
         ];
         let comment = line_comment(" inner-tail", 70, 84, 5, 1);
-        assert_eq!(inner_tail_owner(&comment, &blocks), Some(AstId(2)));
+        assert_eq!(inner_tail_owner(&comment, &blocks), Some(aid(2)));
     }
 
     #[test]
     fn populate_inner_tail_moves_dangling_in_block_to_inner_tail() {
         // Block id 0 spans [0..50), last stmt ends at byte 20.
         // A comment at byte 30 is inside the block's tail range.
-        let blocks = vec![(AstId(0), 20, 50)];
+        let blocks = vec![(aid(0), 20, 50)];
         let mut trivia = TriviaMap::new();
         trivia.set_dangling(vec![line_comment(" tail", 30, 38, 3, 5)]);
 
         populate_inner_tail_from_blocks(&mut trivia, &blocks);
 
-        assert_eq!(trivia.inner_tail_of(AstId(0)).len(), 1);
-        assert_eq!(trivia.inner_tail_of(AstId(0))[0].text, " tail");
+        assert_eq!(trivia.inner_tail_of(aid(0)).len(), 1);
+        assert_eq!(trivia.inner_tail_of(aid(0))[0].text, " tail");
         assert!(trivia.dangling().is_empty());
     }
 
@@ -503,32 +513,32 @@ mod tests {
     fn populate_inner_tail_does_not_disturb_unrelated_leading() {
         // Leading comment of a node OUTSIDE any block's inner-tail
         // range stays as leading.
-        let blocks = vec![(AstId(0), 100, 200)];
+        let blocks = vec![(aid(0), 100, 200)];
         let mut trivia = TriviaMap::new();
-        trivia.attach_leading(AstId(99), vec![line_comment(" header", 0, 8, 1, 1)]);
+        trivia.attach_leading(aid(99), vec![line_comment(" header", 0, 8, 1, 1)]);
 
         populate_inner_tail_from_blocks(&mut trivia, &blocks);
 
-        assert_eq!(trivia.leading_of(AstId(99)).len(), 1);
-        assert!(trivia.inner_tail_of(AstId(0)).is_empty());
+        assert_eq!(trivia.leading_of(aid(99)).len(), 1);
+        assert!(trivia.inner_tail_of(aid(0)).is_empty());
     }
 
     #[test]
     fn populate_inner_tail_is_idempotent() {
-        let blocks = vec![(AstId(0), 20, 50)];
+        let blocks = vec![(aid(0), 20, 50)];
         let mut trivia = TriviaMap::new();
         trivia.set_dangling(vec![line_comment(" tail", 30, 38, 3, 5)]);
 
         populate_inner_tail_from_blocks(&mut trivia, &blocks);
         let after_first: Vec<_> = trivia
-            .inner_tail_of(AstId(0))
+            .inner_tail_of(aid(0))
             .iter()
             .map(|c| c.text.clone())
             .collect();
 
         populate_inner_tail_from_blocks(&mut trivia, &blocks);
         let after_second: Vec<_> = trivia
-            .inner_tail_of(AstId(0))
+            .inner_tail_of(aid(0))
             .iter()
             .map(|c| c.text.clone())
             .collect();
@@ -539,15 +549,15 @@ mod tests {
 
     #[test]
     fn populate_is_idempotent() {
-        let nodes = vec![(AstId(0), one_line_span(0, 10, 1))];
+        let nodes = vec![(aid(0), one_line_span(0, 10, 1))];
         let mut trivia = TriviaMap::new();
         trivia.set_dangling(vec![line_comment(" tail", 12, 18, 1, 13)]);
 
         populate_trailing_from_nodes(&mut trivia, &nodes);
-        let trailing_after_first = trivia.trailing_of(AstId(0)).to_vec();
+        let trailing_after_first = trivia.trailing_of(aid(0)).to_vec();
 
         populate_trailing_from_nodes(&mut trivia, &nodes);
-        let trailing_after_second = trivia.trailing_of(AstId(0)).to_vec();
+        let trailing_after_second = trivia.trailing_of(aid(0)).to_vec();
 
         assert_eq!(trailing_after_first.len(), 1);
         assert_eq!(trailing_after_second.len(), 1);

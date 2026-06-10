@@ -2774,6 +2774,53 @@ test "lower Optional Repeat over RuleRef-led Group inner uses OptionalScanGuard"
     }
 }
 
+test "lower Optional Repeat with many optionals does not enumerate 2^n shapes" {
+    // A single-alt group with many nested Optionals would make
+    // `try_optional_shape_lookahead` enumerate 2^n shapes (and `1 << n`
+    // overflows i32 at n >= 31). Past the cap it must fall back to the
+    // scan-guard strategy instead of selecting OptionalShapeLookahead.
+    let mut inner_elems: List<Element> = [];
+    for let mut i = 0; i < 12; i += 1 {
+        inner_elems.push(Element::Repeat(RepeatElement {
+            kind: RepeatKind::Optional,
+            element: Element::TokenRef(TokenRefElement::new(`T{i}`)),
+            non_greedy: false,
+        }));
+    }
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [
+                alt_of([
+                    Element::Repeat(RepeatElement {
+                        kind: RepeatKind::Optional,
+                        element: Element::Group(GroupElement::new([alt_of(inner_elems)])),
+                        non_greedy: false,
+                    }),
+                ]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    if let Simple(s) = &lowered.parser_rules[0] {
+        if let Repeat(rep) = &s.body.ops[0] {
+            if let OptionalShapeLookahead(_) = &rep.strategy {
+                panic("expected a fallback strategy, not 2^12-shape OptionalShapeLookahead");
+            } else {
+                assert true;
+            }
+        } else {
+            panic("expected Op::Repeat");
+        }
+    } else {
+        panic("expected Rule::Simple");
+    }
+}
+
 test "lower Repeat over General Group inner uses speculative group_counter id" {
     // `r : (stmt | INT INT)+ ; stmt : ID ;`
     // The General Group inside the Repeat gets group_index = 0

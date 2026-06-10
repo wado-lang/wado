@@ -210,16 +210,14 @@ fn "wado-compiler/tests/fixtures/match_variant_1.wado/__cm_binding__Stdout_write
 
 fn "wado-compiler/tests/fixtures/match_variant_1.wado/__cm_export__run"() {
     __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     __inline___initialize_modules_2: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_2;
-        }
+        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
@@ -262,14 +260,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b7: block {
-        l8: loop {
-            if i >= len {
-                break b7;
-            }
+    b5: block {
+        l6: loop {
+            break_if b5 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l8;
+            continue l6;
         };
     };
 }
@@ -379,39 +375,39 @@ fn "core:prelude/fpfmt.wado/unrounded_div"(u, d) {
 }
 
 fn "core:prelude/fpfmt.wado/pow10_coarse"(i) {
-    b14: block {
-        b15: block {
-            b16: block {
-                b17: block {
-                    b18: block {
-                        b19: block {
-                            b20: block {
-                                b21: block {
-                                    b22: block {
-                                        b23: block {
-                                            b24: block {
-                                                b25: block {
-                                                    b26: block {
-                                                        b27: block {
-                                                            b28: block {
-                                                                b29: block {
-                                                                    b30: block {
-                                                                        b31: block {
-                                                                            b32: block {
-                                                                                b33: block {
-                                                                                    b34: block {
-                                                                                        b35: block {
-                                                                                            b36: block {
-                                                                                                b37: block {
-                                                                                                    b38: block {
-                                                                                                        b39: block {
-                                                                                                            b40: block {
-                                                                                                                b41: block {
+    b11: block {
+        b12: block {
+            b13: block {
+                b14: block {
+                    b15: block {
+                        b16: block {
+                            b17: block {
+                                b18: block {
+                                    b19: block {
+                                        b20: block {
+                                            b21: block {
+                                                b22: block {
+                                                    b23: block {
+                                                        b24: block {
+                                                            b25: block {
+                                                                b26: block {
+                                                                    b27: block {
+                                                                        b28: block {
+                                                                            b29: block {
+                                                                                b30: block {
+                                                                                    b31: block {
+                                                                                        b32: block {
+                                                                                            b33: block {
+                                                                                                b34: block {
+                                                                                                    b35: block {
+                                                                                                        b36: block {
+                                                                                                            b37: block {
+                                                                                                                b38: block {
                                                                                                                     br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26] default=0;
                                                                                                                 };
                                                                                                                 "core:internal/unreachable"();
                                                                                                                 unreachable;
-                                                                                                                break b14;
+                                                                                                                break b11;
                                                                                                             };
                                                                                                             return -9202643304706469457_i64, -2331608335343510137_i64;
                                                                                                         };
@@ -468,118 +464,118 @@ fn "core:prelude/fpfmt.wado/pow10_coarse"(i) {
 }
 
 fn "core:prelude/fpfmt.wado/pow10_fine"(i) {
-    return b42: block -> u64 {
-        b43: block {
-            b44: block {
-                b45: block {
-                    b46: block {
-                        b47: block {
-                            b48: block {
-                                b49: block {
-                                    b50: block {
-                                        b51: block {
-                                            b52: block {
-                                                b53: block {
-                                                    b54: block {
-                                                        b55: block {
-                                                            b56: block {
-                                                                b57: block {
-                                                                    b58: block {
-                                                                        b59: block {
-                                                                            b60: block {
-                                                                                b61: block {
-                                                                                    b62: block {
-                                                                                        b63: block {
-                                                                                            b64: block {
-                                                                                                b65: block {
-                                                                                                    b66: block {
-                                                                                                        b67: block {
-                                                                                                            b68: block {
-                                                                                                                b69: block {
-                                                                                                                    b70: block {
+    return b39: block -> u64 {
+        b40: block {
+            b41: block {
+                b42: block {
+                    b43: block {
+                        b44: block {
+                            b45: block {
+                                b46: block {
+                                    b47: block {
+                                        b48: block {
+                                            b49: block {
+                                                b50: block {
+                                                    b51: block {
+                                                        b52: block {
+                                                            b53: block {
+                                                                b54: block {
+                                                                    b55: block {
+                                                                        b56: block {
+                                                                            b57: block {
+                                                                                b58: block {
+                                                                                    b59: block {
+                                                                                        b60: block {
+                                                                                            b61: block {
+                                                                                                b62: block {
+                                                                                                    b63: block {
+                                                                                                        b64: block {
+                                                                                                            b65: block {
+                                                                                                                b66: block {
+                                                                                                                    b67: block {
                                                                                                                         br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27] default=0;
                                                                                                                     };
                                                                                                                     "core:internal/unreachable"();
                                                                                                                     unreachable;
-                                                                                                                    break b42;
+                                                                                                                    break b39;
                                                                                                                 };
                                                                                                                 -9223372036854775808_i64;
-                                                                                                                break b42;
+                                                                                                                break b39;
                                                                                                             };
                                                                                                             -6917529027641081856_i64;
-                                                                                                            break b42;
+                                                                                                            break b39;
                                                                                                         };
                                                                                                         -4035225266123964416_i64;
-                                                                                                        break b42;
+                                                                                                        break b39;
                                                                                                     };
                                                                                                     -432345564227567616_i64;
-                                                                                                    break b42;
+                                                                                                    break b39;
                                                                                                 };
                                                                                                 -7187745005283311616_i64;
-                                                                                                break b42;
+                                                                                                break b39;
                                                                                             };
                                                                                             -4372995238176751616_i64;
-                                                                                            break b42;
+                                                                                            break b39;
                                                                                         };
                                                                                         -854558029293551616_i64;
-                                                                                        break b42;
+                                                                                        break b39;
                                                                                     };
                                                                                     -7451627795949551616_i64;
-                                                                                    break b42;
+                                                                                    break b39;
                                                                                 };
                                                                                 -4702848726509551616_i64;
-                                                                                break b42;
+                                                                                break b39;
                                                                             };
                                                                             -1266874889709551616_i64;
-                                                                            break b42;
+                                                                            break b39;
                                                                         };
                                                                         -7709325833709551616_i64;
-                                                                        break b42;
+                                                                        break b39;
                                                                     };
                                                                     -5024971273709551616_i64;
-                                                                    break b42;
+                                                                    break b39;
                                                                 };
                                                                 -1669528073709551616_i64;
-                                                                break b42;
+                                                                break b39;
                                                             };
                                                             -7960984073709551616_i64;
-                                                            break b42;
+                                                            break b39;
                                                         };
                                                         -5339544073709551616_i64;
-                                                        break b42;
+                                                        break b39;
                                                     };
                                                     -2062744073709551616_i64;
-                                                    break b42;
+                                                    break b39;
                                                 };
                                                 -8206744073709551616_i64;
-                                                break b42;
+                                                break b39;
                                             };
                                             -5646744073709551616_i64;
-                                            break b42;
+                                            break b39;
                                         };
                                         -2446744073709551616_i64;
-                                        break b42;
+                                        break b39;
                                     };
                                     -8446744073709551616_i64;
-                                    break b42;
+                                    break b39;
                                 };
                                 -5946744073709551616_i64;
-                                break b42;
+                                break b39;
                             };
                             -2821744073709551616_i64;
-                            break b42;
+                            break b39;
                         };
                         -8681119073709551616_i64;
-                        break b42;
+                        break b39;
                     };
                     -6239712823709551616_i64;
-                    break b42;
+                    break b39;
                 };
                 -3187955011209551616_i64;
-                break b42;
+                break b39;
             };
             -8910000909647051616_i64;
-            break b42;
+            break b39;
         };
         -6525815118631426616_i64;
     };
@@ -846,17 +842,15 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     v = val;
     idx = (offset + nd) - 1;
     _licm_repr_9 = buf.repr;
-    b92: block {
-        l93: loop {
-            if idx < offset {
-                break b92;
-            }
+    b89: block {
+        l90: loop {
+            break_if b89 idx < offset;
             index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
             builtin::array_set_u8(_licm_repr_9, index, value);
             v = v /u 10_i64;
             idx = idx - 1;
-            continue l93;
+            continue l90;
         };
     };
 }
@@ -945,14 +939,12 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
         trailing_9 = (precision - leading_zeros) - digits_to_output;
         trim_d_10 = d;
         skip_11 = nd - digits_to_output;
-        b101: block {
-            l102: loop {
-                if skip_11 <= 0 {
-                    break b101;
-                }
+        b97: block {
+            l98: loop {
+                break_if b97 skip_11 <= 0;
                 trim_d_10 = trim_d_10 /u 10_i64;
                 skip_11 = skip_11 - 1;
-                continue l102;
+                continue l98;
             };
         };
         digit_offset = buf.used;
@@ -975,14 +967,12 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
             output_nd = decimal_pos + precision;
             trim_d_16 = d;
             skip_17 = nd - output_nd;
-            b107: block {
-                l108: loop {
-                    if skip_17 <= 0 {
-                        break b107;
-                    }
+            b102: block {
+                l103: loop {
+                    break_if b102 skip_17 <= 0;
                     trim_d_16 = trim_d_16 /u 10_i64;
                     skip_17 = skip_17 - 1;
-                    continue l108;
+                    continue l103;
                 };
             };
             total = output_nd + 1;
@@ -1277,31 +1267,27 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         _licm_buf_29 = self.buf;
         _licm_arith_30 = start_pos + left_pad;
         _licm_repr_35 = _licm_buf_29.repr;
-        b145: block {
-            l146: loop {
-                if i_8 < 0 {
-                    break b145;
-                }
+        b139: block {
+            l140: loop {
+                break_if b139 i_8 < 0;
                 index_14 = _licm_arith_30 + i_8;
                 index_17 = start_pos + i_8;
                 value_15 = builtin::array_get_u8(_licm_repr_35, index_17);
                 builtin::array_set_u8(_licm_repr_35, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l146;
+                continue l140;
             };
         };
         j_9 = 0;
         _licm_buf_31 = self.buf;
         _licm_repr_36 = _licm_buf_31.repr;
-        b148: block {
-            l149: loop {
-                if j_9 >= left_pad {
-                    break b148;
-                }
+        b141: block {
+            l142: loop {
+                break_if b141 j_9 >= left_pad;
                 index_19 = start_pos + j_9;
                 builtin::array_set_u8(_licm_repr_36, index_19, fill_byte);
                 j_9 = j_9 + 1;
-                continue l149;
+                continue l142;
             };
         };
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, right_pad);
@@ -1311,31 +1297,27 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         _licm_buf_32 = self.buf;
         _licm_arith_33 = start_pos + padding;
         _licm_repr_37 = _licm_buf_32.repr;
-        b151: block {
-            l152: loop {
-                if i_10 < 0 {
-                    break b151;
-                }
+        b143: block {
+            l144: loop {
+                break_if b143 i_10 < 0;
                 index_22 = _licm_arith_33 + i_10;
                 index_25 = start_pos + i_10;
                 value_23 = builtin::array_get_u8(_licm_repr_37, index_25);
                 builtin::array_set_u8(_licm_repr_37, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l152;
+                continue l144;
             };
         };
         j_11 = 0;
         _licm_buf_34 = self.buf;
         _licm_repr_38 = _licm_buf_34.repr;
-        b154: block {
-            l155: loop {
-                if j_11 >= padding {
-                    break b154;
-                }
+        b145: block {
+            l146: loop {
+                break_if b145 j_11 >= padding;
                 index_27 = start_pos + j_11;
                 builtin::array_set_u8(_licm_repr_38, index_27, fill_byte);
                 j_11 = j_11 + 1;
-                continue l155;
+                continue l146;
             };
         };
     }

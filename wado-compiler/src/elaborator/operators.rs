@@ -1031,7 +1031,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .sem
             .types
             .operator_dispatch
-            .get(&self.ann_key(index_expr.id))
+            .get(&index_expr.id)
             .map(|d| d.needs_deref);
         if let Some(needs_deref) = needs_deref {
             if needs_deref {
@@ -1046,7 +1046,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .sem
             .types
             .expression_types
-            .get(&self.ann_key(index_expr.expr.id()))
+            .get(&index_expr.expr.id())
             .copied()
         else {
             return false;
@@ -1078,7 +1078,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .sem
             .types
             .expression_types
-            .get(&self.ann_key(unary.expr.id()))
+            .get(&unary.expr.id())
             .copied()
         else {
             // ERROR-typed operand (not recorded): lenient, like the old

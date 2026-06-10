@@ -229,34 +229,8 @@ test "i128 negative Display via template string" {
     assert `{c}` == "-9876";
 }
 
-test "u128 from_string small" {
-    let a: u128 = 100;
-    assert u128::from_string("100") == a;
-}
-
-test "u128 from_string larger than u64 max" {
-    let b = u128::from_string("18446744073709551616");
-    assert b.to_string() == "18446744073709551616";
-}
-
-test "i128 from_string positive" {
-    let a: i128 = 100;
-    assert i128::from_string("100") == a;
-}
-
-test "i128 from_string negative" {
-    let a: i128 = -100;
-    assert i128::from_string("-100") == a;
-}
-
-test "u128 arithmetic with from_string" {
-    let a = u128::from_string("100");
-    let b: u128 = 150;
-    assert a + u128::from_string("50") == b;
-}
-
 test "u128 max value" {
-    let max = u128::from_string("340282366920938463463374607431768211455");
+    let max: u128 = 340282366920938463463374607431768211455;
     assert max.to_string() == "340282366920938463463374607431768211455";
     assert max.low() == 18446744073709551615;
     assert max.high() == 18446744073709551615;
@@ -268,12 +242,12 @@ test "u128 max u64 value" {
 }
 
 test "i128 max value" {
-    let max = i128::from_string("170141183460469231731687303715884105727");
+    let max: i128 = 170141183460469231731687303715884105727;
     assert max.to_string() == "170141183460469231731687303715884105727";
 }
 
 test "i128 min value is negative" {
-    let min = i128::from_string("-170141183460469231731687303715884105728");
+    let min: i128 = -170141183460469231731687303715884105728;
     assert min.to_string() == "-170141183460469231731687303715884105728";
     assert min.is_negative();
 }
@@ -696,10 +670,18 @@ test "u128 alternate hex format" {
     assert `{a:#x}` == "0xff";
 }
 
-test "i128 hex format negative" {
-    // abs(i64::MIN) = 2^63 = 0x8000_0000_0000_0000
-    let a: i128 = -9223372036854775808;
-    assert `{a:x}` == "-8000000000000000";
+test "i128 base formats print the two's complement bits" {
+    // Negative values format as their 128-bit two's complement pattern,
+    // matching Rust's {:x}/{:b}/{:o} semantics.
+    let a: i128 = -9223372036854775808;  // i64::MIN as i128
+    assert `{a:x}` == "ffffffffffffffff8000000000000000";
+    let neg_one: i128 = -1;
+    assert `{neg_one:x}` == "ffffffffffffffffffffffffffffffff";
+    let min = i128::from_pair(0, i64::MIN);
+    assert `{min:x}` == "80000000000000000000000000000000";
+    assert `{min:o}` == "2000000000000000000000000000000000000000000";
+    let neg42: i128 = -42;
+    assert `{neg42:X}` == "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD6";
 }
 
 test "i128 binary format" {
@@ -755,4 +737,80 @@ test "i128::from_str_hex" {
     assert i128::from_str_hex(&"7fffffffffffffffffffffffffffffff") matches { Ok(v) && v == max };
     assert i128::from_str_hex(&"80000000000000000000000000000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
     assert i128::from_str_hex(&"-80000000000000000000000000000000") matches { Ok(v) };
+}
+
+test "u128::as_f64 is correctly rounded" {
+    let small: u128 = 5;
+    assert small.as_f64() == 5.0;
+    // ulp(2^64) = 2^12; an exact tie rounds to the even mantissa.
+    let tie: u128 = 18446744073709553664;  // 2^64 + 2^11
+    assert tie.as_f64() == 18446744073709551616.0;
+    let above: u128 = 18446744073709553665;
+    assert above.as_f64() == 18446744073709555712.0;
+    let max: u128 = 340282366920938463463374607431768211455;
+    assert max.as_f64() == 340282366920938463463374607431768211456.0;
+}
+
+test "i128::as_f64 is correctly rounded" {
+    let neg: i128 = -5;
+    assert neg.as_f64() == -5.0;
+    let min = i128::from_pair(0, i64::MIN);
+    assert min.as_f64() == -170141183460469231731687303715884105728.0;
+}
+
+test "u128::as_f32 is correctly rounded and saturates to infinity" {
+    let small: u128 = 5;
+    assert small.as_f32() == 5.0 as f32;
+    // ulp(2^65) = 2^42 in f32; an exact tie rounds to the even mantissa.
+    let tie: u128 = 36893490346442358784;  // 2^65 + 2^41
+    assert tie.as_f32() == 36893488147419103232.0 as f32;
+    let above: u128 = 36893490346442358785;
+    assert above.as_f32() == 36893492545465614336.0 as f32;
+    let max: u128 = 340282366920938463463374607431768211455;
+    assert max.as_f32() == f32::INFINITY;
+    // f32::MAX = (2^24 - 1) * 2^104 sits at the largest finite biased
+    // exponent (254); the bit assembly must keep it finite, one ulp below
+    // the 255/infinity pattern.
+    let f32_max: u128 = 340282346638528859811704183484516925440;
+    assert f32_max.as_f32() != f32::INFINITY;
+    assert f32_max.as_f32() == 340282346638528859811704183484516925440.0 as f32;
+}
+
+test "i128::as_f32 carries the sign" {
+    let neg: i128 = -5;
+    assert neg.as_f32() == -5.0 as f32;
+    let min = i128::from_pair(0, i64::MIN);
+    assert min.as_f32() == -170141183460469231731687303715884105728.0 as f32;
+}
+
+test "TryFrom<u128> for i64" {
+    let ok: u128 = 9223372036854775807;  // i64::MAX
+    assert i64::try_from(ok) matches { Ok(v) && v == i64::MAX };
+    let too_big: u128 = 9223372036854775808;
+    assert i64::try_from(too_big) matches { Err(_) };
+}
+
+test "TryFrom<i128> for u64" {
+    let ok: i128 = 18446744073709551615;  // u64::MAX
+    assert u64::try_from(ok) matches { Ok(v) && v == u64::MAX };
+    let too_big: i128 = 18446744073709551616;
+    assert u64::try_from(too_big) matches { Err(_) };
+    let neg: i128 = -1;
+    assert u64::try_from(neg) matches { Err(_) };
+}
+
+test "TryFrom<u128> for i128" {
+    let ok: u128 = 170141183460469231731687303715884105727;  // i128::MAX
+    let max = i128::from_pair(u64::MAX, i64::MAX);
+    assert i128::try_from(ok) matches { Ok(v) && v == max };
+    let too_big: u128 = 170141183460469231731687303715884105728;
+    assert i128::try_from(too_big) matches { Err(_) };
+}
+
+test "TryFrom<i128> for u128" {
+    let ok: i128 = 170141183460469231731687303715884105727;  // i128::MAX
+    let expected: u128 = 170141183460469231731687303715884105727;
+    assert u128::try_from(ok) matches { Ok(v) && v == expected };
+    let neg: i128 = -1;
+    assert u128::try_from(neg) matches { Err(_) };
 }

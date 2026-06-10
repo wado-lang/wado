@@ -463,3 +463,37 @@ test "char::eq_ignore_ascii_case non-alpha with same bit pattern" {
     // '[' (0x5B) | 0x20 == '{' (0x7B), but neither is a letter
     assert !'['.eq_ignore_ascii_case(&'{');
 }
+
+test "negative i8/i16 base formats print the two's complement bits" {
+    // Matches Rust's {:x}/{:b}/{:o} semantics: the bit pattern of the
+    // value's own width, not a sign + magnitude.
+    let a: i8 = -1;
+    assert `{a:b}` == "11111111";
+    let b: i8 = -86;
+    assert `{b:x}` == "aa";
+    let c: i8 = -128;
+    assert `{c:x}` == "80";
+    let d: i16 = -1;
+    assert `{d:x}` == "ffff";
+    let e: i16 = -2;
+    assert `{e:X}` == "FFFE";
+}
+
+test "negative i32 base formats print the two's complement bits" {
+    let a: i32 = -1;
+    assert `{a:x}` == "ffffffff";
+    assert `{a:#x}` == "0xffffffff";
+    let b: i32 = -42;
+    assert `{b:x}` == "ffffffd6";
+    assert `{b:o}` == "37777777726";
+    assert `{b:b}` == "11111111111111111111111111010110";
+}
+
+test "negative i64 base formats print the two's complement bits" {
+    let a: i64 = -1;
+    assert `{a:x}` == "ffffffffffffffff";
+    let min: i64 = -9223372036854775808;
+    assert `{min:x}` == "8000000000000000";
+    assert `{min:b}` == "1000000000000000000000000000000000000000000000000000000000000000";
+    assert `{min:#o}` == "0o1000000000000000000000";
+}

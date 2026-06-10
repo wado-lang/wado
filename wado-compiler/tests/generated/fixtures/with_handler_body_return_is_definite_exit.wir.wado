@@ -25,11 +25,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wado-compiler/tests/fixtures/with_handler_body_return_is_definite_exit.wado/__cm_export__run" = fn();  // TypeId(9)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(10)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(10)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(11)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(11)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(12)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(12)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(13)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -45,9 +47,25 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:__effect_Counter: ref null "wado-compiler/tests/fixtures/with_handler_body_return_is_definite_exit.wado//__Dispatch_Counter" = ref.null none;
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/with_handler_body_return_is_definite_exit.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    __inline___initialize_modules_2: block {
+        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/with_handler_body_return_is_definite_exit.wado/__cm_export__run" as "run"

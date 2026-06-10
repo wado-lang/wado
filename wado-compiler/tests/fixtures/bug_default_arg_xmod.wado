@@ -1,0 +1,37 @@
+//! Regression for issue #1342: a foreign default-argument value that
+//! constructs a struct must compile correctly when re-resolved at a
+//! cross-module call site.
+//!
+//! `dep_make` (in the dependency module) has a defaulted parameter whose
+//! default builds `DepThing`. Calling `dep_make(5)` here omits it, so annotate
+//! re-resolves that foreign default expression under this module's
+//! perspective. Each node's facts must land on the node's own identity, never
+//! on a same-numbered local node. (Pre-fix this overwrote a `LocalPair` literal
+//! sharing the callee node's dense per-module id; the root fix made every
+//! `AstId` globally unique, so the collision is now impossible by construction
+//! rather than merely avoided.) `DepThing` is imported so the default's struct
+//! type is resolvable here, as the original `atn.wado` context made it.
+//!
+//! `LocalPair` (2 fields) and `DepThing` (4 fields) differ in shape, so any
+//! mis-attribution would surface as a hard `struct.new` type error.
+
+use { dep_make, DepThing } from "./sub/bug_default_arg_xmod_dep.wado";
+
+struct LocalPair {
+    x: i32,
+    y: i32,
+}
+
+// Keeps the `DepThing` import live (its resolvability at the call site is the point).
+fn first_field(t: &DepThing) -> i32 { return t.a; }
+
+export fn run() {
+    let p = LocalPair { x: 10, y: 20 };
+    let r = dep_make(5);
+    assert p.x + p.y == 30;
+    assert r == 15;
+    assert first_field(&DepThing { a: 7, b: 0, c: 0, d: 0 }) == 7;
+}
+
+__DATA__
+{"stdout": ""}

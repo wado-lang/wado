@@ -1722,8 +1722,17 @@ fn instr_has_br_at_depth(instr: &WirInstr, target_depth: u32) -> bool {
             instrs_have_br_at_depth(body, target_depth + 1)
         }
         WirInstr::Seq(items) => instrs_have_br_at_depth(items, target_depth),
-        // All other instructions (arithmetic, struct ops, etc.) cannot contain `Br`.
-        _ => false,
+        // Other instructions cannot introduce a label, but their operands can
+        // still embed control flow (e.g. a `BranchHint`-wrapped condition or a
+        // labeled block in value position), so recurse at the same depth — the
+        // label-introducing arms above adjust it where needed.
+        other => {
+            let mut found = false;
+            other.for_each_child(&mut |child| {
+                found = found || instr_has_br_at_depth(child, target_depth);
+            });
+            found
+        }
     }
 }
 

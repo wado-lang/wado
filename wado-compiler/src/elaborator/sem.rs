@@ -57,15 +57,15 @@ pub(crate) struct ModuleSemantics {
     /// Per-impl trait default-method `ModuleSemantics` snapshots. Keyed by
     /// `(impl_block.id, trait_default_method.ast_id)` — `impl_block.id`
     /// from the impl module's parse tree, `default_method.id` from the
-    /// trait module's parse tree. The pair is unique per synthesis site
-    /// even when the same default body is synthesised across many impls of
-    /// the same trait, so the per-walk fact maps stay isolated (no
-    /// `(trait_module, ast_id)` collision).
+    /// trait module's parse tree. The pair is unique per synthesis site:
+    /// the same trait body is synthesised once per impl, so the SAME trait
+    /// node legitimately has one fact set per impl — the per-snapshot
+    /// isolation is what disambiguates them (a single flat map could not,
+    /// even with globally-unique ids).
     ///
     /// Each value is a full `ModuleSemantics` with:
     /// - `types` / `bindings`: freshly produced by the combined walk's body
-    ///   walk for that one `(impl, default_method)` pair, keyed under the
-    ///   trait module via `ann_module_override`.
+    ///   walk for that one `(impl, default_method)` pair.
     /// - `decls` / `imports`: cloned from the surrounding impl module's
     ///   `ModuleSemantics` so name resolution + decl indices work inside
     ///   the default body walk.

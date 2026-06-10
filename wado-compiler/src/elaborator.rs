@@ -47,7 +47,7 @@ use crate::compiler_host::CompilerHost;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, MethodName};
-use crate::symbol::{Symbol, SymbolKey, SymbolTable};
+use crate::symbol::{Symbol, SymbolTable};
 use crate::tir::{self as tir, TypeId, TypeTable};
 
 /// Build a function-name → item-index map for a module's items. Used
@@ -160,25 +160,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// module-private items (see WEP 2026-04-11).
     // MIGRATION: transient annotate-time scope (per-call-site override).
     pub(super) default_scope_module: Option<ModuleSource>,
-    /// Module that *owns* the AST nodes currently being walked, when that
-    /// differs from `current_module_source`. Set while the combined walk
-    /// inline-resolves *foreign* AST — an associated-const body whose nodes
-    /// belong to the const's defining module rather than the consumer that
-    /// references it.
-    ///
-    /// `ann_key` keys per-`AstId` annotation facts under this module (falling
-    /// back to `current_module_source` when unset), so the facts land under
-    /// `(owning_module, ast_id)` — the same key reify reads after it swaps to
-    /// the owning module via `with_const_module_perspective`. Without this a
-    /// foreign-body node and a consumer node sharing the same dense `AstId`
-    /// collide (e.g. `primitive.wado`'s `INFINITY = 1.0 / 0.0`, resolved while
-    /// compiling `core:json`, overwrites a `core:json` `i32` literal's type
-    /// with `f64`).
-    ///
-    /// Only the fact *key* is overridden; `current_module_source` (and thus
-    /// name resolution / the emitted TIR) is unchanged, so the combined walk's
-    /// output is byte-identical to before.
-    pub(super) ann_module_override: Option<ModuleSource>,
     /// Kiln invocation redirects consulted by `use` resolution sites. Shared
     /// by `Rc` so per-module Elaborator instances can read the single
     /// compilation-unit-wide redirect map cheaply.
@@ -238,12 +219,12 @@ pub struct Elaborator<'a, H: CompilerHost> {
     ///
     /// Those signature nodes are owned by the declaring module and already get
     /// their use→def edges recorded when that module is annotated
-    /// (`resolve_resource_decl`, the impl-method walk). Re-recording them here
-    /// keys the *use* under `current_module_source` (the consumer), not the
-    /// owning module — and because `AstId`s are dense per module, a foreign
-    /// node's id can collide with a real node's id in the consumer and clobber
-    /// a genuine edge. Suppressing keeps `references` keyed by the true
-    /// `(owning_module, ast_id)` of each use.
+    /// (`resolve_resource_decl`, the impl-method walk). Globally-unique
+    /// `AstId`s mean re-recording can no longer clobber an unrelated node's
+    /// edge, but a query re-resolution may still record a *different* def
+    /// than the owning module's walk did (it resolves under the consumer's
+    /// import scope), so queries stay suppressed to keep the owning walk's
+    /// edge authoritative.
     pub(super) suppress_reference_recording: bool,
 }
 
@@ -379,13 +360,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The single sink for every use→def edge. All `record_*` helpers funnel
     /// through here, so the [`Self::suppress_reference_recording`] gate lives in
-    /// exactly one place: when set, the edge is dropped rather than mis-keyed
-    /// under the consumer module (see the field docs).
-    fn insert_reference(&mut self, use_key: SymbolKey, def_key: SymbolKey) {
+    /// exactly one place: when set, the edge is dropped rather than recorded
+    /// as a spurious duplicate by a type-checking query (see the field docs).
+    fn insert_reference(&mut self, use_id: crate::ast::AstId, def_id: crate::ast::AstId) {
         if self.suppress_reference_recording {
             return;
         }
-        self.sem.bindings.references.insert(use_key, def_key);
+        self.sem.bindings.references.insert(use_id, def_id);
     }
 
     /// Record that an identifier resolved to a local binding in the current
@@ -395,41 +376,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         use_id: crate::ast::AstId,
         def_id: crate::ast::AstId,
     ) {
-        let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
-        let def_key = SymbolKey::new(self.current_module_source.clone(), def_id);
-        self.insert_reference(use_key, def_key);
+        self.insert_reference(use_id, def_id);
     }
 
-    /// Record a use→def reference when the definition lives in a (possibly
-    /// different) module identified directly by a [`SymbolKey`]. Prefer
-    /// [`Self::record_reference_to_decl`] when the call site is constructing
-    /// the key from `(module, ast_id)` parts.
-    pub(super) fn record_reference_to_key(
+    /// Record a use→def edge to the definition at `def_id`. The defining
+    /// node may live in any module — its `AstId` is globally unique, so the
+    /// edge needs no module qualifier; navigation recovers the def's module
+    /// from the id via [`crate::semantics::Semantics::module_of_id`].
+    pub(super) fn record_reference_to_def(
         &mut self,
         use_id: crate::ast::AstId,
-        def_key: SymbolKey,
+        def_id: crate::ast::AstId,
     ) {
-        let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
-        self.insert_reference(use_key, def_key);
-    }
-
-    /// Record a use→def reference where the defining declaration is
-    /// identified by its `(module, ast_id)` pair. Convenience over
-    /// [`Self::record_reference_to_key`] for call sites that would
-    /// otherwise construct a [`SymbolKey`] inline — keeps `SymbolKey::new`
-    /// confined to a single place.
-    pub(super) fn record_reference_to_decl(
-        &mut self,
-        use_id: crate::ast::AstId,
-        decl_module: &ModuleSource,
-        decl_ast_id: crate::ast::AstId,
-    ) {
-        self.record_reference_to_key(use_id, SymbolKey::new(decl_module.clone(), decl_ast_id));
+        self.insert_reference(use_id, def_id);
     }
 
     /// Record that an identifier resolved to a declared symbol reachable from
     /// the current module under `name` (local item, imported item, imported
-    /// namespace member, etc.). Looks up the defining [`SymbolKey`] through
+    /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
     /// the symbol table; no-op if the name is not declared.
     pub(super) fn record_item_reference_by_name(&mut self, use_id: crate::ast::AstId, name: &str) {
         let Some(sym) = self
@@ -439,15 +403,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         else {
             return;
         };
-        let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
-        let def_key = sym.defined_at.clone();
-        self.insert_reference(use_key, def_key);
+        let def_id = sym.defined_at;
+        self.insert_reference(use_id, def_id);
     }
 
     /// Record use→def edges for a `TypeName::CaseName` qualified path
     /// expression. The prefix segment (`TypeName`) is resolved by name in
     /// the current module's scope; the suffix segment (`CaseName`) points
-    /// directly at `(case_module, case_ast_id)`.
+    /// directly at `case_ast_id` (its module is intrinsic to the id).
     ///
     /// Used for variant cases, enum cases, and flags members reached via
     /// a two-segment qualified ident.
@@ -455,14 +418,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &mut self,
         ident: &crate::ast::IdentExpr,
         type_name: &str,
-        case_module: &ModuleSource,
         case_ast_id: crate::ast::AstId,
     ) {
         if let Some(prefix_seg) = ident.segments.first() {
             self.record_item_reference_by_name(prefix_seg.id, type_name);
         }
         if let Some(suffix_seg) = ident.segments.get(1) {
-            self.record_reference_to_decl(suffix_seg.id, case_module, case_ast_id);
+            self.record_reference_to_def(suffix_seg.id, case_ast_id);
         }
     }
 
@@ -472,11 +434,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn record_namespaced_case(
         &mut self,
         ident: &crate::ast::IdentExpr,
-        case_module: &ModuleSource,
         case_ast_id: crate::ast::AstId,
     ) {
         if let Some(seg) = ident.segments.get(2) {
-            self.record_reference_to_decl(seg.id, case_module, case_ast_id);
+            self.record_reference_to_def(seg.id, case_ast_id);
         }
     }
 
@@ -537,36 +498,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         None
     }
 
-    /// Build the canonical [`SymbolKey`] for an `AstId` in the module
-    /// currently being walked. The body-level annotation maps
-    /// ([`sem::types::TypeAnnotations`]) are keyed by `SymbolKey`
-    /// (`(ModuleSource, AstId)`) because `AstId`s are only unique within a
-    /// module: reify inlines cross-module AST (associated-const bodies,
-    /// callee-module default arguments) and would otherwise read a
-    /// colliding `AstId`'s record from the wrong module. Recording under
-    /// `(current_module_source, ast_id)` and reading under the same pair
-    /// (reify swaps `current_module_source` while walking foreign AST)
-    /// makes the lookup unambiguous.
-    pub(super) fn ann_key(&self, ast_id: crate::ast::AstId) -> SymbolKey {
-        let module = self
-            .ann_module_override
-            .as_ref()
-            .unwrap_or(&self.current_module_source);
-        SymbolKey::new(module.clone(), ast_id)
-    }
-
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active
     /// module's `expression_types` map. Used by the AST-level
     /// missing-return / definite-exit walks that replaced the TIR
     /// walkers consuming the combined walk's body TIR.
     fn ctrl_flow_ctx(&self) -> control_flow::CtrlFlowCtx<'_> {
-        let module = self
-            .ann_module_override
-            .as_ref()
-            .unwrap_or(&self.current_module_source);
         control_flow::CtrlFlowCtx {
             expression_types: &self.sem.types.expression_types,
-            module,
             type_table: &self.tysys.type_table,
         }
     }
@@ -652,10 +590,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // explicitly: reify's `ann_expression_types` (so a null still falls
         // back to its `expected_type`) and the missing-return walk in
         // `control_flow.rs`.
-        self.sem
-            .types
-            .expression_types
-            .insert(self.ann_key(ast_id), type_id);
+        self.sem.types.expression_types.insert(ast_id, type_id);
     }
 
     /// Record a method-dispatch decision for the [`crate::ast::MethodCallExpr`]
@@ -686,7 +621,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         method_type_args: Vec<TypeId>,
     ) {
         let Some(ast_id) = ast_id else { return };
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.method_dispatch.insert(
             key,
             sem::types::MethodDispatch {
@@ -733,7 +668,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if type_args.is_empty() && mangled_name.is_none() {
             return;
         }
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.generic_instantiations.insert(
             key,
             sem::types::GenericInstantiation {
@@ -751,7 +686,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         param_types: Vec<TypeId>,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.call_param_types.insert(key, param_types);
     }
 
@@ -762,7 +697,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::ClosureCaptureInfo,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.closure_captures.insert(key, info);
     }
 
@@ -774,7 +709,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::AssertCaptureInfo,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.assert_captures.insert(key, info);
     }
 
@@ -787,7 +722,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::ForOfIteratorInfo,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.for_of_iterator.insert(key, info);
     }
 
@@ -802,7 +737,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::OperatorDispatch,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.operator_dispatch.insert(key, info);
     }
 
@@ -818,7 +753,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::OperatorDispatch,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.index_assign_dispatch.insert(key, info);
     }
 
@@ -834,7 +769,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::HandlerBindingFacts,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.handler_bindings.insert(key, info);
     }
 
@@ -849,7 +784,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::ImplFacts,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.impl_facts.insert(key, info);
     }
 
@@ -873,7 +808,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         kind: sem::types::CoercionKind,
         target_type: TypeId,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem
             .types
             .coercions
@@ -891,7 +826,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         place: sem::types::AssignPlace,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.assign_places.insert(key, place);
     }
 
@@ -902,7 +837,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         ast_id: crate::ast::AstId,
     ) -> Option<&sem::types::AssignPlace> {
-        self.sem.types.assign_places.get(&self.ann_key(ast_id))
+        self.sem.types.assign_places.get(&ast_id)
     }
 
     /// Record a TIR-direct desugar tag for the AST node at `ast_id`.
@@ -915,7 +850,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         kind: sem::types::DesugarKind,
     ) {
-        let key = self.ann_key(ast_id);
+        let key = ast_id;
         self.sem.types.desugars.insert(key, kind);
     }
 
@@ -931,18 +866,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         is_mut: bool,
         type_id: TypeId,
     ) {
-        let key = SymbolKey::new(self.current_module_source.clone(), def_id);
         let symbol = Symbol {
             name: name.to_string(),
             kind: crate::symbol::SymbolKind::Variable(crate::symbol::VariableSymbol {
                 is_mut,
                 is_reactive: false,
             }),
-            defined_at: key.clone(),
+            defined_at: def_id,
+            module: self.current_module_source.clone(),
             span: Some(span),
         };
-        self.sem.bindings.local_symbols.insert(key.clone(), symbol);
-        self.sem.types.local_types.insert(key, type_id);
+        self.sem.bindings.local_symbols.insert(def_id, symbol);
+        self.sem.types.local_types.insert(def_id, type_id);
     }
 
     /// Look up a function by name in a loaded module, returning the Item at that index.
@@ -1176,9 +1111,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .lookup_in_module(&source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
-                                self.record_reference_to_key(use_id, sym.defined_at.clone());
+                                self.record_reference_to_def(use_id, sym.defined_at);
                             }
-                            sym.defined_at.module.clone()
+                            sym.module_source().clone()
                         })
                         .unwrap_or_else(|| source.clone());
                     tir::EffectRef::Concrete {
@@ -1199,9 +1134,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .lookup(&self.current_module_source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
-                                self.record_reference_to_key(use_id, sym.defined_at.clone());
+                                self.record_reference_to_def(use_id, sym.defined_at);
                             }
-                            sym.defined_at.module.clone()
+                            sym.module_source().clone()
                         })
                         .unwrap_or_else(|| self.current_module_source.clone());
                     tir::EffectRef::Concrete {
@@ -1230,7 +1165,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 match use_item {
                     ast::UseItem::Simple { id, name, .. } => {
                         if let Some(sym) = self.symbols.lookup_in_module(&source, name) {
-                            self.record_reference_to_key(*id, sym.defined_at.clone());
+                            self.record_reference_to_def(*id, sym.defined_at);
                         }
                     }
                     ast::UseItem::InterfaceFunctions { .. }
@@ -1731,7 +1666,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         (trait_name.as_ref(), impl_block.trait_type.as_ref())
                     {
                         let trait_decl_name = self.get_type_name(trait_ast);
-                        let (trait_methods, trait_module) = self
+                        let (trait_methods, _) = self
                             .find_trait_decl_methods_with_module(&trait_decl_name)
                             .unzip();
                         let default_methods: Vec<ast::Function> = trait_methods
@@ -1742,18 +1677,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             })
                             .collect();
 
-                        // A default method's body is *foreign* AST owned by the
-                        // trait module. The combined walk resolves it under the
-                        // impl module's perspective (to emit the synthesised
-                        // TIR), but the per-`AstId` facts it records are keyed
-                        // under the trait module via `ann_module_override`:
-                        // otherwise a trait-body node and an impl-module node
-                        // sharing the same dense `AstId` collide, overwriting
-                        // the impl module's own facts (e.g. a unit
-                        // `builtin::array_copy` call in `String::push_str`
-                        // mistyped as `Iterator::last`'s `Option<T>`, making
-                        // reify emit a spurious `drop` of a value-less call →
-                        // Wasm stack underflow).
+                        // A default method's body is *foreign* AST owned by
+                        // the trait module; its nodes carry the trait
+                        // module's globally-unique `AstId`s, so the facts the
+                        // walk records cannot collide with impl-module nodes.
                         //
                         // Stage 5 completion: the body walk's only output
                         // is a per-impl `ModuleSemantics` snapshot stored on
@@ -1765,16 +1692,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         //
                         // Per-impl snapshots are required because the same
                         // trait body synthesised for many impls would
-                        // otherwise overwrite its own `(trait_module,
-                        // ast_id)` facts on each iteration. Each impl gets a
+                        // otherwise overwrite its own per-node facts on each
+                        // iteration (one `AstId`, N impls). Each impl gets a
                         // fresh `ModuleSemantics` whose `types` / `bindings`
                         // capture only this one synthesis; `decls` and
                         // `imports` are cloned from the surrounding
                         // (impl-module) `ModuleSemantics` so name resolution
                         // / decl indices work during the body walk.
-                        let prev_override =
-                            std::mem::replace(&mut self.ann_module_override, trait_module);
-
                         for default_method in &default_methods {
                             // Build a synthetic `ModuleSemantics` for this
                             // one (impl, default_method) synthesis. Fresh
@@ -1827,8 +1751,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .default_method_semantics
                                 .insert((impl_block.id, default_method.id), populated);
                         }
-
-                        self.ann_module_override = prev_override;
                     }
 
                     // Restore trait context

@@ -106,6 +106,108 @@ fn test_cold_path_fallthrough_branch_hint_values() {
     );
 }
 
+/// Branch-hint offsets must point at the hinted `if` (0x04) or `br_if` (0x0D)
+/// opcode, relative to the start of the function body (the locals vector) —
+/// that is how runtimes match entries (wasmtime compares the operator's
+/// position minus the body start against `func_offset`). A drift in this
+/// convention would not fail validation; it would just silently disable every
+/// hint. So check the actual bytes the offsets point at.
+#[test]
+fn test_branch_hint_offsets_point_at_branch_opcodes() {
+    use wasmparser::{KnownCustom, Parser, Payload, TypeRef};
+
+    // Check one core module's branch hints; returns (hint_count, saw_br_if).
+    // Offsets in the section are relative to `module` (the core module bytes),
+    // matching the body ranges wasmparser reports.
+    fn check_module(fixture: &str, module: &[u8]) -> (usize, bool) {
+        let mut num_imported_funcs = 0u32;
+        let mut body_ranges: Vec<std::ops::Range<usize>> = Vec::new();
+        let mut hints: Vec<(u32, u32)> = Vec::new();
+        for payload in Parser::new(0).parse_all(module) {
+            match payload.unwrap() {
+                Payload::ImportSection(reader) => {
+                    for import in reader.into_imports() {
+                        if matches!(import.unwrap().ty, TypeRef::Func(_)) {
+                            num_imported_funcs += 1;
+                        }
+                    }
+                }
+                Payload::CodeSectionEntry(body) => {
+                    body_ranges.push(body.range());
+                }
+                Payload::CustomSection(section) => {
+                    if let KnownCustom::BranchHints(reader) = section.as_known() {
+                        for func in reader {
+                            let func = func.unwrap();
+                            for hint in func.hints {
+                                hints.push((func.func, hint.unwrap().func_offset));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut saw_br_if = false;
+        let count = hints.len();
+        for (func, offset) in hints {
+            let local_idx = func
+                .checked_sub(num_imported_funcs)
+                .unwrap_or_else(|| panic!("{fixture}: hint on imported function {func}"))
+                as usize;
+            let body = &body_ranges[local_idx];
+            let pos = body.start + offset as usize;
+            assert!(
+                pos < body.end,
+                "{fixture}: hint offset {offset} in function {func} is past the body"
+            );
+            let opcode = module[pos];
+            assert!(
+                opcode == 0x04 || opcode == 0x0D,
+                "{fixture}: hint offset {offset} in function {func} points at \
+                 opcode {opcode:#04x}, expected `if` (0x04) or `br_if` (0x0d)"
+            );
+            saw_br_if |= opcode == 0x0D;
+        }
+        (count, saw_br_if)
+    }
+
+    for (fixture, opt, expect_br_if) in [
+        ("cold_path.wado", OptLevel::O0, false),
+        ("wir_optimize_brif_select.wado", OptLevel::O2, true),
+    ] {
+        let result = compile_fixture_opt(fixture, opt);
+        let wasm = &result.wasm;
+
+        // The compiler emits a CM component; the branch-hint sections live in
+        // the embedded core modules, with hints relative to each module.
+        let mut total_hints = 0;
+        let mut saw_br_if = false;
+        for payload in Parser::new(0).parse_all(wasm) {
+            if let Payload::ModuleSection {
+                unchecked_range, ..
+            } = payload.unwrap()
+            {
+                let (count, br_if) = check_module(fixture, &wasm[unchecked_range]);
+                total_hints += count;
+                saw_br_if |= br_if;
+            }
+        }
+
+        assert!(
+            total_hints > 0,
+            "{fixture}: no branch hints decoded from any embedded core module"
+        );
+        if expect_br_if {
+            assert!(
+                saw_br_if,
+                "{fixture}: expected at least one hinted br_if at O2"
+            );
+        }
+    }
+}
+
 /// Test that multi-value builtin calls with destructuring do not generate tuple structs.
 /// When `let [lo, hi] = builtin::i64_add128(...)` is used, the codegen should directly
 /// bind stack values to locals without creating a tuple struct (no struct.new after i64.add128).

@@ -23,6 +23,8 @@ pub struct DumpOptions {
     pub opt_level: OptLevel,
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
+    /// Generic codegen feature flags from `-f <flag>` (e.g. `["no-branch-hinting"]`).
+    pub codegen_flags: Vec<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -40,6 +42,7 @@ enum Opt {
     OptLevel,
     InlineThreshold,
     OptIterations,
+    Feature,
     Help,
 }
 
@@ -58,6 +61,7 @@ impl Opt {
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
+        Self::Feature,
         Self::Help,
     ];
 
@@ -131,6 +135,7 @@ impl Opt {
             },
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
+            Self::Feature => args::FEATURE_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -188,7 +193,7 @@ fn format_usage() -> String {
     write!(
         buf,
         "{}",
-        args::format_opts_help(&[Opt::Help], |o| o.spec())
+        args::format_opts_help(&[Opt::Feature, Opt::Help], |o| o.spec())
     )
     .unwrap();
     buf
@@ -214,6 +219,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut opt_level = OptLevel::O2;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
+    let mut codegen_flags: Vec<String> = Vec::new();
     let mut any_phase = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
@@ -288,6 +294,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                         &mut parser,
                     )?);
                 }
+                Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -319,6 +326,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         opt_level,
         inline_threshold,
         opt_iterations,
+        codegen_flags,
     })
 }
 
@@ -358,6 +366,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         target_world.as_deref(),
         opts.inline_threshold,
         opts.opt_iterations,
+        &opts.codegen_flags,
     )
     .await
     .map_err(|_bail| CliExit::silent_failure(1))?;
@@ -498,7 +507,10 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
             };
             println!(
                 "  [ast#{}] {} :: {} = {}",
-                symbol.defined_at.ast_id.0, module_path, symbol.name, kind_str
+                symbol.defined_at.local(),
+                module_path,
+                symbol.name,
+                kind_str
             );
         }
         println!();

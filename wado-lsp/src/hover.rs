@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 use wado_compiler::ast::{self, AstId, Expr, Item, Module, Stmt};
 use wado_compiler::semantics::Semantics;
-use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
+use wado_compiler::symbol::{Symbol, SymbolKind};
 use wado_compiler::unparse;
 
 use crate::diagnostics::{Position, Range};
@@ -42,7 +42,7 @@ pub(crate) fn find_hover(ctx: &QueryContext, position: Position) -> Option<Hover
     let cursor = ctx.cursor_at(position)?;
     let symbol = cursor.def_symbol()?;
     let signature = match &symbol.kind {
-        SymbolKind::Variable(_) => render_local_binding(ctx.sem, &symbol.defined_at, &symbol.name)?,
+        SymbolKind::Variable(_) => render_local_binding(ctx.sem, symbol.defined_at, &symbol.name)?,
         _ => render_item_signature(ctx.sem, symbol)?,
     };
 
@@ -58,7 +58,7 @@ pub(crate) fn find_hover(ctx: &QueryContext, position: Position) -> Option<Hover
 
 /// Render a signature for the given item-level symbol.
 fn render_item_signature(sem: &Semantics, symbol: &Symbol) -> Option<String> {
-    let module = sem.modules.get(&symbol.defined_at.module)?;
+    let module = sem.modules.get(symbol.module_source())?;
     for item in &module.items {
         if let Some(rendered) = item_info(item, &symbol.name) {
             return Some(rendered);
@@ -68,9 +68,9 @@ fn render_item_signature(sem: &Semantics, symbol: &Symbol) -> Option<String> {
 }
 
 /// Render a hover line for a local binding (`let x: T` / `fn f(x: T)`).
-fn render_local_binding(sem: &Semantics, def_key: &SymbolKey, name: &str) -> Option<String> {
-    let module = sem.modules.get(&def_key.module)?;
-    render_local_in_module(module, def_key.ast_id, name)
+fn render_local_binding(sem: &Semantics, def_id: AstId, name: &str) -> Option<String> {
+    let module = sem.modules.get(sem.module_of_id(def_id)?)?;
+    render_local_in_module(module, def_id, name)
 }
 
 fn render_local_in_module(module: &Module, target: AstId, name: &str) -> Option<String> {

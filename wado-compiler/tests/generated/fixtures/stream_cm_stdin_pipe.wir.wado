@@ -31,15 +31,17 @@ type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_bind
 
 type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run" = fn();  // TypeId(9)
 
-type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(10)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(10)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
+type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(12)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(13)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(14)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
+
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(15)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -51,6 +53,8 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
@@ -71,6 +75,18 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run"() {
     let stdin_stream: i32;
     let subtask: i32;
     let __pattern_temp_0: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    __inline___initialize_modules_2: block {
+        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     __pattern_temp_0 = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"();
     subtask = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(local.tee stdin_stream(__pattern_temp_0.0));
     let __fr_ptr_1: i32;
@@ -91,7 +107,7 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run"() {
     }
     let __fr_opt_2: ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
     __fr_opt_2 = (if (__fr_result_1 & 15) == 0 -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
-        ref.as_non_null((if builtin::load_i32(__fr_ptr_1) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
+        ref.as_non_null((if @likely(builtin::load_i32(__fr_ptr_1) == 0) -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
             struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
         } else {
             unreachable;
@@ -102,6 +118,9 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run"() {
     drop("mem/realloc"(__fr_ptr_1, 40, 8, 0));
     drop(__fr_opt_2);
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run" as "run"

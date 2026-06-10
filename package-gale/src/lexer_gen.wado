@@ -16,7 +16,7 @@ use {
     RepeatElement,
     LabelElement,
 } from "./ir.wado";
-use { to_lower, escape_char, literal_const_name, gen_visibility_comment } from "./gen_util.wado";
+use { escape_char, literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec } from "./wadopoet.wado";
 
 pub struct LitToken {
@@ -98,6 +98,30 @@ pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken>
     return result;
 }
 
+/// Case-folding in `literal_const_name` (lowercase → uppercase) can map two
+/// distinct literals (`'and'`, `'AND'`) onto the same base const name. That
+/// would emit duplicate globals / `try_lit_*` fns / `token_kind_name` arms and
+/// break compilation, so the second and later occurrences get a numeric
+/// suffix (`TK_LIT_AND`, `TK_LIT_AND_2`, …). Deterministic in source order.
+fn disambiguate_const_name(base: &String, result: &List<LitToken>) -> String {
+    let mut candidate = *base;
+    let mut n = 2;
+    while const_name_taken(result, &candidate) {
+        candidate = `{*base}_{n}`;
+        n += 1;
+    }
+    return candidate;
+}
+
+fn const_name_taken(result: &List<LitToken>, name: &String) -> bool {
+    for let lit of result {
+        if lit.const_name == *name {
+            return true;
+        }
+    }
+    return false;
+}
+
 fn collect_lits_from_elements(elements: &List<Element>, seen: &mut List<String>, result: &mut List<LitToken>) {
     for let elem of elements {
         collect_lits_from_element(elem, seen, result);
@@ -109,7 +133,9 @@ fn collect_lits_from_element(elem: &Element, seen: &mut List<String>, result: &m
         Literal(l) => {
             if !seen_contains(seen, &l.text) {
                 seen.push(l.text);
-                result.push(LitToken { text: l.text, const_name: literal_const_name(&l.text) });
+                let base = literal_const_name(&l.text);
+                let const_name = disambiguate_const_name(&base, result);
+                result.push(LitToken { text: l.text, const_name });
             }
         },
         Repeat(rep) => collect_lits_from_element(&rep.element, seen, result),
@@ -129,16 +155,40 @@ fn collect_lits_from_element(elem: &Element, seen: &mut List<String>, result: &m
     }
 }
 
-pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {
-    let mut idx = 0;
-    // Mirror ANTLR4's SemanticPipeline.assignLexerTokenTypes: non-fragment
-    // rules WITHOUT a `more` / `type(...)` command get the low token types in
-    // declaration order, then the `more` / `type` rules are numbered. A rule
-    // that always `more`s never produces a parser-visible token, so ANTLR4
-    // pushes its type to the back; matching that order keeps the `<N>` ids in
-    // `to_lexer_string` output identical to the reference tool.
+/// One position in the canonical token numbering: slot `i` of
+/// `token_slot_order` is the token whose kind id is `i`.
+pub variant TokenSlot {
+    /// Index into the lexer-rule list (non-fragment).
+    Rule(i32),
+    /// The `TK_EOF` sentinel.
+    Eof,
+    /// The `TK_ERROR` no-match sentinel (absent when a user rule named
+    /// `ERROR` claims the identifier).
+    Error,
+    /// Index into the literal-token list.
+    Lit(i32),
+}
+
+/// The canonical token numbering, shared by every emitter that indexes by
+/// token kind: `gen_token_constants` (the `TK_*` globals), the highlight
+/// `defaults` capture table (indexed `defaults[kind]` at runtime), and the
+/// ATN builder's `build_token_kinds`. Keeping them on one source prevents
+/// the tables from drifting out of alignment.
+///
+/// Order mirrors ANTLR4's SemanticPipeline.assignLexerTokenTypes:
+/// non-fragment rules WITHOUT a `more` / `type(...)` command get the low
+/// token types in declaration order, then the `more` / `type` rules are
+/// numbered (a rule that always `more`s never produces a parser-visible
+/// token, so ANTLR4 pushes its type to the back). Then `TK_EOF`, then the
+/// `TK_ERROR` sentinel — unless a user rule named `ERROR` claims the same
+/// identifier (`ERROR : .;` is itself a catch-all aligned with the
+/// sentinel's role; `EOF` stays uncollapsed as an ANTLR4-reserved
+/// built-in). Literal tokens close the numbering.
+pub fn token_slot_order(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> List<TokenSlot> {
+    let mut slots: List<TokenSlot> = [];
     for let want_deferred of [false, true] {
-        for let rule of lexer_rules {
+        for let mut i = 0; i < lexer_rules.len(); i += 1 {
+            let rule = &lexer_rules[i];
             if rule.is_fragment {
                 continue;
             }
@@ -146,32 +196,38 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
             if deferred != want_deferred {
                 continue;
             }
-            let name = `TK_{rule.name}`;
-            let init = `{idx}`;
-            let mut g = GlobalSpec::new(&name, "i32", &init);
-            if rule.is_virtual {
-                g.set_trailing_comment(&"virtual");
-            }
-            g.emit(w);
-            idx += 1;
+            slots.push(TokenSlot::Rule(i));
         }
     }
-    let eof_init = `{idx}`;
-    GlobalSpec::new("TK_EOF", "i32", &eof_init).emit(w);
-    idx += 1;
-    // A user rule named `ERROR` claims the same identifier as Gale's
-    // no-match sentinel; let the rule own it — `ERROR : .;` is itself a
-    // catch-all aligned with the sentinel's role. `EOF` stays uncollapsed
-    // (ANTLR4-reserved built-in; collision should be a g4-parse-layer
-    // diagnostic, not a silent merge).
+    slots.push(TokenSlot::Eof);
     if !rule_name_exists(lexer_rules, &"ERROR") {
-        let err_init = `{idx}`;
-        GlobalSpec::new("TK_ERROR", "i32", &err_init).emit(w);
-        idx += 1;
+        slots.push(TokenSlot::Error);
     }
-    for let lit of lit_tokens {
+    for let mut i = 0; i < lit_tokens.len(); i += 1 {
+        slots.push(TokenSlot::Lit(i));
+    }
+    return slots;
+}
+
+pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {
+    let slots = token_slot_order(lexer_rules, lit_tokens);
+    let mut idx = 0;
+    for let slot of &slots {
         let init = `{idx}`;
-        GlobalSpec::new(&lit.const_name, "i32", &init).emit(w);
+        match *slot {
+            Rule(ri) => {
+                let rule = &lexer_rules[ri];
+                let name = `TK_{rule.name}`;
+                let mut g = GlobalSpec::new(&name, "i32", &init);
+                if rule.is_virtual {
+                    g.set_trailing_comment(&"virtual");
+                }
+                g.emit(w);
+            },
+            Eof => GlobalSpec::new("TK_EOF", "i32", &init).emit(w),
+            Error => GlobalSpec::new("TK_ERROR", "i32", &init).emit(w),
+            Lit(li) => GlobalSpec::new(&lit_tokens[li].const_name, "i32", &init).emit(w),
+        }
         idx += 1;
     }
     // `-> type(N)` (numeric) assigns the emitted token an explicit ANTLR4
@@ -304,9 +360,11 @@ fn gen_lexer_match_fns(
                 gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts);
             }
         } else if fragment_is_recursive(rule, lexer_rules) {
-            // Fragments inherit the grammar-level CI flag (rule-level options
-            // on fragments are uncommon; ANTLR4 applies grammar-level CI to
-            // fragments uniformly).
+            // A recursive fragment needs its own `try_*` matcher (non-
+            // recursive fragments are inlined at each use site). `gen_lexer_match_fn`
+            // resolves case-insensitivity from `resolve_ci(grammar_opts,
+            // &rule.options)`, so a rule-level `options { caseInsensitive=... }`
+            // on the fragment overrides the grammar-level flag.
             gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts);
         }
     }
@@ -369,13 +427,23 @@ fn fragment_elem_refs_self(
     }
 }
 
+/// Generated scanner-function name for the lexer rule called `name`.
+/// The rule name is used verbatim (case-preserved): lexer rule names are
+/// g4 identifiers, so `try_<name>` is always a valid Wado identifier, and
+/// preserving case keeps distinct rules distinct (`ID` vs `Id` →
+/// `try_ID` / `try_Id`) without any collision-resolution bookkeeping.
+/// Single source of truth so every emit site agrees on the name.
+pub fn lexer_try_fn_name(name: &String) -> String {
+    return `try_{*name}`;
+}
+
 fn gen_lexer_match_fn(
     w: &mut CodeWriter,
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
     grammar_opts: &List<GrammarOption>,
 ) {
-    let fn_name = `try_{to_lower(&rule.name)}`;
+    let fn_name = lexer_try_fn_name(&rule.name);
     let ci = resolve_ci(grammar_opts, &rule.options);
     gen_visibility_comment(w, &rule.visibility);
     let mut f = FnSpec::new(&fn_name);
@@ -680,7 +748,7 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
                     // The recursive-fragment case uses its own `try_*` fn
                     // emitted separately with grammar-level CI.
                     if fragment_is_recursive(f, all_rules) {
-                        let fn_name = `try_{to_lower(&name)}`;
+                        let fn_name = lexer_try_fn_name(&name);
                         w.line(&`pos = {fn_name}(chars, pos);`);
                         w.line(&`if pos < 0 \{ {fail_action}; \}`);
                     } else if f.body.len() == 1 {
@@ -689,7 +757,7 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
                         gen_lexer_alts(w, &f.body, all_rules, fail_action, ci);
                     }
                 } else {
-                    let fn_name = `try_{to_lower(&name)}`;
+                    let fn_name = lexer_try_fn_name(&name);
                     w.line(&`pos = {fn_name}(chars, pos);`);
                     w.line(&`if pos < 0 \{ {fail_action}; \}`);
                 }
@@ -1377,7 +1445,7 @@ fn compute_first_chars(
     grammar_opts: &List<GrammarOption>,
 ) -> TryCall {
     let ci = resolve_ci(grammar_opts, &rule.options);
-    let fn_name = `try_{to_lower(&rule.name)}`;
+    let fn_name = lexer_try_fn_name(&rule.name);
     // `type(X)` rewrites the kind used when emitting the token. Use the
     // override kind at emit time so downstream code (parser, token_kind_name)
     // sees the renamed type. The rule itself still has its own TK_<name>
@@ -1864,7 +1932,7 @@ fn gen_tokenize_fn(
                     && rule.mode == mi
                     && !is_keyword_rule_name(&rule.name, keywords)
                     && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                    let fn_name = `try_{to_lower(&rule.name)}`;
+                    let fn_name = lexer_try_fn_name(&rule.name);
                     w.line(&`end = {fn_name}(&lexer.chars, start);`);
                     let mut extra = String::with_capacity(64);
                     if rule.push_mode >= 0 {

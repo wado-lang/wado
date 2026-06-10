@@ -381,7 +381,7 @@ mod tests {
             attrs: vec![],
             params: vec![
                 Param {
-                    id: crate::ast::AstId(1),
+                    id: crate::ast::AstId::fresh(),
                     name: "tx".to_string(),
                     name_span: make_span(),
                     ty: Type::Named(NamedType {
@@ -396,7 +396,7 @@ mod tests {
                     span: make_span(),
                 },
                 Param {
-                    id: crate::ast::AstId(2),
+                    id: crate::ast::AstId::fresh(),
                     name: "ptr".to_string(),
                     name_span: make_span(),
                     ty: Type::Named(NamedType {
@@ -411,7 +411,7 @@ mod tests {
                     span: make_span(),
                 },
                 Param {
-                    id: crate::ast::AstId(3),
+                    id: crate::ast::AstId::fresh(),
                     name: "len".to_string(),
                     name_span: make_span(),
                     ty: Type::Named(NamedType {

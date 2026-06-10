@@ -769,7 +769,7 @@ fn hint_guard_fall_through(instrs: &mut [WirInstr], mut reaches_cold: bool) -> b
             && then_body.iter().any(WirInstr::always_diverges)
             && !block_has_cold_path(then_body)
         {
-            wrap_condition_hint(condition, true);
+            WirInstr::hint_condition(condition, true);
         }
         // Update `reaches_cold` for the position before `instrs[i]`. A bare
         // marker makes the path cold; a transparent group propagates through its
@@ -784,19 +784,6 @@ fn hint_guard_fall_through(instrs: &mut [WirInstr], mut reaches_cold: bool) -> b
         }
     }
     reaches_cold
-}
-
-/// Wrap an `if` condition in a `BranchHint`, unless it already carries an
-/// explicit `likely`/`unlikely` annotation (the programmer's hint wins).
-fn wrap_condition_hint(condition: &mut Box<WirInstr>, likely: bool) {
-    if matches!(condition.as_ref(), WirInstr::BranchHint { .. }) {
-        return;
-    }
-    let cond = std::mem::replace(condition.as_mut(), WirInstr::Nop);
-    **condition = WirInstr::BranchHint {
-        likely,
-        expr: Box::new(cond),
-    };
 }
 
 fn apply_cold_path_hints_instr(instr: &mut WirInstr) {
@@ -820,7 +807,7 @@ fn apply_cold_path_hints_instr(instr: &mut WirInstr) {
                 (false, true) => true,
                 _ => return,
             };
-            wrap_condition_hint(condition, likely);
+            WirInstr::hint_condition(condition, likely);
         }
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
             apply_cold_path_hints(body);

@@ -81,6 +81,67 @@ fn last_flag_wins() {
     );
 }
 
+/// Sources covering every branch-hint producer: an explicit `cold_path()`
+/// marker, a synthesized one (`assert`), and a trap branch that the WIR-level
+/// inference would hint on its own. `-f no-branch-hinting` must silence all
+/// of them.
+const BRANCH_HINT_SOURCE: &str = r#"
+#[inline(never)]
+fn guarded(x: i32) -> i32 {
+    if x < 0 {
+        builtin::cold_path();
+        return -1;
+    }
+    if x > 1000 {
+        builtin::unreachable();
+    }
+    return x + 1;
+}
+
+export fn run() {
+    assert guarded(5) == 6;
+}
+"#;
+
+fn compile_branch_hints(codegen_flags: Vec<String>) -> Vec<u8> {
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        codegen_flags,
+        ..Default::default()
+    };
+    common::compile_source_with_compiler_options(
+        Path::new("codegen_flags_branch_hint_test.wado"),
+        BRANCH_HINT_SOURCE,
+        options,
+    )
+    .expect("compilation should succeed")
+    .wasm
+}
+
+fn has_branch_hint_section(wasm: &[u8]) -> bool {
+    let name = b"metadata.code.branch_hint";
+    wasm.windows(name.len()).any(|w| w == name)
+}
+
+#[test]
+fn default_emits_branch_hint_section() {
+    let wasm = compile_branch_hints(Vec::new());
+    assert!(
+        has_branch_hint_section(&wasm),
+        "default codegen must emit the metadata.code.branch_hint custom section"
+    );
+}
+
+#[test]
+fn no_branch_hinting_flag_drops_every_hint() {
+    let wasm = compile_branch_hints(vec!["no-branch-hinting".to_string()]);
+    assert!(
+        !has_branch_hint_section(&wasm),
+        "`-f no-branch-hinting` must drop cold_path markers and disable hint \
+         inference, so no metadata.code.branch_hint section is emitted"
+    );
+}
+
 #[test]
 fn unknown_codegen_flag_is_rejected() {
     let options = CompilerOptions {

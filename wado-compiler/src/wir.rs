@@ -929,6 +929,14 @@ impl WirType {
         )
     }
 
+    /// True when this type lowers to a Wasm GC reference (`Ref` /
+    /// `AbstractRef`), as opposed to a scalar (`i32`/`i64`/`f64`/`v128`/…,
+    /// including `Enum`/`Flags` which are `i32`, and `Unit`). Used to
+    /// reject representation-crossing pass-through casts in WIR build.
+    pub fn is_reference(&self) -> bool {
+        matches!(self, Self::Ref { .. } | Self::AbstractRef { .. })
+    }
+
     /// Returns a nullable version of this type.
     /// Only affects `Ref` and `AbstractRef` variants; other types are returned unchanged.
     pub fn as_nullable(self) -> Self {
@@ -1552,10 +1560,12 @@ pub enum WirInstr {
         then_body: Vec<WirInstr>,
         else_body: Option<Vec<WirInstr>>,
     },
-    /// Branch hint annotation synthesized from `builtin::cold_path()` by
-    /// `apply_cold_path_hints` during WIR finalization. Wraps a condition
+    /// Branch hint annotation, synthesized from `builtin::cold_path()` by
+    /// `apply_cold_path_hints` during WIR finalization or inferred from
+    /// trapping control flow by `wir_optimize::branch_hint`. Wraps a condition
     /// expression; consumed by the emitter when it appears as the condition of
-    /// an `If` instruction, which records a `metadata.code.branch_hint` entry.
+    /// an `If` or `BrIf` instruction, which records a
+    /// `metadata.code.branch_hint` entry.
     BranchHint {
         likely: bool,
         expr: Box<WirInstr>,
@@ -1584,9 +1594,10 @@ pub enum WirInstr {
     /// No operation (for structure).
     Nop,
     /// Cold-path marker emitted for `builtin::cold_path()`. Produces no Wasm.
-    /// `apply_cold_path_hints` consumes it during WIR finalization: an `if`
-    /// whose then/else body contains this marker has its condition wrapped in
-    /// `BranchHint` so the enclosing branch is hinted unlikely.
+    /// `apply_cold_path_hints` consumes it during WIR finalization, wrapping
+    /// the enclosing conditional's condition in a `BranchHint` so the side
+    /// reaching the marker is hinted cold (see that pass for the recognized
+    /// shapes). Lowered to `Nop` under `-f no-branch-hinting`.
     ColdPath,
     /// Drop a value.
     Drop(Box<WirInstr>),
@@ -1743,6 +1754,49 @@ impl WirInstr {
 
     fn seq_always_diverges(instrs: &[Self]) -> bool {
         instrs.iter().any(Self::always_diverges)
+    }
+
+    /// The instruction with any `BranchHint` wrapper peeled off.
+    ///
+    /// A hint is a transparent annotation on an `if`/`br_if` condition, not a
+    /// value: optimization passes that match on a condition's shape must look
+    /// through the wrapper, or the hint blocks the rewrite. A pass that
+    /// logically negates a hinted condition or swaps the arms of a hinted
+    /// `if` must flip the wrapper's `likely` accordingly.
+    pub fn peel_hint(&self) -> &WirInstr {
+        match self {
+            Self::BranchHint { expr, .. } => expr,
+            other => other,
+        }
+    }
+
+    /// Remove a `BranchHint` wrapper in place, returning the direction it
+    /// carried. Used when the branch the hint annotated is eliminated — the
+    /// hint must not survive as a wrapper around an ordinary operand.
+    pub fn take_branch_hint(&mut self) -> Option<bool> {
+        if let Self::BranchHint { likely, expr } = self {
+            let likely = *likely;
+            let inner = std::mem::replace(expr.as_mut(), WirInstr::Nop);
+            *self = inner;
+            Some(likely)
+        } else {
+            None
+        }
+    }
+
+    /// Wrap an `if`/`br_if` condition in a `BranchHint`, unless it already
+    /// carries one — the existing hint (the programmer's `cold_path()` or an
+    /// earlier pass) wins. `likely` refers to the condition evaluating true,
+    /// i.e. the then-arm / taken branch.
+    pub fn hint_condition(condition: &mut Box<WirInstr>, likely: bool) {
+        if matches!(condition.as_ref(), Self::BranchHint { .. }) {
+            return;
+        }
+        let cond = std::mem::replace(condition.as_mut(), Self::Nop);
+        **condition = Self::BranchHint {
+            likely,
+            expr: Box::new(cond),
+        };
     }
 
     /// Returns true if this instruction ends with an unconditional branch or

@@ -1,7 +1,7 @@
 //! Module identity (`ModuleSource`) and its interner.
 //!
 //! `ModuleSource` is the canonical identity for a Wado module — the
-//! "where did this code come from" half of `SymbolKey = (ModuleSource,
+//! "where did this code come from" half of `symbol-coordinate = (ModuleSource,
 //! AstId)`. It is **not** a name-mangling concept: rendering it into a
 //! mangled symbol is the job of `crate::name`.
 //!

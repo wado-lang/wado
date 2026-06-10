@@ -294,6 +294,30 @@ pub enum CompilerItem {
     /// `u128::from_pair` — low/high pair constructor used by the
     /// wide-int literal lowering pass.
     U128FromPair,
+    /// `i128::from_u128` — bit-reinterpreting constructor; lowers
+    /// `u128 as i128` casts.
+    I128FromU128,
+    /// `u128::from_i128` — bit-reinterpreting constructor; lowers
+    /// `i128 as u128` casts.
+    U128FromI128,
+    /// `i128::low` — low 64 bits accessor; lowers truncating
+    /// `i128 as <int>` casts.
+    I128Low,
+    /// `u128::low` — low 64 bits accessor; lowers truncating
+    /// `u128 as <int>` casts.
+    U128Low,
+    /// `i128::as_f64` — correctly rounded conversion; lowers
+    /// `i128 as f64` casts.
+    I128AsF64,
+    /// `i128::as_f32` — correctly rounded conversion; lowers
+    /// `i128 as f32` casts.
+    I128AsF32,
+    /// `u128::as_f64` — correctly rounded conversion; lowers
+    /// `u128 as f64` casts.
+    U128AsF64,
+    /// `u128::as_f32` — correctly rounded conversion; lowers
+    /// `u128 as f32` casts.
+    U128AsF32,
 
     // ── Type families ─────────────────────────────────────────────────
     /// The tuple type family (`pub type [..T];`). The owning module is
@@ -381,6 +405,14 @@ impl CompilerItem {
         Self::I128FromPair,
         Self::U128FromU64,
         Self::U128FromPair,
+        Self::I128FromU128,
+        Self::U128FromI128,
+        Self::I128Low,
+        Self::U128Low,
+        Self::I128AsF64,
+        Self::I128AsF32,
+        Self::U128AsF64,
+        Self::U128AsF32,
         Self::Tuple,
         Self::Array,
     ];
@@ -466,6 +498,14 @@ impl CompilerItem {
             Self::I128FromPair => "i128_from_pair",
             Self::U128FromU64 => "u128_from_u64",
             Self::U128FromPair => "u128_from_pair",
+            Self::I128FromU128 => "i128_from_u128",
+            Self::U128FromI128 => "u128_from_i128",
+            Self::I128Low => "i128_low",
+            Self::U128Low => "u128_low",
+            Self::I128AsF64 => "i128_as_f64",
+            Self::I128AsF32 => "i128_as_f32",
+            Self::U128AsF64 => "u128_as_f64",
+            Self::U128AsF32 => "u128_as_f32",
             Self::Tuple => "tuple",
             Self::Array => "array",
         }
@@ -523,6 +563,14 @@ impl CompilerItem {
             | Self::I128FromPair
             | Self::U128FromU64
             | Self::U128FromPair
+            | Self::I128FromU128
+            | Self::U128FromI128
+            | Self::I128Low
+            | Self::U128Low
+            | Self::I128AsF64
+            | Self::I128AsF32
+            | Self::U128AsF64
+            | Self::U128AsF32
             | Self::Tuple
             | Self::Array
             // Variant cases of always-loaded variants/enums travel with
@@ -642,7 +690,15 @@ impl CompilerItem {
             | Self::I128FromI64
             | Self::I128FromPair
             | Self::U128FromU64
-            | Self::U128FromPair => CompilerItemKind::Method,
+            | Self::U128FromPair
+            | Self::I128FromU128
+            | Self::U128FromI128
+            | Self::I128Low
+            | Self::U128Low
+            | Self::I128AsF64
+            | Self::I128AsF32
+            | Self::U128AsF64
+            | Self::U128AsF32 => CompilerItemKind::Method,
             Self::Tuple => CompilerItemKind::TupleFamily,
             Self::Array => CompilerItemKind::BuiltinType,
             Self::OptionSome | Self::OptionNone | Self::ResultOk | Self::ResultErr => {

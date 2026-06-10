@@ -22,20 +22,17 @@ use std::cell::RefCell;
 
 use crate::ast;
 use crate::hashmap::IndexMap;
-use crate::module_source::ModuleSource;
-use crate::symbol::SymbolKey;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 /// Lookup context for AST control-flow walks. Holds the per-AstId
-/// type table and the current module key so `expression_types` reads
-/// resolve to the right module's facts. `type_table` backs the
+/// type table; `expression_types` is keyed by globally-unique `AstId`,
+/// so no module qualifier is needed. `type_table` backs the
 /// `contains_unknown` filter the missing-return walk applies (since
 /// Stage 7-B `expression_types` records UNKNOWN-containing types).
 #[derive(Clone, Copy)]
 pub(super) struct CtrlFlowCtx<'a> {
-    pub(super) expression_types: &'a IndexMap<SymbolKey, TypeId>,
-    pub(super) module: &'a ModuleSource,
+    pub(super) expression_types: &'a IndexMap<crate::ast::AstId, TypeId>,
     pub(super) type_table: &'a RefCell<TypeTable>,
 }
 
@@ -45,8 +42,7 @@ impl CtrlFlowCtx<'_> {
     }
 
     fn type_of_id(&self, id: crate::ast::AstId) -> Option<TypeId> {
-        let key = SymbolKey::new(self.module.clone(), id);
-        self.expression_types.get(&key).copied()
+        self.expression_types.get(&id).copied()
     }
 
     /// `type_of`, but an UNKNOWN-containing recorded type counts as "no

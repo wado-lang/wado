@@ -96,29 +96,31 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(35)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(36)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(38)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(39)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(39)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(40)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(40)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(41)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(41)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(42)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(42)
 
-type "functype//wado-compiler/tests/fixtures/array_index_2.wado/Container<core:prelude/string.wado/String>::count_flagged" = fn(ref "wado-compiler/tests/fixtures/array_index_2.wado//Container<core:prelude/string.wado/String>") -> i32;  // TypeId(43)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(43)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
+type "functype//wado-compiler/tests/fixtures/array_index_2.wado/Container<core:prelude/string.wado/String>::count_flagged" = fn(ref "wado-compiler/tests/fixtures/array_index_2.wado//Container<core:prelude/string.wado/String>") -> i32;  // TypeId(44)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(45)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(46)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -134,6 +136,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global mut global:__modules_initialized: bool = 0;
 global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
 global global:__const_obj_1: ref null "core:prelude//List<bool>" = struct.new "core:prelude//List<bool>" { repr: ref.as_non_null(array.new_fixed<bool>(0, 1, 0)), used: 3 };
 
@@ -221,9 +224,7 @@ fn "wado-compiler/tests/fixtures/array_index_2.wado/array_index_inline_nested"()
     _licm_repr_57 = global:__const_obj_0.repr;
     b7: block {
         l8: loop {
-            if i >= _licm_used_53 {
-                break b7;
-            }
+            break_if b7 i >= _licm_used_53;
             if if @unlikely(i >= _licm_used_54) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -252,6 +253,18 @@ fn "wado-compiler/tests/fixtures/array_index_2.wado/__cm_binding__Stdout_write_v
 }
 
 fn "wado-compiler/tests/fixtures/array_index_2.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    __inline___initialize_modules_2: block {
+        break_if __inline___initialize_modules_2 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/array_index_2.wado/array_index_inline_multi"();
     "wado-compiler/tests/fixtures/array_index_2.wado/array_index_inline_nested"();
     "wasi/task-return"(0);
@@ -289,14 +302,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b15: block {
-        l16: loop {
-            if i >= len {
-                break b15;
-            }
+    b14: block {
+        l15: loop {
+            break_if b14 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l16;
+            continue l15;
         };
     };
 }
@@ -378,14 +389,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b21: block {
-        l22: loop {
-            if t <= 0_i64 {
-                break b21;
-            }
+    b19: block {
+        l20: loop {
+            break_if b19 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l22;
+            continue l20;
         };
     };
     return n;
@@ -399,18 +408,19 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b25: block {
-            l26: loop {
-                if temp <= 0_i64 {
-                    break b25;
-                }
+        b22: block {
+            l23: loop {
+                break_if b22 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l26;
+                continue l23;
             };
         };
     }
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
@@ -500,14 +510,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b36: block {
-        l37: loop {
-            if i >= n {
-                break b36;
-            }
+    b32: block {
+        l33: loop {
+            break_if b32 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l37;
+            continue l33;
         };
     };
 }
@@ -635,14 +643,12 @@ fn "wado-compiler/tests/fixtures/array_index_2.wado/Container<core:prelude/strin
     _licm_markers_6 = self.markers;
     _licm_used_7 = _licm_markers_6.used;
     _licm_repr_8 = _licm_markers_6.repr;
-    b60: block {
-        l61: loop {
-            if i >= _licm_used_7 {
-                break b60;
-            }
+    b55: block {
+        l56: loop {
+            break_if b55 i >= _licm_used_7;
             count = count + builtin::array_get<bool>(_licm_repr_8, i);
             i = i + 1;
-            continue l61;
+            continue l56;
         };
     };
     return count;

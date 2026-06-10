@@ -1947,7 +1947,18 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::Br(*depth));
             }
             WirInstr::BrIf { depth, condition } => {
-                self.emit_instr(f, condition);
+                // Check for branch hint wrapper on the condition, as for `If`.
+                let (actual_condition, hint) =
+                    if let WirInstr::BranchHint { likely, expr } = condition.as_ref() {
+                        (expr.as_ref(), Some(*likely))
+                    } else {
+                        (condition.as_ref(), None)
+                    };
+                self.emit_instr(f, actual_condition);
+                if let Some(likely) = hint {
+                    self.current_branch_hints
+                        .push((f.byte_len() as u32, likely));
+                }
                 f.instruction(&Instruction::BrIf(*depth));
             }
             WirInstr::BrTable {

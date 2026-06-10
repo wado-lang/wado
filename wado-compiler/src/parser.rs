@@ -40,9 +40,13 @@ pub struct Parser {
     /// Inner attributes parsed before items. Retained even if parsing fails later,
     /// so callers can check `has_todo()` after a parse error.
     parsed_inner_attributes: Vec<InnerAttribute>,
-    /// Next [`AstId`] to allocate. Allocated densely starting from `0` in DFS
-    /// parse order so that re-parsing the same source produces the same id
-    /// sequence.
+    /// The [`crate::ast::AstIdSpace`] every id this parser allocates lives
+    /// in. Fresh per top-level parser; template-interpolation sub-parsers
+    /// inherit the parent's space (see `parse_interpolation_expr`) so a
+    /// module's tree carries exactly one space.
+    ast_id_space: crate::ast::AstIdSpace,
+    /// Local half of the next [`AstId`] to allocate. Allocated densely
+    /// starting from `0` in DFS parse order.
     next_ast_id: u32,
     /// Comments collected by the lexer, ordered by source position. The
     /// parser consumes them in lockstep with token consumption: at every
@@ -120,7 +124,13 @@ impl Parser {
     /// should call [`Parser::from_lex`] instead so shebang / data section /
     /// comments flow through.
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self::build(tokens, None, None, Vec::new())
+        Self::build(
+            tokens,
+            None,
+            None,
+            Vec::new(),
+            crate::ast::AstIdSpace::next(),
+        )
     }
 
     /// Parse a complete [`crate::lexer::LexResult`], keeping the comment
@@ -130,7 +140,13 @@ impl Parser {
     /// so the wire format keeps the `lexer error:` prefix distinct from
     /// `parse error:`.
     pub fn from_lex(lex: crate::lexer::LexResult) -> Self {
-        Self::build(lex.tokens, lex.shebang, lex.data_section, lex.comments)
+        Self::build(
+            lex.tokens,
+            lex.shebang,
+            lex.data_section,
+            lex.comments,
+            crate::ast::AstIdSpace::next(),
+        )
     }
 
     /// Like [`Parser::from_lex`] but drops the comment stream. Used by the
@@ -138,7 +154,13 @@ impl Parser {
     /// thrown away — clearing it up front skips the per-AST-id comment-cursor
     /// walk and `Comment::clone` into [`crate::comment::TriviaMap`].
     pub fn from_lex_no_trivia(lex: crate::lexer::LexResult) -> Self {
-        Self::build(lex.tokens, lex.shebang, lex.data_section, Vec::new())
+        Self::build(
+            lex.tokens,
+            lex.shebang,
+            lex.data_section,
+            Vec::new(),
+            crate::ast::AstIdSpace::next(),
+        )
     }
 
     fn build(
@@ -146,6 +168,7 @@ impl Parser {
         shebang: Option<String>,
         data_section: Option<String>,
         comments: Vec<crate::comment::Comment>,
+        ast_id_space: crate::ast::AstIdSpace,
     ) -> Self {
         // Filter `TokenKind::Error` tokens at construction time so no parser
         // path can mistake one for an identifier or generate a duplicate
@@ -165,6 +188,7 @@ impl Parser {
             data_section,
             include_paths: crate::hashmap::IndexSet::default(),
             parsed_inner_attributes: Vec::new(),
+            ast_id_space,
             next_ast_id: 0,
             comments,
             comment_cursor: 0,
@@ -192,7 +216,8 @@ impl Parser {
     }
 
     /// Allocate a fresh [`AstId`] for an AST node currently being constructed.
-    /// Ids are dense in `0..next_ast_id` and assigned in parse order.
+    /// Id locals are dense in `0..next_ast_id` and assigned in parse order,
+    /// all within this parser's `ast_id_space`.
     ///
     /// Side effect: every comment in `self.comments` whose `span.start`
     /// precedes the next-to-consume token's start and has not already been
@@ -201,7 +226,7 @@ impl Parser {
     /// allocates first (DFS parse order), so the comment naturally lands
     /// on the AST node it semantically belongs to.
     fn alloc_ast_id(&mut self) -> crate::ast::AstId {
-        let id = crate::ast::AstId(self.next_ast_id);
+        let id = crate::ast::AstId::new(self.ast_id_space, self.next_ast_id);
         self.next_ast_id += 1;
         // Comment-stream lockstep: pure tokenisations skip the Vec
         // allocation entirely. Most AST nodes have no preceding
@@ -263,7 +288,8 @@ impl Parser {
     fn restore(&mut self, cp: ParserCheckpoint) {
         self.pos = cp.pos;
         self.comment_cursor = cp.comment_cursor;
-        self.trivia.discard_from(crate::ast::AstId(cp.next_ast_id));
+        self.trivia
+            .discard_from(crate::ast::AstId::new(self.ast_id_space, cp.next_ast_id));
         self.next_ast_id = cp.next_ast_id;
         self.pending_gt = cp.pending_gt;
         // Drop errors recorded inside the speculative branch being rolled back.
@@ -356,6 +382,7 @@ impl Parser {
             self.shebang.take(),
             self.data_section.take(),
             std::mem::take(&mut self.include_paths),
+            self.ast_id_space,
             self.next_ast_id,
             has_syntax_errors,
         )
@@ -5677,12 +5704,13 @@ impl Parser {
             });
         }
 
-        // Continue the parent's dense `AstId` space so interpolation
-        // sub-expressions get unique ids: a fresh `Parser` restarts at 0,
-        // and two interpolations (`{a}` and `{b}`) would then collide on
-        // `AstId(0)`, clobbering each other's entries in the per-`AstId`
-        // annotation maps (expression types, method/static dispatch).
-        let mut parser = Parser::new(lex_result.tokens);
+        // Continue the parent's `AstIdSpace` and dense local counter so
+        // interpolation sub-expressions live in the parent module's id space
+        // with unique locals (one module tree = one space). Building directly
+        // in the parent's space avoids minting — and wasting — a fresh space
+        // per interpolation.
+        let mut parser =
+            Parser::build(lex_result.tokens, None, None, Vec::new(), self.ast_id_space);
         parser.next_ast_id = self.next_ast_id;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;

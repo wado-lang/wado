@@ -35,25 +35,6 @@ impl u128 {
         return u128 { low, high };
     }
 
-    /// Create a u128 from a string (decimal representation)
-    /// Used for literal coercion: `let x: u128 = "12345678901234567890"`
-    pub fn from_string(s: String) -> u128 {
-        let mut result = u128::zero();
-        let mut i = 0;
-        let len = s.len();
-        let bytes = s.internal_raw_bytes();
-        let ten: u128 = 10;
-        while i < len {
-            let byte = builtin::array_get_u8(&bytes, i);
-            let digit = byte as i32 - '0' as i32;
-            if 0 <= digit && digit <= 9 {
-                result = result * ten + u128::from_u64(digit as u64);
-            }
-            i += 1;
-        }
-        return result;
-    }
-
     /// Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
     pub fn from_str_hex(s: &String) -> Result<u128, ParseIntError> {
         return u128::from_str_radix(s, 16);
@@ -90,6 +71,8 @@ impl u128 {
     }
 
     /// Gets the low 64 bits
+    /// Used by the compiler to lower truncating `u128 as <int>` casts.
+    #[compiler_item("u128_low")]
     pub fn low(&self) -> u64 {
         return self.low;
     }
@@ -99,32 +82,100 @@ impl u128 {
         return self.high;
     }
 
-    /// Add two u128 values
-    pub fn add(&self, other: &u128) -> u128 {
-        let [lo, hi] = builtin::i64_add128(
-            self.low as i64,
-            self.high as i64,
-            other.low as i64,
-            other.high as i64,
-        );
-        return u128 {
-            low: lo as u64,
-            high: hi as u64,
-        };
+    /// Create a u128 from an i128 (reinterpret bits)
+    /// Used by the compiler to lower `i128 as u128` casts.
+    #[compiler_item("u128_from_i128")]
+    pub fn from_i128(val: i128) -> u128 {
+        return u128 { low: val.low, high: val.high as u64 };
     }
 
-    /// Subtract two u128 values (self - other)
-    pub fn sub(&self, other: &u128) -> u128 {
-        let [lo, hi] = builtin::i64_sub128(
-            self.low as i64,
-            self.high as i64,
-            other.low as i64,
-            other.high as i64,
-        );
-        return u128 {
-            low: lo as u64,
-            high: hi as u64,
-        };
+    /// Fold a value with more than 64 significant bits (`high != 0`) into
+    /// a `mant_bits`-bit mantissa rounded to nearest with ties to even,
+    /// plus the exponent of the value's leading bit. Shared core of the
+    /// float conversions; mirrors compiler-rt's `__floatuntidf`.
+    fn round_to_mantissa(&self, mant_bits: i32) -> [u64, i64] {
+        assert self.high != 0;
+        let hbits = 64 - builtin::i64_clz(self.high as i64);  // 1..=64
+        // Shift down to mant_bits + 2 bits: the mantissa, a guard bit,
+        // and one bit for the rest.
+        let shift = hbits + (62 - mant_bits) as i64;
+        let mut a: u64 = 0;
+        let mut sticky: u64 = 0;
+        if shift >= 64 {
+            let t = (shift - 64) as u64;
+            a = self.high >> t;
+            if self.low != 0 || self.high & (1 << t) - 1 != 0 {
+                sticky = 1;
+            }
+        } else {
+            let sh = shift as u64;
+            a = self.low >> sh | self.high << 64 - sh;
+            if self.low & (1 << sh) - 1 != 0 {
+                sticky = 1;
+            }
+        }
+        // Bit 1 of `a` is the guard bit and bit 0 the rest; fold sticky
+        // into bit 0, then round half-to-even: copying the mantissa LSB
+        // (bit 2) into bit 0 makes the +1 below carry into the mantissa
+        // exactly when guard && (sticky || odd).
+        a = a | sticky;
+        if a & 4 != 0 {
+            a = a | 1;
+        }
+        a += 1;
+        a = a >> 2;
+        let mut exp = 64 + hbits - 1;  // exponent of the leading bit, 64..=127
+        if a >> mant_bits as u64 != 0 {
+            // Rounding overflowed the mantissa.
+            a = a >> 1;
+            exp += 1;
+        }
+        assert a >> (mant_bits - 1) as u64 == 1;
+        return [a, exp];
+    }
+
+    /// Convert to `f64`, rounding to the nearest representable value with
+    /// ties to even — the same semantics as Rust's `value as f64` cast.
+    /// Used by the compiler to lower `u128 as f64` casts.
+    #[compiler_item("u128_as_f64")]
+    pub fn as_f64(&self) -> f64 {
+        if self.high == 0 {
+            // The native u64 → f64 conversion is correctly rounded.
+            return self.low as f64;
+        }
+        let [m, exp] = self.round_to_mantissa(53);
+        // Assemble the IEEE-754 double directly: biased exponent in bits
+        // 62..=52, the 52-bit mantissa (the leading 1 is implicit) in bits
+        // 51..=0. `exp` is 64..=128 (128 when rounding overflowed the
+        // mantissa, e.g. u128::MAX → 2^128), biasing to 1087..=1151 — far
+        // below the infinity pattern (2047), so the result is always a
+        // finite normal and no special-casing is needed.
+        let biased = (exp + 1023) as u64;
+        let mantissa: u64 = m & (1 << 52) - 1;
+        let bits: u64 = biased << 52 | mantissa;
+        return builtin::f64_reinterpret_i64(bits as i64);
+    }
+
+    /// Convert to `f32`, rounding to the nearest representable value with
+    /// ties to even; values above `f32::MAX` become infinity — the same
+    /// semantics as Rust's `value as f32` cast.
+    /// Used by the compiler to lower `u128 as f32` casts.
+    #[compiler_item("u128_as_f32")]
+    pub fn as_f32(&self) -> f32 {
+        if self.high == 0 {
+            // The native u64 → f32 conversion is correctly rounded.
+            return self.low as f32;
+        }
+        let [m, exp] = self.round_to_mantissa(24);
+        // Assemble the IEEE-754 single directly. `exp` is 64..=127, biasing
+        // to 191..=254; a mantissa that rounded up to exp 128 biases to 255,
+        // which is exactly the +infinity pattern (mantissa field 0) — so
+        // values above f32::MAX saturate to infinity for free, matching
+        // Rust's cast semantics.
+        let biased = (exp + 127) as u32;
+        let mantissa: u32 = m as u32 & (1 << 23) - 1;
+        let bits: u32 = biased << 23 | mantissa;
+        return builtin::f32_reinterpret_i32(bits as i32);
     }
 
     /// Divide self by divisor, returning (quotient, remainder)
@@ -219,6 +270,12 @@ impl u128 {
     }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
+        self.fmt_decimal_magnitude(f, false);
+    }
+
+    /// Decimal digits of `self` with an optional sign, shared by the
+    /// u128 Display path and the i128 one (which passes its magnitude).
+    fn fmt_decimal_magnitude(&self, f: &mut Formatter, is_neg: bool) {
         if *self == 0 {
             let offset = f.prepare_int_write(false, "", 1);
             let mut arr = f.buf.internal_raw_bytes();
@@ -229,13 +286,12 @@ impl u128 {
         let ten: u128 = 10;
 
         // Count digits first
-        let mut temp = *self;
         let mut digit_count = 0;
         for let mut temp = *self; temp > 0; temp /= ten {
             digit_count += 1;
         }
 
-        let offset = f.prepare_int_write(false, "", digit_count);
+        let offset = f.prepare_int_write(is_neg, "", digit_count);
         let mut arr = f.buf.internal_raw_bytes();
 
         // Write digits in reverse order
@@ -245,6 +301,7 @@ impl u128 {
             let digit: i32 = (temp % ten).low() as i64 as i32;
             builtin::array_set_u8(&mut arr, pos, ('0' as i32 + digit) as u8);
         }
+        assert pos == offset;
     }
 
     fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
@@ -262,32 +319,11 @@ impl u128 {
         let digit_count = if is_zero {
             1;
         } else {
-            // Find highest set bit across both halves
-            let mut highest_bit: i32 = 0;
-            let h: i64 = self.high as i64;
-            let l: i64 = self.low as i64;
-            let zero: i64 = 0;
-            if h != zero {
-                let mut b: i32 = 63;
-                while b >= 0 {
-                    let one: i64 = 1;
-                    if h >> b as i64 & one != zero {
-                        highest_bit = 64 + b;
-                        break;
-                    }
-                    b -= 1;
-                }
+            let highest_bit = if self.high != 0 {
+                127 - builtin::i64_clz(self.high as i64) as i32;
             } else {
-                let mut b: i32 = 63;
-                while b >= 0 {
-                    let one: i64 = 1;
-                    if l >> b as i64 & one != zero {
-                        highest_bit = b;
-                        break;
-                    }
-                    b -= 1;
-                }
-            }
+                63 - builtin::i64_clz(self.low as i64) as i32;
+            };
             highest_bit / bits_per_digit + 1;
         };
 
@@ -318,6 +354,7 @@ impl u128 {
                 lo = lo >> shift_u64 | hi_bits;
                 hi = hi >> shift_u64;
             }
+            assert pos == offset;
         }
     }
 }
@@ -637,42 +674,6 @@ impl i128 {
         return i128 { low, high };
     }
 
-    /// Create an i128 from a string (decimal representation, optionally prefixed with '-')
-    /// Used for literal coercion: `let x: i128 = "-12345678901234567890"`
-    pub fn from_string(s: String) -> i128 {
-        let len = s.len();
-        if len == 0 {
-            return i128::zero();
-        }
-
-        let bytes = s.internal_raw_bytes();
-
-        // Check for negative sign
-        let first_byte = builtin::array_get_u8(&bytes, 0);
-        let is_negative = first_byte == '-' as u8;
-        let start_idx = if is_negative { 1 } else { 0 };
-
-        // Parse the absolute value as u128
-        let mut abs_value = u128::zero();
-        let mut i = start_idx;
-        let ten: u128 = 10;
-        while i < len {
-            let byte = builtin::array_get_u8(&bytes, i);
-            let digit = byte as i32 - '0' as i32;
-            if 0 <= digit && digit <= 9 {
-                abs_value = abs_value * ten + u128::from_u64(digit as u64);
-            }
-            i += 1;
-        }
-
-        // Convert to i128
-        let result = i128 { low: abs_value.low, high: abs_value.high as i64 };
-        if is_negative {
-            return result.neg();
-        }
-        return result;
-    }
-
     /// Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`).
     pub fn from_str_hex(s: &String) -> Result<i128, ParseIntError> {
         return i128::from_str_radix(s, 16);
@@ -702,19 +703,12 @@ impl i128 {
                 if v > max_neg_abs {
                     Result::Err(ParseIntError::new(IntErrorKind::NegOverflow));
                 } else {
-                    let pos = i128 {
-                        low: v.low(),
-                        high: v.high() as i64,
-                    };
-                    Result::Ok(pos.neg());
+                    Result::Ok(-i128::from_u128(v));
                 }
             } else if v > max_pos {
                 Result::Err(ParseIntError::new(IntErrorKind::PosOverflow));
             } else {
-                Result::Ok(i128 {
-                    low: v.low(),
-                    high: v.high() as i64,
-                });
+                Result::Ok(i128::from_u128(v));
             },
             Err(k) => {
                 let kind = if is_negative && k == IntErrorKind::PosOverflow { IntErrorKind::NegOverflow } else { k };
@@ -734,6 +728,8 @@ impl i128 {
     }
 
     /// Gets the low 64 bits (unsigned)
+    /// Used by the compiler to lower truncating `i128 as <int>` casts.
+    #[compiler_item("i128_low")]
     pub fn low(&self) -> u64 {
         return self.low;
     }
@@ -748,52 +744,47 @@ impl i128 {
         return self.high < 0;
     }
 
-    /// Adds two i128 values
-    pub fn add(&self, other: &i128) -> i128 {
-        let [lo, hi] = builtin::i64_add128(
-            self.low as i64,
-            self.high,
-            other.low as i64,
-            other.high,
-        );
-        return i128 {
-            low: lo as u64,
-            high: hi,
-        };
-    }
-
-    /// Subtract two i128 values (self - other)
-    pub fn sub(&self, other: &i128) -> i128 {
-        let [lo, hi] = builtin::i64_sub128(
-            self.low as i64,
-            self.high,
-            other.low as i64,
-            other.high,
-        );
-        return i128 {
-            low: lo as u64,
-            high: hi,
-        };
-    }
-
-    /// Negate this i128 value
-    pub fn neg(&self) -> i128 {
-        // -x = ~x + 1 = 0 - x
-        return i128::zero().sub(self);
-    }
-
     /// Get absolute value as u128
     pub fn abs_u128(&self) -> u128 {
         if self.is_negative() {
-            let neg = self.neg();
-            return u128 { low: neg.low, high: neg.high as u64 };
+            // i128::MIN wraps to itself under negation; the reinterpret
+            // still yields the correct magnitude 2^127.
+            return u128::from_i128(-*self);
         }
-        return u128 { low: self.low, high: self.high as u64 };
+        return u128::from_i128(*self);
     }
 
     /// Create i128 from u128 (reinterpret bits)
+    /// Used by the compiler to lower `u128 as i128` casts.
+    #[compiler_item("i128_from_u128")]
     pub fn from_u128(val: u128) -> i128 {
         return i128 { low: val.low, high: val.high as i64 };
+    }
+
+    /// Convert to `f64`, rounding to the nearest representable value with
+    /// ties to even — the same semantics as Rust's `value as f64` cast.
+    /// Used by the compiler to lower `i128 as f64` casts.
+    #[compiler_item("i128_as_f64")]
+    pub fn as_f64(&self) -> f64 {
+        let magnitude = self.abs_u128().as_f64();
+        if self.is_negative() {
+            // Negation of an f64 is exact, so the result stays correctly
+            // rounded.
+            return -magnitude;
+        }
+        return magnitude;
+    }
+
+    /// Convert to `f32`, rounding to the nearest representable value with
+    /// ties to even — the same semantics as Rust's `value as f32` cast.
+    /// Used by the compiler to lower `i128 as f32` casts.
+    #[compiler_item("i128_as_f32")]
+    pub fn as_f32(&self) -> f32 {
+        let magnitude = self.abs_u128().as_f32();
+        if self.is_negative() {
+            return -magnitude;
+        }
+        return magnitude;
     }
 
     /// Divide self by divisor, returning (quotient, remainder)
@@ -823,13 +814,13 @@ impl i128 {
         // Quotient: negative if signs differ
         let mut quotient = i128::from_u128(abs_quotient);
         if dividend_neg != divisor_neg {
-            quotient = quotient.neg();
+            quotient = -quotient;
         }
 
         // Remainder: same sign as dividend
         let mut remainder = i128::from_u128(abs_remainder);
         if dividend_neg {
-            remainder = remainder.neg();
+            remainder = -remainder;
         }
 
         return [quotient, remainder];
@@ -848,103 +839,7 @@ impl i128 {
     }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
-        let is_neg = self.is_negative();
-        let abs_val = self.abs_u128();
-        if abs_val.low == 0 && abs_val.high == 0 {
-            let offset = f.prepare_int_write(false, "", 1);
-            let mut arr = f.buf.internal_raw_bytes();
-            builtin::array_set_u8(&mut arr, offset, '0' as u8);
-            return;
-        }
-
-        let ten: u128 = 10;
-        let mut temp = abs_val;
-        let mut digit_count: i32 = 0;
-        for let mut temp = abs_val; temp > 0; temp /= ten {
-            digit_count += 1;
-        }
-
-        let offset = f.prepare_int_write(is_neg, "", digit_count);
-        let mut arr = f.buf.internal_raw_bytes();
-
-        let mut pos = offset + digit_count;
-        temp = abs_val;
-        for let mut temp = abs_val; temp > 0; temp /= ten {
-            pos -= 1;
-            let digit = (temp % ten).low() as i64 as i32;
-            builtin::array_set_u8(&mut arr, pos, ('0' as i32 + digit) as u8);
-        }
-    }
-
-    fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool, prefix: String) {
-        let is_neg = self.is_negative();
-        let abs_val = self.abs_u128();
-        let bits_per_digit = if base == 2 {
-            1;
-        } else if base == 8 {
-            3;
-        } else {
-            4;
-        };
-        let mask: u64 = (base - 1) as u64;
-
-        let is_zero = abs_val == 0;
-        let digit_count = if is_zero {
-            1;
-        } else {
-            let mut highest_bit: i32 = 0;
-            let h: i64 = abs_val.high as i64;
-            let l: i64 = abs_val.low as i64;
-            if h != 0 {
-                let mut b: i32 = 63;
-                while b >= 0 {
-                    let one: i64 = 1;
-                    if h >> b as i64 & one != 0 {
-                        highest_bit = 64 + b;
-                        break;
-                    }
-                    b -= 1;
-                }
-            } else {
-                let mut b: i32 = 63;
-                while b >= 0 {
-                    let one: i64 = 1;
-                    if l >> b as i64 & one != 0 {
-                        highest_bit = b;
-                        break;
-                    }
-                    b -= 1;
-                }
-            }
-            highest_bit / bits_per_digit + 1;
-        };
-
-        let offset = f.prepare_int_write(is_neg, prefix, digit_count);
-        let mut arr = f.buf.internal_raw_bytes();
-
-        if is_zero {
-            builtin::array_set_u8(&mut arr, offset, '0' as u8);
-        } else {
-            let mut pos = offset + digit_count;
-            let mut lo: u64 = abs_val.low;
-            let mut hi: u64 = abs_val.high;
-            let shift_u64: u64 = bits_per_digit as u64;
-            while lo != 0 || hi != 0 {
-                pos -= 1;
-                let digit: i32 = (lo & mask) as i32;
-                let ch = if digit < 10 {
-                    '0' as i32 + digit;
-                } else if upper {
-                    'A' as i32 + digit - 10;
-                } else {
-                    'a' as i32 + digit - 10;
-                };
-                builtin::array_set_u8(&mut arr, pos, ch as u8);
-                let hi_bits = hi << 64 - shift_u64;
-                lo = lo >> shift_u64 | hi_bits;
-                hi = hi >> shift_u64;
-            }
-        }
+        self.abs_u128().fmt_decimal_magnitude(f, self.is_negative());
     }
 }
 
@@ -976,46 +871,48 @@ impl InspectAlt for i128 {
 
 impl Binary for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 2, false, "");
+        // Negative values print their 128-bit two's complement
+        // pattern, matching Rust.
+        u128::from_i128(*self).fmt_base(f, 2, false, "");
     }
 }
 
 impl Octal for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 8, false, "");
+        u128::from_i128(*self).fmt_base(f, 8, false, "");
     }
 }
 
 impl LowerHex for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, false, "");
+        u128::from_i128(*self).fmt_base(f, 16, false, "");
     }
 }
 
 impl UpperHex for i128 {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, true, "");
+        u128::from_i128(*self).fmt_base(f, 16, true, "");
     }
 }
 
 impl BinaryAlt for i128 {
     pub fn fmt_alt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 2, false, "0b");
+        u128::from_i128(*self).fmt_base(f, 2, false, "0b");
     }
 }
 impl OctalAlt for i128 {
     pub fn fmt_alt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 8, false, "0o");
+        u128::from_i128(*self).fmt_base(f, 8, false, "0o");
     }
 }
 impl LowerHexAlt for i128 {
     pub fn fmt_alt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, false, "0x");
+        u128::from_i128(*self).fmt_base(f, 16, false, "0x");
     }
 }
 impl UpperHexAlt for i128 {
     pub fn fmt_alt(&self, f: &mut Formatter) {
-        self.fmt_base(f, 16, true, "0X");
+        u128::from_i128(*self).fmt_base(f, 16, true, "0X");
     }
 }
 
@@ -1120,7 +1017,7 @@ impl Neg for i128 {
 
     pub fn neg(&self) -> Self::Output {
         // -x = ~x + 1 = 0 - x
-        return i128::zero().sub(self);
+        return i128::zero() - *self;
     }
 }
 
@@ -1325,16 +1222,62 @@ impl TryFrom<u128> for u64 {
     }
 }
 
+impl TryFrom<u128> for i64 {
+    type Error = ConvertError;
+
+    pub fn try_from(value: u128) -> Result<i64, ConvertError> {
+        if value.high() != 0 || value.low() > i64::MAX as u64 {
+            return Result::Err(ConvertError::new("value out of range for i64"));
+        }
+        return Result::Ok(value.low() as i64);
+    }
+}
+
+impl TryFrom<u128> for i128 {
+    type Error = ConvertError;
+
+    pub fn try_from(value: u128) -> Result<i128, ConvertError> {
+        if value.high() > i64::MAX as u64 {
+            return Result::Err(ConvertError::new("value out of range for i128"));
+        }
+        return Result::Ok(i128::from_u128(value));
+    }
+}
+
 impl TryFrom<i128> for i64 {
     type Error = ConvertError;
 
     pub fn try_from(value: i128) -> Result<i64, ConvertError> {
         let min: i128 = i64::MIN as i128;
         let max: i128 = i64::MAX as i128;
-        if value < min || value > max {
+        if !(min <= value <= max) {
             return Result::Err(ConvertError::new("value out of range for i64"));
         }
         return Result::Ok(value.low() as i64);
+    }
+}
+
+impl TryFrom<i128> for u64 {
+    type Error = ConvertError;
+
+    pub fn try_from(value: i128) -> Result<u64, ConvertError> {
+        // In range exactly when the value is in [0, 2^64): the high half
+        // is zero (negative values have a sign-extended, non-zero high).
+        if value.high() != 0 {
+            return Result::Err(ConvertError::new("value out of range for u64"));
+        }
+        return Result::Ok(value.low());
+    }
+}
+
+impl TryFrom<i128> for u128 {
+    type Error = ConvertError;
+
+    pub fn try_from(value: i128) -> Result<u128, ConvertError> {
+        if value.is_negative() {
+            return Result::Err(ConvertError::new("value out of range for u128"));
+        }
+        return Result::Ok(u128::from_i128(value));
     }
 }
 
@@ -1344,7 +1287,7 @@ impl TryFrom<i128> for f64 {
     pub fn try_from(value: i128) -> Result<f64, ConvertError> {
         let max: i128 = 9007199254740992;
         let min: i128 = -9007199254740992;
-        if value < min || value > max {
+        if !(min <= value <= max) {
             return Result::Err(ConvertError::new("value out of range for f64"));
         }
         return Result::Ok(value.low() as i64 as f64);
@@ -1357,7 +1300,7 @@ impl TryFrom<i128> for f32 {
     pub fn try_from(value: i128) -> Result<f32, ConvertError> {
         let max: i128 = 16777216;
         let min: i128 = -16777216;
-        if value < min || value > max {
+        if !(min <= value <= max) {
             return Result::Err(ConvertError::new("value out of range for f32"));
         }
         return Result::Ok(value.low() as i64 as f32);

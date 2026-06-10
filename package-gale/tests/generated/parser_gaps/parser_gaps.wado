@@ -610,7 +610,7 @@ impl Lexer {
     }
 }
 
-fn try_list(chars: &List<char>, start: i32) -> i32 {
+fn try_LIST(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'l' { return -1; }
     pos += 1;
@@ -623,7 +623,7 @@ fn try_list(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_not(chars: &List<char>, start: i32) -> i32 {
+fn try_NOT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'n' { return -1; }
     pos += 1;
@@ -634,7 +634,7 @@ fn try_not(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_set(chars: &List<char>, start: i32) -> i32 {
+fn try_SET(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 's' { return -1; }
     pos += 1;
@@ -645,7 +645,7 @@ fn try_set(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_any(chars: &List<char>, start: i32) -> i32 {
+fn try_ANY(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
@@ -656,7 +656,7 @@ fn try_any(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_item(chars: &List<char>, start: i32) -> i32 {
+fn try_ITEM(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || 'a' <= chars[pos] <= 'z' || chars[pos] == '_') { return -1; }
@@ -675,7 +675,7 @@ fn try_item(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_number(chars: &List<char>, start: i32) -> i32 {
+fn try_NUMBER(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || '0' <= chars[pos] <= '9') { return -1; }
@@ -694,21 +694,21 @@ fn try_number(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_comma(chars: &List<char>, start: i32) -> i32 {
+fn try_COMMA(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ',' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_semi(chars: &List<char>, start: i32) -> i32 {
+fn try_SEMI(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ';' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
@@ -738,47 +738,47 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == ',' {
-            end = try_comma(&lexer.chars, start);
+            end = try_COMMA(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COMMA; }
         } else if first_char == ';' {
-            end = try_semi(&lexer.chars, start);
+            end = try_SEMI(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SEMI; }
         } else if first_char == '_' {
-            end = try_item(&lexer.chars, start);
+            end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
         } else if first_char == 'a' {
-            end = try_any(&lexer.chars, start);
+            end = try_ANY(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ANY; }
-            end = try_item(&lexer.chars, start);
+            end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
         } else if first_char == 'l' {
-            end = try_list(&lexer.chars, start);
+            end = try_LIST(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIST; }
-            end = try_item(&lexer.chars, start);
+            end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
         } else if first_char == 'n' {
-            end = try_not(&lexer.chars, start);
+            end = try_NOT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NOT; }
-            end = try_item(&lexer.chars, start);
+            end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
         } else if first_char == 's' {
-            end = try_set(&lexer.chars, start);
+            end = try_SET(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SET; }
-            end = try_item(&lexer.chars, start);
+            end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
         } else if 'a' <= first_char <= 'z' {
-            end = try_item(&lexer.chars, start);
+            end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
         } else if '0' <= first_char <= '9' {
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else {
-            end = try_item(&lexer.chars, start);
+            end = try_ITEM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ITEM; }
-            end = try_number(&lexer.chars, start);
+            end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         }
         if best_end <= start {

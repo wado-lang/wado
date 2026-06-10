@@ -1,6 +1,6 @@
 ---
 name: optimizer-debug
-description: Debug Wado optimizer (TIR/WIR pass) bugs using WADO_TRACE, WADO_DUMP_PASS_BEFORE/AFTER, WADO_LIST_PASSES, and WADO_SKIP_PASS env vars. Use when an optimization pass produces wrong code, ICEs the WIR pipeline ("invalid core Wasm module: type mismatch ..."), or when you need to see how a specific pass transforms the IR.
+description: Debug Wado optimizer (NIR/WIR pass) bugs using WADO_TRACE, WADO_DUMP_PASS_BEFORE/AFTER, WADO_LIST_PASSES, and WADO_SKIP_PASS env vars. Use when an optimization pass produces wrong code, ICEs the WIR pipeline ("invalid core Wasm module: type mismatch ..."), or when you need to see how a specific pass transforms the IR.
 ---
 
 # Optimizer pass debugging
@@ -35,8 +35,9 @@ WADO_DUMP_PASS_AFTER=wir/sroa_multi_value_returns \
   | sed -n '/=== WIR after/,/=== end WIR/p'
 ```
 
-Dumps the full WIR (or TIR, depending on the pass) right after the named
-pass, framed by `=== WIR after <name> ===` / `=== end WIR after <name> ===`.
+Dumps the full WIR (or NIR, depending on the pass) right after the named
+pass, framed by `=== WIR after <name> ===` / `=== end WIR after <name> ===`
+(NIR passes use `=== NIR after <name> ===`).
 
 ### What does pass X consume?
 
@@ -53,23 +54,28 @@ the after-dump to see exactly what the pass rewrote.
 The variables accept a comma-separated list:
 
 ```sh
-WADO_DUMP_PASS_AFTER=tir/inline,wir/sroa_multi_value_returns \
+WADO_DUMP_PASS_AFTER=nir/inline,wir/sroa_multi_value_returns \
   cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>/tmp/dump.log
 ```
 
 ### Bisect by skipping a pass
 
 ```sh
-WADO_SKIP_PASS=tir/cse cargo run --bin wado --quiet -- compile -O3 file.wado -o /tmp/out.wasm
+WADO_SKIP_PASS=nir/cse cargo run --bin wado --quiet -- compile -O3 file.wado -o /tmp/out.wasm
 ```
 
 Same comma-separated list as `WADO_DUMP_PASS_*`, with one extra
 convenience: a `@N` suffix targets the Nth invocation of a pass within
-the fixed-point loop (1-based). `WADO_SKIP_PASS=tir/ref_elim@2` skips
-ref_elim only on the second iteration, which is how the
-ref_elim-rebound-local bug was localised — its failing test passed on
-the first iteration and only diverged once the inliner expanded an
-additional function on the second.
+the fixed-point loop (1-based). `WADO_SKIP_PASS=nir/cse@2` skips `cse`
+only on the second iteration — invaluable for iteration-dependent bugs
+whose failing test passes on the first iteration and only diverges once
+the inliner expands an additional function on a later one.
+
+Only standalone `run_pass` spans are skippable; confirm a name with
+`WADO_LIST_PASSES=1` first. Local rules folded into the peephole session
+(`ref_elim`, `elide_box_local`, `match_to_switch`, `value_copy_elide`,
+`array_literal`, …) are not individually addressable — target
+`nir/peephole` to skip the whole session.
 
 When a pass is the only one whose skipping makes the bug go away that
 just narrows the _participants_ in the buggy interaction — it does not
@@ -131,7 +137,7 @@ Walk the pass pipeline like this:
 
 | Prefix       | Phase                              |
 | ------------ | ---------------------------------- |
-| `tir/<name>` | TIR-level pass (`optimize.rs`)     |
+| `nir/<name>` | NIR-level pass (`optimize.rs`)     |
 | `wir/<name>` | WIR-level pass (`wir_optimize.rs`) |
 
 `WADO_LIST_PASSES=1` is the source of truth — names there match exactly
@@ -143,14 +149,15 @@ the strings the env vars want.
   use the `debugger` skill (`rust-gdb`) or read the WIR/Wasm directly.
 - For LSP / annotate-time issues, these hooks fire only during the
   optimization phase. Add `tracing` calls in `annotate.rs` directly.
-- For monomorphization or lowering issues, dump TIR with `wado dump --tir`
-  / `--tir-resolved` / `--tir-monomorphized` / `--tir-lowered` instead;
-  those are exposed as proper CLI subcommands.
+- For monomorphization or lowering issues, dump the pre-optimize IR with
+  `wado dump --tir-resolved` / `--tir-monomorphized` (TIR, before lowering)
+  or `--nir-lowered` (NIR, right after lowering) instead; those are exposed
+  as proper CLI flags.
 
 ## See also
 
 - `wado-compiler/src/trace.rs` — `compiler_trace!` macro and filter
   parsing (with unit tests).
-- `wado-compiler/src/optimize.rs` — `run_pass` for TIR passes; defines
+- `wado-compiler/src/optimize.rs` — `run_pass` for NIR passes; defines
   the env-var hook implementation in `mod pass_dump`.
 - `wado-compiler/src/wir_optimize.rs` — `wir_pass` for WIR passes.
