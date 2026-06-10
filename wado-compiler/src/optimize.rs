@@ -300,7 +300,7 @@ pub fn optimize(
     // and to rewrite call-site `let __tmp = Call(f)` into
     // `MultiValueLocalBind [__tmp_0, …] = Call(f)` with subsequent
     // `FieldAccess` reads going to the split locals directly. Runs after
-    // every other transformation so the analysis sees the final TIR
+    // every other transformation so the analysis sees the final NIR
     // shape.
     profiler.span_start("nir/multi_value_return");
     multi_value_return::classify_multi_value_returns(&mut project);
