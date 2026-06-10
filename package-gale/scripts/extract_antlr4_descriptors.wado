@@ -440,7 +440,18 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
         }
     }
     stream.drop();
-    done.drop();
+    // The completion future distinguishes clean EOF from a mid-stream
+    // error; dropping it unchecked could commit a silently truncated
+    // grammar.
+    match done.read() {
+        Some(Ok(_)) => (),
+        Some(Err(e)) => {
+            return Result::Err(e);
+        },
+        None => {
+            return Result::Err(ErrorCode::Io);
+        },
+    }
     return match String::from_utf8(bytes) {
         Ok(s) => Result::Ok(s),
         Err(_) => Result::Err(ErrorCode::IllegalByteSequence),
@@ -464,8 +475,12 @@ fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Resul
     let sub = file.write_via_stream(rx, 0 as Filesize);
     tx.write(bytes);
     tx.drop();
-    sub.drop();
-    return Result::Ok(());
+    // Await the write's completion: dropping the future unchecked would
+    // report Ok(()) for a failed or partial write.
+    return match sub.read() {
+        Some(r) => r,
+        None => Result::Err(ErrorCode::Io),
+    };
 }
 
 /// Remove a regular file. `Err(NoEntry)` is treated like other errors — the
@@ -1285,7 +1300,12 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             for let mut i = 0; i < parsed.slave_grammars.len(); i += 1 {
                 let slave_name = `{base}.slave{i + 1}.g4`;
                 if let Err(_) = write_file_string(&cat_out_dir, &slave_name, &parsed.slave_grammars[i]) {
-                    eprintln(`extract: cannot write {key} slave {i}`);
+                    // Count like a failed main-grammar write so the
+                    // "leave previous files untouched" protection fires;
+                    // silently emitting the descriptor as if the slave
+                    // never existed corrupts the composite.
+                    eprintln(`extract: cannot write {key} {slave_name}`);
+                    category_errors += 1;
                     continue;
                 }
                 slave_relpaths.push(`{*category}/{slave_name}`);
@@ -1767,10 +1787,17 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, 
             let test_filename = `{base}_test.wado`;
             keep_test_files.push(test_filename);
             let key = `{category}/{base}`;
+            // A broken manifest (unreadable .start / .input) is the same
+            // state as a missing .expected: the descriptor cannot be
+            // (re-)emitted this run, so the previously committed test is
+            // stale and must be dropped — keeping it would pin an outcome
+            // that no longer has a manifest behind it.
             let start_text = match read_file_to_string(&pending_cat, &start_filename) {
                 Ok(s) => s,
                 Err(_) => {
-                    eprintln(`finalize: missing oracle-pending/{category}/{start_filename}`);
+                    eprintln(`finalize: missing oracle-pending/{category}/{start_filename} — dropping stale test`);
+                    pending_no_expected += 1;
+                    let _ = remove_file(&oracle_cat, &test_filename);
                     continue;
                 },
             };
@@ -1786,7 +1813,9 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, 
             let input_text = match read_file_to_string(&pending_cat, input_filename) {
                 Ok(s) => s,
                 Err(_) => {
-                    eprintln(`finalize: cannot read oracle-pending/{category}/{*input_filename}`);
+                    eprintln(`finalize: cannot read oracle-pending/{category}/{*input_filename} — dropping stale test`);
+                    pending_no_expected += 1;
+                    let _ = remove_file(&oracle_cat, &test_filename);
                     continue;
                 },
             };
@@ -1838,13 +1867,40 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, 
 /// stays untouched.
 fn strip_eof_marker(raw: &String) -> String {
     let trimmed = raw.trim();
-    let suffix = " <EOF>)";
-    if trimmed.ends_with(suffix) {
-        let n = trimmed.len();
-        let prefix = trimmed.substr_bytes(0, n - suffix.len());
-        return `{prefix})`;
+    return strip_tail_eof_marker(&trimmed);
+}
+
+/// Drop a ` <EOF>` marker in tail position — i.e. followed by nothing but
+/// closing parens — so the tree matches Gale's `to_string_tree()` shape
+/// (which omits EOF). EOF can only ever be the last token of a parse, so
+/// this covers both the top-level trailing form `(s a <EOF>)` and the
+/// nested-at-end form `(s (t <EOF>))`. Any other ` <EOF>` occurrence is
+/// token *text* and must survive untouched (the Stage B normalizer's
+/// `<` / `>` rejection then auto-skips the descriptor instead of silently
+/// corrupting the pinned tree).
+fn strip_tail_eof_marker(s: &String) -> String {
+    let chars: List<char> = s.chars().collect();
+    let mut end = chars.len();
+    while end > 0 && chars[end - 1] == ')' {
+        end -= 1;
     }
-    return trimmed;
+    // " <EOF>" is 6 chars; check chars[end-6 .. end] spell it.
+    if end < 6 {
+        return *s;
+    }
+    let marker: List<char> = [' ', '<', 'E', 'O', 'F', '>'];
+    for let mut i = 0; i < 6; i += 1 {
+        if chars[end - 6 + i] != marker[i] {
+            return *s;
+        }
+    }
+    let mut out = String::with_capacity(s.len());
+    for let mut i = 0; i < chars.len(); i += 1 {
+        if i < end - 6 || i >= end {
+            out.push(chars[i]);
+        }
+    }
+    return out;
 }
 
 fn emit_stage_b_oracle_test_file(
@@ -1924,7 +1980,11 @@ fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
     if s.contains("${") {
         return null;
     }
-    let stripped = s.replace(" <EOF>", "");
+    // Tail-position-only strip (shared with the oracle path): a global
+    // ` <EOF>` replace would silently corrupt a tree whose token text
+    // contains the marker; leaving it in place lets the `<` / `>` check
+    // below auto-skip such descriptors instead.
+    let stripped = strip_tail_eof_marker(&s);
     if stripped.contains("<") || stripped.contains(">") {
         return null;
     }
@@ -1996,6 +2056,29 @@ test "normalize: empty output is not Stage B testable" {
     assert normalize_output_for_stage_b(&"") matches { None };
     assert normalize_output_for_stage_b(&"\n") matches { None };
     assert normalize_output_for_stage_b(&"   ") matches { None };
+}
+
+test "normalize: nested-at-end EOF marker is stripped" {
+    // EOF consumed by a sub-rule still sits at the tree's end, just inside
+    // extra closing parens.
+    let result = normalize_output_for_stage_b(&"(s (t a <EOF>))");
+    assert result matches { Some(_) };
+    if let Some(s) = result {
+        assert s == "(s (t a))", `got '{s}'`;
+    }
+}
+
+test "normalize: mid-tree EOF-looking token text auto-skips, not corrupts" {
+    // ` <EOF>` NOT in tail position is token text; the old global replace
+    // silently deleted it. It must survive the strip and then hit the
+    // `<` / `>` rejection (auto-skip).
+    assert normalize_output_for_stage_b(&"(r <EOF> y)") matches { None };
+}
+
+test "strip_eof_marker: mid-tree marker untouched, tail marker stripped" {
+    assert strip_eof_marker(&"(s a <EOF>)\n") == "(s a)";
+    assert strip_eof_marker(&"(s (t <EOF>))") == "(s (t))";
+    assert strip_eof_marker(&"(r <EOF> y)") == "(r <EOF> y)";
 }
 
 test "normalize: action $text echo is not a tree" {
