@@ -1566,13 +1566,10 @@ fn resolve_char(chars: &List<char>, pos: &mut i32) -> char {
 }
 
 /// Resolve the body of a `\u` escape after the `u` has been consumed.
-/// Handles both `\uXXXX` (up to four hex digits, stopping early at the
-/// first non-hex char) and the `\u{XXXXXX}` brace form for code points
-/// beyond U+FFFF (ANTLR4 lexicon.md). Unrepresentable code points —
-/// surrogates and values past U+10FFFF, which a Wado `char` (a Unicode
-/// scalar) cannot hold — fall back to U+FFFD rather than trapping. Full
-/// surrogate-range support needs a wider char-range representation and is
-/// tracked separately in code-health.md.
+/// Handles `\uXXXX` (up to four hex digits, stopping at the first non-hex
+/// char) and the `\u{XXXXXX}` brace form (ANTLR4 lexicon.md). Code points a
+/// Wado `char` cannot hold — surrogates and values past U+10FFFF — fall
+/// back to U+FFFD rather than trapping.
 fn resolve_unicode_escape(chars: &List<char>, pos: &mut i32) -> char {
     let mut val = 0;
     if *pos < chars.len() && chars[*pos] == '{' {

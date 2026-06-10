@@ -5770,18 +5770,13 @@ fn gen_prediction_code_inner(
         return;
     }
     if let Consume(c) = node {
-        // Verify the consumed element matches the expected element at position
-        // skip in EVERY alternative still reachable below this node — `skip`
-        // is later applied to whichever Leaf the dispatch lands on, so each
-        // of them must agree. (Validating against `alts[0]` was a bug: the
-        // tree is built over a sorted overlap group that need not contain
-        // alternative 0 at all, so the check spuriously failed and the child
-        // Dispatch peeked one token early — see
-        // tests/grammars/ll_consume_group.g4.) If any alt disagrees (e.g. a
-        // RuleRef at position skip was expanded via Dispatch and the Consume
-        // is actually for a later element), the skip count would be wrong and
-        // the Leaf would generate incorrect code: don't consume or increment
-        // skip — the Leaf will fall back to the scan-tournament helper.
+        // The consumed element at position `skip` must match every alt
+        // reachable below this node — `skip` is applied to whichever Leaf the
+        // dispatch lands on. Validating against the whole rule's `alts[0]`
+        // mismatched, since the tree is built over a sorted overlap group that
+        // need not contain alt 0 (regression fixture ll_consume_group.g4). On
+        // any mismatch, skip the consume — the Leaf falls back to the scan
+        // tournament.
         let mut node_alts: List<i32> = [];
         prediction_collect_all_indices(&c.child, &mut node_alts);
         let mut elem_matches = !node_alts.is_empty();

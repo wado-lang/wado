@@ -97,10 +97,8 @@ fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens, Exit 
 
 /// Shared CLI front end for `gen` and `dump`: read every grammar file,
 /// parse, merge the split halves, synthesize implicit tokens, and run the
-/// ANTLR4-compatible reference check (the same check ANTLR4's
-/// `SymbolChecks.checkForUnresolvedRuleRefs` performs; deferred until
-/// post-merge so cross-grammar refs validate cleanly). Any failure prints
-/// a message and exits the process with code 1.
+/// rule-reference check (deferred until post-merge so cross-grammar refs
+/// resolve). Any failure prints a message and exits with code 1.
 fn load_and_merge(paths: &List<String>) -> Grammar with Stdout, Stderr, Preopens, Exit {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
