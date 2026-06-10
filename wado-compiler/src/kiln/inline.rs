@@ -489,11 +489,11 @@ mod tests {
 
     fn module_with_use(source: &str, attrs: ImportAttributes) -> Module {
         let use_decl = UseDecl {
-            id: AstId(0),
+            id: AstId::fresh(),
             is_pub: false,
             source: source.to_string(),
             source_span: span(),
-            source_id: AstId(1),
+            source_id: AstId::fresh(),
             items: vec![UseItem::Wildcard],
             attributes: Some(attrs),
             span: span(),

@@ -3,18 +3,93 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
 
-/// Module-local, parse-stable identifier for AST nodes that bear semantic
-/// significance (items, named members, parameters).
+/// Identity of one dense `AstId` allocation space.
 ///
-/// The parser assigns ids in DFS order starting from `0`; ids for a given
-/// module are densely packed in `0..Module::ast_id_count()`. Every AST node
-/// observed by the compiler has a real id within its module — there is no
-/// sentinel value. Builtin modules (`lib/core/*.wado`) are parsed like any
-/// other module and receive their own dense id range.
+/// Every top-level [`crate::parser::Parser`] instance draws a fresh space
+/// from a process-global counter and stamps it into every id it allocates,
+/// making a full [`AstId`] globally unique within the process while the
+/// [`AstId::local`] halves stay dense per module. Template-interpolation
+/// sub-parsers inherit the parent parser's space (and continue its local
+/// counter); post-parse synthesis continues a module's space via
+/// [`Module::alloc_ast_id`].
+///
+/// A space identifies *one parse*, not a `ModuleSource`: re-parsing the same
+/// source yields a new space. Nothing may rely on ids being reproducible
+/// across separate parses — stdlib ASTs are parsed once per process and
+/// shared (`loader::cached_stdlib_module`), and user-module facts never
+/// outlive the parse that produced them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct AstId(pub u32);
+pub struct AstIdSpace(u32);
+
+impl AstIdSpace {
+    /// Space reserved for [`AstId::fresh`] transient ids. Never returned by
+    /// [`Self::next`].
+    const FRESH: Self = Self(u32::MAX);
+
+    /// Allocate the next allocation space from the process-global counter.
+    #[must_use]
+    pub fn next() -> Self {
+        use core::sync::atomic::{AtomicU32, Ordering};
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let v = NEXT.fetch_add(1, Ordering::Relaxed);
+        assert!(v != u32::MAX, "AstIdSpace counter exhausted");
+        Self(v)
+    }
+}
+
+/// Globally-unique identifier for AST nodes that bear semantic significance
+/// (items, named members, parameters).
+///
+/// An `AstId` pairs an [`AstIdSpace`] (which parse allocated it) with a
+/// module-local dense index. The parser assigns `local` in DFS order starting
+/// from `0`; locals for a given module are densely packed in
+/// `0..Module::ast_id_count()`. Every AST node observed by the compiler has a
+/// real id within its module — there is no sentinel value. Builtin modules
+/// (`lib/core/*.wado`) are parsed like any other module and receive their own
+/// space + dense local range.
+///
+/// Because the space half differs between modules, two nodes from different
+/// modules can never share an `AstId` — keying per-node facts by `AstId`
+/// cannot collide across modules even when the keying module perspective is
+/// wrong (the historic cross-module collision class, see issue #1342).
+///
+/// Ordering is `(space, local)`: within one module (one space) ids order by
+/// allocation order, which is what parser checkpoint rollback and
+/// [`crate::comment::TriviaMap`] rely on.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct AstId {
+    space: AstIdSpace,
+    local: u32,
+}
+
+impl std::fmt::Debug for AstId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AstId({}:{})", self.space.0, self.local)
+    }
+}
 
 impl AstId {
+    /// Build an id in `space` with the given dense `local` index. Callers are
+    /// the parser, [`Module::alloc_ast_id`], and tests; everything else
+    /// should treat ids as opaque.
+    #[must_use]
+    pub fn new(space: AstIdSpace, local: u32) -> Self {
+        Self { space, local }
+    }
+
+    /// The module-local dense index (`0..Module::ast_id_count()` for nodes in
+    /// a module tree).
+    #[must_use]
+    pub fn local(self) -> u32 {
+        self.local
+    }
+
+    /// The allocation space this id was drawn from.
+    #[must_use]
+    pub fn space(self) -> AstIdSpace {
+        self.space
+    }
+
     /// Allocate a fresh `AstId` for a transient AST node that is never owned
     /// by a parsed [`Module`].
     ///
@@ -24,17 +99,14 @@ impl AstId {
     ///   only read the type's `name` and structural fields.
     /// - Unit test fixtures that fabricate AST nodes to exercise registries.
     ///
-    /// The returned id is globally unique within a process. It is *not* a
-    /// sentinel: there is no reserved "synthetic" value. Because transient
-    /// nodes never enter a `Module.items` tree and never become
-    /// [`SymbolKey`](crate::symbol::SymbolKey) lookup targets, they cannot
-    /// collide with parser-allocated ids — those live in per-module dense
-    /// ranges indexed by `(ModuleSource, AstId)`.
+    /// The returned id is globally unique within a process: it lives in the
+    /// reserved [`AstIdSpace::FRESH`] space, so it can never collide with a
+    /// parser-allocated id.
     #[must_use]
     pub fn fresh() -> Self {
         use core::sync::atomic::{AtomicU32, Ordering};
         static NEXT: AtomicU32 = AtomicU32::new(0);
-        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+        Self::new(AstIdSpace::FRESH, NEXT.fetch_add(1, Ordering::Relaxed))
     }
 }
 
@@ -96,8 +168,11 @@ pub struct Module {
     data_section: Option<String>,
     /// Paths referenced by `#include_str` and `#include_bytes` literals, collected during parsing.
     include_paths: IndexSet<String>,
+    /// The [`AstIdSpace`] this module's ids were allocated from (the parsing
+    /// `Parser`'s space). [`Self::alloc_ast_id`] continues it.
+    ast_id_space: AstIdSpace,
     /// Total number of [`AstId`]s allocated for this module during parsing.
-    /// Ids occupy the range `0..ast_id_count`.
+    /// Id locals occupy the range `0..ast_id_count`.
     ast_id_count: u32,
     /// True if error recovery ran during parsing (any syntax error, including
     /// block-internal ones that leave no `Item::Error`). Travels with the AST
@@ -159,6 +234,7 @@ impl Module {
             shebang: None,
             data_section: None,
             include_paths: IndexSet::default(),
+            ast_id_space: AstIdSpace::next(),
             ast_id_count: 0,
             has_syntax_errors: false,
         }
@@ -171,6 +247,7 @@ impl Module {
         shebang: Option<String>,
         data_section: Option<String>,
         include_paths: IndexSet<String>,
+        ast_id_space: AstIdSpace,
         ast_id_count: u32,
         has_syntax_errors: bool,
     ) -> Self {
@@ -180,6 +257,7 @@ impl Module {
             shebang,
             data_section,
             include_paths,
+            ast_id_space,
             ast_id_count,
             has_syntax_errors,
         }
@@ -190,8 +268,13 @@ impl Module {
         self.has_syntax_errors
     }
 
+    /// The [`AstIdSpace`] this module's ids live in.
+    pub fn ast_id_space(&self) -> AstIdSpace {
+        self.ast_id_space
+    }
+
     /// Returns the total number of [`AstId`]s allocated for this module.
-    /// Ids occupy `0..ast_id_count()`.
+    /// Id locals occupy `0..ast_id_count()`.
     pub fn ast_id_count(&self) -> u32 {
         self.ast_id_count
     }
@@ -204,12 +287,12 @@ impl Module {
     /// id is guaranteed not to collide with any parser-allocated id.
     ///
     /// Prefer this over [`AstId::fresh`] for nodes that enter a module
-    /// tree — `AstId::fresh` is globally unique but lives outside the
-    /// `(ModuleSource, AstId)` dense range, so symbol-lookup machinery
-    /// keyed on that range cannot find them.
+    /// tree — `AstId::fresh` is globally unique but lives in the reserved
+    /// transient space, outside this module's dense local range, so
+    /// machinery keyed on that range cannot find them.
     #[must_use]
     pub fn alloc_ast_id(&mut self) -> AstId {
-        let id = AstId(self.ast_id_count);
+        let id = AstId::new(self.ast_id_space, self.ast_id_count);
         self.ast_id_count += 1;
         id
     }
@@ -1694,7 +1777,7 @@ pub struct ContinueStmt {
 }
 
 impl Stmt {
-    /// Returns the parse-stable [`AstId`] for this statement.
+    /// Returns the [`AstId`] for this statement.
     pub fn id(&self) -> AstId {
         match self {
             Stmt::Let(s) => s.id,
@@ -1865,7 +1948,7 @@ pub struct RangeExpr {
 }
 
 impl Expr {
-    /// Returns the parse-stable [`AstId`] for this expression.
+    /// Returns the [`AstId`] for this expression.
     ///
     /// For `Expr::Spread(inner, _)` the id of the inner expression is returned,
     /// since spread is a compile-time splice operation without its own identity.
@@ -3123,21 +3206,27 @@ test "addition" {
 "#;
 
     #[test]
-    fn parse_assigns_stable_ids() {
+    fn parse_assigns_stable_locals_and_fresh_spaces() {
         let m1 = parse(SAMPLE);
         let m2 = parse(SAMPLE);
         assert_eq!(m1.ast_id_count(), m2.ast_id_count());
         assert!(m1.ast_id_count() > 0);
 
-        let ids_1: Vec<AstId> = collect_ids(&m1.items)
+        // The surviving parse-stability contract: re-parsing the same source
+        // assigns the same dense *local* sequence...
+        let locals_1: Vec<u32> = collect_ids(&m1.items)
             .into_iter()
-            .map(|(id, _)| id)
+            .map(|(id, _)| id.local())
             .collect();
-        let ids_2: Vec<AstId> = collect_ids(&m2.items)
+        let locals_2: Vec<u32> = collect_ids(&m2.items)
             .into_iter()
-            .map(|(id, _)| id)
+            .map(|(id, _)| id.local())
             .collect();
-        assert_eq!(ids_1, ids_2);
+        assert_eq!(locals_1, locals_2);
+
+        // ...while each parse mints its own `AstIdSpace`, so the full ids of
+        // two parses never collide (cross-module/global uniqueness).
+        assert_ne!(m1.ast_id_space(), m2.ast_id_space());
     }
 
     #[test]
@@ -3152,15 +3241,19 @@ test "addition" {
         let mut seen: IndexSet<AstId> = IndexSet::default();
         for id in &ids {
             assert!(seen.insert(*id), "duplicate id: {id:?}");
+            assert_eq!(id.space(), m.ast_id_space(), "foreign space: {id:?}");
             assert!(
-                id.0 < m.ast_id_count(),
+                id.local() < m.ast_id_count(),
                 "id {} out of range (count={})",
-                id.0,
+                id.local(),
                 m.ast_id_count()
             );
         }
         for i in 0..m.ast_id_count() {
-            assert!(seen.contains(&AstId(i)), "missing id {i} in dense range");
+            assert!(
+                seen.contains(&AstId::new(m.ast_id_space(), i)),
+                "missing id {i} in dense range"
+            );
         }
     }
 
@@ -3230,15 +3323,19 @@ struct Point { x: i32, y: i32 }
         let mut seen: IndexSet<AstId> = IndexSet::default();
         for (id, sp) in &ids {
             assert!(seen.insert(*id), "duplicate id: {id:?} at span {sp:?}");
+            assert_eq!(id.space(), m.ast_id_space(), "foreign space: {id:?}");
             assert!(
-                id.0 < m.ast_id_count(),
+                id.local() < m.ast_id_count(),
                 "id {} out of range (count={})",
-                id.0,
+                id.local(),
                 m.ast_id_count()
             );
         }
         for i in 0..m.ast_id_count() {
-            assert!(seen.contains(&AstId(i)), "missing id {i} in dense range");
+            assert!(
+                seen.contains(&AstId::new(m.ast_id_space(), i)),
+                "missing id {i} in dense range"
+            );
         }
     }
 

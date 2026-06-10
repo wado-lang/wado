@@ -7562,10 +7562,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // 1. Local / capture lookup, mirroring `resolve_ident`
         //    (expr.rs:534+). Use the local's stored type instead of
-        //    `recorded_type`: template-string sub-parsers restart
-        //    `next_ast_id` at 0 (parser.rs:5175), so multiple
-        //    interpolations collide on `AstId(0)` and the last write
-        //    to `expression_types` wins.
+        //    `recorded_type`: the binding's own type is authoritative
+        //    for an ident and does not depend on the recorded
+        //    per-expression annotation. (Historically this also worked
+        //    around template-string sub-parsers restarting `next_ast_id`
+        //    at 0 and colliding on `AstId(0)`; sub-parsers now continue
+        //    the parent's `AstIdSpace` + counter, see
+        //    `parse_interpolation_expr`.)
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             match var_ref {
                 super::types::VarRef::Local { index, type_id, .. } => {
