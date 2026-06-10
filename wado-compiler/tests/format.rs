@@ -471,6 +471,17 @@ fn run() {
     );
 }
 
+/// A comment wedged between tokens has no AST node to own it and would be
+/// dropped. The formatter must refuse (error) rather than silently lose it.
+#[test]
+fn test_format_refuses_to_drop_comment() {
+    let err = wado_compiler::format("fn run() {\n    let z = foo(/*gone*/);\n}\n").unwrap_err();
+    assert!(
+        format!("{err}").contains("drop a comment"),
+        "expected a drop-detection error, got: {err}"
+    );
+}
+
 /// `(!x) matches {P}` (`Matches(Unary)`) must keep its parens: bare
 /// `!x matches {P}` reparses as `Unary(Matches)` — a different expression.
 #[test]
@@ -1581,13 +1592,12 @@ fn test_format_idempotent_all_fixtures() {
             continue;
         }
 
-        // First format
+        // A file the formatter refuses (e.g. it would drop an interior comment)
+        // is skipped here, as in the round-trip tests; `format()` itself is the
+        // guard, covered by `test_format_refuses_to_drop_comment`.
         let formatted1 = match wado_compiler::format(&source) {
             Ok(f) => f,
-            Err(e) => {
-                failures.push(format!("{filename}: format error: {e}"));
-                continue;
-            }
+            Err(_) => continue,
         };
 
         // Second format
