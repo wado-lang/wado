@@ -264,35 +264,58 @@ algebraic rules over `Select` and `Opaque` provenance.
 
 #### Stage 6 — const_folding, condition_implication, licm
 
-Detailed design: [Stage 6 Value Rules](./wep-2026-06-10-stage6-value-rules.md).
+Builder prerequisites (landed):
 
-- [ ] Env-free `const_folding` rewritten as algebraic rules over Value
-      kinds (`Binary(Add, Int(a), Int(b)) → Int(a+b)`, `Binary(Add, ?x,
-      Int(0)) → ?x`, …). Rules apply destructively against the
-      side-table; saturation is the optional Stage 8 driver, not a
-      prerequisite for this stage.
+- Reachability-aware heap joins: branch endpoints join field versions
+  per fall-through arm instead of `bump_all`, so a loop guard and a
+  later bounds check share field VNs. A labeled block whose `break`
+  targets its own label falls through (fixture
+  `labeled_block_self_break_field_write.wado`).
+- Field store→load seeding: `obj.f = v` and struct-literal `let`s seed
+  `(receiver, field, version) → value`, peering through block /
+  labeled-block constructor wrappers with a sole-producer check.
+  Version monotonicity makes stale seeds unreachable. Seeding is
+  suppressed for reference-aliased receivers: every session passes the
+  canonical `address_taken_locals` / `stores_aliased_locals`, unioned
+  with one session-cached `Body::collect_address_taken_locals` scan.
+- Per-loop pre-header snapshots of `current_value`
+  (`Engine::loop_entry_value`); parameters must be seeded up front
+  (`Engine::set_param_locals`) to appear in them.
+
+Migrations:
+
+- [ ] Env-free `const_folding` as algebraic rules over Value kinds.
+      Landed slice: `store_load_forward` substitutes any read whose VN
+      is a literal (including seeded field reads). The smart-constructor
+      arithmetic folding is deferred until it can _replace_
+      `const_folding`'s folding rather than duplicate it.
 - [ ] Env-bound `const_folding`: `niri.rs` refactored to stop mutating
-      `Body` in place. `reduce_*_a` becomes a Value-returning pure
-      function; the caller decides whether to commit via the engine.
-- [x] `condition_implication`'s bound comparisons collapse onto
-      `ValueId` equality; dominating-guard tracking stays Skel-side.
-      All guard kinds unified into one ValueId-based `GuardFact`; the
-      `DefMap` / taint / kill machinery deleted (1,940 → ~750 lines).
-- [x] `licm`'s arithmetic hoisting moves onto the ValueGraph. Note a
-      design refinement over the original wording: clone-to-pre-header
-      hoisting needs _pre-header stability_ (each `Local` leaf's
-      use-site `ValueId` equals the loop-entry snapshot value), not
-      mere cross-iteration invariance — `loop { x = 5; … x+n … }` has
-      an invariant use value that differs from the pre-header `x`.
-      Dedup is by `ValueId` (copies share one temp). The field-hoist
-      half keeps `ModifiedVars` until per-receiver heap precision
-      lands (see the detailed design).
-- [ ] Simple induction-variable recognition: a Loop body whose update
-      to local `i` is `Local + constant_step` and has no other writes
-      tags `current_value[i]` with `Opaque { induction: { base, step } }`.
-      Rules pattern-match on the tag for bounds-check elimination,
-      bound-implication, and loop-invariant arithmetic detection. No
-      cyclic Value graph at this stage.
+      `Body` in place; the caller commits via the engine.
+- [x] `condition_implication`: all guard kinds (loop, dominating,
+      early-exit, short-circuit, bitmask) unified into one
+      `GuardFact { var_vn, max_offset, bound_vn, is_strict }` with
+      multi-hop `Add` decomposition. The `DefMap` / taint / kill
+      machinery is deleted (1,940 → ~730 lines) — a mutation between
+      guard and check changes the check operand's `ValueId`, so facts
+      go stale by construction (fixtures
+      `array_bounds_elim_oob_guard_var_mutated.wado`,
+      `array_bounds_elim_oob_bound_shrunk.wado`; the migration fixed a
+      position-blindness miscompile in the syntactic predecessor).
+- [x] `licm` arithmetic hoisting. Design refinement: clone-to-pre-header
+      hoisting needs _pre-header stability_ — each `Local` leaf's
+      use-site `ValueId` equals the loop-entry snapshot value — not
+      cross-iteration invariance (`loop { x = 5; … x+n … }` has an
+      invariant use value that differs from the pre-header `x`). An
+      invariance predicate built first on that wrong premise was
+      deleted unconsumed. Dedup is by `ValueId` (copies share one
+      temp); the field-hoist half keeps `ModifiedVars` until
+      per-`(receiver-root, field)` heap precision lands via
+      `mod_ref.rs`. `&x` look-through stays Skel-side — `Ref` /
+      `MutRef` are deliberately not pure values.
+- [ ] Simple induction-variable recognition (`Opaque` tagged with
+      `{ base, step }` in a side table). Not needed by the landed
+      consumers — post-increment reads already appear as
+      `Add(opaque_i, step)` — so deferred until a rule wants it.
 
 #### Stage 9 — Interprocedural worklist
 
