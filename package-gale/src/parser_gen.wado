@@ -1550,8 +1550,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
         // Element failure → break sg_N, falls to fail_stmt.
         // Success → break sg_N_done, skips fail_stmt.
-        let gc = SCAN_GROUP_COUNTER;
-        SCAN_GROUP_COUNTER += 1;
+        let gc = ctx.next_scan_group();
         let body = `sg_{gc}`;
         let done = `sg_{gc}_done`;
         let save_var = `sg_{gc}_save`;
@@ -1572,8 +1571,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         return;
     }
     // Multi-alternative group: try each alternative, fall through to fail.
-    let gc = SCAN_GROUP_COUNTER;
-    SCAN_GROUP_COUNTER += 1;
+    let gc = ctx.next_scan_group();
     let outer = `sg_{gc}`;
     let gp_var = `gp_{gc}`;
     let best_var = `sg_{gc}_best`;
@@ -1687,8 +1685,7 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         } else {
             w.else_begin(&`else if {cond}`);
         }
-        let gc = SCAN_GROUP_COUNTER;
-        SCAN_GROUP_COUNTER += 1;
+        let gc = ctx.next_scan_group();
         let shape_label = `sol_{gc}`;
         let fail = `break {shape_label};`;
         w.begin(&`{shape_label}:`);
@@ -1735,8 +1732,6 @@ fn gen_scan_op_elements_in_block(
         gen_scan_op_element(w, &scan_elems[i], ctx, &fail);
     }
 }
-
-global mut SCAN_GROUP_COUNTER: i32 = 0;
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
     // Track which rule's body we are emitting so a non-greedy `??` inside it

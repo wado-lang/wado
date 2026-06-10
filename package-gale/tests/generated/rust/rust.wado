@@ -21042,22 +21042,6 @@ fn _parse_expression__inner_scan_39(tokens: &List<Token>, pos: i32, follow: &Lis
     return pos;
 }
 
-fn _parse_expression__inner_bt_36(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExpressionNode, ParseError> {
-    let start = p.peek().span.start;
-    let enumeration_variant_expression = _parse_enumeration_variant_expression(p, follow)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::EnumerationVariantExpression_(ExpressionEnumerationVariantExpression_ {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        enumeration_variant_expression,
-    }));
-}
-
-fn _parse_expression__inner_scan_36(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_enumeration_variant_expression(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_expression__inner_bt_35(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let struct_expression = _parse_struct_expression(p, follow)?;
@@ -21070,6 +21054,22 @@ fn _parse_expression__inner_bt_35(p: &mut Parser, follow: &List<List<i32>> = &EM
 fn _parse_expression__inner_scan_35(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_struct_expression(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn _parse_expression__inner_bt_36(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExpressionNode, ParseError> {
+    let start = p.peek().span.start;
+    let enumeration_variant_expression = _parse_enumeration_variant_expression(p, follow)?;
+    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::EnumerationVariantExpression_(ExpressionEnumerationVariantExpression_ {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        enumeration_variant_expression,
+    }));
+}
+
+fn _parse_expression__inner_scan_36(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_enumeration_variant_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -24653,22 +24653,6 @@ fn _parse_pattern_without_range__inner_scan_11(tokens: &List<Token>, pos: i32, f
     return pos;
 }
 
-fn _parse_pattern_without_range__inner_bt_6(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PatternWithoutRangeNode, ParseError> {
-    let start = p.peek().span.start;
-    let tuple_struct_pattern = _parse_tuple_struct_pattern(p, follow)?;
-    return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt6(PatternWithoutRangeAlt6 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        tuple_struct_pattern,
-    }));
-}
-
-fn _parse_pattern_without_range__inner_scan_6(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_tuple_struct_pattern(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_pattern_without_range__inner_bt_5(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PatternWithoutRangeNode, ParseError> {
     let start = p.peek().span.start;
     let struct_pattern = _parse_struct_pattern(p, follow)?;
@@ -24681,6 +24665,22 @@ fn _parse_pattern_without_range__inner_bt_5(p: &mut Parser, follow: &List<List<i
 fn _parse_pattern_without_range__inner_scan_5(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_struct_pattern(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn _parse_pattern_without_range__inner_bt_6(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PatternWithoutRangeNode, ParseError> {
+    let start = p.peek().span.start;
+    let tuple_struct_pattern = _parse_tuple_struct_pattern(p, follow)?;
+    return Result::<PatternWithoutRangeNode, ParseError>::Ok(PatternWithoutRangeNode::Alt6(PatternWithoutRangeAlt6 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        tuple_struct_pattern,
+    }));
+}
+
+fn _parse_pattern_without_range__inner_scan_6(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_tuple_struct_pattern(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }

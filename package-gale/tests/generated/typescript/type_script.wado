@@ -9655,6 +9655,12 @@ fn scan_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
                 if pos > best { best = pos; }
             }
             pos = start;
+            try_3: {
+                pos = scan_export_statement(tokens, pos, follow, 0);
+                if pos < 0 { break try_3; }
+                if pos > best { best = pos; }
+            }
+            pos = start;
             try_6: {
                 pos = scan_class_declaration(tokens, pos, follow, 0);
                 if pos < 0 { break try_6; }
@@ -9682,12 +9688,6 @@ fn scan_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
             try_25: {
                 pos = scan_type_alias_declaration(tokens, pos, follow, 0);
                 if pos < 0 { break try_25; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_3: {
-                pos = scan_export_statement(tokens, pos, follow, 0);
-                if pos < 0 { break try_3; }
                 if pos > best { best = pos; }
             }
             if best >= 0 { pos = best; break scan_alts; }
@@ -10941,6 +10941,37 @@ fn scan_iteration_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i
                 if pos > best { best = pos; }
             }
             pos = start;
+            try_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_For { break try_2; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_2; }
+                pos += 1;
+                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                    let sp = pos;
+                    pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { pos = sp; }
+                }
+                if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_2; }
+                pos += 1;
+                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                    let sp = pos;
+                    pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { pos = sp; }
+                }
+                if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_2; }
+                pos += 1;
+                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+                    let sp = pos;
+                    pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { pos = sp; }
+                }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_2; }
+                pos += 1;
+                pos = scan_statement(tokens, pos, follow, 0);
+                if pos < 0 { break try_2; }
+                if pos > best { best = pos; }
+            }
+            pos = start;
             try_6: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_For { break try_6; }
                 pos += 1;
@@ -10975,37 +11006,6 @@ fn scan_iteration_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i
                 pos += 1;
                 pos = scan_statement(tokens, pos, follow, 0);
                 if pos < 0 { break try_6; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_For { break try_2; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_2; }
-                pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
-                    let sp = pos;
-                    pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; }
-                }
-                if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_2; }
-                pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
-                    let sp = pos;
-                    pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; }
-                }
-                if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_2; }
-                pos += 1;
-                if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
-                    let sp = pos;
-                    pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; }
-                }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_2; }
-                pos += 1;
-                pos = scan_statement(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
                 if pos > best { best = pos; }
             }
             pos = start;
@@ -18018,6 +18018,22 @@ fn _parse_statement__inner_scan_27(tokens: &List<Token>, pos: i32, follow: &List
     return pos;
 }
 
+fn _parse_statement__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
+    let start = p.peek().span.start;
+    let block = _parse_block(p, follow)?;
+    return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt0(StatementAlt0 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        block,
+    }));
+}
+
+fn _parse_statement__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_block(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn _parse_statement__inner_bt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
     let import_statement = _parse_import_statement(p, follow)?;
@@ -18210,22 +18226,6 @@ fn _parse_statement__inner_scan_22(tokens: &List<Token>, pos: i32, follow: &List
     return pos;
 }
 
-fn _parse_statement__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
-    let start = p.peek().span.start;
-    let block = _parse_block(p, follow)?;
-    return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt0(StatementAlt0 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        block,
-    }));
-}
-
-fn _parse_statement__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_block(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_statement__inner_bt_7(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
     let function_declaration = _parse_function_declaration(p, follow)?;
@@ -18254,6 +18254,22 @@ fn _parse_statement__inner_bt_10(p: &mut Parser, follow: &List<List<i32>> = &EMP
 fn _parse_statement__inner_scan_10(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_namespace_declaration(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn _parse_statement__inner_bt_16(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
+    let start = p.peek().span.start;
+    let yield_statement = _parse_yield_statement(p, follow)?;
+    return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt16(StatementAlt16 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        yield_statement,
+    }));
+}
+
+fn _parse_statement__inner_scan_16(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_yield_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -18306,18 +18322,18 @@ fn _parse_statement__inner_scan_26(tokens: &List<Token>, pos: i32, follow: &List
     return pos;
 }
 
-fn _parse_statement__inner_bt_16(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
+fn _parse_statement__inner_bt_9(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
-    let yield_statement = _parse_yield_statement(p, follow)?;
-    return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt16(StatementAlt16 {
+    let interface_declaration = _parse_interface_declaration(p, follow)?;
+    return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt9(StatementAlt9 {
         span: Span::new(start, i32::max(start, p.last_end())),
-        yield_statement,
+        interface_declaration,
     }));
 }
 
-fn _parse_statement__inner_scan_16(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_9(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_yield_statement(tokens, pos, follow, 0);
+    pos = scan_interface_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -18334,22 +18350,6 @@ fn _parse_statement__inner_bt_12(p: &mut Parser, follow: &List<List<i32>> = &EMP
 fn _parse_statement__inner_scan_12(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_iteration_statement(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_statement__inner_bt_9(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
-    let start = p.peek().span.start;
-    let interface_declaration = _parse_interface_declaration(p, follow)?;
-    return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt9(StatementAlt9 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        interface_declaration,
-    }));
-}
-
-fn _parse_statement__inner_scan_9(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_interface_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -18502,17 +18502,21 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_27 = _parse_statement__inner_scan_27(_sd_tokens, _sd_pos);
+            let _sd_p_3 = _parse_statement__inner_scan_3(_sd_tokens, _sd_pos);
             let _sd_p_6 = _parse_statement__inner_scan_6(_sd_tokens, _sd_pos);
             let _sd_p_8 = _parse_statement__inner_scan_8(_sd_tokens, _sd_pos);
             let _sd_p_9 = _parse_statement__inner_scan_9(_sd_tokens, _sd_pos);
             let _sd_p_23 = _parse_statement__inner_scan_23(_sd_tokens, _sd_pos);
             let _sd_p_25 = _parse_statement__inner_scan_25(_sd_tokens, _sd_pos);
-            let _sd_p_3 = _parse_statement__inner_scan_3(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_27 > _sd_best_p {
                 _sd_best_p = _sd_p_27;
                 _sd_best_i = 27;
+            }
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
             }
             if _sd_p_6 > _sd_best_p {
                 _sd_best_p = _sd_p_6;
@@ -18534,12 +18538,11 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 _sd_best_p = _sd_p_25;
                 _sd_best_i = 25;
             }
-            if _sd_p_3 > _sd_best_p {
-                _sd_best_p = _sd_p_3;
-                _sd_best_i = 3;
-            }
             if _sd_best_i == 27 {
                 return _parse_statement__inner_bt_27(p, follow);
+            }
+            if _sd_best_i == 3 {
+                return _parse_statement__inner_bt_3(p, follow);
             }
             if _sd_best_i == 6 {
                 return _parse_statement__inner_bt_6(p, follow);
@@ -18556,10 +18559,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             if _sd_best_i == 25 {
                 return _parse_statement__inner_bt_25(p, follow);
             }
-            if _sd_best_i == 3 {
-                return _parse_statement__inner_bt_3(p, follow);
-            }
-            return _parse_statement__inner_bt_3(p, follow);
+            return _parse_statement__inner_bt_25(p, follow);
         } else if p.peek_kind() == TK_Abstract {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -19052,6 +19052,74 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 return _parse_statement__inner_bt_23(p, follow);
             }
             return _parse_statement__inner_bt_23(p, follow);
+        } else if p.peek_kind() == TK_Yield {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = _parse_statement__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_8 = _parse_statement__inner_scan_8(_sd_tokens, _sd_pos);
+            let _sd_p_16 = _parse_statement__inner_scan_16(_sd_tokens, _sd_pos);
+            let _sd_p_18 = _parse_statement__inner_scan_18(_sd_tokens, _sd_pos);
+            let _sd_p_23 = _parse_statement__inner_scan_23(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_8 > _sd_best_p {
+                _sd_best_p = _sd_p_8;
+                _sd_best_i = 8;
+            }
+            if _sd_p_16 > _sd_best_p {
+                _sd_best_p = _sd_p_16;
+                _sd_best_i = 16;
+            }
+            if _sd_p_18 > _sd_best_p {
+                _sd_best_p = _sd_p_18;
+                _sd_best_i = 18;
+            }
+            if _sd_p_23 > _sd_best_p {
+                _sd_best_p = _sd_p_23;
+                _sd_best_i = 23;
+            }
+            if _sd_best_i == 1 {
+                return _parse_statement__inner_bt_1(p, follow);
+            }
+            if _sd_best_i == 8 {
+                return _parse_statement__inner_bt_8(p, follow);
+            }
+            if _sd_best_i == 16 {
+                return _parse_statement__inner_bt_16(p, follow);
+            }
+            if _sd_best_i == 18 {
+                return _parse_statement__inner_bt_18(p, follow);
+            }
+            if _sd_best_i == 23 {
+                return _parse_statement__inner_bt_23(p, follow);
+            }
+            return _parse_statement__inner_bt_23(p, follow);
+        } else if p.peek_kind() == TK_YieldStar {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_8 = _parse_statement__inner_scan_8(_sd_tokens, _sd_pos);
+            let _sd_p_16 = _parse_statement__inner_scan_16(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_8 > _sd_best_p {
+                _sd_best_p = _sd_p_8;
+                _sd_best_i = 8;
+            }
+            if _sd_p_16 > _sd_best_p {
+                _sd_best_p = _sd_p_16;
+                _sd_best_i = 16;
+            }
+            if _sd_best_i == 8 {
+                return _parse_statement__inner_bt_8(p, follow);
+            }
+            if _sd_best_i == 16 {
+                return _parse_statement__inner_bt_16(p, follow);
+            }
+            return _parse_statement__inner_bt_16(p, follow);
         } else if p.peek_kind() == TK_LIT_TYPE {
             return _parse_statement__inner_bt_25(p, follow);
         } else if p.peek_kind() == TK_Const {
@@ -19122,104 +19190,6 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 return _parse_statement__inner_bt_26(p, follow);
             }
             return _parse_statement__inner_bt_26(p, follow);
-        } else if p.peek_kind() == TK_Yield {
-            let _sd_tokens = &p.tokens;
-            let _sd_pos = p.pos;
-            let _sd_p_1 = _parse_statement__inner_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_8 = _parse_statement__inner_scan_8(_sd_tokens, _sd_pos);
-            let _sd_p_16 = _parse_statement__inner_scan_16(_sd_tokens, _sd_pos);
-            let _sd_p_18 = _parse_statement__inner_scan_18(_sd_tokens, _sd_pos);
-            let _sd_p_23 = _parse_statement__inner_scan_23(_sd_tokens, _sd_pos);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
-            if _sd_p_8 > _sd_best_p {
-                _sd_best_p = _sd_p_8;
-                _sd_best_i = 8;
-            }
-            if _sd_p_16 > _sd_best_p {
-                _sd_best_p = _sd_p_16;
-                _sd_best_i = 16;
-            }
-            if _sd_p_18 > _sd_best_p {
-                _sd_best_p = _sd_p_18;
-                _sd_best_i = 18;
-            }
-            if _sd_p_23 > _sd_best_p {
-                _sd_best_p = _sd_p_23;
-                _sd_best_i = 23;
-            }
-            if _sd_best_i == 1 {
-                return _parse_statement__inner_bt_1(p, follow);
-            }
-            if _sd_best_i == 8 {
-                return _parse_statement__inner_bt_8(p, follow);
-            }
-            if _sd_best_i == 16 {
-                return _parse_statement__inner_bt_16(p, follow);
-            }
-            if _sd_best_i == 18 {
-                return _parse_statement__inner_bt_18(p, follow);
-            }
-            if _sd_best_i == 23 {
-                return _parse_statement__inner_bt_23(p, follow);
-            }
-            return _parse_statement__inner_bt_23(p, follow);
-        } else if p.peek_kind() == TK_YieldStar {
-            let _sd_tokens = &p.tokens;
-            let _sd_pos = p.pos;
-            let _sd_p_8 = _parse_statement__inner_scan_8(_sd_tokens, _sd_pos);
-            let _sd_p_16 = _parse_statement__inner_scan_16(_sd_tokens, _sd_pos);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_8 > _sd_best_p {
-                _sd_best_p = _sd_p_8;
-                _sd_best_i = 8;
-            }
-            if _sd_p_16 > _sd_best_p {
-                _sd_best_p = _sd_p_16;
-                _sd_best_i = 16;
-            }
-            if _sd_best_i == 8 {
-                return _parse_statement__inner_bt_8(p, follow);
-            }
-            if _sd_best_i == 16 {
-                return _parse_statement__inner_bt_16(p, follow);
-            }
-            return _parse_statement__inner_bt_16(p, follow);
-        } else if _gale_kind_set_48(p.peek_kind()) {
-            let _sd_tokens = &p.tokens;
-            let _sd_pos = p.pos;
-            let _sd_p_8 = _parse_statement__inner_scan_8(_sd_tokens, _sd_pos);
-            let _sd_p_12 = _parse_statement__inner_scan_12(_sd_tokens, _sd_pos);
-            let _sd_p_23 = _parse_statement__inner_scan_23(_sd_tokens, _sd_pos);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_8 > _sd_best_p {
-                _sd_best_p = _sd_p_8;
-                _sd_best_i = 8;
-            }
-            if _sd_p_12 > _sd_best_p {
-                _sd_best_p = _sd_p_12;
-                _sd_best_i = 12;
-            }
-            if _sd_p_23 > _sd_best_p {
-                _sd_best_p = _sd_p_23;
-                _sd_best_i = 23;
-            }
-            if _sd_best_i == 8 {
-                return _parse_statement__inner_bt_8(p, follow);
-            }
-            if _sd_best_i == 12 {
-                return _parse_statement__inner_bt_12(p, follow);
-            }
-            if _sd_best_i == 23 {
-                return _parse_statement__inner_bt_23(p, follow);
-            }
-            return _parse_statement__inner_bt_23(p, follow);
         } else if p.peek_kind() == TK_Interface {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -19245,6 +19215,36 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             }
             if _sd_best_i == 9 {
                 return _parse_statement__inner_bt_9(p, follow);
+            }
+            if _sd_best_i == 23 {
+                return _parse_statement__inner_bt_23(p, follow);
+            }
+            return _parse_statement__inner_bt_23(p, follow);
+        } else if _gale_kind_set_48(p.peek_kind()) {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_8 = _parse_statement__inner_scan_8(_sd_tokens, _sd_pos);
+            let _sd_p_12 = _parse_statement__inner_scan_12(_sd_tokens, _sd_pos);
+            let _sd_p_23 = _parse_statement__inner_scan_23(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_8 > _sd_best_p {
+                _sd_best_p = _sd_p_8;
+                _sd_best_i = 8;
+            }
+            if _sd_p_12 > _sd_best_p {
+                _sd_best_p = _sd_p_12;
+                _sd_best_i = 12;
+            }
+            if _sd_p_23 > _sd_best_p {
+                _sd_best_p = _sd_p_23;
+                _sd_best_i = 23;
+            }
+            if _sd_best_i == 8 {
+                return _parse_statement__inner_bt_8(p, follow);
+            }
+            if _sd_best_i == 12 {
+                return _parse_statement__inner_bt_12(p, follow);
             }
             if _sd_best_i == 23 {
                 return _parse_statement__inner_bt_23(p, follow);
@@ -20822,6 +20822,78 @@ fn _parse_iteration_statement__inner_scan_7(tokens: &List<Token>, pos: i32, foll
     return pos;
 }
 
+fn _parse_iteration_statement__inner_bt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<IterationStatementNode, ParseError> {
+    let start = p.peek().span.start;
+    let for_ = p.expect(TK_For)?;
+    let lparen = p.expect(TK_LIT_LPAREN)?;
+    let expression_sequence: Option<ExpressionSequenceNode> = if _gale_kind_set_30(p.peek_kind()) {
+        let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW)?;
+        Option::<ExpressionSequenceNode>::Some(expression_sequence)
+    } else {
+        null
+    };
+    let semicolon = p.expect(TK_SemiColon)?;
+    let expression_sequence_2: Option<ExpressionSequenceNode> = if _gale_kind_set_30(p.peek_kind()) {
+        let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW)?;
+        Option::<ExpressionSequenceNode>::Some(expression_sequence)
+    } else {
+        null
+    };
+    let semicolon_2 = p.expect(TK_SemiColon)?;
+    let expression_sequence_3: Option<ExpressionSequenceNode> = if _gale_kind_set_30(p.peek_kind()) {
+        let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW)?;
+        Option::<ExpressionSequenceNode>::Some(expression_sequence)
+    } else {
+        null
+    };
+    let rparen = p.expect(TK_LIT_RPAREN)?;
+    let statement = _parse_statement(p, follow)?;
+    return Result::<IterationStatementNode, ParseError>::Ok(IterationStatementNode::ForStatement(IterationStatementForStatement {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        for_,
+        lparen,
+        expression_sequence,
+        semicolon,
+        expression_sequence_2,
+        semicolon_2,
+        expression_sequence_3,
+        rparen,
+        statement,
+    }));
+}
+
+fn _parse_iteration_statement__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_For { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+        let sp = pos;
+        pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { return -1; }
+    pos += 1;
+    if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+        let sp = pos;
+        pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { return -1; }
+    pos += 1;
+    if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
+        let sp = pos;
+        pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    pos = scan_statement(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn _parse_iteration_statement__inner_bt_6(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<IterationStatementNode, ParseError> {
     let start = p.peek().span.start;
     let for_ = p.expect(TK_For)?;
@@ -20891,78 +20963,6 @@ fn _parse_iteration_statement__inner_scan_6(tokens: &List<Token>, pos: i32, foll
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
-    pos += 1;
-    pos = scan_statement(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_iteration_statement__inner_bt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<IterationStatementNode, ParseError> {
-    let start = p.peek().span.start;
-    let for_ = p.expect(TK_For)?;
-    let lparen = p.expect(TK_LIT_LPAREN)?;
-    let expression_sequence: Option<ExpressionSequenceNode> = if _gale_kind_set_30(p.peek_kind()) {
-        let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW)?;
-        Option::<ExpressionSequenceNode>::Some(expression_sequence)
-    } else {
-        null
-    };
-    let semicolon = p.expect(TK_SemiColon)?;
-    let expression_sequence_2: Option<ExpressionSequenceNode> = if _gale_kind_set_30(p.peek_kind()) {
-        let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW)?;
-        Option::<ExpressionSequenceNode>::Some(expression_sequence)
-    } else {
-        null
-    };
-    let semicolon_2 = p.expect(TK_SemiColon)?;
-    let expression_sequence_3: Option<ExpressionSequenceNode> = if _gale_kind_set_30(p.peek_kind()) {
-        let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW)?;
-        Option::<ExpressionSequenceNode>::Some(expression_sequence)
-    } else {
-        null
-    };
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    let statement = _parse_statement(p, follow)?;
-    return Result::<IterationStatementNode, ParseError>::Ok(IterationStatementNode::ForStatement(IterationStatementForStatement {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        for_,
-        lparen,
-        expression_sequence,
-        semicolon,
-        expression_sequence_2,
-        semicolon_2,
-        expression_sequence_3,
-        rparen,
-        statement,
-    }));
-}
-
-fn _parse_iteration_statement__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_For { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
-    pos += 1;
-    if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
-        let sp = pos;
-        pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { return -1; }
-    pos += 1;
-    if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
-        let sp = pos;
-        pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { return -1; }
-    pos += 1;
-    if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
-        let sp = pos;
-        pos = scan_expression_sequence(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
@@ -21098,8 +21098,8 @@ fn _parse_iteration_statement__inner(p: &mut Parser, follow: &List<List<i32>> = 
         let _sd_pos = p.pos;
         let _sd_p_3 = _parse_iteration_statement__inner_scan_3(_sd_tokens, _sd_pos);
         let _sd_p_7 = _parse_iteration_statement__inner_scan_7(_sd_tokens, _sd_pos);
-        let _sd_p_6 = _parse_iteration_statement__inner_scan_6(_sd_tokens, _sd_pos);
         let _sd_p_2 = _parse_iteration_statement__inner_scan_2(_sd_tokens, _sd_pos);
+        let _sd_p_6 = _parse_iteration_statement__inner_scan_6(_sd_tokens, _sd_pos);
         let _sd_p_5 = _parse_iteration_statement__inner_scan_5(_sd_tokens, _sd_pos);
         let _sd_p_4 = _parse_iteration_statement__inner_scan_4(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
@@ -21112,13 +21112,13 @@ fn _parse_iteration_statement__inner(p: &mut Parser, follow: &List<List<i32>> = 
             _sd_best_p = _sd_p_7;
             _sd_best_i = 7;
         }
-        if _sd_p_6 > _sd_best_p {
-            _sd_best_p = _sd_p_6;
-            _sd_best_i = 6;
-        }
         if _sd_p_2 > _sd_best_p {
             _sd_best_p = _sd_p_2;
             _sd_best_i = 2;
+        }
+        if _sd_p_6 > _sd_best_p {
+            _sd_best_p = _sd_p_6;
+            _sd_best_i = 6;
         }
         if _sd_p_5 > _sd_best_p {
             _sd_best_p = _sd_p_5;
@@ -21134,11 +21134,11 @@ fn _parse_iteration_statement__inner(p: &mut Parser, follow: &List<List<i32>> = 
         if _sd_best_i == 7 {
             return _parse_iteration_statement__inner_bt_7(p, follow);
         }
-        if _sd_best_i == 6 {
-            return _parse_iteration_statement__inner_bt_6(p, follow);
-        }
         if _sd_best_i == 2 {
             return _parse_iteration_statement__inner_bt_2(p, follow);
+        }
+        if _sd_best_i == 6 {
+            return _parse_iteration_statement__inner_bt_6(p, follow);
         }
         if _sd_best_i == 5 {
             return _parse_iteration_statement__inner_bt_5(p, follow);
@@ -24267,6 +24267,26 @@ fn _parse_single_expression__inner_scan_49(tokens: &List<Token>, pos: i32, follo
     return pos;
 }
 
+fn _parse_single_expression__inner_bt_11(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SingleExpressionNode, ParseError> {
+    let start = p.peek().span.start;
+    let delete = p.expect(TK_Delete)?;
+    let single_expression = _parse_single_expression(p, follow, 21)?;
+    return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::DeleteExpression(SingleExpressionDeleteExpression {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        delete,
+        single_expression,
+    }));
+}
+
+fn _parse_single_expression__inner_scan_11(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Delete { return -1; }
+    pos += 1;
+    pos = scan_single_expression(tokens, pos, follow, 2147483647);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn _parse_single_expression__inner_bt_12(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let void = p.expect(TK_Void)?;
@@ -24321,26 +24341,6 @@ fn _parse_single_expression__inner_bt_20(p: &mut Parser, follow: &List<List<i32>
 fn _parse_single_expression__inner_scan_20(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Await { return -1; }
-    pos += 1;
-    pos = scan_single_expression(tokens, pos, follow, 2147483647);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_single_expression__inner_bt_11(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SingleExpressionNode, ParseError> {
-    let start = p.peek().span.start;
-    let delete = p.expect(TK_Delete)?;
-    let single_expression = _parse_single_expression(p, follow, 21)?;
-    return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::DeleteExpression(SingleExpressionDeleteExpression {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        delete,
-        single_expression,
-    }));
-}
-
-fn _parse_single_expression__inner_scan_11(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_Delete { return -1; }
     pos += 1;
     pos = scan_single_expression(tokens, pos, follow, 2147483647);
     if pos < 0 { return -1; }
@@ -24457,22 +24457,6 @@ fn _parse_single_expression__inner_scan_44(tokens: &List<Token>, pos: i32, follo
     return pos;
 }
 
-fn _parse_single_expression__inner_bt_45(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SingleExpressionNode, ParseError> {
-    let start = p.peek().span.start;
-    let super = p.expect(TK_Super)?;
-    return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::SuperExpression(SingleExpressionSuperExpression {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        super,
-    }));
-}
-
-fn _parse_single_expression__inner_scan_45(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_Super { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_single_expression__inner_bt_43(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let this = p.expect(TK_This)?;
@@ -24485,6 +24469,22 @@ fn _parse_single_expression__inner_bt_43(p: &mut Parser, follow: &List<List<i32>
 fn _parse_single_expression__inner_scan_43(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_This { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn _parse_single_expression__inner_bt_45(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SingleExpressionNode, ParseError> {
+    let start = p.peek().span.start;
+    let super = p.expect(TK_Super)?;
+    return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::SuperExpression(SingleExpressionSuperExpression {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        super,
+    }));
+}
+
+fn _parse_single_expression__inner_scan_45(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Super { return -1; }
     pos += 1;
     return pos;
 }
