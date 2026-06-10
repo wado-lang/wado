@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781016534978,
+  "lastUpdate": 1781051615773,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31737,6 +31737,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/259dd88cb75e6a233c73de7cf95093cf3a455802"
         },
         "date": 1781016534745,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8798,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15932,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad814e1ae876f3cb3ab15da7db538caa7d179886",
+          "message": "Merge pull request #1343 from wado-lang/claude/python-to-nodejs-ts-1hrmsw\n\nPort native-profile analyzer to TypeScript and fix stale optimizer-debug skill",
+          "timestamp": "2026-06-10T09:24:54+09:00",
+          "tree_id": "a55fa646a4bf97b067488923b45108047259f30b",
+          "url": "https://github.com/wado-lang/wado/commit/ad814e1ae876f3cb3ab15da7db538caa7d179886"
+        },
+        "date": 1781051615517,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
