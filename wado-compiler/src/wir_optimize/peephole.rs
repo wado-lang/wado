@@ -722,7 +722,6 @@ fn fold_branchless_increment_in(instr: &mut WirInstr) {
     // the condition is dropped rather than kept around the added operand.
     let mut cond = std::mem::replace(condition, Box::new(WirInstr::Nop));
     cond.take_branch_hint();
-    let cond = cond;
     let get = Box::new(WirInstr::LocalGet {
         name: name.clone(),
         result_ty: WirType::I32,

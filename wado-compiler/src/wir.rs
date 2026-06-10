@@ -1586,9 +1586,10 @@ pub enum WirInstr {
     /// No operation (for structure).
     Nop,
     /// Cold-path marker emitted for `builtin::cold_path()`. Produces no Wasm.
-    /// `apply_cold_path_hints` consumes it during WIR finalization: an `if`
-    /// whose then/else body contains this marker has its condition wrapped in
-    /// `BranchHint` so the enclosing branch is hinted unlikely.
+    /// `apply_cold_path_hints` consumes it during WIR finalization, wrapping
+    /// the enclosing conditional's condition in a `BranchHint` so the side
+    /// reaching the marker is hinted cold (see that pass for the recognized
+    /// shapes). Lowered to `Nop` under `-f no-branch-hinting`.
     ColdPath,
     /// Drop a value.
     Drop(Box<WirInstr>),

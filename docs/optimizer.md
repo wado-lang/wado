@@ -53,7 +53,7 @@ Gating affects only which functions a pass visits, never the IR a visit produces
 
 Allocation-elimination and aggregate passes:
 
-- `inline` — replace small pure non-recursive non-generic reference-free calls with their body; `#[inline]` ×5 threshold, `#[inline(always)]`/`(never)` force/block.
+- `inline` — replace small pure non-recursive non-generic reference-free calls with their body; `#[inline]` ×5 threshold, `#[inline(always)]`/`(never)` force/block. Cold call sites (after a `cold_path()` marker, mirroring the cost model's `block_cut`) are not inlined unless `#[inline(always)]` — the callee body would bloat the hot caller with code that rarely runs.
 - `sroa` — Scalar Replacement of Aggregates: decompose non-escaping (or reconstructible soft-escaping) struct/tuple locals into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — `List<Tuple<…>>` / `List<Struct>` → parallel `List<T_k>` (AoS → SoA) when every use matches the spine/index whitelist.
 - `sroa_param` — rewrite an internal `&S`/`&mut S` single-field-struct parameter to take the inner scalar, and the call-site allocation to the value; skips aliasing-sibling reference params.

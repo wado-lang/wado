@@ -7,7 +7,8 @@
 //! early `return` is ordinary control flow, only a trap is. Explicit hints
 //! (synthesized from `builtin::cold_path()` at WIR build) always win over
 //! inference. The pass runs at every optimization level so hints stay
-//! independent of `-O`, matching `apply_cold_path_hints`.
+//! independent of `-O`, matching `apply_cold_path_hints`; `-f
+//! no-branch-hinting` skips it (see `CodegenFlags::branch_hinting`).
 //!
 //! `select_br_ifs` collapses `if cond { br N }` with an empty else into a
 //! single `br_if N-1`, carrying any branch hint on the condition over to the
@@ -234,8 +235,8 @@ fn select_in_instr(instr: &mut WirInstr) {
     }
 }
 
-/// `Some(depth)` when the arm consists solely of no-op markers and a single
-/// trailing `br`.
+/// `Some(depth)` when the arm consists of exactly one `br`, plus any number
+/// of no-op markers around it.
 fn br_only_arm(body: &[WirInstr]) -> Option<u32> {
     let mut depth = None;
     for instr in body {
