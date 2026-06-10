@@ -207,7 +207,14 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 /// `min_abs` is the absolute value of the most negative representable value
 /// (e.g. for i32, `max = 2147483647`, `min_abs = 2147483648`). Handles the
 /// optional leading `+`/`-` sign.
-pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
+pub fn parse_i64_radix_range(
+    s: &String,
+    start: i32,
+    end: i32,
+    radix: u32,
+    max: i64,
+    min_abs: u64,
+) -> Result<i64, ParseIntError> {
     assert_radix(radix);
     let [is_negative, digit_start] = match parse_signed_prefix_range(s, start, end) {
         Ok(p) => p,

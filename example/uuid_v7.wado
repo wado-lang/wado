@@ -64,9 +64,11 @@ fn repeat(value: u8, count: i32) -> List<u8> {
 // expression, so its block value flows straight out of the function.
 fn gen_v7(seconds: i64, nanoseconds: u32, entropy: List<u8>) -> Uuid {
     let mut rng = SeededRandom { data: entropy, pos: 0 };
-    let clock = FixedClock { instant: Instant { seconds, nanoseconds } };
+    let clock = FixedClock {
+        instant: Instant { seconds, nanoseconds },
+    };
     return with Random => &mut rng, SystemClock => &clock do {
-        Uuid::v7()
+        Uuid::v7();
     };
 }
 

@@ -363,7 +363,12 @@ pub resource Request {
     /// The returned future resolves to result of transmission of this request.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[static]request.new")]
     #[cm_params("headers", "contents", "trailers", "options")]
-    fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>, options: Option<RequestOptions>) -> [Request, Future<Result<(), ErrorCode>>];
+    fn new(
+        headers: Headers,
+        contents: Option<Stream<u8>>,
+        trailers: Future<Result<Option<Trailers>, ErrorCode>>,
+        options: Option<RequestOptions>,
+    ) -> [Request, Future<Result<(), ErrorCode>>];
     /// Get the Method for the Request.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]request.get-method")]
     #[cm_params("self")]
@@ -440,7 +445,10 @@ pub resource Request {
     /// request options acquired from it previously will remain valid.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[static]request.consume-body")]
     #[cm_params("this", "res")]
-    fn consume_body(this: Request, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
+    fn consume_body(
+        this: Request,
+        res: Future<Result<(), ErrorCode>>,
+    ) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
 }
 
 /// Parameters for making an HTTP Request. Each of these parameters is
@@ -510,7 +518,11 @@ pub resource Response {
     /// The returned future resolves to result of transmission of this response.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[static]response.new")]
     #[cm_params("headers", "contents", "trailers")]
-    fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>) -> [Response, Future<Result<(), ErrorCode>>];
+    fn new(
+        headers: Headers,
+        contents: Option<Stream<u8>>,
+        trailers: Future<Result<Option<Trailers>, ErrorCode>>,
+    ) -> [Response, Future<Result<(), ErrorCode>>];
     /// Get the HTTP Status Code for the Response.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]response.get-status-code")]
     #[cm_params("self")]
@@ -541,5 +553,8 @@ pub resource Response {
     /// acquired from it previously will remain valid.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[static]response.consume-body")]
     #[cm_params("this", "res")]
-    fn consume_body(this: Response, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
+    fn consume_body(
+        this: Response,
+        res: Future<Result<(), ErrorCode>>,
+    ) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
 }

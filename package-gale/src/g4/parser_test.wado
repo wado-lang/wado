@@ -204,10 +204,8 @@ test "multi-char range endpoint is rejected, not silently truncated" {
     // ANTLR4 rejects a multi-character range endpoint. The start is already
     // validated (single char); the end must be too, rather than silently
     // taking its first char (`'a'..'bc'` -> 'a'..'b') or panicking on empty.
-    assert parse("grammar Test;\nR : 'a' .. 'bc' ;") matches { Err(_) },
-        "multi-char range end should be rejected";
-    assert parse("grammar Test;\nR : 'a' .. '' ;") matches { Err(_) },
-        "empty range end should be rejected, not panic";
+    assert parse("grammar Test;\nR : 'a' .. 'bc' ;") matches { Err(_) }, "multi-char range end should be rejected";
+    assert parse("grammar Test;\nR : 'a' .. '' ;") matches { Err(_) }, "empty range end should be rejected, not panic";
 }
 
 test "char class \\uXXXX range endpoint" {
@@ -217,8 +215,7 @@ R : [\\u0041-\\u005A] ;";
     let body = &g.lexer_rules[0].body;
     if let CharClass(cc) = body[0].elements[0] {
         assert cc.ranges.len() == 1;
-        assert cc.ranges[0].start == 'A' && cc.ranges[0].end == 'Z',
-            `{cc.ranges[0].start as i32}-{cc.ranges[0].end as i32}`;
+        assert cc.ranges[0].start == 'A' && cc.ranges[0].end == 'Z', `{cc.ranges[0].start as i32}-{cc.ranges[0].end as i32}`;
     } else {
         panic("expected CharClass");
     }
@@ -1207,13 +1204,11 @@ NON_AB : ~( 'a' | 'b' ) ;";
 test "lexer rule tilde applied to rule ref is rejected" {
     // ANTLR4 restricts lexer `~` to a single char, a char set/range, or a
     // block of those — a fragment/rule reference is not a set element.
-    assert parse("lexer grammar Test;\nfragment A : 'a' ;\nB : ~A ;") matches { Err(_) },
-        "~RuleRef in a lexer rule should be rejected";
+    assert parse("lexer grammar Test;\nfragment A : 'a' ;\nB : ~A ;") matches { Err(_) }, "~RuleRef in a lexer rule should be rejected";
 }
 
 test "lexer rule tilde applied to wildcard is rejected" {
-    assert parse("lexer grammar Test;\nB : ~. ;") matches { Err(_) },
-        "~. (not wildcard) in a lexer rule should be rejected";
+    assert parse("lexer grammar Test;\nB : ~. ;") matches { Err(_) }, "~. (not wildcard) in a lexer rule should be rejected";
 }
 
 test "block label single-value" {

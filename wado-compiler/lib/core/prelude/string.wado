@@ -115,8 +115,7 @@ fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
             builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 3, valid: false };
         }
-        let code =
-            (b0 as u32 & 0x07) << 18 | (b1 as u32 & 0x3F) << 12 | (b2 as u32 & 0x3F) << 6 | b3 as u32 & 0x3F;
+        let code = (b0 as u32 & 0x07) << 18 | (b1 as u32 & 0x3F) << 12 | (b2 as u32 & 0x3F) << 6 | b3 as u32 & 0x3F;
         return Utf8Scalar { code, advance: 4, valid: true };
     }
     // 0xF5–0xFF: always invalid
