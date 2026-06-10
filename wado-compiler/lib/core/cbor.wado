@@ -1329,10 +1329,23 @@ impl DeserializeStruct for CborStructAccess {
         if ended {
             return Result::Ok(null);
         }
-        // The key is a text string; match its byte range against the field
-        // schema without allocating a String (RFC 8949 §6.1: text-string keys).
-        let key_range = self.de.read_text_key_range()?;
-        let idx = match S::lookup(self.de.input.slice(key_range.0, key_range.0 + key_range.1)) {
+        // Fast path: a definite-length text key matches the schema straight from
+        // the input bytes, no allocation (RFC 8949 §6.1: text-string keys).
+        let head = self.de.peek_byte()?;
+        if head >> 5 == MAJOR_TEXT && head & 0x1f != AI_INDEFINITE {
+            let key_range = self.de.read_text_key_range()?;
+            let idx = match S::lookup(self.de.input.slice(key_range.0, key_range.0 + key_range.1)) {
+                Some(i) => i,
+                None => -1,
+            };
+            return Result::Ok(Option::Some(idx));
+        }
+        // Slow path: an indefinite-length or tag-wrapped key (rare, but
+        // well-formed) is materialized via `deserialize_string` and matched
+        // by its bytes.
+        builtin::cold_path();
+        let key = self.de.deserialize_string()?;
+        let idx = match S::lookup(key.as_bytes()) {
             Some(i) => i,
             None => -1,
         };
@@ -1582,27 +1595,29 @@ impl Deserializer for CborDeserializer {
     }
 
     fn is_null(&mut self) -> Result<bool, DeserializeError> {
-        // Probe past self-described prefixes (tag 55799 = 0xd9 0xd9 0xf7,
-        // §3.4.6) without consuming: a peek must leave the input untouched
-        // unless it finds the null, so a non-null item re-reads its tags.
-        let mut probe = self.pos;
-        while probe + 3 <= self.input.len()
-            && self.input.get_unchecked(probe) == 0xd9
-            && self.input.get_unchecked(probe + 1) == 0xd9
-            && self.input.get_unchecked(probe + 2) == 0xf7 {
-            probe += 3;
+        // Peek past any passthrough tags (e.g. self-described 55799 in any of
+        // its encodings) for a null/undefined, restoring `pos` if it isn't one
+        // — a peek must leave the input untouched unless it consumes the null.
+        let saved = self.pos;
+        loop {
+            let major = self.peek_byte()? >> 5;
+            if major == MAJOR_TAG {
+                let [tmajor, tai, tag, tindef] = self.read_head()?;
+                if is_passthrough_tag(tag) {
+                    continue;
+                }
+                self.pos = saved;
+                return Result::Ok(false);
+            }
+            // null (0xf6) and undefined (0xf7) both map to the absent value.
+            let b = self.peek_byte()?;
+            if b == INIT_NULL || b == INIT_UNDEFINED {
+                self.pos += 1;
+                return Result::Ok(true);
+            }
+            self.pos = saved;
+            return Result::Ok(false);
         }
-        if probe >= self.input.len() {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(probe as i64));
-        }
-        let b = self.input.get_unchecked(probe);
-        // null (0xf6) and undefined (0xf7) both map to the absent value.
-        if b == INIT_NULL || b == INIT_UNDEFINED {
-            self.pos = probe + 1;
-            return Result::Ok(true);
-        }
-        return Result::Ok(false);
     }
 
     /// Open a definite/indefinite container of the expected major type,

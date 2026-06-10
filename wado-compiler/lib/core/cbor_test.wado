@@ -335,6 +335,28 @@ test "decode: variation-tolerant (non-preferred and indefinite)" {
     assert s == "streaming";
 }
 
+test "decode: indefinite-length text struct key" {
+    // {(_ "a"): 1}: a struct key encoded as an indefinite-length text string
+    // is well-formed and must match the field schema (RFC 8949 §4.1).
+    let p: Point = match from_bytes::<Point, ByteList>(hex("a27f6178ff017f6179ff02")) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("decode failed");
+        },
+    };
+    assert p.x == 1;
+    assert p.y == 2;
+}
+
+test "decode: null wrapped in a non-preferred self-described tag" {
+    // tag 55799 in 4-byte form (0xda 0x0000d9f7) wrapping null — every other
+    // path unwraps non-preferred tag encodings, so Option must too.
+    let n: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("da0000d9f7f6"));
+    assert n matches { Ok(v) && !(v matches { Some(_) }) };
+    let s: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("da0000d9f701"));
+    assert s matches { Ok(v) && v matches { Some(x) && x == 1 } };
+}
+
 test "decode: tag 0 date/time text unwraps to a string" {
     // tag(0) "2013-03-21T20:04:00Z"
     let bytes = hex("c074323031332d30332d32315432303a30343a30305a");
