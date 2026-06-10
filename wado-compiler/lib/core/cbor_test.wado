@@ -3,7 +3,7 @@
 //! value and its canonical diagnostic/hex form from that table.
 
 use { to_bytes, to_bytes_canonical, from_bytes } from "core:cbor";
-use { Serialize, Deserialize } from "core:serde";
+use { Serialize, Deserialize, DeserializeError, DeserializeErrorKind } from "core:serde";
 use { Value } from "core:value";
 use { TreeMap } from "core:collections";
 
@@ -69,6 +69,17 @@ variant Shape {
 }
 impl Serialize for Shape;
 impl Deserialize for Shape;
+
+struct Single {
+    a: i32,
+}
+impl Deserialize for Single;
+
+struct WrapShape {
+    s: Shape,
+    t: i32,
+}
+impl Deserialize for WrapShape;
 
 test "Appendix A: unsigned integers" {
     let a: i32 = 1000000;
@@ -324,6 +335,28 @@ test "decode: variation-tolerant (non-preferred and indefinite)" {
     assert s == "streaming";
 }
 
+test "decode: indefinite-length text struct key" {
+    // {(_ "a"): 1}: a struct key encoded as an indefinite-length text string
+    // is well-formed and must match the field schema (RFC 8949 §4.1).
+    let p: Point = match from_bytes::<Point, ByteList>(hex("a27f6178ff017f6179ff02")) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("decode failed");
+        },
+    };
+    assert p.x == 1;
+    assert p.y == 2;
+}
+
+test "decode: null wrapped in a non-preferred self-described tag" {
+    // tag 55799 in 4-byte form (0xda 0x0000d9f7) wrapping null — every other
+    // path unwraps non-preferred tag encodings, so Option must too.
+    let n: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("da0000d9f7f6"));
+    assert n matches { Ok(v) && !(v matches { Some(_) }) };
+    let s: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("da0000d9f701"));
+    assert s matches { Ok(v) && v matches { Some(x) && x == 1 } };
+}
+
 test "decode: tag 0 date/time text unwraps to a string" {
     // tag(0) "2013-03-21T20:04:00Z"
     let bytes = hex("c074323031332d30332d32315432303a30343a30305a");
@@ -426,6 +459,72 @@ test "reject: nesting deeper than the recursion bound" {
     }
     bytes.push(0x00);
     assert decodes_err::<Value>(bytes);
+}
+
+test "reject: variant map with other than one pair" {
+    // External tagging is a single-pair map ({"Circle": 1.0, "Dot": null}).
+    let two = from_bytes::<Shape, ByteList>(hex("a266436972636c65fb3ff000000000000063446f74f6"));
+    assert two matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    // The extra pair must not desync into the enclosing array:
+    // [{Circle:1.0, Dot:"Dot"}] with a 3-element claim used to decode
+    // silently as [Circle(1.0), Dot, Dot].
+    assert decodes_err::<List<Shape>>(hex("83a266436972636c65fb3ff000000000000063446f7463446f74"));
+    // Zero pairs cannot name a variant.
+    assert decodes_err::<Shape>(hex("a0"));
+}
+
+test "reject: unterminated indefinite variant map" {
+    // {"s": (bf "Circle" 1.0 — break missing), "t": 7} used to decode
+    // successfully because the variant's end never required the break.
+    assert decodes_err::<WrapShape>(hex("a26173bf66436972636c65fb3ff0000000000000617407"));
+}
+
+test "variant single-pair forms still decode" {
+    let d = from_bytes::<Shape, ByteList>(hex("a166436972636c65fb3ff8000000000000"));
+    assert d matches { Ok(v) && v == Shape::Circle(1.5) };
+    let i = from_bytes::<Shape, ByteList>(hex("bf66436972636c65fb3ff8000000000000ff"));
+    assert i matches { Ok(v) && v == Shape::Circle(1.5) };
+}
+
+test "reject: text-key length wider than the remaining input" {
+    // {<key with declared length 2^32+1>: 1}: the 8-byte length must be
+    // range-checked before any narrowing — it used to truncate to 1 and
+    // read a 1-byte key.
+    assert decodes_err::<Single>(hex("a17b00000001000000016101"));
+}
+
+test "reject: stray break where an item is expected" {
+    // {"z": <break>, "x": 1, "y": 2} — a lone 0xff is not an item; skipping
+    // the unknown field "z" must not swallow it (RFC 8949 §3.2.1).
+    assert decodes_err::<Point>(hex("a3617aff617801617902"));
+}
+
+test "passthrough tags unwrap for every scalar shape" {
+    // Self-described CBOR (tag 55799, §3.4.6) around floats, bool, and null —
+    // integers and strings already unwrapped it.
+    assert from_bytes::<f64, ByteList>(hex("d9d9f7fb3ff0000000000000")) matches { Ok(v) && v == 1.0 };
+    assert from_bytes::<f32, ByteList>(hex("d9d9f7fa3fc00000")) matches { Ok(v) && v == 1.5 };
+    assert from_bytes::<bool, ByteList>(hex("d9d9f7f5")) matches { Ok(v) && v };
+    let none: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("d9d9f7f6"));
+    assert none matches { Ok(v) && !v matches { Some(_) } };
+    let some: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("d9d9f701"));
+    assert some matches { Ok(v) && v matches { Some(x) && x == 1 } };
+    // Epoch time (tag 1, §3.4.2) is content-passthrough for numbers
+    // (Appendix A: 1(1363896240) and 1(1363896240.5)).
+    assert from_bytes::<i64, ByteList>(hex("c11a514b67b0")) matches { Ok(v) && v == 1363896240 };
+    assert from_bytes::<f64, ByteList>(hex("c1fb41d452d9ec200000")) matches { Ok(v) && v == 1363896240.5 };
+}
+
+test "reject: definite array longer than the target tuple" {
+    // [1,2,3] into [i32,i32]: the unread element must surface as an error.
+    assert decodes_err::<[i32, i32]>(hex("83010203"));
+    // Nested: [[1,2,[3,4]]] used to decode silently as [[1,2],[3,4]].
+    assert decodes_err::<List<[i32, i32]>>(hex("9f830102820304ff"));
+}
+
+test "tuple from an indefinite array consumes the break" {
+    let r = from_bytes::<[i32, i32], ByteList>(hex("9f0102ff"));
+    assert r matches { Ok(t) && t.0 == 1 && t.1 == 2 };
 }
 
 fn enc_canon<T: Serialize>(v: &T) -> String {

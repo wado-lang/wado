@@ -8,13 +8,16 @@
 //   - Configurable padding via Encoding flags
 //   - Lenient decode: accepts both alphabets and with/without padding
 //
-// Usage:
-//   use { encode, decode, encode_url, encode_with, decode_bytes, Encoding } from "core:base64";
+// All entry points accept any byte source via `AsByteSlice` (a `ByteList`,
+// `ByteArray`, `ByteSlice`, `List<u8>`, or a `String`'s UTF-8 bytes).
 //
-//   let data: List<u8> = [72, 101, 108, 108, 111] as List<u8>;
+// Usage:
+//   use { encode, decode, encode_url, encode_with, Encoding } from "core:base64";
+//
+//   let data: ByteList = [72, 101, 108, 108, 111];
 //   let b64 = encode(&data);           // "SGVsbG8="
 //   let url = encode_url(&data);       // "SGVsbG8"
-//   if let Some(decoded) = decode(b64) { ... }
+//   if let Some(decoded) = decode(&b64) { ... }
 
 
 pub flags Encoding {
@@ -65,7 +68,7 @@ fn build_decode_table() -> List<u8> {
 
 global DECODE_TABLE: List<u8> = build_decode_table();
 
-fn encode_impl(data: &List<u8>, table: &List<u8>, pad: bool) -> String {
+fn encode_impl(data: ByteSlice, table: &List<u8>, pad: bool) -> String {
     let len = data.len();
     if len == 0 {
         return "";
@@ -108,28 +111,30 @@ fn encode_impl(data: &List<u8>, table: &List<u8>, pad: bool) -> String {
 }
 
 /// Encodes bytes as standard Base64 (RFC 4648 §4, padded).
-pub fn encode(data: &List<u8>) -> String {
-    return encode_impl(data, &STANDARD_TABLE, true);
+#[inline]
+pub fn encode<S: AsByteSlice>(data: &S) -> String {
+    return encode_impl(data.as_byte_slice(), &STANDARD_TABLE, true);
 }
 
 /// Encodes bytes as URL-safe Base64 (RFC 4648 §5, no padding).
 /// Equivalent to `encode_with(data, Encoding::UrlSafe | Encoding::NoPadding)`.
-pub fn encode_url(data: &List<u8>) -> String {
-    return encode_impl(data, &URL_SAFE_TABLE, false);
+#[inline]
+pub fn encode_url<S: AsByteSlice>(data: &S) -> String {
+    return encode_impl(data.as_byte_slice(), &URL_SAFE_TABLE, false);
 }
 
 /// Encodes bytes as Base64 with custom flags.
-pub fn encode_with(data: &List<u8>, encoding: Encoding) -> String {
+pub fn encode_with<S: AsByteSlice>(data: &S, encoding: Encoding) -> String {
     let url_safe = (encoding & Encoding::UrlSafe) as u32 != 0;
     let no_padding = (encoding & Encoding::NoPadding) as u32 != 0;
     if url_safe {
-        return encode_impl(data, &URL_SAFE_TABLE, !no_padding);
+        return encode_impl(data.as_byte_slice(), &URL_SAFE_TABLE, !no_padding);
     }
-    return encode_impl(data, &STANDARD_TABLE, !no_padding);
+    return encode_impl(data.as_byte_slice(), &STANDARD_TABLE, !no_padding);
 }
 
-fn decode_impl(input: &List<u8>, input_len: i32) -> Option<List<u8>> {
-    let mut end = input_len;
+fn decode_impl(input: ByteSlice) -> Option<ByteList> {
+    let mut end = input.len();
     while end > 0 && input[end - 1] == '=' as u8 {
         end -= 1;
     }
@@ -185,19 +190,13 @@ fn decode_impl(input: &List<u8>, input_len: i32) -> Option<List<u8>> {
         out.push(((v1 & 15) << 4 | v2 >> 2) as u8);
     }
 
-    return Option::Some(out);
+    return Option::Some(out as ByteList);
 }
 
-/// Decodes a Base64 string.
+/// Decodes Base64 from text or raw bytes (e.g., HTTP body, file content).
 /// Accepts both standard (+/) and URL-safe (-_) alphabets, with or without padding.
 /// Returns null on invalid input.
-pub fn decode(encoded: String) -> Option<List<u8>> {
-    let bytes = encoded.bytes().collect();
-    return decode_impl(&bytes, bytes.len());
-}
-
-/// Decodes Base64 from raw bytes (e.g., HTTP body, file content).
-/// Same lenient behavior as `decode`.
-pub fn decode_bytes(encoded: &List<u8>) -> Option<List<u8>> {
-    return decode_impl(encoded, encoded.len());
+#[inline]
+pub fn decode<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
+    return decode_impl(encoded.as_byte_slice());
 }

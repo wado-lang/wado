@@ -1960,12 +1960,17 @@ impl FunctionTranslator<'_, '_> {
                     }
                 } else if let Some(mi) = func.method_info.clone() {
                     panic!(
-                        "[WIR] unresolved MethodCall: name={:?} method_info={:?}",
+                        "[WIR] unresolved MethodCall: name={:?} module={} method_info={:?}",
                         func.name.clone(),
+                        func.module_source,
                         mi
                     );
                 } else {
-                    panic!("[WIR] unresolved MethodCall: name={:?}", func.name.clone());
+                    panic!(
+                        "[WIR] unresolved MethodCall: name={:?} module={}",
+                        func.name.clone(),
+                        func.module_source
+                    );
                 }
             }
 

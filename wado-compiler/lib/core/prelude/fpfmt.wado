@@ -867,8 +867,17 @@ fn pack64(m: u64, e: i32) -> f64 {
     return f64::from_bits((mantissa_bits | exp_bits) as i64);
 }
 
+/// `parse` accepts at most this many decimal digits in `d` — the most that
+/// always fit a u64 (u64::MAX has 20 digits).
+pub global PARSE_DIGITS_MAX: i32 = 19;
+
+/// Exponent domain of `parse`'s pow10 table. Outside it the result is
+/// definitely ±infinity (above) or ±0 (below).
+pub global PARSE_EXP_MAX: i32 = 350;
+pub global PARSE_EXP_MIN: i32 = -351;
+
 // parse rounds d * 10^p to the nearest f64.
-// d must have at most 19 digits.
+// d must have at most PARSE_DIGITS_MAX digits.
 pub fn parse(d: u64, p: i32) -> f64 {
     let b = u64_bit_len(d);
     let lp = log2_pow10(p);
@@ -1026,12 +1035,12 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     }
 
     // Handle overflow/underflow for extreme exponents.
-    // The pow10 table supports [-351, 350]; beyond that, result is definitely inf or 0.
+    // Beyond the pow10 table's domain the result is definitely inf or 0.
     let eff_p = p - frac;
-    if eff_p > 350 {
+    if eff_p > PARSE_EXP_MAX {
         return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
     }
-    if eff_p < -351 {
+    if eff_p < PARSE_EXP_MIN {
         return Option::Some(builtin::f64_copysign(0.0, sign));
     }
 

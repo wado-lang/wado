@@ -310,6 +310,14 @@ test "f64 constants" {
     assert f64::FRAC_PI_4 == f64::PI / 4.0;
 }
 
+test "f64 safe integer constants" {
+    // 2^53 - 1, the largest integer exactly representable in f64
+    // (JS Number.MAX_SAFE_INTEGER / MIN_SAFE_INTEGER).
+    assert f64::MAX_SAFE_INTEGER == 9007199254740991.0;
+    assert f64::MIN_SAFE_INTEGER == -9007199254740991.0;
+    assert f64::MAX_SAFE_INTEGER as i64 == 9007199254740991;
+}
+
 test "f32 constants" {
     assert 3.14 < f32::PI < 3.15;
     assert f32::TAU == f32::PI * 2.0;

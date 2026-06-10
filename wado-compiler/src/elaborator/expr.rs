@@ -132,7 +132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // node. Read the overall type from `expression_types` (AST
                 // level) via the shared block-result rule so a trailing
                 // `if/else` propagates its branch-agreed type, not `Unit`.
-                self.resolve_block(block, ctx, expected_type);
+                self.resolve_block_value(block, ctx, expected_type);
                 self.ast_block_result_type(block)
             }
             Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
@@ -157,6 +157,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx.active_labels.push(lb.label.clone());
 
                 ctx.enter_scope();
+                // A labeled block yields via `break label: value`, not a tail
+                // expression, so its trailing statement stays in statement
+                // position (a discarded tail `match` may have arms of
+                // differing types).
                 self.resolve_block(&lb.block, ctx, expected_type);
                 ctx.exit_scope();
 
@@ -1508,7 +1512,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve else_block in outer scope (chain bindings not visible
                 // there) for its fact-recording side effects; reify rebuilds it.
                 if let Some(b) = &if_expr.else_block {
-                    self.resolve_block(b, ctx, expected_type);
+                    self.resolve_block_value(b, ctx, expected_type);
                 }
 
                 // Enter scope for chain elements and then_block
@@ -1518,6 +1522,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &if_expr.then_block,
                     ctx,
                     expected_type,
+                    true,
                     if_expr.span,
                 );
                 ctx.exit_scope();
@@ -1625,9 +1630,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // rebuilds the `If` node. The result type is inferred from the
                 // AST (`ast_block_result_type`) below.
                 self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                self.resolve_block(&if_expr.then_block, ctx, expected_type);
+                self.resolve_block_value(&if_expr.then_block, ctx, expected_type);
                 if let Some(b) = &if_expr.else_block {
-                    self.resolve_block(b, ctx, expected_type);
+                    self.resolve_block_value(b, ctx, expected_type);
                 }
 
                 let type_id = if let Some(ty) = expected_type {

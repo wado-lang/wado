@@ -124,27 +124,27 @@ type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Arra
 
 type "functype//core:json/write_escaped_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(36)
 
-type "functype//core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage>" = fn(ref "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado//ErrorMessage") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(37)
+type "functype//core:json/write_json_bool" = fn(ref "core:prelude/string.wado//String", bool) -> ref null "core:serde//SerializeError";  // TypeId(37)
 
-type "functype//core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/Message>" = fn(ref "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado//Message") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(38)
+type "functype//core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage>" = fn(ref "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado//ErrorMessage") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(38)
 
-type "functype//core:base64/__initialize_module" = fn();  // TypeId(39)
+type "functype//core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/Message>" = fn(ref "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado//Message") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(39)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(40)
+type "functype//core:base64/__initialize_module" = fn();  // TypeId(40)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(41)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(41)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(42)
+type "functype//core:prelude/primitive.wado/u64::fmt_base" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(42)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(43)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(43)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(44)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(44)
 
-type "functype//core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(45)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(45)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(46)
+type "functype//core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(46)
 
-type "functype//core:json/JsonSerializer^Serializer::serialize_bool" = fn(ref "core:json//JsonSerializer", bool) -> ref null "core:serde//SerializeError";  // TypeId(47)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(47)
 
 type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(48)
 
@@ -415,6 +415,22 @@ fn "core:json/write_escaped_string"(buf, s) {
     "core:prelude/string.wado/String::push"(buf, 34);
 }
 
+fn "core:json/write_json_bool"(buf, v) {
+    if v {
+        "core:prelude/string.wado/String::push"(buf, 116);
+        "core:prelude/string.wado/String::push"(buf, 114);
+        "core:prelude/string.wado/String::push"(buf, 117);
+        "core:prelude/string.wado/String::push"(buf, 101);
+    } else {
+        "core:prelude/string.wado/String::push"(buf, 102);
+        "core:prelude/string.wado/String::push"(buf, 97);
+        "core:prelude/string.wado/String::push"(buf, 108);
+        "core:prelude/string.wado/String::push"(buf, 115);
+        "core:prelude/string.wado/String::push"(buf, 101);
+    }
+    return ref.null none;
+}
+
 fn "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage>"(value) {
     let buf: ref "core:prelude/string.wado//String";
     let ser: ref "core:json//JsonSerializer";
@@ -591,22 +607,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "core:json/JsonSerializer^Serializer::serialize_bool"(self, v) {
-    if v {
-        "core:prelude/string.wado/String::push"(self.buf, 116);
-        "core:prelude/string.wado/String::push"(self.buf, 114);
-        "core:prelude/string.wado/String::push"(self.buf, 117);
-        "core:prelude/string.wado/String::push"(self.buf, 101);
-    } else {
-        "core:prelude/string.wado/String::push"(self.buf, 102);
-        "core:prelude/string.wado/String::push"(self.buf, 97);
-        "core:prelude/string.wado/String::push"(self.buf, 108);
-        "core:prelude/string.wado/String::push"(self.buf, 115);
-        "core:prelude/string.wado/String::push"(self.buf, 101);
-    }
-    return ref.null none;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -747,16 +747,18 @@ fn "core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wa
 }
 
 fn "core:json/JsonStructSerializer^SerializeStruct::field<bool>"(self, name, value) {
-    let ser: ref "core:json//JsonSerializer";
     let r: ref null "core:serde//SerializeError";
+    let v: bool;
+    let __sroa_ser_buf: ref "core:prelude/string.wado//String";
     if self.count > 0 {
         "core:prelude/string.wado/String::push"(self.buf, 44);
     }
     "core:json/write_escaped_string"(self.buf, name);
     "core:prelude/string.wado/String::push"(self.buf, 58);
-    ser = struct.new "core:json//JsonSerializer" { buf: self.buf };
-    r = "core:json/JsonSerializer^Serializer::serialize_bool"(ser, value.value);
-    self.buf = ser.buf;
+    __sroa_ser_buf = self.buf;
+    v = value.value;
+    r = "core:json/write_json_bool"(__sroa_ser_buf, v);
+    self.buf = __sroa_ser_buf;
     self.count = self.count + 1;
     return r;
 }

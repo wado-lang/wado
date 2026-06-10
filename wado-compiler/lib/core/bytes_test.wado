@@ -9,6 +9,14 @@ test "ByteList literal coercion and as_byte_slice view" {
     assert s[2] == 3;
 }
 
+test "List<u8> as_byte_slice view" {
+    let data: List<u8> = [1, 2, 3];
+    let s = data.as_byte_slice();
+    assert s.len() == 3;
+    assert s[0] == 1;
+    assert s[2] == 3;
+}
+
 test "ByteSlice as_byte_slice is identity" {
     let b: ByteList = [10, 20, 30, 40];
     let s = b.as_byte_slice();

@@ -272,11 +272,11 @@ fn respond_status(code_str: String) -> RouteResponse {
 }
 
 fn respond_base64(encoded: String) -> RouteResponse {
-    if let Some(decoded_bytes) = decode(encoded) {
+    if let Some(decoded_bytes) = decode(&encoded) {
         return RouteResponse {
             status: 200,
             content_type: "text/plain",
-            body: decoded_bytes,
+            body: decoded_bytes as List<u8>,
             allow: null,
         };
     }

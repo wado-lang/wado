@@ -1,4 +1,4 @@
-use { encode, decode, encode_url, encode_with, decode_bytes, Encoding } from "core:base64";
+use { encode, decode, encode_url, encode_with, Encoding } from "core:base64";
 
 test "encode empty" {
     let data: List<u8> = [];
@@ -31,16 +31,18 @@ test "encode three bytes" {
 }
 
 test "encode all byte values" {
-    let mut data: List<u8> = List::with_capacity(256);
+    let mut data: ByteList = [];
     for let mut i = 0; i < 256; i += 1 {
         data.push(i as u8);
     }
-    assert decode(encode(&data)) matches { Some(d) && d == data };
+    let b64 = encode(&data);
+    assert decode(&b64) matches { Some(d) && d == data };
 }
 
 test "encode standard alphabet chars" {
-    let data: List<u8> = [251, 239, 190] as List<u8>;
-    assert decode(encode(&data)) matches { Some(d) && d == data };
+    let data: ByteList = [251, 239, 190];
+    let b64 = encode(&data);
+    assert decode(&b64) matches { Some(d) && d == data };
 }
 
 test "encode_url Hello" {
@@ -75,80 +77,75 @@ test "encode_with url-safe no padding" {
 }
 
 test "decode empty" {
-    assert decode("") matches { Some(d) && d.len() == 0 };
+    assert decode(&"") matches { Some(d) && d.len() == 0 };
 }
 
 test "decode padded" {
-    let expected = "Hello".bytes().collect();
-    assert decode("SGVsbG8=") matches { Some(d) && d == expected };
+    let expected = "Hello".bytes().collect() as ByteList;
+    assert decode(&"SGVsbG8=") matches { Some(d) && d == expected };
 }
 
 test "decode without padding" {
-    let expected = "Hello".bytes().collect();
-    assert decode("SGVsbG8") matches { Some(d) && d == expected };
+    let expected = "Hello".bytes().collect() as ByteList;
+    assert decode(&"SGVsbG8") matches { Some(d) && d == expected };
 }
 
 test "decode url-safe" {
-    let data: List<u8> = [251, 239, 190] as List<u8>;
-    assert decode(encode_url(&data)) matches { Some(d) && d == data };
+    let data: ByteList = [251, 239, 190];
+    let b64 = encode_url(&data);
+    assert decode(&b64) matches { Some(d) && d == data };
 }
 
 test "decode standard" {
-    let data: List<u8> = [251, 239, 190] as List<u8>;
-    assert decode(encode(&data)) matches { Some(d) && d == data };
-}
-
-test "decode_bytes" {
-    let raw = "SGVsbG8=".bytes().collect();
-    let expected = "Hello".bytes().collect();
-    assert decode_bytes(&raw) matches { Some(d) && d == expected };
-}
-
-test "decode_bytes empty" {
-    let raw: List<u8> = [];
-    assert decode_bytes(&raw) matches { Some(d) && d.len() == 0 };
+    let data: ByteList = [251, 239, 190];
+    let b64 = encode(&data);
+    assert decode(&b64) matches { Some(d) && d == data };
 }
 
 test "decode invalid chars" {
-    assert decode("!!!") matches { None };
+    assert decode(&"!!!") matches { None };
 }
 
 test "decode mixed alphabets" {
-    assert decode("abc+def_ghi") matches { Some(_) };
+    assert decode(&"abc+def_ghi") matches { Some(_) };
 }
 
 test "decode structurally invalid length" {
-    assert decode("A") matches { None };
+    assert decode(&"A") matches { None };
 }
 
 test "decode control chars" {
-    assert decode("SGVs\nbG8=") matches { None };
+    assert decode(&"SGVs\nbG8=") matches { None };
 }
 
 test "round-trip standard" {
-    let data: List<u8> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as List<u8>;
-    assert decode(encode(&data)) matches { Some(d) && d == data };
+    let data: ByteList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let b64 = encode(&data);
+    assert decode(&b64) matches { Some(d) && d == data };
 }
 
 test "round-trip url-safe" {
-    let data: List<u8> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as List<u8>;
-    assert decode(encode_url(&data)) matches { Some(d) && d == data };
+    let data: ByteList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let b64 = encode_url(&data);
+    assert decode(&b64) matches { Some(d) && d == data };
 }
 
 test "round-trip various lengths" {
     for let mut size = 0; size <= 20; size += 1 {
-        let mut data: List<u8> = List::with_capacity(size);
+        let mut data: ByteList = [];
         for let mut j = 0; j < size; j += 1 {
             data.push(((j * 7 + 13) % 256) as u8);
         }
 
-        if let Some(decoded) = decode(encode(&data)) {
+        let b64 = encode(&data);
+        if let Some(decoded) = decode(&b64) {
             assert decoded == data, `round-trip failed for size {size}`;
         } else {
             panic(`decode failed for size {size}`);
         }
 
-        if let Some(url_decoded) = decode(encode_url(&data)) {
+        let url_b64 = encode_url(&data);
+        if let Some(url_decoded) = decode(&url_b64) {
             assert url_decoded == data, `url round-trip failed for size {size}`;
         } else {
             panic(`url decode failed for size {size}`);
@@ -156,12 +153,33 @@ test "round-trip various lengths" {
     }
 }
 
+test "encode accepts any byte source" {
+    let list: List<u8> = "Hello".bytes().collect();
+    assert encode(&list) == "SGVsbG8=";
+    let bl: ByteList = [72, 101, 108, 108, 111];
+    assert encode(&bl) == "SGVsbG8=";
+    let slice = bl.as_byte_slice();
+    assert encode(&slice) == "SGVsbG8=";
+    assert encode(&"Hello") == "SGVsbG8=";
+}
+
+test "decode returns a ByteList" {
+    let expected: ByteList = [72, 101, 108, 108, 111];
+    assert decode(&"SGVsbG8=") matches { Some(d) && d == expected };
+}
+
+test "decode accepts raw bytes" {
+    let raw: ByteList = [83, 71, 86, 115, 98, 71, 56, 61];
+    let expected: ByteList = [72, 101, 108, 108, 111];
+    assert decode(&raw) matches { Some(d) && d == expected };
+}
+
 test "RFC 4648 test vectors" {
-    assert encode(&"".bytes().collect()) == "";
-    assert encode(&"f".bytes().collect()) == "Zg==";
-    assert encode(&"fo".bytes().collect()) == "Zm8=";
-    assert encode(&"foo".bytes().collect()) == "Zm9v";
-    assert encode(&"foob".bytes().collect()) == "Zm9vYg==";
-    assert encode(&"fooba".bytes().collect()) == "Zm9vYmE=";
-    assert encode(&"foobar".bytes().collect()) == "Zm9vYmFy";
+    assert encode(&"") == "";
+    assert encode(&"f") == "Zg==";
+    assert encode(&"fo") == "Zm8=";
+    assert encode(&"foo") == "Zm9v";
+    assert encode(&"foob") == "Zm9vYg==";
+    assert encode(&"fooba") == "Zm9vYmE=";
+    assert encode(&"foobar") == "Zm9vYmFy";
 }

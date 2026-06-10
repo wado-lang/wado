@@ -1,0 +1,68 @@
+// Regression: an `if`-expression branch (or a match-arm body block) whose
+// trailing expression is a `match` or `if` must yield that expression's value,
+// even without a type annotation flowing in. Previously the tail match/if in
+// value position was pinned to `()` (resolved as a statement), so the branch
+// typed as Unit and either failed to type-check or miscompiled.
+
+fn pick(k: i32) -> Option<i32> {
+    if k == 1 {
+        return Option::Some(42);
+    }
+    return null;
+}
+
+test "if-expression with match branches" {
+    let cond = true;
+    let idx = if cond {
+        match pick(1) {
+            Some(i) => i,
+            None => -1,
+        }
+    } else {
+        match pick(0) {
+            Some(i) => i,
+            None => -1,
+        }
+    };
+    assert idx == 42;
+}
+
+test "if-branch block: statements then a tail match" {
+    let v: Option<i32> = Option::Some(7);
+    let r = if true {
+        let base = 1;
+        match v {
+            Some(i) => base + i,
+            None => base,
+        }
+    } else {
+        0
+    };
+    assert r == 8;
+}
+
+test "if-expression branch ending in a nested if" {
+    let n = 5;
+    let label = if n > 0 {
+        if n > 3 { 100 } else { 50 }
+    } else {
+        0
+    };
+    assert label == 100;
+}
+
+test "match arm body block ending in a match" {
+    let outer: Option<i32> = Option::Some(2);
+    let inner: Option<i32> = Option::Some(40);
+    let total = match outer {
+        Some(o) => match inner {
+            Some(i) => o + i,
+            None => o,
+        },
+        None => -1,
+    };
+    assert total == 42;
+}
+
+__DATA__
+{"test": {}}

@@ -15,8 +15,8 @@ Usage:
 ```wado
 use { sha256 } from "core:digest";
 
-let digest = sha256(&data);          // one-shot, returns List<u8>
-let hex = digest.to_hex();           // List<u8>::to_hex -> lowercase hex String
+let digest = sha256(&data);          // one-shot, returns ByteList
+let hex = digest.to_hex();           // lowercase hex String
 ```
 
 Incremental hashing via the trait:
@@ -30,14 +30,17 @@ h.update(&second_chunk);
 let digest = h.finalize();
 ```
 
+Message bytes are accepted from any `AsByteSlice` source: a `ByteSlice`,
+`ByteList`, `ByteArray`, plain `List<u8>`, or a `String` (its UTF-8 bytes).
+
 ## Functions
 
-### `pub fn sha256(data: &List<u8>) -> List<u8>`
+### `pub fn sha256<S: AsByteSlice>(data: &S) -> ByteList`
 
 Hash a complete message with SHA-256, returning the 32-byte digest.
 
-Render the result as hex with `List<u8>::to_hex`, e.g.
-`sha256(&data).to_hex()`.
+Accepts any byte source via `AsByteSlice` (a `String` hashes its UTF-8
+bytes). Render the result as hex with `to_hex`, e.g. `sha256(&data).to_hex()`.
 
 ## Traits
 
@@ -49,11 +52,11 @@ Feed message bytes with [`update`](Digest::update) (any number of times),
 then call [`finalize`](Digest::finalize) exactly once to obtain the digest.
 A value must not be used after `finalize`.
 
-#### `fn update(&mut self, data: &List<u8>)`
+#### `fn update<S: AsByteSlice>(&mut self, data: &S)`
 
 Absorb `data` into the running hash state.
 
-#### `fn finalize(&mut self) -> List<u8>`
+#### `fn finalize(&mut self) -> ByteList`
 
 Consume the buffered padding, returning the digest as raw bytes.
 
@@ -74,6 +77,6 @@ Create a fresh SHA-256 state initialized with the standard IV.
 
 #### `impl Digest for Sha256`
 
-##### `fn update(&mut self, data: &List<u8>)`
+##### `fn update<S: AsByteSlice>(&mut self, data: &S)`
 
-##### `fn finalize(&mut self) -> List<u8>`
+##### `fn finalize(&mut self) -> ByteList`

@@ -67,9 +67,37 @@ impl FuncInstState {
             .base_trait_name
             .as_deref()
             .or(info.trait_name.as_deref())?;
-        self.trait_env
-            .concrete_impl_module_for(&info.struct_name, trait_name, type_module)
-            .cloned()
+        if let Some(m) =
+            self.trait_env
+                .concrete_impl_module_for(&info.struct_name, trait_name, type_module)
+        {
+            return Some(m.clone());
+        }
+        // A concrete impl on a generic head (`impl Trait for List<String>`)
+        // is indexed under the AST's simple argument spelling, while a
+        // substituted call site qualifies the arguments — retry with the
+        // qualifiers stripped, then fall back to the head name (which
+        // covers argument shapes `instantiated_type_name` cannot spell).
+        // Newtype-resolved receivers hit the full-name query above, so
+        // they never take these paths.
+        let simplified = crate::name::simplify_generic_type_args(&info.struct_name);
+        if simplified != info.struct_name
+            && let Some(m) =
+                self.trait_env
+                    .concrete_impl_module_for(&simplified, trait_name, type_module)
+        {
+            return Some(m.clone());
+        }
+        if info.base_struct_name != info.struct_name
+            && let Some(m) = self.trait_env.concrete_impl_module_for(
+                &info.base_struct_name,
+                trait_name,
+                type_module,
+            )
+        {
+            return Some(m.clone());
+        }
+        None
     }
 
     /// `true` when `info` denotes a trait method whose impl is already
@@ -137,6 +165,14 @@ pub(super) struct Monomorphizer {
     /// calls on the same struct — calls to other structs within the same impl block
     /// must not receive these type args.
     pub current_impl_struct_name: String,
+    /// Maps each type-parameter *name* of the function currently being
+    /// instantiated to its key in the substitution map (impl-level params use
+    /// their own index; method-level params are offset past the impl params).
+    /// Set by `instantiate_function`. A type-param-receiver static call
+    /// (`T^Trait::method`) resolves its concrete receiver by *name* through
+    /// this map — the receiver is the param named `base_struct_name`, not
+    /// positionally the lowest-index param (which breaks for `fn f<U, T: Tr>`).
+    pub current_param_substitution_key: IndexMap<String, u32>,
 }
 
 impl Monomorphizer {
@@ -156,6 +192,7 @@ impl Monomorphizer {
             },
             current_impl_type_param_count: 0,
             current_impl_struct_name: String::new(),
+            current_param_substitution_key: IndexMap::default(),
         }
     }
 

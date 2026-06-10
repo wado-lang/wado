@@ -11,8 +11,8 @@
 //! ```wado
 //! use { sha256 } from "core:digest";
 //!
-//! let digest = sha256(&data);          // one-shot, returns List<u8>
-//! let hex = digest.to_hex();           // List<u8>::to_hex -> lowercase hex String
+//! let digest = sha256(&data);          // one-shot, returns ByteList
+//! let hex = digest.to_hex();           // lowercase hex String
 //! ```
 //!
 //! Incremental hashing via the trait:
@@ -25,6 +25,9 @@
 //! h.update(&second_chunk);
 //! let digest = h.finalize();
 //! ```
+//!
+//! Message bytes are accepted from any `AsByteSlice` source: a `ByteSlice`,
+//! `ByteList`, `ByteArray`, plain `List<u8>`, or a `String` (its UTF-8 bytes).
 
 /// A streaming message-digest algorithm.
 ///
@@ -33,10 +36,10 @@
 /// A value must not be used after `finalize`.
 pub trait Digest {
     /// Absorb `data` into the running hash state.
-    fn update(&mut self, data: &List<u8>);
+    fn update<S: AsByteSlice>(&mut self, data: &S);
 
     /// Consume the buffered padding, returning the digest as raw bytes.
-    fn finalize(&mut self) -> List<u8>;
+    fn finalize(&mut self) -> ByteList;
 }
 
 // SHA-256 round constants: the first 32 bits of the fractional parts of the
@@ -86,6 +89,18 @@ impl Sha256 {
         if self.buffer.len() == 64 {
             self.process();
             self.buffer.clear();
+        }
+    }
+
+    // Absorb message bytes, compressing each 64-byte block as it fills.
+    fn absorb(&mut self, data: ByteSlice) {
+        for let mut i = 0; i < data.len(); i += 1 {
+            self.buffer.push(data[i]);
+            self.total_len += 1;
+            if self.buffer.len() == 64 {
+                self.process();
+                self.buffer.clear();
+            }
         }
     }
 
@@ -142,18 +157,11 @@ impl Sha256 {
 }
 
 impl Digest for Sha256 {
-    fn update(&mut self, data: &List<u8>) {
-        for let mut i = 0; i < data.len(); i += 1 {
-            self.buffer.push(data[i]);
-            self.total_len += 1;
-            if self.buffer.len() == 64 {
-                self.process();
-                self.buffer.clear();
-            }
-        }
+    fn update<S: AsByteSlice>(&mut self, data: &S) {
+        self.absorb(data.as_byte_slice());
     }
 
-    fn finalize(&mut self) -> List<u8> {
+    fn finalize(&mut self) -> ByteList {
         let bit_len: u64 = self.total_len * 8;
 
         // Append the mandatory 0x80 byte, then zeros until 56 bytes remain in
@@ -177,15 +185,15 @@ impl Digest for Sha256 {
             out.push((v >> 8) as u8);
             out.push(v as u8);
         }
-        return out;
+        return out as ByteList;
     }
 }
 
 /// Hash a complete message with SHA-256, returning the 32-byte digest.
 ///
-/// Render the result as hex with `List<u8>::to_hex`, e.g.
-/// `sha256(&data).to_hex()`.
-pub fn sha256(data: &List<u8>) -> List<u8> {
+/// Accepts any byte source via `AsByteSlice` (a `String` hashes its UTF-8
+/// bytes). Render the result as hex with `to_hex`, e.g. `sha256(&data).to_hex()`.
+pub fn sha256<S: AsByteSlice>(data: &S) -> ByteList {
     let mut hasher = Sha256::new();
     hasher.update(data);
     return hasher.finalize();
