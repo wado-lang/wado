@@ -2725,14 +2725,18 @@ fn "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/
     let __local_4: bool;
     let __local_6: ref "core:prelude/types.wado//Option<i32>";
     let __local_7: i32;
+    let __local_10: ref null "core:serde//DeserializeError";
+    let __local_11: ref "core:serde//DeserializeError";
+    let __local_12: ref null "core:serde//DeserializeError";
+    let __local_13: ref "core:serde//DeserializeError";
     let __qm_e: ref "core:serde//DeserializeError";
-    let __local_5_15: ref null "core:serde//DeserializeError";
-    let d_17: ref "core:json//JsonDeserializer";
+    let __local_5_19: ref null "core:serde//DeserializeError";
+    let d_21: ref "core:json//JsonDeserializer";
     __result = __inline_JsonDeserializer_Deserializer__begin_struct_0: block -> ref "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>" {
-        __local_5_15 = "core:json/JsonDeserializer::expect_char"(d, 123);
-        if @likely(ref.is_null(__local_5_15)) {
+        __local_5_19 = "core:json/JsonDeserializer::expect_char"(d, 123);
+        if @likely(ref.is_null(__local_5_19)) {
         } else {
-            __qm_e = ref.as_non_null(__local_5_15);
+            __qm_e = ref.as_non_null(__local_5_19);
             cold_path;
             break __inline_JsonDeserializer_Deserializer__begin_struct_0: struct.new "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
         }
@@ -2756,8 +2760,8 @@ fn "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/
                             let __sroa___local_8_discriminant: i32;
                             let __sroa___local_8_case0_payload_0: i32;
                             let __sroa___local_8_case1_payload_0: ref null "core:serde//DeserializeError";
-                            d_17 = __local_2.de;
-                            multivalue_bind [__sroa___local_8_discriminant, __sroa___local_8_case0_payload_0, __sroa___local_8_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_17);
+                            d_21 = __local_2.de;
+                            multivalue_bind [__sroa___local_8_discriminant, __sroa___local_8_case0_payload_0, __sroa___local_8_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_21);
                             if __sroa___local_8_discriminant == 0 {
                                 __local_3 = __sroa___local_8_case0_payload_0;
                                 __local_4 = 1;
@@ -2765,7 +2769,12 @@ fn "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/
                                 return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__sroa___local_8_case1_payload_0) };
                             }
                         } else {
-                            drop("core:json/JsonDeserializer::skip_value"(__local_2.de));
+                            __local_10 = "core:json/JsonDeserializer::skip_value"(__local_2.de);
+                            if ref.is_null(__local_10) == 0 {
+                                __local_11 = ref.as_non_null(__local_10);
+                                return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __local_11 };
+                            } else {
+                            }
                         }
                     } else {
                         break b378;
@@ -2779,7 +2788,12 @@ fn "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/
         if __local_4 == 0 {
             return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("required field missing"), used: 22 }, offset: -1_i64 } };
         }
-        drop("core:json/JsonDeserializer::expect_char"(__local_2.de, 125));
+        __local_12 = "core:json/JsonDeserializer::expect_char"(__local_2.de, 125);
+        if ref.is_null(__local_12) == 0 {
+            __local_13 = ref.as_non_null(__local_12);
+            return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __local_13 };
+        } else {
+        }
         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado//Foo" { bar: __local_3 } };
     } else {
         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.cast "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>::Err"(__result).payload_0 };
@@ -2854,25 +2868,25 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     _licm_repr_38 = _licm_input_35.repr;
     _licm_arith_39 = _licm_end_36 - _licm_start_37;
     __hfs_pos_43 = _licm_de_34.pos;
-    b391: block {
-        l392: loop {
+    b393: block {
+        l394: loop {
             if __hfs_pos_43 >= _licm_arith_39 {
                 _licm_de_34.pos = __hfs_pos_43;
-                break b391;
+                break b393;
             }
             index_32 = __hfs_pos_43;
             b_4 = builtin::array_get<u8>(_licm_repr_38, _licm_start_37 + index_32);
             if b_4 == 34 {
                 _licm_de_34.pos = __hfs_pos_43;
-                break b391;
+                break b393;
             }
             if b_4 == 92 {
                 has_escape = 1;
                 _licm_de_34.pos = __hfs_pos_43;
-                break b391;
+                break b393;
             }
             __hfs_pos_43 = __hfs_pos_43 + 1;
-            continue l392;
+            continue l394;
         };
     };
     if @likely(has_escape == 0) {

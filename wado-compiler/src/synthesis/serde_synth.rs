@@ -14,7 +14,7 @@ use crate::name::{LocalMethodName, MethodName, mangle_local_trait_method};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
     TirStructField, TirTemplatePart, TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
@@ -458,6 +458,45 @@ fn propagate_err_block(
         span,
         names,
     )))])
+}
+
+/// `let __acc_r = call; if let Err(e) = __acc_r { return Err(e); }` —
+/// evaluate an access method returning `Result<(), DeserializeError>` and
+/// propagate its error into the enclosing deserialize's `Result`. The access
+/// `end` / `skip` calls are where formats report malformed trailers (an
+/// unterminated variant map, an array longer than the target tuple, a stray
+/// break in a skipped field), so their Results must not be discarded.
+fn propagate_unit_result_stmts(
+    call: TirExpr,
+    call_result_type: TypeId,
+    err_type: TypeId,
+    outer_result_type: TypeId,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    span: Span,
+    names: &SerdeStdlibNames,
+) -> Vec<TirStmt> {
+    let r_local = alloc_local(next_local, locals, call_result_type);
+    let e_local = alloc_local(next_local, locals, err_type);
+    vec![
+        let_mut_stmt("__acc_r", r_local, call_result_type, call),
+        variant_match_stmt(
+            local_ref(r_local, "__acc_r", call_result_type),
+            call_result_type,
+            names.err_name.clone(),
+            err_type,
+            e_local,
+            "__acc_e",
+            block(vec![return_stmt(Some(variant_err(
+                local_ref(e_local, "__acc_e", err_type),
+                outer_result_type,
+                span,
+                names,
+            )))]),
+            block(vec![]),
+            span,
+        ),
+    ]
 }
 
 fn variant_ok(
@@ -1264,14 +1303,20 @@ fn generate_struct_deserialize(
         result_unit_err,
         span,
     );
+    let skip_stmts = propagate_unit_result_stmts(
+        skip_call,
+        result_unit_err,
+        deser_error_type,
+        result_struct_err,
+        &mut next_local,
+        &mut locals,
+        span,
+        names,
+    );
     match_arms.push(TirMatchArm {
         pattern: TirPattern::Wildcard,
         guard: None,
-        body: TirExpr::new(
-            TirExprKind::Block(block(vec![expr_stmt(skip_call)])),
-            TypeTable::UNIT,
-            span,
-        ),
+        body: TirExpr::new(TirExprKind::Block(block(skip_stmts)), TypeTable::UNIT, span),
         span,
     });
 
@@ -1364,7 +1409,16 @@ fn generate_struct_deserialize(
         result_unit_err,
         span,
     );
-    then_stmts.push(expr_stmt(end_call));
+    then_stmts.extend(propagate_unit_result_stmts(
+        end_call,
+        result_unit_err,
+        deser_error_type,
+        result_struct_err,
+        &mut next_local,
+        &mut locals,
+        span,
+        names,
+    ));
 
     // return Ok(StructName { ... })
     let struct_fields: Vec<TirStructField> = fields
@@ -2019,16 +2073,23 @@ fn generate_enum_deserialize(
             span,
         );
 
-        let if_body = block(vec![
-            expr_stmt(end_call),
-            return_stmt(Some(variant_ok(
-                enum_construct,
-                result_enum_err,
-                span,
-                names,
-            ))),
-        ]);
-        disc_then_stmts.push(if_stmt(condition, if_body, None));
+        let mut if_body_stmts = propagate_unit_result_stmts(
+            end_call,
+            result_unit_err,
+            deser_error_type,
+            result_enum_err,
+            &mut next_local,
+            &mut locals,
+            span,
+            names,
+        );
+        if_body_stmts.push(return_stmt(Some(variant_ok(
+            enum_construct,
+            result_enum_err,
+            span,
+            names,
+        ))));
+        disc_then_stmts.push(if_stmt(condition, block(if_body_stmts), None));
     }
 
     // Unknown disc error
@@ -2132,16 +2193,23 @@ fn generate_enum_deserialize(
             span,
         );
 
-        let if_body = block(vec![
-            expr_stmt(end_call),
-            return_stmt(Some(variant_ok(
-                enum_construct,
-                result_enum_err,
-                span,
-                names,
-            ))),
-        ]);
-        name_then_stmts.push(if_stmt(condition, if_body, None));
+        let mut if_body_stmts = propagate_unit_result_stmts(
+            end_call,
+            result_unit_err,
+            deser_error_type,
+            result_enum_err,
+            &mut next_local,
+            &mut locals,
+            span,
+            names,
+        );
+        if_body_stmts.push(return_stmt(Some(variant_ok(
+            enum_construct,
+            result_enum_err,
+            span,
+            names,
+        ))));
+        name_then_stmts.push(if_stmt(condition, block(if_body_stmts), None));
     }
 
     // Unknown variant error
@@ -2728,11 +2796,23 @@ fn generate_variant_deserialize(
                 span,
             );
 
-            let if_body = block(vec![
-                expr_stmt(end_call),
-                return_stmt(Some(variant_ok(construct, result_variant_err, span, names))),
-            ]);
-            disc_then_stmts.push(if_stmt(condition, if_body, None));
+            let mut if_body_stmts = propagate_unit_result_stmts(
+                end_call,
+                result_unit_err,
+                deser_error_type,
+                result_variant_err,
+                &mut next_local,
+                &mut locals,
+                span,
+                names,
+            );
+            if_body_stmts.push(return_stmt(Some(variant_ok(
+                construct,
+                result_variant_err,
+                span,
+                names,
+            ))));
+            disc_then_stmts.push(if_stmt(condition, block(if_body_stmts), None));
         } else {
             let payload_local = alloc_local(&mut next_local, &mut locals, *payload_type);
             let p_result_local = alloc_local(&mut next_local, &mut locals, payload_result_types[i]);
@@ -2778,10 +2858,23 @@ fn generate_variant_deserialize(
                 span,
             );
 
-            let ok_block = block(vec![
-                expr_stmt(end_call),
-                return_stmt(Some(variant_ok(construct, result_variant_err, span, names))),
-            ]);
+            let mut ok_stmts = propagate_unit_result_stmts(
+                end_call,
+                result_unit_err,
+                deser_error_type,
+                result_variant_err,
+                &mut next_local,
+                &mut locals,
+                span,
+                names,
+            );
+            ok_stmts.push(return_stmt(Some(variant_ok(
+                construct,
+                result_variant_err,
+                span,
+                names,
+            ))));
+            let ok_block = block(ok_stmts);
 
             let if_body = block(vec![
                 let_mut_stmt(
@@ -2914,11 +3007,23 @@ fn generate_variant_deserialize(
                 span,
             );
 
-            let if_body = block(vec![
-                expr_stmt(end_call),
-                return_stmt(Some(variant_ok(construct, result_variant_err, span, names))),
-            ]);
-            name_then_stmts.push(if_stmt(condition, if_body, None));
+            let mut if_body_stmts = propagate_unit_result_stmts(
+                end_call,
+                result_unit_err,
+                deser_error_type,
+                result_variant_err,
+                &mut next_local,
+                &mut locals,
+                span,
+                names,
+            );
+            if_body_stmts.push(return_stmt(Some(variant_ok(
+                construct,
+                result_variant_err,
+                span,
+                names,
+            ))));
+            name_then_stmts.push(if_stmt(condition, block(if_body_stmts), None));
         } else {
             let payload_local = alloc_local(&mut next_local, &mut locals, *payload_type);
             let p_result_local = alloc_local(&mut next_local, &mut locals, payload_result_types[i]);
@@ -2964,10 +3069,23 @@ fn generate_variant_deserialize(
                 span,
             );
 
-            let ok_block = block(vec![
-                expr_stmt(end_call),
-                return_stmt(Some(variant_ok(construct, result_variant_err, span, names))),
-            ]);
+            let mut ok_stmts = propagate_unit_result_stmts(
+                end_call,
+                result_unit_err,
+                deser_error_type,
+                result_variant_err,
+                &mut next_local,
+                &mut locals,
+                span,
+                names,
+            );
+            ok_stmts.push(return_stmt(Some(variant_ok(
+                construct,
+                result_variant_err,
+                span,
+                names,
+            ))));
+            let ok_block = block(ok_stmts);
 
             let if_body = block(vec![
                 let_mut_stmt(
@@ -3697,7 +3815,16 @@ fn generate_flags_deserialize(
         result_unit_err,
         span,
     );
-    ok_stmts.push(expr_stmt(end_call));
+    ok_stmts.extend(propagate_unit_result_stmts(
+        end_call,
+        result_unit_err,
+        deser_error_type,
+        result_flags_err,
+        &mut next_local,
+        &mut locals,
+        span,
+        names,
+    ));
 
     // return Ok(bits as FlagsType);
     let bits_as_flags = cast(local_ref(bits_local, "bits", TypeTable::U32), flags_type);

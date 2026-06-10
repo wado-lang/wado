@@ -3168,17 +3168,21 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
     let __local_15: i32;
     let __local_17: bool;
     let __local_19: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let __local_22: ref null "core:serde//DeserializeError";
+    let __local_23: ref "core:serde//DeserializeError";
+    let __local_24: ref null "core:serde//DeserializeError";
+    let __local_25: ref "core:serde//DeserializeError";
     let __qm_e: ref "core:serde//DeserializeError";
-    let __local_5_27: ref null "core:serde//DeserializeError";
+    let __local_5_31: ref null "core:serde//DeserializeError";
     let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let d_33: ref "core:json//JsonDeserializer";
-    let d_35: ref "core:json//JsonDeserializer";
     let d_37: ref "core:json//JsonDeserializer";
+    let d_39: ref "core:json//JsonDeserializer";
+    let d_41: ref "core:json//JsonDeserializer";
     __result = __inline_JsonDeserializer_Deserializer__begin_struct_0: block -> ref "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>" {
-        __local_5_27 = "core:json/JsonDeserializer::expect_char"(d, 123);
-        if @likely(ref.is_null(__local_5_27)) {
+        __local_5_31 = "core:json/JsonDeserializer::expect_char"(d, 123);
+        if @likely(ref.is_null(__local_5_31)) {
         } else {
-            __qm_e = ref.as_non_null(__local_5_27);
+            __qm_e = ref.as_non_null(__local_5_31);
             cold_path;
             break __inline_JsonDeserializer_Deserializer__begin_struct_0: struct.new "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
         }
@@ -3204,8 +3208,8 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
                     if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_10) {
                         __local_11 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__local_10).payload_0;
                         if __local_11 == 0 {
-                            d_33 = __local_2.de;
-                            __local_12 = "core:json/JsonDeserializer::read_json_string"(d_33);
+                            d_37 = __local_2.de;
+                            __local_12 = "core:json/JsonDeserializer::read_json_string"(d_37);
                             if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok"(__local_12) {
                                 __local_13 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok"(__local_12).payload_0;
                                 __local_3 = __local_13;
@@ -3217,8 +3221,8 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
                             let __sroa___local_14_discriminant: i32;
                             let __sroa___local_14_case0_payload_0: i32;
                             let __sroa___local_14_case1_payload_0: ref null "core:serde//DeserializeError";
-                            d_35 = __local_2.de;
-                            multivalue_bind [__sroa___local_14_discriminant, __sroa___local_14_case0_payload_0, __sroa___local_14_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_35);
+                            d_39 = __local_2.de;
+                            multivalue_bind [__sroa___local_14_discriminant, __sroa___local_14_case0_payload_0, __sroa___local_14_case1_payload_0] = "core:json/JsonDeserializer::parse_i32_direct"(d_39);
                             if __sroa___local_14_discriminant == 0 {
                                 __local_4 = local.tee __local_15(__sroa___local_14_case0_payload_0);
                             } else {
@@ -3228,8 +3232,8 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
                             let __sroa___local_16_discriminant: i32;
                             let __sroa___local_16_case0_payload_0: bool;
                             let __sroa___local_16_case1_payload_0: ref null "core:serde//DeserializeError";
-                            d_37 = __local_2.de;
-                            multivalue_bind [__sroa___local_16_discriminant, __sroa___local_16_case0_payload_0, __sroa___local_16_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::deserialize_bool"(d_37);
+                            d_41 = __local_2.de;
+                            multivalue_bind [__sroa___local_16_discriminant, __sroa___local_16_case0_payload_0, __sroa___local_16_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::deserialize_bool"(d_41);
                             if __sroa___local_16_discriminant == 0 {
                                 __local_5_5 = local.tee __local_17(__sroa___local_16_case0_payload_0);
                             } else {
@@ -3257,7 +3261,12 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
                                 return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_default.wado/Config,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__sroa___local_20_case1_payload_0) };
                             }
                         } else {
-                            drop("core:json/JsonDeserializer::skip_value"(__local_2.de));
+                            __local_22 = "core:json/JsonDeserializer::skip_value"(__local_2.de);
+                            if ref.is_null(__local_22) == 0 {
+                                __local_23 = ref.as_non_null(__local_22);
+                                return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_default.wado/Config,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __local_23 };
+                            } else {
+                            }
                         }
                     } else {
                         break b430;
@@ -3271,7 +3280,12 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
         if __local_8 == 0 {
             return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_default.wado/Config,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("required field missing"), used: 22 }, offset: -1_i64 } };
         }
-        drop("core:json/JsonDeserializer::expect_char"(__local_2.de, 125));
+        __local_24 = "core:json/JsonDeserializer::expect_char"(__local_2.de, 125);
+        if ref.is_null(__local_24) == 0 {
+            __local_25 = ref.as_non_null(__local_24);
+            return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_default.wado/Config,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __local_25 };
+        } else {
+        }
         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_default.wado/Config,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/serde_json_default.wado//Config" { host: __local_3, port: __local_4, verbose: __local_5_5, tags: __local_6, description: __local_7 } };
     } else {
         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_default.wado/Config,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.cast "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>::Err"(__result).payload_0 };
@@ -3346,25 +3360,25 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     _licm_repr_38 = _licm_input_35.repr;
     _licm_arith_39 = _licm_end_36 - _licm_start_37;
     __hfs_pos_43 = _licm_de_34.pos;
-    b451: block {
-        l452: loop {
+    b453: block {
+        l454: loop {
             if __hfs_pos_43 >= _licm_arith_39 {
                 _licm_de_34.pos = __hfs_pos_43;
-                break b451;
+                break b453;
             }
             index_32 = __hfs_pos_43;
             b_4 = builtin::array_get<u8>(_licm_repr_38, _licm_start_37 + index_32);
             if b_4 == 34 {
                 _licm_de_34.pos = __hfs_pos_43;
-                break b451;
+                break b453;
             }
             if b_4 == 92 {
                 has_escape = 1;
                 _licm_de_34.pos = __hfs_pos_43;
-                break b451;
+                break b453;
             }
             __hfs_pos_43 = __hfs_pos_43 + 1;
-            continue l452;
+            continue l454;
         };
     };
     if @likely(has_escape == 0) {
@@ -3467,7 +3481,7 @@ fn "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<co
         items = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(2), used: 0 };
         "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(items, first_elem);
         block {
-            l467: loop {
+            l469: loop {
                 let __match_scrut_5: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>";
                 __match_scrut_5 = "core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/string.wado/String>"(seq);
                 next_opt = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>::Ok"(__match_scrut_5)) -> ref null "core:prelude/string.wado//String" {
@@ -3491,7 +3505,7 @@ fn "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<co
                     }
                     return 0, items, ref.null none;
                 }
-                continue l467;
+                continue l469;
             };
         };
     } else {

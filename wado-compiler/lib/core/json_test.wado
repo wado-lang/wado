@@ -53,6 +53,7 @@ variant PrettyShape {
 }
 
 impl Serialize for PrettyShape;
+impl Deserialize for PrettyShape;
 
 test "serialize i32" {
     let n = 42;
@@ -499,6 +500,16 @@ test "serialize i64 beyond safe integer range as string" {
     assert to_string(&neg) matches { Ok(s) && s == `"-9007199254740993"` };
     let safe: i64 = 9007199254740991;
     assert to_string(&safe) matches { Ok(s) && s == "9007199254740991" };
+}
+
+test "deserialize variant object with extra pair errors" {
+    // External tagging is a single-pair object; the access's end() reports the
+    // unbalanced '}' and the synthesized impl must propagate that error
+    // (its Result used to be discarded).
+    let ok: Result<PrettyShape, DeserializeError> = from_string(`\{"Circle":1.5\}`);
+    assert ok matches { Ok(v) && v == PrettyShape::Circle(1.5) };
+    let extra: Result<PrettyShape, DeserializeError> = from_string(`\{"Circle":1.5,"Point":null\}`);
+    assert extra matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 }
 
 test "serialize u64 beyond safe integer range as string" {

@@ -2009,14 +2009,16 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
     let __local_2: ref "core:json//JsonSeqAccess";
     let __local_3_3: u32;
     let __local_6: ref "core:prelude/string.wado//String";
-    let __local_7: ref "core:prelude/string.wado//String";
+    let __local_7: ref null "core:serde//DeserializeError";
+    let __local_8: ref "core:serde//DeserializeError";
+    let __local_9: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//DeserializeError";
-    let __local_3_11: ref null "core:serde//DeserializeError";
+    let __local_3_13: ref null "core:serde//DeserializeError";
     __seq_r = __inline_JsonDeserializer_Deserializer__begin_seq_0: block -> ref "core:prelude/types.wado//Result<core:json/JsonSeqAccess,core:serde/DeserializeError>" {
-        __local_3_11 = "core:json/JsonDeserializer::expect_char"(d, 91);
-        if @likely(ref.is_null(__local_3_11)) {
+        __local_3_13 = "core:json/JsonDeserializer::expect_char"(d, 91);
+        if @likely(ref.is_null(__local_3_13)) {
         } else {
-            __qm_e = ref.as_non_null(__local_3_11);
+            __qm_e = ref.as_non_null(__local_3_13);
             cold_path;
             break __inline_JsonDeserializer_Deserializer__begin_seq_0: struct.new "core:prelude/types.wado//Result<core:json/JsonSeqAccess,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
         }
@@ -2046,7 +2048,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
                             __local_3_3 = __local_3_3 | 4;
                             continue l230;
                         }
-                        return struct.new "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 4, message: ref.as_non_null(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown flag: "), used: 14 }); "core:prelude/string.wado/String::push_str"(__local_7, __local_6); __local_7), offset: -1_i64 } };
+                        return struct.new "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 4, message: ref.as_non_null(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown flag: "), used: 14 }); "core:prelude/string.wado/String::push_str"(__local_9, __local_6); __local_9), offset: -1_i64 } };
                     } else {
                         break b229;
                     }
@@ -2056,7 +2058,12 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
                 continue l230;
             };
         };
-        drop("core:json/JsonDeserializer::expect_char"(__local_2.de, 93));
+        __local_7 = "core:json/JsonDeserializer::expect_char"(__local_2.de, 93);
+        if ref.is_null(__local_7) == 0 {
+            __local_8 = ref.as_non_null(__local_7);
+            return struct.new "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __local_8 };
+        } else {
+        }
         return struct.new "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: __local_3_3 };
     } else {
         return struct.new "core:prelude/types.wado//Result<u32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.cast "core:prelude/types.wado//Result<core:json/JsonSeqAccess,core:serde/DeserializeError>::Err"(__seq_r).payload_0 };
