@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781100238096,
+  "lastUpdate": 1781125601516,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32045,6 +32045,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5e646db9c29fd14cc65f2899653354d85685e310"
         },
         "date": 1781100237546,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d3e4eec98d30d35fdc98a74b072b4bf523140099",
+          "message": "Merge pull request #1352 from wado-lang/claude/generics-bug-fix-mfd8yw\n\nfix(compiler): dispatch concrete-generic trait impls to the correct module",
+          "timestamp": "2026-06-11T05:53:44+09:00",
+          "tree_id": "6e47c4fe6c5f4ac44b52d403536f38c00fa6b1db",
+          "url": "https://github.com/wado-lang/wado/commit/d3e4eec98d30d35fdc98a74b072b4bf523140099"
+        },
+        "date": 1781125601281,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
