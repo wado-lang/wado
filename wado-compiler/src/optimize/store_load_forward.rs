@@ -1,13 +1,19 @@
 //! Store-to-Load Forwarding optimization for Wado NIR.
 //!
-//! Replace `Local` reads with the literal that reaches them. The engine's
-//! `ValueGraph` handles flow-sensitive reaching-defs, branch merges, loop
-//! and heap-write invalidation, so this rule only inspects each read's
-//! `ValueKind` and substitutes when it is a literal.
+//! Replace a value-position read — a `Local` read or a `FieldAccess` read —
+//! with the literal that reaches it. The engine's `ValueGraph` handles
+//! flow-sensitive reaching-defs, branch merges, loop and heap-write
+//! invalidation, and field store→load seeding, so this rule only inspects
+//! each read's `ValueKind` and substitutes when it is a literal.
 //!
-//! Address-taken and `stores`-aliased locals are excluded — the builder
-//! does not model writes through references. Particularly useful after
-//! SROA decomposes struct fields into scalar locals.
+//! For `Local` reads, address-taken and `stores`-aliased locals are excluded
+//! here — the builder does not model writes through references for bare
+//! locals. For `FieldAccess` reads the alias safety is upstream: the builder
+//! seeds a field store only for a non-aliased, non-address-taken receiver, so
+//! an aliased field read never carries a literal `ValueId` to begin with.
+//! Particularly useful after SROA decomposes struct fields into scalar
+//! locals, and now also folds reads of fields whose stored value the builder
+//! forwarded (`obj.f = 5; … obj.f …` and `let x = S { f: 5 }; … x.f …`).
 //!
 //! Runs as a per-function standalone engine session whose `apply_block`
 //! fires once at the body root.
@@ -105,17 +111,25 @@ impl Rule for StoreLoadForwardRule {
 }
 
 fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
-    // Collect every `Local` read expression first; iterating while the
+    // Collect every candidate read expression first; iterating while the
     // engine rewrites would invalidate body/expr indices we're walking.
-    let mut local_reads: Vec<(ExprId, u32)> = Vec::new();
-    collect_local_reads(engine.body, &mut local_reads);
+    // `Local` reads carry their index (subject to the unsafe-local guard);
+    // `FieldAccess` reads carry `None` — their alias safety was already
+    // enforced when the `ValueGraph` builder decided whether to seed the
+    // store (an aliased / address-taken receiver is never seeded, so its
+    // read never carries a literal `ValueId`).
+    let mut reads: Vec<(ExprId, Option<u32>)> = Vec::new();
+    collect_candidate_reads(engine.body, &mut reads);
 
     let mut changed = false;
-    for (expr, local_index) in local_reads {
-        if unsafe_locals.contains(&local_index) {
+    for (expr, local_index) in reads {
+        if let Some(idx) = local_index
+            && unsafe_locals.contains(&idx)
+        {
             continue;
         }
-        // Skip `Assign` LHS reads — they are writes, not reads.
+        // Skip `Assign` LHS reads — they are writes, not reads. For a
+        // `FieldAccess` this also skips the `obj.f` place of `obj.f = …`.
         if is_assign_target(engine, expr) {
             continue;
         }
@@ -144,20 +158,26 @@ fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
     changed
 }
 
-fn collect_local_reads(body: &Body, out: &mut Vec<(ExprId, u32)>) {
-    collect_local_reads_node(body, NodeRef::Block(body.root), out);
+/// Collect value-position `Local` and `FieldAccess` read expressions. A
+/// `Local` yields `(id, Some(index))`; a `FieldAccess` yields `(id, None)`.
+/// Assign-target filtering happens later (`is_assign_target`), so write
+/// places are gathered here but rejected before rewriting.
+fn collect_candidate_reads(body: &Body, out: &mut Vec<(ExprId, Option<u32>)>) {
+    collect_candidate_reads_node(body, NodeRef::Block(body.root), out);
 }
 
-fn collect_local_reads_node(body: &Body, node: NodeRef, out: &mut Vec<(ExprId, u32)>) {
-    if let NodeRef::Expr(id) = node
-        && let ExprKind::Local { index, .. } = &body.exprs[id].kind
-    {
-        out.push((id, *index));
+fn collect_candidate_reads_node(body: &Body, node: NodeRef, out: &mut Vec<(ExprId, Option<u32>)>) {
+    if let NodeRef::Expr(id) = node {
+        match &body.exprs[id].kind {
+            ExprKind::Local { index, .. } => out.push((id, Some(*index))),
+            ExprKind::FieldAccess { .. } => out.push((id, None)),
+            _ => {}
+        }
     }
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));
     for c in kids {
-        collect_local_reads_node(body, c, out);
+        collect_candidate_reads_node(body, c, out);
     }
 }
 
