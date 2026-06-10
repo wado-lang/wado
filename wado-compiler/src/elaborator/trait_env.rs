@@ -1147,7 +1147,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 }
 
-/// Extract a type name from an AST type without needing a Elaborator instance.
 /// Textual instantiated name for a generic AST type whose arguments are all
 /// plain named types (`List<u8>` → "List<u8>", `List<List<i32>>` →
 /// "List<List<i32>>"), matching [`crate::name::mangle_generic_name`] for
@@ -1170,6 +1169,7 @@ fn instantiated_type_name(ty: &ast::Type) -> Option<String> {
     Some(crate::name::mangle_generic_name(&generic.name, &args))
 }
 
+/// Extract a type name from an AST type without needing an Elaborator instance.
 fn get_type_name_static(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),

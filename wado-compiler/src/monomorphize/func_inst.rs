@@ -1189,9 +1189,6 @@ impl Monomorphizer {
         }
     }
 
-    /// Instantiate a generic function with concrete type arguments
-    ///
-    /// Note: `instantiate_function` is separate from `instantiate_method`
     /// The concrete type a `T^Trait::method` receiver dispatches on while
     /// instantiating the current function: the substitution entry for the
     /// receiver parameter *named* `info.base_struct_name`. Resolving by name
@@ -1217,6 +1214,9 @@ impl Monomorphizer {
             .map(|(_, &tid)| tid)
     }
 
+    /// Instantiate a generic function with concrete type arguments
+    ///
+    /// Note: `instantiate_function` is separate from `instantiate_method`
     pub fn instantiate_function(
         &mut self,
         generic: &TirFunction,

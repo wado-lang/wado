@@ -1122,12 +1122,11 @@ impl CborDeserializer {
     }
 
     /// One step of a container walk, shared by the seq / map / struct accesses.
-    /// Returns `[ended, remaining]`: `ended` is `true` when the container is
-    /// exhausted — consuming an indefinite container's break and balancing the
-    /// depth taken by `enter`. When it returns `false` the caller consumes one
-    /// element; a definite container's caller then decrements its own
-    /// `remaining`. (Returning a bare `bool` rather than a `[bool, i64]` pair
-    /// keeps the hottest decode loop allocation-free.)
+    /// Returns `true` when the container is exhausted — consuming an indefinite
+    /// container's break and balancing the depth taken by `enter`. On `false`
+    /// the caller consumes one element; a definite container's caller then
+    /// decrements its own `remaining`. (A bare `bool` rather than a
+    /// `[bool, i64]` pair keeps the hottest decode loop allocation-free.)
     fn container_step(&mut self, remaining: i64, indef: bool) -> Result<bool, DeserializeError> {
         if indef {
             if self.peek_byte()? == BREAK {
