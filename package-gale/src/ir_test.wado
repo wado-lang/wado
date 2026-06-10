@@ -15,8 +15,24 @@ use {
     Visibility,
     synthesize_implicit_tokens,
     check_references,
+    merge_grammars,
 } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
+
+test "merge_grammars strips matching Lexer/Parser suffix to a common base" {
+    let lexer = parse("lexer grammar FooLexer;\nA : 'a' ;").unwrap();
+    let parser = parse("parser grammar FooParser;\nr : A ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+    assert merged.name == "Foo", `name={merged.name}`;
+}
+
+test "merge_grammars keeps a name that IS the suffix (no empty base)" {
+    // `parser grammar Parser;` must not strip to the empty string.
+    let parser = parse("parser grammar Parser;\nr : A ;").unwrap();
+    let lexer = parse("lexer grammar Lexer;\nA : 'a' ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+    assert merged.name == "Parser", `name={merged.name}`;
+}
 
 test "Grammar construction" {
     let g = Grammar {

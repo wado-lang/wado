@@ -668,45 +668,28 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
                 r.set_mode = remap[r.set_mode];
             }
             // Remap user-defined channel ids (>= 2). 0 and 1 are predefined.
+            // `src_idx` indexes the source grammar's declared channels, and
+            // every channel reference is validated at parse time, so it is
+            // always in range — a miss is an internal inconsistency, not
+            // input we should silently pass through with a stale id.
             if r.channel >= 2 {
                 let src_idx = r.channel - 2;
-                if src_idx < chan_remap.len() {
-                    r.channel = chan_remap[src_idx];
-                }
+                assert src_idx < chan_remap.len(),
+                    `merge_grammars: channel id {r.channel} has no remap entry`;
+                r.channel = chan_remap[src_idx];
             }
             lexer_rules.push(r);
         }
     }
-    // Derive common name by stripping Lexer/Parser suffix
-    if name.len() > 5 {
-        let chars: List<char> = name.chars().collect();
-        let len = chars.len();
-        if len >= 6 {
-            let mut suffix = String::with_capacity(6);
-            for let mut i = len - 6; i < len; i += 1 {
-                suffix.push(chars[i]);
-            }
-            if suffix == "Parser" {
-                let mut base = String::with_capacity(len - 6);
-                for let mut i = 0; i < len - 6; i += 1 {
-                    base.push(chars[i]);
-                }
-                name = base;
-            }
-        }
-        if len >= 5 {
-            let mut suffix = String::with_capacity(5);
-            for let mut i = len - 5; i < len; i += 1 {
-                suffix.push(chars[i]);
-            }
-            if suffix == "Lexer" {
-                let mut base = String::with_capacity(len - 5);
-                for let mut i = 0; i < len - 5; i += 1 {
-                    base.push(chars[i]);
-                }
-                name = base;
-            }
-        }
+    // Derive the common name by stripping a `Lexer` / `Parser` suffix
+    // (`FooLexer` + `FooParser` both reduce to `Foo`). The suffixes are
+    // ASCII, so byte-offset slicing is safe for multibyte names. Only strip
+    // when a non-empty base remains, so a grammar literally named `Parser`
+    // or `Lexer` keeps its name.
+    if name.ends_with("Parser") && name.len() > 6 {
+        name = name.substr_bytes(0, name.len() - 6);
+    } else if name.ends_with("Lexer") && name.len() > 5 {
+        name = name.substr_bytes(0, name.len() - 5);
     }
     return Grammar {
         name,

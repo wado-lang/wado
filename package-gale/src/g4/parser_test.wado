@@ -417,6 +417,16 @@ rule : ID ;";
     assert g.channels[1] == "CHAN_B";
 }
 
+test "lexer rule with undeclared channel name is rejected" {
+    // ANTLR4 errors on a `channel(X)` whose name is neither a predefined
+    // channel nor declared in `channels { }`. The old behavior silently
+    // resolved it to channel 0 (DEFAULT), inverting the author's intent.
+    let input = "lexer grammar Test;
+channels { COMMENTS }
+WS : ' ' -> channel(TYPO) ;";
+    assert parse(input) matches { Err(_) }, "undeclared channel name should be rejected";
+}
+
 test "lexer rule with named channel resolves to user channel id" {
     // ANTLR4 reserves channel 0 (DEFAULT) and 1 (HIDDEN); user channels
     // declared via `channels { }` start at id 2. The parser should assign

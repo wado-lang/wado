@@ -1300,15 +1300,26 @@ impl G4Parser {
                     actions.channel = parse_int_literal(&arg.text.to_string());
                 } else {
                     // User-defined channel name: look up in the grammar's
-                    // channels { } block. Unknown names default to 0 so
-                    // generation still emits a well-formed lexer — the
-                    // compatibility principle prefers permissive parsing.
+                    // channels { } block (declared in the prequel, before
+                    // rules). ANTLR4 errors on an undeclared name; resolving
+                    // it to 0 (DEFAULT) would silently invert the author's
+                    // intent to route the token off the default channel.
                     let name = arg.text.to_string();
-                    let mut resolved = 0;
+                    let mut resolved = -1;
                     for let mut i = 0; i < self.channels.len(); i += 1 {
                         if self.channels[i] == name {
                             resolved = i + 2;
                         }
+                    }
+                    if resolved < 0 {
+                        let expected: List<String> = ["a channel declared in `channels { }`"];
+                        return Result::<(), ParseError>::Err(
+                            ParseError::new(
+                                `channel "{name}" is not declared in a \`channels \{ ... \}\` block`,
+                                arg.span,
+                                expected,
+                            ),
+                        );
                     }
                     actions.channel = resolved;
                 }
