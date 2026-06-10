@@ -943,11 +943,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let def_key = self
                     .symbols
                     .lookup_in_module(&ns_source, suffix)
-                    .map(|sym| sym.defined_at.clone());
+                    .map(|sym| sym.defined_at);
                 if let Some(def_key) = def_key {
-                    self.record_reference_to_key(ident.id, def_key.clone());
+                    self.record_reference_to_def(ident.id, def_key);
                     if let Some(seg) = ident.segments.get(1) {
-                        self.record_reference_to_key(seg.id, def_key);
+                        self.record_reference_to_def(seg.id, def_key);
                     }
                 }
                 (
@@ -1017,7 +1017,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .symbols
                 .lookup(&self.current_module_source, effective_name)
             {
-                self.record_reference_to_key(ident.id, symbol.defined_at.clone());
+                self.record_reference_to_def(ident.id, symbol.defined_at);
                 (
                     Some(CalleeRef::from_imported_symbol(symbol)),
                     effective_name.to_string(),

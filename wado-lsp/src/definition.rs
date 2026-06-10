@@ -4,9 +4,9 @@
 //! 1. Reuse the engine's [`Semantics`] snapshot.
 //! 2. Use `Semantics::cursor_at` to find the innermost AST node at the cursor.
 //! 3. If that node is a use-site (Ident of a local), follow
-//!    `Semantics::referenced_symbol` to the binding [`SymbolKey`].
+//!    `Semantics::referenced_symbol` to the binding `AstId`.
 //! 4. Otherwise the cursor AST id itself points at a declared symbol.
-//! 5. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`].
+//! 5. Translate the resulting `AstId` into a [`DefinitionResult`].
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::ast::{self, AstVisitor, Item, Literal, Module};
@@ -62,13 +62,13 @@ pub(crate) fn find_definition(ctx: &QueryContext, position: Position) -> Option<
     // impl methods are addressable by `AstId` via `name_span_of` but are not
     // individually registered as symbols; the URI fallback handles both.
     let span = cursor.def_span()?;
-    let def_uri = match ctx.sem.symbol_at(&def_key) {
+    let def_uri = match ctx.sem.symbol_at(def_key) {
         Some(symbol) => symbol_uri(entry, symbol, ctx.uri)?,
-        None => module_uri(entry, &def_key.module, ctx.uri)?,
+        None => module_uri(entry, ctx.sem.module_of_id(def_key)?, ctx.uri)?,
     };
     Some(DefinitionResult {
         uri: def_uri,
-        range: span_to_range(&span, ctx.source_for_key(&def_key), ctx.encoding),
+        range: span_to_range(&span, ctx.source_for_id(def_key), ctx.encoding),
     })
 }
 

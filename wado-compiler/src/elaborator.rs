@@ -47,7 +47,7 @@ use crate::compiler_host::CompilerHost;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, MethodName};
-use crate::symbol::{Symbol, SymbolKey, SymbolTable};
+use crate::symbol::{Symbol, SymbolTable};
 use crate::tir::{self as tir, TypeId, TypeTable};
 
 /// Build a function-name → item-index map for a module's items. Used
@@ -362,11 +362,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// through here, so the [`Self::suppress_reference_recording`] gate lives in
     /// exactly one place: when set, the edge is dropped rather than recorded
     /// as a spurious duplicate by a type-checking query (see the field docs).
-    fn insert_reference(&mut self, use_id: crate::ast::AstId, def_key: SymbolKey) {
+    fn insert_reference(&mut self, use_id: crate::ast::AstId, def_id: crate::ast::AstId) {
         if self.suppress_reference_recording {
             return;
         }
-        self.sem.bindings.references.insert(use_id, def_key);
+        self.sem.bindings.references.insert(use_id, def_id);
     }
 
     /// Record that an identifier resolved to a local binding in the current
@@ -376,26 +376,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         use_id: crate::ast::AstId,
         def_id: crate::ast::AstId,
     ) {
-        let def_key = SymbolKey::new(self.current_module_source.clone(), def_id);
-        self.insert_reference(use_id, def_key);
+        self.insert_reference(use_id, def_id);
     }
 
     /// Record a use→def reference when the definition lives in a (possibly
-    /// different) module identified directly by a [`SymbolKey`]. Prefer
+    /// different) module identified directly by a [`AstId`](crate::ast::AstId). Prefer
     /// [`Self::record_reference_to_decl`] when the call site is constructing
     /// the key from `(module, ast_id)` parts.
-    pub(super) fn record_reference_to_key(
+    pub(super) fn record_reference_to_def(
         &mut self,
         use_id: crate::ast::AstId,
-        def_key: SymbolKey,
+        def_id: crate::ast::AstId,
     ) {
-        self.insert_reference(use_id, def_key);
+        self.insert_reference(use_id, def_id);
     }
 
     /// Record a use→def reference where the defining declaration is
     /// identified by its `(module, ast_id)` pair. Convenience over
-    /// [`Self::record_reference_to_key`] for call sites that would
-    /// otherwise construct a [`SymbolKey`] inline — keeps `SymbolKey::new`
+    /// [`Self::record_reference_to_def`] for call sites that would
+    /// otherwise construct a [`AstId`](crate::ast::AstId) inline — keeps `AstId::new`
     /// confined to a single place.
     pub(super) fn record_reference_to_decl(
         &mut self,
@@ -403,12 +402,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         decl_module: &ModuleSource,
         decl_ast_id: crate::ast::AstId,
     ) {
-        self.record_reference_to_key(use_id, SymbolKey::new(decl_module.clone(), decl_ast_id));
+        let _ = decl_module;
+        self.record_reference_to_def(use_id, decl_ast_id);
     }
 
     /// Record that an identifier resolved to a declared symbol reachable from
     /// the current module under `name` (local item, imported item, imported
-    /// namespace member, etc.). Looks up the defining [`SymbolKey`] through
+    /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
     /// the symbol table; no-op if the name is not declared.
     pub(super) fn record_item_reference_by_name(&mut self, use_id: crate::ast::AstId, name: &str) {
         let Some(sym) = self
@@ -418,8 +418,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         else {
             return;
         };
-        let def_key = sym.defined_at.clone();
-        self.insert_reference(use_id, def_key);
+        let def_id = sym.defined_at;
+        self.insert_reference(use_id, def_id);
     }
 
     /// Record use→def edges for a `TypeName::CaseName` qualified path
@@ -889,7 +889,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 is_mut,
                 is_reactive: false,
             }),
-            defined_at: SymbolKey::new(self.current_module_source.clone(), def_id),
+            defined_at: def_id,
+            module: self.current_module_source.clone(),
             span: Some(span),
         };
         self.sem.bindings.local_symbols.insert(def_id, symbol);
@@ -1127,9 +1128,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .lookup_in_module(&source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
-                                self.record_reference_to_key(use_id, sym.defined_at.clone());
+                                self.record_reference_to_def(use_id, sym.defined_at);
                             }
-                            sym.defined_at.module.clone()
+                            sym.module_source().clone()
                         })
                         .unwrap_or_else(|| source.clone());
                     tir::EffectRef::Concrete {
@@ -1150,9 +1151,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .lookup(&self.current_module_source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
-                                self.record_reference_to_key(use_id, sym.defined_at.clone());
+                                self.record_reference_to_def(use_id, sym.defined_at);
                             }
-                            sym.defined_at.module.clone()
+                            sym.module_source().clone()
                         })
                         .unwrap_or_else(|| self.current_module_source.clone());
                     tir::EffectRef::Concrete {
@@ -1181,7 +1182,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 match use_item {
                     ast::UseItem::Simple { id, name, .. } => {
                         if let Some(sym) = self.symbols.lookup_in_module(&source, name) {
-                            self.record_reference_to_key(*id, sym.defined_at.clone());
+                            self.record_reference_to_def(*id, sym.defined_at);
                         }
                     }
                     ast::UseItem::InterfaceFunctions { .. }

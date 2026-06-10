@@ -282,7 +282,7 @@ impl Module {
     /// Allocate a fresh dense [`AstId`] at the end of this module's
     /// per-module range.  Use this when post-parse synthesis injects a
     /// new AST node into [`Self::items`] and the node needs a
-    /// [`SymbolKey`](crate::symbol::SymbolKey)-compatible id (for
+    /// the symbol coordinate-compatible id (for
     /// example an `Item::Impl` that the elaborator walks).  The returned
     /// id is guaranteed not to collide with any parser-allocated id.
     ///

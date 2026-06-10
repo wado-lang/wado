@@ -14,12 +14,11 @@
 //! argument instead of threading the tuple by hand at every call site.
 
 use wado_compiler::Cursor;
+use wado_compiler::ast::AstId;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::Semantics;
-use wado_compiler::symbol::SymbolKey;
 
 use crate::diagnostics::Position;
-use crate::location::source_for_key;
 use crate::text::{PositionEncoding, lsp_position_to_line_col};
 
 /// Constant inputs to one LSP query against an open document.
@@ -71,11 +70,11 @@ impl<'a> QueryContext<'a> {
     }
 
     /// Source text to feed [`crate::location::span_to_range`] when
-    /// re-encoding a span at `key`. `Some(self.source)` for spans inside
-    /// the entry document; `None` for spans in other modules (their
+    /// re-encoding a span at node `id`. `Some(self.source)` for spans
+    /// inside the entry document; `None` for spans in other modules (their
     /// source isn't available here, and `span_to_range` falls back to
     /// "codepoint columns as code units" — correct under UTF-32 / ASCII).
-    pub fn source_for_key(&self, key: &SymbolKey) -> Option<&'a str> {
-        source_for_key(self.entry(), key, self.source)
+    pub fn source_for_id(&self, id: AstId) -> Option<&'a str> {
+        (self.sem.module_of_id(id) == Some(self.entry())).then_some(self.source)
     }
 }

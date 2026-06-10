@@ -79,7 +79,7 @@ use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 
 /// Generate the `ann_*` annotation accessors on [`Reify`]. Each expands to
-/// a method that builds the canonical `SymbolKey` for `id` in the current
+/// a method that builds the canonical `AstId` for `id` in the current
 /// module, walks `self.tuple_overlay_stack` innermost-first looking for that
 /// key, then falls back to `self.sem.types.<map>`, returning a clone. See
 /// the accessor doc comment on the `impl` block for why this exists.
@@ -197,10 +197,10 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// per outer element). See [`Self::reify_tuple_for_of`].
     pub(crate) tuple_overlay_visits: IndexMap<crate::ast::AstId, usize>,
     /// Source-level live set. When `Some`, reify skips emitting free
-    /// functions and globals whose `SymbolKey` is absent — the dead items
+    /// functions and globals whose `AstId` is absent — the dead items
     /// the liveness pass found unreachable from the export boundary, which
     /// downstream phases would discard anyway. `None` reifies everything.
-    pub(crate) live_items: Option<&'a IndexSet<crate::symbol::SymbolKey>>,
+    pub(crate) live_items: Option<&'a IndexSet<crate::ast::AstId>>,
     /// Active parameter-name → already-reified-argument substitutions for
     /// the default-argument expression currently being reified. A
     /// cross-module default is reified under the *callee's* module
@@ -236,7 +236,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
         interner: Rc<RefCell<ModuleSourceInterner>>,
-        live_items: Option<&'a IndexSet<crate::symbol::SymbolKey>>,
+        live_items: Option<&'a IndexSet<crate::ast::AstId>>,
     ) -> Self {
         Self {
             tysys,
@@ -383,7 +383,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let canonical = self
                         .symbols
                         .lookup_in_module(&source, name)
-                        .map(|sym| sym.defined_at.module.clone())
+                        .map(|sym| sym.module_source().clone())
                         .unwrap_or_else(|| source.clone());
                     crate::tir::EffectRef::Concrete {
                         name: name.clone(),
@@ -393,7 +393,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let canonical = self
                         .symbols
                         .lookup(&self.current_module_source, name)
-                        .map(|sym| sym.defined_at.module.clone())
+                        .map(|sym| sym.module_source().clone())
                         .unwrap_or_else(|| self.current_module_source.clone());
                     crate::tir::EffectRef::Concrete {
                         name: name.clone(),
@@ -504,9 +504,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// removes their dead ones instead.
     fn is_dead_item(&self, module: &ModuleSource, id: crate::ast::AstId) -> bool {
         super::liveness::is_user_authored(module)
-            && self.live_items.is_some_and(|live| {
-                !live.contains(&crate::symbol::SymbolKey::new(module.clone(), id))
-            })
+            && self.live_items.is_some_and(|live| !live.contains(&id))
     }
 
     pub(crate) fn reify_module(
@@ -1093,7 +1091,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// [`Self::with_const_module_perspective`]: `self.sem`,
     /// `self.current_module_source`, and `self.current_module_items` are
     /// replaced with the trait module's view for the duration of the body
-    /// walk so the `ann_*` accessors' `SymbolKey`s name the trait module
+    /// walk so the `ann_*` accessors' `AstId`s name the trait module
     /// (where the facts were keyed).
     fn reify_impl_default_methods(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
         use crate::name::MethodName;
@@ -7445,7 +7443,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// different, loaded module, restoring the originals afterward. Used to
     /// reify an AST fragment that belongs to another module (e.g. an
     /// associated constant's body): the `ann_*` accessors key on
-    /// `current_module_source`, so swapping it makes their `SymbolKey`
+    /// `current_module_source`, so swapping it makes their `AstId`
     /// lookups hit that module's `ModuleSemantics` rather than the use
     /// site's. Same mechanism the default-argument path uses inline
     /// (cross-module AST reify). A no-op when `module` is the current module

@@ -26,7 +26,7 @@
 
 use crate::ast::AstId;
 use crate::hashmap::IndexMap;
-use crate::symbol::{Symbol, SymbolKey};
+use crate::symbol::Symbol;
 
 /// `use → def` edges and locally defined symbols for one module.
 ///
@@ -36,12 +36,13 @@ use crate::symbol::{Symbol, SymbolKey};
 /// its node exactly, regardless of which module's `ModuleBindings` it landed
 /// in. The sole consumer ([`crate::semantics::semantics_with_logger`])
 /// flattens every module's bindings into single `Semantics` maps, so these
-/// are flat-stores-by-construction. Def-side values stay [`SymbolKey`]:
-/// navigation needs the defining module.
+/// are flat-stores-by-construction. Def-side values are the defining
+/// node's [`AstId`]; the owning module is recovered from the id's space
+/// when navigation needs it (`Semantics::module_of_id`).
 #[derive(Default, Clone)]
 pub(crate) struct ModuleBindings {
-    /// `IdentExpr.id → (module, defining AstId)`.
-    pub(crate) references: IndexMap<AstId, SymbolKey>,
+    /// `IdentExpr.id → defining AstId`.
+    pub(crate) references: IndexMap<AstId, AstId>,
     /// Locally-defined [`Symbol`]s (let bindings, parameters, closure
     /// parameters) keyed by the binding's defining [`AstId`].
     pub(crate) local_symbols: IndexMap<AstId, Symbol>,

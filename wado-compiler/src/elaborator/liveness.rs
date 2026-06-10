@@ -35,7 +35,6 @@
 use crate::ast::{self, AstId, AstVisitor, Block, Expr, Function, Item, Module};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::symbol::SymbolKey;
 use crate::token::Span;
 
 /// Result of the source-level liveness analysis.
@@ -56,13 +55,13 @@ use crate::token::Span;
 pub(crate) struct Liveness {
     /// Reachable from production roots ∪ tests (`E ∪ T`). Reify gates
     /// free-function / global emission on this set.
-    pub(crate) live_items: IndexSet<SymbolKey>,
+    pub(crate) live_items: IndexSet<AstId>,
     /// Candidates reachable from neither production nor tests (`∉ E ∧ ∉ T`),
     /// in source order. `DeadFunction` / `DeadGlobal`.
-    pub(crate) dead_items: Vec<SymbolKey>,
+    pub(crate) dead_items: Vec<AstId>,
     /// Candidates reachable from tests but not production (`∈ T \ E`), in
     /// source order. `TestOnlyFunction` / `TestOnlyGlobal`.
-    pub(crate) test_only_items: Vec<SymbolKey>,
+    pub(crate) test_only_items: Vec<AstId>,
 }
 
 /// Compute liveness over every loaded module.
@@ -73,7 +72,7 @@ pub(crate) struct Liveness {
 /// reify gating and still reaches the world-conformance check.
 pub(crate) fn compute(
     modules: &IndexMap<ModuleSource, Module>,
-    references: &IndexMap<AstId, SymbolKey>,
+    references: &IndexMap<AstId, AstId>,
     world_export_names: &IndexSet<String>,
 ) -> Liveness {
     let mut graph = Graph::default();
@@ -91,13 +90,13 @@ pub(crate) fn compute(
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    let key = SymbolKey::new(source.clone(), func.id);
+                    let key = func.id;
                     graph.add_function_edges(source, func, references, &key);
                     if func.is_export
                         || has_export_attr(func)
                         || world_export_names.contains(&func.name)
                     {
-                        graph.seed_export(key.clone());
+                        graph.seed_export(key);
                     }
                     // Bodyless functions are compiler builtins / imports, not
                     // user-authored code that could be "dead". `#[allow(dead_code)]`
@@ -112,7 +111,7 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Global(global) => {
-                    let key = SymbolKey::new(source.clone(), global.id);
+                    let key = global.id;
                     graph.add_expr_edges(source, &global.initializer, references, &key);
                     if user && !module_allows_dead && !attrs_allow_dead_code(&global.attributes) {
                         graph.report_candidates.push(key);
@@ -128,7 +127,7 @@ pub(crate) fn compute(
                     // dropping a reachable callee. Structs are not report
                     // candidates, so the extra live entry is harmless.
                     let mut has_default = false;
-                    let key = SymbolKey::new(source.clone(), struct_decl.id);
+                    let key = struct_decl.id;
                     for field in &struct_decl.fields {
                         if let Some(default) = &field.default {
                             graph.add_expr_edges(source, default, references, &key);
@@ -141,7 +140,7 @@ pub(crate) fn compute(
                 }
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        let key = SymbolKey::new(source.clone(), method.id);
+                        let key = method.id;
                         graph.add_function_edges(source, method, references, &key);
                         // Slice 1: methods are live production intermediaries.
                         graph.seed_export(key);
@@ -152,7 +151,7 @@ pub(crate) fn compute(
                         if method.body.is_none() {
                             continue;
                         }
-                        let key = SymbolKey::new(source.clone(), method.id);
+                        let key = method.id;
                         graph.add_function_edges(source, method, references, &key);
                         graph.seed_export(key);
                     }
@@ -163,7 +162,7 @@ pub(crate) fn compute(
                     // solely from a test is therefore classified `test-only`
                     // rather than live, so genuinely dead production code is not
                     // masked by a lingering test reference.
-                    let key = SymbolKey::new(source.clone(), test.id);
+                    let key = test.id;
                     graph.add_block_edges(source, &test.body, references, &key);
                     graph.seed_test(key);
                 }
@@ -180,23 +179,23 @@ pub(crate) fn compute(
 #[derive(Default)]
 struct Graph {
     /// `owner -> called items`.
-    edges: IndexMap<SymbolKey, Vec<SymbolKey>>,
+    edges: IndexMap<AstId, Vec<AstId>>,
     /// Production roots (world exports, `#[export]`, methods, struct-field
     /// defaults) — seeds of the `E` closure.
-    export_seeds: Vec<SymbolKey>,
+    export_seeds: Vec<AstId>,
     /// `test` block roots — seeds of the `T` closure.
-    test_seeds: Vec<SymbolKey>,
+    test_seeds: Vec<AstId>,
     /// User-authored free functions / globals eligible for dead reporting,
     /// in source order.
-    report_candidates: Vec<SymbolKey>,
+    report_candidates: Vec<AstId>,
 }
 
 impl Graph {
-    fn seed_export(&mut self, key: SymbolKey) {
+    fn seed_export(&mut self, key: AstId) {
         self.export_seeds.push(key);
     }
 
-    fn seed_test(&mut self, key: SymbolKey) {
+    fn seed_test(&mut self, key: AstId) {
         self.test_seeds.push(key);
     }
 
@@ -204,8 +203,8 @@ impl Graph {
         &mut self,
         source: &ModuleSource,
         func: &Function,
-        references: &IndexMap<AstId, SymbolKey>,
-        owner: &SymbolKey,
+        references: &IndexMap<AstId, AstId>,
+        owner: &AstId,
     ) {
         if let Some(body) = &func.body {
             self.add_block_edges(source, body, references, owner);
@@ -225,8 +224,8 @@ impl Graph {
         &mut self,
         source: &ModuleSource,
         block: &Block,
-        references: &IndexMap<AstId, SymbolKey>,
-        owner: &SymbolKey,
+        references: &IndexMap<AstId, AstId>,
+        owner: &AstId,
     ) {
         let mut collector = IdCollector::default();
         ast::walk_block(&mut collector, block);
@@ -237,8 +236,8 @@ impl Graph {
         &mut self,
         source: &ModuleSource,
         expr: &Expr,
-        references: &IndexMap<AstId, SymbolKey>,
-        owner: &SymbolKey,
+        references: &IndexMap<AstId, AstId>,
+        owner: &AstId,
     ) {
         let mut collector = IdCollector::default();
         ast::walk_expr(&mut collector, expr);
@@ -251,16 +250,13 @@ impl Graph {
         &mut self,
         source: &ModuleSource,
         ids: &[AstId],
-        references: &IndexMap<AstId, SymbolKey>,
-        owner: &SymbolKey,
+        references: &IndexMap<AstId, AstId>,
+        owner: &AstId,
     ) {
         let _ = source;
         for &id in ids {
             if let Some(def) = references.get(&id) {
-                self.edges
-                    .entry(owner.clone())
-                    .or_default()
-                    .push(def.clone());
+                self.edges.entry(*owner).or_default().push(*def);
             }
         }
     }
@@ -272,7 +268,7 @@ impl Graph {
 
         let mut live_items = production.clone();
         for key in &tests {
-            live_items.insert(key.clone());
+            live_items.insert(*key);
         }
 
         let mut dead_items = Vec::new();
@@ -282,9 +278,9 @@ impl Graph {
                 continue;
             }
             if tests.contains(key) {
-                test_only_items.push(key.clone());
+                test_only_items.push(*key);
             } else {
-                dead_items.push(key.clone());
+                dead_items.push(*key);
             }
         }
 
@@ -296,17 +292,17 @@ impl Graph {
     }
 
     /// BFS reachability from `seeds` over the call-graph edges.
-    fn closure(&self, seeds: &[SymbolKey]) -> IndexSet<SymbolKey> {
-        let mut reached: IndexSet<SymbolKey> = IndexSet::default();
-        let mut work: Vec<SymbolKey> = seeds.to_vec();
+    fn closure(&self, seeds: &[AstId]) -> IndexSet<AstId> {
+        let mut reached: IndexSet<AstId> = IndexSet::default();
+        let mut work: Vec<AstId> = seeds.to_vec();
         while let Some(key) = work.pop() {
-            if !reached.insert(key.clone()) {
+            if !reached.insert(key) {
                 continue;
             }
             if let Some(targets) = self.edges.get(&key) {
                 for target in targets {
                     if !reached.contains(target) {
-                        work.push(target.clone());
+                        work.push(*target);
                     }
                 }
             }

@@ -111,7 +111,7 @@ pub(super) struct FlagsMemberData {
 pub(crate) struct FlagsInfo {
     pub(super) type_id: TypeId,
     pub(super) members: Vec<FlagsMemberData>,
-    /// Module source that owns this flags declaration. Used to build `SymbolKey`
+    /// Module source that owns this flags declaration. Used to build the symbol coordinate
     /// entries for use->def references pointing at individual members.
     pub(super) module_source: ModuleSource,
 }
@@ -796,7 +796,7 @@ pub(super) struct LocalVar {
     ///
     /// Used by [`Elaborator`] to record `use → def` edges when an `IdentExpr`
     /// resolves to this local, so that LSP can translate a cursor position
-    /// into the defining [`SymbolKey`].
+    /// into the defining symbol's `AstId`.
     pub(super) defining_ast_id: Option<AstId>,
 }
 

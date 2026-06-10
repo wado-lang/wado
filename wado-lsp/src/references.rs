@@ -2,14 +2,13 @@
 //!
 //! Resolution flow mirrors `definition.rs`:
 //! 1. Run `semantics` to produce a fully-resolved snapshot.
-//! 2. Resolve the cursor to a defining [`SymbolKey`].
+//! 2. Resolve the cursor to a defining `AstId`.
 //! 3. Walk `Semantics::iter_references` and collect every use-site whose
 //!    target equals the def key.
 //! 4. Translate each use-site into a [`ReferenceLocation`].
 //! 5. Optionally prepend the defining occurrence itself.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::symbol::SymbolKey;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::{module_uri, span_to_range, symbol_uri};
@@ -40,11 +39,11 @@ pub(crate) fn find_references(
     };
 
     let mut out = Vec::new();
-    if include_declaration && let Some(loc) = declaration_location(ctx, &def_key) {
+    if include_declaration && let Some(loc) = declaration_location(ctx, def_key) {
         out.push(loc);
     }
-    for use_key in cursor.references_to_def() {
-        if let Some(loc) = use_site_location(ctx, &use_key) {
+    for use_id in cursor.references_to_def() {
+        if let Some(loc) = use_site_location(ctx, use_id) {
             out.push(loc);
         }
     }
@@ -61,26 +60,26 @@ pub(crate) fn find_references(
 
 pub(crate) fn declaration_location(
     ctx: &QueryContext,
-    def_key: &SymbolKey,
+    def_id: wado_compiler::ast::AstId,
 ) -> Option<ReferenceLocation> {
-    let symbol = ctx.sem.symbol_at(def_key)?;
-    let span = ctx.sem.name_span_of(def_key).or(symbol.span)?;
+    let symbol = ctx.sem.symbol_at(def_id)?;
+    let span = ctx.sem.name_span_of(def_id).or(symbol.span)?;
     let uri = symbol_uri(ctx.entry(), symbol, ctx.uri)?;
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span, ctx.source_for_key(def_key), ctx.encoding),
+        range: span_to_range(&span, ctx.source_for_id(def_id), ctx.encoding),
     })
 }
 
 pub(crate) fn use_site_location(
     ctx: &QueryContext,
-    use_key: &SymbolKey,
+    use_id: wado_compiler::ast::AstId,
 ) -> Option<ReferenceLocation> {
-    let span = ctx.sem.span_of_key(use_key)?;
-    let uri = module_uri(ctx.entry(), &use_key.module, ctx.uri)?;
+    let span = ctx.sem.span_of_id(use_id)?;
+    let uri = module_uri(ctx.entry(), ctx.sem.module_of_id(use_id)?, ctx.uri)?;
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span, ctx.source_for_key(use_key), ctx.encoding),
+        range: span_to_range(&span, ctx.source_for_id(use_id), ctx.encoding),
     })
 }
 

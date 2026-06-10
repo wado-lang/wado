@@ -3,7 +3,7 @@ use wado_compiler::ast::{self, AstId, Expr, Item, Stmt, Type};
 use wado_compiler::lexer::lex;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::Semantics;
-use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
+use wado_compiler::symbol::{Symbol, SymbolKind};
 use wado_compiler::token::{Token, TokenKind};
 
 use crate::text::{PositionEncoding, codepoints_to_code_units, line_without_terminator};
@@ -669,29 +669,29 @@ fn build_semantic_classes(sem: &Semantics, ast_types: &TypeSpans) -> IndexMap<us
     let mut classes: IndexMap<usize, (u32, u32)> = IndexMap::default();
 
     // Declaration sites: the binding's own name span.
-    for (key, symbol) in sem.iter_symbols() {
-        if key.module != *entry {
+    for (id, symbol) in sem.iter_symbols() {
+        if sem.module_of_id(id) != Some(entry) {
             continue;
         }
-        let Some(span) = sem.name_span_of(key) else {
+        let Some(span) = sem.name_span_of(id) else {
             continue;
         };
-        let (token_type, mut modifiers) = classify_symbol(symbol, key, ast_types, entry);
+        let (token_type, mut modifiers) = classify_symbol(symbol, id, ast_types, sem, entry);
         modifiers |= token_modifier::DECLARATION | token_modifier::DEFINITION;
         classes.insert(span.start, (token_type, modifiers));
     }
 
     // Use sites: every recorded use→def edge, classified by the def symbol.
-    for (use_key, def_key) in sem.iter_references() {
-        if use_key.module != *entry {
+    for (use_id, def_id) in sem.iter_references() {
+        if sem.module_of_id(use_id) != Some(entry) {
             continue;
         }
-        let (Some(symbol), Some(span)) = (sem.symbol_at(def_key), sem.span_of_key(&use_key)) else {
+        let (Some(symbol), Some(span)) = (sem.symbol_at(def_id), sem.span_of_id(use_id)) else {
             continue;
         };
         classes.insert(
             span.start,
-            classify_symbol(symbol, def_key, ast_types, entry),
+            classify_symbol(symbol, def_id, ast_types, sem, entry),
         );
     }
 
@@ -703,8 +703,9 @@ fn build_semantic_classes(sem: &Semantics, ast_types: &TypeSpans) -> IndexMap<us
 /// `declaration` modifier is added by the caller for declaration sites.
 fn classify_symbol(
     symbol: &Symbol,
-    def_key: &SymbolKey,
+    def_id: AstId,
     ast_types: &TypeSpans,
+    sem: &Semantics,
     entry: &ModuleSource,
 ) -> (u32, u32) {
     let mut modifiers = 0;
@@ -721,7 +722,7 @@ fn classify_symbol(
             }
             // The symbol table records no parameter/local distinction, so a
             // same-module definition id in the parameter set marks parameters.
-            if def_key.module == *entry && ast_types.is_param(def_key.ast_id) {
+            if sem.module_of_id(def_id) == Some(entry) && ast_types.is_param(def_id) {
                 token_type::PARAMETER
             } else {
                 token_type::VARIABLE

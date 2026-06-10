@@ -640,7 +640,7 @@ pub struct TypeTable {
     /// Populated by the elaborator whenever it creates a decl-backed type
     /// (`make_struct`, `make_enum`, `make_variant`, `make_flags`,
     /// `make_newtype`, `make_resource`) via [`TypeTable::register_decl_type`].
-    /// Lets LSP-style queries translate a [`SymbolKey`] — the canonical
+    /// Lets LSP-style queries translate a [`AstId`](crate::ast::AstId) — the canonical
     /// identity of a declaration — to the `TypeId` it represents without
     /// searching by name.
     ///
@@ -648,13 +648,13 @@ pub struct TypeTable {
     /// still resolves to the base `TypeId`. Use `symbol_of_type` to walk from
     /// any decl-backed `TypeId` (including monomorphizations) back to the
     /// declaring symbol.
-    type_by_symbol: IndexMap<crate::symbol::SymbolKey, TypeId>,
+    type_by_symbol: IndexMap<crate::ast::AstId, TypeId>,
     /// Inverse of `type_by_symbol` plus monomorphization tracking: every
     /// decl-backed `TypeId` — including monomorphized instances —
-    /// maps to the [`SymbolKey`] of its declaring AST node.
+    /// maps to the [`AstId`](crate::ast::AstId) of its declaring AST node.
     ///
     /// A sparse [`TypeMap`] keyed by the decl-backed `TypeId`.
-    symbol_by_type: TypeMap<crate::symbol::SymbolKey>,
+    symbol_by_type: TypeMap<crate::ast::AstId>,
 }
 
 impl Default for TypeTable {
@@ -839,15 +839,15 @@ impl TypeTable {
             .copied()
     }
 
-    /// Register the `(SymbolKey -> TypeId)` mapping for a declared type.
+    /// Register the `(AstId -> TypeId)` mapping for a declared type.
     ///
     /// Called by the elaborator right after constructing the `TypeId` that
     /// represents a user-declared type (struct, enum, variant, flags,
     /// newtype, resource). Both directions of the map are populated:
     /// forward `type_by_symbol[key] = type_id` and inverse
     /// `symbol_by_type[type_id] = key`.
-    pub fn register_decl_type(&mut self, key: crate::symbol::SymbolKey, type_id: TypeId) {
-        self.type_by_symbol.insert(key.clone(), type_id);
+    pub fn register_decl_type(&mut self, key: crate::ast::AstId, type_id: TypeId) {
+        self.type_by_symbol.insert(key, type_id);
         self.symbol_by_type.set_growing(type_id, key);
     }
 
@@ -858,21 +858,21 @@ impl TypeTable {
     /// `symbol_by_type` lets LSP queries walk any decl-backed `TypeId` back to
     /// the declaring AST node. The forward `type_by_symbol` index is NOT
     /// updated: that keeps the base generic's `TypeId` as the canonical entry.
-    pub fn register_mono_type(&mut self, base_key: crate::symbol::SymbolKey, type_id: TypeId) {
+    pub fn register_mono_type(&mut self, base_key: crate::ast::AstId, type_id: TypeId) {
         self.symbol_by_type.set_growing(type_id, base_key);
     }
 
-    /// Canonical `TypeId` for a declared-type [`SymbolKey`].
+    /// Canonical `TypeId` for a declared-type [`AstId`](crate::ast::AstId).
     ///
     /// Returns `None` if the symbol is not a decl-backed type, or if the
     /// elaborator has not yet created a `TypeId` for it.
-    pub fn type_of_symbol(&self, key: &crate::symbol::SymbolKey) -> Option<TypeId> {
+    pub fn type_of_symbol(&self, key: &crate::ast::AstId) -> Option<TypeId> {
         self.type_by_symbol.get(key).copied()
     }
 
     /// Walk a decl-backed `TypeId` (including monomorphizations) back to the
-    /// declaring [`SymbolKey`].
-    pub fn symbol_of_type(&self, type_id: TypeId) -> Option<&crate::symbol::SymbolKey> {
+    /// declaring [`AstId`](crate::ast::AstId).
+    pub fn symbol_of_type(&self, type_id: TypeId) -> Option<&crate::ast::AstId> {
         self.symbol_by_type.get(type_id)
     }
 
@@ -975,7 +975,7 @@ impl TypeTable {
         // A redirect entry is meaningful only when both endpoints survive.
         self.redirects
             .retain(|id, &target| effective_keep.contains(&id) && effective_keep.contains(&target));
-        // Retain SymbolKey indices to surviving TypeIds only.
+        // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
         self.type_by_symbol

@@ -37,14 +37,14 @@ pub(crate) fn canonical_decl_key_with(
             .unwrap_or_else(|| name.to_string());
         let canonical = symbols
             .lookup_in_module(src, &original)
-            .map(|sym| sym.defined_at.module.clone())
+            .map(|sym| sym.module_source().clone())
             .unwrap_or_else(|| src.clone());
         return (canonical, original);
     }
     if let Some(src) = imports.effect_sources.get(name) {
         let canonical = symbols
             .lookup_in_module(src, name)
-            .map(|sym| sym.defined_at.module.clone())
+            .map(|sym| sym.module_source().clone())
             .unwrap_or_else(|| src.clone());
         return (canonical, name.to_string());
     }
@@ -56,7 +56,7 @@ pub(crate) fn canonical_decl_key_with(
         return (current_module_source.clone(), name.to_string());
     }
     if let Some(sym) = symbols.lookup(current_module_source, name) {
-        return (sym.defined_at.module.clone(), name.to_string());
+        return (sym.module_source().clone(), name.to_string());
     }
     if let Some(key) = trait_env.find_trait_decl_key(name) {
         return key;

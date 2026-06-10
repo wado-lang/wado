@@ -8,26 +8,9 @@
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{AstId, CmImport};
+use crate::ast::{AstId, AstIdSpace, CmImport};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
-
-/// Canonical identity of a symbol.
-///
-/// The pair `(module, ast_id)` uniquely identifies the AST node that declared
-/// the symbol. Effect / resource methods registered under qualified names
-/// (e.g., `"Stdout::write"`) use their own method `AstId`, not the parent's.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SymbolKey {
-    pub module: ModuleSource,
-    pub ast_id: AstId,
-}
-
-impl SymbolKey {
-    pub fn new(module: ModuleSource, ast_id: AstId) -> Self {
-        Self { module, ast_id }
-    }
-}
 
 /// The kind of symbol and its associated data
 #[derive(Debug, Clone)]
@@ -191,8 +174,12 @@ pub struct Symbol {
     pub name: String,
     /// Symbol kind and data
     pub kind: SymbolKind,
-    /// Canonical identity: `(module, ast_id)` of the declaring AST node
-    pub defined_at: SymbolKey,
+    /// The declaring AST node's globally-unique id.
+    pub defined_at: AstId,
+    /// Module the symbol is defined in (the declaring node's home). Stored
+    /// directly — not a fact-map key — so navigation reads it without a
+    /// space-registry lookup.
+    pub module: ModuleSource,
     /// Source location (if available)
     pub span: Option<Span>,
 }
@@ -200,7 +187,7 @@ pub struct Symbol {
 impl Symbol {
     /// Module where this symbol is defined.
     pub fn module_source(&self) -> &ModuleSource {
-        &self.defined_at.module
+        &self.module
     }
 
     /// Check if this is a builtin function
@@ -232,24 +219,30 @@ pub struct ReExportTarget {
 
 /// The symbol table
 ///
-/// Tracks all symbols organized by module. Symbols are keyed by
-/// `(ModuleSource, AstId)` via [`SymbolKey`]; the name indices (`modules`,
-/// `imports`, `reexports`) map from textual names to that canonical identity.
+/// Tracks all symbols organized by module. Symbols are keyed by their
+/// declaring node's globally-unique [`AstId`]; the name indices (`modules`,
+/// `imports`, `reexports`) map from textual names to that identity. The
+/// declaring module of any symbol is recovered from its `AstId`'s
+/// [`AstIdSpace`] via [`Self::module_of`] (populated at [`Self::define`]).
 #[derive(Debug, Default, Clone)]
 pub struct SymbolTable {
-    /// All symbols keyed by their canonical identity.
-    symbols: IndexMap<SymbolKey, Symbol>,
-    /// Module → symbol name → canonical key
-    modules: IndexMap<ModuleSource, IndexMap<String, SymbolKey>>,
+    /// All symbols keyed by their declaring node's [`AstId`].
+    symbols: IndexMap<AstId, Symbol>,
+    /// Module → symbol name → declaring `AstId`.
+    modules: IndexMap<ModuleSource, IndexMap<String, AstId>>,
     /// Re-exports: module → exported name → re-export target
     reexports: IndexMap<ModuleSource, IndexMap<String, ReExportTarget>>,
     /// Imported symbols, scoped per importing module: module → imported name →
-    /// canonical key. Each module sees only the names it explicitly `use`s
-    /// (plus the implicit prelude, resolved as a fallback in [`Self::lookup`]).
-    /// This is *not* a program-wide map: a name imported by one module is not
-    /// visible to another, so same-named imports in different modules cannot
-    /// collide.
-    imports: IndexMap<ModuleSource, IndexMap<String, SymbolKey>>,
+    /// declaring `AstId`. Each module sees only the names it explicitly
+    /// `use`s (plus the implicit prelude, resolved as a fallback in
+    /// [`Self::lookup`]). This is *not* a program-wide map: a name imported
+    /// by one module is not visible to another, so same-named imports in
+    /// different modules cannot collide.
+    imports: IndexMap<ModuleSource, IndexMap<String, AstId>>,
+    /// `AstIdSpace → ModuleSource` registry, populated as symbols are
+    /// `define`d. Recovers the declaring module of any defined symbol's
+    /// `AstId` (each module's parse owns one space).
+    space_modules: IndexMap<AstIdSpace, ModuleSource>,
 }
 
 impl SymbolTable {
@@ -261,8 +254,15 @@ impl SymbolTable {
     /// Iterate every symbol with its canonical key, across all modules.
     /// Order follows insertion (`define` order). Callers that want a single
     /// module filter on `key.module`.
-    pub fn iter(&self) -> impl Iterator<Item = (&SymbolKey, &Symbol)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&AstId, &Symbol)> {
         self.symbols.iter()
+    }
+
+    /// Declaring module of a defined symbol's `AstId`, via the space
+    /// registry. `None` for ids never `define`d here (e.g. transient
+    /// `AstId::fresh` operands).
+    pub fn module_of(&self, id: AstId) -> Option<&ModuleSource> {
+        self.space_modules.get(&id.space())
     }
 
     /// Check whether a symbol with `name` is already defined directly in
@@ -290,7 +290,7 @@ impl SymbolTable {
     /// Define a symbol in a module.
     ///
     /// The `(module_source, ast_id)` pair uniquely identifies the declaring
-    /// AST node. Returns the assigned [`SymbolKey`].
+    /// AST node. Returns the assigned [`AstId`].
     pub fn define(
         &mut self,
         module_source: &ModuleSource,
@@ -298,30 +298,30 @@ impl SymbolTable {
         name: &str,
         kind: SymbolKind,
         span: Option<Span>,
-    ) -> SymbolKey {
-        let key = SymbolKey {
-            module: module_source.clone(),
-            ast_id,
-        };
+    ) -> AstId {
         let symbol = Symbol {
             name: name.to_string(),
             kind,
-            defined_at: key.clone(),
+            defined_at: ast_id,
+            module: module_source.clone(),
             span,
         };
-        self.symbols.insert(key.clone(), symbol);
+        self.symbols.insert(ast_id, symbol);
+        self.space_modules
+            .entry(ast_id.space())
+            .or_insert_with(|| module_source.clone());
 
         let module = self.modules.entry(module_source.clone()).or_default();
-        module.insert(name.to_string(), key.clone());
+        module.insert(name.to_string(), ast_id);
 
-        key
+        ast_id
     }
 
     /// Register an imported symbol in `importing_module`.
     ///
     /// This makes the symbol accessible by its short name (without module
     /// prefix) when resolving names referenced from `importing_module`.
-    pub fn register_import(&mut self, importing_module: &ModuleSource, name: &str, key: SymbolKey) {
+    pub fn register_import(&mut self, importing_module: &ModuleSource, name: &str, key: AstId) {
         self.imports
             .entry(importing_module.clone())
             .or_default()
@@ -375,7 +375,9 @@ impl SymbolTable {
                 {
                     aliases.push((
                         alias_name.clone(),
-                        symbol.defined_at.module.clone(),
+                        self.module_of(symbol.defined_at)
+                            .expect("defined symbol has a registered module")
+                            .clone(),
                         symbol.name.clone(),
                     ));
                 }
@@ -474,7 +476,7 @@ impl SymbolTable {
     }
 
     /// Get a symbol by its canonical key.
-    pub fn get(&self, key: &SymbolKey) -> Option<&Symbol> {
+    pub fn get(&self, key: &AstId) -> Option<&Symbol> {
         self.symbols.get(key)
     }
 

@@ -6,7 +6,7 @@
 //!   (struct field maps, variant cases, flags, newtypes, resource methods)
 //!   and interns every declaration in the shared [`TypeTable`]. It also
 //!   populates [`TypeTable::type_by_symbol`]/[`TypeTable::symbol_by_type`]
-//!   so LSP queries can resolve a [`SymbolKey`] to a decl-backed type
+//!   so LSP queries can resolve a [`AstId`](crate::ast::AstId) to a decl-backed type
 //!   without running TIR lowering. The output is an [`AnnotateState`] that
 //!   both `build_tir` and the LSP consume.
 //! - [`Elaborator::build_tir_from_state`] reads that state and produces one
@@ -973,7 +973,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // symbol, including types that aren't referenced as a field anywhere.
         // Without this, decl-only types (e.g., a standalone `struct Unused {}`)
         // would only appear in the table after TIR lowering — too late for the
-        // annotate phase to index them by `SymbolKey`.
+        // annotate phase to index them by `AstId`.
         Self::intern_all_decl_types(
             modules,
             &all_struct_fields,
@@ -983,14 +983,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
 
         // Populate `TypeTable::type_by_symbol` / `symbol_by_type` so LSP queries
-        // can resolve a `SymbolKey` to a decl-backed type without running the
+        // can resolve a `AstId` to a decl-backed type without running the
         // lower phase.
         Self::register_symbol_key_type_indices(symbols, &type_table);
 
         // Seed per-module semantics with the snapshot's pre-resolved stdlib
         // entries so the LSP edges remain consistent and the body walk on
         // user modules can extend on top. The snapshot stores `references` /
-        // `locals` / `local_types` as flat maps keyed by `SymbolKey`; we
+        // `locals` / `local_types` as flat maps keyed by `AstId`; we
         // split them by `key.module` because each module's data now lives in
         // its own [`super::sem::ModuleSemantics`].
         let mut module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics> =
@@ -1042,7 +1042,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     debug_assert!(false, "{snapshot_invariant}: {use_id:?}");
                     continue;
                 };
-                sem.bindings.references.insert(*use_id, def_key.clone());
+                sem.bindings.references.insert(*use_id, *def_key);
             }
             for (id, sym) in &snap.locals {
                 let Some(sem) = snap
@@ -1405,11 +1405,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later; computing it here lets reify gate item emission on the live
         // set and the unused-diagnostics emitter read `dead_items`.
         {
-            let mut references: IndexMap<crate::ast::AstId, crate::symbol::SymbolKey> =
+            let mut references: IndexMap<crate::ast::AstId, crate::ast::AstId> =
                 IndexMap::default();
             for sem in state.module_semantics.values() {
                 for (use_id, def_key) in &sem.bindings.references {
-                    references.insert(*use_id, def_key.clone());
+                    references.insert(*use_id, *def_key);
                 }
             }
             let export_names: crate::hashmap::IndexSet<String> = state
@@ -1538,7 +1538,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// instrumented at each `make_struct` / `make_enum` / ... call site: the
     /// decl-creation sites are spread across elaborator/module.rs,
     /// `elaborator/type_resolution.rs`, elaborator/orchestration.rs, elaborator/call.rs,
-    /// and elaborator/expr.rs, and threading a `SymbolKey` through every one of
+    /// and elaborator/expr.rs, and threading a `AstId` through every one of
     /// them would churn ~40 call sites. The symbol-table walk is O(symbols) and
     /// touches only declarations, so the cost is negligible.
     fn register_symbol_key_type_indices(
@@ -1560,8 +1560,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if !is_type_decl {
                 continue;
             }
-            let key = symbol.defined_at.clone();
-            if let Some(type_id) = tt.find_decl_type_by_name(&symbol.name, &key.module) {
+            let key = symbol.defined_at;
+            let Some(decl_module) = symbols.module_of(key) else {
+                continue;
+            };
+            if let Some(type_id) = tt.find_decl_type_by_name(&symbol.name, decl_module) {
                 tt.register_decl_type(key, type_id);
             }
         }

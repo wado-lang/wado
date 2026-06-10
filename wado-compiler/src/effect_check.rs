@@ -982,19 +982,14 @@ impl AstVisitor for SemEffectWalker<'_> {
                     self.sem.references.get(&ident.id).and_then(|def| {
                         self.index
                             .fn_effects
-                            .get(&def.ast_id)
-                            .map(|effects| (def.clone(), effects.clone(), ident.name.clone()))
+                            .get(def)
+                            .map(|effects| (*def, effects.clone(), ident.name.clone()))
                     })
                 } else {
                     None
                 };
                 if let Some((def, effects, name)) = free {
-                    let params = self
-                        .index
-                        .fn_params
-                        .get(&def.ast_id)
-                        .cloned()
-                        .unwrap_or_default();
+                    let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
                     let resolved = self.resolve_effect_params(&effects, &params, false, &call.args);
                     self.report_missing(&resolved, &name, call.span);
                 } else if let Some(func_ref) = self
@@ -1102,7 +1097,7 @@ impl SemEffectWalker<'_> {
                 .sem
                 .references
                 .get(&ident.id)
-                .and_then(|def| self.sem.local_types.get(&def.ast_id))
+                .and_then(|def| self.sem.local_types.get(def))
             {
                 return Some(*type_id);
             }
@@ -1399,7 +1394,7 @@ impl AstVisitor for PurityWalker<'_> {
                     self.sem
                         .references
                         .get(&ident.id)
-                        .and_then(|def| self.index.fn_effects.get(&def.ast_id))
+                        .and_then(|def| self.index.fn_effects.get(def))
                         .map(|effects| (effects.clone(), ident.name.clone()))
                 } else {
                     None
