@@ -471,6 +471,31 @@ fn run() {
     );
 }
 
+/// Comments after the last top-level item have no following item to lead;
+/// they must be flushed at module end, not dropped.
+#[test]
+fn test_format_preserves_trailing_module_comments() {
+    let source = "fn run() {\n    let x = 1;\n}\n\n// tail note one\n// tail note two\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(formatted.contains("// tail note one"), "got:\n{formatted}");
+    assert!(formatted.contains("// tail note two"), "got:\n{formatted}");
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+/// Leading and trailing comments on array-literal elements must survive.
+#[test]
+fn test_format_preserves_array_element_comments() {
+    let source =
+        "fn run() {\n    let xs = [\n        // lead one\n        1,\n        2,  // tail two\n    ];\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    for c in ["// lead one", "// tail two"] {
+        assert!(formatted.contains(c), "missing `{c}`:\n{formatted}");
+    }
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
 /// A comment wedged between tokens has no AST node to own it and would be
 /// dropped. The formatter must refuse (error) rather than silently lose it.
 #[test]
@@ -1621,6 +1646,56 @@ fn test_format_idempotent_all_fixtures() {
         failures.is_empty(),
         "Format idempotency failures:\n{}",
         failures.join("\n\n---\n\n")
+    );
+}
+
+/// The formatter must never silently drop a comment. `format()` returns
+/// `CompileError::Format` when it would, so run it over the whole fixture +
+/// stdlib corpus — our richest collection of edge-case syntax. Fixtures are
+/// not reformatted in the tree (they double as parser tests), but they are an
+/// ideal corpus for this invariant; a drop here is a real bug.
+#[test]
+fn test_no_dropped_comments_in_corpus() {
+    fn check(path: &Path, failures: &mut Vec<String>) {
+        let source = fs::read_to_string(path).expect("cannot read file");
+        // Intentional compile-error / TODO fixtures don't parse cleanly.
+        if source.contains("compile_error")
+            || source.contains("\"TODO\": true")
+            || source.contains("#![TODO]")
+        {
+            return;
+        }
+        if let Err(wado_compiler::CompileError::Format { message }) =
+            wado_compiler::format(&source)
+        {
+            failures.push(format!("{}: {message}", path.display()));
+        }
+    }
+
+    fn visit(dir: &Path, failures: &mut Vec<String>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries {
+            let path = entry.expect("cannot read entry").path();
+            if path.is_dir() {
+                visit(&path, failures);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("wado") {
+                check(&path, failures);
+            }
+        }
+    }
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut failures = Vec::new();
+    visit(&root.join("tests/fixtures"), &mut failures);
+    visit(&root.join("lib"), &mut failures);
+
+    assert!(
+        failures.is_empty(),
+        "formatter dropped comments in {} file(s):\n{}",
+        failures.len(),
+        failures.join("\n")
     );
 }
 
