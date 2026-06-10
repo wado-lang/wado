@@ -1,0 +1,27 @@
+// Regression: a user struct whose name equals a serde trait's type-parameter
+// name (`S` in `next_field<S: FieldSchema>`) used to ICE in monomorphization.
+// The synthesized `S^FieldSchema::lookup` was never queued because the
+// type-param receiver's mangled name coincided with the concrete type name,
+// so the "name changed?" guard skipped queueing the instantiation.
+use { Serialize, Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+struct S {
+    a: i32,
+    b: i32,
+}
+
+impl Deserialize for S;
+
+test "struct named S deserializes" {
+    let r = from_string::<S>(`\{"a":1,"b":2\}`);
+    assert r matches { Ok(v) && v.a == 1 && v.b == 2 };
+}
+
+test "struct named S with unknown field" {
+    let r = from_string::<S>(`\{"a":1,"z":9,"b":2\}`);
+    assert r matches { Ok(v) && v.a == 1 && v.b == 2 };
+}
+
+__DATA__
+{"test": {}}

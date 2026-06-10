@@ -1637,8 +1637,30 @@ impl Monomorphizer {
                         }
                         let mut new_func_name = new_info.to_mangled_name();
 
-                        if new_func_name != old_func_name {
-                            if info.is_type_param_receiver {
+                        // The work each branch performs is gated on its own real
+                        // precondition, not on whether the mangled name changed:
+                        //
+                        //  - A type-param receiver (`S^Trait::method`) needs its
+                        //    home module resolved and its concrete instance queued
+                        //    exactly when the receiver resolved to a concrete type.
+                        //    The mangled name is incidental — it stays `S^…` when a
+                        //    user struct is literally named `S` (so it equals the
+                        //    type-param spelling), yet the instance must still be
+                        //    queued or it is left unresolved at WIR build.
+                        //  - A non-type-param call encodes all of its type args in
+                        //    its name, so an unchanged name means nothing to rewrite.
+                        let receiver_is_concrete = substitution
+                            .iter()
+                            .min_by_key(|(idx, _)| **idx)
+                            .is_some_and(|(_, &tid)| {
+                                !matches!(
+                                    type_table.get(tid),
+                                    ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                                )
+                            });
+
+                        if info.is_type_param_receiver {
+                            if receiver_is_concrete {
                                 let mut sorted_entries: Vec<_> = substitution.iter().collect();
                                 sorted_entries.sort_by_key(|(idx, _)| **idx);
                                 let concrete_type_id = *sorted_entries[0].1;
@@ -1763,20 +1785,20 @@ impl Monomorphizer {
                                     monomorph_info: new_monomorph,
                                     method_info: Some(new_info),
                                 };
-                            } else {
-                                let monomorph_info = Some(MonomorphInfo {
-                                    generic_name: old_func_name,
-                                    impl_type_args: sub_impl_type_args,
-                                    method_type_args: sub_method_type_args,
-                                    is_blanket: false,
-                                });
-                                *call_func = FunctionRef {
-                                    module_source,
-                                    name: new_func_name,
-                                    monomorph_info,
-                                    method_info: Some(new_info),
-                                };
                             }
+                        } else if new_func_name != old_func_name {
+                            let monomorph_info = Some(MonomorphInfo {
+                                generic_name: old_func_name,
+                                impl_type_args: sub_impl_type_args,
+                                method_type_args: sub_method_type_args,
+                                is_blanket: false,
+                            });
+                            *call_func = FunctionRef {
+                                module_source,
+                                name: new_func_name,
+                                monomorph_info,
+                                method_info: Some(new_info),
+                            };
                         }
                     }
                 }
