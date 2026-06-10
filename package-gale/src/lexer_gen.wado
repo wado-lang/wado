@@ -395,13 +395,23 @@ fn fragment_elem_refs_self(
     }
 }
 
+/// Generated scanner-function name for the lexer rule called `name`.
+/// The rule name is used verbatim (case-preserved): lexer rule names are
+/// g4 identifiers, so `try_<name>` is always a valid Wado identifier, and
+/// preserving case keeps distinct rules distinct (`ID` vs `Id` →
+/// `try_ID` / `try_Id`) without any collision-resolution bookkeeping.
+/// Single source of truth so every emit site agrees on the name.
+pub fn lexer_try_fn_name(name: &String) -> String {
+    return `try_{*name}`;
+}
+
 fn gen_lexer_match_fn(
     w: &mut CodeWriter,
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
     grammar_opts: &List<GrammarOption>,
 ) {
-    let fn_name = `try_{to_lower(&rule.name)}`;
+    let fn_name = lexer_try_fn_name(&rule.name);
     let ci = resolve_ci(grammar_opts, &rule.options);
     gen_visibility_comment(w, &rule.visibility);
     let mut f = FnSpec::new(&fn_name);
@@ -706,7 +716,7 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
                     // The recursive-fragment case uses its own `try_*` fn
                     // emitted separately with grammar-level CI.
                     if fragment_is_recursive(f, all_rules) {
-                        let fn_name = `try_{to_lower(&name)}`;
+                        let fn_name = lexer_try_fn_name(&name);
                         w.line(&`pos = {fn_name}(chars, pos);`);
                         w.line(&`if pos < 0 \{ {fail_action}; \}`);
                     } else if f.body.len() == 1 {
@@ -715,7 +725,7 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
                         gen_lexer_alts(w, &f.body, all_rules, fail_action, ci);
                     }
                 } else {
-                    let fn_name = `try_{to_lower(&name)}`;
+                    let fn_name = lexer_try_fn_name(&name);
                     w.line(&`pos = {fn_name}(chars, pos);`);
                     w.line(&`if pos < 0 \{ {fail_action}; \}`);
                 }
@@ -1403,7 +1413,7 @@ fn compute_first_chars(
     grammar_opts: &List<GrammarOption>,
 ) -> TryCall {
     let ci = resolve_ci(grammar_opts, &rule.options);
-    let fn_name = `try_{to_lower(&rule.name)}`;
+    let fn_name = lexer_try_fn_name(&rule.name);
     // `type(X)` rewrites the kind used when emitting the token. Use the
     // override kind at emit time so downstream code (parser, token_kind_name)
     // sees the renamed type. The rule itself still has its own TK_<name>
@@ -1890,7 +1900,7 @@ fn gen_tokenize_fn(
                     && rule.mode == mi
                     && !is_keyword_rule_name(&rule.name, keywords)
                     && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                    let fn_name = `try_{to_lower(&rule.name)}`;
+                    let fn_name = lexer_try_fn_name(&rule.name);
                     w.line(&`end = {fn_name}(&lexer.chars, start);`);
                     let mut extra = String::with_capacity(64);
                     if rule.push_mode >= 0 {

@@ -565,7 +565,7 @@ impl Lexer {
     }
 }
 
-fn try_and(chars: &List<char>, start: i32) -> i32 {
+fn try_AND(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
@@ -576,7 +576,7 @@ fn try_and(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_dog(chars: &List<char>, start: i32) -> i32 {
+fn try_DOG(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
@@ -587,7 +587,7 @@ fn try_dog(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_cat(chars: &List<char>, start: i32) -> i32 {
+fn try_CAT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -598,7 +598,7 @@ fn try_cat(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_hardware(chars: &List<char>, start: i32) -> i32 {
+fn try_HARDWARE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'h' { return -1; }
     pos += 1;
@@ -619,7 +619,7 @@ fn try_hardware(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_software(chars: &List<char>, start: i32) -> i32 {
+fn try_SOFTWARE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 's' { return -1; }
     pos += 1;
@@ -640,7 +640,7 @@ fn try_software(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ' ' { return -1; }
     pos += 1;
@@ -658,22 +658,22 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == 'a' {
-            end = try_and(&lexer.chars, start);
+            end = try_AND(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_AND; }
         } else if first_char == 'c' {
-            end = try_cat(&lexer.chars, start);
+            end = try_CAT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_CAT; }
         } else if first_char == 'd' {
-            end = try_dog(&lexer.chars, start);
+            end = try_DOG(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DOG; }
         } else if first_char == 'h' {
-            end = try_hardware(&lexer.chars, start);
+            end = try_HARDWARE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_HARDWARE; }
         } else if first_char == 's' {
-            end = try_software(&lexer.chars, start);
+            end = try_SOFTWARE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SOFTWARE; }
         }
         if best_end <= start {

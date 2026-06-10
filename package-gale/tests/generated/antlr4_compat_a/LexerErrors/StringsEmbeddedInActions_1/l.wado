@@ -532,7 +532,7 @@ impl Lexer {
     }
 }
 
-fn try_action2(chars: &List<char>, start: i32) -> i32 {
+fn try_ACTION2(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '[' { return -1; }
     pos += 1;
@@ -552,7 +552,7 @@ fn try_action2(chars: &List<char>, start: i32) -> i32 {
         let mut alts_ok_1 = false;
         alts_1_0: {
             pos = alts_saved_1;
-            pos = try_string(chars, pos);
+            pos = try_STRING(chars, pos);
             if pos < 0 { break alts_1_0; }
             alts_ok_1 = true;
         }
@@ -578,7 +578,7 @@ fn try_action2(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_string(chars: &List<char>, start: i32) -> i32 {
+fn try_STRING(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
@@ -617,7 +617,7 @@ fn try_string(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
@@ -647,13 +647,13 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '"' {
-            end = try_string(&lexer.chars, start);
+            end = try_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STRING; }
         } else if first_char == '[' {
-            end = try_action2(&lexer.chars, start);
+            end = try_ACTION2(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ACTION2; }
         }
         if best_end <= start {

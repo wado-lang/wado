@@ -3814,7 +3814,7 @@ impl Lexer {
     }
 }
 
-fn try_multilinecomment(chars: &List<char>, start: i32) -> i32 {
+fn try_MultiLineComment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -3840,7 +3840,7 @@ fn try_multilinecomment(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_singlelinecomment(chars: &List<char>, start: i32) -> i32 {
+fn try_SingleLineComment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -3860,7 +3860,7 @@ fn try_singlelinecomment(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_regularexpressionliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -4132,14 +4132,14 @@ fn try_regularexpressionliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_semicolon(chars: &List<char>, start: i32) -> i32 {
+fn try_SemiColon(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ';' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_nullliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_NullLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'n' { return -1; }
     pos += 1;
@@ -4152,7 +4152,7 @@ fn try_nullliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_booleanliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_BooleanLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_14 = pos;
     let mut alts_ok_14 = false;
@@ -4188,7 +4188,7 @@ fn try_booleanliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_decimalliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_DecimalLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_15 = pos;
     let mut alts_ok_15 = false;
@@ -4398,7 +4398,7 @@ fn try_decimalliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_hexintegerliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_HexIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
@@ -4422,7 +4422,7 @@ fn try_hexintegerliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_octalintegerliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_OctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
@@ -4443,7 +4443,7 @@ fn try_octalintegerliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_octalintegerliteral2(chars: &List<char>, start: i32) -> i32 {
+fn try_OctalIntegerLiteral2(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
@@ -4467,7 +4467,7 @@ fn try_octalintegerliteral2(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_binaryintegerliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_BinaryIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
@@ -4491,7 +4491,7 @@ fn try_binaryintegerliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_bighexintegerliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_BigHexIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
@@ -4517,7 +4517,7 @@ fn try_bighexintegerliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_bigoctalintegerliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_BigOctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
@@ -4570,7 +4570,7 @@ fn try_bigoctalintegerliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_bigbinaryintegerliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_BigBinaryIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
@@ -4623,7 +4623,7 @@ fn try_bigbinaryintegerliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_bigdecimalintegerliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_BigDecimalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_42 = pos;
     let mut alts_ok_42 = false;
@@ -4659,7 +4659,7 @@ fn try_bigdecimalintegerliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_break(chars: &List<char>, start: i32) -> i32 {
+fn try_Break(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'b' { return -1; }
     pos += 1;
@@ -4674,7 +4674,7 @@ fn try_break(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_do(chars: &List<char>, start: i32) -> i32 {
+fn try_Do(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
@@ -4683,7 +4683,7 @@ fn try_do(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_instanceof(chars: &List<char>, start: i32) -> i32 {
+fn try_Instanceof(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
@@ -4708,7 +4708,7 @@ fn try_instanceof(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_case(chars: &List<char>, start: i32) -> i32 {
+fn try_Case(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -4721,7 +4721,7 @@ fn try_case(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_else(chars: &List<char>, start: i32) -> i32 {
+fn try_Else(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'e' { return -1; }
     pos += 1;
@@ -4734,7 +4734,7 @@ fn try_else(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_var(chars: &List<char>, start: i32) -> i32 {
+fn try_Var(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'v' { return -1; }
     pos += 1;
@@ -4745,7 +4745,7 @@ fn try_var(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_catch(chars: &List<char>, start: i32) -> i32 {
+fn try_Catch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -4760,7 +4760,7 @@ fn try_catch(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_finally(chars: &List<char>, start: i32) -> i32 {
+fn try_Finally(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'f' { return -1; }
     pos += 1;
@@ -4779,7 +4779,7 @@ fn try_finally(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_return(chars: &List<char>, start: i32) -> i32 {
+fn try_Return(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'r' { return -1; }
     pos += 1;
@@ -4796,7 +4796,7 @@ fn try_return(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_void(chars: &List<char>, start: i32) -> i32 {
+fn try_Void(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'v' { return -1; }
     pos += 1;
@@ -4809,7 +4809,7 @@ fn try_void(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_continue(chars: &List<char>, start: i32) -> i32 {
+fn try_Continue(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -4830,7 +4830,7 @@ fn try_continue(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_for(chars: &List<char>, start: i32) -> i32 {
+fn try_For(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'f' { return -1; }
     pos += 1;
@@ -4841,7 +4841,7 @@ fn try_for(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_switch(chars: &List<char>, start: i32) -> i32 {
+fn try_Switch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 's' { return -1; }
     pos += 1;
@@ -4858,7 +4858,7 @@ fn try_switch(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_while(chars: &List<char>, start: i32) -> i32 {
+fn try_While(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'w' { return -1; }
     pos += 1;
@@ -4873,7 +4873,7 @@ fn try_while(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_debugger(chars: &List<char>, start: i32) -> i32 {
+fn try_Debugger(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
@@ -4894,7 +4894,7 @@ fn try_debugger(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_function_(chars: &List<char>, start: i32) -> i32 {
+fn try_Function_(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'f' { return -1; }
     pos += 1;
@@ -4915,7 +4915,7 @@ fn try_function_(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_this(chars: &List<char>, start: i32) -> i32 {
+fn try_This(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 't' { return -1; }
     pos += 1;
@@ -4928,7 +4928,7 @@ fn try_this(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_with(chars: &List<char>, start: i32) -> i32 {
+fn try_With(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'w' { return -1; }
     pos += 1;
@@ -4941,7 +4941,7 @@ fn try_with(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_default(chars: &List<char>, start: i32) -> i32 {
+fn try_Default(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
@@ -4960,7 +4960,7 @@ fn try_default(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_if(chars: &List<char>, start: i32) -> i32 {
+fn try_If(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
@@ -4969,7 +4969,7 @@ fn try_if(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_throw(chars: &List<char>, start: i32) -> i32 {
+fn try_Throw(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 't' { return -1; }
     pos += 1;
@@ -4984,7 +4984,7 @@ fn try_throw(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_delete(chars: &List<char>, start: i32) -> i32 {
+fn try_Delete(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
@@ -5001,7 +5001,7 @@ fn try_delete(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_in(chars: &List<char>, start: i32) -> i32 {
+fn try_In(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
@@ -5010,7 +5010,7 @@ fn try_in(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_try(chars: &List<char>, start: i32) -> i32 {
+fn try_Try(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 't' { return -1; }
     pos += 1;
@@ -5021,7 +5021,7 @@ fn try_try(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_as(chars: &List<char>, start: i32) -> i32 {
+fn try_As(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
@@ -5030,7 +5030,7 @@ fn try_as(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_from(chars: &List<char>, start: i32) -> i32 {
+fn try_From(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'f' { return -1; }
     pos += 1;
@@ -5043,7 +5043,7 @@ fn try_from(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_readonly(chars: &List<char>, start: i32) -> i32 {
+fn try_ReadOnly(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'r' { return -1; }
     pos += 1;
@@ -5064,7 +5064,7 @@ fn try_readonly(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_async(chars: &List<char>, start: i32) -> i32 {
+fn try_Async(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
@@ -5079,7 +5079,7 @@ fn try_async(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_await(chars: &List<char>, start: i32) -> i32 {
+fn try_Await(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
@@ -5094,7 +5094,7 @@ fn try_await(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_yield(chars: &List<char>, start: i32) -> i32 {
+fn try_Yield(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'y' { return -1; }
     pos += 1;
@@ -5109,7 +5109,7 @@ fn try_yield(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_yieldstar(chars: &List<char>, start: i32) -> i32 {
+fn try_YieldStar(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'y' { return -1; }
     pos += 1;
@@ -5126,7 +5126,7 @@ fn try_yieldstar(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_class(chars: &List<char>, start: i32) -> i32 {
+fn try_Class(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -5141,7 +5141,7 @@ fn try_class(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_enum(chars: &List<char>, start: i32) -> i32 {
+fn try_Enum(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'e' { return -1; }
     pos += 1;
@@ -5154,7 +5154,7 @@ fn try_enum(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_super(chars: &List<char>, start: i32) -> i32 {
+fn try_Super(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 's' { return -1; }
     pos += 1;
@@ -5169,7 +5169,7 @@ fn try_super(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_const(chars: &List<char>, start: i32) -> i32 {
+fn try_Const(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -5184,7 +5184,7 @@ fn try_const(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_export(chars: &List<char>, start: i32) -> i32 {
+fn try_Export(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'e' { return -1; }
     pos += 1;
@@ -5201,7 +5201,7 @@ fn try_export(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_import(chars: &List<char>, start: i32) -> i32 {
+fn try_Import(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
@@ -5218,7 +5218,7 @@ fn try_import(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_implements(chars: &List<char>, start: i32) -> i32 {
+fn try_Implements(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
@@ -5243,7 +5243,7 @@ fn try_implements(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_let(chars: &List<char>, start: i32) -> i32 {
+fn try_Let(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'l' { return -1; }
     pos += 1;
@@ -5254,7 +5254,7 @@ fn try_let(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_private(chars: &List<char>, start: i32) -> i32 {
+fn try_Private(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'p' { return -1; }
     pos += 1;
@@ -5273,7 +5273,7 @@ fn try_private(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_public(chars: &List<char>, start: i32) -> i32 {
+fn try_Public(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'p' { return -1; }
     pos += 1;
@@ -5290,7 +5290,7 @@ fn try_public(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_interface(chars: &List<char>, start: i32) -> i32 {
+fn try_Interface(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
@@ -5313,7 +5313,7 @@ fn try_interface(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_package(chars: &List<char>, start: i32) -> i32 {
+fn try_Package(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'p' { return -1; }
     pos += 1;
@@ -5332,7 +5332,7 @@ fn try_package(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_protected(chars: &List<char>, start: i32) -> i32 {
+fn try_Protected(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'p' { return -1; }
     pos += 1;
@@ -5355,7 +5355,7 @@ fn try_protected(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_static(chars: &List<char>, start: i32) -> i32 {
+fn try_Static(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 's' { return -1; }
     pos += 1;
@@ -5372,7 +5372,7 @@ fn try_static(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_any(chars: &List<char>, start: i32) -> i32 {
+fn try_Any(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
@@ -5383,7 +5383,7 @@ fn try_any(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_number(chars: &List<char>, start: i32) -> i32 {
+fn try_Number(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'n' { return -1; }
     pos += 1;
@@ -5400,7 +5400,7 @@ fn try_number(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_never(chars: &List<char>, start: i32) -> i32 {
+fn try_Never(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'n' { return -1; }
     pos += 1;
@@ -5415,7 +5415,7 @@ fn try_never(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_boolean(chars: &List<char>, start: i32) -> i32 {
+fn try_Boolean(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'b' { return -1; }
     pos += 1;
@@ -5434,7 +5434,7 @@ fn try_boolean(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_string(chars: &List<char>, start: i32) -> i32 {
+fn try_String(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 's' { return -1; }
     pos += 1;
@@ -5451,7 +5451,7 @@ fn try_string(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_unique(chars: &List<char>, start: i32) -> i32 {
+fn try_Unique(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'u' { return -1; }
     pos += 1;
@@ -5468,7 +5468,7 @@ fn try_unique(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_symbol(chars: &List<char>, start: i32) -> i32 {
+fn try_Symbol(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 's' { return -1; }
     pos += 1;
@@ -5485,7 +5485,7 @@ fn try_symbol(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_undefined(chars: &List<char>, start: i32) -> i32 {
+fn try_Undefined(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'u' { return -1; }
     pos += 1;
@@ -5508,7 +5508,7 @@ fn try_undefined(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_object(chars: &List<char>, start: i32) -> i32 {
+fn try_Object(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'o' { return -1; }
     pos += 1;
@@ -5525,7 +5525,7 @@ fn try_object(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_of(chars: &List<char>, start: i32) -> i32 {
+fn try_Of(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'o' { return -1; }
     pos += 1;
@@ -5534,7 +5534,7 @@ fn try_of(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_keyof(chars: &List<char>, start: i32) -> i32 {
+fn try_KeyOf(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'k' { return -1; }
     pos += 1;
@@ -5549,7 +5549,7 @@ fn try_keyof(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_constructor(chars: &List<char>, start: i32) -> i32 {
+fn try_Constructor(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -5576,7 +5576,7 @@ fn try_constructor(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_namespace(chars: &List<char>, start: i32) -> i32 {
+fn try_Namespace(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'n' { return -1; }
     pos += 1;
@@ -5599,7 +5599,7 @@ fn try_namespace(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_require(chars: &List<char>, start: i32) -> i32 {
+fn try_Require(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'r' { return -1; }
     pos += 1;
@@ -5618,7 +5618,7 @@ fn try_require(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_module(chars: &List<char>, start: i32) -> i32 {
+fn try_Module(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'm' { return -1; }
     pos += 1;
@@ -5635,7 +5635,7 @@ fn try_module(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_declare(chars: &List<char>, start: i32) -> i32 {
+fn try_Declare(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
@@ -5654,7 +5654,7 @@ fn try_declare(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_abstract(chars: &List<char>, start: i32) -> i32 {
+fn try_Abstract(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
@@ -5675,7 +5675,7 @@ fn try_abstract(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_is(chars: &List<char>, start: i32) -> i32 {
+fn try_Is(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
@@ -5684,7 +5684,7 @@ fn try_is(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_identifier(chars: &List<char>, start: i32) -> i32 {
+fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_44 = pos;
     let mut alts_ok_44 = false;
@@ -5901,7 +5901,7 @@ fn try_identifier(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_stringliteral(chars: &List<char>, start: i32) -> i32 {
+fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_52 = pos;
     let mut alts_ok_52 = false;
@@ -6283,14 +6283,14 @@ fn try_stringliteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_backtick(chars: &List<char>, start: i32) -> i32 {
+fn try_BackTick(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '`' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_whitespaces(chars: &List<char>, start: i32) -> i32 {
+fn try_WhiteSpaces(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == '\t' || chars[pos] == '\u{b}' || chars[pos] == '\u{c}' || chars[pos] == ' ' || chars[pos] == '\u{a0}') { return -1; }
@@ -6309,7 +6309,7 @@ fn try_whitespaces(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lineterminator(chars: &List<char>, start: i32) -> i32 {
+fn try_LineTerminator(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{2028}' || chars[pos] == '\u{2029}') { return -1; }
@@ -6317,7 +6317,7 @@ fn try_lineterminator(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_htmlcomment(chars: &List<char>, start: i32) -> i32 {
+fn try_HtmlComment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '<' { return -1; }
     pos += 1;
@@ -6349,7 +6349,7 @@ fn try_htmlcomment(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_cdatacomment(chars: &List<char>, start: i32) -> i32 {
+fn try_CDataComment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '<' { return -1; }
     pos += 1;
@@ -6391,14 +6391,14 @@ fn try_cdatacomment(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_unexpectedcharacter(chars: &List<char>, start: i32) -> i32 {
+fn try_UnexpectedCharacter(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_templatestringescapeatom(chars: &List<char>, start: i32) -> i32 {
+fn try_TemplateStringEscapeAtom(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\\' { return -1; }
     pos += 1;
@@ -6407,14 +6407,14 @@ fn try_templatestringescapeatom(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_backtickinside(chars: &List<char>, start: i32) -> i32 {
+fn try_BackTickInside(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '`' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_templatestringstartexpression(chars: &List<char>, start: i32) -> i32 {
+fn try_TemplateStringStartExpression(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '$' { return -1; }
     pos += 1;
@@ -6423,7 +6423,7 @@ fn try_templatestringstartexpression(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_templatestringatom(chars: &List<char>, start: i32) -> i32 {
+fn try_TemplateStringAtom(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if false || chars[pos] == '`' || chars[pos] == '\\' { return -1; }
@@ -6965,186 +6965,186 @@ pub fn tokenize(input: &String) -> List<Token> {
             if end > best_end { best_end = end; best_kind = TK_LIT_STARSTAREQ; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
             end = try_lit_questionquestioneq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_QUESTIONQUESTIONEQ; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_multilinecomment(&lexer.chars, start);
+            end = try_MultiLineComment(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_MultiLineComment; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
-            end = try_singlelinecomment(&lexer.chars, start);
+            end = try_SingleLineComment(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SingleLineComment; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
-            end = try_regularexpressionliteral(&lexer.chars, start);
+            end = try_RegularExpressionLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RegularExpressionLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_semicolon(&lexer.chars, start);
+            end = try_SemiColon(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SemiColon; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_nullliteral(&lexer.chars, start);
+            end = try_NullLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NullLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_booleanliteral(&lexer.chars, start);
+            end = try_BooleanLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BooleanLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_decimalliteral(&lexer.chars, start);
+            end = try_DecimalLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_hexintegerliteral(&lexer.chars, start);
+            end = try_HexIntegerLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_HexIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_octalintegerliteral(&lexer.chars, start);
+            end = try_OctalIntegerLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OctalIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_octalintegerliteral2(&lexer.chars, start);
+            end = try_OctalIntegerLiteral2(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OctalIntegerLiteral2; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_binaryintegerliteral(&lexer.chars, start);
+            end = try_BinaryIntegerLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BinaryIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_bighexintegerliteral(&lexer.chars, start);
+            end = try_BigHexIntegerLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BigHexIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_bigoctalintegerliteral(&lexer.chars, start);
+            end = try_BigOctalIntegerLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BigOctalIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_bigbinaryintegerliteral(&lexer.chars, start);
+            end = try_BigBinaryIntegerLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BigBinaryIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_bigdecimalintegerliteral(&lexer.chars, start);
+            end = try_BigDecimalIntegerLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BigDecimalIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_break(&lexer.chars, start);
+            end = try_Break(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Break; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_do(&lexer.chars, start);
+            end = try_Do(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Do; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_instanceof(&lexer.chars, start);
+            end = try_Instanceof(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Instanceof; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_case(&lexer.chars, start);
+            end = try_Case(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Case; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_else(&lexer.chars, start);
+            end = try_Else(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Else; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_var(&lexer.chars, start);
+            end = try_Var(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Var; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_catch(&lexer.chars, start);
+            end = try_Catch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Catch; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_finally(&lexer.chars, start);
+            end = try_Finally(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Finally; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_return(&lexer.chars, start);
+            end = try_Return(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Return; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_void(&lexer.chars, start);
+            end = try_Void(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Void; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_continue(&lexer.chars, start);
+            end = try_Continue(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Continue; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_for(&lexer.chars, start);
+            end = try_For(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_For; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_switch(&lexer.chars, start);
+            end = try_Switch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Switch; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_while(&lexer.chars, start);
+            end = try_While(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_While; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_debugger(&lexer.chars, start);
+            end = try_Debugger(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Debugger; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_this(&lexer.chars, start);
+            end = try_This(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_This; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_with(&lexer.chars, start);
+            end = try_With(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_With; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_default(&lexer.chars, start);
+            end = try_Default(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Default; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_if(&lexer.chars, start);
+            end = try_If(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_If; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_throw(&lexer.chars, start);
+            end = try_Throw(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Throw; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_delete(&lexer.chars, start);
+            end = try_Delete(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Delete; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_in(&lexer.chars, start);
+            end = try_In(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_In; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_try(&lexer.chars, start);
+            end = try_Try(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Try; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_as(&lexer.chars, start);
+            end = try_As(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_As; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_from(&lexer.chars, start);
+            end = try_From(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_From; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_readonly(&lexer.chars, start);
+            end = try_ReadOnly(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ReadOnly; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_async(&lexer.chars, start);
+            end = try_Async(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Async; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_await(&lexer.chars, start);
+            end = try_Await(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Await; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_yield(&lexer.chars, start);
+            end = try_Yield(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Yield; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_yieldstar(&lexer.chars, start);
+            end = try_YieldStar(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_YieldStar; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_class(&lexer.chars, start);
+            end = try_Class(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Class; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_enum(&lexer.chars, start);
+            end = try_Enum(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Enum; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_super(&lexer.chars, start);
+            end = try_Super(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Super; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_const(&lexer.chars, start);
+            end = try_Const(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Const; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_export(&lexer.chars, start);
+            end = try_Export(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Export; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_import(&lexer.chars, start);
+            end = try_Import(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Import; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_implements(&lexer.chars, start);
+            end = try_Implements(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Implements; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_let(&lexer.chars, start);
+            end = try_Let(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Let; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_private(&lexer.chars, start);
+            end = try_Private(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Private; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_public(&lexer.chars, start);
+            end = try_Public(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Public; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_interface(&lexer.chars, start);
+            end = try_Interface(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Interface; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_package(&lexer.chars, start);
+            end = try_Package(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Package; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_protected(&lexer.chars, start);
+            end = try_Protected(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Protected; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_static(&lexer.chars, start);
+            end = try_Static(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Static; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_any(&lexer.chars, start);
+            end = try_Any(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Any; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_never(&lexer.chars, start);
+            end = try_Never(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Never; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_boolean(&lexer.chars, start);
+            end = try_Boolean(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Boolean; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_string(&lexer.chars, start);
+            end = try_String(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_String; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_unique(&lexer.chars, start);
+            end = try_Unique(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Unique; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_symbol(&lexer.chars, start);
+            end = try_Symbol(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Symbol; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_undefined(&lexer.chars, start);
+            end = try_Undefined(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Undefined; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_object(&lexer.chars, start);
+            end = try_Object(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Object; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_of(&lexer.chars, start);
+            end = try_Of(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Of; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_keyof(&lexer.chars, start);
+            end = try_KeyOf(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KeyOf; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_constructor(&lexer.chars, start);
+            end = try_Constructor(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Constructor; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_namespace(&lexer.chars, start);
+            end = try_Namespace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Namespace; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_require(&lexer.chars, start);
+            end = try_Require(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Require; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_module(&lexer.chars, start);
+            end = try_Module(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Module; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_declare(&lexer.chars, start);
+            end = try_Declare(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Declare; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_abstract(&lexer.chars, start);
+            end = try_Abstract(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Abstract; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_is(&lexer.chars, start);
+            end = try_Is(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Is; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_identifier(&lexer.chars, start);
+            end = try_Identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Identifier; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_stringliteral(&lexer.chars, start);
+            end = try_StringLiteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_StringLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_backtick(&lexer.chars, start);
+            end = try_BackTick(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BackTick; best_push_mode = 1; best_pop_mode = false; best_channel = 0; }
-            end = try_whitespaces(&lexer.chars, start);
+            end = try_WhiteSpaces(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WhiteSpaces; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
-            end = try_lineterminator(&lexer.chars, start);
+            end = try_LineTerminator(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LineTerminator; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
-            end = try_htmlcomment(&lexer.chars, start);
+            end = try_HtmlComment(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_HtmlComment; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
-            end = try_cdatacomment(&lexer.chars, start);
+            end = try_CDataComment(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_CDataComment; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
-            end = try_unexpectedcharacter(&lexer.chars, start);
+            end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_push_mode = -1; best_pop_mode = false; best_channel = 2; }
         } else if current_mode == 1 {
-            end = try_templatestringescapeatom(&lexer.chars, start);
+            end = try_TemplateStringEscapeAtom(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_TemplateStringEscapeAtom; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-            end = try_backtickinside(&lexer.chars, start);
+            end = try_BackTickInside(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BackTick; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
-            end = try_templatestringstartexpression(&lexer.chars, start);
+            end = try_TemplateStringStartExpression(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_TemplateStringStartExpression; best_push_mode = 0; best_pop_mode = false; best_channel = 0; }
-            end = try_templatestringatom(&lexer.chars, start);
+            end = try_TemplateStringAtom(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_TemplateStringAtom; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode) {

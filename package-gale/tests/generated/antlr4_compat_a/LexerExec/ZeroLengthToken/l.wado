@@ -534,26 +534,26 @@ impl Lexer {
     }
 }
 
-fn try_beginstring(chars: &List<char>, start: i32) -> i32 {
+fn try_BeginString(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_stringmode_x(chars: &List<char>, start: i32) -> i32 {
+fn try_StringMode_X(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'x' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_stringmode_done(chars: &List<char>, start: i32) -> i32 {
+fn try_StringMode_Done(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     return pos;
 }
 
-fn try_endstring(chars: &List<char>, start: i32) -> i32 {
+fn try_EndString(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
@@ -578,15 +578,15 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut best_set_mode: i32 = -1;
         let mut best_more = false;
         if current_mode == 0 {
-            end = try_beginstring(&lexer.chars, start);
+            end = try_BeginString(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BeginString; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = true; }
         } else if current_mode == 1 {
-            end = try_stringmode_x(&lexer.chars, start);
+            end = try_StringMode_X(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_StringMode_X; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; }
-            end = try_stringmode_done(&lexer.chars, start);
+            end = try_StringMode_Done(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_StringMode_Done; best_push_mode = -1; best_pop_mode = false; best_set_mode = 2; best_more = true; }
         } else if current_mode == 2 {
-            end = try_endstring(&lexer.chars, start);
+            end = try_EndString(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_EndString; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {

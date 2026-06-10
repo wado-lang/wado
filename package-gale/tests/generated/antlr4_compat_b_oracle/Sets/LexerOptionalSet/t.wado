@@ -533,7 +533,7 @@ impl Lexer {
     }
 }
 
-fn try_a(chars: &List<char>, start: i32) -> i32 {
+fn try_A(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let opt_saved_0 = pos;
     let mut opt_ok_0 = false;
@@ -573,7 +573,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        end = try_a(&lexer.chars, start);
+        end = try_A(&lexer.chars, start);
         if end > best_end { best_end = end; best_kind = TK_A; }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);

@@ -546,7 +546,7 @@ impl Lexer {
     }
 }
 
-fn try_plain(chars: &List<char>, start: i32) -> i32 {
+fn try_PLAIN(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z') { return -1; }
@@ -565,14 +565,14 @@ fn try_plain(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_quote(chars: &List<char>, start: i32) -> i32 {
+fn try_QUOTE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
@@ -591,14 +591,14 @@ fn try_ws(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_str_esc_begin(chars: &List<char>, start: i32) -> i32 {
+fn try_STR_ESC_BEGIN(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\\' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_str_char(chars: &List<char>, start: i32) -> i32 {
+fn try_STR_CHAR(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if false || chars[pos] == '\\' || chars[pos] == '"' { return -1; }
@@ -606,14 +606,14 @@ fn try_str_char(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_string(chars: &List<char>, start: i32) -> i32 {
+fn try_STRING(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_esc_char(chars: &List<char>, start: i32) -> i32 {
+fn try_ESC_CHAR(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     pos += 1;
@@ -638,21 +638,21 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut best_set_mode: i32 = -1;
         let mut best_more = false;
         if current_mode == 0 {
-            end = try_plain(&lexer.chars, start);
+            end = try_PLAIN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PLAIN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; }
-            end = try_quote(&lexer.chars, start);
+            end = try_QUOTE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_QUOTE; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = true; }
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; }
         } else if current_mode == 1 {
-            end = try_str_esc_begin(&lexer.chars, start);
+            end = try_STR_ESC_BEGIN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STR_ESC_BEGIN; best_push_mode = -1; best_pop_mode = false; best_set_mode = 2; best_more = true; }
-            end = try_str_char(&lexer.chars, start);
+            end = try_STR_CHAR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STR_CHAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; }
-            end = try_string(&lexer.chars, start);
+            end = try_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STRING; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; }
         } else if current_mode == 2 {
-            end = try_esc_char(&lexer.chars, start);
+            end = try_ESC_CHAR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ESC_CHAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = 1; best_more = true; }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {

@@ -2418,7 +2418,7 @@ impl Lexer {
     }
 }
 
-fn try_comment(chars: &List<char>, start: i32) -> i32 {
+fn try_Comment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -2502,7 +2502,7 @@ fn try_comment(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_url(chars: &List<char>, start: i32) -> i32 {
+fn try_Url(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_7 = pos;
     let mut alts_ok_7 = false;
@@ -2882,7 +2882,7 @@ fn try_url(chars: &List<char>, start: i32) -> i32 {
     let mut alts_ok_28 = false;
     alts_28_0: {
         pos = alts_saved_28;
-        pos = try_space(chars, pos);
+        pos = try_Space(chars, pos);
         if pos < 0 { break alts_28_0; }
         alts_ok_28 = true;
     }
@@ -3024,7 +3024,7 @@ fn try_url(chars: &List<char>, start: i32) -> i32 {
     let mut alts_ok_38 = false;
     alts_38_0: {
         pos = alts_saved_38;
-        pos = try_space(chars, pos);
+        pos = try_Space(chars, pos);
         if pos < 0 { break alts_38_0; }
         alts_ok_38 = true;
     }
@@ -3040,7 +3040,7 @@ fn try_url(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_space(chars: &List<char>, start: i32) -> i32 {
+fn try_Space(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == 'f') { return -1; }
@@ -3059,7 +3059,7 @@ fn try_space(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_cdo(chars: &List<char>, start: i32) -> i32 {
+fn try_Cdo(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '<' { return -1; }
     pos += 1;
@@ -3072,7 +3072,7 @@ fn try_cdo(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_cdc(chars: &List<char>, start: i32) -> i32 {
+fn try_Cdc(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
@@ -3083,7 +3083,7 @@ fn try_cdc(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_includes(chars: &List<char>, start: i32) -> i32 {
+fn try_Includes(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '~' { return -1; }
     pos += 1;
@@ -3092,7 +3092,7 @@ fn try_includes(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_dashmatch(chars: &List<char>, start: i32) -> i32 {
+fn try_DashMatch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '|' { return -1; }
     pos += 1;
@@ -3101,7 +3101,7 @@ fn try_dashmatch(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_hash(chars: &List<char>, start: i32) -> i32 {
+fn try_Hash(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '#' { return -1; }
     pos += 1;
@@ -3354,7 +3354,7 @@ fn try_hash(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_import(chars: &List<char>, start: i32) -> i32 {
+fn try_Import(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -4105,7 +4105,7 @@ fn try_import(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_page(chars: &List<char>, start: i32) -> i32 {
+fn try_Page(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -4568,7 +4568,7 @@ fn try_page(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_media(chars: &List<char>, start: i32) -> i32 {
+fn try_Media(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -5135,7 +5135,7 @@ fn try_media(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_namespace(chars: &List<char>, start: i32) -> i32 {
+fn try_Namespace(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -6158,7 +6158,7 @@ fn try_namespace(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_charset(chars: &List<char>, start: i32) -> i32 {
+fn try_Charset(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -6181,7 +6181,7 @@ fn try_charset(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_important(chars: &List<char>, start: i32) -> i32 {
+fn try_Important(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '!' { return -1; }
     pos += 1;
@@ -6192,14 +6192,14 @@ fn try_important(chars: &List<char>, start: i32) -> i32 {
             let mut alts_ok_226 = false;
             alts_226_0: {
                 pos = alts_saved_226;
-                pos = try_space(chars, pos);
+                pos = try_Space(chars, pos);
                 if pos < 0 { break alts_226_0; }
                 alts_ok_226 = true;
             }
             if !alts_ok_226 {
                 alts_226_1: {
                     pos = alts_saved_226;
-                    pos = try_comment(chars, pos);
+                    pos = try_Comment(chars, pos);
                     if pos < 0 { break alts_226_1; }
                     alts_ok_226 = true;
                 }
@@ -7309,16 +7309,16 @@ fn try_important(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_percentage(chars: &List<char>, start: i32) -> i32 {
+fn try_Percentage(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    pos = try_number(chars, pos);
+    pos = try_Number(chars, pos);
     if pos < 0 { return -1; }
     if pos >= chars.len() || chars[pos] != '%' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_url_(chars: &List<char>, start: i32) -> i32 {
+fn try_Url_(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'u' { return -1; }
     pos += 1;
@@ -7331,7 +7331,7 @@ fn try_url_(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_unicoderange(chars: &List<char>, start: i32) -> i32 {
+fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_290 = pos;
     let mut alts_ok_290 = false;
@@ -7610,7 +7610,7 @@ fn try_unicoderange(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_mediaonly(chars: &List<char>, start: i32) -> i32 {
+fn try_MediaOnly(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_311 = pos;
     let mut alts_ok_311 = false;
@@ -8111,7 +8111,7 @@ fn try_mediaonly(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_not(chars: &List<char>, start: i32) -> i32 {
+fn try_Not(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_339 = pos;
     let mut alts_ok_339 = false;
@@ -8488,7 +8488,7 @@ fn try_not(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_and(chars: &List<char>, start: i32) -> i32 {
+fn try_And(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_360 = pos;
     let mut alts_ok_360 = false;
@@ -8825,7 +8825,7 @@ fn try_and(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_dimension(chars: &List<char>, start: i32) -> i32 {
+fn try_Dimension(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_381 = pos;
     let mut alts_ok_381 = false;
@@ -8839,7 +8839,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
             let mut alts_ok_383 = false;
             alts_383_0: {
                 pos = alts_saved_383;
-                pos = try_number(chars, pos);
+                pos = try_Number(chars, pos);
                 if pos < 0 { break alts_383_0; }
                 let alts_saved_384 = pos;
                 let mut alts_ok_384 = false;
@@ -9094,7 +9094,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
             if !alts_ok_383 {
                 alts_383_1: {
                     pos = alts_saved_383;
-                    pos = try_number(chars, pos);
+                    pos = try_Number(chars, pos);
                     if pos < 0 { break alts_383_1; }
                     let alts_saved_398 = pos;
                     let mut alts_ok_398 = false;
@@ -9329,7 +9329,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                 if !alts_ok_383 {
                     alts_383_2: {
                         pos = alts_saved_383;
-                        pos = try_number(chars, pos);
+                        pos = try_Number(chars, pos);
                         if pos < 0 { break alts_383_2; }
                         let alts_saved_412 = pos;
                         let mut alts_ok_412 = false;
@@ -9584,7 +9584,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                     if !alts_ok_383 {
                         alts_383_3: {
                             pos = alts_saved_383;
-                            pos = try_number(chars, pos);
+                            pos = try_Number(chars, pos);
                             if pos < 0 { break alts_383_3; }
                             let alts_saved_426 = pos;
                             let mut alts_ok_426 = false;
@@ -9839,7 +9839,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                         if !alts_ok_383 {
                             alts_383_4: {
                                 pos = alts_saved_383;
-                                pos = try_number(chars, pos);
+                                pos = try_Number(chars, pos);
                                 if pos < 0 { break alts_383_4; }
                                 let alts_saved_440 = pos;
                                 let mut alts_ok_440 = false;
@@ -10094,7 +10094,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                             if !alts_ok_383 {
                                 alts_383_5: {
                                     pos = alts_saved_383;
-                                    pos = try_number(chars, pos);
+                                    pos = try_Number(chars, pos);
                                     if pos < 0 { break alts_383_5; }
                                     let alts_saved_454 = pos;
                                     let mut alts_ok_454 = false;
@@ -10329,7 +10329,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                                 if !alts_ok_383 {
                                     alts_383_6: {
                                         pos = alts_saved_383;
-                                        pos = try_number(chars, pos);
+                                        pos = try_Number(chars, pos);
                                         if pos < 0 { break alts_383_6; }
                                         let alts_saved_468 = pos;
                                         let mut alts_ok_468 = false;
@@ -10473,7 +10473,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                 let mut alts_ok_475 = false;
                 alts_475_0: {
                     pos = alts_saved_475;
-                    pos = try_number(chars, pos);
+                    pos = try_Number(chars, pos);
                     if pos < 0 { break alts_475_0; }
                     let alts_saved_476 = pos;
                     let mut alts_ok_476 = false;
@@ -10708,7 +10708,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                 if !alts_ok_475 {
                     alts_475_1: {
                         pos = alts_saved_475;
-                        pos = try_number(chars, pos);
+                        pos = try_Number(chars, pos);
                         if pos < 0 { break alts_475_1; }
                         let alts_saved_490 = pos;
                         let mut alts_ok_490 = false;
@@ -10943,7 +10943,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                     if !alts_ok_475 {
                         alts_475_2: {
                             pos = alts_saved_475;
-                            pos = try_number(chars, pos);
+                            pos = try_Number(chars, pos);
                             if pos < 0 { break alts_475_2; }
                             let alts_saved_504 = pos;
                             let mut alts_ok_504 = false;
@@ -11178,7 +11178,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                         if !alts_ok_475 {
                             alts_475_3: {
                                 pos = alts_saved_475;
-                                pos = try_number(chars, pos);
+                                pos = try_Number(chars, pos);
                                 if pos < 0 { break alts_475_3; }
                                 let alts_saved_518 = pos;
                                 let mut alts_ok_518 = false;
@@ -11547,7 +11547,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                     let mut alts_ok_539 = false;
                     alts_539_0: {
                         pos = alts_saved_539;
-                        pos = try_number(chars, pos);
+                        pos = try_Number(chars, pos);
                         if pos < 0 { break alts_539_0; }
                         let alts_saved_540 = pos;
                         let mut alts_ok_540 = false;
@@ -11802,7 +11802,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                     if !alts_ok_539 {
                         alts_539_1: {
                             pos = alts_saved_539;
-                            pos = try_number(chars, pos);
+                            pos = try_Number(chars, pos);
                             if pos < 0 { break alts_539_1; }
                             let alts_saved_554 = pos;
                             let mut alts_ok_554 = false;
@@ -12057,7 +12057,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                         if !alts_ok_539 {
                             alts_539_2: {
                                 pos = alts_saved_539;
-                                pos = try_number(chars, pos);
+                                pos = try_Number(chars, pos);
                                 if pos < 0 { break alts_539_2; }
                                 let alts_saved_568 = pos;
                                 let mut alts_ok_568 = false;
@@ -12560,7 +12560,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                             if !alts_ok_539 {
                                 alts_539_3: {
                                     pos = alts_saved_539;
-                                    pos = try_number(chars, pos);
+                                    pos = try_Number(chars, pos);
                                     if pos < 0 { break alts_539_3; }
                                     let alts_saved_596 = pos;
                                     let mut alts_ok_596 = false;
@@ -13058,7 +13058,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
             let mut alts_ok_624 = false;
             alts_624_0: {
                 pos = alts_saved_624;
-                pos = try_number(chars, pos);
+                pos = try_Number(chars, pos);
                 if pos < 0 { break alts_624_0; }
                 let alts_saved_625 = pos;
                 let mut alts_ok_625 = false;
@@ -13313,7 +13313,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
             if !alts_ok_624 {
                 alts_624_1: {
                     pos = alts_saved_624;
-                    pos = try_number(chars, pos);
+                    pos = try_Number(chars, pos);
                     if pos < 0 { break alts_624_1; }
                     let alts_saved_639 = pos;
                     let mut alts_ok_639 = false;
@@ -13452,7 +13452,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                 let mut alts_ok_646 = false;
                 alts_646_0: {
                     pos = alts_saved_646;
-                    pos = try_number(chars, pos);
+                    pos = try_Number(chars, pos);
                     if pos < 0 { break alts_646_0; }
                     let alts_saved_647 = pos;
                     let mut alts_ok_647 = false;
@@ -13707,7 +13707,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                 if !alts_ok_646 {
                     alts_646_1: {
                         pos = alts_saved_646;
-                        pos = try_number(chars, pos);
+                        pos = try_Number(chars, pos);
                         if pos < 0 { break alts_646_1; }
                         let alts_saved_661 = pos;
                         let mut alts_ok_661 = false;
@@ -14094,7 +14094,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                     let mut alts_ok_682 = false;
                     alts_682_0: {
                         pos = alts_saved_682;
-                        pos = try_number(chars, pos);
+                        pos = try_Number(chars, pos);
                         if pos < 0 { break alts_682_0; }
                         let alts_saved_683 = pos;
                         let mut alts_ok_683 = false;
@@ -14453,7 +14453,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                     if !alts_ok_682 {
                         alts_682_1: {
                             pos = alts_saved_682;
-                            pos = try_number(chars, pos);
+                            pos = try_Number(chars, pos);
                             if pos < 0 { break alts_682_1; }
                             let alts_saved_704 = pos;
                             let mut alts_ok_704 = false;
@@ -14916,7 +14916,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                         if !alts_ok_682 {
                             alts_682_2: {
                                 pos = alts_saved_682;
-                                pos = try_number(chars, pos);
+                                pos = try_Number(chars, pos);
                                 if pos < 0 { break alts_682_2; }
                                 let alts_saved_732 = pos;
                                 let mut alts_ok_732 = false;
@@ -15408,7 +15408,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                         let mut alts_ok_760 = false;
                         alts_760_0: {
                             pos = alts_saved_760;
-                            pos = try_number(chars, pos);
+                            pos = try_Number(chars, pos);
                             if pos < 0 { break alts_760_0; }
                             let alts_saved_761 = pos;
                             let mut alts_ok_761 = false;
@@ -15747,7 +15747,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                         if !alts_ok_760 {
                             alts_760_1: {
                                 pos = alts_saved_760;
-                                pos = try_number(chars, pos);
+                                pos = try_Number(chars, pos);
                                 if pos < 0 { break alts_760_1; }
                                 let alts_saved_782 = pos;
                                 let mut alts_ok_782 = false;
@@ -16086,7 +16086,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                             if !alts_ok_760 {
                                 alts_760_2: {
                                     pos = alts_saved_760;
-                                    pos = try_number(chars, pos);
+                                    pos = try_Number(chars, pos);
                                     if pos < 0 { break alts_760_2; }
                                     let alts_saved_803 = pos;
                                     let mut alts_ok_803 = false;
@@ -16549,7 +16549,7 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
                                 if !alts_ok_760 {
                                     alts_760_3: {
                                         pos = alts_saved_760;
-                                        pos = try_number(chars, pos);
+                                        pos = try_Number(chars, pos);
                                         if pos < 0 { break alts_760_3; }
                                         let alts_saved_831 = pos;
                                         let mut alts_ok_831 = false;
@@ -17063,51 +17063,51 @@ fn try_dimension(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_unknowndimension(chars: &List<char>, start: i32) -> i32 {
+fn try_UnknownDimension(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    pos = try_number(chars, pos);
+    pos = try_Number(chars, pos);
     if pos < 0 { return -1; }
-    pos = try_ident(chars, pos);
+    pos = try_Ident(chars, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn try_plus(chars: &List<char>, start: i32) -> i32 {
+fn try_Plus(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '+' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_minus(chars: &List<char>, start: i32) -> i32 {
+fn try_Minus(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_greater(chars: &List<char>, start: i32) -> i32 {
+fn try_Greater(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '>' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_comma(chars: &List<char>, start: i32) -> i32 {
+fn try_Comma(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ',' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_tilde(chars: &List<char>, start: i32) -> i32 {
+fn try_Tilde(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '~' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_pseudonot(chars: &List<char>, start: i32) -> i32 {
+fn try_PseudoNot(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ':' { return -1; }
     pos += 1;
@@ -17488,7 +17488,7 @@ fn try_pseudonot(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_number(chars: &List<char>, start: i32) -> i32 {
+fn try_Number(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_880 = pos;
     let mut alts_ok_880 = false;
@@ -17547,7 +17547,7 @@ fn try_number(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_string_(chars: &List<char>, start: i32) -> i32 {
+fn try_String_(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_884 = pos;
     let mut alts_ok_884 = false;
@@ -17913,7 +17913,7 @@ fn try_string_(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_prefixmatch(chars: &List<char>, start: i32) -> i32 {
+fn try_PrefixMatch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '^' { return -1; }
     pos += 1;
@@ -17922,7 +17922,7 @@ fn try_prefixmatch(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_suffixmatch(chars: &List<char>, start: i32) -> i32 {
+fn try_SuffixMatch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '$' { return -1; }
     pos += 1;
@@ -17931,7 +17931,7 @@ fn try_suffixmatch(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_substringmatch(chars: &List<char>, start: i32) -> i32 {
+fn try_SubstringMatch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '*' { return -1; }
     pos += 1;
@@ -17940,7 +17940,7 @@ fn try_substringmatch(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_fontface(chars: &List<char>, start: i32) -> i32 {
+fn try_FontFace(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -18918,7 +18918,7 @@ fn try_fontface(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_supports(chars: &List<char>, start: i32) -> i32 {
+fn try_Supports(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -19917,7 +19917,7 @@ fn try_supports(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_or(chars: &List<char>, start: i32) -> i32 {
+fn try_Or(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_1023 = pos;
     let mut alts_ok_1023 = false;
@@ -20170,7 +20170,7 @@ fn try_or(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_keyframes(chars: &List<char>, start: i32) -> i32 {
+fn try_Keyframes(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -22450,7 +22450,7 @@ fn try_keyframes(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_from(chars: &List<char>, start: i32) -> i32 {
+fn try_From(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_1172 = pos;
     let mut alts_ok_1172 = false;
@@ -22931,7 +22931,7 @@ fn try_from(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_to(chars: &List<char>, start: i32) -> i32 {
+fn try_To(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_1200 = pos;
     let mut alts_ok_1200 = false;
@@ -23184,7 +23184,7 @@ fn try_to(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_calc(chars: &List<char>, start: i32) -> i32 {
+fn try_Calc(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -23199,7 +23199,7 @@ fn try_calc(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_viewport(chars: &List<char>, start: i32) -> i32 {
+fn try_Viewport(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -24178,7 +24178,7 @@ fn try_viewport(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_counterstyle(chars: &List<char>, start: i32) -> i32 {
+fn try_CounterStyle(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -25692,7 +25692,7 @@ fn try_counterstyle(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_fontfeaturevalues(chars: &List<char>, start: i32) -> i32 {
+fn try_FontFeatureValues(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -27825,7 +27825,7 @@ fn try_fontfeaturevalues(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_dximagetransform(chars: &List<char>, start: i32) -> i32 {
+fn try_DxImageTransform(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'p' { return -1; }
     pos += 1;
@@ -27895,21 +27895,21 @@ fn try_dximagetransform(chars: &List<char>, start: i32) -> i32 {
     pos += 1;
     if pos >= chars.len() || chars[pos] != '.' { return -1; }
     pos += 1;
-    pos = try_function_(chars, pos);
+    pos = try_Function_(chars, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn try_atkeyword(chars: &List<char>, start: i32) -> i32 {
+fn try_AtKeyword(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
-    pos = try_ident(chars, pos);
+    pos = try_Ident(chars, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn try_variable(chars: &List<char>, start: i32) -> i32 {
+fn try_Variable(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
@@ -28164,7 +28164,7 @@ fn try_variable(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_var(chars: &List<char>, start: i32) -> i32 {
+fn try_Var(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'v' { return -1; }
     pos += 1;
@@ -28177,7 +28177,7 @@ fn try_var(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ident(chars: &List<char>, start: i32) -> i32 {
+fn try_Ident(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let opt_saved_1508 = pos;
     let mut opt_ok_1508 = false;
@@ -28436,16 +28436,16 @@ fn try_ident(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_function_(chars: &List<char>, start: i32) -> i32 {
+fn try_Function_(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    pos = try_ident(chars, pos);
+    pos = try_Ident(chars, pos);
     if pos < 0 { return -1; }
     if pos >= chars.len() || chars[pos] != '(' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_unexpectedcharacter(chars: &List<char>, start: i32) -> i32 {
+fn try_UnexpectedCharacter(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     pos += 1;
@@ -28556,650 +28556,650 @@ pub fn tokenize(input: &String) -> List<Token> {
         let first_char = lexer.chars[start];
         let mut best_channel: i32 = 0;
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
-            end = try_space(&lexer.chars, start);
+            end = try_Space(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Space; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '!' {
-            end = try_important(&lexer.chars, start);
+            end = try_Important(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Important; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '"' || first_char == '\'' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_string_(&lexer.chars, start);
+            end = try_String_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_String_; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '#' {
-            end = try_hash(&lexer.chars, start);
+            end = try_Hash(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Hash; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '$' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_suffixmatch(&lexer.chars, start);
+            end = try_SuffixMatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SuffixMatch; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '(' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LPAREN; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == ')' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RPAREN; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '*' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_STAR; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_substringmatch(&lexer.chars, start);
+            end = try_SubstringMatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SubstringMatch; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '+' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_plus(&lexer.chars, start);
+            end = try_Plus(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Plus; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == ',' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_comma(&lexer.chars, start);
+            end = try_Comma(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Comma; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '-' {
-            end = try_cdc(&lexer.chars, start);
+            end = try_Cdc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Cdc; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_minus(&lexer.chars, start);
+            end = try_Minus(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Minus; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_variable(&lexer.chars, start);
+            end = try_Variable(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Variable; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '.' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_DOT; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '/' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SLASH; best_channel = 0; }
-            end = try_comment(&lexer.chars, start);
+            end = try_Comment(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Comment; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == ':' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_COLON; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_pseudonot(&lexer.chars, start);
+            end = try_PseudoNot(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PseudoNot; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == ';' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SEMI; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '<' {
-            end = try_cdo(&lexer.chars, start);
+            end = try_Cdo(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Cdo; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '=' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_EQ; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '>' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_greater(&lexer.chars, start);
+            end = try_Greater(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Greater; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '@' {
-            end = try_import(&lexer.chars, start);
+            end = try_Import(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Import; best_channel = 0; }
-            end = try_page(&lexer.chars, start);
+            end = try_Page(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Page; best_channel = 0; }
-            end = try_media(&lexer.chars, start);
+            end = try_Media(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Media; best_channel = 0; }
-            end = try_namespace(&lexer.chars, start);
+            end = try_Namespace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Namespace; best_channel = 0; }
-            end = try_charset(&lexer.chars, start);
+            end = try_Charset(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Charset; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_fontface(&lexer.chars, start);
+            end = try_FontFace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FontFace; best_channel = 0; }
-            end = try_supports(&lexer.chars, start);
+            end = try_Supports(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Supports; best_channel = 0; }
-            end = try_keyframes(&lexer.chars, start);
+            end = try_Keyframes(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Keyframes; best_channel = 0; }
-            end = try_viewport(&lexer.chars, start);
+            end = try_Viewport(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Viewport; best_channel = 0; }
-            end = try_counterstyle(&lexer.chars, start);
+            end = try_CounterStyle(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_CounterStyle; best_channel = 0; }
-            end = try_fontfeaturevalues(&lexer.chars, start);
+            end = try_FontFeatureValues(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FontFeatureValues; best_channel = 0; }
-            end = try_atkeyword(&lexer.chars, start);
+            end = try_AtKeyword(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'A' || first_char == 'a' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_and(&lexer.chars, start);
+            end = try_And(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_And; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'F' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_from(&lexer.chars, start);
+            end = try_From(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_From; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'N' || first_char == 'n' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_not(&lexer.chars, start);
+            end = try_Not(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Not; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'O' || first_char == 'o' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_mediaonly(&lexer.chars, start);
+            end = try_MediaOnly(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_MediaOnly; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_or(&lexer.chars, start);
+            end = try_Or(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Or; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'T' || first_char == 't' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_to(&lexer.chars, start);
+            end = try_To(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_To; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'U' {
-            end = try_url(&lexer.chars, start);
+            end = try_Url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_unicoderange(&lexer.chars, start);
+            end = try_UnicodeRange(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnicodeRange; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '[' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LBRACKET; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '\\' {
-            end = try_url(&lexer.chars, start);
+            end = try_Url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_mediaonly(&lexer.chars, start);
+            end = try_MediaOnly(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_MediaOnly; best_channel = 0; }
-            end = try_not(&lexer.chars, start);
+            end = try_Not(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Not; best_channel = 0; }
-            end = try_and(&lexer.chars, start);
+            end = try_And(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_And; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_or(&lexer.chars, start);
+            end = try_Or(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Or; best_channel = 0; }
-            end = try_from(&lexer.chars, start);
+            end = try_From(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_From; best_channel = 0; }
-            end = try_to(&lexer.chars, start);
+            end = try_To(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_To; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == ']' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RBRACKET; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '^' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_prefixmatch(&lexer.chars, start);
+            end = try_PrefixMatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PrefixMatch; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '_' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_U5f; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'c' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_calc(&lexer.chars, start);
+            end = try_Calc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Calc; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'f' {
-            end = try_space(&lexer.chars, start);
+            end = try_Space(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Space; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_from(&lexer.chars, start);
+            end = try_From(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_From; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'p' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_dximagetransform(&lexer.chars, start);
+            end = try_DxImageTransform(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DxImageTransform; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'u' {
-            end = try_url(&lexer.chars, start);
+            end = try_Url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_url_(&lexer.chars, start);
+            end = try_Url_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url_; best_channel = 0; }
-            end = try_unicoderange(&lexer.chars, start);
+            end = try_UnicodeRange(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnicodeRange; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == 'v' {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_var(&lexer.chars, start);
+            end = try_Var(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Var; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '{' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LBRACE; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '|' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PIPE; best_channel = 0; }
-            end = try_dashmatch(&lexer.chars, start);
+            end = try_DashMatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DashMatch; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_unicoderange(&lexer.chars, start);
+            end = try_UnicodeRange(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnicodeRange; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '}' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RBRACE; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '~' {
-            end = try_includes(&lexer.chars, start);
+            end = try_Includes(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Includes; best_channel = 0; }
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_tilde(&lexer.chars, start);
+            end = try_Tilde(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Tilde; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else {
-            end = try_percentage(&lexer.chars, start);
+            end = try_Percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_dimension(&lexer.chars, start);
+            end = try_Dimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_unknowndimension(&lexer.chars, start);
+            end = try_UnknownDimension(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-            end = try_number(&lexer.chars, start);
+            end = try_Number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-            end = try_ident(&lexer.chars, start);
+            end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-            end = try_function_(&lexer.chars, start);
+            end = try_Function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-            end = try_unexpectedcharacter(&lexer.chars, start);
+            end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         }
         if best_end > start {
