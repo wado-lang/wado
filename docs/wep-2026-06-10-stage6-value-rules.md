@@ -125,46 +125,46 @@ hash-consing semantics stay put. Consumers pattern-match via
 appear as `Binary(Add, opaque_i, Int(step))`, so no implicit identity
 between pre- and post-increment reads can arise.
 
-Field-store seeding. The builder currently bumps a field's version on
-`Assign`-to-`FieldAccess` but does not remember the stored value, and a
-`let x = S { f: 16 }` binds `x` to a bare `Opaque`. Add a builder-side
-map `(receiver ValueId, field_index, HeapVersion) → ValueId` populated
-at:
+Field-store seeding (landed). The builder bumped a field's version on
+`Assign`-to-`FieldAccess` but did not remember the stored value, and a
+`let x = S { f: 16 }` bound `x` to a bare `Opaque`. A builder-side map
+`(receiver ValueId, field_index, HeapVersion) → ValueId` is now
+populated at:
 
-- `Assign(FieldAccess(pure recv, f), pure value)` — after the bump,
+- `Assign(FieldAccess(bare-Local recv, f), value)` — after the bump,
   seed the new version with the stored value,
-- `Let` of a `StructLiteral` — bind the fresh receiver opaque and seed
-  each pure field value at the current version (struct literals stay
-  Skel-side; only the field projections enter the graph).
+- `Let` of a direct `StructLiteral` — seed each pure field value at the
+  current version against the binding's fresh receiver opaque (struct
+  literals stay Skel-side; only the field projections enter the graph).
 
 `compute_value` consults the map before interning a `FieldAccess` kind,
 so a read of a seeded field returns the stored value's `ValueId`
 directly. This completes store→load forwarding for fields (Stage 5
 only dedups _reads_) and gives `condition_implication` its
-`StructLit`-field numeric facts.
+`StructLit`-field numeric facts. Key soundness comes from the version
+tag: any later write to that field (per-field, on any receiver) or a
+branch join bumps the version, so a stale seed is never hit.
 
-Alias-safety prerequisite (found while prototyping). A first attempt at
-this seeding (the `field_store` map exactly as above) forwarded
-`p.a` to the `assert p.a == 42` in `stores_optimize_with_stores_no_forward`
-and `stores_optimize_mixed_calls`, where a `with stores[p]` callee was
-inlined into a `Holder { pair: &p }` shape that captures `&p` without
-an opaque call to bump the heap. Runtime output stayed correct (the
-field _was_ still 42 there), but those fixtures deliberately lock in
-the conservative non-forwarding that `store_load_forward`'s
-`stores_aliased_locals` / `address_taken_locals` exclusion provides,
-and the builder has neither set — `builder::build` takes only `body`
-and `params`. So field-store seeding must thread those two sets in and
-skip seeding a receiver that is (or derives from) an aliased /
-address-taken local. That threading lands together with this seeding,
-not before; the prototype is reverted until then so the heap-join
-increment (6.0, landed) stays independently shippable.
+Alias safety. Naively seeding forwarded `p.a` to `assert p.a == 42` in
+`stores_optimize_with_stores_no_forward` / `stores_optimize_mixed_calls`,
+where a `with stores[p]` callee inlines into a `Holder { pair: &p }`
+that captures `&p` without an opaque call. Those fixtures lock in the
+conservative non-forwarding `store_load_forward` gets from its
+`address_taken_locals` / `stores_aliased_locals` exclusion. `build` now
+takes an `alias_unsafe` set; `Engine::set_alias_unsafe_locals` threads
+the function's canonical sets in (`store_load_forward` passes the same
+`unsafe_locals` it excludes), and the builder additionally body-scans
+for live `&local` / `&mut local` to catch the post-inline aliases the
+canonical sets miss after `ref_elim`. Seeding is skipped for any such
+receiver. Body-scan alone is sound for the passes that pass no set
+(e.g. `cse`): an alias that can mutate the object keeps a live `&local`
+in the body, so a missing scan hit means the alias is dead.
 
-Unsafe locals stay a rule-layer concern. Address-taken locals are boxed
-by lower (`&mut x` turns `x` into `Box<i32>` with `.value` field
-accesses), so bare-local staleness from reference writes does not arise
-in well-formed NIR; rules keep excluding
-`address_taken_locals` / `stores_aliased_locals` reads defensively, the
-way `store_load_forward` does, against transient post-inline shapes.
+Bare-local staleness is a separate, already-handled concern: `&mut x`
+on a scalar local is boxed by lower (`x: Box<i32>` with `.value`
+accesses), and rules still exclude `address_taken_locals` /
+`stores_aliased_locals` reads defensively against transient post-inline
+shapes.
 
 ### Increment 6.1 — value_fold (env-free + env-bound constant folding, store_load_forward)
 
