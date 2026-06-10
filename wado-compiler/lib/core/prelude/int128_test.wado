@@ -768,6 +768,12 @@ test "u128::as_f32 is correctly rounded and saturates to infinity" {
     assert above.as_f32() == 36893492545465614336.0 as f32;
     let max: u128 = 340282366920938463463374607431768211455;
     assert max.as_f32() == f32::INFINITY;
+    // f32::MAX = (2^24 - 1) * 2^104 sits at the largest finite biased
+    // exponent (254); the bit assembly must keep it finite, one ulp below
+    // the 255/infinity pattern.
+    let f32_max: u128 = 340282346638528859811704183484516925440;
+    assert f32_max.as_f32() != f32::INFINITY;
+    assert f32_max.as_f32() == 340282346638528859811704183484516925440.0 as f32;
 }
 
 test "i128::as_f32 carries the sign" {
