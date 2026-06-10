@@ -140,14 +140,11 @@ pub struct ValueGraphBuild {
     /// `Local` read with the forwarded literal, avoiding `repr` churn in
     /// diagnostic output and NIR dumps.
     pub literal_source: IndexMap<ValueId, ExprId>,
-    /// Per-loop snapshot of `current_value` taken right before loop entry
-    /// (before the reassigned-local opaques are seeded), keyed by the loop
-    /// body's `BlockId`. `entry[idx]` is the `ValueId` a read of local `idx`
-    /// would produce in the loop's pre-header. A hoisting pass may move a
-    /// pure computation out of the loop exactly when each `Local` leaf's
-    /// value *at the use site* equals its pre-header value — mere
-    /// cross-iteration invariance is not enough (`loop { x = 5; … x + n … }`
-    /// has an invariant use value that differs from the pre-header `x`).
+    /// Per-loop pre-header snapshot of `current_value`, keyed by the loop
+    /// body's `BlockId`. Hoisting to the pre-header requires each `Local`
+    /// leaf's use-site value to equal this entry value — cross-iteration
+    /// invariance is not enough (`loop { x = 5; … x + n … }` has an
+    /// invariant use value that differs from the pre-header `x`).
     pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
@@ -196,15 +193,10 @@ struct Builder<'a> {
     /// `ValueId` → first source `ExprId` for literal values, so consumers can
     /// reuse the original `repr`. See [`ValueGraphBuild::literal_source`].
     literal_source: IndexMap<ValueId, ExprId>,
-    /// Store→load forwarding for fields: the value most recently stored to
-    /// `(receiver ValueId, field_index, HeapVersion)`. A `FieldAccess` read
-    /// at the same triple returns the stored value's `ValueId` directly
-    /// instead of interning an opaque `FieldAccess` kind. Keys carry the
-    /// version, which is monotonic and never reused, so stale entries are
-    /// simply never hit: any write to that field — on any receiver, since the
-    /// heap model is per-field — bumps the version, and a branch join gives
-    /// the field a fresh version, so a post-store read forwards only while
-    /// the store provably reaches it.
+    /// Store→load forwarding for fields: the value last stored to
+    /// `(receiver, field, version)`, returned for reads at the same triple.
+    /// Versions are monotonic and never reused, so a write or branch join
+    /// bumps past a stale entry — no invalidation needed.
     field_store: IndexMap<(ValueId, u32, HeapVersion), ValueId>,
     /// Locals whose object is reference-aliased; field seeding is suppressed
     /// for them (see [`build`]).
@@ -216,9 +208,6 @@ struct Builder<'a> {
 
 impl<'a> Builder<'a> {
     fn new(body: &'a Body, alias_unsafe: &crate::hashmap::IndexSet<u32>) -> Self {
-        // `alias_unsafe` arrives complete from the engine: the canonical
-        // sets unioned with the session-cached body scan
-        // (`Body::collect_address_taken_locals`).
         let unsafe_locals = alias_unsafe.clone();
         Self {
             body,
@@ -677,20 +666,12 @@ impl<'a> Builder<'a> {
         self.literal_source.entry(value).or_insert(expr);
     }
 
-    /// Seed the field-store map from a `let x = S { f: v, … }` binding, where
-    /// `recv` is `x`'s (fresh-opaque) `ValueId` and `value_expr` is the bound
-    /// expression. Each pure field value is seeded at the current version of
-    /// its field, so a later `x.f` read forwards it.
-    ///
-    /// Wrappers are peered through to the sole producing tail:
-    ///
-    /// - an unlabeled `Block`'s trailing expression (no break target, so
-    ///   the tail is the only producer) — the shape constructor inlining
-    ///   leaves behind after flattening, and
-    /// - a `LabeledBlock` whose only `break label:` is the trailing
-    ///   `break label: value` statement — the unflattened inlined-
-    ///   constructor shape; any other break to the label means multiple
-    ///   producers, so seeding stops there (soundness over coverage).
+    /// Seed the field-store map from a `let x = S { f: v, … }` binding so a
+    /// later `x.f` read forwards `v`. Wrappers are peered through to the
+    /// sole producing tail: an unlabeled `Block`'s trailing expression, or a
+    /// `LabeledBlock` whose only `break label:` is the trailing
+    /// value-carrying statement (any other break to the label means
+    /// multiple producers — stop, soundness over coverage).
     fn seed_struct_literal_fields(&mut self, recv: ValueId, value_expr: ExprId) {
         let mut producer = value_expr;
         loop {
@@ -860,23 +841,11 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Join the heap state at a branch endpoint over the fall-through arms.
-    ///
-    /// `pre` is the heap state before the branch; each `arms` entry is an
-    /// arm's post-walk snapshot paired with whether the arm falls through
-    /// (a `break` / `return` / `continue`-terminated arm does not, so its
-    /// writes never reach code after the branch). A field whose version
-    /// every fall-through arm left at the pre-branch version keeps it; a
-    /// field some fall-through arm wrote (or that an arm's `bump_all`
-    /// invalidated) gets a fresh version, since its post-merge value is
-    /// unknown. With no fall-through arm the post-state is `pre` (code
-    /// after the branch is unreachable).
-    ///
-    /// This replaces the previous unconditional `bump_all`, which split
-    /// the heap version of every field read after any branch — including
-    /// the `if !(cond) { break }` guard that opens every desugared loop,
-    /// so `arr.used` read in the guard never shared a `ValueId` with a
-    /// later bounds-check read.
+    /// Join the heap state at a branch endpoint: a field keeps its
+    /// pre-branch version iff every fall-through arm left it unchanged;
+    /// otherwise it bumps. Non-fall-through arms (terminated by `break` /
+    /// `return` / `continue`) are excluded — their writes never reach code
+    /// after the branch. No fall-through arm ⇒ post-state is `pre`.
     fn join_heap(&mut self, pre: &HeapSnapshot, arms: &[(HeapSnapshot, bool)]) {
         let live: Vec<&HeapSnapshot> = arms
             .iter()
@@ -947,13 +916,10 @@ impl<'a> Builder<'a> {
                 self.block_falls_through(*then_block)
                     || else_block.is_none_or(|eb| self.block_falls_through(eb))
             }
-            // A labeled block falls through when its body reaches the
-            // bottom OR any `break` targets the block's OWN label — such a
-            // break resumes right after the block, i.e. it IS fall-through.
-            // The tail-only `block_falls_through` walk cannot see early
-            // self-breaks (`lbl: { if d { break lbl; } return; }`), so scan
-            // the subtree too. Over-approximating the break's reachability
-            // only adds an arm to the join, which is sound.
+            // A break targeting the block's OWN label resumes right after
+            // it — that IS fall-through, and the tail-only walk cannot see
+            // early self-breaks, so scan the subtree too. Over-approximating
+            // the break's reachability only adds an arm to the join (sound).
             StmtKind::LabeledBlock { block, label } => {
                 self.block_falls_through(*block) || block_breaks_to(self.body, *block, label)
             }
@@ -1025,9 +991,8 @@ impl<'a> Builder<'a> {
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
         collect_writes_in_block(self.body, body_block, &mut writes);
-        // Pre-header snapshot: the value each local has just before the
-        // loop, before the reassigned-local opaques below overwrite the
-        // written ones. See `ValueGraphBuild::loop_entry_values`.
+        // Snapshot before the reassigned-local opaques below overwrite the
+        // written locals' pre-loop values.
         self.loop_entry_values
             .insert(body_block, self.current_value.clone());
         for idx in &writes {

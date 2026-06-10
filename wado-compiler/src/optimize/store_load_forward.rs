@@ -39,21 +39,15 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
         if func.body.is_none() {
             return false;
         }
-        // Forwarding-ineligible locals: the canonical `address_taken_locals`
-        // / `stores_aliased_locals` sets, plus the engine's session-cached
-        // body scan for live `&x` / `&mut x` over `Local` — the canonical
-        // sets are static records from elaboration and go stale after
-        // `inline` / `ref_elim` copy `Ref` / `MutRef` nodes for remapped
-        // callee locals (see the comment on `elide_local::ElideRule`).
+        // Forwarding-ineligible locals: the canonical sets plus the
+        // engine's body scan — the canonical sets are static elaboration
+        // records and go stale after `inline` / `ref_elim` copy `Ref`
+        // nodes (see `elide_local::ElideRule`).
         let mut unsafe_locals = func.address_taken_locals.clone();
         unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
-        // Suppress field store→load seeding on the same aliased locals this
-        // rule excludes from forwarding, so the `ValueGraph` does not hand
-        // back a forwarded field value for an aliased object. The engine
-        // unions in its body scan before the builder sees the set.
         engine.set_alias_unsafe_locals(unsafe_locals.clone());
         unsafe_locals.extend(engine.body_address_taken().iter().copied());
         let rule = StoreLoadForwardRule {
@@ -84,13 +78,9 @@ impl Rule for StoreLoadForwardRule {
 }
 
 fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
-    // Collect every candidate read expression first; iterating while the
-    // engine rewrites would invalidate body/expr indices we're walking.
-    // `Local` reads carry their index (subject to the unsafe-local guard);
-    // `FieldAccess` reads carry `None` — their alias safety was already
-    // enforced when the `ValueGraph` builder decided whether to seed the
-    // store (an aliased / address-taken receiver is never seeded, so its
-    // read never carries a literal `ValueId`).
+    // Snapshot reads before rewriting. `FieldAccess` reads carry `None`:
+    // their alias safety is upstream — the builder never seeds an aliased
+    // receiver, so such a read never carries a literal `ValueId`.
     let mut reads: Vec<(ExprId, Option<u32>)> = Vec::new();
     collect_candidate_reads(engine.body, &mut reads);
 

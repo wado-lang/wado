@@ -55,10 +55,8 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
         let rule = CseRule {
             applied: Cell::new(false),
         };
-        // Canonical reference-aliased locals: the builder's own body scan
-        // catches live `&local` shapes, but only these sets know aliases
-        // with no surviving Ref node (`with stores[p]`). Field store→load
-        // seeding must stay off for them.
+        // Only the canonical sets know aliases with no surviving Ref node
+        // (`with stores[p]`); field seeding must stay off for them.
         let mut alias_unsafe = func.address_taken_locals.clone();
         alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction { body, locals, .. } = &mut *func;
@@ -222,18 +220,14 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
 }
 
 /// Collect every `Binary` subexpression of `expr` paired with its `ValueId`.
-/// Recurses through Binary/Unary so candidates like `!(p * p <= limit)`
-/// are reached. Two-pass: pass 1 collects candidates under `&body`;
-/// pass 2 attaches `ValueIds` (which needs `&mut engine`).
+/// Two-pass: pass 1 collects under `&body`; pass 2 attaches `ValueId`s
+/// (needs `&mut engine`).
 ///
-/// The right operand of a short-circuit `&&` / `||` is not descended into:
-/// it only evaluates when the left side allows, and the hoisted `let __cse`
-/// at the top of the loop body evaluates unconditionally — extracting a
-/// candidate from inside the conditional operand would introduce evaluation
-/// (and a possible trap, e.g. a division) the source program never performs.
-/// A candidate that *is* the `&&` / `||` node hoists the whole operator,
-/// whose clone still short-circuits, so only the descent is restricted. See
-/// `cse_short_circuit_no_trap.wado`.
+/// A short-circuit `&&` / `||` right operand is not descended into: the
+/// hoisted `let __cse` evaluates unconditionally, so extracting from the
+/// conditional operand could introduce a trap (e.g. a division) the source
+/// never performs — see `cse_short_circuit_no_trap.wado`. A candidate that
+/// *is* the operator hoists whole, and its clone still short-circuits.
 fn collect_binary_candidates(
     engine: &mut Engine,
     expr: ExprId,

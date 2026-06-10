@@ -110,12 +110,10 @@ pub struct Engine<'a> {
     /// rebuild after edits rescans. Unioned with `alias_unsafe_locals`
     /// before reaching the builder.
     body_address_taken: Option<IndexSet<u32>>,
-    /// Local indices of the owning function's parameters, seeded as stable
-    /// `Opaque`s by the `ValueGraph` builder. The builder's lazy
-    /// first-read fallback is observationally identical for value queries,
-    /// but only up-front seeding makes parameters visible in the loop-entry
-    /// snapshots [`Engine::loop_entry_value`] reads, so passes that consume
-    /// those (licm) must call [`Engine::set_param_locals`] first.
+    /// Parameter local indices, seeded as stable `Opaque`s. Only up-front
+    /// seeding makes parameters visible in the loop-entry snapshots, so
+    /// passes consuming [`Engine::loop_entry_value`] must call
+    /// [`Engine::set_param_locals`] first.
     param_locals: Vec<u32>,
 }
 
@@ -252,13 +250,9 @@ impl<'a> Engine<'a> {
         if self.value_graph.is_some() {
             return;
         }
-        // `param_locals` is empty unless a pass set it: the builder's
-        // `read_local` fallback caches an `Opaque` on first read, which is
-        // observationally identical to up-front seeding for value queries.
-        // Passes consuming loop-entry snapshots set the params explicitly.
-        // Union the canonical alias sets with the session's body scan; the
-        // builder receives the complete exclusion set and performs no scan
-        // of its own.
+        // The builder receives the complete exclusion set — canonical alias
+        // sets unioned with the session's body scan — and scans nothing
+        // itself.
         let mut alias_unsafe = self.alias_unsafe_locals.clone();
         if self.body_address_taken.is_none() {
             let mut set = IndexSet::default();

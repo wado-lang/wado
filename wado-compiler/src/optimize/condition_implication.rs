@@ -22,10 +22,6 @@
 //! and a check changes the check operand's `ValueId` and the implication
 //! simply fails. See `array_bounds_elim_oob_guard_var_mutated.wado` /
 //! `array_bounds_elim_oob_bound_shrunk.wado` for the fixtures pinning this.
-//! (The pre-ValueGraph implementation compared operands syntactically —
-//! `resolves_to(i, i)` was unconditionally true — and needed a positional
-//! kill-tracking layer plus a `DefMap` of copy / field / struct-literal
-//! chains to approximate what the `ValueGraph` now answers directly.)
 //!
 //! Runs on the worklist rewrite engine as a [`Rule`]: a per-function
 //! standalone engine session whose `apply_block` fires once at the body root.
@@ -59,11 +55,8 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut Functio
         let rule = ConditionImplicationRule {
             applied: Cell::new(false),
         };
-        // Canonical reference-aliased locals: guard facts consume seeded
-        // field values, so the value graph must apply the same
-        // no-forwarding-for-aliased-locals exclusion store_load_forward
-        // uses (the builder's body scan alone misses aliases with no
-        // surviving Ref node, e.g. `with stores[p]`).
+        // Guard facts consume seeded field values; only the canonical sets
+        // know aliases with no surviving Ref node (`with stores[p]`).
         let mut alias_unsafe = func.address_taken_locals.clone();
         alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction { body, locals, .. } = &mut *func;
@@ -286,10 +279,9 @@ fn is_bitmask_bounded(engine: &mut Engine, condition: ExprId) -> bool {
 
 fn process_block(engine: &mut Engine, block: BlockId) -> bool {
     let mut changed = false;
-    // Guard facts from earlier early-exit statements in this block. No
-    // staleness tracking is needed: a mutation of the variable or bound
-    // between the guard and a later check changes the check operand's
-    // `ValueId`, so the fact stops matching by itself.
+    // Guard facts from earlier early-exit statements. No staleness
+    // tracking: a mutation between guard and check changes the check
+    // operand's `ValueId`, so the fact stops matching by itself.
     let mut guards: Vec<GuardFact> = Vec::new();
     let stmts = engine.body.blocks[block].stmts.clone();
     for s in stmts {

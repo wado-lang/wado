@@ -155,8 +155,6 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             type_table: &type_table,
             applied: Cell::new(false),
         };
-        // Canonical reference-aliased locals — same exclusion discipline as
-        // the other value-graph sessions (see store_load_forward).
         let mut alias_unsafe = func.address_taken_locals.clone();
         alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction {
@@ -168,8 +166,6 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_unsafe_locals(alias_unsafe);
-        // Seed parameters in the value graph so they appear in the loop-entry
-        // snapshots the arithmetic hoist's leaf-stability check reads.
         engine.set_param_locals(params.iter().map(|p| p.local_index).collect());
         engine.run(&[&rule])
     })
@@ -212,10 +208,9 @@ fn licm_block(
     let mut changed = false;
     let mut new_stmts = Vec::new();
 
-    // Iterate a clone (not `mem::take`): the original statement list must
-    // stay in place during the recursion, because `hoist_invariant_arith`
-    // rebuilds the engine's value graph from the body root mid-walk — a
-    // gutted ancestor block would make the rebuild see an empty function.
+    // Iterate a clone, not `mem::take`: `hoist_invariant_arith` rebuilds
+    // the value graph from the body root mid-walk, so ancestor blocks must
+    // stay populated.
     for s in engine.body.blocks[block].stmts.clone() {
         // Classify without holding the borrow across the mutable recursion.
         enum Shape {
@@ -1320,28 +1315,21 @@ fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32
 struct ArithHoist<'a> {
     /// The loop whose pre-header the candidates move to.
     loop_body: BlockId,
-    /// Locals bound by hoist `let`s accumulated so far. Their statements are
-    /// not in the tree yet (the caller prepends them after `licm_loop`
-    /// returns), so they have no pre-header entry value — but they are fresh
-    /// read-only pre-header temps, pre-header-stable by construction.
+    /// Locals bound by hoist `let`s whose statements are not in the tree
+    /// yet (the caller prepends them after `licm_loop` returns): no entry
+    /// value, but read-only pre-header temps are stable by construction.
     pending_hoist_locals: &'a IndexSet<u32>,
-    /// Locals whose address is taken (`&x` / `&mut x`) anywhere in the
-    /// function. The `ValueGraph` does not model writes through references,
-    /// so their use-site values cannot be trusted as pre-header-stable.
+    /// Address-taken locals — the `ValueGraph` does not model writes
+    /// through references, so their use-site values cannot be trusted.
     address_taken: &'a IndexSet<u32>,
 }
 
 impl ArithHoist<'_> {
-    /// Whether `e` is a compound (`Binary` / `Unary`) arithmetic expression
-    /// that may move to the pre-header, returning its `ValueId` for dedup.
-    ///
-    /// Movability is per `Local` leaf: the leaf's use-site `ValueId` must
-    /// equal the loop's pre-header entry value, so the hoisted clone
-    /// computes exactly what every in-loop occurrence reads. This covers
-    /// reassigned locals and loop-scoped bindings (entry value missing or
-    /// different) in one check — cross-iteration invariance alone would
-    /// wrongly admit `loop { x = 5; … x + n … }`, whose use value is
-    /// invariant but differs from the pre-header `x`.
+    /// Whether `e` is a compound arithmetic expression that may move to
+    /// the pre-header, returning its `ValueId` for dedup. Each `Local`
+    /// leaf's use-site value must equal the pre-header entry value, so the
+    /// hoisted clone computes what every occurrence reads — cross-iteration
+    /// invariance alone would wrongly admit `loop { x = 5; … x + n … }`.
     fn candidate(&self, engine: &mut Engine, e: ExprId) -> Option<ValueId> {
         let compound = matches!(
             &engine.body.exprs[e].kind,
@@ -1416,19 +1404,16 @@ impl ArithHoist<'_> {
 }
 
 /// Hoist maximal pre-header-stable pure-arithmetic subexpressions out of
-/// `loop_body`, deduping occurrences with equal `ValueId`s (which also
-/// equates copies: `let t = x; … t + y … x + y …` shares one temp) into a
-/// single hoisted temp each. Returns whether anything was hoisted. The
-/// pre-header `let`s are appended to `all_hoist_stmts` (prepended before the
-/// loop by the caller).
+/// `loop_body`, one temp per distinct `ValueId` (so copies share: `let t =
+/// x; … t + y … x + y …`). The `let`s are appended to `all_hoist_stmts`,
+/// which the caller prepends before the loop.
 fn hoist_invariant_arith(
     engine: &mut Engine,
     loop_body: BlockId,
     all_hoist_stmts: &mut Vec<StmtId>,
 ) -> bool {
-    // The field-hoist iterations (and earlier arith rounds) rewrote the
-    // body; rebuild the value graph so use-site values and the loop's entry
-    // snapshot are current.
+    // Earlier hoist rounds rewrote the body; rebuild so use-site values
+    // and the entry snapshot are current.
     engine.invalidate_value_graph();
 
     let mut pending_hoist_locals: IndexSet<u32> = IndexSet::default();

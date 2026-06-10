@@ -807,14 +807,10 @@ impl Body {
     /// Invoke `f` on every id-bearing child of `node`, in source order.
     /// Arms / fields / call args are transparent (their inline child ids are
     /// visited directly). Leaf nodes invoke `f` zero times.
-    /// Collect every local whose address is taken by a live `&local` /
-    /// `&mut local` (`Unary::Ref` / `Unary::MutRef` over a `Local`) anywhere
-    /// in the body. The canonical `address_taken_locals` /
-    /// `stores_aliased_locals` sets go stale after `inline` / `ref_elim`
-    /// copy reference nodes, so consumers (the `ValueGraph` builder's
-    /// field-seeding exclusion, `store_load_forward`'s forwarding
-    /// exclusion) union this scan in. Iterative with one scratch stack —
-    /// no per-node allocation.
+    /// Collect every local with a live `&local` / `&mut local` in the body.
+    /// The canonical `address_taken_locals` / `stores_aliased_locals` sets
+    /// go stale after `inline` / `ref_elim` copy reference nodes, so
+    /// alias-sensitive consumers union this scan in.
     pub fn collect_address_taken_locals(&self, out: &mut crate::hashmap::IndexSet<u32>) {
         let mut stack: Vec<NodeRef> = vec![NodeRef::Block(self.root)];
         while let Some(node) = stack.pop() {
