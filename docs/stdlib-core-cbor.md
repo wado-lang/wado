@@ -183,6 +183,13 @@ _Fields are private._
 
 ##### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 
+##### `fn begin_container(&mut self, want_major: u8, expected: String) -> Result<[i64, bool], DeserializeError>`
+
+Open a definite/indefinite container of the expected major type,
+transparently unwrapping any self-described prefix and entering the
+depth guard. Returns `[remaining, indef]` for the access to carry
+(`remaining` is `-1` for an indefinite container).
+
 ##### `fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError>`
 
 ##### `fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError>`
