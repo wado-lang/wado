@@ -1577,8 +1577,16 @@ fn sort_alts_by_element_count(indices: &mut List<i32>, alts: &List<Alternative>)
             if pj > pi {
                 swap = true;
             } else if pj == pi {
-                if alts[indices[j]].elements.len() > alts[indices[i]].elements.len() {
+                let ej = alts[indices[j]].elements.len();
+                let ei = alts[indices[i]].elements.len();
+                if ej > ei {
                     swap = true;
+                } else if ej == ei {
+                    // Full tie: keep source order so the tournament's
+                    // first-tried alt is deterministic (stable sort).
+                    if indices[j] < indices[i] {
+                        swap = true;
+                    }
                 }
             }
             if swap {

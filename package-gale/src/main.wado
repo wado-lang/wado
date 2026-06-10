@@ -47,6 +47,10 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
 }
 
 fn cmd_gen(paths: List<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens {
+    if paths.len() == 0 {
+        eprintln("gale gen: no grammar files given");
+        return;
+    }
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("gale: no preopened directories available (try without --no-dir)");

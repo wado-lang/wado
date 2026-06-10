@@ -158,10 +158,23 @@ pub fn has_multi_alt_groups(groups: &List<List<i32>>) -> bool {
 
 pub fn sort_group_by_specificity(group: &mut List<i32>, first_sets: &List<List<String>>) {
     // Sort by first set size ascending: smaller first set = more specific = try first.
-    // Ties broken by original order (stable-ish bubble sort).
+    // Ties broken by source order (smaller group index first). This is a
+    // selection sort over the total order (size asc, index asc); the index
+    // tie-break is what makes it stable — swapping only on a strictly smaller
+    // size would reorder tied alts (e.g. sizes [2,2,1] → [2,1,0]).
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
-            if first_sets[group[j]].len() < first_sets[group[i]].len() {
+            let sj = first_sets[group[j]].len();
+            let si = first_sets[group[i]].len();
+            let mut swap = false;
+            if sj < si {
+                swap = true;
+            } else if sj == si {
+                if group[j] < group[i] {
+                    swap = true;
+                }
+            }
+            if swap {
                 let tmp = group[i];
                 group[i] = group[j];
                 group[j] = tmp;
@@ -310,8 +323,16 @@ pub fn sort_group_by_element_count(group: &mut List<i32>, alts: &List<Alternativ
                 swap = true;
             } else if pj == pi {
                 // Within same-priority tier: more elements = more specific = first
-                if alts[group[j]].elements.len() > alts[group[i]].elements.len() {
+                let ej = alts[group[j]].elements.len();
+                let ei = alts[group[i]].elements.len();
+                if ej > ei {
                     swap = true;
+                } else if ej == ei {
+                    // Full tie: keep source order (smaller index first) so the
+                    // tournament's first-tried alt is deterministic.
+                    if group[j] < group[i] {
+                        swap = true;
+                    }
                 }
             }
             if swap {

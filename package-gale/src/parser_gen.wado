@@ -4777,6 +4777,8 @@ fn gen_consume_group_store_optional_op(
                 emit_atn_ret_pending(w, ctx, rc.atn_call_site);
                 w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
+            } else {
+                panic("gen_consume_group_store_optional_op: SimpleCst alt op is not RuleCall");
             }
         } else {
             let mut sorted_group = group.sorted();

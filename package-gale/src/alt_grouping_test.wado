@@ -1,0 +1,34 @@
+//! Tests for `alt_grouping.wado`. Focus: the overlap-group sorts must be
+//! STABLE on key ties — the dispatch/tournament commits to the first-tried
+//! alt on a scan-length tie, so reordering tied alts can change parse
+//! results. The reference `sort_group_by_mandatory_count_desc` already
+//! breaks full ties by source order; the others must too.
+
+use { sort_group_by_specificity } from "./alt_grouping.wado";
+
+test "sort_group_by_specificity: ties keep source order" {
+    // First-set sizes [2, 2, 1]. Ascending by size puts alt 2 (size 1)
+    // first; alts 0 and 1 tie on size 2 and must stay in source order.
+    // The buggy swap-immediately sort yields [2, 1, 0] (0 and 1 reversed).
+    let first_sets: List<List<String>> = [
+        ["A", "B"],
+        ["C", "D"],
+        ["E"],
+    ];
+    let mut group: List<i32> = [0, 1, 2];
+    sort_group_by_specificity(&mut group, &first_sets);
+    assert group[0] == 2, `group[0]={group[0]}`;
+    assert group[1] == 0, `group[1]={group[1]} (tie not in source order)`;
+    assert group[2] == 1, `group[2]={group[2]} (tie not in source order)`;
+}
+
+test "sort_group_by_specificity: already-ascending stays put" {
+    let first_sets: List<List<String>> = [
+        ["A"],
+        ["B", "C"],
+        ["D", "E", "F"],
+    ];
+    let mut group: List<i32> = [0, 1, 2];
+    sort_group_by_specificity(&mut group, &first_sets);
+    assert group[0] == 0 && group[1] == 1 && group[2] == 2, `{group[0]},{group[1]},{group[2]}`;
+}
