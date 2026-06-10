@@ -540,7 +540,7 @@ impl Lexer {
     }
 }
 
-fn try_z(chars: &List<char>, start: i32) -> i32 {
+fn try_Z(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'z' { return -1; }
     pos += 1;
@@ -574,7 +574,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         } else if first_char == 'y' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_Y; }
         } else if first_char == 'z' {
-            end = try_z(&lexer.chars, start);
+            end = try_Z(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Z; }
         }
         if best_end <= start {

@@ -143,6 +143,35 @@ fn is_valid_not_set_element(elem: &Element) -> bool {
     return false;
 }
 
+/// ANTLR4 restricts `~` in *lexer* rules to a single-character literal, a
+/// char range / char class, or a parenthesised block whose alternatives are
+/// themselves such set elements. A rule reference, the wildcard (`~.`), a
+/// multi-character literal, or an EBNF-suffixed element is rejected. Spec:
+/// `vendor/antlr4/doc/lexer-rules.md` (set complement).
+fn is_valid_lexer_not_element(elem: &LexerElement) -> bool {
+    if let Literal(s) = elem {
+        return s.chars().count() == 1;
+    }
+    if let CharRange(_) = elem {
+        return true;
+    }
+    if let CharClass(_) = elem {
+        return true;
+    }
+    if let Group(alts) = elem {
+        for let alt of alts {
+            if alt.elements.len() != 1 {
+                return false;
+            }
+            if !is_valid_lexer_not_element(&alt.elements[0]) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
 impl G4Parser {
     pub fn new(tokens: List<Token>, chars: List<char>) -> G4Parser {
         return G4Parser {
@@ -449,6 +478,11 @@ impl G4Parser {
                 if !dup {
                     self.channels.push(name);
                 }
+                self.advance();
+            } else {
+                // Unknown token — advance to avoid an infinite loop on
+                // malformed input, mirroring `parse_tokens_block`. Channel
+                // bodies are not semantically meaningful beyond the names.
                 self.advance();
             }
             if self.is_kind(G4Token::Comma) {
@@ -1236,24 +1270,24 @@ impl G4Parser {
             if LexerSlice::eq_str(&"skip", action_text) {
                 actions.skip = true;
             } else if LexerSlice::eq_str(&"pushMode", action_text) {
-                self.expect(G4Token::LParen).unwrap();
+                self.expect(G4Token::LParen)?;
                 let mode_name = self.advance();
-                self.expect(G4Token::RParen).unwrap();
+                self.expect(G4Token::RParen)?;
                 actions.push_mode = intern_mode(mode_names, &mode_name.text.to_string());
             } else if LexerSlice::eq_str(&"popMode", action_text) {
                 actions.pop_mode = true;
             } else if LexerSlice::eq_str(&"mode", action_text) {
                 // `mode(X)` switches the current mode (top of stack), unlike pushMode.
-                self.expect(G4Token::LParen).unwrap();
+                self.expect(G4Token::LParen)?;
                 let mode_name = self.advance();
-                self.expect(G4Token::RParen).unwrap();
+                self.expect(G4Token::RParen)?;
                 actions.set_mode = intern_mode(mode_names, &mode_name.text.to_string());
             } else if LexerSlice::eq_str(&"channel", action_text) {
                 // `channel(X)` accepts an integer literal, the predefined name
                 // HIDDEN, or a user-defined channel name from `channels { }`.
-                self.expect(G4Token::LParen).unwrap();
+                self.expect(G4Token::LParen)?;
                 let arg = self.advance();
-                self.expect(G4Token::RParen).unwrap();
+                self.expect(G4Token::RParen)?;
                 if LexerSlice::eq_str(&"DEFAULT_TOKEN_CHANNEL", &arg.text) {
                     // ANTLR4's predefined name for channel 0.
                     actions.channel = DEFAULT_CHANNEL;
@@ -1266,22 +1300,33 @@ impl G4Parser {
                     actions.channel = parse_int_literal(&arg.text.to_string());
                 } else {
                     // User-defined channel name: look up in the grammar's
-                    // channels { } block. Unknown names default to 0 so
-                    // generation still emits a well-formed lexer — the
-                    // compatibility principle prefers permissive parsing.
+                    // channels { } block (declared in the prequel, before
+                    // rules). ANTLR4 errors on an undeclared name; resolving
+                    // it to 0 (DEFAULT) would silently invert the author's
+                    // intent to route the token off the default channel.
                     let name = arg.text.to_string();
-                    let mut resolved = 0;
+                    let mut resolved = -1;
                     for let mut i = 0; i < self.channels.len(); i += 1 {
                         if self.channels[i] == name {
                             resolved = i + 2;
                         }
                     }
+                    if resolved < 0 {
+                        let expected: List<String> = ["a channel declared in `channels { }`"];
+                        return Result::<(), ParseError>::Err(
+                            ParseError::new(
+                                `channel "{name}" is not declared in a \`channels \{ ... \}\` block`,
+                                arg.span,
+                                expected,
+                            ),
+                        );
+                    }
                     actions.channel = resolved;
                 }
             } else if LexerSlice::eq_str(&"type", action_text) {
-                self.expect(G4Token::LParen).unwrap();
+                self.expect(G4Token::LParen)?;
                 let target = self.advance();
-                self.expect(G4Token::RParen).unwrap();
+                self.expect(G4Token::RParen)?;
                 actions.type_override = Option::<String>::Some(target.text.to_string());
             } else if LexerSlice::eq_str(&"more", action_text) {
                 actions.more = true;
@@ -1370,8 +1415,21 @@ impl G4Parser {
                 self.advance();
                 self.advance();
                 let end_tok = self.expect(G4Token::StringLit)?;
-                let start_char = first_char(&text).unwrap();
                 let end_text = end_tok.text.to_string();
+                // ANTLR4 requires a single-char endpoint. The start is
+                // guarded above; validate the end too rather than silently
+                // truncating (`'a'..'bc'`) or panicking on empty (`'a'..''`).
+                if end_text.chars().count() != 1 {
+                    let expected: List<String> = ["single-char string literal"];
+                    return Result::<LexerElement, ParseError>::Err(
+                        ParseError::new(
+                            "range endpoint must be a single character",
+                            end_tok.span,
+                            expected,
+                        ),
+                    );
+                }
+                let start_char = first_char(&text).unwrap();
                 let end_char = first_char(&end_text).unwrap();
                 return Result::<LexerElement, ParseError>::Ok(
                     LexerElement::CharRange([start_char, end_char]),
@@ -1414,8 +1472,19 @@ impl G4Parser {
             return Result::<LexerElement, ParseError>::Ok(LexerElement::Group(alts));
         }
         if self.is_kind(G4Token::Tilde) {
+            let tilde_span = self.peek().span;
             self.advance();
             let inner = self.parse_lexer_atom()?;
+            if !is_valid_lexer_not_element(&inner) {
+                let expected: List<String> = ["single char, char set, or block of them"];
+                return Result::<LexerElement, ParseError>::Err(
+                    ParseError::new(
+                        "`~` in a lexer rule must be applied to a single character, a char set, or a parenthesised set — not a rule reference, wildcard, or multi-char literal",
+                        tilde_span,
+                        expected,
+                    ),
+                );
+            }
             return Result::<LexerElement, ParseError>::Ok(
                 LexerElement::Not(LexerNotElement { element: inner }),
             );
@@ -1486,17 +1555,46 @@ fn resolve_char(chars: &List<char>, pos: &mut i32) -> char {
         'n' => '\n',
         'r' => '\r',
         't' => '\t',
+        'b' => '\u0008',  // backspace (ANTLR4 lexicon.md)
+        'f' => '\u000C',  // form feed
         '\\' => '\\',
         ']' => ']',
         '-' => '-',
-        'u' => {
-            let mut val = 0;
-            for let mut i = 0; i < 4; i += 1 {
-                val = val * 16 + advance_char(chars, pos).hex_digit_value();
-            }
-            char::from_i32(val).unwrap();
-        },
+        'u' => resolve_unicode_escape(chars, pos),
         _ => ec,
+    };
+}
+
+/// Resolve the body of a `\u` escape after the `u` has been consumed.
+/// Handles `\uXXXX` (up to four hex digits, stopping at the first non-hex
+/// char) and the `\u{XXXXXX}` brace form (ANTLR4 lexicon.md). Code points a
+/// Wado `char` cannot hold — surrogates and values past U+10FFFF — fall
+/// back to U+FFFD rather than trapping.
+fn resolve_unicode_escape(chars: &List<char>, pos: &mut i32) -> char {
+    let mut val = 0;
+    if *pos < chars.len() && chars[*pos] == '{' {
+        *pos += 1;
+        while *pos < chars.len() && chars[*pos] != '}' {
+            if !chars[*pos].is_hexdigit() {
+                break;
+            }
+            val = val * 16 + chars[*pos].hex_digit_value();
+            *pos += 1;
+        }
+        if *pos < chars.len() && chars[*pos] == '}' {
+            *pos += 1;
+        }
+    } else {
+        let mut n = 0;
+        while n < 4 && *pos < chars.len() && chars[*pos].is_hexdigit() {
+            val = val * 16 + chars[*pos].hex_digit_value();
+            *pos += 1;
+            n += 1;
+        }
+    }
+    return match char::from_i32(val) {
+        Some(ch) => ch,
+        None => '\u{FFFD}',
     };
 }
 

@@ -528,7 +528,7 @@ impl Lexer {
     }
 }
 
-fn try_word(chars: &List<char>, start: i32) -> i32 {
+fn try_WORD(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || 'a' <= chars[pos] <= 'z' || chars[pos] == '-' || chars[pos] == '+') { return -1; }
@@ -558,13 +558,13 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '+' || first_char == '-' {
-            end = try_word(&lexer.chars, start);
+            end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
         } else if 'a' <= first_char <= 'z' {
-            end = try_word(&lexer.chars, start);
+            end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
         } else {
-            end = try_word(&lexer.chars, start);
+            end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
         }
         if best_end <= start {

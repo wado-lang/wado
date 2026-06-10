@@ -530,7 +530,7 @@ impl Lexer {
     }
 }
 
-fn try_action(chars: &List<char>, start: i32) -> i32 {
+fn try_ACTION(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '{' { return -1; }
     pos += 1;
@@ -541,7 +541,7 @@ fn try_action(chars: &List<char>, start: i32) -> i32 {
             let mut alts_ok_1 = false;
             alts_1_0: {
                 pos = alts_saved_1;
-                pos = try_action(chars, pos);
+                pos = try_ACTION(chars, pos);
                 if pos < 0 { break alts_1_0; }
                 alts_ok_1 = true;
             }
@@ -565,7 +565,7 @@ fn try_action(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
@@ -595,10 +595,10 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '{' {
-            end = try_action(&lexer.chars, start);
+            end = try_ACTION(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ACTION; }
         }
         if best_end <= start {

@@ -528,7 +528,7 @@ impl Lexer {
     }
 }
 
-fn try_id(chars: &List<char>, start: i32) -> i32 {
+fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
     let mut alts_ok_0 = false;
@@ -588,16 +588,16 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '_' {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if 'A' <= first_char <= 'Z' {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if '\u{100}' <= first_char <= '\u{fffc}' {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         }
         if best_end <= start {

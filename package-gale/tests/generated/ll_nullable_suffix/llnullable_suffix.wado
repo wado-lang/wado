@@ -635,21 +635,21 @@ impl Lexer {
     }
 }
 
-fn try_x(chars: &List<char>, start: i32) -> i32 {
+fn try_X(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'X' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_y(chars: &List<char>, start: i32) -> i32 {
+fn try_Y(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'Y' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_ws(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
@@ -679,13 +679,13 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
-            end = try_ws(&lexer.chars, start);
+            end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == 'X' {
-            end = try_x(&lexer.chars, start);
+            end = try_X(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_X; }
         } else if first_char == 'Y' {
-            end = try_y(&lexer.chars, start);
+            end = try_Y(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Y; }
         }
         if best_end <= start {

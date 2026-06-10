@@ -532,14 +532,14 @@ impl Lexer {
     }
 }
 
-fn try_colon(chars: &List<char>, start: i32) -> i32 {
+fn try_COLON(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ':' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_ptr(chars: &List<char>, start: i32) -> i32 {
+fn try_PTR(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
@@ -548,7 +548,7 @@ fn try_ptr(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_id(chars: &List<char>, start: i32) -> i32 {
+fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || 'a' <= chars[pos] <= 'z') { return -1; }
@@ -578,16 +578,16 @@ pub fn tokenize(input: &String) -> List<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '-' {
-            end = try_ptr(&lexer.chars, start);
+            end = try_PTR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PTR; }
         } else if first_char == ':' {
-            end = try_colon(&lexer.chars, start);
+            end = try_COLON(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COLON; }
         } else if 'a' <= first_char <= 'z' {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         }
         if best_end <= start {

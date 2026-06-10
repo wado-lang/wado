@@ -632,7 +632,7 @@ impl Lexer {
     }
 }
 
-fn try_id(chars: &List<char>, start: i32) -> i32 {
+fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || 'a' <= chars[pos] <= 'z') { return -1; }
@@ -680,10 +680,10 @@ pub fn tokenize(input: &String) -> List<Token> {
         } else if first_char == ':' {
             if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_COLON; }
         } else if 'a' <= first_char <= 'z' {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {
-            end = try_id(&lexer.chars, start);
+            end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         }
         if best_end <= start {

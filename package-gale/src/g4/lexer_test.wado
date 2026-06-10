@@ -70,6 +70,20 @@ test "string literals" {
     assert_token(&tokens[2], G4Token::StringLit, "\n");
 }
 
+test "string literal unicode and control escapes" {
+    // `\uXXXX` reads exactly the hex digits (here only two: `\u41` is 'A'),
+    // not four chars unconditionally; `\u{...}` is the astral form; `\b` and
+    // `\f` are control escapes (ANTLR4 lexicon.md). Unrepresentable code
+    // points fall back to U+FFFD rather than trapping.
+    let tokens = tokenize("'\\u0041' '\\u{1F600}' '\\b\\f'");
+    assert_token(&tokens[0], G4Token::StringLit, "A");
+    assert_token(&tokens[1], G4Token::StringLit, "\u{1F600}");
+    let mut control = String::new();
+    control.push('\u0008');
+    control.push('\u000C');
+    assert_token(&tokens[2], G4Token::StringLit, control);
+}
+
 test "char classes" {
     let tokens = tokenize("[a-z] [0-9A-Fa-f] [^\"\\n]");
     assert_token(&tokens[0], G4Token::CharClass, "[a-z]");
