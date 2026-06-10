@@ -73,21 +73,8 @@ impl FuncInstState {
         {
             return Some(m.clone());
         }
-        // A concrete impl on a generic head (`impl Trait for List<String>`)
-        // is indexed under the AST's simple argument spelling, while a
-        // substituted call site qualifies the arguments — retry with the
-        // qualifiers stripped, then fall back to the head name (which
-        // covers argument shapes `instantiated_type_name` cannot spell).
-        // Newtype-resolved receivers hit the full-name query above, so
-        // they never take these paths.
-        let simplified = crate::name::simplify_generic_type_args(&info.struct_name);
-        if simplified != info.struct_name
-            && let Some(m) =
-                self.trait_env
-                    .concrete_impl_module_for(&simplified, trait_name, type_module)
-        {
-            return Some(m.clone());
-        }
+        // Fall back to the head name for argument shapes the qualified
+        // instantiated index above cannot spell (tuples, function types).
         if info.base_struct_name != info.struct_name
             && let Some(m) = self.trait_env.concrete_impl_module_for(
                 &info.base_struct_name,

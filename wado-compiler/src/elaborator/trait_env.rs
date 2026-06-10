@@ -464,29 +464,15 @@ impl TraitEnv {
                         // Track the concrete subset separately: only impl
                         // blocks with no type parameters at all qualify
                         // (e.g. `impl Display for String`, not
-                        // `impl<T> Inspect for List<T>`).
+                        // `impl<T> Inspect for List<T>`). Indexed by the bare
+                        // head only; a concrete impl on a generic head
+                        // (`impl Trait for List<u8>`) is additionally indexed
+                        // under its resolved instantiated name post-resolution
+                        // by `synthesis::collect_synthesised_impls`.
                         if impl_block.type_params.is_empty() {
                             let cmodules = concrete_trait_impl_modules.entry(key).or_default();
                             if !cmodules.contains(module_source) {
                                 cmodules.push(module_source.clone());
-                            }
-                            // An impl on a fully-instantiated generic head
-                            // (`impl Trait for List<u8>`) is also indexed
-                            // under its instantiated name ("List<u8>"), the
-                            // name the monomorphizer's substituted call
-                            // sites query when routing `List<u8>^Trait::m`
-                            // to the impl block's module.
-                            if let Some(inst) = instantiated_type_name(&impl_block.ty) {
-                                let ikey = (inst, trait_name.clone());
-                                let imodules = trait_impl_modules.entry(ikey.clone()).or_default();
-                                if !imodules.contains(module_source) {
-                                    imodules.push(module_source.clone());
-                                }
-                                let icmodules =
-                                    concrete_trait_impl_modules.entry(ikey).or_default();
-                                if !icmodules.contains(module_source) {
-                                    icmodules.push(module_source.clone());
-                                }
                             }
                         }
                     }
@@ -1145,28 +1131,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
     }
-}
-
-/// Textual instantiated name for a generic AST type whose arguments are all
-/// plain named types (`List<u8>` → "List<u8>", `List<List<i32>>` →
-/// "List<List<i32>>"), matching [`crate::name::mangle_generic_name`] for
-/// unqualified argument names. Returns `None` for non-generic heads and for
-/// argument shapes (refs, tuples, …) whose mangled spelling the AST cannot
-/// reproduce — callers then fall back to the head-name index entry.
-fn instantiated_type_name(ty: &ast::Type) -> Option<String> {
-    let ast::Type::Generic(generic) = ty else {
-        return None;
-    };
-    let mut args = Vec::with_capacity(generic.args.len());
-    for arg in &generic.args {
-        let name = match arg {
-            ast::Type::Named(named) => named.name.clone(),
-            ast::Type::Generic(_) => instantiated_type_name(arg)?,
-            _ => return None,
-        };
-        args.push(name);
-    }
-    Some(crate::name::mangle_generic_name(&generic.name, &args))
 }
 
 /// Extract a type name from an AST type without needing an Elaborator instance.
