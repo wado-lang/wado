@@ -22,6 +22,7 @@ pub mod traits;
 
 use crate::elaborator::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::module_source::ModuleSource;
+use crate::name::LocalMethodName;
 use crate::package::Package;
 use crate::tir::ResolvedType;
 
@@ -198,7 +199,7 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
 /// refs, nested generics) with no AST re-derivation.
 fn record_concrete_instantiation(
     record: &mut impl FnMut(String, String, &ModuleSource, bool),
-    info: &crate::name::LocalMethodName,
+    info: &LocalMethodName,
     trait_name: &str,
     module_source: &ModuleSource,
 ) {
