@@ -45,17 +45,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) {
+        self.resolve_block_with_position(block, ctx, expected_type, false);
+    }
+
+    /// Resolve a block whose value is consumed (the block is in expression
+    /// position: an `Expr::Block`, an `if`/`match` arm, a labeled-block
+    /// expression). The trailing `match`/`if`/labeled-block is resolved as a
+    /// value even without an `expected_type`, so it keeps its arm-agreed type
+    /// instead of being pinned to `Unit` by `resolve_stmt`.
+    pub(super) fn resolve_block_value(
+        &mut self,
+        block: &Block,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) {
+        self.resolve_block_with_position(block, ctx, expected_type, true);
+    }
+
+    fn resolve_block_with_position(
+        &mut self,
+        block: &Block,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        tail_value: bool,
+    ) {
         ctx.enter_scope();
         let len = block.stmts.len();
         for (i, s) in block.stmts.iter().enumerate() {
-            // Propagate expected type to the last expression/statement for coercion
-            if expected_type.is_some() && i == len - 1 {
+            // The trailing statement is resolved in value position when the
+            // block's value is consumed — either an `expected_type` flows in
+            // (for coercion) or the block itself sits in expression position
+            // (`tail_value`). A bare `match`/`if` tail then keeps its
+            // arm-agreed value type instead of `resolve_stmt` pinning it to
+            // `Unit` (which only suits a discarded statement-position match).
+            if (expected_type.is_some() || tail_value) && i == len - 1 {
                 if let Stmt::Expr(expr_stmt) = s {
                     self.resolve_expr(&expr_stmt.expr, ctx, expected_type);
                     continue;
                 }
                 if let Stmt::If(if_stmt) = s {
-                    self.resolve_if_stmt_with_expected(if_stmt, ctx, expected_type);
+                    self.resolve_if_stmt_with_expected(if_stmt, ctx, expected_type, tail_value);
                     continue;
                 }
                 if let Stmt::Match(match_expr) = s {
@@ -68,7 +97,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 if let Stmt::LabeledBlock(labeled_block) = s {
-                    self.resolve_labeled_block_with_expected(labeled_block, ctx, expected_type);
+                    self.resolve_labeled_block_with_expected(
+                        labeled_block,
+                        ctx,
+                        expected_type,
+                        tail_value,
+                    );
                     continue;
                 }
             }
@@ -116,7 +150,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         labeled_block: &ast::LabeledBlockStmt,
         ctx: &mut FunctionContext,
     ) {
-        self.resolve_labeled_block_with_expected(labeled_block, ctx, None);
+        self.resolve_labeled_block_with_expected(labeled_block, ctx, None, false);
     }
 
     fn resolve_labeled_block_with_expected(
@@ -124,10 +158,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         labeled_block: &ast::LabeledBlockStmt,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
+        tail_value: bool,
     ) {
         ctx.active_labels.push(labeled_block.label.clone());
         // resolve_block already handles scope entry/exit
-        self.resolve_block(&labeled_block.block, ctx, expected_type);
+        self.resolve_block_with_position(&labeled_block.block, ctx, expected_type, tail_value);
         ctx.active_labels.pop();
     }
 
@@ -886,7 +921,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `If` / if-let-chain TIR from the AST + the `DesugarKind::IfLetChain`
     /// tag; this walk only resolves the condition and blocks for their facts.
     pub(super) fn resolve_if_stmt(&mut self, if_stmt: &IfStmt, ctx: &mut FunctionContext) {
-        self.resolve_if_stmt_with_expected(if_stmt, ctx, None);
+        self.resolve_if_stmt_with_expected(if_stmt, ctx, None, false);
     }
 
     /// Like `resolve_if_stmt` but propagates `expected_type` to blocks for
@@ -898,13 +933,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if_stmt: &IfStmt,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
+        tail_value: bool,
     ) {
         match &if_stmt.condition {
             ast::Condition::Expr(expr) => {
                 self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                self.resolve_block(&if_stmt.then_block, ctx, expected_type);
+                self.resolve_block_with_position(
+                    &if_stmt.then_block,
+                    ctx,
+                    expected_type,
+                    tail_value,
+                );
                 if let Some(b) = &if_stmt.else_block {
-                    self.resolve_block(b, ctx, expected_type);
+                    self.resolve_block_with_position(b, ctx, expected_type, tail_value);
                 }
             }
             ast::Condition::LetChain { elements, .. } => {
@@ -912,7 +953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve else_block in the outer scope (chain bindings are not
                 // visible there) for its facts.
                 if let Some(b) = &if_stmt.else_block {
-                    self.resolve_block(b, ctx, expected_type);
+                    self.resolve_block_with_position(b, ctx, expected_type, tail_value);
                 }
 
                 // Enter scope for chain element bindings and then_block.
@@ -922,6 +963,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &if_stmt.then_block,
                     ctx,
                     expected_type,
+                    tail_value,
                     if_stmt.span,
                 );
                 ctx.exit_scope();
@@ -953,10 +995,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         then_block_ast: &ast::Block,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
+        tail_value: bool,
         span: Span,
     ) {
         if elements.is_empty() {
-            self.resolve_block(then_block_ast, ctx, expected_type);
+            self.resolve_block_with_position(then_block_ast, ctx, expected_type, tail_value);
             return;
         }
         // Process the current element first so its bindings are visible when
@@ -976,6 +1019,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     then_block_ast,
                     ctx,
                     expected_type,
+                    tail_value,
                     span,
                 );
             }
@@ -986,6 +1030,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     then_block_ast,
                     ctx,
                     expected_type,
+                    tail_value,
                     span,
                 );
             }
@@ -2438,7 +2483,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // the combined walk only binds the chain patterns and walks the
                 // then-body for facts.
                 ctx.enter_scope();
-                self.resolve_let_chain_stmts(elements, &w.body, ctx, None, *cond_span);
+                self.resolve_let_chain_stmts(elements, &w.body, ctx, None, false, *cond_span);
                 ctx.exit_scope();
             }
         }

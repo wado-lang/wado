@@ -66,7 +66,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so handler-introduced bindings, if any, don't leak — matches how
         // regular block expressions behave.
         ctx.enter_scope();
-        self.resolve_block(&with_expr.body, ctx, expected_type);
+        self.resolve_block_value(&with_expr.body, ctx, expected_type);
         ctx.exit_scope();
 
         // `with ... do { ... }` is an expression: it evaluates to its body
