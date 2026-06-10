@@ -379,10 +379,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
-    /// Record a use→def reference when the definition lives in a (possibly
-    /// different) module identified directly by a [`AstId`](crate::ast::AstId). Prefer
-    /// [`Self::record_reference_to_decl`] when the call site is constructing
-    /// the key from `(module, ast_id)` parts.
+    /// Record a use→def edge to the definition at `def_id`. The defining
+    /// node may live in any module — its `AstId` is globally unique, so the
+    /// edge needs no module qualifier; navigation recovers the def's module
+    /// from the id via [`crate::semantics::Semantics::module_of_id`].
     pub(super) fn record_reference_to_def(
         &mut self,
         use_id: crate::ast::AstId,

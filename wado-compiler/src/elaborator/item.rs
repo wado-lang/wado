@@ -1511,8 +1511,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Record the impl-type-param scheme for reify to read back instead of
         // recomputing it (single source of truth = this original path). Keyed
-        // via `ann_key` so a default-method body synthesised for several impls
-        // lands under its owning module.
+        // by the method's globally-unique `AstId`; per-impl `ModuleSemantics`
+        // snapshots disambiguate the same default body synthesised across
+        // several impls.
         let method_key = func.id;
         scope
             .sem

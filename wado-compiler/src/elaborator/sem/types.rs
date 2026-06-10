@@ -335,7 +335,7 @@ pub(crate) struct TypeAnnotations {
     pub(crate) tuple_overlays: IndexMap<AstId, Vec<Vec<ElementOverlay>>>,
     /// Impl-level type parameters as `Elaborator::resolve_method` (the
     /// battle-tested original path) computed them, keyed per impl-method
-    /// `AstId` via `ann_key`. Reify reads this instead of recomputing the
+    /// `AstId`. Reify reads this instead of recomputing the
     /// impl-type-param scheme with its own logic — the single source of truth
     /// for the scheme is the elaborator. Reify reads it only for
     /// explicitly-written methods (unique key); default-method bodies land
