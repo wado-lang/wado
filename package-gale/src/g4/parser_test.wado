@@ -170,6 +170,50 @@ HEX : [0-9a-fA-F] ;";
     }
 }
 
+test "char class with \\u{...} brace escape (astral code point)" {
+    // ANTLR4 lexicon: `\u{XXXXXX}` covers all code points (lexicon.md).
+    // The fixed-4-digit path used to read `{` as a hex digit and panic.
+    let input = "grammar Test;
+EMOJI : [\\u{1F600}] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.ranges.len() == 1;
+        assert cc.ranges[0].start == '\u{1F600}', `start={cc.ranges[0].start as i32}`;
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "char class with \\uXXXX and \\b \\f escapes" {
+    let input = "grammar Test;
+C : [\\u0041\\b\\f] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.ranges.len() == 3, `len={cc.ranges.len()}`;
+        assert cc.ranges[0].start == 'A', `0={cc.ranges[0].start as i32}`;
+        assert cc.ranges[1].start == '\u0008', `1={cc.ranges[1].start as i32}`;  // backspace
+        assert cc.ranges[2].start == '\u000C', `2={cc.ranges[2].start as i32}`;  // form feed
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "char class \\uXXXX range endpoint" {
+    let input = "grammar Test;
+R : [\\u0041-\\u005A] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.ranges.len() == 1;
+        assert cc.ranges[0].start == 'A' && cc.ranges[0].end == 'Z',
+            `{cc.ranges[0].start as i32}-{cc.ranges[0].end as i32}`;
+    } else {
+        panic("expected CharClass");
+    }
+}
+
 test "unicode property class L" {
     let input = "grammar Test;
 ID : [\\p{L}] ;";

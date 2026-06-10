@@ -125,26 +125,34 @@ impl G4Lexer {
         let ec = self.chars[self.pos];
         self.pos += 1;
         if ec == 'u' {
+            let mut val = 0;
             if !self.at_end() && self.chars[self.pos] == '{' {
                 self.pos += 1;
-                let mut val = 0;
                 while !self.at_end() && self.chars[self.pos] != '}' {
+                    if !self.chars[self.pos].is_hexdigit() {
+                        break;
+                    }
                     val = val * 16 + hex_value(self.chars[self.pos]);
                     self.pos += 1;
                 }
-                if !self.at_end() {
+                if !self.at_end() && self.chars[self.pos] == '}' {
                     self.pos += 1;
                 }
-                text.push(char::from_i32(val).unwrap());
             } else {
-                let mut val = 0;
+                // `\uXXXX`: read up to four hex digits, stopping early at the
+                // first non-hex char (so `\u41` is two digits, not four chars).
                 let mut hex_count = 0;
-                while hex_count < 4 && !self.at_end() {
+                while hex_count < 4 && !self.at_end() && self.chars[self.pos].is_hexdigit() {
                     val = val * 16 + hex_value(self.chars[self.pos]);
                     self.pos += 1;
                     hex_count += 1;
                 }
-                text.push(char::from_i32(val).unwrap());
+            }
+            // Surrogates / out-of-range values cannot be a Wado char; fall
+            // back to U+FFFD rather than trapping (see code-health.md).
+            match char::from_i32(val) {
+                Some(ch) => text.push(ch),
+                None => text.push('\u{FFFD}'),
             }
         } else if ec == 'n' {
             text.push('\n');
@@ -152,6 +160,8 @@ impl G4Lexer {
             text.push('\r');
         } else if ec == 't' {
             text.push('\t');
+        } else if ec == 'b' {
+            text.push('\u0008');
         } else if ec == 'f' {
             text.push('\u000C');
         } else {

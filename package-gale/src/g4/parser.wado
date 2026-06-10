@@ -1491,17 +1491,49 @@ fn resolve_char(chars: &List<char>, pos: &mut i32) -> char {
         'n' => '\n',
         'r' => '\r',
         't' => '\t',
+        'b' => '\u0008',  // backspace (ANTLR4 lexicon.md)
+        'f' => '\u000C',  // form feed
         '\\' => '\\',
         ']' => ']',
         '-' => '-',
-        'u' => {
-            let mut val = 0;
-            for let mut i = 0; i < 4; i += 1 {
-                val = val * 16 + advance_char(chars, pos).hex_digit_value();
-            }
-            char::from_i32(val).unwrap();
-        },
+        'u' => resolve_unicode_escape(chars, pos),
         _ => ec,
+    };
+}
+
+/// Resolve the body of a `\u` escape after the `u` has been consumed.
+/// Handles both `\uXXXX` (up to four hex digits, stopping early at the
+/// first non-hex char) and the `\u{XXXXXX}` brace form for code points
+/// beyond U+FFFF (ANTLR4 lexicon.md). Unrepresentable code points —
+/// surrogates and values past U+10FFFF, which a Wado `char` (a Unicode
+/// scalar) cannot hold — fall back to U+FFFD rather than trapping. Full
+/// surrogate-range support needs a wider char-range representation and is
+/// tracked separately in code-health.md.
+fn resolve_unicode_escape(chars: &List<char>, pos: &mut i32) -> char {
+    let mut val = 0;
+    if *pos < chars.len() && chars[*pos] == '{' {
+        *pos += 1;
+        while *pos < chars.len() && chars[*pos] != '}' {
+            if !chars[*pos].is_hexdigit() {
+                break;
+            }
+            val = val * 16 + chars[*pos].hex_digit_value();
+            *pos += 1;
+        }
+        if *pos < chars.len() && chars[*pos] == '}' {
+            *pos += 1;
+        }
+    } else {
+        let mut n = 0;
+        while n < 4 && *pos < chars.len() && chars[*pos].is_hexdigit() {
+            val = val * 16 + chars[*pos].hex_digit_value();
+            *pos += 1;
+            n += 1;
+        }
+    }
+    return match char::from_i32(val) {
+        Some(ch) => ch,
+        None => '\u{FFFD}',
     };
 }
 
