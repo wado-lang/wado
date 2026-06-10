@@ -16909,10 +16909,76 @@ fn _parse_macro_match__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }));
     }
     if kind == TK_DOLLAR {
+        let dollar = p.expect(TK_DOLLAR)?;
         if _gale_kind_set_6(p.peek_kind()) {
-            return _parse_macro_match__inner_bt_2(p, follow);
+            let mut group_0_inner: Option<MacroMatchGroup0> = null;
+            let grp_kind = p.peek_kind();
+            if _gale_kind_set_4(grp_kind) {
+                let identifier = _parse_identifier(p, follow)?;
+                group_0_inner = Option::<MacroMatchGroup0>::Some(MacroMatchGroup0::Alt0(MacroMatchGroup0Alt0 {
+                    identifier,
+                }));
+            } else if grp_kind == TK_KW_SELFVALUE {
+                let kw_selfvalue = p.expect(TK_KW_SELFVALUE)?;
+                group_0_inner = Option::<MacroMatchGroup0>::Some(MacroMatchGroup0::Alt1(MacroMatchGroup0Alt1 {
+                    kw_selfvalue,
+                }));
+            }
+            let group_0 = group_0_inner;
+            let colon = p.expect(TK_COLON)?;
+            let macro_frag_spec = _parse_macro_frag_spec(p, follow)?;
+            return Result::<MacroMatchNode, ParseError>::Ok(MacroMatchNode::Alt2(MacroMatchAlt2 {
+                span: Span::new(start, i32::max(start, p.last_end())),
+                dollar,
+                group_0,
+                colon,
+                macro_frag_spec,
+            }));
         } else if p.peek_kind() == TK_LPAREN {
-            return _parse_macro_match__inner_bt_3(p, follow);
+            let lparen = p.expect(TK_LPAREN)?;
+            let mut macro_match_list: List<MacroMatchNode> = [];
+            let mut _plus_first = true;
+            loop {
+                if !_plus_first {
+                    let mut rep_scan_pos: i32 = -1;
+                    rep_scan: {
+                        let tokens = &p.tokens;
+                        let mut pos: i32 = p.pos;
+                        pos = scan_macro_match(tokens, pos, &EMPTY_FOLLOW, 0);
+                        if pos < 0 { break rep_scan; }
+                        if pos <= p.pos { break rep_scan; }
+                        rep_scan_pos = pos;
+                    }
+                    if rep_scan_pos < 0 {
+                        if _gale_kind_set_1(p.peek_kind()) {
+                            let _rec_pos = p.pos;
+                            if let Err(_rec_e) = _parse_macro_match(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                            p.pos = _rec_pos;
+                        }
+                        break;
+                    }
+                }
+                _plus_first = false;
+                let macro_match = _parse_macro_match(p, &EMPTY_FOLLOW)?;
+                macro_match_list.push(macro_match);
+            }
+            let rparen = p.expect(TK_RPAREN)?;
+            let macro_rep_sep: Option<MacroRepSepNode> = if _gale_kind_set_7(p.peek_kind()) {
+                let macro_rep_sep = _parse_macro_rep_sep(p, &EMPTY_FOLLOW)?;
+                Option::<MacroRepSepNode>::Some(macro_rep_sep)
+            } else {
+                null
+            };
+            let macro_rep_op = _parse_macro_rep_op(p, follow)?;
+            return Result::<MacroMatchNode, ParseError>::Ok(MacroMatchNode::Alt3(MacroMatchAlt3 {
+                span: Span::new(start, i32::max(start, p.last_end())),
+                dollar,
+                lparen,
+                macro_match_list,
+                rparen,
+                macro_rep_sep,
+                macro_rep_op,
+            }));
         }
     }
     return Result::<MacroMatchNode, ParseError>::Err(p.error(
