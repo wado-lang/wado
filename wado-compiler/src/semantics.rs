@@ -76,15 +76,15 @@ pub struct Semantics {
     /// [`Semantics::is_complete`], so the `expect` in `compile_with_options`
     /// is safe. LSP queries do not inspect `state` directly.
     pub(crate) state: Option<AnnotateState>,
-    /// Use→def map populated by the real elaborator as it walks function
-    /// bodies in `build_tir_from_state`. Maps `(module, IdentExpr.id)` to
-    /// the binding's defining `AstId`. Empty when resolve did not run
-    /// or bailed before recording any edges.
     /// `AstIdSpace → ModuleSource` registry over the loaded modules: which
     /// module's parse minted each id space. Lets bare-`AstId` facts be
     /// resolved back to their owning module (spans, URIs) without carrying a
     /// module in every key.
     pub(crate) space_modules: IndexMap<crate::ast::AstIdSpace, ModuleSource>,
+    /// Use→def map populated by the real elaborator as it walks function
+    /// bodies in `build_tir_from_state`. Maps `IdentExpr.id` to the
+    /// binding's defining `AstId`. Empty when resolve did not run or
+    /// bailed before recording any edges.
     pub(crate) references: IndexMap<AstId, AstId>,
     /// Local binding [`Symbol`] entries (let / param / closure param)
     /// emitted by the elaborator alongside `references`. Keyed by the
