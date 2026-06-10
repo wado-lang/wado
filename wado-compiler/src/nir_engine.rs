@@ -168,6 +168,23 @@ impl<'a> Engine<'a> {
         self.value_graph.as_ref()?.literal_source.get(&id).copied()
     }
 
+    /// Whether the value `v` is loop-invariant for the loop whose body block
+    /// is `loop_body` — i.e. it does not transitively depend on any
+    /// loop-written local or body-written field. Returns `false`
+    /// (conservatively variant) for a `loop_body` the builder did not record
+    /// as a loop. Built lazily like [`Engine::value`].
+    pub fn is_loop_invariant(
+        &mut self,
+        loop_body: BlockId,
+        v: crate::nir_value_graph::ValueId,
+    ) -> bool {
+        self.ensure_value_graph();
+        self.value_graph
+            .as_ref()
+            .unwrap()
+            .is_loop_invariant(loop_body, v)
+    }
+
     /// Drop the cached `ValueGraph` so the next [`Engine::value`] call
     /// rebuilds. Used by rules that intend to query the value graph again
     /// after a structural rewrite that would invalidate the prior build.

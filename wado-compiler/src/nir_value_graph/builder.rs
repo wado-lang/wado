@@ -30,10 +30,10 @@
 use crate::hashmap::IndexMap;
 use crate::nir::{NirBinaryOp, NirParam, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
 };
 
-use super::{HeapVersion, ValueId, ValuePool};
+use super::{HeapVersion, ValueId, ValueKind, ValuePool};
 
 /// Per-function heap-version tracker. The builder threads one `HeapState`
 /// through the walk; on every Skel node that may write the heap, the
@@ -137,6 +137,96 @@ pub struct ValueGraphBuild {
     /// `Local` read with the forwarded literal, avoiding `repr` churn in
     /// diagnostic output and NIR dumps.
     pub literal_source: IndexMap<ValueId, ExprId>,
+    /// Per-loop variance thresholds, keyed by the loop body's `BlockId`.
+    /// Consulted by [`ValueGraphBuild::is_loop_invariant`]; see [`LoopScope`].
+    pub loop_scopes: IndexMap<BlockId, LoopScope>,
+}
+
+/// Variance thresholds the builder records for one loop, so a consumer can
+/// ask whether a `ValueId` is loop-invariant without rebuilding a
+/// `ModifiedVars`-style analysis.
+///
+/// A value is loop-*variant* (changes across iterations) iff it
+/// transitively depends on a loop-written local — an `Opaque` minted at the
+/// loop's entry (the reassigned-local placeholder) or during the body walk —
+/// or on a field the body writes — a `FieldAccess` at a heap version the body
+/// produced. Everything else (parameters, pre-loop locals, literals,
+/// arithmetic over invariant operands, reads of unwritten fields) is
+/// invariant. See [`ValueGraphBuild::is_loop_invariant`].
+#[derive(Clone, Copy, Debug)]
+pub struct LoopScope {
+    /// `ValueId`s whose index is `>=` this were minted at the loop's entry
+    /// (reassigned-local opaques) or during the body; an `Opaque` among them
+    /// varies across iterations.
+    value_threshold: u32,
+    /// `FieldAccess` reads at a `heap_ver` index `>=` this were written by
+    /// the body. The entry `bump_all` sits just below it, so a field the body
+    /// never writes keeps a sub-threshold version and stays invariant.
+    version_threshold: u32,
+}
+
+impl ValueGraphBuild {
+    /// Whether `v` is loop-invariant for the loop whose body is `loop_body`.
+    /// Returns `false` (conservatively variant) for an unrecorded
+    /// `loop_body`, so a caller that hoists on `true` never moves a varying
+    /// value.
+    pub fn is_loop_invariant(&self, loop_body: BlockId, v: ValueId) -> bool {
+        let Some(&scope) = self.loop_scopes.get(&loop_body) else {
+            return false;
+        };
+        let mut memo: IndexMap<ValueId, bool> = IndexMap::default();
+        !self.is_variant(scope, v, &mut memo)
+    }
+
+    fn is_variant(&self, scope: LoopScope, v: ValueId, memo: &mut IndexMap<ValueId, bool>) -> bool {
+        if let Some(&cached) = memo.get(&v) {
+            return cached;
+        }
+        // Insert a provisional `false` so a (degenerate) cyclic reference
+        // terminates; the MVP graph is acyclic (`LoopPhi` is handled below
+        // without recursing), so this only guards against future kinds.
+        memo.insert(v, false);
+        let result = match self.pool.kind(v) {
+            ValueKind::Opaque(_) => v.index() >= scope.value_threshold,
+            ValueKind::FieldAccess {
+                receiver, heap_ver, ..
+            } => {
+                let (receiver, heap_ver) = (*receiver, *heap_ver);
+                heap_ver.index() >= scope.version_threshold
+                    || self.is_variant(scope, receiver, memo)
+            }
+            ValueKind::Binary { lhs, rhs, .. } => {
+                let (lhs, rhs) = (*lhs, *rhs);
+                self.is_variant(scope, lhs, memo) || self.is_variant(scope, rhs, memo)
+            }
+            ValueKind::Unary { operand, .. } => {
+                let operand = *operand;
+                self.is_variant(scope, operand, memo)
+            }
+            ValueKind::Cast { operand, .. } => {
+                let operand = *operand;
+                self.is_variant(scope, operand, memo)
+            }
+            ValueKind::Select { cond, then, else_ } => {
+                let (cond, then, else_) = (*cond, *then, *else_);
+                self.is_variant(scope, cond, memo)
+                    || self.is_variant(scope, then, memo)
+                    || self.is_variant(scope, else_, memo)
+            }
+            // A loop recurrence varies by definition.
+            ValueKind::LoopPhi { .. } => true,
+            // Literals are invariant.
+            ValueKind::Int(_)
+            | ValueKind::Float(_)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::String(_)
+            | ValueKind::Null
+            | ValueKind::Unit => false,
+        };
+        memo.insert(v, result);
+        result
+    }
 }
 
 /// Build the `ValueGraph` for one function body.
@@ -164,6 +254,7 @@ pub fn build(
         pool: b.pool,
         value_of: b.value_of,
         literal_source: b.literal_source,
+        loop_scopes: b.loop_scopes,
     }
 }
 
@@ -192,6 +283,9 @@ struct Builder<'a> {
     /// Locals whose object is reference-aliased; field seeding is suppressed
     /// for them (see [`build`]).
     alias_unsafe: crate::hashmap::IndexSet<u32>,
+    /// Per-loop variance thresholds recorded by [`Self::walk_loop`]. See
+    /// [`LoopScope`] / [`ValueGraphBuild::is_loop_invariant`].
+    loop_scopes: IndexMap<BlockId, LoopScope>,
 }
 
 impl<'a> Builder<'a> {
@@ -207,6 +301,7 @@ impl<'a> Builder<'a> {
             literal_source: IndexMap::default(),
             field_store: IndexMap::default(),
             alias_unsafe: unsafe_locals,
+            loop_scopes: IndexMap::default(),
         }
     }
 
@@ -940,6 +1035,11 @@ impl<'a> Builder<'a> {
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
         collect_writes_in_block(self.body, body_block, &mut writes);
+        // Variance threshold for values: anything minted from here on (the
+        // entry opaques below, plus everything the body walk interns) is a
+        // candidate loop-variant — but only `Opaque`s actually vary; see
+        // `is_variant`.
+        let value_threshold = self.pool.len() as u32;
         for idx in &writes {
             if self.current_value.contains_key(idx) {
                 let opaque = self.pool.fresh_opaque();
@@ -947,6 +1047,17 @@ impl<'a> Builder<'a> {
             }
         }
         self.heap_state.bump_all();
+        // Variance threshold for heap: the entry `bump_all` above gives every
+        // field this version; a field the body writes bumps past it, so
+        // `heap_ver >= version_threshold` ⟺ "written by the body".
+        let version_threshold = self.heap_state.next.index();
+        self.loop_scopes.insert(
+            body_block,
+            LoopScope {
+                value_threshold,
+                version_threshold,
+            },
+        );
         self.walk_block(body_block);
         for idx in &writes {
             if self.current_value.contains_key(idx) {
@@ -1994,6 +2105,145 @@ mod tests {
             r.pool.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
+    }
+
+    // ----- Loop-invariance query -----
+
+    #[test]
+    fn loop_invariant_param_field_read() {
+        // fn(obj) { loop { let x = obj.f; } }  -- obj.f not written -> invariant
+        let mut body = empty_body();
+        let recv = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv, 0);
+        let let_x = let_stmt(&mut body, 1, read, false);
+        let lb = block_with(&mut body, vec![let_x]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        root_with(&mut body, vec![loop_s]);
+        let r = build_t(&body, &[param_seed()]);
+        let vid = r.value_of[&read];
+        assert!(r.is_loop_invariant(lb, vid));
+    }
+
+    #[test]
+    fn loop_body_call_makes_field_read_variant() {
+        // fn(obj) { loop { foo(); let x = obj.f; } }
+        // The call may mutate obj.f (bump_all), so the read is at a
+        // body-produced heap version -> variant. (A `obj.f = lit; … obj.f`
+        // would instead fold to that literal and be correctly invariant —
+        // the seeded-constant case.)
+        let mut body = empty_body();
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_x = let_stmt(&mut body, 1, read, false);
+        let lb = block_with(&mut body, vec![call_s, let_x]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        root_with(&mut body, vec![loop_s]);
+        let r = build_t(&body, &[param_seed()]);
+        let vid = r.value_of[&read];
+        assert!(!r.is_loop_invariant(lb, vid));
+    }
+
+    #[test]
+    fn loop_seeded_constant_field_read_is_invariant() {
+        // fn(obj) { loop { obj.f = 1; let x = obj.f; } }
+        // The store seeds obj.f = 1, so the read folds to the literal 1,
+        // which is loop-invariant (always 1 within the loop).
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let write = field_assign_stmt(&mut body, recv_w, 0, one);
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_x = let_stmt(&mut body, 1, read, false);
+        let lb = block_with(&mut body, vec![write, let_x]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        root_with(&mut body, vec![loop_s]);
+        let r = build_t(&body, &[param_seed()]);
+        let vid = r.value_of[&read];
+        assert_eq!(r.pool.kind(vid), &ValueKind::Int(1));
+        assert!(r.is_loop_invariant(lb, vid));
+    }
+
+    #[test]
+    fn loop_induction_local_read_is_variant() {
+        // fn() { let mut i = 0; loop { let j = i; i = i + 1; } } -- j reads i (variant)
+        let mut body = empty_body();
+        let zero = int_lit(&mut body, 0);
+        let let_i = let_stmt(&mut body, 0, zero, true);
+        let i_read = local_ref(&mut body, 0);
+        let let_j = let_stmt(&mut body, 1, i_read, false);
+        let i_read2 = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let plus = binary(&mut body, NirBinaryOp::Add, i_read2, one);
+        let assign = assign_stmt(&mut body, 0, plus);
+        let lb = block_with(&mut body, vec![let_j, assign]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        root_with(&mut body, vec![let_i, loop_s]);
+        let r = build_t(&body, &[]);
+        let vid = r.value_of[&i_read];
+        assert!(!r.is_loop_invariant(lb, vid));
+    }
+
+    #[test]
+    fn loop_invariant_arithmetic_of_params() {
+        // fn(n, m) { loop { let s = n + m; } } -- both params -> invariant
+        let mut body = empty_body();
+        let n_read = local_ref(&mut body, 0);
+        let m_read = local_ref(&mut body, 1);
+        let sum = binary(&mut body, NirBinaryOp::Add, n_read, m_read);
+        let let_s = let_stmt(&mut body, 2, sum, false);
+        let lb = block_with(&mut body, vec![let_s]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        root_with(&mut body, vec![loop_s]);
+        let n = NirParam {
+            name: "n".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 0,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let m = NirParam {
+            name: "m".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 1,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build_t(&body, &[n, m]);
+        let vid = r.value_of[&sum];
+        assert!(r.is_loop_invariant(lb, vid));
+    }
+
+    #[test]
+    fn loop_arithmetic_with_induction_is_variant() {
+        // fn(n) { let mut i = 0; loop { let s = i + n; i = i + 1; } }
+        // `i + n` mixes the induction variable -> variant.
+        let mut body = empty_body();
+        let zero = int_lit(&mut body, 0);
+        let let_i = let_stmt(&mut body, 1, zero, true);
+        let i_read = local_ref(&mut body, 1);
+        let n_read = local_ref(&mut body, 0);
+        let sum = binary(&mut body, NirBinaryOp::Add, i_read, n_read);
+        let let_s = let_stmt(&mut body, 2, sum, false);
+        let i_read2 = local_ref(&mut body, 1);
+        let one = int_lit(&mut body, 1);
+        let plus = binary(&mut body, NirBinaryOp::Add, i_read2, one);
+        let assign = assign_stmt(&mut body, 1, plus);
+        let lb = block_with(&mut body, vec![let_s, assign]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        root_with(&mut body, vec![let_i, loop_s]);
+        let n = NirParam {
+            name: "n".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 0,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build_t(&body, &[n]);
+        let vid = r.value_of[&sum];
+        assert!(!r.is_loop_invariant(lb, vid));
     }
 
     #[test]
