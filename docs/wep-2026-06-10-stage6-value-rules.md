@@ -113,6 +113,12 @@ stack. For each `Loop`, it records into `ValueGraphBuild`:
   its operands is variant.
 
 Engine API: `engine.is_loop_invariant(loop_body: BlockId, v: ValueId)`.
+(Removed after 6.4 landed: licm's hoisting needs pre-header stability,
+not cross-iteration invariance, so the predicate had no production
+consumer — and a latent wrong answer for read-before-write field
+recurrences. The `loop_entry_values` snapshots are what survived;
+re-derive a variance predicate from a fresh design if a real consumer
+appears.)
 
 Induction tags. During `walk_loop`'s pre-scan, a written local `i`
 whose only writes in the body are exactly one `i = i + C` (C an integer
