@@ -1241,24 +1241,24 @@ impl G4Parser {
             if LexerSlice::eq_str(&"skip", action_text) {
                 actions.skip = true;
             } else if LexerSlice::eq_str(&"pushMode", action_text) {
-                self.expect(G4Token::LParen).unwrap();
+                self.expect(G4Token::LParen)?;
                 let mode_name = self.advance();
-                self.expect(G4Token::RParen).unwrap();
+                self.expect(G4Token::RParen)?;
                 actions.push_mode = intern_mode(mode_names, &mode_name.text.to_string());
             } else if LexerSlice::eq_str(&"popMode", action_text) {
                 actions.pop_mode = true;
             } else if LexerSlice::eq_str(&"mode", action_text) {
                 // `mode(X)` switches the current mode (top of stack), unlike pushMode.
-                self.expect(G4Token::LParen).unwrap();
+                self.expect(G4Token::LParen)?;
                 let mode_name = self.advance();
-                self.expect(G4Token::RParen).unwrap();
+                self.expect(G4Token::RParen)?;
                 actions.set_mode = intern_mode(mode_names, &mode_name.text.to_string());
             } else if LexerSlice::eq_str(&"channel", action_text) {
                 // `channel(X)` accepts an integer literal, the predefined name
                 // HIDDEN, or a user-defined channel name from `channels { }`.
-                self.expect(G4Token::LParen).unwrap();
+                self.expect(G4Token::LParen)?;
                 let arg = self.advance();
-                self.expect(G4Token::RParen).unwrap();
+                self.expect(G4Token::RParen)?;
                 if LexerSlice::eq_str(&"DEFAULT_TOKEN_CHANNEL", &arg.text) {
                     // ANTLR4's predefined name for channel 0.
                     actions.channel = DEFAULT_CHANNEL;
@@ -1284,9 +1284,9 @@ impl G4Parser {
                     actions.channel = resolved;
                 }
             } else if LexerSlice::eq_str(&"type", action_text) {
-                self.expect(G4Token::LParen).unwrap();
+                self.expect(G4Token::LParen)?;
                 let target = self.advance();
-                self.expect(G4Token::RParen).unwrap();
+                self.expect(G4Token::RParen)?;
                 actions.type_override = Option::<String>::Some(target.text.to_string());
             } else if LexerSlice::eq_str(&"more", action_text) {
                 actions.more = true;

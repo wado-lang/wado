@@ -861,6 +861,23 @@ COMMENT : '#' ~[\\r\\n]* -> channel(2) ;";
     assert g.lexer_rules[0].channel == 2;
 }
 
+test "malformed lexer command is rejected, not panicked" {
+    // `channel HIDDEN` is missing the parens ANTLR4 requires. The parser
+    // must return an Err (it threads Result) rather than trapping on the
+    // internal `expect(LParen).unwrap()`.
+    let input = "lexer grammar Test;
+WS : [ \\t]+ -> channel HIDDEN ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected malformed channel command to be rejected";
+}
+
+test "lexer command type without parens is rejected, not panicked" {
+    let input = "lexer grammar Test;
+A : 'a' -> type ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected malformed type command to be rejected";
+}
+
 test "lexer command channel with HIDDEN" {
     let input = "lexer grammar Test;
 WS : [ \\t]+ -> channel(HIDDEN) ;";
