@@ -4635,23 +4635,10 @@ pub fn u128::as_f64(self: &u128) -> f64 {
     let __pattern_temp_0: [u64, i64] = self.u128::round_to_mantissa(53);
     let m: u64 = __pattern_temp_0.0;
     let exp: i64 = __pattern_temp_0.1;
-    let mut result: f64 = m as f64;
-    let mut k: i64 = (exp - 52);
-    loop {
-        if !(k >= 16) {
-            break;
-        }
-        result = (result * 65536.0);
-        k = (k - 16);
-    }
-    loop {
-        if !(k > 0) {
-            break;
-        }
-        result = (result * 2.0);
-        k = (k - 1);
-    }
-    return result;
+    let biased: u64 = (exp + 1023) as u64;
+    let mantissa: u64 = (m & ((1 << 52) - 1));
+    let bits: u64 = ((biased << 52) | mantissa);
+    return core::builtin::f64_reinterpret_i64(bits as i64);
 }
 
 pub fn u128::as_f32(self: &u128) -> f32 {
@@ -4661,23 +4648,10 @@ pub fn u128::as_f32(self: &u128) -> f32 {
     let __pattern_temp_0: [u64, i64] = self.u128::round_to_mantissa(24);
     let m: u64 = __pattern_temp_0.0;
     let exp: i64 = __pattern_temp_0.1;
-    let mut result: f32 = m as f32;
-    let mut k: i64 = (exp - 23);
-    loop {
-        if !(k >= 16) {
-            break;
-        }
-        result = (result * 65536.0);
-        k = (k - 16);
-    }
-    loop {
-        if !(k > 0) {
-            break;
-        }
-        result = (result * 2.0);
-        k = (k - 1);
-    }
-    return result;
+    let biased: u32 = (exp + 127) as u32;
+    let mantissa: u32 = (m as u32 & ((1 << 23) - 1));
+    let bits: u32 = ((biased << 23) | mantissa);
+    return core::builtin::f32_reinterpret_i32(bits as i32);
 }
 
 pub fn u128::div_rem(self: &u128, divisor: &u128) -> [u128, u128] {
@@ -4795,7 +4769,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
                 __r.String::push_str(&"core:prelude/int128.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 312 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 302 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&"\ncondition: pos == offset\n");
                 __r.String::push_str(&"pos: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -4876,7 +4850,7 @@ fn u128::fmt_base(self: &u128, f: &mut Formatter, base: i32, upper: bool, prefix
                     __r.String::push_str(&"core:prelude/int128.wado");
                     __r.String::push_str(&":");
                     let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                    Box<i32> { value: 365 }."i32^Display::fmt"(&mut __f);
+                    Box<i32> { value: 355 }."i32^Display::fmt"(&mut __f);
                     __r.String::push_str(&"\ncondition: pos == offset\n");
                     __r.String::push_str(&"pos: ");
                     __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
