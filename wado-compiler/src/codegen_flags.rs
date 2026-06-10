@@ -39,8 +39,9 @@ pub struct CodegenFlags {
     /// hint inference is skipped. The markers are dropped at WIR build — not
     /// at NIR — so the NIR inliner's cold-path cost exclusion behaves
     /// identically in both configurations and the A/B isolates the hints
-    /// themselves. `br_if` selection stays on either way; it is instruction
-    /// selection, not hinting.
+    /// themselves. `br_if` selection is unaffected by this flag — it is
+    /// instruction selection, not hinting (it runs at `-O1+`, gated by the
+    /// optimization level like any other rewrite).
     pub branch_hinting: bool,
 }
 
