@@ -922,24 +922,13 @@ impl JsonDeserializer {
             return Result::Ok(result);
         }
 
-<<<<<<< HEAD
-        // Slow path: has escape sequences (or hit EOF). Build the escape-free
-        // prefix, then handle escapes.
-        let mut result = match String::from_utf8_slice(self.input.slice(prefix_start, scan_pos)) {
-||||||| 259dd88cb
-        // Slow path: has escape sequences (or hit EOF). Build the escape-free
-        // prefix with checked UTF-8 construction, then handle escapes.
-        let mut result = match String::from_utf8_slice(self.input.slice(prefix_start, prefix_start + prefix_len)) {
-=======
         // Slow path: has escape sequences (or hit EOF). Escapes are rare in
         // typical JSON (citm_catalog: 1 of ~26k string tokens), so the whole
         // tail is cold — the marker hints the fast-path dispatch above
         // likely-taken and lets the engine lay this path out of line. Build the
-        // escape-free prefix with checked UTF-8 construction, then handle
-        // escapes.
+        // escape-free prefix, then handle escapes.
         builtin::cold_path();
-        let mut result = match String::from_utf8_slice(self.input.slice(prefix_start, prefix_start + prefix_len)) {
->>>>>>> origin/main
+        let mut result = match String::from_utf8_slice(self.input.slice(prefix_start, scan_pos)) {
             Ok(s) => s,
             Err(_) => {
                 return Result::Err(self.invalid_utf8_string(prefix_start));
