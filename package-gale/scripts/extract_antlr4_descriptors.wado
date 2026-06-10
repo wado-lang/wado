@@ -440,18 +440,16 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
         }
     }
     stream.drop();
-    // The completion future distinguishes clean EOF from a mid-stream
-    // error; dropping it unchecked could commit a silently truncated
-    // grammar.
-    match done.read() {
-        Some(Ok(_)) => (),
-        Some(Err(e)) => {
-            return Result::Err(e);
-        },
-        None => {
-            return Result::Err(ErrorCode::Io);
-        },
-    }
+    // TODO(compiler): the completion future SHOULD be consumed here — it
+    // distinguishes clean EOF from a mid-stream error, and dropping it
+    // unchecked could commit a silently truncated grammar. But reading a
+    // `Future<Result<(), ErrorCode>>` currently ICEs the compiler in the
+    // CLI world (unit-payload result lifting at the CM boundary; "WIR
+    // pipeline generated invalid core Wasm module ... values remaining on
+    // stack at end of block" in the consuming fn). Same bug family as the
+    // `Exit::exit(Result<(),()>)` ICE noted in wado-compiler/lib/core/cli.wado.
+    // Re-add the `done.read()` check once that is fixed.
+    done.drop();
     return match String::from_utf8(bytes) {
         Ok(s) => Result::Ok(s),
         Err(_) => Result::Err(ErrorCode::IllegalByteSequence),
@@ -475,12 +473,12 @@ fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Resul
     let sub = file.write_via_stream(rx, 0 as Filesize);
     tx.write(bytes);
     tx.drop();
-    // Await the write's completion: dropping the future unchecked would
-    // report Ok(()) for a failed or partial write.
-    return match sub.read() {
-        Some(r) => r,
-        None => Result::Err(ErrorCode::Io),
-    };
+    // TODO(compiler): `sub.read()` should be awaited here — dropping the
+    // future unchecked reports Ok(()) for a failed or partial write — but
+    // reading a `Future<Result<(), ErrorCode>>` currently ICEs the
+    // compiler (see read_file_to_string above).
+    sub.drop();
+    return Result::Ok(());
 }
 
 /// Remove a regular file. `Err(NoEntry)` is treated like other errors — the
