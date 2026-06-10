@@ -243,23 +243,23 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 
 From highest to lowest precedence:
 
-| Level | Operators                                                           | Associativity  | Description                 |
-| ----- | ------------------------------------------------------------------- | -------------- | --------------------------- |
-| 1     | `::`, `.`, `()`                                                     | Left-to-right  | Paths, method calls, fields |
-| 2     | `?`                                                                 | N/A            | Error propagation           |
-| 3     | `!`, `~`, `-`, `*`, `&`, `&mut`                                     | Right-to-left  | Unary operators             |
-| 4     | `as`                                                                | Left-to-right  | Type cast                   |
-| 5     | `*`, `/`, `%`                                                       | Left-to-right  | Multiplicative              |
-| 6     | `+`, `-`                                                            | Left-to-right  | Additive                    |
-| 7     | `<<`, `>>`                                                          | Left-to-right  | Bitwise shift               |
-| 8     | `&`                                                                 | Left-to-right  | Bitwise AND                 |
-| 9     | `^`                                                                 | Left-to-right  | Bitwise XOR                 |
-| 10    | `\|`                                                                | Left-to-right  | Bitwise OR                  |
-| 11    | `==`, `<`, `>`, `<=`, `>=` (left-assoc with rules), `!=` (no chain) | **Restricted** | Comparison                  |
-| 12    | `&&`                                                                | Left-to-right  | Logical AND                 |
-| 13    | `\|\|`                                                              | Left-to-right  | Logical OR                  |
-| 14    | `..<`, `..=`                                                        | N/A            | Range operators             |
-| 15    | `=`, `+=`, `-=`, etc.                                               | Right-to-left  | Assignment                  |
+| Level | Operators                                                           | Associativity  | Description                        |
+| ----- | ------------------------------------------------------------------- | -------------- | ---------------------------------- |
+| 1     | `::`, `.`, `()`, `matches { pattern }`                              | Left-to-right  | Paths, calls, fields, pattern test |
+| 2     | `?`                                                                 | N/A            | Error propagation                  |
+| 3     | `!`, `~`, `-`, `*`, `&`, `&mut`                                     | Right-to-left  | Unary operators                    |
+| 4     | `as`                                                                | Left-to-right  | Type cast                          |
+| 5     | `*`, `/`, `%`                                                       | Left-to-right  | Multiplicative                     |
+| 6     | `+`, `-`                                                            | Left-to-right  | Additive                           |
+| 7     | `<<`, `>>`                                                          | Left-to-right  | Bitwise shift                      |
+| 8     | `&`                                                                 | Left-to-right  | Bitwise AND                        |
+| 9     | `^`                                                                 | Left-to-right  | Bitwise XOR                        |
+| 10    | `\|`                                                                | Left-to-right  | Bitwise OR                         |
+| 11    | `==`, `<`, `>`, `<=`, `>=` (left-assoc with rules), `!=` (no chain) | **Restricted** | Comparison                         |
+| 12    | `&&`                                                                | Left-to-right  | Logical AND                        |
+| 13    | `\|\|`                                                              | Left-to-right  | Logical OR                         |
+| 14    | `..<`, `..=`                                                        | N/A            | Range operators                    |
+| 15    | `=`, `+=`, `-=`, etc.                                               | Right-to-left  | Assignment                         |
 
 **Key differences from Rust**:
 
@@ -270,6 +270,28 @@ From highest to lowest precedence:
   - Mixed-direction chains rejected: `a < b > c`
   - `!=` cannot be chained
   - Rust rejects all comparison chaining at parse level
+
+**`matches` is postfix (Level 1):**
+
+The `matches` operator (`scrutinee matches { pattern }`) binds at the postfix
+level, alongside `.`/`()`/`::`, so it is tighter than the unary operators, `as`,
+and every binary operator. The braced right-hand side is self-delimiting, so
+there is no right-associativity question; only the left (scrutinee) extent
+matters.
+
+This is deliberate. Because `!` is a prefix operator, postfix `matches` makes
+`!x matches { P }` parse as `!(x matches { P })` — "`x` does not match `P`" —
+which is the overwhelmingly common intent and is used pervasively across the
+standard library. The alternative (placing `matches` at a binary level, e.g.
+comparison) would flip this to `(!x) matches { P }`, forcing the negated-match
+idiom to be written `!(x matches { P })` everywhere.
+
+The trade-off is fundamental and cannot be avoided with a single precedence:
+keeping `!x matches { P }` = "not match" requires `matches` to be tighter than
+unary (`< 3`), while letting `x as T matches { P }` parse without parentheses
+requires it to be looser than `as` (`> 4`); `< 3 ∧ > 4` is unsatisfiable. We
+keep the negation idiom and require parentheses for the rarer cast/binary
+scrutinee, where the parser emits a hint pointing at `(expr) matches { ... }`.
 
 ## References
 
