@@ -1,0 +1,30 @@
+// Test: a bounds check AFTER the bound storage shrinks must survive.
+// The loop guard proves `i < arr.len()` for the `.used` value read at the
+// guard. `pop()` shrinks `.used` within the iteration, so a later
+// `arr[i]` re-reads a smaller bound and must panic. Eliding the check is
+// silently wrong: the GC backing array still has the old capacity, so
+// the raw `array.get` does NOT trap — it reads a stale element.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut arr: List<i32> = [10, 20, 30];
+    let mut i = 0;
+    let mut sum = 0;
+    loop {
+        if !(i < arr.len()) {
+            break;
+        }
+        if i == 0 {
+            arr.pop();
+            arr.pop();
+            arr.pop();
+        }
+        sum += arr[i];
+        i += 1;
+    }
+    println(`{sum}`);
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}

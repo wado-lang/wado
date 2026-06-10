@@ -29,6 +29,7 @@ use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::tir::TypeTable;
 
 use cranelift_entity::EntityRef;
 
@@ -99,6 +100,7 @@ enum FieldSource {
 type DefMap = IndexMap<u32, Def>;
 
 pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let type_table = project.type_table.borrow();
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ConditionImplication, len, |fid| {
@@ -108,6 +110,7 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut Functio
         }
         let rule = ConditionImplicationRule {
             applied: Cell::new(false),
+            type_table: &type_table,
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
@@ -118,11 +121,12 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut Functio
 
 /// Standalone-session rule whose single `apply_block` performs the whole-
 /// function condition-implication walk at the body root.
-pub(super) struct ConditionImplicationRule {
+pub(super) struct ConditionImplicationRule<'a> {
     applied: Cell<bool>,
+    type_table: &'a TypeTable,
 }
 
-impl Rule for ConditionImplicationRule {
+impl Rule for ConditionImplicationRule<'_> {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
         if engine.parent_of(NodeRef::Block(block)).is_some() {
             return false;
@@ -133,7 +137,112 @@ impl Rule for ConditionImplicationRule {
         let tainted = collect_tainted_locals(engine.body);
         let mut defs = DefMap::default();
         let root = engine.body.root;
-        process_block(engine, root, &mut defs, &tainted)
+        process_block(engine, root, &mut defs, &tainted, self.type_table)
+    }
+}
+
+/// Mutation events observed in a statement subtree that can invalidate a
+/// previously established guard fact.
+///
+/// A guard proves a relation between the values its operands had *when the
+/// guard was evaluated*. A later write to the guard variable (`i += 1`), to
+/// the bound's backing storage (`arr.used = …` from an inlined `pop`), or an
+/// opaque heap effect (a call that may mutate the bound's object) means a
+/// re-read at a check site can observe a different value, so the implication
+/// no longer holds there. The eliminators collect these events in document
+/// order and permanently retire affected guards (see
+/// `array_bounds_elim_oob_guard_var_mutated.wado` /
+/// `array_bounds_elim_oob_bound_shrunk.wado`).
+#[derive(Default)]
+struct KillEvents {
+    /// Bare locals written by `local = expr` or exposed via `&mut local`.
+    locals: IndexSet<u32>,
+    /// `field_index`es written by `obj.f = expr` or exposed via `&mut obj.f`.
+    /// Receiver-insensitive: a write to any object's `f` retires bounds
+    /// reading field `f`, mirroring the per-field heap model elsewhere.
+    fields: IndexSet<u32>,
+    /// An opaque heap effect: a non-builtin, possibly-returning call, or a
+    /// write through a reference. Retires every field-chain bound.
+    heap: bool,
+}
+
+/// Collect every kill event in `node`'s subtree. The granularity is one
+/// statement: a guard is retired *before* the eliminators look inside a
+/// statement that contains a kill for it, so a check and a write inside the
+/// same statement conservatively keep the check.
+fn collect_kill_events(body: &Body, node: NodeRef, type_table: &TypeTable, out: &mut KillEvents) {
+    if let NodeRef::Expr(e) = node {
+        record_kill_event(body, e, type_table, out);
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        collect_kill_events(body, c, type_table, out);
+    }
+}
+
+fn record_kill_event(body: &Body, e: ExprId, type_table: &TypeTable, out: &mut KillEvents) {
+    match &body.exprs[e].kind {
+        ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
+            ExprKind::Local { index, .. } => {
+                out.locals.insert(*index);
+            }
+            ExprKind::FieldAccess { field_index, .. } => {
+                out.fields.insert(*field_index);
+            }
+            // `arr[i] = v` writes an element; bounds read locals and
+            // length-carrying fields, never elements.
+            ExprKind::Index { .. } => {}
+            _ => out.heap = true,
+        },
+        ExprKind::Unary {
+            op: NirUnaryOp::MutRef,
+            expr: inner,
+        } => match &body.exprs[*inner].kind {
+            ExprKind::Local { index, .. } => {
+                out.locals.insert(*index);
+            }
+            ExprKind::FieldAccess { field_index, .. } => {
+                out.fields.insert(*field_index);
+            }
+            _ => out.heap = true,
+        },
+        ExprKind::Call { func, .. } => {
+            // A diverging call never resumes on the path where it ran, so
+            // code after it (in walk order) only executes when it did not
+            // run. Builtins operate below the struct-field layer
+            // (`array_set`, `store_u8`, …) and cannot move a bound.
+            if !type_table.is_never(body.exprs[e].type_id)
+                && func.builtin_name().is_none()
+                && func.monomorphized_builtin_name().is_none()
+            {
+                out.heap = true;
+            }
+        }
+        ExprKind::MethodCall { .. }
+        | ExprKind::IndirectCall { .. }
+        | ExprKind::CmRawCall { .. } => {
+            if !type_table.is_never(body.exprs[e].type_id) {
+                out.heap = true;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Whether `bound`'s backing storage may have been written per `k`.
+fn bound_killed(bound: &Bound, k: &KillEvents) -> bool {
+    match bound {
+        Bound::Literal(_) => false,
+        Bound::Local(idx) => k.locals.contains(idx),
+        Bound::FieldChain {
+            root_local,
+            field_indices,
+        } => {
+            k.heap
+                || k.locals.contains(root_local)
+                || field_indices.iter().any(|f| k.fields.contains(f))
+        }
     }
 }
 
@@ -282,20 +391,34 @@ fn taint_root_local(body: &Body, e: ExprId, taints: &mut Taints) {
     }
 }
 
-fn process_block(engine: &mut Engine, block: BlockId, defs: &mut DefMap, tainted: &Taints) -> bool {
+fn process_block(
+    engine: &mut Engine,
+    block: BlockId,
+    defs: &mut DefMap,
+    tainted: &Taints,
+    type_table: &TypeTable,
+) -> bool {
     let mut changed = false;
     let mut guards: Vec<ShortCircuitGuard> = Vec::new();
     let stmts = engine.body.blocks[block].stmts.clone();
     for s in stmts {
         record_def_from_stmt(engine.body, s, defs, tainted);
         record_defs_from_nested(engine.body, s, defs, tainted);
+        // Retire guards whose variable or bound this stmt may mutate —
+        // BEFORE applying them, so a check and a write inside the same
+        // stmt conservatively keep the check.
+        if !guards.is_empty() {
+            let mut kills = KillEvents::default();
+            collect_kill_events(engine.body, NodeRef::Stmt(s), type_table, &mut kills);
+            guards.retain(|g| !g.killed_by(&kills));
+        }
         // Apply accumulated guards from previous early-exit stmts to this stmt
         for guard in &guards {
             changed |= guard.eliminate_in_stmt(engine, s, defs);
         }
         changed |= BitmaskEliminator { defs }.visit_stmt(engine, s);
-        changed |= ShortCircuitEliminator { defs }.visit_stmt(engine, s);
-        changed |= process_stmt(engine, s, defs, tainted);
+        changed |= ShortCircuitEliminator { defs, type_table }.visit_stmt(engine, s);
+        changed |= process_stmt(engine, s, defs, tainted, type_table);
         // If this is `if (var >= bound) { return/break }`, extract a guard
         if let Some(guard) = extract_early_exit_guard(engine.body, s, defs) {
             guards.push(guard);
@@ -304,7 +427,13 @@ fn process_block(engine: &mut Engine, block: BlockId, defs: &mut DefMap, tainted
     changed
 }
 
-fn process_stmt(engine: &mut Engine, s: StmtId, defs: &mut DefMap, tainted: &Taints) -> bool {
+fn process_stmt(
+    engine: &mut Engine,
+    s: StmtId,
+    defs: &mut DefMap,
+    tainted: &Taints,
+    type_table: &TypeTable,
+) -> bool {
     // Record definitions from let bindings
     record_def_from_stmt(engine.body, s, defs, tainted);
 
@@ -319,15 +448,15 @@ fn process_stmt(engine: &mut Engine, s: StmtId, defs: &mut DefMap, tainted: &Tai
         _ => StmtShape::None,
     };
     match shape {
-        StmtShape::Loop(lb) => process_loop(engine, lb, defs, tainted),
+        StmtShape::Loop(lb) => process_loop(engine, lb, defs, tainted, type_table),
         StmtShape::If(then_b, else_b) => {
-            let mut changed = process_block(engine, then_b, defs, tainted);
+            let mut changed = process_block(engine, then_b, defs, tainted, type_table);
             if let Some(eb) = else_b {
-                changed |= process_block(engine, eb, defs, tainted);
+                changed |= process_block(engine, eb, defs, tainted, type_table);
             }
             changed
         }
-        StmtShape::Labeled(b) => process_block(engine, b, defs, tainted),
+        StmtShape::Labeled(b) => process_block(engine, b, defs, tainted, type_table),
         StmtShape::None => false,
     }
 }
@@ -344,6 +473,7 @@ fn process_loop(
     loop_body: BlockId,
     defs: &mut DefMap,
     tainted: &Taints,
+    type_table: &TypeTable,
 ) -> bool {
     // First, record defs inside the loop body (for copies like `let index = i`)
     // and recurse into nested structures
@@ -364,8 +494,10 @@ fn process_loop(
         // Eliminate implied conditions in the loop body (skip the guard itself)
         let mut condition_elim = ConditionEliminator {
             guard,
+            guard_alive: true,
             dom_guards: vec![],
             defs: &loop_defs,
+            type_table,
         };
         for s in stmts.iter().skip(1) {
             changed |= condition_elim.visit_stmt(engine, *s);
@@ -379,7 +511,7 @@ fn process_loop(
 
     // Recurse into nested loops
     for s in &stmts {
-        changed |= process_stmt_nested_loops(engine, *s, defs, tainted);
+        changed |= process_stmt_nested_loops(engine, *s, defs, tainted, type_table);
     }
 
     changed
@@ -392,6 +524,7 @@ fn process_stmt_nested_loops(
     s: StmtId,
     defs: &mut DefMap,
     tainted: &Taints,
+    type_table: &TypeTable,
 ) -> bool {
     let shape = match &engine.body.stmts[s].kind {
         StmtKind::Loop { body: lb } => StmtShape::Loop(*lb),
@@ -404,15 +537,15 @@ fn process_stmt_nested_loops(
         _ => StmtShape::None,
     };
     match shape {
-        StmtShape::Loop(lb) => process_loop(engine, lb, defs, tainted),
+        StmtShape::Loop(lb) => process_loop(engine, lb, defs, tainted, type_table),
         StmtShape::If(then_b, else_b) => {
             let mut changed = false;
             for s in engine.body.blocks[then_b].stmts.clone() {
-                changed |= process_stmt_nested_loops(engine, s, defs, tainted);
+                changed |= process_stmt_nested_loops(engine, s, defs, tainted, type_table);
             }
             if let Some(eb) = else_b {
                 for s in engine.body.blocks[eb].stmts.clone() {
-                    changed |= process_stmt_nested_loops(engine, s, defs, tainted);
+                    changed |= process_stmt_nested_loops(engine, s, defs, tainted, type_table);
                 }
             }
             changed
@@ -420,7 +553,7 @@ fn process_stmt_nested_loops(
         StmtShape::Labeled(b) => {
             let mut changed = false;
             for s in engine.body.blocks[b].stmts.clone() {
-                changed |= process_stmt_nested_loops(engine, s, defs, tainted);
+                changed |= process_stmt_nested_loops(engine, s, defs, tainted, type_table);
             }
             changed
         }
@@ -653,20 +786,29 @@ fn record_def_from_stmt(body: &Body, s: StmtId, defs: &mut DefMap, tainted: &Tai
             if let ExprKind::Local { index, .. } = &body.exprs[*expr].kind {
                 // The chain `let _licm = arr.used` is captured as
                 // `Def::FieldAccess { local: arr, field_index: used }`.
-                // When `resolve_constant` walks the chain it goes
-                // through `arr`'s `Def::StructLit`; if `arr.used` is
-                // field-tainted, the StructLit recorder will have
-                // already dropped that field, so the FieldAccess
-                // walk naturally returns `None`. Recording the
-                // FieldAccess def itself is always sound — the
-                // soundness check happens at the StructLit layer.
-                defs.insert(
-                    local_index,
-                    Def::FieldAccess {
-                        local: *index,
-                        field_index: *field_index,
-                    },
-                );
+                //
+                // The *numeric* path is taint-safe without a gate here:
+                // `resolve_constant` walks through `arr`'s `Def::StructLit`,
+                // whose recorder already drops field-tainted entries.
+                //
+                // The *identity* path is not: `resolves_to` treats two
+                // locals defined as the same `(local, field)` read as equal,
+                // which is wrong when the field is written between the two
+                // reads (each `let` snapshots a different value). Skip the
+                // def whenever the pair — or the receiver as a whole — may
+                // be mutated anywhere in the function, so the equivalence
+                // only ever connects reads of immutable storage.
+                if !tainted.locals.contains(index)
+                    && !tainted.fields.contains(&(*index, *field_index))
+                {
+                    defs.insert(
+                        local_index,
+                        Def::FieldAccess {
+                            local: *index,
+                            field_index: *field_index,
+                        },
+                    );
+                }
             }
         }
         ExprKind::StructLiteral { .. } => {
@@ -948,14 +1090,71 @@ fn set_false(engine: &mut Engine, cond: ExprId) {
 /// When a loop guard proves `i < bound`, inner conditions `i >= bound` are
 /// replaced with `false`. Dominating if-conditions are also tracked to extend
 /// the elimination into their then-blocks.
+///
+/// Guards are positional facts: every `visit_stmt` first scans the statement
+/// for [`KillEvents`] and permanently retires any guard whose variable or
+/// bound the statement may mutate, so checks after the mutation (in document
+/// order) are never eliminated against the stale fact. Dominating guards are
+/// scoped by `Vec` truncation (not clone/restore) so an in-scope kill cannot
+/// be resurrected when an inner `if` exits.
 struct ConditionEliminator<'a> {
     guard: &'a LoopGuard,
-    dom_guards: Vec<DominatingGuard>,
+    /// Cleared once the loop body (in document order) may write `guard.var`
+    /// or the guard bound's backing storage.
+    guard_alive: bool,
+    dom_guards: Vec<DomEntry>,
     defs: &'a DefMap,
+    type_table: &'a TypeTable,
+}
+
+/// A dominating guard plus its positional liveness (see
+/// [`ConditionEliminator`]).
+struct DomEntry {
+    guard: DominatingGuard,
+    alive: bool,
+}
+
+impl ConditionEliminator<'_> {
+    /// Scan `s` for kill events and retire affected guards. Runs before the
+    /// statement's checks are considered, so a write and a check inside one
+    /// statement conservatively keep the check.
+    fn apply_kills(&mut self, body: &Body, s: StmtId) {
+        if !self.guard_alive && self.dom_guards.iter().all(|d| !d.alive) {
+            return;
+        }
+        let mut kills = KillEvents::default();
+        collect_kill_events(body, NodeRef::Stmt(s), self.type_table, &mut kills);
+        if kills.locals.is_empty() && kills.fields.is_empty() && !kills.heap {
+            return;
+        }
+        if self.guard_alive
+            && (kills.locals.contains(&self.guard.var) || bound_killed(&self.guard.bound, &kills))
+        {
+            self.guard_alive = false;
+        }
+        for d in &mut self.dom_guards {
+            if d.alive
+                && (kills.locals.contains(&d.guard.var) || bound_killed(&d.guard.bound, &kills))
+            {
+                d.alive = false;
+            }
+        }
+    }
+
+    fn implied_false(&self, body: &Body, condition: ExprId) -> bool {
+        if self.guard_alive && is_implied_false(body, condition, self.guard, self.defs) {
+            return true;
+        }
+        self.dom_guards
+            .iter()
+            .filter(|d| d.alive)
+            .any(|d| is_implied_by_dominating_guard(body, condition, &d.guard, self.defs))
+    }
 }
 
 impl ArenaOptVisitor for ConditionEliminator<'_> {
     fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool {
+        self.apply_kills(engine.body, s);
         let if_ids = match &engine.body.stmts[s].kind {
             StmtKind::If {
                 condition,
@@ -968,13 +1167,7 @@ impl ArenaOptVisitor for ConditionEliminator<'_> {
             // Check if this statement is a bounds check that can be eliminated.
             if else_block.is_none()
                 && is_panic_block(engine.body, then_block)
-                && is_implied_false_by_any(
-                    engine.body,
-                    condition,
-                    self.guard,
-                    &self.dom_guards,
-                    self.defs,
-                )
+                && self.implied_false(engine.body, condition)
             {
                 set_false(engine, condition);
                 return true;
@@ -984,12 +1177,15 @@ impl ArenaOptVisitor for ConditionEliminator<'_> {
             // elimination into the then-block.
             let mut changed = self.visit_expr(engine, condition);
             let dom = extract_dominating_guard(engine.body, condition, self.defs);
-            let saved = self.dom_guards.clone();
+            let scope_len = self.dom_guards.len();
             if let Some(dg) = dom {
-                self.dom_guards.push(dg);
+                self.dom_guards.push(DomEntry {
+                    guard: dg,
+                    alive: true,
+                });
             }
             changed |= self.visit_block(engine, then_block);
-            self.dom_guards = saved;
+            self.dom_guards.truncate(scope_len);
             if let Some(eb) = else_block {
                 changed |= self.visit_block(engine, eb);
             }
@@ -1012,12 +1208,15 @@ impl ArenaOptVisitor for ConditionEliminator<'_> {
         if let Some((condition, then_branch, else_branch)) = if_ids {
             let mut changed = self.visit_expr(engine, condition);
             let dom = extract_dominating_guard(engine.body, condition, self.defs);
-            let saved = self.dom_guards.clone();
+            let scope_len = self.dom_guards.len();
             if let Some(dg) = dom {
-                self.dom_guards.push(dg);
+                self.dom_guards.push(DomEntry {
+                    guard: dg,
+                    alive: true,
+                });
             }
             changed |= self.visit_block(engine, then_branch);
-            self.dom_guards = saved;
+            self.dom_guards.truncate(scope_len);
             if let Some(eb) = else_branch {
                 changed |= self.visit_block(engine, eb);
             }
@@ -1099,6 +1298,7 @@ fn block_always_exits(body: &Body, block: BlockId) -> bool {
 /// This handles both `Local` and `FieldAccess` bounds (e.g., `chars.used`).
 struct ShortCircuitEliminator<'a> {
     defs: &'a DefMap,
+    type_table: &'a TypeTable,
 }
 
 impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
@@ -1114,7 +1314,19 @@ impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
         if let Some((left, right)) = or_ids {
             let mut changed = self.visit_expr(engine, left);
             if let Some(guard) = ShortCircuitGuard::extract(engine.body, left, self.defs) {
-                changed |= guard.eliminate_in_expr(engine, right, self.defs);
+                // The rhs may itself mutate the guard's operands (a call or
+                // assignment inside the expression); apply only when it
+                // provably cannot.
+                let mut kills = KillEvents::default();
+                collect_kill_events(
+                    engine.body,
+                    NodeRef::Expr(right),
+                    self.type_table,
+                    &mut kills,
+                );
+                if !guard.killed_by(&kills) {
+                    changed |= guard.eliminate_in_expr(engine, right, self.defs);
+                }
             }
             changed |= self.visit_expr(engine, right);
             return changed;
@@ -1156,6 +1368,12 @@ fn extract_field_chain(body: &Body, e: ExprId) -> Option<(u32, Vec<u32>)> {
 }
 
 impl ShortCircuitGuard {
+    /// Whether `kills` may mutate this guard's variable or bound, making
+    /// the fact stale for code after the kill point.
+    fn killed_by(&self, kills: &KillEvents) -> bool {
+        kills.locals.contains(&self.var) || bound_killed(&self.bound, kills)
+    }
+
     /// Extract a guard from `(var + k) >= bound` being false.
     fn extract(body: &Body, condition: ExprId, defs: &DefMap) -> Option<Self> {
         let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
@@ -1536,25 +1754,6 @@ fn is_implied_false(body: &Body, condition: ExprId, guard: &LoopGuard, defs: &De
     // [`check_bound_implied_false`] applies exact-match for two-Local
     // bounds and >=/> for literal-mixed bounds.
     check_bound_implied_false(&check_bound, &guard.bound, guard.is_strict, defs)
-}
-
-/// Check if a condition is implied false by the loop guard OR any dominating guard.
-fn is_implied_false_by_any(
-    body: &Body,
-    condition: ExprId,
-    guard: &LoopGuard,
-    dom_guards: &[DominatingGuard],
-    defs: &DefMap,
-) -> bool {
-    if is_implied_false(body, condition, guard, defs) {
-        return true;
-    }
-    for dg in dom_guards {
-        if is_implied_by_dominating_guard(body, condition, dg, defs) {
-            return true;
-        }
-    }
-    false
 }
 
 /// Check if `check_var >= check_bound` is implied false by a dominating guard.
