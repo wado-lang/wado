@@ -1192,6 +1192,31 @@ impl Monomorphizer {
     /// Instantiate a generic function with concrete type arguments
     ///
     /// Note: `instantiate_function` is separate from `instantiate_method`
+    /// The concrete type a `T^Trait::method` receiver dispatches on while
+    /// instantiating the current function: the substitution entry for the
+    /// receiver parameter *named* `info.base_struct_name`. Resolving by name
+    /// (rather than the lowest substitution index) is what lets
+    /// `fn f<U, T: Trait>` dispatch `T::method` on `T` instead of `U`. Falls
+    /// back to the lowest-index entry only when no declared parameter matches
+    /// the name (e.g. a synthesised receiver), preserving the prior behaviour.
+    fn receiver_substitution_tid(
+        &self,
+        info: &LocalMethodName,
+        substitution: &IndexMap<u32, TypeId>,
+    ) -> Option<TypeId> {
+        if let Some(key) = self
+            .current_param_substitution_key
+            .get(&info.base_struct_name)
+            && let Some(&tid) = substitution.get(key)
+        {
+            return Some(tid);
+        }
+        substitution
+            .iter()
+            .min_by_key(|(idx, _)| **idx)
+            .map(|(_, &tid)| tid)
+    }
+
     pub fn instantiate_function(
         &mut self,
         generic: &TirFunction,
@@ -1236,6 +1261,21 @@ impl Monomorphizer {
         for (param, &arg) in generic.type_params.iter().zip(key.method_type_args.iter()) {
             substitution.insert(offset + param.index, arg);
         }
+
+        // Map each type-param name to its substitution key, so a
+        // `T^Trait::method` receiver resolves by name (the param named
+        // `base_struct_name`) rather than positionally. Built with the same
+        // key rule as `substitution`: impl params by their index, method
+        // params offset past them. Method params are inserted last so an
+        // inner-scope name shadows an impl-level one.
+        let mut param_key_by_name: IndexMap<String, u32> = IndexMap::default();
+        for param in &generic.impl_type_params {
+            param_key_by_name.insert(param.name.clone(), param.index);
+        }
+        for param in &generic.type_params {
+            param_key_by_name.insert(param.name.clone(), offset + param.index);
+        }
+        self.current_param_substitution_key = param_key_by_name;
 
         // Substitute types in parameters
         let params: Vec<TirParam> = generic
@@ -1576,17 +1616,15 @@ impl Monomorphizer {
 
                         // Build the new method info with substituted type names.
                         let mut new_info = if info.is_type_param_receiver {
-                            // The struct name is a type parameter (e.g., T^Ord::cmp).
-                            // Look up the concrete type from the outer substitution.
-                            let mut sorted_entries: Vec<_> = substitution.iter().collect();
-                            sorted_entries.sort_by_key(|(idx, _)| **idx);
-                            if sorted_entries.is_empty() {
-                                info.clone()
-                            } else {
-                                let concrete_tid = *sorted_entries[0].1;
-                                let type_name = type_table.mangle_type_name(concrete_tid);
-                                let base = type_table.base_type_name(concrete_tid);
-                                info.with_substituted_struct_name(&type_name, &base)
+                            // The struct name is a type parameter (e.g., T^Ord::cmp);
+                            // resolve the concrete receiver by the param's name.
+                            match self.receiver_substitution_tid(&info, substitution) {
+                                Some(concrete_tid) => {
+                                    let type_name = type_table.mangle_type_name(concrete_tid);
+                                    let base = type_table.base_type_name(concrete_tid);
+                                    info.with_substituted_struct_name(&type_name, &base)
+                                }
+                                None => info.clone(),
                             }
                         } else {
                             // Apply the callee's own substituted type args.
@@ -1649,21 +1687,18 @@ impl Monomorphizer {
                         //    queued or it is left unresolved at WIR build.
                         //  - A non-type-param call encodes all of its type args in
                         //    its name, so an unchanged name means nothing to rewrite.
-                        let receiver_is_concrete = substitution
-                            .iter()
-                            .min_by_key(|(idx, _)| **idx)
-                            .is_some_and(|(_, &tid)| {
-                                !matches!(
-                                    type_table.get(tid),
-                                    ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                                )
-                            });
+                        let receiver_tid = self.receiver_substitution_tid(&info, substitution);
+                        let receiver_is_concrete = receiver_tid.is_some_and(|tid| {
+                            !matches!(
+                                type_table.get(tid),
+                                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                            )
+                        });
 
                         if info.is_type_param_receiver {
                             if receiver_is_concrete {
-                                let mut sorted_entries: Vec<_> = substitution.iter().collect();
-                                sorted_entries.sort_by_key(|(idx, _)| **idx);
-                                let concrete_type_id = *sorted_entries[0].1;
+                                let concrete_type_id = receiver_tid
+                                    .expect("receiver_is_concrete implies a resolved receiver");
                                 let receiver_module =
                                     module_source_for_trait_impl(type_table, concrete_type_id);
                                 // Per the inspect_ref_array_field.wado contract, this
@@ -1750,7 +1785,6 @@ impl Monomorphizer {
                                     } else {
                                         Vec::new()
                                     };
-                                    let concrete_type_id = *sorted_entries[0].1;
                                     let impl_type_arg_tids: Vec<TypeId> = type_table
                                         .generic_type_args(concrete_type_id)
                                         .unwrap_or_default();
@@ -1776,7 +1810,7 @@ impl Monomorphizer {
                                          `module_source_for_trait_impl` for the receiver's \
                                          `ResolvedType` arm",
                                         new_info.to_mangled_name(),
-                                        *sorted_entries[0].1,
+                                        concrete_type_id,
                                     )
                                 });
                                 *call_func = FunctionRef {
