@@ -381,11 +381,6 @@ fn "wado-compiler/tests/fixtures/opt_hfs_defer_callclean_writeback.wado/Cursor::
                 break b23;
             }
             index = __hfs_pos_8;
-            if @unlikely(index >= _licm_used_6) {
-                cold_path;
-                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                unreachable;
-            }
             b = builtin::array_get<u8>(_licm_repr_7, index);
             if b > 32 {
                 self.pos = __hfs_pos_8;
@@ -407,14 +402,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b29: block {
-        l30: loop {
+    b28: block {
+        l29: loop {
             if i >= n {
-                break b29;
+                break b28;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l30;
+            continue l29;
         };
     };
 }

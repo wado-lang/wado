@@ -126,11 +126,6 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/iter_next"(it) {
         return 1, 0;
     }
     index = it.pos;
-    if @unlikely(index >= it.items.used) {
-        cold_path;
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
     v = builtin::array_get<i32>(it.items.repr, index);
     it.pos = it.pos + 1;
     return 0, v;
@@ -141,17 +136,17 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/sum_iter"(items) {
     let sum: i32;
     it = struct.new "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado//Iterator" { items: items, pos: 0 };
     sum = 0;
-    b2: block {
-        l3: loop {
+    b1: block {
+        l2: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: i32;
             multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/iter_next"(it);
             if __sroa___match_4_discriminant == 0 {
                 sum = sum + __sroa___match_4_payload_0;
             } else {
-                break b2;
+                break b1;
             }
-            continue l3;
+            continue l2;
         };
     };
     return sum;
@@ -173,8 +168,8 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/count_positive"(it
     let label: ref "core:prelude/string.wado//String";
     it = struct.new "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado//Iterator" { items: items, pos: 0 };
     count = 0;
-    b7: block {
-        l8: loop {
+    b6: block {
+        l7: loop {
             let __sroa___match_6_discriminant: i32;
             let __sroa___match_6_payload_0: i32;
             multivalue_bind [__sroa___match_6_discriminant, __sroa___match_6_payload_0] = "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/iter_next"(it);
@@ -190,9 +185,9 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/count_positive"(it
                 } else {
                 }
             } else {
-                break b7;
+                break b6;
             }
-            continue l8;
+            continue l7;
         };
     };
     return count;
@@ -204,30 +199,30 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/cross_sum"(a, b) {
     let it_b: ref "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado//Iterator";
     it_a = struct.new "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado//Iterator" { items: a, pos: 0 };
     sum = 0;
-    b12: block {
-        l13: loop {
+    b11: block {
+        l12: loop {
             let __sroa___match_7_discriminant: i32;
             let __sroa___match_7_payload_0: i32;
             multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/iter_next"(it_a);
             if __sroa___match_7_discriminant == 0 {
                 it_b = struct.new "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado//Iterator" { items: b, pos: 0 };
-                b15: block {
-                    l16: loop {
+                b14: block {
+                    l15: loop {
                         let __sroa___local_8_discriminant: i32;
                         let __sroa___local_8_payload_0: i32;
                         multivalue_bind [__sroa___local_8_discriminant, __sroa___local_8_payload_0] = "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/iter_next"(it_b);
                         if __sroa___local_8_discriminant == 0 {
                             sum = sum + (__sroa___match_7_payload_0 * __sroa___local_8_payload_0);
                         } else {
-                            break b15;
+                            break b14;
                         }
-                        continue l16;
+                        continue l15;
                     };
                 };
             } else {
-                break b12;
+                break b11;
             }
-            continue l13;
+            continue l12;
         };
     };
     return sum;
@@ -310,14 +305,14 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/__cm_export__run"(
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b22: block {
-        l23: loop {
+    b21: block {
+        l22: loop {
             if i >= len {
-                break b22;
+                break b21;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l23;
+            continue l22;
         };
     };
 }
@@ -399,14 +394,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b28: block {
-        l29: loop {
+    b27: block {
+        l28: loop {
             if t <= 0_i64 {
-                break b28;
+                break b27;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l29;
+            continue l28;
         };
     };
     return n;
@@ -420,15 +415,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b32: block {
-            l33: loop {
+        b31: block {
+            l32: loop {
                 if temp <= 0_i64 {
-                    break b32;
+                    break b31;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l33;
+                continue l32;
             };
         };
     }
@@ -502,16 +497,16 @@ fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b40: block {
-        l41: loop {
+    b39: block {
+        l40: loop {
             if i >= len {
-                break b40;
+                break b39;
             }
             if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l41;
+            continue l40;
         };
     };
     return 1;
@@ -548,14 +543,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b48: block {
-        l49: loop {
+    b47: block {
+        l48: loop {
             if i >= n {
-                break b48;
+                break b47;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l49;
+            continue l48;
         };
     };
 }

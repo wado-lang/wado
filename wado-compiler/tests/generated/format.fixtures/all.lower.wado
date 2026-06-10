@@ -458,12 +458,28 @@ pub struct "Box<Fn<2,Tuple<I::Item,J::Item>>>" {
     value: fn mut([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item],
 }
 
+pub struct "Box<SpecialKind>" {
+    value: SpecialKind,
+}
+
+pub struct "Box<IntErrorKind>" {
+    value: IntErrorKind,
+}
+
+pub struct "Box<FloatErrorKind>" {
+    value: FloatErrorKind,
+}
+
 pub struct "Box<i32>" {
     value: i32,
 }
 
 pub struct "Box<Fn<1,T>>" {
     value: fn(i32) -> T,
+}
+
+pub struct "Box<Color>" {
+    value: Color,
 }
 
 pub struct "Box<Shape>" {
@@ -482,8 +498,20 @@ pub struct "Box<f64>" {
     value: f64,
 }
 
+pub struct "Box<ErrorCode>" {
+    value: ErrorCode,
+}
+
+pub struct "Box<Ordering>" {
+    value: Ordering,
+}
+
 pub struct "Box<Fn<1,U>>" {
     value: fn mut(I::Item) -> U,
+}
+
+pub struct "Box<Alignment>" {
+    value: Alignment,
 }
 
 struct __Closure_0 {
@@ -4874,13 +4902,13 @@ pub fn parse_text(s: &String) -> Option<f64> {
     return "core::prelude/fpfmt.wado::parse_text_range"(s, 0, s.String::len());
 }
 
-pub fn "SpecialKind^Eq::eq"(self: &SpecialKind, other: &SpecialKind) -> bool {
-    return (*self == *other);
+pub fn "SpecialKind^Eq::eq"(self: Box<SpecialKind>, other: Box<SpecialKind>) -> bool {
+    return (self.value == other.value);
 }
 
-pub fn "SpecialKind^Ord::cmp"(self: &SpecialKind, other: &SpecialKind) -> Ordering {
-    let a: SpecialKind = *self;
-    let b: SpecialKind = *other;
+pub fn "SpecialKind^Ord::cmp"(self: Box<SpecialKind>, other: Box<SpecialKind>) -> Ordering {
+    let a: SpecialKind = self.value;
+    let b: SpecialKind = other.value;
     if (a < b) {
         return Ordering::Less;
     }
@@ -4938,17 +4966,17 @@ pub fn "FormatResult^Ord::cmp"(self: &FormatResult, other: &FormatResult) -> Ord
     return Ordering::Equal;
 }
 
-pub fn "SpecialKind^Inspect::inspect"(self: &SpecialKind, f: &mut Formatter) {
-    if (*self == 0) {
+pub fn "SpecialKind^Inspect::inspect"(self: Box<SpecialKind>, f: &mut Formatter) {
+    if (self.value == 0) {
         f.Formatter::write_str(&"SpecialKind::NotSpecial");
     } else {
-        if (*self == 1) {
+        if (self.value == 1) {
             f.Formatter::write_str(&"SpecialKind::Zero");
         } else {
-            if (*self == 2) {
+            if (self.value == 2) {
                 f.Formatter::write_str(&"SpecialKind::Inf");
             } else {
-                if (*self == 3) {
+                if (self.value == 3) {
                     f.Formatter::write_str(&"SpecialKind::NaN");
                 };
             };
@@ -5032,7 +5060,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "SpecialKind^InspectAlt::inspect_alt"(self: &SpecialKind, f: &mut Formatter) {
+pub fn "SpecialKind^InspectAlt::inspect_alt"(self: Box<SpecialKind>, f: &mut Formatter) {
     self."SpecialKind^Inspect::inspect"(f);
 }
 
@@ -5121,7 +5149,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "SpecialKind^Display::fmt"(self: &SpecialKind, f: &mut Formatter) {
+pub fn "SpecialKind^Display::fmt"(self: Box<SpecialKind>, f: &mut Formatter) {
     self."SpecialKind^Inspect::inspect"(f);
 }
 
@@ -5217,7 +5245,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "SpecialKind^DisplayAlt::fmt_alt"(self: &SpecialKind, f: &mut Formatter) {
+pub fn "SpecialKind^DisplayAlt::fmt_alt"(self: Box<SpecialKind>, f: &mut Formatter) {
     self."SpecialKind^InspectAlt::inspect_alt"(f);
 }
 
@@ -6764,13 +6792,13 @@ pub fn parse_f64_from_str(s: &String) -> Result<f64, ParseFloatError> {
     return "core::prelude/intparse.wado::parse_f64_from_str_range"(s, 0, s.String::len());
 }
 
-pub fn "IntErrorKind^Eq::eq"(self: &IntErrorKind, other: &IntErrorKind) -> bool {
-    return (*self == *other);
+pub fn "IntErrorKind^Eq::eq"(self: Box<IntErrorKind>, other: Box<IntErrorKind>) -> bool {
+    return (self.value == other.value);
 }
 
-pub fn "IntErrorKind^Ord::cmp"(self: &IntErrorKind, other: &IntErrorKind) -> Ordering {
-    let a: IntErrorKind = *self;
-    let b: IntErrorKind = *other;
+pub fn "IntErrorKind^Ord::cmp"(self: Box<IntErrorKind>, other: Box<IntErrorKind>) -> Ordering {
+    let a: IntErrorKind = self.value;
+    let b: IntErrorKind = other.value;
     if (a < b) {
         return Ordering::Less;
     }
@@ -6780,13 +6808,13 @@ pub fn "IntErrorKind^Ord::cmp"(self: &IntErrorKind, other: &IntErrorKind) -> Ord
     return Ordering::Equal;
 }
 
-pub fn "FloatErrorKind^Eq::eq"(self: &FloatErrorKind, other: &FloatErrorKind) -> bool {
-    return (*self == *other);
+pub fn "FloatErrorKind^Eq::eq"(self: Box<FloatErrorKind>, other: Box<FloatErrorKind>) -> bool {
+    return (self.value == other.value);
 }
 
-pub fn "FloatErrorKind^Ord::cmp"(self: &FloatErrorKind, other: &FloatErrorKind) -> Ordering {
-    let a: FloatErrorKind = *self;
-    let b: FloatErrorKind = *other;
+pub fn "FloatErrorKind^Ord::cmp"(self: Box<FloatErrorKind>, other: Box<FloatErrorKind>) -> Ordering {
+    let a: FloatErrorKind = self.value;
+    let b: FloatErrorKind = other.value;
     if (a < b) {
         return Ordering::Less;
     }
@@ -6797,11 +6825,11 @@ pub fn "FloatErrorKind^Ord::cmp"(self: &FloatErrorKind, other: &FloatErrorKind) 
 }
 
 pub fn "ParseIntError^Eq::eq"(self: &ParseIntError, other: &ParseIntError) -> bool {
-    return self.kind."IntErrorKind^Eq::eq"(&other.kind);
+    return Box<IntErrorKind> { value: self.kind }."IntErrorKind^Eq::eq"(Box<IntErrorKind> { value: other.kind });
 }
 
 pub fn "ParseIntError^Ord::cmp"(self: &ParseIntError, other: &ParseIntError) -> Ordering {
-    let c: Ordering = self.kind."IntErrorKind^Ord::cmp"(&other.kind);
+    let c: Ordering = Box<IntErrorKind> { value: self.kind }."IntErrorKind^Ord::cmp"(Box<IntErrorKind> { value: other.kind });
     if (c != Ordering::Equal) {
         return c;
     }
@@ -6809,28 +6837,28 @@ pub fn "ParseIntError^Ord::cmp"(self: &ParseIntError, other: &ParseIntError) -> 
 }
 
 pub fn "ParseFloatError^Eq::eq"(self: &ParseFloatError, other: &ParseFloatError) -> bool {
-    return self.kind."FloatErrorKind^Eq::eq"(&other.kind);
+    return Box<FloatErrorKind> { value: self.kind }."FloatErrorKind^Eq::eq"(Box<FloatErrorKind> { value: other.kind });
 }
 
 pub fn "ParseFloatError^Ord::cmp"(self: &ParseFloatError, other: &ParseFloatError) -> Ordering {
-    let c: Ordering = self.kind."FloatErrorKind^Ord::cmp"(&other.kind);
+    let c: Ordering = Box<FloatErrorKind> { value: self.kind }."FloatErrorKind^Ord::cmp"(Box<FloatErrorKind> { value: other.kind });
     if (c != Ordering::Equal) {
         return c;
     }
     return Ordering::Equal;
 }
 
-pub fn "IntErrorKind^Inspect::inspect"(self: &IntErrorKind, f: &mut Formatter) {
-    if (*self == 0) {
+pub fn "IntErrorKind^Inspect::inspect"(self: Box<IntErrorKind>, f: &mut Formatter) {
+    if (self.value == 0) {
         f.Formatter::write_str(&"IntErrorKind::Empty");
     } else {
-        if (*self == 1) {
+        if (self.value == 1) {
             f.Formatter::write_str(&"IntErrorKind::InvalidDigit");
         } else {
-            if (*self == 2) {
+            if (self.value == 2) {
                 f.Formatter::write_str(&"IntErrorKind::PosOverflow");
             } else {
-                if (*self == 3) {
+                if (self.value == 3) {
                     f.Formatter::write_str(&"IntErrorKind::NegOverflow");
                 };
             };
@@ -6838,11 +6866,11 @@ pub fn "IntErrorKind^Inspect::inspect"(self: &IntErrorKind, f: &mut Formatter) {
     };
 }
 
-pub fn "FloatErrorKind^Inspect::inspect"(self: &FloatErrorKind, f: &mut Formatter) {
-    if (*self == 0) {
+pub fn "FloatErrorKind^Inspect::inspect"(self: Box<FloatErrorKind>, f: &mut Formatter) {
+    if (self.value == 0) {
         f.Formatter::write_str(&"FloatErrorKind::Empty");
     } else {
-        if (*self == 1) {
+        if (self.value == 1) {
             f.Formatter::write_str(&"FloatErrorKind::Invalid");
         };
     };
@@ -6851,14 +6879,14 @@ pub fn "FloatErrorKind^Inspect::inspect"(self: &FloatErrorKind, f: &mut Formatte
 pub fn "ParseIntError^Inspect::inspect"(self: &ParseIntError, f: &mut Formatter) {
     f.Formatter::write_str(&"ParseIntError { ");
     f.Formatter::write_str(&"kind: ");
-    self.kind."IntErrorKind^Inspect::inspect"(f);
+    Box<IntErrorKind> { value: self.kind }."IntErrorKind^Inspect::inspect"(f);
     f.Formatter::write_str(&" }");
 }
 
 pub fn "ParseFloatError^Inspect::inspect"(self: &ParseFloatError, f: &mut Formatter) {
     f.Formatter::write_str(&"ParseFloatError { ");
     f.Formatter::write_str(&"kind: ");
-    self.kind."FloatErrorKind^Inspect::inspect"(f);
+    Box<FloatErrorKind> { value: self.kind }."FloatErrorKind^Inspect::inspect"(f);
     f.Formatter::write_str(&" }");
 }
 
@@ -6908,11 +6936,11 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "IntErrorKind^InspectAlt::inspect_alt"(self: &IntErrorKind, f: &mut Formatter) {
+pub fn "IntErrorKind^InspectAlt::inspect_alt"(self: Box<IntErrorKind>, f: &mut Formatter) {
     self."IntErrorKind^Inspect::inspect"(f);
 }
 
-pub fn "FloatErrorKind^InspectAlt::inspect_alt"(self: &FloatErrorKind, f: &mut Formatter) {
+pub fn "FloatErrorKind^InspectAlt::inspect_alt"(self: Box<FloatErrorKind>, f: &mut Formatter) {
     self."FloatErrorKind^Inspect::inspect"(f);
 }
 
@@ -6920,7 +6948,7 @@ pub fn "ParseIntError^InspectAlt::inspect_alt"(self: &ParseIntError, f: &mut For
     f.Formatter::open_brace("ParseIntError {");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"kind: ");
-    self.kind."IntErrorKind^InspectAlt::inspect_alt"(f);
+    Box<IntErrorKind> { value: self.kind }."IntErrorKind^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
     f.Formatter::close_brace("}");
 }
@@ -6929,7 +6957,7 @@ pub fn "ParseFloatError^InspectAlt::inspect_alt"(self: &ParseFloatError, f: &mut
     f.Formatter::open_brace("ParseFloatError {");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"kind: ");
-    self.kind."FloatErrorKind^InspectAlt::inspect_alt"(f);
+    Box<FloatErrorKind> { value: self.kind }."FloatErrorKind^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
     f.Formatter::close_brace("}");
 }
@@ -6980,11 +7008,11 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "IntErrorKind^Display::fmt"(self: &IntErrorKind, f: &mut Formatter) {
+pub fn "IntErrorKind^Display::fmt"(self: Box<IntErrorKind>, f: &mut Formatter) {
     self."IntErrorKind^Inspect::inspect"(f);
 }
 
-pub fn "FloatErrorKind^Display::fmt"(self: &FloatErrorKind, f: &mut Formatter) {
+pub fn "FloatErrorKind^Display::fmt"(self: Box<FloatErrorKind>, f: &mut Formatter) {
     self."FloatErrorKind^Inspect::inspect"(f);
 }
 
@@ -7076,11 +7104,11 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "IntErrorKind^DisplayAlt::fmt_alt"(self: &IntErrorKind, f: &mut Formatter) {
+pub fn "IntErrorKind^DisplayAlt::fmt_alt"(self: Box<IntErrorKind>, f: &mut Formatter) {
     self."IntErrorKind^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "FloatErrorKind^DisplayAlt::fmt_alt"(self: &FloatErrorKind, f: &mut Formatter) {
+pub fn "FloatErrorKind^DisplayAlt::fmt_alt"(self: Box<FloatErrorKind>, f: &mut Formatter) {
     self."FloatErrorKind^InspectAlt::inspect_alt"(f);
 }
 
@@ -14889,13 +14917,13 @@ export fn run() {
     __initialize_modules();
 }
 
-pub fn "Color^Eq::eq"(self: &Color, other: &Color) -> bool {
-    return (*self == *other);
+pub fn "Color^Eq::eq"(self: Box<Color>, other: Box<Color>) -> bool {
+    return (self.value == other.value);
 }
 
-pub fn "Color^Ord::cmp"(self: &Color, other: &Color) -> Ordering {
-    let a: Color = *self;
-    let b: Color = *other;
+pub fn "Color^Ord::cmp"(self: Box<Color>, other: Box<Color>) -> Ordering {
+    let a: Color = self.value;
+    let b: Color = other.value;
     if (a < b) {
         return Ordering::Less;
     }
@@ -14995,14 +15023,14 @@ pub fn "Shape^Eq::eq"(self: Box<Shape>, other: Box<Shape>) -> bool {
     };
 }
 
-pub fn "Color^Inspect::inspect"(self: &Color, f: &mut Formatter) {
-    if (*self == 0) {
+pub fn "Color^Inspect::inspect"(self: Box<Color>, f: &mut Formatter) {
+    if (self.value == 0) {
         f.Formatter::write_str(&"Color::Red");
     } else {
-        if (*self == 1) {
+        if (self.value == 1) {
             f.Formatter::write_str(&"Color::Green");
         } else {
-            if (*self == 2) {
+            if (self.value == 2) {
                 f.Formatter::write_str(&"Color::Blue");
             };
         };
@@ -15136,7 +15164,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "Color^InspectAlt::inspect_alt"(self: &Color, f: &mut Formatter) {
+pub fn "Color^InspectAlt::inspect_alt"(self: Box<Color>, f: &mut Formatter) {
     self."Color^Inspect::inspect"(f);
 }
 
@@ -15269,7 +15297,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "Color^Display::fmt"(self: &Color, f: &mut Formatter) {
+pub fn "Color^Display::fmt"(self: Box<Color>, f: &mut Formatter) {
     self."Color^Inspect::inspect"(f);
 }
 
@@ -15385,7 +15413,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "Color^DisplayAlt::fmt_alt"(self: &Color, f: &mut Formatter) {
+pub fn "Color^DisplayAlt::fmt_alt"(self: Box<Color>, f: &mut Formatter) {
     self."Color^InspectAlt::inspect_alt"(f);
 }
 
@@ -18609,13 +18637,13 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "ErrorCode^Eq::eq"(self: &ErrorCode, other: &ErrorCode) -> bool {
-    return (*self == *other);
+pub fn "ErrorCode^Eq::eq"(self: Box<ErrorCode>, other: Box<ErrorCode>) -> bool {
+    return (self.value == other.value);
 }
 
-pub fn "ErrorCode^Ord::cmp"(self: &ErrorCode, other: &ErrorCode) -> Ordering {
-    let a: ErrorCode = *self;
-    let b: ErrorCode = *other;
+pub fn "ErrorCode^Ord::cmp"(self: Box<ErrorCode>, other: Box<ErrorCode>) -> Ordering {
+    let a: ErrorCode = self.value;
+    let b: ErrorCode = other.value;
     if (a < b) {
         return Ordering::Less;
     }
@@ -18625,14 +18653,14 @@ pub fn "ErrorCode^Ord::cmp"(self: &ErrorCode, other: &ErrorCode) -> Ordering {
     return Ordering::Equal;
 }
 
-pub fn "ErrorCode^Inspect::inspect"(self: &ErrorCode, f: &mut Formatter) {
-    if (*self == 0) {
+pub fn "ErrorCode^Inspect::inspect"(self: Box<ErrorCode>, f: &mut Formatter) {
+    if (self.value == 0) {
         f.Formatter::write_str(&"ErrorCode::Io");
     } else {
-        if (*self == 1) {
+        if (self.value == 1) {
             f.Formatter::write_str(&"ErrorCode::IllegalByteSequence");
         } else {
-            if (*self == 2) {
+            if (self.value == 2) {
                 f.Formatter::write_str(&"ErrorCode::Pipe");
             };
         };
@@ -18685,7 +18713,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "ErrorCode^InspectAlt::inspect_alt"(self: &ErrorCode, f: &mut Formatter) {
+pub fn "ErrorCode^InspectAlt::inspect_alt"(self: Box<ErrorCode>, f: &mut Formatter) {
     self."ErrorCode^Inspect::inspect"(f);
 }
 
@@ -18735,7 +18763,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "ErrorCode^Display::fmt"(self: &ErrorCode, f: &mut Formatter) {
+pub fn "ErrorCode^Display::fmt"(self: Box<ErrorCode>, f: &mut Formatter) {
     self."ErrorCode^Inspect::inspect"(f);
 }
 
@@ -18819,7 +18847,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "ErrorCode^DisplayAlt::fmt_alt"(self: &ErrorCode, f: &mut Formatter) {
+pub fn "ErrorCode^DisplayAlt::fmt_alt"(self: Box<ErrorCode>, f: &mut Formatter) {
     self."ErrorCode^InspectAlt::inspect_alt"(f);
 }
 
@@ -18907,13 +18935,13 @@ pub fn ConvertError::new(message: String) -> ConvertError {
     return ConvertError { message: message };
 }
 
-pub fn "Ordering^Eq::eq"(self: &Ordering, other: &Ordering) -> bool {
-    return (*self == *other);
+pub fn "Ordering^Eq::eq"(self: Box<Ordering>, other: Box<Ordering>) -> bool {
+    return (self.value == other.value);
 }
 
-pub fn "Ordering^Ord::cmp"(self: &Ordering, other: &Ordering) -> Ordering {
-    let a: Ordering = *self;
-    let b: Ordering = *other;
+pub fn "Ordering^Ord::cmp"(self: Box<Ordering>, other: Box<Ordering>) -> Ordering {
+    let a: Ordering = self.value;
+    let b: Ordering = other.value;
     if (a < b) {
         return Ordering::Less;
     }
@@ -18935,14 +18963,14 @@ pub fn "ConvertError^Ord::cmp"(self: &ConvertError, other: &ConvertError) -> Ord
     return Ordering::Equal;
 }
 
-pub fn "Ordering^Inspect::inspect"(self: &Ordering, f: &mut Formatter) {
-    if (*self == 0) {
+pub fn "Ordering^Inspect::inspect"(self: Box<Ordering>, f: &mut Formatter) {
+    if (self.value == 0) {
         f.Formatter::write_str(&"Ordering::Less");
     } else {
-        if (*self == 1) {
+        if (self.value == 1) {
             f.Formatter::write_str(&"Ordering::Equal");
         } else {
-            if (*self == 2) {
+            if (self.value == 2) {
                 f.Formatter::write_str(&"Ordering::Greater");
             };
         };
@@ -19002,7 +19030,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "Ordering^InspectAlt::inspect_alt"(self: &Ordering, f: &mut Formatter) {
+pub fn "Ordering^InspectAlt::inspect_alt"(self: Box<Ordering>, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
 }
 
@@ -19061,7 +19089,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "Ordering^Display::fmt"(self: &Ordering, f: &mut Formatter) {
+pub fn "Ordering^Display::fmt"(self: Box<Ordering>, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
 }
 
@@ -19149,7 +19177,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "Ordering^DisplayAlt::fmt_alt"(self: &Ordering, f: &mut Formatter) {
+pub fn "Ordering^DisplayAlt::fmt_alt"(self: Box<Ordering>, f: &mut Formatter) {
     self."Ordering^InspectAlt::inspect_alt"(f);
 }
 
@@ -19559,13 +19587,13 @@ pub fn "String^InspectAlt::inspect_alt"(self: &String, f: &mut Formatter) {
     self."String^Inspect::inspect"(f);
 }
 
-pub fn "Alignment^Eq::eq"(self: &Alignment, other: &Alignment) -> bool {
-    return (*self == *other);
+pub fn "Alignment^Eq::eq"(self: Box<Alignment>, other: Box<Alignment>) -> bool {
+    return (self.value == other.value);
 }
 
-pub fn "Alignment^Ord::cmp"(self: &Alignment, other: &Alignment) -> Ordering {
-    let a: Alignment = *self;
-    let b: Alignment = *other;
+pub fn "Alignment^Ord::cmp"(self: Box<Alignment>, other: Box<Alignment>) -> Ordering {
+    let a: Alignment = self.value;
+    let b: Alignment = other.value;
     if (a < b) {
         return Ordering::Less;
     }
@@ -19576,7 +19604,7 @@ pub fn "Alignment^Ord::cmp"(self: &Alignment, other: &Alignment) -> Ordering {
 }
 
 pub fn "Formatter^Eq::eq"(self: &Formatter, other: &Formatter) -> bool {
-    return (((((((Box<char> { value: self.fill }."char^Eq::eq"(Box<char> { value: other.fill }) && self.align."Alignment^Eq::eq"(&other.align)) && Box<bool> { value: self.sign_plus }."bool^Eq::eq"(Box<bool> { value: other.sign_plus })) && Box<bool> { value: self.zero_pad }."bool^Eq::eq"(Box<bool> { value: other.zero_pad })) && Box<i32> { value: self.width }."i32^Eq::eq"(Box<i32> { value: other.width })) && Box<i32> { value: self.precision }."i32^Eq::eq"(Box<i32> { value: other.precision })) && Box<i32> { value: self.indent }."i32^Eq::eq"(Box<i32> { value: other.indent })) && self.buf."&mut core:prelude/string.wado/String^Eq::eq"(&other.buf));
+    return (((((((Box<char> { value: self.fill }."char^Eq::eq"(Box<char> { value: other.fill }) && Box<Alignment> { value: self.align }."Alignment^Eq::eq"(Box<Alignment> { value: other.align })) && Box<bool> { value: self.sign_plus }."bool^Eq::eq"(Box<bool> { value: other.sign_plus })) && Box<bool> { value: self.zero_pad }."bool^Eq::eq"(Box<bool> { value: other.zero_pad })) && Box<i32> { value: self.width }."i32^Eq::eq"(Box<i32> { value: other.width })) && Box<i32> { value: self.precision }."i32^Eq::eq"(Box<i32> { value: other.precision })) && Box<i32> { value: self.indent }."i32^Eq::eq"(Box<i32> { value: other.indent })) && self.buf."&mut core:prelude/string.wado/String^Eq::eq"(&other.buf));
 }
 
 pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
@@ -19584,7 +19612,7 @@ pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
     if (c != Ordering::Equal) {
         return c;
     }
-    let c: Ordering = self.align."Alignment^Ord::cmp"(&other.align);
+    let c: Ordering = Box<Alignment> { value: self.align }."Alignment^Ord::cmp"(Box<Alignment> { value: other.align });
     if (c != Ordering::Equal) {
         return c;
     }
@@ -19615,14 +19643,14 @@ pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
     return Ordering::Equal;
 }
 
-pub fn "Alignment^Inspect::inspect"(self: &Alignment, f: &mut Formatter) {
-    if (*self == 0) {
+pub fn "Alignment^Inspect::inspect"(self: Box<Alignment>, f: &mut Formatter) {
+    if (self.value == 0) {
         f.Formatter::write_str(&"Alignment::Left");
     } else {
-        if (*self == 1) {
+        if (self.value == 1) {
             f.Formatter::write_str(&"Alignment::Center");
         } else {
-            if (*self == 2) {
+            if (self.value == 2) {
                 f.Formatter::write_str(&"Alignment::Right");
             };
         };
@@ -19675,7 +19703,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "Alignment^InspectAlt::inspect_alt"(self: &Alignment, f: &mut Formatter) {
+pub fn "Alignment^InspectAlt::inspect_alt"(self: Box<Alignment>, f: &mut Formatter) {
     self."Alignment^Inspect::inspect"(f);
 }
 
@@ -19725,7 +19753,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "Alignment^Display::fmt"(self: &Alignment, f: &mut Formatter) {
+pub fn "Alignment^Display::fmt"(self: Box<Alignment>, f: &mut Formatter) {
     self."Alignment^Inspect::inspect"(f);
 }
 
@@ -19809,7 +19837,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "Alignment^DisplayAlt::fmt_alt"(self: &Alignment, f: &mut Formatter) {
+pub fn "Alignment^DisplayAlt::fmt_alt"(self: Box<Alignment>, f: &mut Formatter) {
     self."Alignment^InspectAlt::inspect_alt"(f);
 }
 
