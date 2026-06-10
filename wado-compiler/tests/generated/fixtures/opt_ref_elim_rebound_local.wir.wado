@@ -96,25 +96,27 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(30)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(31)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(31)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(32)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(33)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(34)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(35)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(35)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(36)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(36)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(37)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(39)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(40)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -129,6 +131,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado/run"() with Stdout {
     let __b_0: ref "core:prelude//List<i32>";
     let __b_2: ref "core:prelude//List<i32>";
@@ -139,113 +143,119 @@ fn "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado/run"() with Std
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
-    let alts_27: ref null "core:prelude//List<i32>";
-    let alts_28: ref "core:prelude//List<i32>";
-    let self_29: i32;
+    let alts_26: ref null "core:prelude//List<i32>";
+    let alts_27: ref "core:prelude//List<i32>";
+    let self_28: i32;
     let element: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
-    let alts_45: ref null "core:prelude//List<i32>";
-    let alts_46: ref "core:prelude//List<i32>";
-    let self_47: i32;
-    let elem_53: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
-    let alts_54: ref null "core:prelude//List<i32>";
-    let alts_55: ref "core:prelude//List<i32>";
-    let self_56: i32;
+    let alts_44: ref null "core:prelude//List<i32>";
+    let alts_45: ref "core:prelude//List<i32>";
+    let self_46: i32;
+    let elem_52: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
+    let alts_53: ref null "core:prelude//List<i32>";
+    let alts_54: ref "core:prelude//List<i32>";
+    let self_55: i32;
     let __sroa_e2_value: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
     let __sroa_e1_value: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
-    let g_61: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
-    let rep_62: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//RepeatElement";
-    let g_63: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
-    let __sroa___match_4_value_65: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
-    let g_68: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
-    let rep_69: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//RepeatElement";
-    let g_70: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
-    let __sroa___match_4_value_72: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
-    let g_75: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
-    let rep_76: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//RepeatElement";
-    let g_77: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
-    let __sroa___match_4_value_79: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
+    let g_60: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
+    let rep_61: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//RepeatElement";
+    let g_62: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
+    let __sroa___match_4_value_64: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
+    let g_67: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
+    let rep_68: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//RepeatElement";
+    let g_69: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
+    let __sroa___match_4_value_71: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
+    let g_74: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
+    let rep_75: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//RepeatElement";
+    let g_76: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
+    let __sroa___match_4_value_78: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     __sroa_e1_value = struct.new "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group" { discriminant: 1, payload_0: ref.as_non_null(__b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }; struct.new "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement" { alternatives: __b_0 }) };
-    "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_29(__inline_process_12: block -> i32 {
-        alts_27 = __inline_extract_0: block -> ref null "core:prelude//List<i32>" {
+    "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_28(__inline_process_11: block -> i32 {
+        alts_26 = __inline_extract_0: block -> ref null "core:prelude//List<i32>" {
             if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e1_value) {
-                g_61 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e1_value).payload_0;
-                break __inline_extract_0: g_61.alternatives;
+                g_60 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e1_value).payload_0;
+                break __inline_extract_0: g_60.alternatives;
             } else {
             }
             if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e1_value) {
-                rep_62 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e1_value).payload_0;
-                __sroa___match_4_value_65 = rep_62.element;
-                if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_65) {
-                    g_63 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_65).payload_0;
-                    break __inline_extract_0: g_63.alternatives;
+                rep_61 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e1_value).payload_0;
+                __sroa___match_4_value_64 = rep_61.element;
+                if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_64) {
+                    g_62 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_64).payload_0;
+                    break __inline_extract_0: g_62.alternatives;
                 } else {
                 }
             } else {
             }
             break __inline_extract_0: ref.null none;
         };
-        if ref.is_null(alts_27) == 0 {
-            alts_28 = ref.as_non_null(alts_27);
-            break __inline_process_12: (alts_28.used * 10) + 1;
+        if ref.is_null(alts_26) == 0 {
+            alts_27 = ref.as_non_null(alts_26);
+            break __inline_process_11: (alts_27.used * 10) + 1;
         } else {
         }
-        break __inline_process_12: -1;
+        break __inline_process_11: -1;
     }), __local_6); __local_5);
     __b_2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 };
     inner_g = struct.new "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement" { alternatives: __b_2 };
     __sroa_e2_value = struct.new "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat" { discriminant: 2, payload_0: ref.as_non_null(element = struct.new "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group" { discriminant: 1, payload_0: inner_g }; struct.new "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//RepeatElement" { element: element }) };
-    "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_47(__inline_process_24: block -> i32 {
-        alts_45 = __inline_extract_2: block -> ref null "core:prelude//List<i32>" {
+    "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_46(__inline_process_23: block -> i32 {
+        alts_44 = __inline_extract_2: block -> ref null "core:prelude//List<i32>" {
             if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e2_value) {
-                g_68 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e2_value).payload_0;
-                break __inline_extract_2: g_68.alternatives;
+                g_67 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e2_value).payload_0;
+                break __inline_extract_2: g_67.alternatives;
             } else {
             }
             if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e2_value) {
-                rep_69 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e2_value).payload_0;
-                __sroa___match_4_value_72 = rep_69.element;
-                if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_72) {
-                    g_70 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_72).payload_0;
-                    break __inline_extract_2: g_70.alternatives;
+                rep_68 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e2_value).payload_0;
+                __sroa___match_4_value_71 = rep_68.element;
+                if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_71) {
+                    g_69 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_71).payload_0;
+                    break __inline_extract_2: g_69.alternatives;
                 } else {
                 }
             } else {
             }
             break __inline_extract_2: ref.null none;
         };
-        if ref.is_null(alts_45) == 0 {
-            alts_46 = ref.as_non_null(alts_45);
-            break __inline_process_24: (alts_46.used * 10) + 1;
+        if ref.is_null(alts_44) == 0 {
+            alts_45 = ref.as_non_null(alts_44);
+            break __inline_process_23: (alts_45.used * 10) + 1;
         } else {
         }
-        break __inline_process_24: -1;
+        break __inline_process_23: -1;
     }), __local_8); __local_7);
-    "core:cli/println"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_56(__inline_process_29: block -> i32 {
-        elem_53 = struct.new "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Leaf" { discriminant: 0, payload_0: 0 };
-        alts_54 = __inline_extract_4: block -> ref null "core:prelude//List<i32>" {
-            if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(elem_53) {
-                g_75 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(elem_53).payload_0;
-                break __inline_extract_4: g_75.alternatives;
+    "core:cli/println"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_55(__inline_process_28: block -> i32 {
+        elem_52 = struct.new "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Leaf" { discriminant: 0, payload_0: 0 };
+        alts_53 = __inline_extract_4: block -> ref null "core:prelude//List<i32>" {
+            if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(elem_52) {
+                g_74 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(elem_52).payload_0;
+                break __inline_extract_4: g_74.alternatives;
             } else {
             }
-            if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(elem_53) {
-                rep_76 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(elem_53).payload_0;
-                __sroa___match_4_value_79 = rep_76.element;
-                if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_79) {
-                    g_77 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_79).payload_0;
-                    break __inline_extract_4: g_77.alternatives;
+            if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(elem_52) {
+                rep_75 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(elem_52).payload_0;
+                __sroa___match_4_value_78 = rep_75.element;
+                if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_78) {
+                    g_76 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_78).payload_0;
+                    break __inline_extract_4: g_76.alternatives;
                 } else {
                 }
             } else {
             }
             break __inline_extract_4: ref.null none;
         };
-        if ref.is_null(alts_54) == 0 {
-            alts_55 = ref.as_non_null(alts_54);
-            break __inline_process_29: (alts_55.used * 10) + 1;
+        if ref.is_null(alts_53) == 0 {
+            alts_54 = ref.as_non_null(alts_53);
+            break __inline_process_28: (alts_54.used * 10) + 1;
         } else {
         }
-        break __inline_process_29: -1;
+        break __inline_process_28: -1;
     }), __local_10); __local_9);
 }
 
@@ -254,6 +264,12 @@ fn "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado/__cm_binding__S
 }
 
 fn "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado/run"();
     "wasi/task-return"(0);
 }
@@ -292,9 +308,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     i = 0;
     b13: block {
         l14: loop {
-            if i >= len {
-                break b13;
-            }
+            break_if b13 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
             continue l14;
@@ -345,14 +359,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b18: block {
-        l19: loop {
-            if t <= 0_i64 {
-                break b18;
-            }
+    b17: block {
+        l18: loop {
+            break_if b17 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l19;
+            continue l18;
         };
     };
     return n;
@@ -366,18 +378,19 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b22: block {
-            l23: loop {
-                if temp <= 0_i64 {
-                    break b22;
-                }
+        b20: block {
+            l21: loop {
+                break_if b20 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l23;
+                continue l21;
             };
         };
     }
+}
+
+fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
@@ -467,14 +480,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b33: block {
-        l34: loop {
-            if i >= n {
-                break b33;
-            }
+    b30: block {
+        l31: loop {
+            break_if b30 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l34;
+            continue l31;
         };
     };
 }
