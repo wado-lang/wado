@@ -1,14 +1,15 @@
 //! Symbol table for name resolution
 //!
 //! The symbol table tracks all definitions (functions, types, effects, etc.)
-//! and their metadata. Each symbol is keyed by `(ModuleSource, AstId)` — the
-//! stable coordinate of the AST node that introduced it. This lets downstream
-//! phases and LSP queries translate between source positions, AST nodes, and
-//! semantic information without a parallel integer ID space.
+//! and their metadata. Each symbol is keyed by the globally-unique [`AstId`]
+//! of the AST node that introduced it; the symbol's declaring module is read
+//! off [`Symbol::module_source`]. This lets downstream phases and LSP queries
+//! translate between source positions, AST nodes, and semantic information
+//! without a parallel integer ID space.
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{AstId, AstIdSpace, CmImport};
+use crate::ast::{AstId, CmImport};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 
@@ -222,8 +223,8 @@ pub struct ReExportTarget {
 /// Tracks all symbols organized by module. Symbols are keyed by their
 /// declaring node's globally-unique [`AstId`]; the name indices (`modules`,
 /// `imports`, `reexports`) map from textual names to that identity. The
-/// declaring module of any symbol is recovered from its `AstId`'s
-/// [`AstIdSpace`] via [`Self::module_of`] (populated at [`Self::define`]).
+/// declaring module of any symbol is read off `Symbol::module_source()`
+/// (set at [`Self::define`]).
 #[derive(Debug, Default, Clone)]
 pub struct SymbolTable {
     /// All symbols keyed by their declaring node's [`AstId`].
@@ -239,10 +240,6 @@ pub struct SymbolTable {
     /// by one module is not visible to another, so same-named imports in
     /// different modules cannot collide.
     imports: IndexMap<ModuleSource, IndexMap<String, AstId>>,
-    /// `AstIdSpace → ModuleSource` registry, populated as symbols are
-    /// `define`d. Recovers the declaring module of any defined symbol's
-    /// `AstId` (each module's parse owns one space).
-    space_modules: IndexMap<AstIdSpace, ModuleSource>,
 }
 
 impl SymbolTable {
@@ -256,13 +253,6 @@ impl SymbolTable {
     /// module filter on `key.module`.
     pub fn iter(&self) -> impl Iterator<Item = (&AstId, &Symbol)> {
         self.symbols.iter()
-    }
-
-    /// Declaring module of a defined symbol's `AstId`, via the space
-    /// registry. `None` for ids never `define`d here (e.g. transient
-    /// `AstId::fresh` operands).
-    pub fn module_of(&self, id: AstId) -> Option<&ModuleSource> {
-        self.space_modules.get(&id.space())
     }
 
     /// Check whether a symbol with `name` is already defined directly in
@@ -307,9 +297,6 @@ impl SymbolTable {
             span,
         };
         self.symbols.insert(ast_id, symbol);
-        self.space_modules
-            .entry(ast_id.space())
-            .or_insert_with(|| module_source.clone());
 
         let module = self.modules.entry(module_source.clone()).or_default();
         module.insert(name.to_string(), ast_id);
@@ -536,11 +523,11 @@ mod tests {
     }
 
     #[test]
-    fn module_of_recovers_the_defining_module() {
-        // `define` registers the symbol's space -> module mapping, so a bare
-        // `AstId` round-trips back to its declaring module without carrying
-        // the module in the key (the role `SymbolKey` used to play). Ids use
-        // real per-module spaces, exactly as the parser mints them.
+    fn define_records_the_symbols_home_module() {
+        // `define` stamps the declaring module onto the `Symbol` (the
+        // authoritative def-side home), so navigation reads it back without
+        // the module ever being part of a key (the role `SymbolKey` played).
+        // Ids use real per-module spaces, exactly as the parser mints them.
         let mut table = SymbolTable::new();
         let cli = ModuleSource::cli();
         let space_a = crate::ast::AstIdSpace::next();
@@ -554,11 +541,9 @@ mod tests {
             SymbolKind::BuiltinType,
             None,
         );
-        assert_eq!(table.module_of(id), Some(&cli));
         assert_eq!(table.get(&id).unwrap().module_source(), &cli);
-
-        // An id from a space never `define`d here has no registered module.
-        assert_eq!(table.module_of(AstId::new(space_b, 0)), None);
+        // A same-local id from a different space is a distinct, undefined key.
+        assert!(table.get(&AstId::new(space_b, 0)).is_none());
     }
 
     #[test]

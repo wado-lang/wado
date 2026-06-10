@@ -421,13 +421,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for associated constants (e.g., f64::PI, i32::MAX). The
-        // constant's body is *foreign* AST owned by `const_module`; its
-        // nodes carry their own globally-unique `AstId`s, so the facts this
-        // re-resolution records land on the const's nodes without touching
-        // any consumer node. Inference re-runs here against the consumer's
-        // scope (so the emitted TIR stays identical); reify re-reads the
-        // facts by node id after `with_const_module_perspective` swaps to
-        // `const_module`.
+        // constant's body is *foreign* AST owned by `const_module`. We
+        // re-resolve it here for the consumer's inference/typecheck side
+        // effects; the per-`AstId` facts this records carry the const body's
+        // own globally-unique ids, so they cannot clobber a consumer node
+        // sharing a dense local index (the historic cross-module collision,
+        // issue #1342). Reify produces the const's TIR under
+        // `with_const_module_perspective(const_module)`, so it does not
+        // depend on these consumer-side entries.
         if let Some((const_module, type_id, const_expr)) = self
             .sem
             .decls
@@ -3065,9 +3066,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // private `global` of the struct module) resolve in that
                     // module's scope via `default_scope_module`, the
                     // callee-scope fallback `pad_args_with_defaults` also
-                    // uses for function default arguments. Fact recording
-                    // needs no redirection: the default's nodes carry their
-                    // own globally-unique `AstId`s.
+                    // uses for function default arguments. Fact-key
+                    // redirection is no longer needed: the default's nodes
+                    // carry their own globally-unique `AstId`s, so the facts
+                    // this consumer-side walk records cannot collide with a
+                    // local node. Reify reifies the default under the struct
+                    // module's perspective.
                     //
                     // Only scope is redirected; `expected_type_id` still
                     // drives literal and `null → None` coercion.

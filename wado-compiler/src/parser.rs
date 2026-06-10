@@ -124,7 +124,13 @@ impl Parser {
     /// should call [`Parser::from_lex`] instead so shebang / data section /
     /// comments flow through.
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self::build(tokens, None, None, Vec::new())
+        Self::build(
+            tokens,
+            None,
+            None,
+            Vec::new(),
+            crate::ast::AstIdSpace::next(),
+        )
     }
 
     /// Parse a complete [`crate::lexer::LexResult`], keeping the comment
@@ -134,7 +140,13 @@ impl Parser {
     /// so the wire format keeps the `lexer error:` prefix distinct from
     /// `parse error:`.
     pub fn from_lex(lex: crate::lexer::LexResult) -> Self {
-        Self::build(lex.tokens, lex.shebang, lex.data_section, lex.comments)
+        Self::build(
+            lex.tokens,
+            lex.shebang,
+            lex.data_section,
+            lex.comments,
+            crate::ast::AstIdSpace::next(),
+        )
     }
 
     /// Like [`Parser::from_lex`] but drops the comment stream. Used by the
@@ -142,7 +154,13 @@ impl Parser {
     /// thrown away — clearing it up front skips the per-AST-id comment-cursor
     /// walk and `Comment::clone` into [`crate::comment::TriviaMap`].
     pub fn from_lex_no_trivia(lex: crate::lexer::LexResult) -> Self {
-        Self::build(lex.tokens, lex.shebang, lex.data_section, Vec::new())
+        Self::build(
+            lex.tokens,
+            lex.shebang,
+            lex.data_section,
+            Vec::new(),
+            crate::ast::AstIdSpace::next(),
+        )
     }
 
     fn build(
@@ -150,6 +168,7 @@ impl Parser {
         shebang: Option<String>,
         data_section: Option<String>,
         comments: Vec<crate::comment::Comment>,
+        ast_id_space: crate::ast::AstIdSpace,
     ) -> Self {
         // Filter `TokenKind::Error` tokens at construction time so no parser
         // path can mistake one for an identifier or generate a duplicate
@@ -169,7 +188,7 @@ impl Parser {
             data_section,
             include_paths: crate::hashmap::IndexSet::default(),
             parsed_inner_attributes: Vec::new(),
-            ast_id_space: crate::ast::AstIdSpace::next(),
+            ast_id_space,
             next_ast_id: 0,
             comments,
             comment_cursor: 0,
@@ -5686,12 +5705,12 @@ impl Parser {
         }
 
         // Continue the parent's `AstIdSpace` and dense local counter so
-        // interpolation sub-expressions live in the parent module's id
-        // space with unique locals: a fresh `Parser` would otherwise mint
-        // its own space (breaking "one module tree = one space") and
-        // restart locals at 0.
-        let mut parser = Parser::new(lex_result.tokens);
-        parser.ast_id_space = self.ast_id_space;
+        // interpolation sub-expressions live in the parent module's id space
+        // with unique locals (one module tree = one space). Building directly
+        // in the parent's space avoids minting — and wasting — a fresh space
+        // per interpolation.
+        let mut parser =
+            Parser::build(lex_result.tokens, None, None, Vec::new(), self.ast_id_space);
         parser.next_ast_id = self.next_ast_id;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;
