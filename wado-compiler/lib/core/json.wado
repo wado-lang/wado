@@ -51,11 +51,8 @@ global TWO_POW_64: f64 = 18446744073709551616.0;
 /// Writes a byte string as a base64url (no padding) JSON string into buf.
 /// Matches RFC 8949 §6.1 advice for representing binary data as JSON text.
 fn write_base64_string(buf: &mut String, v: ByteSlice) {
-    // core:base64 encodes from a List, so the slice is copied once here.
-    let mut bytes: List<u8> = List::with_capacity(v.len());
-    bytes.extend_from_slice(v as ArraySlice<u8>);
     buf.push('"');
-    buf.push_str(&base64_encode_with(&bytes, Encoding::UrlSafe | Encoding::NoPadding));
+    buf.push_str(&base64_encode_with(&v, Encoding::UrlSafe | Encoding::NoPadding));
     buf.push('"');
 }
 
@@ -1909,9 +1906,9 @@ impl Deserializer for JsonDeserializer {
 
     fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
         let s = self.read_json_string()?;
-        match base64_decode(s) {
+        match base64_decode(&s) {
             Some(bytes) => {
-                return Result::Ok(bytes as ByteList);
+                return Result::Ok(bytes);
             },
             None => {
                 return Result::Err(DeserializeError::invalid_value(
