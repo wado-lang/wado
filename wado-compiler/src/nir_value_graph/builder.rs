@@ -212,8 +212,10 @@ struct Builder<'a> {
 
 impl<'a> Builder<'a> {
     fn new(body: &'a Body, alias_unsafe: &crate::hashmap::IndexSet<u32>) -> Self {
-        let mut unsafe_locals = alias_unsafe.clone();
-        collect_address_taken_in_block(body, body.root, &mut unsafe_locals);
+        // `alias_unsafe` arrives complete from the engine: the canonical
+        // sets unioned with the session-cached body scan
+        // (`Body::collect_address_taken_locals`).
+        let unsafe_locals = alias_unsafe.clone();
         Self {
             body,
             pool: ValuePool::new(),
@@ -676,12 +678,15 @@ impl<'a> Builder<'a> {
     /// expression. Each pure field value is seeded at the current version of
     /// its field, so a later `x.f` read forwards it.
     ///
-    /// Unlabeled `Block` wrappers are peered through to their trailing
-    /// expression — the shape constructor inlining leaves behind
-    /// (`let arr = { let n = …; …; List { repr, used: n } }`); an unlabeled
-    /// block has no break target, so the tail is its sole producer.
-    /// `LabeledBlock` wrappers (whose value exits via `break label:`) are a
-    /// follow-up; missing them only costs forwarding, never soundness.
+    /// Wrappers are peered through to the sole producing tail:
+    ///
+    /// - an unlabeled `Block`'s trailing expression (no break target, so
+    ///   the tail is the only producer) — the shape constructor inlining
+    ///   leaves behind after flattening, and
+    /// - a `LabeledBlock` whose only `break label:` is the trailing
+    ///   `break label: value` statement — the unflattened inlined-
+    ///   constructor shape; any other break to the label means multiple
+    ///   producers, so seeding stops there (soundness over coverage).
     fn seed_struct_literal_fields(&mut self, recv: ValueId, value_expr: ExprId) {
         let mut producer = value_expr;
         loop {
@@ -695,6 +700,36 @@ impl<'a> Builder<'a> {
                         return;
                     };
                     producer = *tail;
+                }
+                ExprKind::LabeledBlock { block, label, .. } => {
+                    let (block, label) = (*block, label.clone());
+                    let stmts = &self.body.blocks[block].stmts;
+                    let Some(&last) = stmts.last() else {
+                        return;
+                    };
+                    let StmtKind::Break {
+                        label: Some(brk),
+                        value: Some(value),
+                    } = &self.body.stmts[last].kind
+                    else {
+                        return;
+                    };
+                    if *brk != label {
+                        return;
+                    }
+                    let value = *value;
+                    // The trailing break must be the sole producer: no other
+                    // break to this label anywhere else in the block or in
+                    // the carried value.
+                    let earlier_break = stmts[..stmts.len() - 1]
+                        .iter()
+                        .any(|s| block_breaks_to_node(self.body, NodeRef::Stmt(*s), &label));
+                    if earlier_break
+                        || block_breaks_to_node(self.body, NodeRef::Expr(value), &label)
+                    {
+                        return;
+                    }
+                    producer = value;
                 }
                 _ => return,
             }
@@ -1045,39 +1080,6 @@ fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
     body.for_each_child(node, |c| kids.push(c));
     kids.into_iter()
         .any(|c| block_breaks_to_node(body, c, label))
-}
-
-/// Scan `block`'s subtree for `&local` / `&mut local` (`Unary::Ref` /
-/// `Unary::MutRef` over a `Local`) and insert every targeted local into
-/// `out`. Mirrors `store_load_forward::collect_address_taken_in_body`: the
-/// canonical `address_taken_locals` / `stores_aliased_locals` sets go stale
-/// after `inline` / `ref_elim` copy reference nodes, so this body scan
-/// catches the transient post-inline aliases (the `Holder { pair: &p }`
-/// shape an inlined `with stores[p]` callee leaves behind). Used to suppress
-/// field store→load seeding on aliased receivers.
-fn collect_address_taken_in_block(
-    body: &Body,
-    block: crate::nir_arena::BlockId,
-    out: &mut crate::hashmap::IndexSet<u32>,
-) {
-    collect_address_taken_node(body, NodeRef::Block(block), out);
-}
-
-fn collect_address_taken_node(body: &Body, node: NodeRef, out: &mut crate::hashmap::IndexSet<u32>) {
-    if let NodeRef::Expr(id) = node
-        && let ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-            expr: inner,
-        } = &body.exprs[id].kind
-        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
-    {
-        out.insert(*index);
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_address_taken_node(body, c, out);
-    }
 }
 
 /// Collect every local index that an `Assign`-to-bare-`Local`, a `Let`, or
@@ -2178,8 +2180,10 @@ mod tests {
     #[test]
     fn body_scanned_address_taken_receiver_is_not_seeded() {
         // fn(obj) { obj.f = 7; let r = &obj; let y = obj.f; }
-        // The live `&obj` makes `obj` address-taken by the builder's own
-        // body scan, so the store is not seeded even without a passed set.
+        // The live `&obj` makes `obj` address-taken via
+        // `Body::collect_address_taken_locals` — the scan the engine unions
+        // into the exclusion set before every graph build — so the store is
+        // not seeded.
         let mut body = empty_body();
         let recv_w = local_ref(&mut body, 0);
         let seven = int_lit(&mut body, 7);
@@ -2197,7 +2201,10 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![write, let_r, let_y]);
-        let r = build_t(&body, &[param_seed()]);
+        let mut scanned = crate::hashmap::IndexSet::default();
+        body.collect_address_taken_locals(&mut scanned);
+        assert!(scanned.contains(&0));
+        let r = build(&body, &[param_seed().local_index], &scanned);
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }

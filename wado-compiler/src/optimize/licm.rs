@@ -32,7 +32,6 @@ use crate::token::Span;
 use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
-use super::store_load_forward::collect_address_taken_in_body;
 
 /// Tracks which variables and fields are modified within a loop.
 ///
@@ -1435,8 +1434,7 @@ fn hoist_invariant_arith(
             pending_hoist_locals.insert(*local_index);
         }
     }
-    let mut address_taken: IndexSet<u32> = IndexSet::default();
-    collect_address_taken_in_body(engine.body, &mut address_taken);
+    let address_taken: IndexSet<u32> = engine.body_address_taken().clone();
 
     let walk = ArithHoist {
         loop_body,

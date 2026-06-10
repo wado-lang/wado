@@ -104,6 +104,12 @@ pub struct Engine<'a> {
     /// sets it via [`Engine::set_alias_unsafe_locals`] before the first
     /// `value` query.
     alias_unsafe_locals: IndexSet<u32>,
+    /// Per-session cache of the body's live `&local` / `&mut local` scan
+    /// (see [`Body::collect_address_taken_locals`]). Computed on the first
+    /// graph build, cleared with [`Engine::invalidate_value_graph`] so a
+    /// rebuild after edits rescans. Unioned with `alias_unsafe_locals`
+    /// before reaching the builder.
+    body_address_taken: Option<IndexSet<u32>>,
     /// Local indices of the owning function's parameters, seeded as stable
     /// `Opaque`s by the `ValueGraph` builder. The builder's lazy
     /// first-read fallback is observationally identical for value queries,
@@ -131,6 +137,7 @@ impl<'a> Engine<'a> {
             locals,
             value_graph: None,
             alias_unsafe_locals: IndexSet::default(),
+            body_address_taken: None,
             param_locals: Vec::new(),
         };
         engine.build_parents();
@@ -203,6 +210,19 @@ impl<'a> Engine<'a> {
     /// after a structural rewrite that would invalidate the prior build.
     pub fn invalidate_value_graph(&mut self) {
         self.value_graph = None;
+        self.body_address_taken = None;
+    }
+
+    /// The session's cached body scan for live `&local` / `&mut local`
+    /// shapes. Rules that exclude such locals (`store_load_forward`, licm's
+    /// arithmetic hoist) read this instead of rescanning.
+    pub fn body_address_taken(&mut self) -> &IndexSet<u32> {
+        if self.body_address_taken.is_none() {
+            let mut set = IndexSet::default();
+            self.body.collect_address_taken_locals(&mut set);
+            self.body_address_taken = Some(set);
+        }
+        self.body_address_taken.as_ref().unwrap()
     }
 
     /// Record the function's reference-aliased locals so the lazily-built
@@ -236,11 +256,18 @@ impl<'a> Engine<'a> {
         // `read_local` fallback caches an `Opaque` on first read, which is
         // observationally identical to up-front seeding for value queries.
         // Passes consuming loop-entry snapshots set the params explicitly.
-        let build = crate::nir_value_graph::builder::build(
-            &*self.body,
-            &self.param_locals,
-            &self.alias_unsafe_locals,
-        );
+        // Union the canonical alias sets with the session's body scan; the
+        // builder receives the complete exclusion set and performs no scan
+        // of its own.
+        let mut alias_unsafe = self.alias_unsafe_locals.clone();
+        if self.body_address_taken.is_none() {
+            let mut set = IndexSet::default();
+            self.body.collect_address_taken_locals(&mut set);
+            self.body_address_taken = Some(set);
+        }
+        alias_unsafe.extend(self.body_address_taken.as_ref().unwrap().iter().copied());
+        let build =
+            crate::nir_value_graph::builder::build(&*self.body, &self.param_locals, &alias_unsafe);
         self.value_graph = Some(build);
     }
 
