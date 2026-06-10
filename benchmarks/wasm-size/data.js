@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781088654727,
+  "lastUpdate": 1781096565959,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31957,6 +31957,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5dd280b51b75105674388bf0e44621c59edad637"
         },
         "date": 1781088654193,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "77bafeacda8793f4f25668c6d47da4959811bdf6",
+          "message": "Merge pull request #1350 from wado-lang/claude/great-keller-mgkk2q\n\npackage-gale: code-health audit + 30 bug fixes",
+          "timestamp": "2026-06-10T21:54:03+09:00",
+          "tree_id": "f66a31e1f53da4f2c4b4f3d83dbb3f311e6ec24d",
+          "url": "https://github.com/wado-lang/wado/commit/77bafeacda8793f4f25668c6d47da4959811bdf6"
+        },
+        "date": 1781096565417,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
