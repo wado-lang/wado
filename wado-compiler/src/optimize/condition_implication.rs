@@ -29,6 +29,7 @@ use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::ValueId;
 use crate::tir::TypeTable;
 
 use cranelift_entity::EntityRef;
@@ -42,6 +43,19 @@ struct LoopGuard {
     bound: Bound,
     /// `true` for `<` (strict), `false` for `<=` (inclusive)
     is_strict: bool,
+    /// `ValueGraph` identity of the guard variable read at the guard
+    /// position, if pure. Lets a check `j >= b` be proven false by plain
+    /// `ValueId` equality (`engine.value(j) == var_vn`), which already
+    /// encodes reaching-defs: a reassignment of the variable between the
+    /// guard and the check changes its `ValueId`, so the fast path simply
+    /// fails — no separate kill tracking needed for it. `None` for an impure
+    /// guard expression (the field-chain / DefMap path then applies).
+    var_vn: Option<ValueId>,
+    /// `ValueGraph` identity of the guard bound read at the guard position.
+    /// Field-chain bounds (`arr.used`) now share a `ValueId` with the check's
+    /// read of the same field (per the reachability-aware heap join), so the
+    /// fast path catches them without the `Bound::FieldChain` machinery.
+    bound_vn: Option<ValueId>,
 }
 
 /// A dominating if-condition that proves `var + k < bound` for all `k <= max_offset`.
@@ -488,7 +502,7 @@ fn process_loop(
     }
 
     // Extract the loop guard from the first statement
-    let guard = extract_loop_guard(engine.body, loop_body);
+    let guard = extract_loop_guard(engine, loop_body);
 
     if let Some(guard) = &guard {
         // Eliminate implied conditions in the loop body (skip the guard itself)
@@ -565,13 +579,13 @@ fn process_stmt_nested_loops(
 ///
 /// Matches: `if !(var < bound) { break LABEL; }` → guard `var < bound`
 ///      or: `if !(var <= bound) { break LABEL; }` → guard `var <= bound`
-fn extract_loop_guard(body: &Body, loop_body: BlockId) -> Option<LoopGuard> {
-    let first = *body.blocks[loop_body].stmts.first()?;
+fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<LoopGuard> {
+    let first = *engine.body.blocks[loop_body].stmts.first()?;
     let StmtKind::If {
         condition,
         then_block,
         else_block: None,
-    } = &body.stmts[first].kind
+    } = &engine.body.stmts[first].kind
     else {
         return None;
     };
@@ -579,11 +593,11 @@ fn extract_loop_guard(body: &Body, loop_body: BlockId) -> Option<LoopGuard> {
     let then_block = *then_block;
 
     // then_block must be a single Break statement
-    if body.blocks[then_block].stmts.len() != 1 {
+    if engine.body.blocks[then_block].stmts.len() != 1 {
         return None;
     }
     matches!(
-        &body.stmts[body.blocks[then_block].stmts[0]].kind,
+        &engine.body.stmts[engine.body.blocks[then_block].stmts[0]].kind,
         StmtKind::Break { .. }
     )
     .then_some(())?;
@@ -592,12 +606,13 @@ fn extract_loop_guard(body: &Body, loop_body: BlockId) -> Option<LoopGuard> {
     let ExprKind::Unary {
         op: NirUnaryOp::Not,
         expr: inner,
-    } = &body.exprs[condition].kind
+    } = &engine.body.exprs[condition].kind
     else {
         return None;
     };
+    let inner = *inner;
 
-    let ExprKind::Binary { left, op, right } = &body.exprs[*inner].kind else {
+    let ExprKind::Binary { left, op, right } = &engine.body.exprs[inner].kind else {
         return None;
     };
 
@@ -607,16 +622,21 @@ fn extract_loop_guard(body: &Body, loop_body: BlockId) -> Option<LoopGuard> {
         _ => return None,
     };
 
-    let ExprKind::Local { index: var, .. } = &body.exprs[var_expr].kind else {
+    let ExprKind::Local { index: var, .. } = &engine.body.exprs[var_expr].kind else {
         return None;
     };
     let var = *var;
-    let bound = Bound::extract(body, bound_expr)?;
+    let bound = Bound::extract(engine.body, bound_expr)?;
+    // The reads' value-graph identities, captured at the guard position.
+    let var_vn = engine.value(var_expr);
+    let bound_vn = engine.value(bound_expr);
 
     Some(LoopGuard {
         var,
         bound,
         is_strict,
+        var_vn,
+        bound_vn,
     })
 }
 
@@ -1141,14 +1161,47 @@ impl ConditionEliminator<'_> {
         }
     }
 
-    fn implied_false(&self, body: &Body, condition: ExprId) -> bool {
-        if self.guard_alive && is_implied_false(body, condition, self.guard, self.defs) {
-            return true;
+    fn implied_false(&self, engine: &mut Engine, condition: ExprId) -> bool {
+        if self.guard_alive {
+            // Fast path: prove `check_lhs >= check_bound` false by plain
+            // ValueId equality against the guard's captured identities. This
+            // catches field-chain bounds (`arr.used`) the `DefMap` path
+            // misses, and is sound by construction — equal `ValueId`s denote
+            // the same runtime value at both program points.
+            if self.vn_implies_false(engine, condition) {
+                return true;
+            }
+            if is_implied_false(engine.body, condition, self.guard, self.defs) {
+                return true;
+            }
         }
         self.dom_guards
             .iter()
             .filter(|d| d.alive)
-            .any(|d| is_implied_by_dominating_guard(body, condition, &d.guard, self.defs))
+            .any(|d| is_implied_by_dominating_guard(engine.body, condition, &d.guard, self.defs))
+    }
+
+    /// Strict-guard identity regime over `ValueId`s: a guard `var < bound`
+    /// proves `check_lhs >= check_bound` false when `check_lhs` carries the
+    /// guard variable's `ValueId` and `check_bound` the guard bound's. The
+    /// non-strict (`<=`) and offset regimes stay on the `DefMap` path.
+    fn vn_implies_false(&self, engine: &mut Engine, condition: ExprId) -> bool {
+        if !self.guard.is_strict {
+            return false;
+        }
+        let (Some(gv), Some(gb)) = (self.guard.var_vn, self.guard.bound_vn) else {
+            return false;
+        };
+        let ExprKind::Binary {
+            left,
+            op: NirBinaryOp::GtEq,
+            right,
+        } = &engine.body.exprs[condition].kind
+        else {
+            return false;
+        };
+        let (left, right) = (*left, *right);
+        engine.value(left) == Some(gv) && engine.value(right) == Some(gb)
     }
 }
 
@@ -1167,7 +1220,7 @@ impl ArenaOptVisitor for ConditionEliminator<'_> {
             // Check if this statement is a bounds check that can be eliminated.
             if else_block.is_none()
                 && is_panic_block(engine.body, then_block)
-                && self.implied_false(engine.body, condition)
+                && self.implied_false(engine, condition)
             {
                 set_false(engine, condition);
                 return true;
