@@ -493,6 +493,18 @@ test "deserialize f64 long integer part with fraction" {
     assert r matches { Ok(v) && 12000000000000000000000.0 < v < 13000000000000000000000.0 };
 }
 
+test "deserialize f64 with many leading fraction zeros" {
+    // Leading zeros must shift the scale, not consume the 19-digit mantissa
+    // budget — otherwise the lone significant digit is lost and the value
+    // collapses to 0.
+    let tiny: Result<f64, DeserializeError> = from_string("0.0000000000000000000001");
+    assert tiny matches { Ok(v) && 0.9e-22 < v < 1.1e-22 };
+    let small: Result<f64, DeserializeError> = from_string("0.00000000000000000012345");
+    assert small matches { Ok(v) && 1.0e-19 < v < 1.5e-19 };
+    let mixed: Result<f64, DeserializeError> = from_string("0.0105");
+    assert mixed matches { Ok(v) && 0.01049 < v < 0.01051 };
+}
+
 test "serialize i64 beyond safe integer range as string" {
     let big: i64 = 9007199254740993;
     assert to_string(&big) matches { Ok(s) && s == `"9007199254740993"` };

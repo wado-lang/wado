@@ -671,12 +671,17 @@ pub struct JsonDeserializer {
 /// integer parsers' range checks.
 struct ScannedNumber {
     neg: bool,
-    /// The first `FPFMT_DIGITS_MAX` digits, integer part first.
+    /// The first `FPFMT_DIGITS_MAX` *significant* digits (leading zeros
+    /// excluded), integer part first.
     digits: u64,
     /// All digits before the '.', including ones dropped from `digits`.
     int_digits: i32,
-    /// Fraction digits accumulated into `digits`.
+    /// Fraction digits accumulated into `digits` (after any leading zeros).
     frac_digits: i32,
+    /// Leading fraction zeros, before the first significant digit. They shift
+    /// the scale without consuming the mantissa budget, so a value like
+    /// `0.0000000000000000000001` keeps its one significant digit.
+    frac_lead_zeros: i32,
     /// Explicit `e`/`E` exponent, saturating past fpfmt's domain.
     exp: i32,
     has_frac_or_exp: bool,
@@ -688,10 +693,11 @@ fn scanned_to_f64(n: &ScannedNumber) -> f64 {
     if n.digits == 0 {
         return if n.neg { -0.0 } else { 0.0 };
     }
-    // Integer digits beyond the accumulated ones shift the scale up;
-    // dropped fraction digits only truncate precision.
+    // Integer digits beyond the accumulated ones shift the scale up; every
+    // fraction digit (accumulated or a skipped leading zero) shifts it down;
+    // dropped trailing fraction digits only truncate precision.
     let extra_int_digits = if n.int_digits > FPFMT_DIGITS_MAX { n.int_digits - FPFMT_DIGITS_MAX } else { 0 };
-    let eff_p = n.exp - n.frac_digits + extra_int_digits;
+    let eff_p = n.exp - n.frac_digits - n.frac_lead_zeros + extra_int_digits;
     if eff_p > FPFMT_EXP_MAX {
         return if n.neg { f64::NEG_INFINITY } else { f64::INFINITY };
     }
@@ -1152,40 +1158,46 @@ impl JsonDeserializer {
                 self.pos as i64,
             ));
         }
-        let mut digits: u64 = (first - '0' as i32) as u64;
-        let mut acc_digits = 1;
-        let mut int_digits = 1;
-        self.pos += 1;
+        // Integer part. JSON forbids leading zeros (an integer is `0` or starts
+        // nonzero), so the only non-significant integer digit is a lone `0`;
+        // skip it so it doesn't consume the mantissa budget.
+        let mut digits: u64 = 0;
+        let mut acc_digits = 0;
+        let mut int_digits = 0;
         while self.pos < self.input.len() {
             let b = self.input.get_unchecked(self.pos) as i32;
-            if '0' as i32 <= b <= '9' as i32 {
-                if acc_digits < FPFMT_DIGITS_MAX {
-                    digits = digits * 10 + (b - '0' as i32) as u64;
-                    acc_digits += 1;
-                }
-                int_digits += 1;
-                self.pos += 1;
-            } else {
+            if !('0' as i32 <= b <= '9' as i32) {
                 break;
             }
+            int_digits += 1;
+            let d = (b - '0' as i32) as u64;
+            if (digits != 0 || d != 0) && acc_digits < FPFMT_DIGITS_MAX {
+                digits = digits * 10 + d;
+                acc_digits += 1;
+            }
+            self.pos += 1;
         }
         let mut frac_digits = 0;
+        let mut frac_lead_zeros = 0;
         let mut has_frac_or_exp = false;
         if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '.' as i32 {
             has_frac_or_exp = true;
             self.pos += 1;
             while self.pos < self.input.len() {
                 let b = self.input.get_unchecked(self.pos) as i32;
-                if '0' as i32 <= b <= '9' as i32 {
-                    if acc_digits < FPFMT_DIGITS_MAX {
-                        digits = digits * 10 + (b - '0' as i32) as u64;
-                        frac_digits += 1;
-                        acc_digits += 1;
-                    }
-                    self.pos += 1;
-                } else {
+                if !('0' as i32 <= b <= '9' as i32) {
                     break;
                 }
+                let d = (b - '0' as i32) as u64;
+                if digits == 0 && d == 0 {
+                    // Leading fraction zero: shifts the scale, not the mantissa.
+                    frac_lead_zeros += 1;
+                } else if acc_digits < FPFMT_DIGITS_MAX {
+                    digits = digits * 10 + d;
+                    frac_digits += 1;
+                    acc_digits += 1;
+                }
+                self.pos += 1;
             }
         }
         let mut exp = 0;
@@ -1228,6 +1240,7 @@ impl JsonDeserializer {
             digits,
             int_digits,
             frac_digits,
+            frac_lead_zeros,
             exp,
             has_frac_or_exp,
         });
