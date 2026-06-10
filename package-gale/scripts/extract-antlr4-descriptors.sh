@@ -148,8 +148,10 @@ if [ "$oracle_ran" -eq 0 ]; then
     exit 0
 fi
 echo "==> Phase 3/3: Wado finalize stage_b_oracle/"
-# Stamp emitted tests with the jar version phase 2 actually used.
-oracle_version_cache="${XDG_CACHE_HOME:-$HOME/.cache}/gale/antlr4-latest-version"
+# Stamp emitted tests with the jar version Phase 2 actually used. The
+# oracle script writes it to antlr4-resolved-version on every run (the
+# latest-version cache would be wrong when ANTLR4_VERSION is pinned).
+oracle_version_cache="${XDG_CACHE_HOME:-$HOME/.cache}/gale/antlr4-resolved-version"
 if [ -f "$oracle_version_cache" ]; then
     ORACLE_VERSION=$(cat "$oracle_version_cache")
     export ORACLE_VERSION
