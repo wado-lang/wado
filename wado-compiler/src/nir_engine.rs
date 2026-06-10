@@ -97,6 +97,13 @@ pub struct Engine<'a> {
     /// [`Engine::invalidate_value_graph`]. See [`crate::nir_value_graph`]
     /// for the data model.
     value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
+    /// Locals whose object is reference-aliased (the owning function's
+    /// `address_taken_locals` / `stores_aliased_locals`). Passed to the
+    /// `ValueGraph` builder so field store→load seeding is suppressed for
+    /// them, matching `store_load_forward`'s exclusion. Empty unless a pass
+    /// sets it via [`Engine::set_alias_unsafe_locals`] before the first
+    /// `value` query.
+    alias_unsafe_locals: IndexSet<u32>,
 }
 
 impl<'a> Engine<'a> {
@@ -116,6 +123,7 @@ impl<'a> Engine<'a> {
             buf,
             locals,
             value_graph: None,
+            alias_unsafe_locals: IndexSet::default(),
         };
         engine.build_parents();
         engine.build_uses();
@@ -167,6 +175,18 @@ impl<'a> Engine<'a> {
         self.value_graph = None;
     }
 
+    /// Record the function's reference-aliased locals so the lazily-built
+    /// `ValueGraph` suppresses field store→load seeding for them (the
+    /// `with stores[p]` "no field forwarding" contract). Must be called
+    /// before the first [`Engine::value`] query, since the graph caches on
+    /// first build; a later call forces a rebuild on next query.
+    pub fn set_alias_unsafe_locals(&mut self, locals: IndexSet<u32>) {
+        if self.alias_unsafe_locals != locals {
+            self.alias_unsafe_locals = locals;
+            self.value_graph = None;
+        }
+    }
+
     fn ensure_value_graph(&mut self) {
         if self.value_graph.is_some() {
             return;
@@ -176,7 +196,8 @@ impl<'a> Engine<'a> {
         // up-front seeding as long as the engine never needs non-`Opaque`
         // parameter values. Wire `params` through `Engine::new` if that
         // changes.
-        let build = crate::nir_value_graph::builder::build(&*self.body, &[]);
+        let build =
+            crate::nir_value_graph::builder::build(&*self.body, &[], &self.alias_unsafe_locals);
         self.value_graph = Some(build);
     }
 

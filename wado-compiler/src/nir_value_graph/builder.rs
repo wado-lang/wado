@@ -145,8 +145,19 @@ pub struct ValueGraphBuild {
 /// `Local { index: param.local_index }` read returns that Opaque every time
 /// until the parameter is reassigned (which the builder picks up the same
 /// way as any other `Assign`).
-pub fn build(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
-    let mut b = Builder::new(body);
+///
+/// `alias_unsafe` are locals whose object is reference-aliased (the caller's
+/// `address_taken_locals` / `stores_aliased_locals`, e.g. the `with stores[p]`
+/// effect's `p`). The builder unions them with a body scan for live
+/// `&local` / `&mut local` and suppresses field store→load seeding on those
+/// receivers, matching `store_load_forward`'s own exclusion so the `stores`
+/// effect's "no field forwarding for aliased locals" contract is upheld.
+pub fn build(
+    body: &Body,
+    params: &[NirParam],
+    alias_unsafe: &crate::hashmap::IndexSet<u32>,
+) -> ValueGraphBuild {
+    let mut b = Builder::new(body, alias_unsafe);
     b.seed_params(params);
     b.walk_block(body.root);
     ValueGraphBuild {
@@ -168,10 +179,25 @@ struct Builder<'a> {
     /// `ValueId` → first source `ExprId` for literal values, so consumers can
     /// reuse the original `repr`. See [`ValueGraphBuild::literal_source`].
     literal_source: IndexMap<ValueId, ExprId>,
+    /// Store→load forwarding for fields: the value most recently stored to
+    /// `(receiver ValueId, field_index, HeapVersion)`. A `FieldAccess` read
+    /// at the same triple returns the stored value's `ValueId` directly
+    /// instead of interning an opaque `FieldAccess` kind. Keys carry the
+    /// version, which is monotonic and never reused, so stale entries are
+    /// simply never hit: any write to that field — on any receiver, since the
+    /// heap model is per-field — bumps the version, and a branch join gives
+    /// the field a fresh version, so a post-store read forwards only while
+    /// the store provably reaches it.
+    field_store: IndexMap<(ValueId, u32, HeapVersion), ValueId>,
+    /// Locals whose object is reference-aliased; field seeding is suppressed
+    /// for them (see [`build`]).
+    alias_unsafe: crate::hashmap::IndexSet<u32>,
 }
 
 impl<'a> Builder<'a> {
-    fn new(body: &'a Body) -> Self {
+    fn new(body: &'a Body, alias_unsafe: &crate::hashmap::IndexSet<u32>) -> Self {
+        let mut unsafe_locals = alias_unsafe.clone();
+        collect_address_taken_in_block(body, body.root, &mut unsafe_locals);
         Self {
             body,
             pool: ValuePool::new(),
@@ -179,6 +205,8 @@ impl<'a> Builder<'a> {
             current_value: IndexMap::default(),
             heap_state: HeapState::new(),
             literal_source: IndexMap::default(),
+            field_store: IndexMap::default(),
+            alias_unsafe: unsafe_locals,
         }
     }
 
@@ -205,6 +233,12 @@ impl<'a> Builder<'a> {
                     .walk_expr(value)
                     .unwrap_or_else(|| self.pool.fresh_opaque());
                 self.current_value.insert(local_index, v);
+                // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
+                // each pure field so a later `x.f` read forwards the literal.
+                // Skipped when `x` is reference-aliased.
+                if !self.alias_unsafe.contains(&local_index) {
+                    self.seed_struct_literal_fields(v, value);
+                }
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
                 self.walk_expr(value);
@@ -391,15 +425,31 @@ impl<'a> Builder<'a> {
                 // value, so a write inside `value` must not be visible to
                 // those reads.
                 let target_kind = self.body.exprs[target].kind.clone();
-                match &target_kind {
-                    ExprKind::Local { .. } => {}
+                // Capture the receiver's `ValueId` (and whether it is a
+                // seed-safe bare `Local`) for a `obj.f = …` store, so the
+                // post-bump version can be seeded for store→load forwarding.
+                let recv_seed = match &target_kind {
+                    ExprKind::Local { .. } => None,
                     ExprKind::FieldAccess { expr: recv, .. } => {
-                        self.walk_expr(*recv);
+                        let recv_local = match &self.body.exprs[*recv].kind {
+                            ExprKind::Local { index, .. } => Some(*index),
+                            _ => None,
+                        };
+                        let recv_v = self.walk_expr(*recv);
+                        // Seed only a bare, non-aliased `Local` receiver; an
+                        // aliased object (`with stores[p]`) or a deeper place
+                        // (`a.b.f = …`) is left un-seeded so a later read
+                        // re-derives an opaque `FieldAccess`.
+                        match (recv_v, recv_local) {
+                            (Some(rv), Some(idx)) if !self.alias_unsafe.contains(&idx) => Some(rv),
+                            _ => None,
+                        }
                     }
                     _ => {
                         self.walk_expr(target);
+                        None
                     }
-                }
+                };
                 let v = self
                     .walk_expr(value)
                     .unwrap_or_else(|| self.pool.fresh_opaque());
@@ -409,6 +459,10 @@ impl<'a> Builder<'a> {
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
                         self.heap_state.bump_field(field_index);
+                        if let Some(recv_v) = recv_seed {
+                            let ver = self.heap_state.version_of(field_index);
+                            self.field_store.insert((recv_v, field_index, ver), v);
+                        }
                     }
                     _ => {
                         self.heap_state.bump_all();
@@ -515,6 +569,11 @@ impl<'a> Builder<'a> {
                 // instance) propagates None.
                 let recv = self.walk_expr(inner)?;
                 let heap_ver = self.heap_state.version_of(field_index);
+                // Store→load forwarding: a value stored to this exact
+                // `(receiver, field, version)` is the value this read sees.
+                if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
+                    return Some(stored);
+                }
                 Some(self.pool.field_access(recv, field_index, heap_ver))
             }
             ExprKind::Index { expr: inner, index } => {
@@ -593,6 +652,28 @@ impl<'a> Builder<'a> {
 
     fn record_literal(&mut self, expr: ExprId, value: ValueId) {
         self.literal_source.entry(value).or_insert(expr);
+    }
+
+    /// Seed the field-store map from a `let x = S { f: v, … }` binding, where
+    /// `recv` is `x`'s (fresh-opaque) `ValueId` and `value_expr` is the bound
+    /// expression. Each pure field value is seeded at the current version of
+    /// its field, so a later `x.f` read forwards it. Only a direct
+    /// `StructLiteral` is handled — block- / labeled-block-wrapped
+    /// constructors (the inlined-constructor shape) are a follow-up; missing
+    /// them only costs forwarding, never soundness.
+    fn seed_struct_literal_fields(&mut self, recv: ValueId, value_expr: ExprId) {
+        let ExprKind::StructLiteral { fields, .. } = &self.body.exprs[value_expr].kind else {
+            return;
+        };
+        // Clone out the (field_index, value-expr) pairs to release the body
+        // borrow before mutating `field_store`.
+        let pairs: Vec<(u32, ExprId)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
+        for (field_index, field_value) in pairs {
+            if let Some(&fv) = self.value_of.get(&field_value) {
+                let ver = self.heap_state.version_of(field_index);
+                self.field_store.insert((recv, field_index, ver), fv);
+            }
+        }
     }
 
     fn read_local(&mut self, idx: u32) -> ValueId {
@@ -893,6 +974,39 @@ impl<'a> Builder<'a> {
     }
 }
 
+/// Scan `block`'s subtree for `&local` / `&mut local` (`Unary::Ref` /
+/// `Unary::MutRef` over a `Local`) and insert every targeted local into
+/// `out`. Mirrors `store_load_forward::collect_address_taken_in_body`: the
+/// canonical `address_taken_locals` / `stores_aliased_locals` sets go stale
+/// after `inline` / `ref_elim` copy reference nodes, so this body scan
+/// catches the transient post-inline aliases (the `Holder { pair: &p }`
+/// shape an inlined `with stores[p]` callee leaves behind). Used to suppress
+/// field store→load seeding on aliased receivers.
+fn collect_address_taken_in_block(
+    body: &Body,
+    block: crate::nir_arena::BlockId,
+    out: &mut crate::hashmap::IndexSet<u32>,
+) {
+    collect_address_taken_node(body, NodeRef::Block(block), out);
+}
+
+fn collect_address_taken_node(body: &Body, node: NodeRef, out: &mut crate::hashmap::IndexSet<u32>) {
+    if let NodeRef::Expr(id) = node
+        && let ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } = &body.exprs[id].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+    {
+        out.insert(*index);
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        collect_address_taken_node(body, c, out);
+    }
+}
+
 /// Collect every local index that an `Assign`-to-bare-`Local`, a `Let`, or
 /// a `LetDestructure` binding writes anywhere in `block`'s subtree. Used
 /// by `walk_loop` and `dirty_all_writes_in_block` to mark the right set
@@ -979,6 +1093,11 @@ mod tests {
     use crate::token::Span;
 
     // ----- Body builders for tests -----
+
+    /// `build` with no reference-aliased locals — the common test case.
+    fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
+        build(body, params, &crate::hashmap::IndexSet::default())
+    }
 
     fn empty_body() -> Body {
         Body::empty()
@@ -1115,7 +1234,7 @@ mod tests {
         let lit = int_lit(&mut body, 42);
         let s = alloc_stmt(&mut body, StmtKind::Expr(lit));
         root_with(&mut body, vec![s]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         let v = r.value_of[&lit];
         assert_eq!(r.pool.kind(v), &ValueKind::Int(42));
     }
@@ -1129,7 +1248,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s2 = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, s2]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         let lit_v = r.value_of[&lit];
         let read_v = r.value_of[&read];
         assert_eq!(lit_v, read_v);
@@ -1149,7 +1268,7 @@ mod tests {
         let add_b = binary(&mut body, NirBinaryOp::Add, one_b, two_b);
         let let_b = let_stmt(&mut body, 1, add_b, false);
         root_with(&mut body, vec![let_a, let_b]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         assert_eq!(r.value_of[&add_a], r.value_of[&add_b]);
     }
 
@@ -1164,7 +1283,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, assign, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
     }
 
@@ -1192,7 +1311,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         let read_v = r.value_of[&read];
         match r.pool.kind(read_v) {
             ValueKind::Select { cond, then, else_ } => {
@@ -1225,7 +1344,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         match r.pool.kind(r.value_of[&read]) {
             ValueKind::Select { cond, then, else_ } => {
                 assert_eq!(r.pool.kind(*cond), &ValueKind::Bool(true));
@@ -1260,7 +1379,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         // Both arms wrote Int(2); the merge picks that without a Select.
         assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
     }
@@ -1280,7 +1399,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, loop_s, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
@@ -1304,7 +1423,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_x, let_i, loop_s, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         // `x` is not touched by the loop, so it retains its Int(1).
         assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
     }
@@ -1325,7 +1444,7 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build(&body, &[param]);
+        let r = build_t(&body, &[param]);
         let v1 = r.value_of[&read1];
         let v2 = r.value_of[&read2];
         assert_eq!(v1, v2);
@@ -1352,7 +1471,7 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build(&body, &[param]);
+        let r = build_t(&body, &[param]);
         // Both `x + 1` expressions share a ValueId because `x` is a stable
         // (write-once) Opaque and `1` is hash-consed.
         assert_eq!(r.value_of[&add_a], r.value_of[&add_b]);
@@ -1383,7 +1502,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, s]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
@@ -1405,7 +1524,7 @@ mod tests {
         let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1));
         let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2));
         root_with(&mut body, vec![s1, s2]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         assert_eq!(r.value_of[&read1], r.value_of[&read2]);
         assert!(matches!(
             r.pool.kind(r.value_of[&read1]),
@@ -1444,7 +1563,7 @@ mod tests {
         let let_b2 = let_stmt(&mut body, 4, read_b2, false);
 
         root_with(&mut body, vec![let_a, let_b, write, let_a2, let_b2]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
 
         // `obj.f` reads straddle a write of `f`: different heap versions, distinct VN.
         assert_ne!(r.value_of[&read_a], r.value_of[&read_a2]);
@@ -1472,7 +1591,7 @@ mod tests {
         let let_2 = let_stmt(&mut body, 2, read2, false);
 
         root_with(&mut body, vec![let_1, call_s, let_2]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         assert_ne!(r.value_of[&read1], r.value_of[&read2]);
     }
 
@@ -1484,7 +1603,7 @@ mod tests {
         let fa = field_access(&mut body, call, 0);
         let s = alloc_stmt(&mut body, StmtKind::Expr(fa));
         root_with(&mut body, vec![s]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         assert!(!r.value_of.contains_key(&fa));
     }
 
@@ -1537,7 +1656,7 @@ mod tests {
         let switch_s = alloc_stmt(&mut body, StmtKind::Expr(switch_e));
 
         root_with(&mut body, vec![let_pre, switch_s]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         // The read inside arm 1 must share a VN with the pre-switch read.
         assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_arm]);
     }
@@ -1578,7 +1697,7 @@ mod tests {
             },
         );
         root_with(&mut body, vec![let_pre, if_s]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_else]);
     }
 
@@ -1628,7 +1747,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_x, lb_stmt, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         // Post-LB `x` must be Opaque — the break-path write of 2 means the
         // value is unknown, even though fall-through never observes it.
         assert!(matches!(
@@ -1677,7 +1796,7 @@ mod tests {
         let let_b = let_stmt(&mut body, 2, read_b, false);
 
         root_with(&mut body, vec![let_a, if_s, let_b]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         assert_eq!(r.value_of[&read_a], r.value_of[&read_b]);
     }
 
@@ -1712,7 +1831,7 @@ mod tests {
         let let_b = let_stmt(&mut body, 2, read_b, false);
 
         root_with(&mut body, vec![let_a, if_s, let_b]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         assert_ne!(r.value_of[&read_a], r.value_of[&read_b]);
     }
 
@@ -1755,7 +1874,7 @@ mod tests {
         let let_f2 = let_stmt(&mut body, 4, read_f2, false);
 
         root_with(&mut body, vec![let_g0, if_s, let_g1, let_f1, let_f2]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         // `g` untouched across the if: same VN.
         assert_eq!(r.value_of[&read_g0], r.value_of[&read_g1]);
         // `f` reads after the merge are at one fresh post-merge version.
@@ -1763,5 +1882,146 @@ mod tests {
         // …but distinct from the pre-if `f` value (there was none here) is
         // not asserted; the merge gave `f` a fresh version, which the two
         // post reads share.
+    }
+
+    // ----- Field store→load forwarding -----
+
+    #[test]
+    fn field_store_forwards_to_later_read() {
+        // fn(obj) { obj.f = 7; let y = obj.f; }
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        let read_v = r.value_of[&read];
+        assert_eq!(r.pool.kind(read_v), &ValueKind::Int(7));
+        assert_eq!(read_v, r.value_of[&seven]);
+    }
+
+    #[test]
+    fn field_store_does_not_forward_after_overwrite() {
+        // fn(obj) { obj.f = 7; obj.f = 9; let y = obj.f; } -> sees 9
+        let mut body = empty_body();
+        let recv_w1 = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write1 = field_assign_stmt(&mut body, recv_w1, 0, seven);
+        let recv_w2 = local_ref(&mut body, 0);
+        let nine = int_lit(&mut body, 9);
+        let write2 = field_assign_stmt(&mut body, recv_w2, 0, nine);
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write1, write2, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(9));
+    }
+
+    #[test]
+    fn field_store_does_not_forward_across_call() {
+        // fn(obj) { obj.f = 7; foo(); let y = obj.f; } -> opaque read
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, call_s, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn struct_literal_let_seeds_field_reads() {
+        // fn() { let x = S { f0: 5, f1: 6 }; let n = x.f0; } -> n == 5
+        let mut body = empty_body();
+        let five = int_lit(&mut body, 5);
+        let six = int_lit(&mut body, 6);
+        let struct_lit = alloc_expr(
+            &mut body,
+            ExprKind::StructLiteral {
+                struct_type: TypeTable::UNIT,
+                struct_name: "S".to_string(),
+                fields: vec![
+                    crate::nir_arena::ArenaStructField {
+                        name: "f0".to_string(),
+                        value: five,
+                        field_index: 0,
+                    },
+                    crate::nir_arena::ArenaStructField {
+                        name: "f1".to_string(),
+                        value: six,
+                        field_index: 1,
+                    },
+                ],
+            },
+        );
+        let let_x = let_stmt(&mut body, 0, struct_lit, false);
+        let recv = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv, 0);
+        let let_n = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![let_x, let_n]);
+        let r = build_t(&body, &[]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(5));
+    }
+
+    #[test]
+    fn aliased_receiver_is_not_seeded() {
+        // fn(obj) { obj.f = 7; let y = obj.f; } but `obj` (local 0) is
+        // reference-aliased → no forwarding; the read stays opaque.
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, let_y]);
+        let mut aliased = crate::hashmap::IndexSet::default();
+        aliased.insert(0u32);
+        let r = build(&body, &[param_seed()], &aliased);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn body_scanned_address_taken_receiver_is_not_seeded() {
+        // fn(obj) { obj.f = 7; let r = &obj; let y = obj.f; }
+        // The live `&obj` makes `obj` address-taken by the builder's own
+        // body scan, so the store is not seeded even without a passed set.
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let obj_ref_inner = local_ref(&mut body, 0);
+        let obj_ref = alloc_expr(
+            &mut body,
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: obj_ref_inner,
+            },
+        );
+        let let_r = let_stmt(&mut body, 1, obj_ref, false);
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 2, read, false);
+        root_with(&mut body, vec![write, let_r, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
     }
 }

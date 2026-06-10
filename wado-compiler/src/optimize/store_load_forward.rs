@@ -46,11 +46,15 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
         collect_address_taken_in_body(body_ref, &mut unsafe_locals);
         let rule = StoreLoadForwardRule {
             applied: Cell::new(false),
-            unsafe_locals,
+            unsafe_locals: unsafe_locals.clone(),
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
+        // Suppress field store→load seeding on the same aliased locals this
+        // rule excludes from forwarding, so the `ValueGraph` does not hand
+        // back a forwarded field value for an aliased object.
+        engine.set_alias_unsafe_locals(unsafe_locals);
         engine.run(&[&rule])
     })
 }
