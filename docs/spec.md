@@ -268,14 +268,29 @@ See [WEP: Range Object](./wep-2026-03-03-range-object.md) for the full design.
 
 **Postfix Operators** (highest precedence):
 
-| Operator  | Description       |
-| --------- | ----------------- |
-| `.`       | Field access      |
-| `[]`      | Index access      |
-| `()`      | Function call     |
-| `::`      | Namespace access  |
-| `as Type` | Type cast         |
-| `?`       | Error propagation |
+| Operator              | Description       |
+| --------------------- | ----------------- |
+| `.`                   | Field access      |
+| `[]`                  | Index access      |
+| `()`                  | Function call     |
+| `::`                  | Namespace access  |
+| `matches { pattern }` | Pattern test      |
+| `as Type`             | Type cast         |
+| `?`                   | Error propagation |
+
+**`matches` Precedence:**
+
+The `matches` operator binds at the postfix level — tighter than the unary
+operators (`!`, `-`, `~`, `*`), `as`, and every binary operator. Its scrutinee
+(the value being tested) is therefore a postfix expression. Two consequences:
+
+- `!x matches { Some(_) }` parses as `!(x matches { Some(_) })` — i.e. "`x` does
+  **not** match `Some(_)`". This is the common intent, so it is the default;
+  to negate the value first, write `(!x) matches { ... }`.
+- To test a lower-precedence scrutinee — a cast, arithmetic, or comparison —
+  parenthesize it: `(x as i32) matches { 0 }`, `(a + b) matches { 0 }`. Writing
+  `x as i32 matches { 0 }` is a parse error (the compiler suggests the
+  parentheses).
 
 **Prohibited Operators**:
 

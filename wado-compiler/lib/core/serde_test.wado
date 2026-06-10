@@ -186,17 +186,31 @@ impl Serializer for MockSerializer {
         return Result::Ok(MockMapSerializer { w: self.w, count: 0 });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<MockStructSerializer, SerializeError> with stores[self] {
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        fields: i32,
+    ) -> Result<MockStructSerializer, SerializeError> with stores[self] {
         self.w.buf.push_str(&"{");
         return Result::Ok(MockStructSerializer { w: self.w, count: 0 });
     }
 
-    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+    fn serialize_unit_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
         self.w.buf.push_str(&`"{*variant_name}"`);
         return Result::Ok(());
     }
 
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<MockVariantSerializer, SerializeError> with stores[self] {
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<MockVariantSerializer, SerializeError> with stores[self] {
         self.w.buf.push_str(&`\{"{*variant_name}":`);
         return Result::Ok(MockVariantSerializer { w: self.w });
     }

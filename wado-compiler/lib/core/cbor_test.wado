@@ -352,7 +352,7 @@ test "decode: null wrapped in a non-preferred self-described tag" {
     // tag 55799 in 4-byte form (0xda 0x0000d9f7) wrapping null — every other
     // path unwraps non-preferred tag encodings, so Option must too.
     let n: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("da0000d9f7f6"));
-    assert n matches { Ok(v) && !(v matches { Some(_) }) };
+    assert n matches { Ok(v) && !v matches { Some(_) } };
     let s: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("da0000d9f701"));
     assert s matches { Ok(v) && v matches { Some(x) && x == 1 } };
 }

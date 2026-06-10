@@ -174,6 +174,9 @@ pub struct Unparser<'a> {
     /// means "render without comments" (used by `wado dump`'s
     /// AST-rendering path, where comment fidelity is not required).
     trivia: Option<&'a crate::comment::TriviaMap>,
+    /// All comments sorted by source position (cached from `trivia`). Used for
+    /// positional emission where node-keyed lookup misses a comment.
+    all_comments: Vec<crate::comment::Comment>,
     output: String,
     indent_level: usize,
     emitted_comments: IndexSet<usize>,
@@ -190,8 +193,35 @@ impl<'a> Unparser<'a> {
     /// `Unparser::new().with_trivia(&trivia)`, while paths that don't
     /// care about comments (e.g. AST dump) just call `Unparser::new()`.
     pub fn with_trivia(mut self, trivia: &'a crate::comment::TriviaMap) -> Self {
+        self.all_comments = trivia.all_comments();
         self.trivia = Some(trivia);
         self
+    }
+
+    /// True if any comment sits strictly inside `(start, end)`.
+    fn has_comment_in_range(&self, start: usize, end: usize) -> bool {
+        self.all_comments
+            .iter()
+            .any(|c| c.span.start > start && c.span.start < end)
+    }
+
+    /// Emit every not-yet-emitted comment whose start is in `[lo, hi)`, each on
+    /// its own indented line. Used to place interior comments (e.g. between
+    /// collection elements) that node-keyed emission would miss.
+    fn emit_comments_in_range(&mut self, lo: usize, hi: usize) {
+        let comments: Vec<crate::comment::Comment> = self
+            .all_comments
+            .iter()
+            .filter(|c| c.span.start >= lo && c.span.start < hi)
+            .cloned()
+            .collect();
+        for comment in &comments {
+            if self.emitted_comments.insert(comment.span.start) {
+                self.write_indent();
+                self.emit_comment(comment);
+                self.output.push('\n');
+            }
+        }
     }
 
     /// Leading trivia for `id`, or an empty slice when no trivia map is
@@ -309,6 +339,22 @@ impl<'a> Unparser<'a> {
             let item_span = get_item_span(item);
             self.unparse_item(item);
             self.last_source_line = item_span.end_line();
+        }
+
+        // Comments after the last item have no following node to lead, so flush
+        // the file-tail dangling comments here rather than dropping them.
+        let tail: Vec<Comment> = self
+            .trivia
+            .map(|t| t.dangling().to_vec())
+            .unwrap_or_default();
+        for comment in &tail {
+            if self.emitted_comments.insert(comment.span.start) {
+                self.emit_blank_lines_to(comment.span.line);
+                self.write_indent();
+                self.emit_comment(comment);
+                self.output.push('\n');
+                self.last_source_line = comment.span.line;
+            }
         }
     }
 
@@ -1604,7 +1650,21 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_matches(&mut self, m: &crate::ast::MatchesExpr) {
-        self.unparse_expr(&m.expr);
+        // The scrutinee is postfix-level; a lower-precedence one needs parens
+        // or it reparses wrong, e.g. `(!x) matches {P}` → `!x matches {P}` =
+        // `!(x matches {P})`. Same rule as a method-call receiver.
+        let needs_parens = matches!(
+            &m.expr,
+            Expr::Unary(_)
+                | Expr::Binary(_)
+                | Expr::Cast(_)
+                | Expr::Assign(_)
+                | Expr::CompoundAssign(_)
+                | Expr::ComparisonChain(_)
+                | Expr::Range(_)
+                | Expr::Closure(_)
+        );
+        self.with_parens_if(needs_parens, |s| s.unparse_expr(&m.expr));
         self.output.push_str(" matches { ");
         self.unparse_pattern(&m.pattern);
         if let Some(guard) = &m.guard {
@@ -1630,6 +1690,32 @@ impl<'a> Unparser<'a> {
         let elements = &tuple_lit.elements;
         if elements.is_empty() {
             self.output.push_str("[]");
+            return;
+        }
+
+        // Any comment inside the array forces the one-per-line form so each
+        // comment has a place to go; the packed/inline forms have no slot and
+        // would drop it. Leading comments are emitted positionally (by source
+        // span) because a comment before a container element attaches to that
+        // element's *head* node, not to the element expression's own id.
+        if self.has_comment_in_range(tuple_lit.span.start, tuple_lit.span.end) {
+            self.output.push_str("[\n");
+            self.indent_level += 1;
+            let mut lo = tuple_lit.span.start;
+            for elem in elements {
+                self.emit_comments_in_range(lo, elem.span().start);
+                self.write_indent();
+                self.unparse_expr(elem);
+                self.output.push(',');
+                self.emit_trailing_for_inline(elem.id());
+                self.output.push('\n');
+                lo = elem.span().end;
+            }
+            // Any comment after the last element, before the closing `]`.
+            self.emit_comments_in_range(lo, tuple_lit.span.end);
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push(']');
             return;
         }
 

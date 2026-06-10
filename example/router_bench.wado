@@ -101,7 +101,12 @@ fn maps_equal(a: &TreeMap<String, String>, b: &TreeMap<String, String>) -> bool 
 /// *and* identical params for every entry in the access pattern. Run
 /// before timing so a regression in one engine doesn't masquerade as a
 /// speedup.
-fn verify_engines_agree(linear: &LinearRouter, radix: &RadixRouter, dfa: &DfaRouter, pattern: &List<AccessRequest>) with Stdout {
+fn verify_engines_agree(
+    linear: &LinearRouter,
+    radix: &RadixRouter,
+    dfa: &DfaRouter,
+    pattern: &List<AccessRequest>,
+) with Stdout {
     let mut all_ok = true;
     for let req of pattern {
         let l = linear.match_path(req.method, &req.path);

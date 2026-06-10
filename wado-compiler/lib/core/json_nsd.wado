@@ -264,7 +264,11 @@ impl Serializer for NsdSerializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<NsdStructSerializer, SerializeError> with stores[self] {
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        fields: i32,
+    ) -> Result<NsdStructSerializer, SerializeError> with stores[self] {
         // NSD: struct as array
         self.buf.push_str(&"[");
         return Result::Ok(NsdStructSerializer {
@@ -273,13 +277,23 @@ impl Serializer for NsdSerializer {
         });
     }
 
-    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+    fn serialize_unit_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
         // NSD: discriminant integer
         self.buf.push_str(&`{disc}`);
         return Result::Ok(());
     }
 
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<NsdVariantSerializer, SerializeError> with stores[self] {
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<NsdVariantSerializer, SerializeError> with stores[self] {
         // NSD: [disc, payload]
         self.buf.push_str(&`[{disc}`);
         return Result::Ok(NsdVariantSerializer {
@@ -528,7 +542,11 @@ impl Deserializer for NsdDeserializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<NsdStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        num_fields: i32,
+    ) -> Result<NsdStructAccess, DeserializeError> with stores[self] {
         // NSD: struct encoded as array
         let r = self.de.expect_char('[' as i32);
         if let Err(e) = r {
@@ -542,7 +560,11 @@ impl Deserializer for NsdDeserializer {
         });
     }
 
-    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<NsdVariantAccess, DeserializeError> with stores[self] {
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        num_cases: i32,
+    ) -> Result<NsdVariantAccess, DeserializeError> with stores[self] {
         self.de.skip_whitespace();
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
