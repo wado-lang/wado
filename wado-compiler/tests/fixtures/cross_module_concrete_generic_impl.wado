@@ -1,0 +1,25 @@
+// Two modules each declare a distinct `Token`/`Tag` and an
+// `impl Tag for List<Token>`. Routed through a generic bound, module B's
+// list must reach module B's impl, not module A's — the two impls share the
+// simple name `List<Token>` but distinct module-qualified arguments.
+//
+// Regression guard for issue #1348.
+
+use { Token as TokA, tag_via_bound_a } from "./sub/cross_module_concrete_generic_impl_a.wado";
+use { Token as TokB, tag_via_bound_b } from "./sub/cross_module_concrete_generic_impl_b.wado";
+
+test "cross-module concrete generic impl with same-simple-name argument" {
+    let a: List<TokA> = [TokA { n: 1 }];
+    let b: List<TokB> = [TokB { n: 2 }];
+
+    // Direct method calls resolve via the receiver's type id.
+    assert a.tag() == 101;
+    assert b.tag() == 201;
+
+    // Through a generic bound, each module's list must reach its own impl.
+    assert tag_via_bound_a(&a) == 101;
+    assert tag_via_bound_b(&b) == 201;
+}
+
+__DATA__
+{"test": {}}

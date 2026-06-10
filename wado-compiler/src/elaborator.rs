@@ -1425,7 +1425,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
                     let mut actual_idx = 0u32;
                     for param in &impl_block.type_params {
-                        if self.tysys.is_known_type_name(&param.name) {
+                        if self
+                            .tysys
+                            .is_known_type_name_in(&self.current_module_source, &param.name)
+                        {
                             // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
                             if !param.bounds.is_empty() {
                                 self.trait_ctx
@@ -1474,7 +1477,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;
                                 if !self.trait_ctx.type_params.contains_key(name)
-                                    && !self.tysys.is_known_type_name(name)
+                                    && !self
+                                        .tysys
+                                        .is_known_type_name_in(&self.current_module_source, name)
                                 {
                                     let type_id = self
                                         .tysys
@@ -1599,28 +1604,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .collect(),
                             _ => Vec::new(),
                         };
-                        // Per-instantiation owner for a fully concrete impl
-                        // (`impl List<u8>`). Decided AST-side (excluding declared
-                        // impl type params) so it agrees with method dispatch's
-                        // `from_concrete_impl`; the name is built from the
-                        // resolved `self_type` so it matches how call sites
-                        // mangle the receiver (base name + per-arg mangle).
+                        // Concrete-impl owner (`impl List<u8>`): the receiver's
+                        // qualified mangle, matching call sites (issue #1348).
                         let concrete_owner: Option<String> = if self
                             .impl_is_concrete_instantiation(impl_block, &self.current_module_source)
                         {
                             let tt = self.tysys.type_table.borrow();
-                            match tt.get(tt.peel_refs(self_type)) {
-                                crate::tir::ResolvedType::GenericInstance {
-                                    name,
-                                    type_args,
-                                    ..
-                                } => {
-                                    let args: Vec<String> =
-                                        type_args.iter().map(|&a| tt.mangle_type_name(a)).collect();
-                                    Some(format!("{}<{}>", name, args.join(",")))
-                                }
-                                _ => None,
-                            }
+                            let peeled = tt.peel_refs(self_type);
+                            matches!(
+                                tt.get(peeled),
+                                crate::tir::ResolvedType::GenericInstance { .. }
+                            )
+                            .then(|| tt.mangle_type_name(peeled))
                         } else {
                             None
                         };

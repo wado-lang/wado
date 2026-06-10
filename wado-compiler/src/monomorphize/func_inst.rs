@@ -1673,7 +1673,7 @@ impl Monomorphizer {
                                     .collect();
                             }
                         }
-                        let mut new_func_name = new_info.to_mangled_name();
+                        let new_func_name = new_info.to_mangled_name();
 
                         // The work each branch performs is gated on its own real
                         // precondition, not on whether the mangled name changed:
@@ -1741,24 +1741,6 @@ impl Monomorphizer {
                                 let concrete_impl_module = self
                                     .functions
                                     .impl_module(&new_info, receiver_module.as_ref());
-                                // A concrete impl on a generic head
-                                // (`impl Trait for List<String>`) defines its
-                                // methods under the AST's simple argument
-                                // spelling, while `mangle_type_name` above
-                                // qualifies the arguments. Rename the call to
-                                // the definition's spelling so every
-                                // name-keyed consumer (inliner call graph,
-                                // dead-function elimination, WIR lookup) sees
-                                // one name for one function.
-                                if concrete_impl_module.is_some() {
-                                    let simplified = crate::name::simplify_generic_type_args(
-                                        &new_info.struct_name,
-                                    );
-                                    if simplified != new_info.struct_name {
-                                        new_info.struct_name = simplified;
-                                        new_func_name = new_info.to_mangled_name();
-                                    }
-                                }
                                 let concrete_module =
                                     concrete_impl_module.or(blanket_module).or(receiver_module);
                                 let new_monomorph = if new_info.method_type_args.is_empty() {
@@ -2584,7 +2566,7 @@ impl Monomorphizer {
         // Compute the new method info with concrete type names.
         // If the struct is a type param (e.g., T^Ord::cmp), substitute the struct
         // name directly instead of adding type args.
-        let mut new_info = if info.is_type_param_receiver && !type_names.is_empty() {
+        let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
             // Use the (already-substituted) receiver type to find the concrete name.
             let mut inner = receiver_type_id;
             while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) = type_table.get(inner).clone()
@@ -2640,7 +2622,7 @@ impl Monomorphizer {
         } else {
             info.clone()
         };
-        let mut new_func_name = new_info.to_mangled_name();
+        let new_func_name = new_info.to_mangled_name();
 
         if new_func_name == old_func_name {
             return;
@@ -2692,20 +2674,6 @@ impl Monomorphizer {
             let concrete_impl_module = self
                 .functions
                 .impl_module(&new_info, receiver_module.as_ref());
-            // A concrete impl on a generic head (`impl Trait for
-            // List<String>`) defines its methods under the AST's simple
-            // argument spelling, while `mangle_type_name` above qualifies
-            // the arguments. Rename the call to the definition's spelling
-            // so every name-keyed consumer (inliner call graph,
-            // dead-function elimination, WIR lookup) sees one name for one
-            // function.
-            if concrete_impl_module.is_some() {
-                let simplified = crate::name::simplify_generic_type_args(&new_info.struct_name);
-                if simplified != new_info.struct_name {
-                    new_info.struct_name = simplified;
-                    new_func_name = new_info.to_mangled_name();
-                }
-            }
             let concrete_module = concrete_impl_module.or(blanket_module).or(receiver_module);
 
             // Determine if this is a blanket impl method.

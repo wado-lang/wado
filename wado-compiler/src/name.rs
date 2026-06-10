@@ -1114,38 +1114,6 @@ pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
     }
 }
 
-/// Rewrite a mangled generic type name so every type argument uses its
-/// simple (unqualified) name: `List<core:prelude/string.wado/String>` →
-/// `List<String>`. The head name is left untouched.
-///
-/// A concrete `impl Trait for List<String>` block names its methods with
-/// the AST's simple argument spelling, while monomorphized call sites
-/// qualify arguments (`mangle_type_name`); this bridges the two spellings
-/// for lookups. Names without type arguments pass through unchanged.
-pub fn simplify_generic_type_args(mangled: &str) -> String {
-    let Some(lt) = mangled.find('<') else {
-        return mangled.to_string();
-    };
-    let (head, args) = mangled.split_at(lt);
-    let mut out = String::with_capacity(mangled.len());
-    out.push_str(head);
-    let mut segment_start = out.len();
-    for c in args.chars() {
-        match c {
-            '<' | ',' | '>' => {
-                out.push(c);
-                segment_start = out.len();
-            }
-            // Drop the qualifier accumulated since the last delimiter;
-            // repeated separators (`core:prelude/string.wado/String`)
-            // strip stepwise until only the simple name remains.
-            '/' => out.truncate(segment_start),
-            _ => out.push(c),
-        }
-    }
-    out
-}
-
 /// Build a monomorphized method name from struct name, type args, and method name.
 ///
 /// Examples:

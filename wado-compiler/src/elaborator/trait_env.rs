@@ -470,13 +470,10 @@ impl TraitEnv {
                             if !cmodules.contains(module_source) {
                                 cmodules.push(module_source.clone());
                             }
-                            // An impl on a fully-instantiated generic head
-                            // (`impl Trait for List<u8>`) is also indexed
-                            // under its instantiated name ("List<u8>"), the
-                            // name the monomorphizer's substituted call
-                            // sites query when routing `List<u8>^Trait::m`
-                            // to the impl block's module.
-                            if let Some(inst) = instantiated_type_name(&impl_block.ty) {
+                            // Also index under the qualified instantiated name
+                            // (`List<u8>`), which substituted call sites query.
+                            let canon = |name: &str| canonical_key(module_source, name);
+                            if let Some(inst) = instantiated_type_name(&impl_block.ty, &canon) {
                                 let ikey = (inst, trait_name.clone());
                                 let imodules = trait_impl_modules.entry(ikey.clone()).or_default();
                                 if !imodules.contains(module_source) {
@@ -1147,26 +1144,47 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 }
 
-/// Textual instantiated name for a generic AST type whose arguments are all
-/// plain named types (`List<u8>` → "List<u8>", `List<List<i32>>` →
-/// "List<List<i32>>"), matching [`crate::name::mangle_generic_name`] for
-/// unqualified argument names. Returns `None` for non-generic heads and for
-/// argument shapes (refs, tuples, …) whose mangled spelling the AST cannot
-/// reproduce — callers then fall back to the head-name index entry.
-fn instantiated_type_name(ty: &ast::Type) -> Option<String> {
+/// Instantiated name for a concrete generic impl head, qualified to match
+/// the call site's `mangle_type_name` (issue #1348). `None` for non-generic
+/// heads and argument shapes [`qualified_type_arg`] cannot spell.
+fn instantiated_type_name(ty: &ast::Type, canon: &dyn Fn(&str) -> DeclKey) -> Option<String> {
     let ast::Type::Generic(generic) = ty else {
         return None;
     };
     let mut args = Vec::with_capacity(generic.args.len());
     for arg in &generic.args {
-        let name = match arg {
-            ast::Type::Named(named) => named.name.clone(),
-            ast::Type::Generic(_) => instantiated_type_name(arg)?,
-            _ => return None,
-        };
-        args.push(name);
+        args.push(qualified_type_arg(arg, canon)?);
     }
     Some(crate::name::mangle_generic_name(&generic.name, &args))
+}
+
+/// One type argument qualified from the AST like
+/// [`crate::tir::TypeTable::mangle_type_arg_for_generic`] does from a `TypeId`.
+fn qualified_type_arg(ty: &ast::Type, canon: &dyn Fn(&str) -> DeclKey) -> Option<String> {
+    match ty {
+        ast::Type::Named(named) => {
+            if super::is_primitive_type_name(&named.name) {
+                Some(named.name.clone())
+            } else {
+                let (module, name) = canon(&named.name);
+                Some(format!("{module}/{name}"))
+            }
+        }
+        ast::Type::Generic(generic) => {
+            let mut args = Vec::with_capacity(generic.args.len());
+            for arg in &generic.args {
+                args.push(qualified_type_arg(arg, canon)?);
+            }
+            let (module, name) = canon(&generic.name);
+            let unqualified = crate::name::mangle_generic_name(&name, &args);
+            Some(format!("{module}/{unqualified}"))
+        }
+        ast::Type::Reference(inner) => Some(format!("&{}", qualified_type_arg(inner, canon)?)),
+        ast::Type::MutReference(inner) => {
+            Some(format!("&mut {}", qualified_type_arg(inner, canon)?))
+        }
+        _ => None,
+    }
 }
 
 /// Extract a type name from an AST type without needing an Elaborator instance.

@@ -694,11 +694,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::GenericResource {
                 name, type_args, ..
             } => {
+                // Qualify the arguments so a concrete-generic impl's method
+                // name matches its definition (issue #1348).
                 let type_arg_names: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+                    .map(|t| {
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .mangle_type_arg_for_generic(*t)
+                    })
                     .collect();
-                let mangled = format!("{}<{}>", name, type_arg_names.join(","));
+                let mangled = crate::name::mangle_generic_name(&name, &type_arg_names);
                 (mangled, name, type_arg_names, Some(type_args))
             }
             // The raw GC array splits like a generic instance: the receiver

@@ -1,0 +1,18 @@
+// Module A: its own `Token`/`Tag` and `impl Tag for List<Token>`.
+pub struct Token {
+    pub n: i32,
+}
+
+pub trait Tag {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for List<Token> {
+    fn tag(&self) -> i32 {
+        return 100 + self.len() as i32;
+    }
+}
+
+pub fn tag_via_bound_a<T: Tag>(x: &T) -> i32 {
+    return x.tag();
+}
