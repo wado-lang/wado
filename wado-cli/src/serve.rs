@@ -74,6 +74,8 @@ pub struct ServeOptions {
     pub max_concurrency: usize,
     pub profile: ProfileMode,
     pub no_cache: bool,
+    /// Generic codegen feature flags from `-f <flag>`.
+    pub codegen_flags: Vec<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -92,6 +94,7 @@ enum Opt {
     MaxConcurrency,
     Profile,
     NoCache,
+    Feature,
     Help,
 }
 
@@ -146,6 +149,7 @@ impl Opt {
         Self::MaxConcurrency,
         Self::Profile,
         Self::NoCache,
+        Self::Feature,
         Self::Help,
     ];
 
@@ -175,6 +179,7 @@ impl Opt {
             Self::MaxConcurrency => MAX_CONCURRENCY_SPEC,
             Self::Profile => PROFILE_SPEC,
             Self::NoCache => args::NO_CACHE_SPEC,
+            Self::Feature => args::FEATURE_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -242,6 +247,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut max_concurrency: usize = DEFAULT_MAX_CONCURRENCY;
     let mut profile = ProfileMode::None;
     let mut no_cache = false;
+    let mut codegen_flags: Vec<String> = Vec::new();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -298,6 +304,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                     }
                 }
                 Opt::NoCache => no_cache = true,
+                Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -335,6 +342,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         max_concurrency,
         profile,
         no_cache,
+        codegen_flags,
     })
 }
 
@@ -1170,7 +1178,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
         allocator: opts.allocator,
         no_cache: opts.no_cache,
         test_name_filters: Vec::new(),
-        codegen_flags: Vec::new(),
+        codegen_flags: opts.codegen_flags.clone(),
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
     let wasm = compile::compile(&opts.input, &flags).await?;

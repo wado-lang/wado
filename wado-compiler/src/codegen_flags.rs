@@ -31,11 +31,25 @@ pub struct CodegenFlags {
     /// open-coded loop. See the `WirInstr::ArrayCopy` emitter in
     /// `codegen/emit.rs`.
     pub array_copy: bool,
+
+    /// Emit `metadata.code.branch_hint` entries (the default). Pass
+    /// `-f no-branch-hinting` to benchmark without them: `builtin::cold_path()`
+    /// then lowers to a plain no-op in `wir_build` (so no marker reaches WIR
+    /// and `apply_cold_path_hints` finds nothing) and the WIR-level trap-based
+    /// hint inference is skipped. The markers are dropped at WIR build — not
+    /// at NIR — so the NIR inliner's cold-path cost exclusion behaves
+    /// identically in both configurations and the A/B isolates the hints
+    /// themselves. `br_if` selection stays on either way; it is instruction
+    /// selection, not hinting.
+    pub branch_hinting: bool,
 }
 
 impl Default for CodegenFlags {
     fn default() -> Self {
-        Self { array_copy: true }
+        Self {
+            array_copy: true,
+            branch_hinting: true,
+        }
     }
 }
 
@@ -62,6 +76,7 @@ impl CodegenFlags {
             };
             match name {
                 "array-copy" => result.array_copy = enabled,
+                "branch-hinting" => result.branch_hinting = enabled,
                 _ => return Err(flag.to_string()),
             }
         }
@@ -79,8 +94,17 @@ mod tests {
             CodegenFlags::parse(std::iter::empty::<&str>()),
             Ok(CodegenFlags::default())
         );
-        // array.copy is on by default.
+        // array.copy and branch hinting are on by default.
         assert!(CodegenFlags::default().array_copy);
+        assert!(CodegenFlags::default().branch_hinting);
+    }
+
+    #[test]
+    fn no_branch_hinting_disables_the_default() {
+        let flags = CodegenFlags::parse(["no-branch-hinting"]).unwrap();
+        assert!(!flags.branch_hinting);
+        // Other flags keep their defaults.
+        assert!(flags.array_copy);
     }
 
     #[test]

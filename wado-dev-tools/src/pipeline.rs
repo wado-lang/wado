@@ -505,6 +505,7 @@ async fn render_phases(
             target_world.as_deref(),
             None,
             None,
+            &[],
         )
         .await;
 
