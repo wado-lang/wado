@@ -1,0 +1,48 @@
+// An implicit `&mut self` method receiver on an enum-typed local must
+// write the mutation back to the local. Like primitives, an enum
+// receiver is value-copied unless the local is marked address-taken,
+// so reify's implicit-mut-borrow marking (and the boxing pass) must
+// treat enums the same way; without it `s.advance()` mutated a copy.
+
+use { println, Stdout } from "core:cli";
+
+enum State {
+    Idle,
+    Running,
+    Done,
+}
+
+impl State {
+    fn advance(&mut self) {
+        match *self {
+            State::Idle => {
+                *self = State::Running;
+            }
+            State::Running => {
+                *self = State::Done;
+            }
+            State::Done => {}
+        }
+    }
+
+    fn code(&self) -> i32 {
+        return match *self {
+            State::Idle => 1,
+            State::Running => 2,
+            State::Done => 3,
+        };
+    }
+}
+
+export fn run() with Stdout {
+    let mut s = State::Idle;
+    s.advance();
+    println(`{s.code()}`);
+    s.advance();
+    println(`{s.code()}`);
+    s.advance();
+    println(`{s.code()}`);
+}
+
+__DATA__
+{"stdout": "2\n3\n3\n"}

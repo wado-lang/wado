@@ -1,0 +1,30 @@
+// Writes through `&mut` to an enum-typed local must be visible through
+// the original local. Enums are scalar-backed like primitives, so the
+// boxing pass must give `&mut EnumType` a stable heap slot; without it
+// the deref-assignment was silently lost at every optimization level.
+
+use { println, Stdout } from "core:cli";
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn code(c: Color) -> i32 {
+    return match c {
+        Color::Red => 1,
+        Color::Green => 2,
+        Color::Blue => 3,
+    };
+}
+
+export fn run() with Stdout {
+    let mut c = Color::Red;
+    let r = &mut c;
+    *r = Color::Blue;
+    println(`{code(c)}`);
+}
+
+__DATA__
+{"stdout": "3\n"}

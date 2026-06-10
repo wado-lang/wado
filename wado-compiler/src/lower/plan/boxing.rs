@@ -268,6 +268,13 @@ impl TypeBuilder {
         // Collect base TypeIds that need boxing, plus newtypes.
         // Boxing is required for:
         // - Primitives (except i128/u128 which are already GC types)
+        // - Standalone enums (plain i32 discriminants — scalar-backed
+        //   exactly like primitives, so `&mut EnumType` needs the same
+        //   stable heap slot; without it a deref-assignment through the
+        //   reference is lost). A variant's payload-less case subset is
+        //   also a `ResolvedType::Enum` but carries the variant's name and
+        //   its values are GC refs into the variant hierarchy — those go
+        //   through the variant representation, not boxing.
         // - Variant types (subtype hierarchy prevents field-by-field deref assignment)
         // - Function types (the local holds a `ref struct` value; `&mut fn`
         //   needs a stable heap slot for deref-assignment, and we box `&fn`
@@ -281,9 +288,11 @@ impl TypeBuilder {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                     let is_prim = matches!(type_table.get(inner), ResolvedType::Primitive(p)
                         if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128));
+                    let is_enum = matches!(type_table.get(inner), ResolvedType::Enum { name, .. }
+                        if !self.variant_names.contains(name.as_str()));
                     let is_variant = self.is_variant_type(inner, type_table);
                     let is_fn = matches!(type_table.get(inner), ResolvedType::Function { .. });
-                    if is_prim || is_variant || is_fn {
+                    if is_prim || is_enum || is_variant || is_fn {
                         needs_box_base.insert(inner);
                     }
                 }
