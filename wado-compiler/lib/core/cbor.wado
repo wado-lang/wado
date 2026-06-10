@@ -498,7 +498,9 @@ fn append_all(buf: &mut List<u8>, src: &ByteList) {
 }
 
 /// Bytewise lexicographic comparison of two encoded keys (RFC 8949 §4.2.1
-/// orders map keys by the bytewise order of their encoded form).
+/// orders map keys by the bytewise order of their encoded form). Hand-rolled
+/// rather than `List<u8>::cmp` because the `ByteList` newtype does not surface
+/// the element `Ord` impl's `cmp` here.
 fn cmp_bytes(a: &ByteList, b: &ByteList) -> Ordering {
     let n = if a.len() < b.len() { a.len() } else { b.len() };
     let mut i = 0;

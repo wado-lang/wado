@@ -51,7 +51,7 @@ impl AsByteSlice for ByteArray {
 
 // Bridge for byte-producing APIs that still return a plain `List<u8>`
 // (e.g. `core:json` `to_bytes`); remove once the stdlib migrates to the
-// `Byte*` newtypes everywhere.
+// `Byte*` newtypes everywhere (tracked in wado-lang/wado#1349).
 impl AsByteSlice for List<u8> {
     fn as_byte_slice(&self) -> ByteSlice with stores[self] {
         return self.as_slice() as ByteSlice;

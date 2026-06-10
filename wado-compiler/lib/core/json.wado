@@ -735,6 +735,24 @@ fn has_exp_or_dot(raw: &String) -> bool {
     return false;
 }
 
+/// Validate that a float-reconstructed integer `v` is whole and within
+/// `[min, over)`, returning `v` for the caller to cast. The upper bound is
+/// half-open so the exactly-representable powers of two `2^63` / `2^64` (which
+/// round up out of the i64 / u64 range) are rejected. Shared by every JSON
+/// number → integer path that falls back through f64 (scientific notation or a
+/// fractional token, whether scanned directly or string-encoded).
+fn checked_int_f64(v: f64, min: f64, over: f64, range_msg: String, start: i64) -> Result<f64, DeserializeError> {
+    if v != f64::floor(v) {
+        builtin::cold_path();
+        return Result::Err(DeserializeError::unexpected_type("expected integer, got float", start));
+    }
+    if v < min || v >= over {
+        builtin::cold_path();
+        return Result::Err(DeserializeError::overflow(range_msg, start));
+    }
+    return Result::Ok(v);
+}
+
 /// Maps an integer `from_str` failure onto a deserialize error.
 fn int_from_str_error(kind: IntErrorKind, range_msg: String, start: i64) -> DeserializeError {
     return match kind {
@@ -749,21 +767,10 @@ fn parse_i64_from(raw: &String, start: i64) -> Result<i64, DeserializeError> {
     if has_exp_or_dot(raw) {
         // Reconstruct via f64 for scientific notation (e.g. 1e2 → 100).
         return match f64::from_str(raw) {
-            Ok(v) && v != f64::floor(v) => {
-                builtin::cold_path();
-                Result::Err(DeserializeError::unexpected_type(
-                    "expected integer, got float",
-                    start,
-                ));
+            Ok(v) => {
+                let checked = checked_int_f64(v, -TWO_POW_63, TWO_POW_63, "value out of range for i64", start)?;
+                Result::Ok(checked as i64);
             },
-            Ok(v) && v >= TWO_POW_63 || v < -TWO_POW_63 => {
-                builtin::cold_path();
-                Result::Err(DeserializeError::overflow(
-                    "value out of range for i64",
-                    start,
-                ));
-            },
-            Ok(v) => Result::Ok(v as i64),
             Err(_) => {
                 builtin::cold_path();
                 Result::Err(DeserializeError::invalid_value("invalid number", start));
@@ -787,28 +794,13 @@ fn parse_u64_from(raw: &String, start: i64) -> Result<u64, DeserializeError> {
         return Result::Err(DeserializeError::overflow("negative value for u64", start));
     }
     if has_exp_or_dot(raw) {
+        // The leading-byte check above misses forms like " -1e3"; the `min: 0`
+        // bound in `checked_int_f64` rejects any negative the float reveals.
         return match f64::from_str(raw) {
-            // The leading-byte check above misses forms like " -1e3";
-            // f64::from_str is the final authority on the sign.
-            Ok(v) && v < 0.0 => {
-                builtin::cold_path();
-                Result::Err(DeserializeError::overflow("negative value for u64", start));
+            Ok(v) => {
+                let checked = checked_int_f64(v, 0.0, TWO_POW_64, "value out of range for u64", start)?;
+                Result::Ok(checked as u64);
             },
-            Ok(v) && v != f64::floor(v) => {
-                builtin::cold_path();
-                Result::Err(DeserializeError::unexpected_type(
-                    "expected integer, got float",
-                    start,
-                ));
-            },
-            Ok(v) && v >= TWO_POW_64 => {
-                builtin::cold_path();
-                Result::Err(DeserializeError::overflow(
-                    "value out of range for u64",
-                    start,
-                ));
-            },
-            Ok(v) => Result::Ok(v as u64),
             Err(_) => {
                 builtin::cold_path();
                 Result::Err(DeserializeError::invalid_value("invalid number", start));
@@ -1044,24 +1036,22 @@ impl JsonDeserializer {
         }
         let mut code = hi;
         if 0xD800 <= hi <= 0xDBFF {
-            // High surrogate: a `\uXXXX` low surrogate must follow.
-            if self.pos + 2 > self.input.len()
-                || self.input.get_unchecked(self.pos) as i32 != '\\' as i32
-                || self.input.get_unchecked(self.pos + 1) as i32 != 'u' as i32 {
+            // High surrogate: a `\uXXXX` low surrogate (0xDC00-0xDFFF) must
+            // follow. (A malformed `\uXXXX` hex error still surfaces from
+            // `read_hex4`; only a *valid* non-low-surrogate is "unpaired".)
+            let mut lo: u32 = 0;
+            let paired = if self.pos + 2 <= self.input.len()
+                && self.input.get_unchecked(self.pos) as i32 == '\\' as i32
+                && self.input.get_unchecked(self.pos + 1) as i32 == 'u' as i32 {
+                self.pos += 2;
+                lo = self.read_hex4()?;
+                0xDC00 <= lo <= 0xDFFF;
+            } else {
+                false;
+            };
+            if !paired {
                 builtin::cold_path();
-                return Result::Err(DeserializeError::malformed(
-                    "unpaired high surrogate",
-                    start,
-                ));
-            }
-            self.pos += 2;
-            let lo = self.read_hex4()?;
-            if !(0xDC00 <= lo <= 0xDFFF) {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::malformed(
-                    "unpaired high surrogate",
-                    start,
-                ));
+                return Result::Err(DeserializeError::malformed("unpaired high surrogate", start));
             }
             code = 0x10000 + (hi - 0xD800 << 10) + (lo - 0xDC00);
         }
@@ -1293,21 +1283,13 @@ impl JsonDeserializer {
             return Result::Ok(if n.neg { -v } else { v } as i32);
         }
         // Decimal point or exponent — reconstruct via f64 (e.g. 1e2 → 100).
-        let v = scanned_to_f64(&n);
-        if v != f64::floor(v) {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type(
-                "expected integer, got float",
-                start,
-            ));
-        }
-        if v < i32::MIN as f64 || v > i32::MAX as f64 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::overflow(
-                "value out of range for i32",
-                start,
-            ));
-        }
+        let v = checked_int_f64(
+            scanned_to_f64(&n),
+            i32::MIN as f64,
+            i32::MAX as f64 + 1.0,
+            "value out of range for i32",
+            start,
+        )?;
         return Result::Ok(v as i32);
     }
 
@@ -1339,21 +1321,13 @@ impl JsonDeserializer {
             }
             return Result::Ok(v);
         }
-        let v = scanned_to_f64(&n);
-        if v != f64::floor(v) {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type(
-                "expected integer, got float",
-                start,
-            ));
-        }
-        if v >= TWO_POW_63 || v < -TWO_POW_63 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::overflow(
-                "value out of range for i64",
-                start,
-            ));
-        }
+        let v = checked_int_f64(
+            scanned_to_f64(&n),
+            -TWO_POW_63,
+            TWO_POW_63,
+            "value out of range for i64",
+            start,
+        )?;
         return Result::Ok(v as i64);
     }
 
@@ -1373,25 +1347,20 @@ impl JsonDeserializer {
                 return Result::Ok(n.digits);
             }
             if n.int_digits == FPFMT_DIGITS_MAX + 1 {
-                // The scanner caps at FPFMT_DIGITS_MAX digits, but u64::MAX
-                // has one more, so re-parse the token exactly (a number token
-                // is ASCII, and with no sign / '.' / exponent here its length
-                // equals its digit count).
-                let len = n.int_digits;
-                let raw = String::internal_from_utf8_raw(
-                    self.input.slice(self.pos - len, self.pos).to_array(),
-                    len,
-                );
-                return match u64::from_str(&raw) {
-                    Ok(v) => Result::Ok(v),
-                    Err(_) => {
-                        builtin::cold_path();
-                        Result::Err(DeserializeError::overflow(
-                            "value out of range for u64",
-                            start,
-                        ));
-                    },
-                };
+                // u64::MAX has one digit more than the mantissa budget, so the
+                // value is the scanner's `digits` (the first 19) with the last
+                // digit appended. Append it with an overflow check — no String
+                // round-trip (the token is `[pos - int_digits, pos)`, so the
+                // final digit is the byte just before `pos`).
+                let last = (self.input.get_unchecked(self.pos - 1) - '0' as u8) as u64;
+                if n.digits > (u64::MAX - last) / 10 {
+                    builtin::cold_path();
+                    return Result::Err(DeserializeError::overflow(
+                        "value out of range for u64",
+                        start,
+                    ));
+                }
+                return Result::Ok(n.digits * 10 + last);
             }
             builtin::cold_path();
             return Result::Err(DeserializeError::overflow(
@@ -1399,21 +1368,13 @@ impl JsonDeserializer {
                 start,
             ));
         }
-        let v = scanned_to_f64(&n);
-        if v != f64::floor(v) {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type(
-                "expected integer, got float",
-                start,
-            ));
-        }
-        if v < 0.0 || v >= TWO_POW_64 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::overflow(
-                "value out of range for u64",
-                start,
-            ));
-        }
+        let v = checked_int_f64(
+            scanned_to_f64(&n),
+            0.0,
+            TWO_POW_64,
+            "value out of range for u64",
+            start,
+        )?;
         return Result::Ok(v as u64);
     }
 
