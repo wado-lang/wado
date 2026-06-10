@@ -777,7 +777,12 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(&mut wir_package, options.opt_level, nir.codegen_flags, logger);
+        wir_optimize::optimize_wir(
+            &mut wir_package,
+            options.opt_level,
+            nir.codegen_flags,
+            logger,
+        );
     }
 
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
@@ -997,22 +1002,21 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 package.target_world = world.to_string();
             }
             package.wasm_assets.clone_from(&load_result.wasm_assets);
-            package.codegen_flags =
-                match codegen_flags::CodegenFlags::parse(codegen_flags) {
-                    Ok(flags) => flags,
-                    Err(flag) => {
-                        let _ = logger.error(compiler_host::Diagnostic {
-                            severity: compiler_host::Severity::Error,
-                            code: compiler_host::Code::UnsupportedFeature,
-                            message: format!(
-                                "unknown codegen flag: `-f {flag}` (supported: `array-copy`, \
+            package.codegen_flags = match codegen_flags::CodegenFlags::parse(codegen_flags) {
+                Ok(flags) => flags,
+                Err(flag) => {
+                    let _ = logger.error(compiler_host::Diagnostic {
+                        severity: compiler_host::Severity::Error,
+                        code: compiler_host::Code::UnsupportedFeature,
+                        message: format!(
+                            "unknown codegen flag: `-f {flag}` (supported: `array-copy`, \
                                  `branch-hinting`, optionally prefixed with `no-`)"
-                            ),
-                            span: None,
-                        });
-                        return Err(Bail);
-                    }
-                };
+                        ),
+                        span: None,
+                    });
+                    return Err(Bail);
+                }
+            };
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()

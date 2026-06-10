@@ -69,9 +69,7 @@ fn infer_in_instr(instr: &mut WirInstr) {
 /// predicate for the path *before* the slice.
 fn hint_brif_trap_tail(instrs: &mut [WirInstr], mut reaches_trap: bool) -> bool {
     for i in (0..instrs.len()).rev() {
-        if reaches_trap
-            && let WirInstr::BrIf { condition, .. } = &mut instrs[i]
-        {
+        if reaches_trap && let WirInstr::BrIf { condition, .. } = &mut instrs[i] {
             WirInstr::hint_condition(condition, true);
         }
         // Update `reaches_trap` for the position before `instrs[i]`.
@@ -151,7 +149,10 @@ fn may_transfer_out(instr: &WirInstr, nesting: u32) -> bool {
             targets,
             default,
         } => {
-            targets.iter().chain(std::iter::once(default)).any(|d| *d >= nesting)
+            targets
+                .iter()
+                .chain(std::iter::once(default))
+                .any(|d| *d >= nesting)
                 || may_transfer_out(index, nesting)
         }
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
@@ -294,11 +295,7 @@ mod tests {
 
     #[test]
     fn trapping_then_arm_is_hinted_unlikely() {
-        let mut body = vec![if_instr(
-            local_get("c"),
-            vec![WirInstr::Unreachable],
-            None,
-        )];
+        let mut body = vec![if_instr(local_get("c"), vec![WirInstr::Unreachable], None)];
         infer_in_body(&mut body);
         assert_eq!(hint_of(&body[0]), Some(false));
     }
@@ -334,11 +331,7 @@ mod tests {
         // break / return diverge but must not be hinted cold.
         let mut body = vec![
             if_instr(local_get("a"), vec![WirInstr::Br { depth: 1 }], None),
-            if_instr(
-                local_get("b"),
-                vec![WirInstr::Return { value: None }],
-                None,
-            ),
+            if_instr(local_get("b"), vec![WirInstr::Return { value: None }], None),
         ];
         infer_in_body(&mut body);
         assert_eq!(hint_of(&body[0]), None);
