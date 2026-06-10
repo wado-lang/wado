@@ -7,7 +7,7 @@ mod common;
 use common::InMemoryHost;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::{Semantics, semantics};
-use wado_compiler::symbol::{SymbolKey, SymbolKind};
+use wado_compiler::symbol::SymbolKind;
 
 #[test]
 fn semantics_newtype_records_aliased_type() {
@@ -61,24 +61,23 @@ export fn run() {
         .expect("Point symbol should be defined in entry module");
     assert!(matches!(point_symbol.kind, SymbolKind::Struct(_)));
 
-    let key = SymbolKey::new(entry.clone(), point_symbol.defined_at.ast_id);
+    let key = point_symbol.defined_at;
 
     let ty = sem
-        .type_at(&key)
+        .type_at(key)
         .expect("type_at(Point) should return a decl-backed ResolvedType");
     // The type exists; verifying the identity round-trip is enough — walking
-    // back through `symbols_of_type` to the same `SymbolKey`.
+    // back through `symbols_of_type` to the same `AstId`.
     let type_id = sem.types.type_of_symbol(&key).unwrap();
-    let walked = sem.types.symbol_of_type(type_id).unwrap();
-    assert_eq!(walked.module, key.module);
-    assert_eq!(walked.ast_id, key.ast_id);
+    let walked = *sem.types.symbol_of_type(type_id).unwrap();
+    assert_eq!(walked, key);
 
     // The AST node behind the key is an innermost symbol-bearing node.
     let def = sem
-        .definition_of(&key)
+        .definition_of(key)
         .expect("definition_of should resolve");
     assert_eq!(def.module, entry);
-    assert_eq!(def.ast_id, key.ast_id);
+    assert_eq!(def.ast_id, key);
 
     let _ = ty; // keep the borrow alive through the assertions above
 }
@@ -143,7 +142,7 @@ fn semantics_resolves_position_to_ast_id() {
         .symbols
         .lookup_in_module(&entry, "run")
         .expect("run symbol should be defined");
-    assert_eq!(run_symbol.defined_at.ast_id, id);
+    assert_eq!(run_symbol.defined_at, id);
 }
 
 /// Verify that calls into stdlib resolve via the same `referenced_symbol`
@@ -173,24 +172,22 @@ export fn run() with Stdout {
     let call_id = sem
         .ast_id_at(&entry, 5, 5)
         .expect("position inside `println` call should resolve to an AstId");
-    let call_key = SymbolKey::new(entry, call_id);
-
-    let def_key = sem
-        .referenced_symbol(&call_key)
+    let def_id = sem
+        .referenced_symbol(call_id)
         .expect("`println` call site must record a use→def edge to the stdlib decl");
     // The defining symbol lives in a stdlib module — either `core:cli`
     // (where the user imports from) or a re-exported origin.
     assert!(
         matches!(
-            &def_key.module,
-            ModuleSource::Core { .. } | ModuleSource::Wasi { .. }
+            sem.module_of_id(def_id),
+            Some(ModuleSource::Core { .. } | ModuleSource::Wasi { .. })
         ),
         "println def should live in stdlib, got {:?}",
-        def_key.module,
+        sem.module_of_id(def_id),
     );
 
     let def_symbol = sem
-        .symbol_at(&def_key)
+        .symbol_at(def_id)
         .expect("stdlib def must resolve to a Symbol via `symbol_at`");
     assert_eq!(def_symbol.name, "println");
 }
@@ -216,18 +213,17 @@ export fn run() {
     let use_id = sem
         .ast_id_at(&entry, 4, 14)
         .expect("position inside `x` use should resolve to an AstId");
-    let use_key = SymbolKey::new(entry.clone(), use_id);
-
-    let def_key = sem
-        .referenced_symbol(&use_key)
+    let def_id = sem
+        .referenced_symbol(use_id)
         .expect("`x` use site must record a use→def edge to the let binding");
     assert_eq!(
-        def_key.module, entry,
+        sem.module_of_id(def_id),
+        Some(&entry),
         "user let binding must resolve to the per-compile entry, got {:?}",
-        def_key.module,
+        sem.module_of_id(def_id),
     );
     let def_symbol = sem
-        .symbol_at(&def_key)
+        .symbol_at(def_id)
         .expect("user let binding must resolve via `symbol_at` (locals table)");
     assert_eq!(def_symbol.name, "x");
 }
@@ -251,21 +247,20 @@ export fn run() with Stdout {
 
     // Resolve the same use→def edge under both a cold and a (potentially
     // cached) compile and require they agree exactly.  We compare both
-    // the resolved `SymbolKey` and the underlying `Symbol::name`, since
+    // the resolved `AstId` and the underlying `Symbol::name`, since
     // a stale snapshot could in principle yield a different key with
     // the same name.
-    let resolve_println_def = |a: &Semantics| -> (SymbolKey, String) {
+    let resolve_println_def = |a: &Semantics| -> (wado_compiler::ast::AstId, String) {
         let entry = a.interner.borrow_mut().entry_point("entry.wado");
         // Line 6: `    println(msg);` — column 5 lands on `println`.
         let call_id = a
             .ast_id_at(&entry, 6, 5)
             .expect("println call should resolve to an AstId");
-        let use_key = SymbolKey::new(entry, call_id);
         let def_key = a
-            .referenced_symbol(&use_key)
+            .referenced_symbol(call_id)
             .expect("println call must record a use→def edge");
         let name = a
-            .symbol_at(&def_key)
+            .symbol_at(def_key)
             .expect("def must resolve to a Symbol")
             .name
             .clone();
@@ -308,7 +303,7 @@ export fn run() {
     // brittle column lookup that depends on which sub-node sits beneath
     // the cursor) keeps the test resilient to AstId numbering changes.
     let hit = sem.iter_method_dispatch().any(|key| {
-        key.module == entry
+        sem.module_of_id(key) == Some(&entry)
             && sem
                 .method_dispatch_view(key)
                 .is_some_and(|(name, _, self_kind)| name.contains("len") && self_kind == "ref")
@@ -389,7 +384,7 @@ export fn run() {
 
     let mut kinds: Vec<String> = sem
         .iter_desugars()
-        .filter(|key| key.module == entry)
+        .filter(|key| sem.module_of_id(*key) == Some(&entry))
         .filter_map(|key| sem.desugar_view(key))
         .collect();
     kinds.sort();
@@ -435,7 +430,7 @@ export fn run() {
     let mut saw_numeric = false;
     let mut saw_null_to_option = false;
     for key in sem.iter_coercions() {
-        if key.module != entry {
+        if sem.module_of_id(key) != Some(&entry) {
             continue;
         }
         let Some((kind, _target)) = sem.coercion_view(key) else {
@@ -485,9 +480,9 @@ export fn run() {
     let one_id = sem
         .ast_id_at(&entry, 3, 13)
         .expect("position on `1` literal should resolve to an AstId");
-    let one_key = SymbolKey::new(entry.clone(), one_id);
+
     let one_ty = sem
-        .expression_type(&one_key)
+        .expression_type(one_id)
         .expect("the `1` literal must record an expression type");
     assert_eq!(sem.types.type_name(one_ty), "i32");
 
@@ -496,9 +491,9 @@ export fn run() {
     let x_use_id = sem
         .ast_id_at(&entry, 4, 14)
         .expect("position on `x` use should resolve to an AstId");
-    let x_use_key = SymbolKey::new(entry, x_use_id);
+
     let x_ty = sem
-        .expression_type(&x_use_key)
+        .expression_type(x_use_id)
         .expect("the `x` use site must record an expression type");
     assert_eq!(sem.types.type_name(x_ty), "i32");
 }
@@ -523,7 +518,7 @@ export fn run() {
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
 
     let saw_tuple_to_sequence = sem.iter_coercions().any(|key| {
-        key.module == entry
+        sem.module_of_id(key) == Some(&entry)
             && sem
                 .coercion_view(key)
                 .is_some_and(|(kind, _)| kind == "tuple_to_sequence")
@@ -558,18 +553,16 @@ export fn run() {
     // Every recorded i32 literal in the user module would be a regression
     // (the only literals are the two `1` / `2` args, which must surface as
     // i64 after type-arg inference).
-    let any_i32 = sem
-        .expression_types
-        .iter()
-        .any(|(key, &type_id)| key.module == entry && sem.types.type_name(type_id) == "i32");
+    let any_i32 = sem.expression_types.iter().any(|(id, &type_id)| {
+        sem.module_of_id(*id) == Some(&entry) && sem.types.type_name(type_id) == "i32"
+    });
     assert!(
         !any_i32,
         "post-inference recoerce_literal_args must overwrite the pre-inference i32 entry",
     );
-    let saw_i64 = sem
-        .expression_types
-        .iter()
-        .any(|(key, &type_id)| key.module == entry && sem.types.type_name(type_id) == "i64");
+    let saw_i64 = sem.expression_types.iter().any(|(id, &type_id)| {
+        sem.module_of_id(*id) == Some(&entry) && sem.types.type_name(type_id) == "i64"
+    });
     assert!(
         saw_i64,
         "post-inference recoerce_literal_args must record the inferred i64 type",
@@ -596,7 +589,7 @@ export fn run() {
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
 
     let saw_bogus = sem.iter_method_dispatch().any(|key| {
-        key.module == entry
+        sem.module_of_id(key) == Some(&entry)
             && sem
                 .method_dispatch_view(key)
                 .is_some_and(|(name, _, _)| name.contains("no_such_method"))
@@ -631,9 +624,9 @@ export fn run() {
     let match_id = sem
         .ast_id_at(&entry, 4, 5)
         .expect("`match` keyword should resolve to an AstId");
-    let match_key = SymbolKey::new(entry, match_id);
+
     let match_ty = sem
-        .expression_type(&match_key)
+        .expression_type(match_id)
         .expect("stmt-position match must record an expression type");
     assert_eq!(sem.types.type_name(match_ty), "()");
 }

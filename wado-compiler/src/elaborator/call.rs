@@ -413,7 +413,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(method_ast_id) =
                         self.find_impl_method_ast_id(&method_module, prefix, suffix)
                     {
-                        self.record_reference_to_decl(suffix_seg.id, &method_module, method_ast_id);
+                        self.record_reference_to_def(suffix_seg.id, method_ast_id);
                     }
                 }
                 // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
@@ -648,12 +648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Find the case by name
                 if let Some((_case_index, case_data)) = case_match {
-                    self.record_qualified_case(
-                        ident,
-                        &prefix_owned,
-                        &variant_info.module_source,
-                        case_data.ast_id,
-                    );
+                    self.record_qualified_case(ident, &prefix_owned, case_data.ast_id);
                     // Each variant case has exactly one payload.
                     // Unit variants expect 0 args, non-unit variants expect 1 arg.
                     let payload_is_unit = matches!(
@@ -798,11 +793,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .find(|(_, c)| c.name == method_name)
                             .map(|(i, c)| (i, c.clone()));
                         if let Some((_case_index, case_data)) = case_match {
-                            self.record_namespaced_case(
-                                ident,
-                                &variant_info.module_source,
-                                case_data.ast_id,
-                            );
+                            self.record_namespaced_case(ident, case_data.ast_id);
                             let payload_is_unit = matches!(
                                 self.tysys.type_table.borrow().get(case_data.payload),
                                 ResolvedType::Unit
@@ -917,7 +908,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `static_method_dispatch` early return — without
                     // re-running `locate_static_method_impl` /
                     // `lookup_static_method_*` from the AST alone.
-                    let key = self.ann_key(call.id);
+                    let key = call.id;
                     self.sem.types.static_method_dispatch.insert(
                         key,
                         super::sem::types::StaticMethodDispatch {
@@ -943,11 +934,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let def_key = self
                     .symbols
                     .lookup_in_module(&ns_source, suffix)
-                    .map(|sym| sym.defined_at.clone());
+                    .map(|sym| sym.defined_at);
                 if let Some(def_key) = def_key {
-                    self.record_reference_to_key(ident.id, def_key.clone());
+                    self.record_reference_to_def(ident.id, def_key);
                     if let Some(seg) = ident.segments.get(1) {
-                        self.record_reference_to_key(seg.id, def_key);
+                        self.record_reference_to_def(seg.id, def_key);
                     }
                 }
                 (
@@ -1017,7 +1008,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .symbols
                 .lookup(&self.current_module_source, effective_name)
             {
-                self.record_reference_to_key(ident.id, symbol.defined_at.clone());
+                self.record_reference_to_def(ident.id, symbol.defined_at);
                 (
                     Some(CalleeRef::from_imported_symbol(symbol)),
                     effective_name.to_string(),
@@ -1201,7 +1192,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the `is_static_method` arm; this covers the remaining
         // shapes (`println(x)`, `builtin::array_new(n)`,
         // `ns::foo(x)` for use-namespaced imports).
-        let key = self.ann_key(call.id);
+        let key = call.id;
         self.sem.types.static_method_dispatch.insert(
             key,
             super::sem::types::StaticMethodDispatch {
@@ -2871,7 +2862,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `StaticMethodCallExpr` id, so reusing `static_method_dispatch`
             // is collision-free. Args here carry no `is_mut` (the
             // production builder below uses all-false `CallArg`s).
-            let key = self.ann_key(call.id);
+            let key = call.id;
             self.sem.types.static_method_dispatch.insert(
                 key,
                 super::sem::types::StaticMethodDispatch {

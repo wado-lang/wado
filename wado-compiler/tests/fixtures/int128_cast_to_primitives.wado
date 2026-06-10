@@ -1,0 +1,157 @@
+// Regression test for https://github.com/wado-lang/wado/issues/1328 — casts
+// whose *source* is i128/u128 used to fall through `translate_cast`
+// unconverted, leaking the boxed wide-int ref into a slot expecting
+// f64/i64 and producing invalid core Wasm at every optimization level.
+//
+// `i128/u128 as T` now lowers to prelude calls: `as_f64`/`as_f32` for
+// floats (correctly rounded, Rust `as`-cast semantics), `low()` plus a
+// primitive cast for integer targets (truncation), and the reinterpreting
+// constructors for `i128 ↔ u128`.
+
+test "i128 as f64" {
+    let v: i128 = 5;
+    assert v as f64 == 5.0;
+    let neg: i128 = -5;
+    assert neg as f64 == -5.0;
+}
+
+test "u128 as f64" {
+    let v: u128 = 5;
+    assert v as f64 == 5.0;
+}
+
+test "large i128 as f64 uses the full 128-bit value" {
+    // 2^100, exactly representable in f64. A lowering that converts only
+    // the low 64 bits (which are all zero) would yield 0 instead.
+    let v: i128 = 1267650600228229401496703205376;
+    assert v as f64 == 1267650600228229401496703205376.0;
+}
+
+test "u128 as f64 rounds to nearest with ties to even" {
+    // ulp(2^64) = 2^12; 2^64 + 2^11 is an exact tie and rounds down to
+    // the even mantissa, one more rounds up.
+    let tie: u128 = 18446744073709553664;
+    assert tie as f64 == 18446744073709551616.0;
+    let above: u128 = 18446744073709553665;
+    assert above as f64 == 18446744073709555712.0;
+}
+
+test "i128 as f64 rounds the magnitude for negative values" {
+    // -(2^65 + 2^12): an exact tie in the wide path (high != 0).
+    let tie: i128 = -36893488147419107328;
+    assert tie as f64 == -36893488147419103232.0;
+    let below: i128 = -36893488147419107329;
+    assert below as f64 == -36893488147419111424.0;
+}
+
+test "u64-range u128 as f64 takes the native conversion path" {
+    let v: u128 = 18446744073709551615;  // 2^64 - 1, high == 0
+    assert v as f64 == 18446744073709551616.0;
+}
+
+test "i128::MIN and u128::MAX as f64" {
+    let min: i128 = -170141183460469231731687303715884105728;
+    assert min as f64 == -170141183460469231731687303715884105728.0;
+    let max: u128 = 340282366920938463463374607431768211455;
+    assert max as f64 == 340282366920938463463374607431768211456.0;
+}
+
+test "wide int as f32" {
+    let v: i128 = -5;
+    assert v as f32 == -5.0 as f32;
+    // ulp(2^65) = 2^42 in f32; 2^65 + 2^41 is an exact tie (rounds down
+    // to the even mantissa), one more rounds up.
+    let tie: u128 = 36893490346442358784;
+    assert tie as f32 == 36893488147419103232.0 as f32;
+    let above: u128 = 36893490346442358785;
+    assert above as f32 == 36893492545465614336.0 as f32;
+}
+
+test "u128::MAX as f32 overflows to infinity" {
+    let max: u128 = 340282366920938463463374607431768211455;
+    assert max as f32 == f32::INFINITY;
+}
+
+test "wide int as integer truncates to the low bits" {
+    let v: i128 = 18446744073709551623;  // 2^64 + 7
+    assert v as i64 == 7;
+    let neg: i128 = -1;
+    assert neg as i64 == -1;
+    assert neg as u64 == 18446744073709551615;
+    assert neg as i32 == -1;
+    assert neg as u8 == 255;
+    let w: i128 = 4294967301;  // 2^32 + 5
+    assert w as i32 == 5;
+    let u: u128 = 18446744073709551623;  // 2^64 + 7
+    assert u as u64 == 7;
+    assert u as i64 == 7;
+}
+
+test "i128 and u128 reinterpret into each other" {
+    let neg: i128 = -1;
+    let max: u128 = 340282366920938463463374607431768211455;
+    assert neg as u128 == max;
+    assert max as i128 == neg;
+    // Identity casts are no-ops.
+    assert neg as i128 == neg;
+    assert max as u128 == max;
+}
+
+type WideI = i128;
+type WideU = u128;
+type Meters = f64;
+
+test "newtype of i128/u128 casts like its base" {
+    // Reinterpret to/from the newtype (regression: an added validation
+    // once rejected these even though they are repr-compatible no-ops).
+    let v = 5 as i128 as WideI;
+    let back = v as i128;
+    assert back.low() == 5;
+
+    // Newtype source lowers through the same prelude calls as its base.
+    assert v as i64 == 5;
+    assert v as f64 == 5.0;
+    let m = v as Meters;
+    assert m as f64 == 5.0;
+
+    let neg = -1 as i128 as WideI;
+    let max: u128 = 340282366920938463463374607431768211455;
+    assert neg as u128 == max;
+    assert neg as WideU as u128 == max;
+}
+
+trait Visitor {
+    type Value;
+    fn visit_f64(&mut self, v: f64) -> Result<Self::Value, String>;
+    // The default body contains the wide-int → f64 cast that issue #1328
+    // tripped over. It is only instantiated when an impl relies on the
+    // default, which is why the only pre-existing Visitor (core:value)
+    // never exposed the bug.
+    fn visit_i128(&mut self, v: i128) -> Result<Self::Value, String> {
+        return self.visit_f64(v as f64);
+    }
+}
+
+struct Pt {
+    x: i64,
+}
+
+struct PtVisitor {
+}
+impl Visitor for PtVisitor {
+    type Value = Pt;
+
+    fn visit_f64(&mut self, v: f64) -> Result<Pt, String> {
+        return Result::Ok(Pt { x: v as i64 });
+    }
+}
+
+test "trait default method casting i128 to f64" {
+    let mut v = PtVisitor {};
+    let n: i128 = 5;
+    let p = v.visit_i128(n).expect("visit");
+    assert p.x == 5;
+}
+
+__DATA__
+{"test": {}}

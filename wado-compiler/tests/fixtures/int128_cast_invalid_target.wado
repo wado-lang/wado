@@ -1,0 +1,11 @@
+// i128/u128 can only be cast to numeric types; anything else must be a
+// compile error rather than silently leaking the wide-int struct ref into
+// codegen (issue #1328).
+
+export fn run() {
+    let v: i128 = 5;
+    let s = v as String;
+}
+
+__DATA__
+{"compile_error": "i128/u128 can only be cast to numeric types"}

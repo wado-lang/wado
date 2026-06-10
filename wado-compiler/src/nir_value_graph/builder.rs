@@ -458,12 +458,12 @@ impl<'a> Builder<'a> {
                 let mut arm_states: Vec<IndexMap<u32, ValueId>> =
                     Vec::with_capacity(arms.len() + 1);
                 for arm in &arms {
-                    self.current_value = saved.clone();
+                    self.current_value.clone_from(&saved);
                     self.heap_state.restore(saved_heap.clone());
                     self.walk_block(*arm);
                     arm_states.push(self.current_value.clone());
                 }
-                self.current_value = saved.clone();
+                self.current_value.clone_from(&saved);
                 self.heap_state.restore(saved_heap);
                 self.walk_block(default);
                 arm_states.push(std::mem::replace(&mut self.current_value, saved.clone()));
@@ -702,7 +702,7 @@ impl<'a> Builder<'a> {
         let saved_heap = self.heap_state.snapshot();
         let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());
         for arm in arms {
-            self.current_value = saved.clone();
+            self.current_value.clone_from(&saved);
             self.heap_state.restore(saved_heap.clone());
             self.bind_pattern_opaque(arm.pattern);
             if let Some(g) = arm.guard {
@@ -711,7 +711,7 @@ impl<'a> Builder<'a> {
             self.walk_expr(arm.body);
             states.push(self.current_value.clone());
         }
-        self.current_value = saved.clone();
+        self.current_value.clone_from(&saved);
         self.heap_state.restore(saved_heap);
         self.merge_n_arms(&saved, &states);
     }

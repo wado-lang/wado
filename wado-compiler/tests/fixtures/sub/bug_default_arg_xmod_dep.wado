@@ -1,0 +1,13 @@
+//! Dependency module for `bug_default_arg_xmod` (issue #1342): a callee whose
+//! default argument value constructs a struct defined in this module.
+
+pub struct DepThing {
+    pub a: i32,
+    pub b: i32,
+    pub c: i32,
+    pub d: i32,
+}
+
+pub fn dep_make(x: i32, t: DepThing = DepThing { a: 1, b: 2, c: 3, d: 4 }) -> i32 {
+    return x + t.a + t.b + t.c + t.d;
+}

@@ -6,7 +6,7 @@
 //!   (struct field maps, variant cases, flags, newtypes, resource methods)
 //!   and interns every declaration in the shared [`TypeTable`]. It also
 //!   populates [`TypeTable::type_by_symbol`]/[`TypeTable::symbol_by_type`]
-//!   so LSP queries can resolve a [`SymbolKey`] to a decl-backed type
+//!   so LSP queries can resolve a [`AstId`](crate::ast::AstId) to a decl-backed type
 //!   without running TIR lowering. The output is an [`AnnotateState`] that
 //!   both `build_tir` and the LSP consume.
 //! - [`Elaborator::build_tir_from_state`] reads that state and produces one
@@ -751,7 +751,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 FlagsInfo {
                                     type_id: flags_type,
                                     members,
-                                    module_source: module_source.clone(),
                                 },
                             );
                     }
@@ -973,7 +972,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // symbol, including types that aren't referenced as a field anywhere.
         // Without this, decl-only types (e.g., a standalone `struct Unused {}`)
         // would only appear in the table after TIR lowering — too late for the
-        // annotate phase to index them by `SymbolKey`.
+        // annotate phase to index them by `AstId`.
         Self::intern_all_decl_types(
             modules,
             &all_struct_fields,
@@ -983,14 +982,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
 
         // Populate `TypeTable::type_by_symbol` / `symbol_by_type` so LSP queries
-        // can resolve a `SymbolKey` to a decl-backed type without running the
+        // can resolve a `AstId` to a decl-backed type without running the
         // lower phase.
         Self::register_symbol_key_type_indices(symbols, &type_table);
 
         // Seed per-module semantics with the snapshot's pre-resolved stdlib
         // entries so the LSP edges remain consistent and the body walk on
         // user modules can extend on top. The snapshot stores `references` /
-        // `locals` / `local_types` as flat maps keyed by `SymbolKey`; we
+        // `locals` / `local_types` as flat maps keyed by `AstId`; we
         // split them by `key.module` because each module's data now lives in
         // its own [`super::sem::ModuleSemantics`].
         let mut module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics> =
@@ -1027,59 +1026,82 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // `get_mut` so a divergence shows up as a `debug_assert` failure
             // rather than silently creating phantom `ModuleSemantics` entries
             // that LSP would later flatten into `Semantics::references`.
-            let snapshot_invariant = "snapshot module must be in the current compile's loaded set";
-            for (use_key, def_key) in &snap.references {
-                let Some(sem) = module_semantics.get_mut(&use_key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", use_key.module);
+            // Snapshot ids route back to a per-module `ModuleSemantics` via
+            // the snapshot's `AstIdSpace → ModuleSource` registry: stdlib
+            // ASTs are parsed once per process and shared, so the snapshot's
+            // spaces are the current compile's spaces. A miss shows up as a
+            // `debug_assert` failure rather than silently dropping facts.
+            let snapshot_invariant =
+                "snapshot id must belong to a module in the current compile's loaded set";
+            for (use_id, def_key) in &snap.references {
+                let Some(sem) = snap
+                    .module_of_id(*use_id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {use_id:?}");
                     continue;
                 };
-                sem.bindings
-                    .references
-                    .insert(use_key.clone(), def_key.clone());
+                sem.bindings.references.insert(*use_id, *def_key);
             }
-            for (key, sym) in &snap.locals {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, sym) in &snap.locals {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.bindings.local_symbols.insert(key.clone(), sym.clone());
+                sem.bindings.local_symbols.insert(*id, sym.clone());
             }
-            for (key, type_id) in &snap.local_types {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, type_id) in &snap.local_types {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.types.local_types.insert(key.clone(), *type_id);
+                sem.types.local_types.insert(*id, *type_id);
             }
-            for (key, type_id) in &snap.expression_types {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, type_id) in &snap.expression_types {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.types.expression_types.insert(key.clone(), *type_id);
+                sem.types.expression_types.insert(*id, *type_id);
             }
-            for (key, dispatch) in &snap.method_dispatch {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, dispatch) in &snap.method_dispatch {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.types
-                    .method_dispatch
-                    .insert(key.clone(), dispatch.clone());
+                sem.types.method_dispatch.insert(*id, dispatch.clone());
             }
-            for (key, choice) in &snap.coercions {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, choice) in &snap.coercions {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.types.coercions.insert(key.clone(), choice.clone());
+                sem.types.coercions.insert(*id, choice.clone());
             }
-            for (key, kind) in &snap.desugars {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, kind) in &snap.desugars {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.types.desugars.insert(key.clone(), *kind);
+                sem.types.desugars.insert(*id, *kind);
             }
         }
 
@@ -1338,7 +1360,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 trait_ctx: super::trait_env::TraitContext::default(),
                 trait_check_stack: RefCell::new(Vec::new()),
                 default_scope_module: None,
-                ann_module_override: None,
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
                 pending_method_dispatch: None,
@@ -1383,11 +1404,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later; computing it here lets reify gate item emission on the live
         // set and the unused-diagnostics emitter read `dead_items`.
         {
-            let mut references: IndexMap<crate::symbol::SymbolKey, crate::symbol::SymbolKey> =
+            let mut references: IndexMap<crate::ast::AstId, crate::ast::AstId> =
                 IndexMap::default();
             for sem in state.module_semantics.values() {
-                for (use_key, def_key) in &sem.bindings.references {
-                    references.insert(use_key.clone(), def_key.clone());
+                for (use_id, def_key) in &sem.bindings.references {
+                    references.insert(*use_id, *def_key);
                 }
             }
             let export_names: crate::hashmap::IndexSet<String> = state
@@ -1516,7 +1537,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// instrumented at each `make_struct` / `make_enum` / ... call site: the
     /// decl-creation sites are spread across elaborator/module.rs,
     /// `elaborator/type_resolution.rs`, elaborator/orchestration.rs, elaborator/call.rs,
-    /// and elaborator/expr.rs, and threading a `SymbolKey` through every one of
+    /// and elaborator/expr.rs, and threading a `AstId` through every one of
     /// them would churn ~40 call sites. The symbol-table walk is O(symbols) and
     /// touches only declarations, so the cost is negligible.
     fn register_symbol_key_type_indices(
@@ -1538,8 +1559,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if !is_type_decl {
                 continue;
             }
-            let key = symbol.defined_at.clone();
-            if let Some(type_id) = tt.find_decl_type_by_name(&symbol.name, &key.module) {
+            let key = symbol.defined_at;
+            let decl_module = symbol.module_source();
+            if let Some(type_id) = tt.find_decl_type_by_name(&symbol.name, decl_module) {
                 tt.register_decl_type(key, type_id);
             }
         }

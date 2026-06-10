@@ -279,25 +279,25 @@ fn emit_unused_diagnostics<H: CompilerHost>(
     use crate::ast::Item;
     use crate::compiler_host::{Code, DiagnosticSpan};
 
-    let emit = |keys: &[crate::symbol::SymbolKey],
-                fn_code: Code,
-                global_code: Code,
-                reason: &str| {
-        for key in keys {
-            let Some(module) = sem.modules.get(&key.module) else {
+    let emit = |ids: &[crate::ast::AstId], fn_code: Code, global_code: Code, reason: &str| {
+        for id in ids {
+            let Some(owning) = sem.module_of_id(*id) else {
                 continue;
             };
-            let filename = key.module.diagnostic_filename();
+            let Some(module) = sem.modules.get(owning) else {
+                continue;
+            };
+            let filename = owning.diagnostic_filename();
             for item in &module.items {
                 match item {
-                    Item::Function(func) if func.id == key.ast_id => {
+                    Item::Function(func) if func.id == *id => {
                         logger.warn_at(
                             fn_code,
                             format!("function `{}` {reason}", func.name),
                             DiagnosticSpan::from_span(&func.name_span, Some(filename.as_str())),
                         );
                     }
-                    Item::Global(global) if global.id == key.ast_id => {
+                    Item::Global(global) if global.id == *id => {
                         logger.warn_at(
                             global_code,
                             format!("global `{}` {reason}", global.name),

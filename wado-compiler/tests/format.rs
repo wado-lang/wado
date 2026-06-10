@@ -55,10 +55,27 @@ fn normalize_ast_debug(debug: &str) -> String {
             continue;
         }
 
-        // Normalize any `AstId(N)` occurrence — AstIds are parse-order
-        // allocations and must not affect AST equivalence. Whitespace changes
-        // by the formatter can cause legitimately different id counts when
-        // the parser's token consumption changes slightly.
+        // Normalize any `AstIdSpace(N)` occurrence (the Module's
+        // `ast_id_space` field): every parse mints a fresh space, so the
+        // original and formatted parses always differ here by design.
+        // Multi-line in `{:#?}` output, so consume through the `)`.
+        if bytes[i..].starts_with(b"AstIdSpace(") {
+            result.extend_from_slice(b"ASPACE");
+            i += b"AstIdSpace(".len();
+            while i < bytes.len() && bytes[i] != b')' {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Normalize any `AstId(S:N)` occurrence — AstIds are parse-order
+        // allocations (in a per-parse space) and must not affect AST
+        // equivalence. Whitespace changes by the formatter can cause
+        // legitimately different id counts when the parser's token
+        // consumption changes slightly.
         if bytes[i..].starts_with(b"AstId(") {
             result.extend_from_slice(b"AID");
             i += b"AstId(".len();

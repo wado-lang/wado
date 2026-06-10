@@ -112,7 +112,7 @@ It may include TODOs on WIP.
 - [String API — checked / unchecked / internal Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
 - [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md)
 - [Resource Ownership and a Resource-Scoped Borrow Checker](./wep-2026-05-21-resource-ownership.md)
-- [Elaborator Re-architecture — TypeSystem / Annotate / Reify](./wep-2026-05-26-elaborator-rearchitecture.md)
+- [Elaborator Re-architecture — TypeSystem / Annotate / Reify](./wep-2026-05-26-elaborator-rearchitecture.md) (identity model superseded by globally-unique `AstId`)
 - [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md)
 - [`NirExprKind::ArrayLiteral` — a NIR-Materialized List Node](./wep-2026-05-31-nir-array-literal.md)
 - [Diagnostic Reason Chains for Type and Trait Errors](./wep-2026-06-02-diagnostic-reason-chains.md)

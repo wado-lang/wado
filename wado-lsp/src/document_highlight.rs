@@ -48,11 +48,11 @@ pub(crate) fn document_highlight(ctx: &QueryContext, position: Position) -> Vec<
 
     let mut out = Vec::new();
 
-    if &def_key.module == entry
+    if ctx.sem.module_of_id(def_key) == Some(entry)
         && let Some(span) = ctx
             .sem
-            .name_span_of(&def_key)
-            .or_else(|| ctx.sem.symbol_at(&def_key).and_then(|s| s.span))
+            .name_span_of(def_key)
+            .or_else(|| ctx.sem.symbol_at(def_key).and_then(|s| s.span))
     {
         out.push(DocumentHighlight {
             range: span_to_range(&span, Some(ctx.source), ctx.encoding),
@@ -60,14 +60,14 @@ pub(crate) fn document_highlight(ctx: &QueryContext, position: Position) -> Vec<
         });
     }
 
-    for use_key in cursor.references_to_def() {
-        if &use_key.module != entry {
+    for use_id in cursor.references_to_def() {
+        if ctx.sem.module_of_id(use_id) != Some(entry) {
             continue;
         }
-        let Some(span) = ctx.sem.span_of_key(&use_key) else {
+        let Some(span) = ctx.sem.span_of_id(use_id) else {
             continue;
         };
-        let kind = if ctx.sem.is_write_target(&use_key) {
+        let kind = if ctx.sem.is_write_target(use_id) {
             HighlightKind::Write
         } else {
             HighlightKind::Read

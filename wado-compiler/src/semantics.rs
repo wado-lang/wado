@@ -22,7 +22,7 @@ use crate::hashmap::IndexMap;
 use crate::loader;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::symbol::{Symbol, SymbolKey, SymbolTable};
+use crate::symbol::{Symbol, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 use crate::world_registry::WorldRegistry;
@@ -76,24 +76,29 @@ pub struct Semantics {
     /// [`Semantics::is_complete`], so the `expect` in `compile_with_options`
     /// is safe. LSP queries do not inspect `state` directly.
     pub(crate) state: Option<AnnotateState>,
+    /// `AstIdSpace → ModuleSource` registry over the loaded modules: which
+    /// module's parse minted each id space. Lets bare-`AstId` facts be
+    /// resolved back to their owning module (spans, URIs) without carrying a
+    /// module in every key.
+    pub(crate) space_modules: IndexMap<crate::ast::AstIdSpace, ModuleSource>,
     /// Use→def map populated by the real elaborator as it walks function
-    /// bodies in `build_tir_from_state`. Maps `(module, IdentExpr.id)` to
-    /// the binding's defining `SymbolKey`. Empty when resolve did not run
-    /// or bailed before recording any edges.
-    pub(crate) references: IndexMap<SymbolKey, SymbolKey>,
+    /// bodies in `build_tir_from_state`. Maps `IdentExpr.id` to the
+    /// binding's defining `AstId`. Empty when resolve did not run or
+    /// bailed before recording any edges.
+    pub(crate) references: IndexMap<AstId, AstId>,
     /// Local binding [`Symbol`] entries (let / param / closure param)
     /// emitted by the elaborator alongside `references`. Keyed by the
-    /// binding's defining [`SymbolKey`]; consulted by
+    /// binding's defining [`AstId`]; consulted by
     /// [`Semantics::symbol_at`] when the key does not name an item-level
     /// symbol. Empty when resolve did not run or bailed early.
-    pub(crate) locals: IndexMap<SymbolKey, Symbol>,
+    pub(crate) locals: IndexMap<AstId, Symbol>,
     /// Inferred [`TypeId`] for each local binding (let / param / closure
-    /// param), keyed by the binding's defining [`SymbolKey`]. Populated
+    /// param), keyed by the binding's defining [`AstId`](crate::ast::AstId). Populated
     /// alongside [`Self::locals`] from the elaborator. Consumed by LSP
     /// inlay-hint queries via [`Semantics::local_type_name`] to render
     /// the inferred type on bindings without explicit annotation. Empty
     /// when resolve did not run or bailed before recording any bindings.
-    pub local_types: IndexMap<SymbolKey, TypeId>,
+    pub local_types: IndexMap<AstId, TypeId>,
     /// Resolved [`TypeId`] for every expression visited by the elaborator
     /// body walk, keyed by the expression's `(module, AstId)` pair. The
     /// future `reify` pass (Stage 5 of the elaborator re-architecture WEP)
@@ -101,26 +106,26 @@ pub struct Semantics {
     /// inference; LSP hover can consult it for a type at the cursor.
     /// Empty when resolve did not run or bailed before any expression was
     /// visited.
-    pub expression_types: IndexMap<SymbolKey, TypeId>,
+    pub expression_types: IndexMap<AstId, TypeId>,
     /// Method-dispatch decisions recorded for each AST
     /// [`crate::ast::MethodCallExpr`] visited by the body walk, keyed by
     /// the call expression's `(module, AstId)` pair. See
     /// [`crate::elaborator::sem::types::MethodDispatch`] for the contract
     /// (synthetic calls and short-circuiting paths leave no entry).
-    pub(crate) method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
+    pub(crate) method_dispatch: IndexMap<AstId, crate::elaborator::sem::types::MethodDispatch>,
     /// Coercion choices recorded for each expression that
     /// [`crate::elaborator::Elaborator::try_coerce`] adapted into its
     /// expected type, keyed by the source expression's `(module, AstId)`.
     /// Expressions that did not need coercion leave no entry. See
     /// [`crate::elaborator::sem::types::CoercionChoice`] for the data
     /// shape.
-    pub(crate) coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice>,
+    pub(crate) coercions: IndexMap<AstId, crate::elaborator::sem::types::CoercionChoice>,
     /// TIR-direct desugar tags recorded by the body walk at each
     /// `assert` / `matches` / comparison-chain / for-of / `while` /
     /// compound-assignment site, keyed by the enclosing AST node's
     /// `(module, AstId)`. See
     /// [`crate::elaborator::sem::types::DesugarKind`].
-    pub(crate) desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind>,
+    pub(crate) desugars: IndexMap<AstId, crate::elaborator::sem::types::DesugarKind>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
@@ -135,7 +140,7 @@ pub struct Semantics {
     pub(crate) is_complete: bool,
 }
 
-/// A definition location, assembled from a [`SymbolKey`].
+/// A definition location, assembled from a symbol.
 ///
 /// Returned by [`Semantics::definition_of`]. The `uri` is derived from
 /// `ModuleSource::diagnostic_filename` — it is present for user-authored
@@ -209,15 +214,19 @@ impl Semantics {
         types: TypeTable,
         interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
         state: Option<AnnotateState>,
-        references: IndexMap<SymbolKey, SymbolKey>,
-        locals: IndexMap<SymbolKey, Symbol>,
-        local_types: IndexMap<SymbolKey, TypeId>,
-        expression_types: IndexMap<SymbolKey, TypeId>,
-        method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
-        coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice>,
-        desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind>,
+        references: IndexMap<AstId, AstId>,
+        locals: IndexMap<AstId, Symbol>,
+        local_types: IndexMap<AstId, TypeId>,
+        expression_types: IndexMap<AstId, TypeId>,
+        method_dispatch: IndexMap<AstId, crate::elaborator::sem::types::MethodDispatch>,
+        coercions: IndexMap<AstId, crate::elaborator::sem::types::CoercionChoice>,
+        desugars: IndexMap<AstId, crate::elaborator::sem::types::DesugarKind>,
         tir_modules: IndexMap<ModuleSource, TirModule>,
     ) -> Self {
+        let space_modules = modules
+            .iter()
+            .map(|(ms, m)| (m.ast_id_space(), ms.clone()))
+            .collect();
         Self {
             entry_module_source,
             modules,
@@ -226,6 +235,7 @@ impl Semantics {
             interner,
             ast_indices,
             state,
+            space_modules,
             references,
             locals,
             local_types,
@@ -253,17 +263,17 @@ impl Semantics {
     /// declared symbol. Falls back to the synthetic local table when the key
     /// names a `let` / parameter binding rather than an item.
     #[must_use]
-    pub fn symbol_at(&self, key: &SymbolKey) -> Option<&Symbol> {
-        self.symbols.get(key).or_else(|| self.locals.get(key))
+    pub fn symbol_at(&self, id: AstId) -> Option<&Symbol> {
+        self.symbols.get(&id).or_else(|| self.locals.get(&id))
     }
 
-    /// Resolve a use-site `SymbolKey` (typically an [`IdentExpr`] id) to the
-    /// `SymbolKey` of its defining binding. Returns `None` if the key does
+    /// Resolve a use-site `AstId` (typically an [`IdentExpr`] id) to the
+    /// `AstId` of its defining binding. Returns `None` if the key does
     /// not appear in the reference map — in which case the caller should
     /// fall back to name-based lookup via the symbol table.
     #[must_use]
-    pub fn referenced_symbol(&self, key: &SymbolKey) -> Option<SymbolKey> {
-        self.references.get(key).cloned()
+    pub fn referenced_symbol(&self, id: AstId) -> Option<AstId> {
+        self.references.get(&id).copied()
     }
 
     /// Iterate every declared symbol with its canonical key, across all
@@ -272,31 +282,36 @@ impl Semantics {
     /// Callers that want a single module filter on `key.module`. Used by
     /// semantic-token highlighting to classify declaration sites in one pass
     /// instead of a positional lookup per token.
-    pub fn iter_symbols(&self) -> impl Iterator<Item = (&SymbolKey, &Symbol)> {
-        self.symbols.iter().chain(self.locals.iter())
+    pub fn iter_symbols(&self) -> impl Iterator<Item = (AstId, &Symbol)> {
+        self.symbols
+            .iter()
+            .map(|(id, s)| (*id, s))
+            .chain(self.locals.iter().map(|(id, s)| (*id, s)))
     }
 
     /// Iterate every recorded use-site `(use_key, def_key)` edge.
     ///
     /// Each `use_key` is typically an [`IdentExpr`] id; `def_key` is the
-    /// binding's defining [`SymbolKey`]. Use sites of locals, parameters,
+    /// binding's defining [`AstId`]. Use sites of locals, parameters,
     /// item-level definitions (functions, types, globals) and imported items
     /// are all recorded here.
-    pub fn iter_references(&self) -> impl Iterator<Item = (&SymbolKey, &SymbolKey)> {
-        self.references.iter()
+    pub fn iter_references(&self) -> impl Iterator<Item = (AstId, AstId)> {
+        self.references
+            .iter()
+            .map(|(use_id, def_id)| (*use_id, *def_id))
     }
 
-    /// Find every use-site `SymbolKey` whose definition is `def_key`.
+    /// Find every use-site `AstId` whose definition is `def_id`.
     ///
     /// Walks [`Self::iter_references`] and collects matches. The returned keys
     /// can be passed to [`Self::span_of_key`] for source ranges. The defining
     /// occurrence itself is **not** included — callers that want it should add
     /// it via [`Self::name_span_of`] / [`Self::span_of_key`].
     #[must_use]
-    pub fn references_to(&self, def_key: &SymbolKey) -> Vec<SymbolKey> {
+    pub fn references_to(&self, def_id: AstId) -> Vec<AstId> {
         self.iter_references()
-            .filter(|&(_use_key, target)| target == def_key)
-            .map(|(use_key, _target)| use_key.clone())
+            .filter(|(_use_id, target)| *target == def_id)
+            .map(|(use_id, _target)| use_id)
             .collect()
     }
 
@@ -304,8 +319,8 @@ impl Semantics {
     /// type-declaring AST node (struct, enum, variant, flags, newtype,
     /// resource).
     #[must_use]
-    pub fn type_at(&self, key: &SymbolKey) -> Option<&ResolvedType> {
-        let type_id = self.types.type_of_symbol(key)?;
+    pub fn type_at(&self, id: AstId) -> Option<&ResolvedType> {
+        let type_id = self.types.type_of_symbol(&id)?;
         Some(self.types.get(type_id))
     }
 
@@ -318,8 +333,8 @@ impl Semantics {
     /// refers to an item), or when the elaborator bailed before reaching
     /// the binding's body.
     #[must_use]
-    pub fn local_type_name(&self, key: &SymbolKey) -> Option<String> {
-        let type_id = self.local_types.get(key).copied()?;
+    pub fn local_type_name(&self, id: AstId) -> Option<String> {
+        let type_id = self.local_types.get(&id).copied()?;
         Some(self.types.type_name(type_id))
     }
 
@@ -330,8 +345,8 @@ impl Semantics {
     /// name an expression that the elaborator reached — typically an item
     /// id or a body the elaborator bailed on.
     #[must_use]
-    pub fn expression_type(&self, key: &SymbolKey) -> Option<TypeId> {
-        self.expression_types.get(key).copied()
+    pub fn expression_type(&self, id: AstId) -> Option<TypeId> {
+        self.expression_types.get(&id).copied()
     }
 
     /// Method-dispatch decision recorded for the `MethodCallExpr` at
@@ -348,9 +363,9 @@ impl Semantics {
     #[must_use]
     pub(crate) fn method_dispatch_at(
         &self,
-        key: &SymbolKey,
+        id: AstId,
     ) -> Option<&crate::elaborator::sem::types::MethodDispatch> {
-        self.method_dispatch.get(key)
+        self.method_dispatch.get(&id)
     }
 
     /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
@@ -364,8 +379,8 @@ impl Semantics {
     /// path consumes the full [`crate::elaborator::sem::types::MethodDispatch`]
     /// via `pub(crate)` access from inside the crate.
     #[must_use]
-    pub fn method_dispatch_view(&self, key: &SymbolKey) -> Option<(String, ModuleSource, String)> {
-        let dispatch = self.method_dispatch.get(key)?;
+    pub fn method_dispatch_view(&self, id: AstId) -> Option<(String, ModuleSource, String)> {
+        let dispatch = self.method_dispatch.get(&id)?;
         let self_kind = match dispatch.self_kind {
             crate::ast::SelfKind::None => "none",
             crate::ast::SelfKind::Ref => "ref",
@@ -382,8 +397,8 @@ impl Semantics {
     /// `MethodCallExpr`'s `(module, AstId)`. Pair with
     /// [`Self::method_dispatch_view`] for the stable public view onto
     /// each entry.
-    pub fn iter_method_dispatch(&self) -> impl Iterator<Item = &SymbolKey> {
-        self.method_dispatch.keys()
+    pub fn iter_method_dispatch(&self) -> impl Iterator<Item = AstId> + '_ {
+        self.method_dispatch.keys().copied()
     }
 
     /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
@@ -397,9 +412,9 @@ impl Semantics {
     /// variant set; the returned string mirrors the variant name in
     /// lowercase-with-underscores form.
     #[must_use]
-    pub fn coercion_view(&self, key: &SymbolKey) -> Option<(String, TypeId)> {
+    pub fn coercion_view(&self, id: AstId) -> Option<(String, TypeId)> {
         use crate::elaborator::sem::types::CoercionKind;
-        let choice = self.coercions.get(key)?;
+        let choice = self.coercions.get(&id)?;
         let kind = match choice.kind {
             CoercionKind::NumericLiteral => "numeric_literal",
             CoercionKind::NullToOption => "null_to_option",
@@ -414,8 +429,8 @@ impl Semantics {
     /// Iterate every recorded coercion choice keyed by the source
     /// expression's `(module, AstId)`. Pair with [`Self::coercion_view`]
     /// for the stable public view onto each entry.
-    pub fn iter_coercions(&self) -> impl Iterator<Item = &SymbolKey> {
-        self.coercions.keys()
+    pub fn iter_coercions(&self) -> impl Iterator<Item = AstId> + '_ {
+        self.coercions.keys().copied()
     }
 
     /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
@@ -428,9 +443,9 @@ impl Semantics {
     /// [`crate::elaborator::sem::types::DesugarKind`] for the full
     /// variant set.
     #[must_use]
-    pub fn desugar_view(&self, key: &SymbolKey) -> Option<String> {
+    pub fn desugar_view(&self, id: AstId) -> Option<String> {
         use crate::elaborator::sem::types::DesugarKind;
-        let kind = self.desugars.get(key)?;
+        let kind = self.desugars.get(&id)?;
         let name = match kind {
             DesugarKind::Assert => "assert",
             DesugarKind::Matches => "matches",
@@ -454,8 +469,8 @@ impl Semantics {
     /// Iterate every recorded desugar tag keyed by the enclosing AST
     /// node's `(module, AstId)`. Pair with [`Self::desugar_view`] for the
     /// stable public view onto each entry.
-    pub fn iter_desugars(&self) -> impl Iterator<Item = &SymbolKey> {
-        self.desugars.keys()
+    pub fn iter_desugars(&self) -> impl Iterator<Item = AstId> + '_ {
+        self.desugars.keys().copied()
     }
 
     /// URI (filename) of a module, when the module has one.
@@ -478,13 +493,11 @@ impl Semantics {
     /// function's `(item_idx, [method_idx])` address, so no AST scan
     /// happens at query time.
     #[must_use]
-    pub fn function_at(&self, key: &SymbolKey) -> Option<&crate::ast::Function> {
+    pub fn function_at(&self, id: AstId) -> Option<&crate::ast::Function> {
         use crate::ast_index::FunctionLocation;
-        let module = self.modules.get(&key.module)?;
-        let location = self
-            .ast_indices
-            .get(&key.module)?
-            .function_location(key.ast_id)?;
+        let owning = self.module_of_id(id)?;
+        let module = self.modules.get(owning)?;
+        let location = self.ast_indices.get(owning)?.function_location(id)?;
         match location {
             FunctionLocation::Free { item_idx } => match module.items.get(item_idx)? {
                 crate::ast::Item::Function(f) => Some(f),
@@ -507,15 +520,23 @@ impl Semantics {
     /// `AstId`, span, and URI into a [`Definition`]. Returns `None` if the
     /// key does not refer to a declared symbol.
     #[must_use]
-    pub fn definition_of(&self, key: &SymbolKey) -> Option<Definition> {
-        let sym = self.symbol_at(key)?;
-        let defined_at = &sym.defined_at;
+    pub fn definition_of(&self, id: AstId) -> Option<Definition> {
+        let sym = self.symbol_at(id)?;
+        let module = sym.module_source().clone();
         Some(Definition {
-            module: defined_at.module.clone(),
-            ast_id: defined_at.ast_id,
+            uri: self.uri_of(&module),
+            module,
+            ast_id: sym.defined_at,
             span: sym.span,
-            uri: self.uri_of(&defined_at.module),
         })
+    }
+
+    /// Module that owns the node `id`, resolved through the per-parse
+    /// [`crate::ast::AstIdSpace`] each loaded module's ids live in. `None`
+    /// for ids of unloaded/transient origin (e.g. `AstId::fresh`).
+    #[must_use]
+    pub fn module_of_id(&self, id: AstId) -> Option<&ModuleSource> {
+        self.space_modules.get(&id.space())
     }
 
     /// Span of the AST node identified by `key` — the source range of the
@@ -524,8 +545,8 @@ impl Semantics {
     /// [`AstIndex::span_of`](crate::ast_index::AstIndex::span_of), which is
     /// total over every parser-allocated [`AstId`].
     #[must_use]
-    pub fn span_of_key(&self, key: &SymbolKey) -> Option<Span> {
-        self.ast_indices.get(&key.module)?.span_of(key.ast_id)
+    pub fn span_of_id(&self, id: AstId) -> Option<Span> {
+        self.ast_indices.get(self.module_of_id(id)?)?.span_of(id)
     }
 
     /// Span of the defining identifier for the symbol at `key`.
@@ -539,8 +560,10 @@ impl Semantics {
     /// nodes without a dedicated name span (e.g. anonymous `impl` blocks,
     /// `Item::Resource`, tests).
     #[must_use]
-    pub fn name_span_of(&self, key: &SymbolKey) -> Option<Span> {
-        self.ast_indices.get(&key.module)?.name_span_of(key.ast_id)
+    pub fn name_span_of(&self, id: AstId) -> Option<Span> {
+        self.ast_indices
+            .get(self.module_of_id(id)?)?
+            .name_span_of(id)
     }
 
     /// True iff `key` names an `IdentExpr` that appears as the direct
@@ -548,10 +571,10 @@ impl Semantics {
     /// document-highlight to classify a use-site as Read vs. Write without
     /// re-walking the body.
     #[must_use]
-    pub fn is_write_target(&self, key: &SymbolKey) -> bool {
-        self.ast_indices
-            .get(&key.module)
-            .is_some_and(|idx| idx.is_write_target(key.ast_id))
+    pub fn is_write_target(&self, id: AstId) -> bool {
+        self.module_of_id(id)
+            .and_then(|m| self.ast_indices.get(m))
+            .is_some_and(|idx| idx.is_write_target(id))
     }
 
     /// Resolve a 1-based `(line, column)` position to a [`Cursor`] over
@@ -572,7 +595,8 @@ impl Semantics {
         let ast_id = self.ast_id_at(module, line, column)?;
         Some(Cursor {
             sem: self,
-            key: SymbolKey::new(module.clone(), ast_id),
+            module: module.clone(),
+            id: ast_id,
         })
     }
 }
@@ -585,39 +609,40 @@ impl Semantics {
 /// query helper. Constructed via [`Semantics::cursor_at`].
 pub struct Cursor<'a> {
     sem: &'a Semantics,
-    key: SymbolKey,
+    module: ModuleSource,
+    id: AstId,
 }
 
 impl<'a> Cursor<'a> {
     /// Module the cursor is positioned in.
     #[must_use]
     pub fn module(&self) -> &ModuleSource {
-        &self.key.module
+        &self.module
     }
 
-    /// `(module, ast_id)` of the AST node at the cursor.
+    /// `AstId` of the AST node at the cursor.
     #[must_use]
-    pub fn key(&self) -> &SymbolKey {
-        &self.key
+    pub fn key(&self) -> AstId {
+        self.id
     }
 
     /// Source span of the AST node at the cursor, if available.
     #[must_use]
     pub fn span(&self) -> Option<Span> {
-        self.sem.span_of_key(&self.key)
+        self.sem.span_of_id(self.id)
     }
 
-    /// `SymbolKey` of the binding the cursor names, following the use→def
-    /// edge when present. Returns `None` when the cursor does not land on a
+    /// `AstId` of the binding the cursor names, following the use→def edge
+    /// when present. Returns `None` when the cursor does not land on a
     /// recognised name (e.g. on punctuation, on an expression body, on a
     /// numeric literal).
     #[must_use]
-    pub fn def_key(&self) -> Option<SymbolKey> {
-        if let Some(def) = self.sem.referenced_symbol(&self.key) {
+    pub fn def_key(&self) -> Option<AstId> {
+        if let Some(def) = self.sem.referenced_symbol(self.id) {
             return Some(def);
         }
-        if self.sem.symbol_at(&self.key).is_some() {
-            return Some(self.key.clone());
+        if self.sem.symbol_at(self.id).is_some() {
+            return Some(self.id);
         }
         None
     }
@@ -625,8 +650,7 @@ impl<'a> Cursor<'a> {
     /// Symbol named by the cursor, after chasing the use→def edge.
     #[must_use]
     pub fn def_symbol(&self) -> Option<&'a Symbol> {
-        let def_key = self.def_key()?;
-        self.sem.symbol_at(&def_key)
+        self.sem.symbol_at(self.def_key()?)
     }
 
     /// Identifier-only span of the binding the cursor names (the
@@ -635,8 +659,7 @@ impl<'a> Cursor<'a> {
     /// (e.g. anonymous `impl` blocks).
     #[must_use]
     pub fn def_name_span(&self) -> Option<Span> {
-        let def_key = self.def_key()?;
-        self.sem.name_span_of(&def_key)
+        self.sem.name_span_of(self.def_key()?)
     }
 
     /// Best span at the binding's declaration site, falling back from the
@@ -649,11 +672,11 @@ impl<'a> Cursor<'a> {
     /// (`Item::Resource`, anonymous `impl` blocks, tests).
     #[must_use]
     pub fn def_span(&self) -> Option<Span> {
-        let def_key = self.def_key()?;
+        let def = self.def_key()?;
         self.sem
-            .name_span_of(&def_key)
-            .or_else(|| self.sem.symbol_at(&def_key).and_then(|s| s.span))
-            .or_else(|| self.sem.span_of_key(&def_key))
+            .name_span_of(def)
+            .or_else(|| self.sem.symbol_at(def).and_then(|s| s.span))
+            .or_else(|| self.sem.span_of_id(def))
     }
 
     /// True iff the cursor lands on an `IdentExpr` that appears as the
@@ -661,15 +684,15 @@ impl<'a> Cursor<'a> {
     /// [`Semantics::is_write_target`] for the cursor's own key.
     #[must_use]
     pub fn is_write_target(&self) -> bool {
-        self.sem.is_write_target(&self.key)
+        self.sem.is_write_target(self.id)
     }
 
-    /// Every use-site `SymbolKey` for the binding the cursor names.
+    /// Every use-site `AstId` for the binding the cursor names.
     /// Returns an empty `Vec` when the cursor does not name a known binding.
     #[must_use]
-    pub fn references_to_def(&self) -> Vec<SymbolKey> {
+    pub fn references_to_def(&self) -> Vec<AstId> {
         match self.def_key() {
-            Some(key) => self.sem.references_to(&key),
+            Some(def) => self.sem.references_to(def),
             None => Vec::new(),
         }
     }
@@ -990,30 +1013,30 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     let types = state.tysys.type_table.borrow().clone();
 
     // Flatten the per-module `ModuleSemantics` into the maps LSP queries
-    // consume directly. The Semantics API stays keyed by `SymbolKey`; the
+    // consume directly. The Semantics API is keyed by bare `AstId`; the
     // per-module storage on `AnnotateState` is the elaborator-side detail
     // that replaces the previous `Rc<RefCell<…>>` plumbing. The
     // `expression_types` / `method_dispatch` / `coercions` maps are stored
     // per-module keyed by raw `AstId` (the body walk's natural index); the
     // rebind here pairs each id with its owning module so the
     // Semantics-level lookup matches the other flat maps.
-    let mut references: IndexMap<SymbolKey, SymbolKey> = IndexMap::default();
-    let mut locals: IndexMap<SymbolKey, Symbol> = IndexMap::default();
-    let mut local_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
-    let mut expression_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
-    let mut method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch> =
+    let mut references: IndexMap<AstId, AstId> = IndexMap::default();
+    let mut locals: IndexMap<AstId, Symbol> = IndexMap::default();
+    let mut local_types: IndexMap<AstId, TypeId> = IndexMap::default();
+    let mut expression_types: IndexMap<AstId, TypeId> = IndexMap::default();
+    let mut method_dispatch: IndexMap<AstId, crate::elaborator::sem::types::MethodDispatch> =
         IndexMap::default();
-    let mut coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice> =
+    let mut coercions: IndexMap<AstId, crate::elaborator::sem::types::CoercionChoice> =
         IndexMap::default();
-    let mut desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind> =
+    let mut desugars: IndexMap<AstId, crate::elaborator::sem::types::DesugarKind> =
         IndexMap::default();
     for (_module_source, sem) in &mut state.module_semantics {
         references.extend(std::mem::take(&mut sem.bindings.references));
         locals.extend(std::mem::take(&mut sem.bindings.local_symbols));
         local_types.extend(std::mem::take(&mut sem.types.local_types));
-        // The body-level annotation maps are already keyed by `SymbolKey`
-        // (`(ModuleSource, AstId)`), so the per-module maps merge directly
-        // into the flat Semantics maps without re-keying.
+        // All body-level maps are keyed by globally-unique `AstId`, so the
+        // per-module maps merge into the flat Semantics maps directly —
+        // entries can never collide across modules.
         expression_types.extend(std::mem::take(&mut sem.types.expression_types));
         method_dispatch.extend(std::mem::take(&mut sem.types.method_dispatch));
         coercions.extend(std::mem::take(&mut sem.types.coercions));
@@ -1030,6 +1053,11 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // it onto `Semantics` for the diagnostic emitter and LSP.
     let liveness = std::mem::take(&mut state.liveness);
 
+    let space_modules = load_result
+        .modules
+        .iter()
+        .map(|(ms, m)| (m.ast_id_space(), ms.clone()))
+        .collect();
     Semantics {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
@@ -1038,6 +1066,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         interner,
         ast_indices,
         state: Some(state),
+        space_modules,
         references,
         locals,
         local_types,
