@@ -168,6 +168,19 @@ shapes.
 
 ### Increment 6.1 — value_fold (env-free + env-bound constant folding, store_load_forward)
 
+Landed so far: the literal-read slice. `store_load_forward` was
+generalized from `Local` reads to any value-position read whose
+`ValueKind` is a literal, so `FieldAccess` reads the builder seeded
+(`obj.f = 5; … obj.f …`, `let x = S { f: 5 }; … x.f …`) now fold. This
+moves field store→load forwarding off `const_folding`'s flow-sensitive
+`field_env` walk onto the shared ValueGraph. The smart-constructor
+arithmetic folding below is the remaining slice; it is deferred until it
+can _replace_ (not duplicate) `const_folding`'s arithmetic, since
+`peephole`'s env-free `const_fold` already folds literal arithmetic
+before the graph is built and the flow-sensitive walker folds the
+env-bound case — adding graph-side folding now would be redundant work
+with byte-churn risk and no observable win.
+
 ValuePool smart constructors. `binary` / `unary` / `cast` / `select`
 gain folding variants that the builder calls with the result type's
 `PrimitiveType` (from the Skel node's `type_id`):
