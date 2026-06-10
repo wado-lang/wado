@@ -751,7 +751,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 FlagsInfo {
                                     type_id: flags_type,
                                     members,
-                                    module_source: module_source.clone(),
                                 },
                             );
                     }

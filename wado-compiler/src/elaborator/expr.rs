@@ -429,14 +429,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // issue #1342). Reify produces the const's TIR under
         // `with_const_module_perspective(const_module)`, so it does not
         // depend on these consumer-side entries.
-        if let Some((const_module, type_id, const_expr)) = self
+        if let Some((_const_module, type_id, const_expr)) = self
             .sem
             .decls
             .associated_constants
             .get(&ident.name)
             .cloned()
         {
-            let _ = const_module;
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
             self.resolve_expr(&const_expr, ctx, Some(type_id));
@@ -457,12 +456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|(_, c)| c.name == suffix)
                     .map(|(i, c)| (i, c.clone()))
                 {
-                    self.record_qualified_case(
-                        ident,
-                        prefix,
-                        &variant_info.module_source,
-                        case_data.ast_id,
-                    );
+                    self.record_qualified_case(ident, prefix, case_data.ast_id);
                     // Unit variant - payload must be unit type
                     let payload_is_unit = matches!(
                         self.tysys.type_table.borrow().get(case_data.payload),
@@ -513,12 +507,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(enum_info) = self.lookup_enum_case(prefix).cloned()
                 && let Some(case_data) = enum_info.find_case(suffix).cloned()
             {
-                self.record_qualified_case(
-                    ident,
-                    prefix,
-                    &enum_info.module_source,
-                    case_data.ast_id,
-                );
+                self.record_qualified_case(ident, prefix, case_data.ast_id);
                 // Use canonical name (not import alias) for consistent TypeId interning
                 let enum_type = self
                     .tysys
@@ -539,7 +528,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|m| m.name == suffix)
                     .cloned()
             {
-                self.record_qualified_case(ident, prefix, &flags_info.module_source, member.ast_id);
+                self.record_qualified_case(ident, prefix, member.ast_id);
                 // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
                 return flags_info.type_id;
             }
@@ -1101,7 +1090,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
-                    self.record_reference_to_decl(use_id, &module_source, *fid);
+                    self.record_reference_to_def(use_id, *fid);
                     return;
                 }
             }
@@ -2922,7 +2911,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .unwrap_or_default();
         for (use_id, def_id) in field_refs {
-            self.record_reference_to_decl(use_id, &struct_module_source, def_id);
+            self.record_reference_to_def(use_id, def_id);
         }
 
         // Resolve field expressions, converting tuple literals to arrays when needed.

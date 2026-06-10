@@ -1131,11 +1131,11 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    check_function_stores_sem(sem, src, func, annotations, &mut out);
+                    check_function_stores_sem(sem, func, annotations, &mut out);
                 }
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        check_function_stores_sem(sem, src, method, annotations, &mut out);
+                        check_function_stores_sem(sem, method, annotations, &mut out);
                     }
                 }
                 _ => {}
@@ -1147,7 +1147,6 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
 
 fn check_function_stores_sem(
     sem: &Semantics,
-    _module: &ModuleSource,
     func: &Function,
     annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
     out: &mut Vec<StoresError>,
@@ -1301,13 +1300,12 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
     let Some(state) = sem.state.as_ref() else {
         return;
     };
-    let walk = |src: &ModuleSource,
-                annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
+    let walk = |annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
                 params: &[crate::ast::Param],
                 out: &mut Vec<DefaultPurityError>| {
         for param in params {
             if let Some(default) = &param.default {
-                purity_walk_default(sem, src, annotations, index, default, out);
+                purity_walk_default(sem, annotations, index, default, out);
             }
         }
     };
@@ -1319,10 +1317,10 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
         let annotations = state.module_semantics.get(src).map(|m| &m.types);
         for item in &module.items {
             match item {
-                Item::Function(func) => walk(src, annotations, &func.params, out),
+                Item::Function(func) => walk(annotations, &func.params, out),
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        walk(src, annotations, &method.params, out);
+                        walk(annotations, &method.params, out);
                     }
                 }
                 Item::Trait(trait_decl) => {
@@ -1333,13 +1331,13 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
                     // default's calls leave no `references` edge for the walker
                     // to flag until that annotation lands.
                     for method in &trait_decl.methods {
-                        walk(src, annotations, &method.params, out);
+                        walk(annotations, &method.params, out);
                     }
                 }
                 Item::Struct(struct_decl) => {
                     for field in &struct_decl.fields {
                         if let Some(default) = &field.default {
-                            purity_walk_default(sem, src, annotations, index, default, out);
+                            purity_walk_default(sem, annotations, index, default, out);
                         }
                     }
                 }
@@ -1351,7 +1349,6 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
 
 fn purity_walk_default(
     sem: &Semantics,
-    _module: &ModuleSource,
     annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
     index: &EffectIndex,
     default: &Expr,

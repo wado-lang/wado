@@ -413,7 +413,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(method_ast_id) =
                         self.find_impl_method_ast_id(&method_module, prefix, suffix)
                     {
-                        self.record_reference_to_decl(suffix_seg.id, &method_module, method_ast_id);
+                        self.record_reference_to_def(suffix_seg.id, method_ast_id);
                     }
                 }
                 // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
@@ -648,12 +648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Find the case by name
                 if let Some((_case_index, case_data)) = case_match {
-                    self.record_qualified_case(
-                        ident,
-                        &prefix_owned,
-                        &variant_info.module_source,
-                        case_data.ast_id,
-                    );
+                    self.record_qualified_case(ident, &prefix_owned, case_data.ast_id);
                     // Each variant case has exactly one payload.
                     // Unit variants expect 0 args, non-unit variants expect 1 arg.
                     let payload_is_unit = matches!(
@@ -798,11 +793,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .find(|(_, c)| c.name == method_name)
                             .map(|(i, c)| (i, c.clone()));
                         if let Some((_case_index, case_data)) = case_match {
-                            self.record_namespaced_case(
-                                ident,
-                                &variant_info.module_source,
-                                case_data.ast_id,
-                            );
+                            self.record_namespaced_case(ident, case_data.ast_id);
                             let payload_is_unit = matches!(
                                 self.tysys.type_table.borrow().get(case_data.payload),
                                 ResolvedType::Unit

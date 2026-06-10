@@ -391,21 +391,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
-    /// Record a use→def reference where the defining declaration is
-    /// identified by its `(module, ast_id)` pair. Convenience over
-    /// [`Self::record_reference_to_def`] for call sites that would
-    /// otherwise construct a [`AstId`](crate::ast::AstId) inline — keeps `AstId::new`
-    /// confined to a single place.
-    pub(super) fn record_reference_to_decl(
-        &mut self,
-        use_id: crate::ast::AstId,
-        decl_module: &ModuleSource,
-        decl_ast_id: crate::ast::AstId,
-    ) {
-        let _ = decl_module;
-        self.record_reference_to_def(use_id, decl_ast_id);
-    }
-
     /// Record that an identifier resolved to a declared symbol reachable from
     /// the current module under `name` (local item, imported item, imported
     /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
@@ -425,7 +410,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Record use→def edges for a `TypeName::CaseName` qualified path
     /// expression. The prefix segment (`TypeName`) is resolved by name in
     /// the current module's scope; the suffix segment (`CaseName`) points
-    /// directly at `(case_module, case_ast_id)`.
+    /// directly at `case_ast_id` (its module is intrinsic to the id).
     ///
     /// Used for variant cases, enum cases, and flags members reached via
     /// a two-segment qualified ident.
@@ -433,14 +418,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &mut self,
         ident: &crate::ast::IdentExpr,
         type_name: &str,
-        case_module: &ModuleSource,
         case_ast_id: crate::ast::AstId,
     ) {
         if let Some(prefix_seg) = ident.segments.first() {
             self.record_item_reference_by_name(prefix_seg.id, type_name);
         }
         if let Some(suffix_seg) = ident.segments.get(1) {
-            self.record_reference_to_decl(suffix_seg.id, case_module, case_ast_id);
+            self.record_reference_to_def(suffix_seg.id, case_ast_id);
         }
     }
 
@@ -450,11 +434,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn record_namespaced_case(
         &mut self,
         ident: &crate::ast::IdentExpr,
-        case_module: &ModuleSource,
         case_ast_id: crate::ast::AstId,
     ) {
         if let Some(seg) = ident.segments.get(2) {
-            self.record_reference_to_decl(seg.id, case_module, case_ast_id);
+            self.record_reference_to_def(seg.id, case_ast_id);
         }
     }
 

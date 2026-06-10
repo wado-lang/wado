@@ -111,9 +111,6 @@ pub(super) struct FlagsMemberData {
 pub(crate) struct FlagsInfo {
     pub(super) type_id: TypeId,
     pub(super) members: Vec<FlagsMemberData>,
-    /// Module source that owns this flags declaration. Used to build the symbol coordinate
-    /// entries for use->def references pointing at individual members.
-    pub(super) module_source: ModuleSource,
 }
 
 /// Resource info: module source and method names

@@ -1265,11 +1265,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         {
                             // Record pattern's case-name identifier -> enum case decl
                             if let Some(id) = name_id {
-                                self.record_reference_to_decl(
-                                    *id,
-                                    &enum_info.module_source,
-                                    case_data.ast_id,
-                                );
+                                self.record_reference_to_def(*id, case_data.ast_id);
                             }
                             // Enum case carries no payload — no binding.
                             return Vec::new();
@@ -1317,11 +1313,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .find(|c| c.name == normalized_variant_name)
                         .cloned()
                 {
-                    self.record_reference_to_decl(
-                        *id,
-                        &variant_info.module_source,
-                        case_data.ast_id,
-                    );
+                    self.record_reference_to_def(*id, case_data.ast_id);
                 }
 
                 // Each variant case has exactly one payload type.

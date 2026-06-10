@@ -91,7 +91,7 @@ pub(crate) fn compute(
             match item {
                 Item::Function(func) => {
                     let key = func.id;
-                    graph.add_function_edges(source, func, references, &key);
+                    graph.add_function_edges(func, references, &key);
                     if func.is_export
                         || has_export_attr(func)
                         || world_export_names.contains(&func.name)
@@ -112,7 +112,7 @@ pub(crate) fn compute(
                 }
                 Item::Global(global) => {
                     let key = global.id;
-                    graph.add_expr_edges(source, &global.initializer, references, &key);
+                    graph.add_expr_edges(&global.initializer, references, &key);
                     if user && !module_allows_dead && !attrs_allow_dead_code(&global.attributes) {
                         graph.report_candidates.push(key);
                     }
@@ -130,7 +130,7 @@ pub(crate) fn compute(
                     let key = struct_decl.id;
                     for field in &struct_decl.fields {
                         if let Some(default) = &field.default {
-                            graph.add_expr_edges(source, default, references, &key);
+                            graph.add_expr_edges(default, references, &key);
                             has_default = true;
                         }
                     }
@@ -141,7 +141,7 @@ pub(crate) fn compute(
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
                         let key = method.id;
-                        graph.add_function_edges(source, method, references, &key);
+                        graph.add_function_edges(method, references, &key);
                         // Slice 1: methods are live production intermediaries.
                         graph.seed_export(key);
                     }
@@ -152,7 +152,7 @@ pub(crate) fn compute(
                             continue;
                         }
                         let key = method.id;
-                        graph.add_function_edges(source, method, references, &key);
+                        graph.add_function_edges(method, references, &key);
                         graph.seed_export(key);
                     }
                 }
@@ -163,7 +163,7 @@ pub(crate) fn compute(
                     // rather than live, so genuinely dead production code is not
                     // masked by a lingering test reference.
                     let key = test.id;
-                    graph.add_block_edges(source, &test.body, references, &key);
+                    graph.add_block_edges(&test.body, references, &key);
                     graph.seed_test(key);
                 }
                 _ => {}
@@ -201,13 +201,12 @@ impl Graph {
 
     fn add_function_edges(
         &mut self,
-        source: &ModuleSource,
         func: &Function,
         references: &IndexMap<AstId, AstId>,
         owner: &AstId,
     ) {
         if let Some(body) = &func.body {
-            self.add_block_edges(source, body, references, owner);
+            self.add_block_edges(body, references, owner);
         }
         // A parameter default is materialized by reify at every call site that
         // omits the argument, so anything it references is reachable whenever
@@ -215,45 +214,31 @@ impl Graph {
         // precise: a dead function's defaults stay dead too.
         for param in &func.params {
             if let Some(default) = &param.default {
-                self.add_expr_edges(source, default, references, owner);
+                self.add_expr_edges(default, references, owner);
             }
         }
     }
 
     fn add_block_edges(
         &mut self,
-        source: &ModuleSource,
         block: &Block,
         references: &IndexMap<AstId, AstId>,
         owner: &AstId,
     ) {
         let mut collector = IdCollector::default();
         ast::walk_block(&mut collector, block);
-        self.link(source, &collector.ids, references, owner);
+        self.link(&collector.ids, references, owner);
     }
 
-    fn add_expr_edges(
-        &mut self,
-        source: &ModuleSource,
-        expr: &Expr,
-        references: &IndexMap<AstId, AstId>,
-        owner: &AstId,
-    ) {
+    fn add_expr_edges(&mut self, expr: &Expr, references: &IndexMap<AstId, AstId>, owner: &AstId) {
         let mut collector = IdCollector::default();
         ast::walk_expr(&mut collector, expr);
-        self.link(source, &collector.ids, references, owner);
+        self.link(&collector.ids, references, owner);
     }
 
     /// For each id in the owner's body that resolves to a definition, add an
     /// `owner -> def` edge.
-    fn link(
-        &mut self,
-        source: &ModuleSource,
-        ids: &[AstId],
-        references: &IndexMap<AstId, AstId>,
-        owner: &AstId,
-    ) {
-        let _ = source;
+    fn link(&mut self, ids: &[AstId], references: &IndexMap<AstId, AstId>, owner: &AstId) {
         for &id in ids {
             if let Some(def) = references.get(&id) {
                 self.edges.entry(*owner).or_default().push(*def);

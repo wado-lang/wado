@@ -855,7 +855,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(method_ast_id) =
                 self.find_impl_method_ast_id(&method_module_source, &base_struct_name, method_name)
         {
-            self.record_reference_to_decl(method_id, &method_module_source, method_ast_id);
+            self.record_reference_to_def(method_id, method_ast_id);
         }
 
         let func = FunctionRef {
@@ -1518,7 +1518,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(method_ast_id) =
             self.find_impl_method_ast_id(&struct_module, &struct_name, &static_call.method)
         {
-            self.record_reference_to_decl(static_call.method_id, &struct_module, method_ast_id);
+            self.record_reference_to_def(static_call.method_id, method_ast_id);
         }
 
         let func_ref = FunctionRef {
