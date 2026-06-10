@@ -2933,7 +2933,24 @@ impl Parser {
     // Expression parsing with precedence climbing
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
-        self.parse_assignment_expr()
+        let expr = self.parse_assignment_expr()?;
+        // `matches` is a postfix operator (parsed in `parse_postfix_expr`), so
+        // its scrutinee must be a postfix expression. When a `matches` token
+        // remains after a full expression, the scrutinee was a lower-precedence
+        // form — a cast (`x as T`), a unary (`-x`), or a binary (`a + b`) — that
+        // `matches` cannot bind to, and the default error would be a bare
+        // "expected `;`". Point at the real fix: parenthesize the scrutinee.
+        if self.check(&TokenKind::Matches) {
+            return Err(ParseError {
+                message: "the scrutinee of `matches` must be parenthesized here: \
+                          write `(expr) matches { pattern }`. `matches` binds tighter \
+                          than unary, `as`, and binary operators, so it cannot apply \
+                          to such an expression directly."
+                    .to_owned(),
+                span: self.peek().span,
+            });
+        }
+        Ok(expr)
     }
 
     /// Parse assignment expression: `target = value` or `target op= value`
@@ -5936,6 +5953,26 @@ mod tests {
         let module = parser.parse();
         let errors = parser.take_errors();
         (module, errors)
+    }
+
+    /// `matches` is postfix (binds tighter than unary/cast/binary), so its
+    /// scrutinee must be a postfix expression. A lower-precedence scrutinee
+    /// like `x as i32` strands the `matches` token; the parser should guide
+    /// the user to parenthesize the scrutinee rather than emit a bare
+    /// "expected `;`".
+    #[test]
+    fn test_matches_on_low_precedence_scrutinee_suggests_parens() {
+        for src in [
+            "fn r() -> bool { return x as i32 matches { 0 }; }",
+            "fn r() -> bool { return x as i32 matches { 0 } }",
+        ] {
+            let err = parse(src).unwrap_err();
+            assert!(
+                err.message.contains("parenthe"),
+                "expected a parenthesization hint, got: {}",
+                err.message
+            );
+        }
     }
 
     #[test]
