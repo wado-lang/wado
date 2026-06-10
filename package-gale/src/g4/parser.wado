@@ -143,6 +143,35 @@ fn is_valid_not_set_element(elem: &Element) -> bool {
     return false;
 }
 
+/// ANTLR4 restricts `~` in *lexer* rules to a single-character literal, a
+/// char range / char class, or a parenthesised block whose alternatives are
+/// themselves such set elements. A rule reference, the wildcard (`~.`), a
+/// multi-character literal, or an EBNF-suffixed element is rejected. Spec:
+/// `vendor/antlr4/doc/lexer-rules.md` (set complement).
+fn is_valid_lexer_not_element(elem: &LexerElement) -> bool {
+    if let Literal(s) = elem {
+        return s.chars().count() == 1;
+    }
+    if let CharRange(_) = elem {
+        return true;
+    }
+    if let CharClass(_) = elem {
+        return true;
+    }
+    if let Group(alts) = elem {
+        for let alt of alts {
+            if alt.elements.len() != 1 {
+                return false;
+            }
+            if !is_valid_lexer_not_element(&alt.elements[0]) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
 impl G4Parser {
     pub fn new(tokens: List<Token>, chars: List<char>) -> G4Parser {
         return G4Parser {
@@ -1375,8 +1404,21 @@ impl G4Parser {
                 self.advance();
                 self.advance();
                 let end_tok = self.expect(G4Token::StringLit)?;
-                let start_char = first_char(&text).unwrap();
                 let end_text = end_tok.text.to_string();
+                // ANTLR4 requires a single-char endpoint. The start is
+                // guarded above; validate the end too rather than silently
+                // truncating (`'a'..'bc'`) or panicking on empty (`'a'..''`).
+                if end_text.chars().count() != 1 {
+                    let expected: List<String> = ["single-char string literal"];
+                    return Result::<LexerElement, ParseError>::Err(
+                        ParseError::new(
+                            "range endpoint must be a single character",
+                            end_tok.span,
+                            expected,
+                        ),
+                    );
+                }
+                let start_char = first_char(&text).unwrap();
                 let end_char = first_char(&end_text).unwrap();
                 return Result::<LexerElement, ParseError>::Ok(
                     LexerElement::CharRange([start_char, end_char]),
@@ -1419,8 +1461,19 @@ impl G4Parser {
             return Result::<LexerElement, ParseError>::Ok(LexerElement::Group(alts));
         }
         if self.is_kind(G4Token::Tilde) {
+            let tilde_span = self.peek().span;
             self.advance();
             let inner = self.parse_lexer_atom()?;
+            if !is_valid_lexer_not_element(&inner) {
+                let expected: List<String> = ["single char, char set, or block of them"];
+                return Result::<LexerElement, ParseError>::Err(
+                    ParseError::new(
+                        "`~` in a lexer rule must be applied to a single character, a char set, or a parenthesised set — not a rule reference, wildcard, or multi-char literal",
+                        tilde_span,
+                        expected,
+                    ),
+                );
+            }
             return Result::<LexerElement, ParseError>::Ok(
                 LexerElement::Not(LexerNotElement { element: inner }),
             );
