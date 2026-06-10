@@ -53,7 +53,7 @@ These are the highest-risk remaining bugs: a static-prediction edge or a parse/s
 
 ### Unchecked-argument quality nits (non-crash)
 
-- [ ] Malformed lexer command *arguments* are still unchecked (the paren panics are fixed): `pushMode(42)` interns a mode literally named `42`, `-> ;` yields the odd "unknown lexer command ;". Validate the argument is an identifier. `src/g4/parser.wado:1232-1290`
+- [ ] Malformed lexer command _arguments_ are still unchecked (the paren panics are fixed): `pushMode(42)` interns a mode literally named `42`, `-> ;` yields the odd "unknown lexer command ;". Validate the argument is an identifier. `src/g4/parser.wado:1232-1290`
 
 ## Logic duplication
 
