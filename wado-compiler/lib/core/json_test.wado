@@ -12,7 +12,17 @@ use {
 } from "core:serde";
 use { TreeMap } from "core:collections";
 
-use { to_string, to_string_pretty, to_bytes, to_bytes_canonical, to_bytes_pretty, from_string, from_bytes, write_escaped_string, PrettyJsonSerializer } from "core:json";
+use {
+    to_string,
+    to_string_pretty,
+    to_bytes,
+    to_bytes_canonical,
+    to_bytes_pretty,
+    from_string,
+    from_bytes,
+    write_escaped_string,
+    PrettyJsonSerializer,
+} from "core:json";
 
 fn assert_bytes_eq_string(bytes: &List<u8>, s: &String) {
     let expected: List<u8> = s.bytes().collect();
@@ -336,6 +346,168 @@ test "deserialize eof error" {
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::Eof };
 }
 
+test "deserialize i32 range limits" {
+    let max: Result<i32, DeserializeError> = from_string("2147483647");
+    assert max matches { Ok(v) && v == i32::MAX };
+    let min: Result<i32, DeserializeError> = from_string("-2147483648");
+    assert min matches { Ok(v) && v == i32::MIN };
+}
+
+test "deserialize i32 overflow errors" {
+    let over: Result<i32, DeserializeError> = from_string("2147483648");
+    assert over matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let under: Result<i32, DeserializeError> = from_string("-2147483649");
+    assert under matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let wide: Result<i32, DeserializeError> = from_string("99999999999999999999999");
+    assert wide matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+}
+
+test "deserialize i64 range limits" {
+    let max: Result<i64, DeserializeError> = from_string("9223372036854775807");
+    assert max matches { Ok(v) && v == i64::MAX };
+    let min: Result<i64, DeserializeError> = from_string("-9223372036854775808");
+    assert min matches { Ok(v) && v == i64::MIN };
+}
+
+test "deserialize i64 overflow errors" {
+    let over: Result<i64, DeserializeError> = from_string("9223372036854775808");
+    assert over matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let under: Result<i64, DeserializeError> = from_string("-9223372036854775809");
+    assert under matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let wide: Result<i64, DeserializeError> = from_string("92233720368547758080");
+    assert wide matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+}
+
+test "deserialize u64 full range" {
+    let max: Result<u64, DeserializeError> = from_string("18446744073709551615");
+    assert max matches { Ok(v) && v == u64::MAX };
+}
+
+test "deserialize u64 overflow errors" {
+    let over: Result<u64, DeserializeError> = from_string("18446744073709551616");
+    assert over matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let wide: Result<u64, DeserializeError> = from_string("184467440737095516150");
+    assert wide matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+}
+
+test "deserialize u32 overflow errors" {
+    let over: Result<u32, DeserializeError> = from_string("4294967296");
+    assert over matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let wide: Result<u32, DeserializeError> = from_string("99999999999999999999");
+    assert wide matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+}
+
+test "deserialize integer from scientific notation" {
+    let a: Result<i32, DeserializeError> = from_string("1e2");
+    assert a matches { Ok(v) && v == 100 };
+    let b: Result<i64, DeserializeError> = from_string("1.5e3");
+    assert b matches { Ok(v) && v == 1500 };
+}
+
+test "deserialize scientific notation overflow errors" {
+    let a: Result<i32, DeserializeError> = from_string("3e9");
+    assert a matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let b: Result<i64, DeserializeError> = from_string("1e30");
+    assert b matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let c: Result<u64, DeserializeError> = from_string("1e30");
+    assert c matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+}
+
+test "deserialize string-encoded scientific overflow errors" {
+    let a: Result<i64, DeserializeError> = from_string(`"1e30"`);
+    assert a matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let b: Result<u64, DeserializeError> = from_string(`"1e30"`);
+    assert b matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+}
+
+test "deserialize surrogate pair" {
+    let emoji: Result<String, DeserializeError> = from_string(`"\\uD83D\\uDE00"`);
+    assert emoji matches { Ok(v) && v == "😀" };
+    let clef: Result<String, DeserializeError> = from_string(`"\\uD834\\uDD1E"`);
+    assert clef matches { Ok(v) && v == "𝄞" };
+}
+
+test "deserialize unpaired surrogate errors" {
+    let lone_high: Result<String, DeserializeError> = from_string(`"\\uD800"`);
+    assert lone_high matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    let lone_low: Result<String, DeserializeError> = from_string(`"\\uDC00"`);
+    assert lone_low matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    let no_pair: Result<String, DeserializeError> = from_string(`"\\uD800x"`);
+    assert no_pair matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+test "deserialize i128 range limits" {
+    let max: Result<i128, DeserializeError> = from_string("170141183460469231731687303715884105727");
+    assert max matches { Ok(_) };
+    if let Ok(v) = max {
+        assert to_string(&v) matches { Ok(s) && s == `"170141183460469231731687303715884105727"` };
+    }
+    let min: Result<i128, DeserializeError> = from_string("-170141183460469231731687303715884105728");
+    assert min matches { Ok(_) };
+    if let Ok(v) = min {
+        assert to_string(&v) matches { Ok(s) && s == `"-170141183460469231731687303715884105728"` };
+    }
+}
+
+test "deserialize i128 overflow errors" {
+    let over: Result<i128, DeserializeError> = from_string("170141183460469231731687303715884105728");
+    assert over matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let under: Result<i128, DeserializeError> = from_string("-170141183460469231731687303715884105729");
+    assert under matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let str_over: Result<i128, DeserializeError> = from_string(`"170141183460469231731687303715884105728"`);
+    assert str_over matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+}
+
+test "deserialize i128 rejects non-numeric input" {
+    let arr: Result<i128, DeserializeError> = from_string("[]");
+    assert arr matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    let dash: Result<i128, DeserializeError> = from_string(`"-"`);
+    assert dash matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+    let empty: Result<i128, DeserializeError> = from_string(`""`);
+    assert empty matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+}
+
+test "deserialize u128 full range" {
+    let max: Result<u128, DeserializeError> = from_string("340282366920938463463374607431768211455");
+    assert max matches { Ok(_) };
+    if let Ok(v) = max {
+        assert to_string(&v) matches { Ok(s) && s == `"340282366920938463463374607431768211455"` };
+    }
+}
+
+test "deserialize u128 overflow and negative errors" {
+    let over: Result<u128, DeserializeError> = from_string("340282366920938463463374607431768211456");
+    assert over matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let neg: Result<u128, DeserializeError> = from_string("-1");
+    assert neg matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+}
+
+test "deserialize f64 keeps scale when dropping excess fraction digits" {
+    let r: Result<f64, DeserializeError> = from_string("1234567890.12345678901234567890");
+    assert r matches { Ok(v) && 1234567890.0 < v < 1234567891.0 };
+}
+
+test "deserialize f64 long integer part with fraction" {
+    let r: Result<f64, DeserializeError> = from_string("12345678901234567890123.5");
+    assert r matches { Ok(v) && 12000000000000000000000.0 < v < 13000000000000000000000.0 };
+}
+
+test "serialize i64 beyond safe integer range as string" {
+    let big: i64 = 9007199254740993;
+    assert to_string(&big) matches { Ok(s) && s == `"9007199254740993"` };
+    let neg: i64 = -9007199254740993;
+    assert to_string(&neg) matches { Ok(s) && s == `"-9007199254740993"` };
+    let safe: i64 = 9007199254740991;
+    assert to_string(&safe) matches { Ok(s) && s == "9007199254740991" };
+}
+
+test "serialize u64 beyond safe integer range as string" {
+    let big: u64 = 18446744073709551615;
+    assert to_string(&big) matches { Ok(s) && s == `"18446744073709551615"` };
+    let safe: u64 = 9007199254740991;
+    assert to_string(&safe) matches { Ok(s) && s == "9007199254740991" };
+}
+
 struct CanonInner {
     z: i32,
     a: i32,
@@ -394,7 +566,9 @@ test "to_bytes_canonical sorts struct fields" {
 }
 
 test "to_bytes_canonical sorts nested struct fields recursively" {
-    let o = CanonOuter { m: CanonInner { z: 1, a: 2 } };
+    let o = CanonOuter {
+        m: CanonInner { z: 1, a: 2 },
+    };
     let r = to_bytes_canonical(&o);
     assert r matches { Ok(_) };
     if let Ok(b) = r {

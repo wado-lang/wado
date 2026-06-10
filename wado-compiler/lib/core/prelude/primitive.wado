@@ -202,7 +202,15 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
 }
 
 /// Write digits of a u64 value (as raw i64 bits) in a power-of-2 base.
-fn write_u64_base_digits(arr: &mut Array<u8>, offset: i32, val_i64: i64, digit_count: i32, bits_per_digit: i32, mask: i32, upper: bool) {
+fn write_u64_base_digits(
+    arr: &mut Array<u8>,
+    offset: i32,
+    val_i64: i64,
+    digit_count: i32,
+    bits_per_digit: i32,
+    mask: i32,
+    upper: bool,
+) {
     let mask64 = mask as i64;
     let mut pos = offset + digit_count;
     if val_i64 == 0 {
@@ -906,7 +914,15 @@ impl u64 {
         let mask = base - 1;
         let digit_count = count_digits_u64_base(val_i64, bits_per_digit);
         let offset = f.prepare_int_write(false, prefix, digit_count);
-        write_u64_base_digits(&mut f.buf.internal_raw_bytes(), offset, val_i64, digit_count, bits_per_digit, mask, upper);
+        write_u64_base_digits(
+            &mut f.buf.internal_raw_bytes(),
+            offset,
+            val_i64,
+            digit_count,
+            bits_per_digit,
+            mask,
+            upper,
+        );
     }
 
     fn fmt_into(&self, f: &mut Formatter) {
@@ -1253,6 +1269,12 @@ impl f64 {
     pub const INFINITY: f64 = 1.0 / 0.0;
     pub const NEG_INFINITY: f64 = -1.0 / 0.0;
     pub const NAN: f64 = 0.0 / 0.0;
+    /// The largest integer exactly representable in f64: 2^53 - 1.
+    /// Mirrors JS `Number.MAX_SAFE_INTEGER`.
+    pub const MAX_SAFE_INTEGER: f64 = 9007199254740991.0;
+    /// The smallest integer exactly representable in f64: -(2^53 - 1).
+    /// Mirrors JS `Number.MIN_SAFE_INTEGER`.
+    pub const MIN_SAFE_INTEGER: f64 = -9007199254740991.0;
 
     fn fmt_into(&self, f: &mut Formatter) {
         if f.precision >= 0 {
