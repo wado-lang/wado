@@ -96,6 +96,20 @@ impl FunctionTranslator<'_, '_> {
             if let Some(id) = self.resolve_newtype_method(module_source, method_info) {
                 return Some(id);
             }
+            // Concrete-impl fallback: `impl Trait for List<String>` defines
+            // its methods under the AST's simple argument spelling, while a
+            // monomorphized call site qualifies the arguments. Retry with
+            // the qualifiers stripped.
+            let simplified = crate::name::simplify_generic_type_args(&method_info.struct_name);
+            if simplified != method_info.struct_name {
+                let mut simple_info = method_info.clone();
+                simple_info.struct_name = simplified;
+                let mangled = simple_info.to_mangled_name();
+                let fq3 = format!("{module_source}/{mangled}");
+                if let Some(id) = self.ctx.func_map.get(&fq3) {
+                    return Some(id.clone());
+                }
+            }
         }
         None
     }
