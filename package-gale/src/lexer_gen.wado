@@ -155,16 +155,40 @@ fn collect_lits_from_element(elem: &Element, seen: &mut List<String>, result: &m
     }
 }
 
-pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {
-    let mut idx = 0;
-    // Mirror ANTLR4's SemanticPipeline.assignLexerTokenTypes: non-fragment
-    // rules WITHOUT a `more` / `type(...)` command get the low token types in
-    // declaration order, then the `more` / `type` rules are numbered. A rule
-    // that always `more`s never produces a parser-visible token, so ANTLR4
-    // pushes its type to the back; matching that order keeps the `<N>` ids in
-    // `to_lexer_string` output identical to the reference tool.
+/// One position in the canonical token numbering: slot `i` of
+/// `token_slot_order` is the token whose kind id is `i`.
+pub variant TokenSlot {
+    /// Index into the lexer-rule list (non-fragment).
+    Rule(i32),
+    /// The `TK_EOF` sentinel.
+    Eof,
+    /// The `TK_ERROR` no-match sentinel (absent when a user rule named
+    /// `ERROR` claims the identifier).
+    Error,
+    /// Index into the literal-token list.
+    Lit(i32),
+}
+
+/// The canonical token numbering, shared by every emitter that indexes by
+/// token kind: `gen_token_constants` (the `TK_*` globals), the highlight
+/// `defaults` capture table (indexed `defaults[kind]` at runtime), and the
+/// ATN builder's `build_token_kinds`. Keeping them on one source prevents
+/// the tables from drifting out of alignment.
+///
+/// Order mirrors ANTLR4's SemanticPipeline.assignLexerTokenTypes:
+/// non-fragment rules WITHOUT a `more` / `type(...)` command get the low
+/// token types in declaration order, then the `more` / `type` rules are
+/// numbered (a rule that always `more`s never produces a parser-visible
+/// token, so ANTLR4 pushes its type to the back). Then `TK_EOF`, then the
+/// `TK_ERROR` sentinel — unless a user rule named `ERROR` claims the same
+/// identifier (`ERROR : .;` is itself a catch-all aligned with the
+/// sentinel's role; `EOF` stays uncollapsed as an ANTLR4-reserved
+/// built-in). Literal tokens close the numbering.
+pub fn token_slot_order(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> List<TokenSlot> {
+    let mut slots: List<TokenSlot> = [];
     for let want_deferred of [false, true] {
-        for let rule of lexer_rules {
+        for let mut i = 0; i < lexer_rules.len(); i += 1 {
+            let rule = &lexer_rules[i];
             if rule.is_fragment {
                 continue;
             }
@@ -172,32 +196,38 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
             if deferred != want_deferred {
                 continue;
             }
-            let name = `TK_{rule.name}`;
-            let init = `{idx}`;
-            let mut g = GlobalSpec::new(&name, "i32", &init);
-            if rule.is_virtual {
-                g.set_trailing_comment(&"virtual");
-            }
-            g.emit(w);
-            idx += 1;
+            slots.push(TokenSlot::Rule(i));
         }
     }
-    let eof_init = `{idx}`;
-    GlobalSpec::new("TK_EOF", "i32", &eof_init).emit(w);
-    idx += 1;
-    // A user rule named `ERROR` claims the same identifier as Gale's
-    // no-match sentinel; let the rule own it — `ERROR : .;` is itself a
-    // catch-all aligned with the sentinel's role. `EOF` stays uncollapsed
-    // (ANTLR4-reserved built-in; collision should be a g4-parse-layer
-    // diagnostic, not a silent merge).
+    slots.push(TokenSlot::Eof);
     if !rule_name_exists(lexer_rules, &"ERROR") {
-        let err_init = `{idx}`;
-        GlobalSpec::new("TK_ERROR", "i32", &err_init).emit(w);
-        idx += 1;
+        slots.push(TokenSlot::Error);
     }
-    for let lit of lit_tokens {
+    for let mut i = 0; i < lit_tokens.len(); i += 1 {
+        slots.push(TokenSlot::Lit(i));
+    }
+    return slots;
+}
+
+pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {
+    let slots = token_slot_order(lexer_rules, lit_tokens);
+    let mut idx = 0;
+    for let slot of &slots {
         let init = `{idx}`;
-        GlobalSpec::new(&lit.const_name, "i32", &init).emit(w);
+        match *slot {
+            Rule(ri) => {
+                let rule = &lexer_rules[ri];
+                let name = `TK_{rule.name}`;
+                let mut g = GlobalSpec::new(&name, "i32", &init);
+                if rule.is_virtual {
+                    g.set_trailing_comment(&"virtual");
+                }
+                g.emit(w);
+            },
+            Eof => GlobalSpec::new("TK_EOF", "i32", &init).emit(w),
+            Error => GlobalSpec::new("TK_ERROR", "i32", &init).emit(w),
+            Lit(li) => GlobalSpec::new(&lit_tokens[li].const_name, "i32", &init).emit(w),
+        }
         idx += 1;
     }
     // `-> type(N)` (numeric) assigns the emitted token an explicit ANTLR4

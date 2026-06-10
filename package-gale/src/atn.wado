@@ -23,7 +23,7 @@
 use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
 use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
 use { lower, element_is_self_ref } from "./lower.wado";
-use { collect_literal_tokens, LitToken } from "./lexer_gen.wado";
+use { collect_literal_tokens, token_slot_order, LitToken } from "./lexer_gen.wado";
 use { literal_const_name } from "./gen_util.wado";
 use {
     ATN_BLOB_MAGIC,
@@ -193,46 +193,23 @@ impl AtnBuilder {
     }
 }
 
-/// Build the name -> token-kind-id map, mirroring
-/// `lexer_gen::gen_token_constants` numbering exactly so ATN atom labels
-/// match the `TK_*` constants the generated parser uses: non-deferred
-/// lexer rules first (declaration order), then deferred (`more`/`type`)
-/// rules, then `TK_EOF`, then `TK_ERROR` (unless a rule named `ERROR`
-/// exists), then literal tokens. Returns the map and the total token
-/// count. Numeric `type(N)` overrides are not modelled yet (no fixture
-/// needs them in the ATN path).
+/// Build the name -> token-kind-id map, driven by the same
+/// `lexer_gen::token_slot_order` that numbers the generated `TK_*`
+/// constants, so ATN atom labels match them by construction. Returns the
+/// map and the total token count. Numeric `type(N)` overrides are not
+/// modelled yet (no fixture needs them in the ATN path).
 pub fn build_token_kinds(grammar: &Grammar) -> [TreeMap<String, i32>, i32] {
     let mut map = TreeMap::<String, i32>::new();
-    let mut idx = 0;
-    for let want_deferred of [false, true] {
-        for let rule of &grammar.lexer_rules {
-            if rule.is_fragment {
-                continue;
-            }
-            let deferred = rule.more || rule.type_override matches { Some(_) };
-            if deferred != want_deferred {
-                continue;
-            }
-            map[`TK_{rule.name}`] = idx;
-            idx += 1;
-        }
-    }
-    map["TK_EOF"] = idx;
-    idx += 1;
-    let mut error_rule_exists = false;
-    for let rule of &grammar.lexer_rules {
-        if rule.name == "ERROR" {
-            error_rule_exists = true;
-            break;
-        }
-    }
-    if !error_rule_exists {
-        map["TK_ERROR"] = idx;
-        idx += 1;
-    }
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
-    for let lit of &lit_tokens {
-        map[lit.const_name] = idx;
+    let slots = token_slot_order(&grammar.lexer_rules, &lit_tokens);
+    let mut idx = 0;
+    for let slot of &slots {
+        match *slot {
+            Rule(ri) => map[`TK_{grammar.lexer_rules[ri].name}`] = idx,
+            Eof => map["TK_EOF"] = idx,
+            Error => map["TK_ERROR"] = idx,
+            Lit(li) => map[lit_tokens[li].const_name] = idx,
+        }
         idx += 1;
     }
     return [map, idx];
