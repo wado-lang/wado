@@ -18,7 +18,6 @@ use crate::token::Span;
 
 use crate::ast::{self, AstVisitor, Expr, Function, Item, Stmt};
 use crate::semantics::Semantics;
-use crate::symbol::SymbolKey;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
 /// Used to select the diagnostic wording (`missing resource` vs `missing effect`).
@@ -345,8 +344,8 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
 /// purity) can borrow a single [`EffectIndex`] view over them. Assembled once
 /// from [`Semantics`] + [`AnnotateState`].
 struct OwnedEffectData {
-    fn_effects: IndexMap<SymbolKey, Vec<EffectRef>>,
-    fn_params: IndexMap<SymbolKey, Vec<TypeId>>,
+    fn_effects: IndexMap<crate::ast::AstId, Vec<EffectRef>>,
+    fn_params: IndexMap<crate::ast::AstId, Vec<TypeId>>,
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     resource_names: IndexSet<(ModuleSource, String)>,
@@ -361,18 +360,18 @@ impl OwnedEffectData {
         // Resolved effect lists, indexed two ways: by the function's
         // declaration key (free calls resolve through `references`) and by
         // `(module, mangled name)` (method dispatch carries a `FunctionRef`).
-        let mut fn_effects: IndexMap<SymbolKey, Vec<EffectRef>> = IndexMap::default();
-        let mut fn_params: IndexMap<SymbolKey, Vec<TypeId>> = IndexMap::default();
+        let mut fn_effects: IndexMap<crate::ast::AstId, Vec<EffectRef>> = IndexMap::default();
+        let mut fn_params: IndexMap<crate::ast::AstId, Vec<TypeId>> = IndexMap::default();
         let mut mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>> =
             IndexMap::default();
         let mut mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
         for (src, module_sem) in &state.module_semantics {
             let types = &module_sem.types;
             for (key, effects) in &types.function_effects {
-                fn_effects.insert(key.clone(), effects.clone());
+                fn_effects.insert(*key, effects.clone());
             }
             for (key, params) in &types.fn_param_types {
-                fn_params.insert(key.clone(), params.clone());
+                fn_params.insert(*key, params.clone());
             }
             for (key, names) in &types.method_names {
                 if let Some(effects) = types.function_effects.get(key) {
@@ -396,10 +395,9 @@ impl OwnedEffectData {
                         resource_names.insert((src.clone(), resource.name.clone()));
                     }
                     Item::Struct(struct_decl) => {
-                        if let Some(field_types) = annotations.and_then(|ann| {
-                            ann.struct_field_types
-                                .get(&SymbolKey::new(src.clone(), struct_decl.id))
-                        }) {
+                        if let Some(field_types) =
+                            annotations.and_then(|ann| ann.struct_field_types.get(&struct_decl.id))
+                        {
                             struct_fields.insert(
                                 (src.clone(), struct_decl.name.clone()),
                                 field_types.clone(),
@@ -470,9 +468,9 @@ impl OwnedEffectData {
 /// The cross-module effect data the body walk consults, assembled once.
 struct EffectIndex<'a> {
     /// Declaration key → resolved effects (free calls resolve via `references`).
-    fn_effects: &'a IndexMap<SymbolKey, Vec<EffectRef>>,
+    fn_effects: &'a IndexMap<crate::ast::AstId, Vec<EffectRef>>,
     /// Declaration key → parameter type ids (for effect-parameter resolution).
-    fn_params: &'a IndexMap<SymbolKey, Vec<TypeId>>,
+    fn_params: &'a IndexMap<crate::ast::AstId, Vec<TypeId>>,
     /// `(module, mangled name)` → effects (method / static dispatch).
     mangled_index: &'a IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     /// `(module, mangled name)` → parameter type ids.
@@ -504,7 +502,7 @@ fn check_function_effects_sem(
     if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_") {
         return;
     }
-    let caller_key = SymbolKey::new(module.clone(), func.id);
+    let caller_key = func.id;
 
     // Per-module annotations carry the dispatch facts and signature types that
     // have no flattened `Semantics` mirror (static-method dispatch,
@@ -527,7 +525,7 @@ fn check_function_effects_sem(
     if let Some(ann) = annotations {
         add_signature_resources(
             ann,
-            &caller_key,
+            caller_key,
             &sem.types,
             index.struct_fields,
             index.variant_payloads,
@@ -559,7 +557,6 @@ fn check_function_effects_sem(
     }
 
     let mut walker = SemEffectWalker {
-        module,
         sem,
         annotations,
         index,
@@ -595,10 +592,7 @@ fn build_propagation_closure_sem(
                 Item::Resource(decl) => (decl.id, &decl.name, true),
                 _ => continue,
             };
-            let Some(ops) = annotations
-                .effect_ops
-                .get(&SymbolKey::new(src.clone(), decl_id))
-            else {
+            let Some(ops) = annotations.effect_ops.get(&decl_id) else {
                 continue;
             };
             let mut refs: IndexSet<EffectRef> = IndexSet::default();
@@ -717,14 +711,19 @@ fn expand_through_closure(
 /// too.
 fn add_signature_resources(
     annotations: &crate::elaborator::sem::types::TypeAnnotations,
-    fn_key: &SymbolKey,
+    fn_key: crate::ast::AstId,
     type_table: &TypeTable,
     struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
     variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
     out: &mut IndexSet<EffectRef>,
 ) {
     let mut visited = TypeSet::default();
-    for &type_id in annotations.fn_param_types.get(fn_key).into_iter().flatten() {
+    for &type_id in annotations
+        .fn_param_types
+        .get(&fn_key)
+        .into_iter()
+        .flatten()
+    {
         collect_resource_refs(
             type_id,
             type_table,
@@ -734,7 +733,7 @@ fn add_signature_resources(
             &mut visited,
         );
     }
-    if let Some(&return_type) = annotations.fn_return_types.get(fn_key) {
+    if let Some(&return_type) = annotations.fn_return_types.get(&fn_key) {
         collect_resource_refs(
             return_type,
             type_table,
@@ -744,7 +743,7 @@ fn add_signature_resources(
             &mut visited,
         );
     }
-    if let Some(&task_return) = annotations.function_task_returns.get(fn_key) {
+    if let Some(&task_return) = annotations.function_task_returns.get(&fn_key) {
         collect_resource_refs(
             task_return,
             type_table,
@@ -776,7 +775,6 @@ fn callee_name(callee: &Expr) -> &str {
 
 /// Walks a function body, checking that each call's required effects are held.
 struct SemEffectWalker<'a> {
-    module: &'a ModuleSource,
     sem: &'a Semantics,
     annotations: Option<&'a crate::elaborator::sem::types::TypeAnnotations>,
     index: &'a EffectIndex<'a>,
@@ -875,12 +873,7 @@ impl SemEffectWalker<'_> {
             {
                 continue;
             }
-            let Some(arg_type) = self
-                .sem
-                .expression_types
-                .get(&SymbolKey::new(self.module.clone(), arg.id()))
-                .copied()
-            else {
+            let Some(arg_type) = self.sem.expression_types.get(&arg.id()).copied() else {
                 continue;
             };
             let ResolvedType::Function {
@@ -959,10 +952,9 @@ impl AstVisitor for SemEffectWalker<'_> {
         // `method_dispatch` fact for `visit_expr` to consult. Check their
         // declared effects here from the recorded `for_of_iterator` fact.
         if let Stmt::ForOf(for_of) = stmt
-            && let Some(info) = self.annotations.and_then(|ann| {
-                ann.for_of_iterator
-                    .get(&SymbolKey::new(self.module.clone(), for_of.id))
-            })
+            && let Some(info) = self
+                .annotations
+                .and_then(|ann| ann.for_of_iterator.get(&for_of.id))
         {
             for func_ref in [&info.into_iter, &info.next] {
                 let effects = self.index.method_effects(func_ref);
@@ -987,28 +979,27 @@ impl AstVisitor for SemEffectWalker<'_> {
                 // functions also appear in `static_method_dispatch`, so try
                 // `references` first — it is the authoritative free-call edge.)
                 let free = if let Expr::Ident(ident) = &call.callee {
-                    self.sem
-                        .references
-                        .get(&SymbolKey::new(self.module.clone(), ident.id))
-                        .and_then(|def| {
-                            self.index
-                                .fn_effects
-                                .get(def)
-                                .map(|effects| (def.clone(), effects.clone(), ident.name.clone()))
-                        })
+                    self.sem.references.get(&ident.id).and_then(|def| {
+                        self.index
+                            .fn_effects
+                            .get(&def.ast_id)
+                            .map(|effects| (def.clone(), effects.clone(), ident.name.clone()))
+                    })
                 } else {
                     None
                 };
                 if let Some((def, effects, name)) = free {
-                    let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
+                    let params = self
+                        .index
+                        .fn_params
+                        .get(&def.ast_id)
+                        .cloned()
+                        .unwrap_or_default();
                     let resolved = self.resolve_effect_params(&effects, &params, false, &call.args);
                     self.report_missing(&resolved, &name, call.span);
                 } else if let Some(func_ref) = self
                     .annotations
-                    .and_then(|ann| {
-                        ann.static_method_dispatch
-                            .get(&SymbolKey::new(self.module.clone(), call.id))
-                    })
+                    .and_then(|ann| ann.static_method_dispatch.get(&call.id))
                     .map(|dispatch| dispatch.function_ref.clone())
                 {
                     let effects = self.method_effects(&func_ref);
@@ -1029,7 +1020,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 }
             }
             Expr::MethodCall(method_call) => {
-                let call_key = SymbolKey::new(self.module.clone(), method_call.id);
+                let call_key = method_call.id;
                 if let Some(dispatch) = self.sem.method_dispatch.get(&call_key) {
                     let func_ref = dispatch.function_ref.clone();
                     let effects = self.method_effects(&func_ref);
@@ -1040,7 +1031,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-                let call_key = SymbolKey::new(self.module.clone(), static_call.id);
+                let call_key = static_call.id;
                 if let Some(func_ref) = self
                     .annotations
                     .and_then(|ann| ann.static_method_dispatch.get(&call_key))
@@ -1110,16 +1101,13 @@ impl SemEffectWalker<'_> {
             if let Some(type_id) = self
                 .sem
                 .references
-                .get(&SymbolKey::new(self.module.clone(), ident.id))
-                .and_then(|def| self.sem.local_types.get(def))
+                .get(&ident.id)
+                .and_then(|def| self.sem.local_types.get(&def.ast_id))
             {
                 return Some(*type_id);
             }
         }
-        self.sem
-            .expression_types
-            .get(&SymbolKey::new(self.module.clone(), call.callee.id()))
-            .copied()
+        self.sem.expression_types.get(&call.callee.id()).copied()
     }
 }
 
@@ -1164,7 +1152,7 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
 
 fn check_function_stores_sem(
     sem: &Semantics,
-    module: &ModuleSource,
+    _module: &ModuleSource,
     func: &Function,
     annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
     out: &mut Vec<StoresError>,
@@ -1182,7 +1170,7 @@ fn check_function_stores_sem(
     let Some(annotations) = annotations else {
         return;
     };
-    let key = SymbolKey::new(module.clone(), func.id);
+    let key = func.id;
     let Some(param_types) = annotations.fn_param_types.get(&key) else {
         return;
     };
@@ -1205,7 +1193,6 @@ fn check_function_stores_sem(
 
     let stores: IndexSet<String> = func.stores.iter().cloned().collect();
     let mut walker = StoresWalker {
-        module,
         annotations,
         ref_params,
         stores,
@@ -1217,7 +1204,6 @@ fn check_function_stores_sem(
 /// Walks a function body flagging reference parameters that escape without a
 /// matching `stores[param]` declaration.
 struct StoresWalker<'a> {
-    module: &'a ModuleSource,
     annotations: &'a crate::elaborator::sem::types::TypeAnnotations,
     /// Reference (`&T` / `&mut T`) parameter names of the enclosing function.
     ref_params: IndexSet<String>,
@@ -1276,10 +1262,7 @@ impl AstVisitor for StoresWalker<'_> {
                 // assign place recorded by the elaborator (the same fact reify
                 // reads to build `GlobalVarSet`) identifies the global by name.
                 if let Some(param) = self.unstored_ref_param(&assign.value)
-                    && let Some(place) = self
-                        .annotations
-                        .assign_places
-                        .get(&SymbolKey::new(self.module.clone(), assign.target.id()))
+                    && let Some(place) = self.annotations.assign_places.get(&assign.target.id())
                     && let crate::elaborator::sem::types::AssignPlace::Global { name, .. } = place
                 {
                     self.out.push(StoresError {
@@ -1373,14 +1356,13 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
 
 fn purity_walk_default(
     sem: &Semantics,
-    module: &ModuleSource,
+    _module: &ModuleSource,
     annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
     index: &EffectIndex,
     default: &Expr,
     out: &mut Vec<DefaultPurityError>,
 ) {
     let mut walker = PurityWalker {
-        module,
         sem,
         annotations,
         index,
@@ -1392,7 +1374,6 @@ fn purity_walk_default(
 /// Walks a default expression flagging any call to an effectful function (or an
 /// effect-handler install), which would make the default impure.
 struct PurityWalker<'a> {
-    module: &'a ModuleSource,
     sem: &'a Semantics,
     annotations: Option<&'a crate::elaborator::sem::types::TypeAnnotations>,
     index: &'a EffectIndex<'a>,
@@ -1417,8 +1398,8 @@ impl AstVisitor for PurityWalker<'_> {
                 let free = if let Expr::Ident(ident) = &call.callee {
                     self.sem
                         .references
-                        .get(&SymbolKey::new(self.module.clone(), ident.id))
-                        .and_then(|def| self.index.fn_effects.get(def))
+                        .get(&ident.id)
+                        .and_then(|def| self.index.fn_effects.get(&def.ast_id))
                         .map(|effects| (effects.clone(), ident.name.clone()))
                 } else {
                     None
@@ -1427,10 +1408,7 @@ impl AstVisitor for PurityWalker<'_> {
                     self.flag_if_effectful(&effects, &name, call.span);
                 } else if let Some(func_ref) = self
                     .annotations
-                    .and_then(|ann| {
-                        ann.static_method_dispatch
-                            .get(&SymbolKey::new(self.module.clone(), call.id))
-                    })
+                    .and_then(|ann| ann.static_method_dispatch.get(&call.id))
                     .map(|dispatch| dispatch.function_ref.clone())
                 {
                     let effects = self.index.method_effects(&func_ref);
@@ -1438,11 +1416,7 @@ impl AstVisitor for PurityWalker<'_> {
                 }
             }
             Expr::MethodCall(method_call) => {
-                if let Some(dispatch) = self
-                    .sem
-                    .method_dispatch
-                    .get(&SymbolKey::new(self.module.clone(), method_call.id))
-                {
+                if let Some(dispatch) = self.sem.method_dispatch.get(&method_call.id) {
                     let effects = self.index.method_effects(&dispatch.function_ref);
                     self.flag_if_effectful(&effects, &method_call.method, method_call.span);
                 }
@@ -1450,10 +1424,7 @@ impl AstVisitor for PurityWalker<'_> {
             Expr::StaticMethodCall(static_call) => {
                 if let Some(func_ref) = self
                     .annotations
-                    .and_then(|ann| {
-                        ann.static_method_dispatch
-                            .get(&SymbolKey::new(self.module.clone(), static_call.id))
-                    })
+                    .and_then(|ann| ann.static_method_dispatch.get(&static_call.id))
                     .map(|dispatch| dispatch.function_ref.clone())
                 {
                     let effects = self.index.method_effects(&func_ref);

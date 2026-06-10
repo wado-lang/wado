@@ -119,11 +119,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Like [`Self::find_trait_decl_methods`] but also returns the module that
-    /// owns the trait declaration. Callers that resolve a trait *default*
-    /// method body need the owning module: the body's AST nodes belong to it,
-    /// so the per-`AstId` facts the walk records must be keyed under that
-    /// module (via `ann_module_override`), not the impl module that triggered
-    /// the synthesis.
+    /// owns the trait declaration, for callers that need to attribute a trait
+    /// *default* method body to its declaring module (e.g. diagnostics).
+    /// Fact keying needs no module qualifier: the body's nodes carry their
+    /// own globally-unique `AstId`s.
     pub(super) fn find_trait_decl_methods_with_module(
         &self,
         trait_name: &str,

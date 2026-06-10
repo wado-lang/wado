@@ -87,20 +87,15 @@ macro_rules! reify_annotation_accessors {
     ($($name:ident => $map:ident : $val:ty),+ $(,)?) => {
         $(
             fn $name(&self, id: crate::ast::AstId) -> Option<$val> {
-                // Annotation maps are keyed by the canonical `SymbolKey`
-                // (`(ModuleSource, AstId)`); reify swaps
-                // `current_module_source` while walking foreign AST so the
-                // key always names the module the node actually came from.
-                let key = crate::symbol::SymbolKey::new(
-                    self.current_module_source.clone(),
-                    id,
-                );
+                // Annotation maps are keyed by the globally-unique `AstId`
+                // itself; a node names its facts no matter which module's
+                // perspective reify currently has swapped in.
                 for overlay in self.tuple_overlay_stack.iter().rev() {
-                    if let Some(v) = overlay.$map.get(&key) {
+                    if let Some(v) = overlay.$map.get(&id) {
                         return Some(v.clone());
                     }
                 }
-                self.sem.types.$map.get(&key).cloned()
+                self.sem.types.$map.get(&id).cloned()
             }
         )+
     };
@@ -111,11 +106,7 @@ macro_rules! reify_annotation_accessors {
     (base { $($name:ident => $map:ident : $val:ty),+ $(,)? }) => {
         $(
             fn $name(&self, id: crate::ast::AstId) -> Option<$val> {
-                let key = crate::symbol::SymbolKey::new(
-                    self.current_module_source.clone(),
-                    id,
-                );
-                self.sem.types.$map.get(&key).cloned()
+                self.sem.types.$map.get(&id).cloned()
             }
         )+
     };
@@ -204,7 +195,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// this each time it reifies the same `for_of.id` so it consumes the
     /// matching instantiation (a nested inner for-of is instantiated once
     /// per outer element). See [`Self::reify_tuple_for_of`].
-    pub(crate) tuple_overlay_visits: IndexMap<crate::symbol::SymbolKey, usize>,
+    pub(crate) tuple_overlay_visits: IndexMap<crate::ast::AstId, usize>,
     /// Source-level live set. When `Some`, reify skips emitting free
     /// functions and globals whose `SymbolKey` is absent — the dead items
     /// the liveness pass found unreachable from the export boundary, which
@@ -307,13 +298,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// with `Option<UNKNOWN>` and trap WIR translation
     /// ("Null with unresolved Option inner type").
     fn ann_expression_types(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
-        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
         let raw = self
             .tuple_overlay_stack
             .iter()
             .rev()
-            .find_map(|overlay| overlay.expression_types.get(&key).copied())
-            .or_else(|| self.sem.types.expression_types.get(&key).copied())?;
+            .find_map(|overlay| overlay.expression_types.get(&id).copied())
+            .or_else(|| self.sem.types.expression_types.get(&id).copied())?;
         if self.tysys.type_table.borrow().contains_unknown(raw) {
             None
         } else {
@@ -1007,10 +997,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     self.sem
                         .types
                         .function_task_returns
-                        .get(&crate::symbol::SymbolKey::new(
-                            self.current_module_source.clone(),
-                            func.id,
-                        ))
+                        .get(&func.id)
                         .copied()
                         .unwrap_or(return_type),
                 )
@@ -1021,10 +1008,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .sem
                 .types
                 .function_effects
-                .get(&crate::symbol::SymbolKey::new(
-                    self.current_module_source.clone(),
-                    func.id,
-                ))
+                .get(&func.id)
                 .cloned()
                 .unwrap_or_else(|| self.reify_effects(&func.effects)),
             stores: func.stores.clone(),
@@ -1072,8 +1056,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if impl_block.is_synthesize_request {
             return Vec::new();
         }
-        let impl_key =
-            crate::symbol::SymbolKey::new(self.current_module_source.clone(), impl_block.id);
+        let impl_key = impl_block.id;
         let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
             // Annotate did not record facts — the impl block was
             // diagnosed by annotate (e.g. unknown trait reference)
@@ -1121,8 +1104,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let Some(trait_ast) = impl_block.trait_type.as_ref() else {
             return Vec::new();
         };
-        let impl_key =
-            crate::symbol::SymbolKey::new(self.current_module_source.clone(), impl_block.id);
+        let impl_key = impl_block.id;
         let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
             return Vec::new();
         };
@@ -1445,10 +1427,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     self.sem
                         .types
                         .function_task_returns
-                        .get(&crate::symbol::SymbolKey::new(
-                            self.current_module_source.clone(),
-                            func.id,
-                        ))
+                        .get(&func.id)
                         .copied()
                         .unwrap_or(return_type),
                 )
@@ -1459,10 +1438,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .sem
                 .types
                 .function_effects
-                .get(&crate::symbol::SymbolKey::new(
-                    self.current_module_source.clone(),
-                    func.id,
-                ))
+                .get(&func.id)
                 .cloned()
                 .unwrap_or_else(|| self.reify_effects(&func.effects)),
             stores: func.stores.clone(),
@@ -3098,12 +3074,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // binding and body are reified so the `ann_*` accessors see the
         // right per-element facts instead of the truncated base maps.
         let instantiation: Vec<super::sem::types::ElementOverlay> = {
-            let for_of_key =
-                crate::symbol::SymbolKey::new(self.current_module_source.clone(), for_of.id);
-            let visit = self
-                .tuple_overlay_visits
-                .entry(for_of_key.clone())
-                .or_insert(0);
+            let for_of_key = for_of.id;
+            let visit = self.tuple_overlay_visits.entry(for_of_key).or_insert(0);
             let k = *visit;
             *visit += 1;
             self.sem
@@ -4357,11 +4329,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if let Some(default_expr) = default {
                 let expected_field_ty = substitute(self, *raw_ty);
                 // Reify a foreign default under its owning module's
-                // perspective so every per-`AstId` annotation lookup hits the
-                // module the combined walk recorded the default's facts under
-                // (it keyed them via `ann_module_override`). Resolving under
-                // the construction module would read this module's colliding
-                // node and mis-type the synthesized value.
+                // perspective: fact lookups key by the node's own globally-
+                // unique `AstId` (no module qualifier), but the default's
+                // free identifiers and decl lookups still resolve in the
+                // struct module's scope, so the perspective swap remains for
+                // name resolution.
                 let value = if struct_module == self.current_module_source {
                     self.reify_expr(default_expr, ctx, Some(expected_field_ty))
                 } else {
@@ -5290,7 +5262,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let return_type = if let crate::ast::Expr::Block(ref block) = closure.body {
             let ctrl_ctx = super::control_flow::CtrlFlowCtx {
                 expression_types: &self.sem.types.expression_types,
-                module: &self.current_module_source,
                 type_table: &self.tysys.type_table,
             };
             super::control_flow::find_return_type_in_block(ctrl_ctx, block).unwrap_or(body.type_id)
@@ -5937,10 +5908,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .sem
             .types
             .from_call_facts
-            .get(&crate::symbol::SymbolKey::new(
-                self.current_module_source.clone(),
-                caller_id,
-            ))
+            .get(&caller_id)
             .cloned()
             .expect(
                 "resolve_from_call records FromCallFacts at every site reify hits — \
@@ -6001,8 +5969,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // enumeration on `sem.types.handler_bindings`. Reify
             // reifies the handler expression and stitches one
             // `TirHandlerBinding` per recorded effect entry.
-            let binding_key =
-                crate::symbol::SymbolKey::new(self.current_module_source.clone(), binding.id);
+            let binding_key = binding.id;
             let Some(facts) = self.sem.types.handler_bindings.get(&binding_key).cloned() else {
                 // Annotate didn't record this binding — either it
                 // bailed (diagnosed type) or the binding shape is
@@ -6675,8 +6642,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // expr.rs:resolve_from_call) and records `FromCallFacts`
             // under `call.id`. Reify reuses `reify_from_call` so both the
             // ?-op path and this static-call path emit identical TIR.
-            let from_facts_key =
-                crate::symbol::SymbolKey::new(self.current_module_source.clone(), call.id);
+            let from_facts_key = call.id;
             if self.sem.types.from_call_facts.contains_key(&from_facts_key) {
                 return self.reify_from_call(recorded_type, arg_type, arg, span, call.id);
             }

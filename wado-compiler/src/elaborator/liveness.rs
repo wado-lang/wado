@@ -73,7 +73,7 @@ pub(crate) struct Liveness {
 /// reify gating and still reaches the world-conformance check.
 pub(crate) fn compute(
     modules: &IndexMap<ModuleSource, Module>,
-    references: &IndexMap<SymbolKey, SymbolKey>,
+    references: &IndexMap<AstId, SymbolKey>,
     world_export_names: &IndexSet<String>,
 ) -> Liveness {
     let mut graph = Graph::default();
@@ -204,7 +204,7 @@ impl Graph {
         &mut self,
         source: &ModuleSource,
         func: &Function,
-        references: &IndexMap<SymbolKey, SymbolKey>,
+        references: &IndexMap<AstId, SymbolKey>,
         owner: &SymbolKey,
     ) {
         if let Some(body) = &func.body {
@@ -225,7 +225,7 @@ impl Graph {
         &mut self,
         source: &ModuleSource,
         block: &Block,
-        references: &IndexMap<SymbolKey, SymbolKey>,
+        references: &IndexMap<AstId, SymbolKey>,
         owner: &SymbolKey,
     ) {
         let mut collector = IdCollector::default();
@@ -237,7 +237,7 @@ impl Graph {
         &mut self,
         source: &ModuleSource,
         expr: &Expr,
-        references: &IndexMap<SymbolKey, SymbolKey>,
+        references: &IndexMap<AstId, SymbolKey>,
         owner: &SymbolKey,
     ) {
         let mut collector = IdCollector::default();
@@ -251,12 +251,12 @@ impl Graph {
         &mut self,
         source: &ModuleSource,
         ids: &[AstId],
-        references: &IndexMap<SymbolKey, SymbolKey>,
+        references: &IndexMap<AstId, SymbolKey>,
         owner: &SymbolKey,
     ) {
+        let _ = source;
         for &id in ids {
-            let use_key = SymbolKey::new(source.clone(), id);
-            if let Some(def) = references.get(&use_key) {
+            if let Some(def) = references.get(&id) {
                 self.edges
                     .entry(owner.clone())
                     .or_default()

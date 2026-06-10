@@ -686,7 +686,7 @@ fn build_semantic_classes(sem: &Semantics, ast_types: &TypeSpans) -> IndexMap<us
         if use_key.module != *entry {
             continue;
         }
-        let (Some(symbol), Some(span)) = (sem.symbol_at(def_key), sem.span_of_key(use_key)) else {
+        let (Some(symbol), Some(span)) = (sem.symbol_at(def_key), sem.span_of_key(&use_key)) else {
             continue;
         };
         classes.insert(

@@ -147,7 +147,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let target_type = self.resolve_type(annotated_type);
             // Publish the resolved whole-pattern annotation so reify reads it
             // instead of re-running `resolve_type` against the AST.
-            let key = self.ann_key(let_stmt.id);
+            let key = let_stmt.id;
             self.sem.types.let_annotated_types.insert(key, target_type);
 
             // Special case: tuple literal with Tuple type annotation
@@ -2092,7 +2092,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // outer element, appending one entry per outer element; reify's visit
         // counter pairs them up in the same order.
         if overlay_base.is_some() {
-            let for_of_key = self.ann_key(for_of.id);
+            let for_of_key = for_of.id;
             self.sem
                 .types
                 .tuple_overlays

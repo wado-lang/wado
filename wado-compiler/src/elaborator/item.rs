@@ -577,7 +577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem
             .types
             .decl_type_params
-            .insert(self.ann_key(struct_decl.id), type_params);
+            .insert(struct_decl.id, type_params);
 
         // Record per-field resolved types for reify to read instead of
         // re-resolving them off the static decl pass + UNKNOWN-fallback.
@@ -586,7 +586,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem
             .types
             .struct_field_types
-            .insert(self.ann_key(struct_decl.id), struct_field_types);
+            .insert(struct_decl.id, struct_field_types);
 
         // Stage 7-B: reify (`reify_struct`) emits the `TirStruct` from the
         // recorded `struct_field_types` / `decl_type_params` + the AST.
@@ -748,7 +748,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem
             .types
             .effect_ops
-            .insert(self.ann_key(decl.id), operations.clone());
+            .insert(decl.id, operations.clone());
         TirEffect {
             name: decl.name.clone(),
             is_pub: decl.is_pub,
@@ -769,7 +769,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem
             .types
             .effect_ops
-            .insert(self.ann_key(decl.id), operations.clone());
+            .insert(decl.id, operations.clone());
         TirResource {
             name: decl.name.clone(),
             is_pub: decl.is_pub,
@@ -834,7 +834,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem
             .types
             .decl_type_params
-            .insert(self.ann_key(variant_decl.id), type_params);
+            .insert(variant_decl.id, type_params);
 
         register_variant_compiler_item(
             &self.tysys.type_table,
@@ -1184,14 +1184,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cannot reconstruct effect-param canonicalisation without
         // `current_effect_param_decls`, so the annotate phase records
         // the already-resolved list here keyed by the function's `AstId`.
-        let func_key = scope.ann_key(func.id);
+        let func_key = func.id;
         scope.sem.types.function_effects.insert(func_key, effects);
 
         // Stage 5: an async function's wasm return type is erased to
         // `()`; record the declared (pre-erasure) return type so reify
         // can set `task_return_type` for resource-store inference.
         if func.is_async {
-            let task_key = scope.ann_key(func.id);
+            let task_key = func.id;
             scope
                 .sem
                 .types
@@ -1208,15 +1208,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // of truth = this path): param types in declaration order, the
         // (post-async-erasure) return type, and the projected TIR type params
         // (defaults resolved with the type-param scope alive, above).
-        let sig_key = self.ann_key(func.id);
+        let sig_key = func.id;
         self.sem
             .types
             .fn_param_types
-            .insert(sig_key.clone(), params.iter().map(|p| p.type_id).collect());
-        self.sem
-            .types
-            .fn_return_types
-            .insert(sig_key.clone(), return_type);
+            .insert(sig_key, params.iter().map(|p| p.type_id).collect());
+        self.sem.types.fn_return_types.insert(sig_key, return_type);
         self.sem.types.decl_type_params.insert(sig_key, type_params);
 
         // Stage 7-B: reify (`reify_function`) emits the `TirFunction` from
@@ -1516,7 +1513,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // recomputing it (single source of truth = this original path). Keyed
         // via `ann_key` so a default-method body synthesised for several impls
         // lands under its owning module.
-        let method_key = scope.ann_key(func.id);
+        let method_key = func.id;
         scope
             .sem
             .types
@@ -1662,7 +1659,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 5 / mangled-name slice: publish the mangled + display
         // names for reify to read straight off `MethodNames` instead of
         // running `format_local` itself against the impl facts.
-        let method_names_key = scope.ann_key(func.id);
+        let method_names_key = func.id;
         scope.sem.types.method_names.insert(
             method_names_key,
             super::sem::types::MethodNames {
@@ -1819,7 +1816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cannot reconstruct effect-param canonicalisation without
         // `current_effect_param_decls`, so the annotate phase records
         // the already-resolved list here keyed by the method's `AstId`.
-        let method_key = scope.ann_key(func.id);
+        let method_key = func.id;
         scope.sem.types.function_effects.insert(method_key, effects);
 
         // Restore effect params and Self type. `trait_ctx` is auto-restored on
@@ -1832,19 +1829,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Record the resolved param/return types for reify to read back
         // (single source of truth = this path); `params` is in `func.params`
         // order including the receiver.
-        let sig_key = self.ann_key(func.id);
+        let sig_key = func.id;
         self.sem
             .types
             .fn_param_types
-            .insert(sig_key.clone(), params.iter().map(|p| p.type_id).collect());
+            .insert(sig_key, params.iter().map(|p| p.type_id).collect());
         self.sem.types.fn_return_types.insert(sig_key, return_type);
         // Record the method-level TIR type params (with defaults resolved while
         // the type-param scope was still alive, above) for reify to read back
         // rather than re-projecting them after its scope is torn down.
-        self.sem
-            .types
-            .decl_type_params
-            .insert(self.ann_key(func.id), type_params);
+        self.sem.types.decl_type_params.insert(func.id, type_params);
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {

@@ -310,7 +310,7 @@ export fn run() {
     let hit = sem.iter_method_dispatch().any(|key| {
         key.module == entry
             && sem
-                .method_dispatch_view(key)
+                .method_dispatch_view(&key)
                 .is_some_and(|(name, _, self_kind)| name.contains("len") && self_kind == "ref")
     });
     assert!(
@@ -390,7 +390,7 @@ export fn run() {
     let mut kinds: Vec<String> = sem
         .iter_desugars()
         .filter(|key| key.module == entry)
-        .filter_map(|key| sem.desugar_view(key))
+        .filter_map(|key| sem.desugar_view(&key))
         .collect();
     kinds.sort();
     kinds.dedup();
@@ -438,7 +438,7 @@ export fn run() {
         if key.module != entry {
             continue;
         }
-        let Some((kind, _target)) = sem.coercion_view(key) else {
+        let Some((kind, _target)) = sem.coercion_view(&key) else {
             continue;
         };
         if kind == "numeric_literal" {
@@ -525,7 +525,7 @@ export fn run() {
     let saw_tuple_to_sequence = sem.iter_coercions().any(|key| {
         key.module == entry
             && sem
-                .coercion_view(key)
+                .coercion_view(&key)
                 .is_some_and(|(kind, _)| kind == "tuple_to_sequence")
     });
     assert!(
@@ -558,18 +558,16 @@ export fn run() {
     // Every recorded i32 literal in the user module would be a regression
     // (the only literals are the two `1` / `2` args, which must surface as
     // i64 after type-arg inference).
-    let any_i32 = sem
-        .expression_types
-        .iter()
-        .any(|(key, &type_id)| key.module == entry && sem.types.type_name(type_id) == "i32");
+    let any_i32 = sem.expression_types.iter().any(|(id, &type_id)| {
+        sem.module_of_id(*id) == Some(&entry) && sem.types.type_name(type_id) == "i32"
+    });
     assert!(
         !any_i32,
         "post-inference recoerce_literal_args must overwrite the pre-inference i32 entry",
     );
-    let saw_i64 = sem
-        .expression_types
-        .iter()
-        .any(|(key, &type_id)| key.module == entry && sem.types.type_name(type_id) == "i64");
+    let saw_i64 = sem.expression_types.iter().any(|(id, &type_id)| {
+        sem.module_of_id(*id) == Some(&entry) && sem.types.type_name(type_id) == "i64"
+    });
     assert!(
         saw_i64,
         "post-inference recoerce_literal_args must record the inferred i64 type",
@@ -598,7 +596,7 @@ export fn run() {
     let saw_bogus = sem.iter_method_dispatch().any(|key| {
         key.module == entry
             && sem
-                .method_dispatch_view(key)
+                .method_dispatch_view(&key)
                 .is_some_and(|(name, _, _)| name.contains("no_such_method"))
     });
     assert!(

@@ -1027,59 +1027,82 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // `get_mut` so a divergence shows up as a `debug_assert` failure
             // rather than silently creating phantom `ModuleSemantics` entries
             // that LSP would later flatten into `Semantics::references`.
-            let snapshot_invariant = "snapshot module must be in the current compile's loaded set";
-            for (use_key, def_key) in &snap.references {
-                let Some(sem) = module_semantics.get_mut(&use_key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", use_key.module);
+            // Snapshot ids route back to a per-module `ModuleSemantics` via
+            // the snapshot's `AstIdSpace → ModuleSource` registry: stdlib
+            // ASTs are parsed once per process and shared, so the snapshot's
+            // spaces are the current compile's spaces. A miss shows up as a
+            // `debug_assert` failure rather than silently dropping facts.
+            let snapshot_invariant =
+                "snapshot id must belong to a module in the current compile's loaded set";
+            for (use_id, def_key) in &snap.references {
+                let Some(sem) = snap
+                    .module_of_id(*use_id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {use_id:?}");
                     continue;
                 };
-                sem.bindings
-                    .references
-                    .insert(use_key.clone(), def_key.clone());
+                sem.bindings.references.insert(*use_id, def_key.clone());
             }
-            for (key, sym) in &snap.locals {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, sym) in &snap.locals {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.bindings.local_symbols.insert(key.clone(), sym.clone());
+                sem.bindings.local_symbols.insert(*id, sym.clone());
             }
-            for (key, type_id) in &snap.local_types {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, type_id) in &snap.local_types {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.types.local_types.insert(key.clone(), *type_id);
+                sem.types.local_types.insert(*id, *type_id);
             }
-            for (key, type_id) in &snap.expression_types {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, type_id) in &snap.expression_types {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.types.expression_types.insert(key.clone(), *type_id);
+                sem.types.expression_types.insert(*id, *type_id);
             }
-            for (key, dispatch) in &snap.method_dispatch {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, dispatch) in &snap.method_dispatch {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.types
-                    .method_dispatch
-                    .insert(key.clone(), dispatch.clone());
+                sem.types.method_dispatch.insert(*id, dispatch.clone());
             }
-            for (key, choice) in &snap.coercions {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, choice) in &snap.coercions {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.types.coercions.insert(key.clone(), choice.clone());
+                sem.types.coercions.insert(*id, choice.clone());
             }
-            for (key, kind) in &snap.desugars {
-                let Some(sem) = module_semantics.get_mut(&key.module) else {
-                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+            for (id, kind) in &snap.desugars {
+                let Some(sem) = snap
+                    .module_of_id(*id)
+                    .and_then(|ms| module_semantics.get_mut(ms))
+                else {
+                    debug_assert!(false, "{snapshot_invariant}: {id:?}");
                     continue;
                 };
-                sem.types.desugars.insert(key.clone(), *kind);
+                sem.types.desugars.insert(*id, *kind);
             }
         }
 
@@ -1338,7 +1361,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 trait_ctx: super::trait_env::TraitContext::default(),
                 trait_check_stack: RefCell::new(Vec::new()),
                 default_scope_module: None,
-                ann_module_override: None,
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
                 pending_method_dispatch: None,
@@ -1383,11 +1405,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later; computing it here lets reify gate item emission on the live
         // set and the unused-diagnostics emitter read `dead_items`.
         {
-            let mut references: IndexMap<crate::symbol::SymbolKey, crate::symbol::SymbolKey> =
+            let mut references: IndexMap<crate::ast::AstId, crate::symbol::SymbolKey> =
                 IndexMap::default();
             for sem in state.module_semantics.values() {
-                for (use_key, def_key) in &sem.bindings.references {
-                    references.insert(use_key.clone(), def_key.clone());
+                for (use_id, def_key) in &sem.bindings.references {
+                    references.insert(*use_id, def_key.clone());
                 }
             }
             let export_names: crate::hashmap::IndexSet<String> = state

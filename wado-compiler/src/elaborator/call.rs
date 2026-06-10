@@ -917,7 +917,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `static_method_dispatch` early return — without
                     // re-running `locate_static_method_impl` /
                     // `lookup_static_method_*` from the AST alone.
-                    let key = self.ann_key(call.id);
+                    let key = call.id;
                     self.sem.types.static_method_dispatch.insert(
                         key,
                         super::sem::types::StaticMethodDispatch {
@@ -1201,7 +1201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the `is_static_method` arm; this covers the remaining
         // shapes (`println(x)`, `builtin::array_new(n)`,
         // `ns::foo(x)` for use-namespaced imports).
-        let key = self.ann_key(call.id);
+        let key = call.id;
         self.sem.types.static_method_dispatch.insert(
             key,
             super::sem::types::StaticMethodDispatch {
@@ -2871,7 +2871,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `StaticMethodCallExpr` id, so reusing `static_method_dispatch`
             // is collision-free. Args here carry no `is_mut` (the
             // production builder below uses all-false `CallArg`s).
-            let key = self.ann_key(call.id);
+            let key = call.id;
             self.sem.types.static_method_dispatch.insert(
                 key,
                 super::sem::types::StaticMethodDispatch {

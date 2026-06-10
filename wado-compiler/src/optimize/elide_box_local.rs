@@ -648,12 +648,12 @@ fn walk_children_observable(
 // Substitution at use site
 // -----------------------------------------------------------------------
 
-/// Replace the single `FieldAccess(Local(candidate), field_name)` use with the
-/// candidate's inner initializer, moving `inner`'s content into the field-access
-/// node while keeping that node's `type_id` / `span` (downstream type registries
-/// are keyed by the field-access node's `type_id`). The candidate has exactly
-/// one such use (guaranteed by `fieldaccess_reads == 1` / `total_reads == 1`),
-/// so the first pre-order match is the only one.
+// Replace the single `FieldAccess(Local(candidate), field_name)` use with the
+// candidate's inner initializer, moving `inner`'s content into the field-access
+// node while keeping that node's `type_id` / `span` (downstream type registries
+// are keyed by the field-access node's `type_id`). The candidate has exactly
+// one such use (guaranteed by `fieldaccess_reads == 1` / `total_reads == 1`),
+// so the first pre-order match is the only one.
 
 #[cfg(test)]
 mod tests {
