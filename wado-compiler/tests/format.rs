@@ -486,8 +486,7 @@ fn test_format_preserves_trailing_module_comments() {
 /// Leading and trailing comments on array-literal elements must survive.
 #[test]
 fn test_format_preserves_array_element_comments() {
-    let source =
-        "fn run() {\n    let xs = [\n        // lead one\n        1,\n        2,  // tail two\n    ];\n}\n";
+    let source = "fn run() {\n    let xs = [\n        // lead one\n        1,\n        2,  // tail two\n    ];\n}\n";
     let formatted = wado_compiler::format(source).expect("format failed");
     for c in ["// lead one", "// tail two"] {
         assert!(formatted.contains(c), "missing `{c}`:\n{formatted}");
@@ -1665,8 +1664,7 @@ fn test_no_dropped_comments_in_corpus() {
         {
             return;
         }
-        if let Err(wado_compiler::CompileError::Format { message }) =
-            wado_compiler::format(&source)
+        if let Err(wado_compiler::CompileError::Format { message }) = wado_compiler::format(&source)
         {
             failures.push(format!("{}: {message}", path.display()));
         }

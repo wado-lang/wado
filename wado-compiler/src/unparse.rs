@@ -343,7 +343,10 @@ impl<'a> Unparser<'a> {
 
         // Comments after the last item have no following node to lead, so flush
         // the file-tail dangling comments here rather than dropping them.
-        let tail: Vec<Comment> = self.trivia.map(|t| t.dangling().to_vec()).unwrap_or_default();
+        let tail: Vec<Comment> = self
+            .trivia
+            .map(|t| t.dangling().to_vec())
+            .unwrap_or_default();
         for comment in &tail {
             if self.emitted_comments.insert(comment.span.start) {
                 self.emit_blank_lines_to(comment.span.line);
