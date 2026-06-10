@@ -143,6 +143,22 @@ directly. This completes store→load forwarding for fields (Stage 5
 only dedups _reads_) and gives `condition_implication` its
 `StructLit`-field numeric facts.
 
+Alias-safety prerequisite (found while prototyping). A first attempt at
+this seeding (the `field_store` map exactly as above) forwarded
+`p.a` to the `assert p.a == 42` in `stores_optimize_with_stores_no_forward`
+and `stores_optimize_mixed_calls`, where a `with stores[p]` callee was
+inlined into a `Holder { pair: &p }` shape that captures `&p` without
+an opaque call to bump the heap. Runtime output stayed correct (the
+field _was_ still 42 there), but those fixtures deliberately lock in
+the conservative non-forwarding that `store_load_forward`'s
+`stores_aliased_locals` / `address_taken_locals` exclusion provides,
+and the builder has neither set — `builder::build` takes only `body`
+and `params`. So field-store seeding must thread those two sets in and
+skip seeding a receiver that is (or derives from) an aliased /
+address-taken local. That threading lands together with this seeding,
+not before; the prototype is reverted until then so the heap-join
+increment (6.0, landed) stays independently shippable.
+
 Unsafe locals stay a rule-layer concern. Address-taken locals are boxed
 by lower (`&mut x` turns `x` into `Box<i32>` with `.value` field
 accesses), so bare-local staleness from reference writes does not arise
