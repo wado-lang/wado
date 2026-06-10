@@ -1239,6 +1239,20 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                     if let Err(_) = remove_file(&stage_a_cat_dir, &stale) {
                     }
                 }
+                // Also sweep the grammar file and its slaves — a [skip]
+                // descriptor's .g4 usually carries StringTemplate directives,
+                // i.e. it is not even a valid grammar, and leaving it behind
+                // makes the committed corpus look larger than the supported
+                // set. (Slave names are `{base}.slave<N>.g4`; enumerate by
+                // prefix since N is unknown without parsing the descriptor.)
+                if let Err(_) = remove_file(&cat_out_dir, &`{base}.g4`) {
+                }
+                let slave_prefix = `{base}.slave`;
+                for let existing of list_files_with_suffix(&cat_out_dir, &".g4") {
+                    if existing.starts_with(slave_prefix) {
+                        let _ = remove_file(&cat_out_dir, &existing);
+                    }
+                }
                 continue;
             }
 
@@ -1505,6 +1519,10 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             if let Skip(reason) = &stage_b_triage {
                 println(`  skipB: {key} — {*reason}`);
                 stage_b_skip += 1;
+                // Sweep the stale Stage B test, mirroring the Stage A skip
+                // branch: flipping a previously-emitted descriptor into
+                // [stage_b_skip] must not leave the old test behind.
+                let _ = remove_file(&stage_b_cat_dir, &`{base}_test.wado`);
                 continue;
             }
             let stage_b_filename = `{base}_test.wado`;
