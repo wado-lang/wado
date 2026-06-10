@@ -158,11 +158,7 @@ fn "wado-compiler/tests/fixtures/if_merged.wado/compute_mode1"(mode, precision, 
         0;
     }) -> i32 {
         adjusted = local.tee base(precision + 1) + exp_est;
-        if exp_est >= 0 -> i32 {
-            adjusted;
-        } else {
-            base;
-        }
+        select i32(exp_est >= 0, adjusted, base);
     } else {
         precision + 1;
     }));
@@ -561,14 +557,14 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b45: block {
-        l46: loop {
+    b44: block {
+        l45: loop {
             if i >= len {
-                break b45;
+                break b44;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l46;
+            continue l45;
         };
     };
 }
@@ -616,14 +612,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b50: block {
-        l51: loop {
+    b49: block {
+        l50: loop {
             if t <= 0_i64 {
-                break b50;
+                break b49;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l51;
+            continue l50;
         };
     };
     return n;
@@ -637,15 +633,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b54: block {
-            l55: loop {
+        b53: block {
+            l54: loop {
                 if temp <= 0_i64 {
-                    break b54;
+                    break b53;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l55;
+                continue l54;
             };
         };
     }
@@ -738,14 +734,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b65: block {
-        l66: loop {
+    b64: block {
+        l65: loop {
             if i >= n {
-                break b65;
+                break b64;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l66;
+            continue l65;
         };
     };
 }

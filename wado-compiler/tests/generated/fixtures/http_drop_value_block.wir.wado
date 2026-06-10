@@ -523,11 +523,7 @@ fn "wado-compiler/tests/fixtures/http_drop_value_block.wado/handle"(request) {
         probe = "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_new"();
         __b_2 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(118), used: 1 };
         drop("wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_append"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }, __b_2));
-        __block_v_14 = (if "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_has"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }) -> i32 {
-            7;
-        } else {
-            0;
-        });
+        __block_v_14 = select i32("wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_has"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }), 7, 0);
         "wasi/resource-drop:fields"(probe);
         __block_v_14;
     } else {
@@ -985,14 +981,14 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     let i: i32;
     arr = builtin::array_new<u8>(len);
     i = 0;
-    b81: block {
-        l82: loop {
+    b80: block {
+        l81: loop {
             if i >= len {
-                break b81;
+                break b80;
             }
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l82;
+            continue l81;
         };
     };
     return arr;
@@ -1001,14 +997,14 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b84: block {
-        l85: loop {
+    b83: block {
+        l84: loop {
             if i >= len {
-                break b84;
+                break b83;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l85;
+            continue l84;
         };
     };
 }
@@ -1101,14 +1097,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b90: block {
-        l91: loop {
+    b89: block {
+        l90: loop {
             if t <= 0_i64 {
-                break b90;
+                break b89;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l91;
+            continue l90;
         };
     };
     return n;
@@ -1122,15 +1118,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b94: block {
-            l95: loop {
+        b93: block {
+            l94: loop {
                 if temp <= 0_i64 {
-                    break b94;
+                    break b93;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l95;
+                continue l94;
             };
         };
     }
@@ -1223,14 +1219,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b105: block {
-        l106: loop {
+    b104: block {
+        l105: loop {
             if i >= n {
-                break b105;
+                break b104;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l106;
+            continue l105;
         };
     };
 }

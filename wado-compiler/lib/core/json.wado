@@ -687,6 +687,21 @@ struct ScannedNumber {
     has_frac_or_exp: bool,
 }
 
+impl ScannedNumber {
+    /// A zeroed scratch buffer for `scan_number_into` to fill.
+    fn empty() -> ScannedNumber {
+        return ScannedNumber {
+            neg: false,
+            digits: 0,
+            int_digits: 0,
+            frac_digits: 0,
+            frac_lead_zeros: 0,
+            exp: 0,
+            has_frac_or_exp: false,
+        };
+    }
+}
+
 /// Reconstructs the f64 value of a scanned number token. Exponents outside
 /// fpfmt's domain clamp to ±infinity / ±zero.
 fn scanned_to_f64(n: &ScannedNumber) -> f64 {
@@ -865,19 +880,13 @@ impl JsonDeserializer {
         return self.expect_char(':' as i32);
     }
 
-    /// Builds a String from `input[start..end)` with UTF-8 validation
-    /// (RFC 8259 §8.1); invalid bytes are reported as `MalformedInput`.
-    fn slice_to_string(&self, start: i32, end: i32) -> Result<String, DeserializeError> {
-        return match String::from_utf8_slice(self.input.slice(start, end)) {
-            Ok(s) => Result::Ok(s),
-            Err(_) => {
-                builtin::cold_path();
-                Result::Err(DeserializeError::malformed(
-                    "invalid UTF-8 in string",
-                    start as i64,
-                ));
-            },
-        };
+    /// The `MalformedInput` error for invalid UTF-8 string content at `start`
+    /// (RFC 8259 §8.1). A cold-path builder so call sites can match
+    /// `String::from_utf8_slice`'s own `Result` inline (extracting the `String`
+    /// with no re-wrapping allocation on the hot path) yet share one error.
+    fn invalid_utf8_string(&self, start: i32) -> DeserializeError {
+        builtin::cold_path();
+        return DeserializeError::malformed("invalid UTF-8 in string", start as i64);
     }
 
     pub fn read_json_string(&mut self) -> Result<String, DeserializeError> {
@@ -911,14 +920,24 @@ impl JsonDeserializer {
         // Fast path: no escapes. The token is `input[prefix_start..scan_pos)`;
         // only string *content* can be multi-byte — JSON structure is ASCII.
         if scan_pos < input_len && self.input.get_unchecked(scan_pos) as i32 == '"' as i32 {
-            let result = self.slice_to_string(prefix_start, scan_pos)?;
+            let result = match String::from_utf8_slice(self.input.slice(prefix_start, scan_pos)) {
+                Ok(s) => s,
+                Err(_) => {
+                    return Result::Err(self.invalid_utf8_string(prefix_start));
+                },
+            };
             self.pos = scan_pos + 1;
             return Result::Ok(result);
         }
 
         // Slow path: has escape sequences (or hit EOF). Build the escape-free
         // prefix, then handle escapes.
-        let mut result = self.slice_to_string(prefix_start, scan_pos)?;
+        let mut result = match String::from_utf8_slice(self.input.slice(prefix_start, scan_pos)) {
+            Ok(s) => s,
+            Err(_) => {
+                return Result::Err(self.invalid_utf8_string(prefix_start));
+            },
+        };
         self.pos = scan_pos;
 
         loop {
@@ -935,7 +954,12 @@ impl JsonDeserializer {
                 self.pos += 1;
             }
             if self.pos > chunk_start {
-                let chunk = self.slice_to_string(chunk_start, self.pos)?;
+                let chunk = match String::from_utf8_slice(self.input.slice(chunk_start, self.pos)) {
+                    Ok(s) => s,
+                    Err(_) => {
+                        return Result::Err(self.invalid_utf8_string(chunk_start));
+                    },
+                };
                 result.push_str(&chunk);
             }
 
@@ -1132,11 +1156,13 @@ impl JsonDeserializer {
         }
     }
 
-    /// Scans the JSON number token at `pos` (whitespace already skipped).
-    /// Only the first `FPFMT_DIGITS_MAX` significant digits are accumulated.
-    /// Dropped fraction digits merely truncate precision, while dropped
-    /// integer digits shift the scale via `int_digits`.
-    fn scan_number(&mut self) -> Result<ScannedNumber, DeserializeError> {
+    /// Scans the JSON number token at `pos` (whitespace already skipped) into
+    /// the caller-provided `out`. Only the first `FPFMT_DIGITS_MAX` significant
+    /// digits are accumulated; dropped fraction digits merely truncate
+    /// precision, while dropped integer digits shift the scale via `int_digits`.
+    /// Writing into a scratch struct keeps a `Result<ScannedNumber>` aggregate
+    /// off the hot decode path.
+    fn scan_number_into(&mut self, out: &mut ScannedNumber) -> Result<(), DeserializeError> {
         if self.pos >= self.input.len() {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
@@ -1235,15 +1261,14 @@ impl JsonDeserializer {
                 }
             }
         }
-        return Result::Ok(ScannedNumber {
-            neg,
-            digits,
-            int_digits,
-            frac_digits,
-            frac_lead_zeros,
-            exp,
-            has_frac_or_exp,
-        });
+        out.neg = neg;
+        out.digits = digits;
+        out.int_digits = int_digits;
+        out.frac_digits = frac_digits;
+        out.frac_lead_zeros = frac_lead_zeros;
+        out.exp = exp;
+        out.has_frac_or_exp = has_frac_or_exp;
+        return Result::Ok(());
     }
 
     /// Parses an i32 directly from `self.input`, without an intermediate
@@ -1251,7 +1276,8 @@ impl JsonDeserializer {
     pub fn parse_i32_direct(&mut self) -> Result<i32, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
-        let n = self.scan_number()?;
+        let mut n = ScannedNumber::empty();
+        self.scan_number_into(&mut n)?;
         if !n.has_frac_or_exp {
             // `digits` is exact within FPFMT_DIGITS_MAX digits; longer tokens
             // always overflow i32. i32::MIN's magnitude is one above i32::MAX.
@@ -1290,7 +1316,8 @@ impl JsonDeserializer {
     pub fn parse_i64_direct(&mut self) -> Result<i64, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
-        let n = self.scan_number()?;
+        let mut n = ScannedNumber::empty();
+        self.scan_number_into(&mut n)?;
         if !n.has_frac_or_exp {
             // i64::MIN's magnitude (2^63) is one above i64::MAX.
             let limit: u64 = if n.neg { i64::MAX as u64 + 1 } else { i64::MAX as u64 };
@@ -1339,7 +1366,8 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::overflow("negative value for u64", start));
         }
-        let n = self.scan_number()?;
+        let mut n = ScannedNumber::empty();
+        self.scan_number_into(&mut n)?;
         if !n.has_frac_or_exp {
             if n.int_digits <= FPFMT_DIGITS_MAX {
                 return Result::Ok(n.digits);
@@ -1393,7 +1421,8 @@ impl JsonDeserializer {
     /// intermediate String allocation.
     pub fn parse_f64_direct(&mut self) -> Result<f64, DeserializeError> {
         self.skip_whitespace();
-        let n = self.scan_number()?;
+        let mut n = ScannedNumber::empty();
+        self.scan_number_into(&mut n)?;
         return Result::Ok(scanned_to_f64(&n));
     }
 

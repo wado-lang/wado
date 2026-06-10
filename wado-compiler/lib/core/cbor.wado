@@ -93,6 +93,12 @@ global CANONICAL_NAN_F32_BITS: u64 = 0x7fc00000;
 global U64_MAX_AS_U128: u128 = 18446744073709551615;
 global I128_MAX_AS_U128: u128 = 170141183460469231731687303715884105727;
 
+// Container type-mismatch diagnostics, referenced by `begin_container` so the
+// success path allocates no message (only the cold error path copies one).
+global MSG_EXPECTED_ARRAY: String = "expected array";
+global MSG_EXPECTED_MAP: String = "expected map";
+global MSG_EXPECTED_MAP_FOR_STRUCT: String = "expected map for struct";
+
 /// Write a CBOR head — a major type (0..7) plus its argument in preferred
 /// (shortest) form (RFC 8949 §3). Shared by integers, string/array/map
 /// lengths, and tag numbers.
@@ -1116,23 +1122,24 @@ impl CborDeserializer {
     /// One step of a container walk, shared by the seq / map / struct accesses.
     /// Returns `[ended, remaining]`: `ended` is `true` when the container is
     /// exhausted — consuming an indefinite container's break and balancing the
-    /// depth taken by `enter`; otherwise one more definite element is accounted
-    /// for and `remaining` is the decremented count to store back. `remaining`
-    /// is passed through unchanged for indefinite containers.
-    fn container_step(&mut self, remaining: i64, indef: bool) -> Result<[bool, i64], DeserializeError> {
+    /// depth taken by `enter`. When it returns `false` the caller consumes one
+    /// element; a definite container's caller then decrements its own
+    /// `remaining`. (Returning a bare `bool` rather than a `[bool, i64]` pair
+    /// keeps the hottest decode loop allocation-free.)
+    fn container_step(&mut self, remaining: i64, indef: bool) -> Result<bool, DeserializeError> {
         if indef {
             if self.peek_byte()? == BREAK {
                 self.pos += 1;
                 self.depth -= 1;
-                return Result::Ok([true, remaining]);
+                return Result::Ok(true);
             }
-            return Result::Ok([false, remaining]);
+            return Result::Ok(false);
         }
         if remaining <= 0 {
             self.depth -= 1;
-            return Result::Ok([true, remaining]);
+            return Result::Ok(true);
         }
-        return Result::Ok([false, remaining - 1]);
+        return Result::Ok(false);
     }
 
     /// Skip one well-formed item (RFC 8949 §4.1), for unknown struct fields and
@@ -1256,10 +1263,11 @@ struct CborVariantAccess {
 
 impl CborSeqAccess {
     fn at_end(&mut self) -> Result<bool, DeserializeError> {
-        let [ended, remaining] = self.de.container_step(self.remaining, self.indef)?;
-        self.remaining = remaining;
+        let ended = self.de.container_step(self.remaining, self.indef)?;
         if ended {
             self.done = true;
+        } else if !self.indef {
+            self.remaining -= 1;
         }
         return Result::Ok(ended);
     }
@@ -1304,10 +1312,11 @@ impl DeserializeSeq for CborSeqAccess {
 
 impl DeserializeMap for CborMapAccess {
     fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
-        let [ended, remaining] = self.de.container_step(self.remaining, self.indef)?;
-        self.remaining = remaining;
-        if ended {
+        if self.de.container_step(self.remaining, self.indef)? {
             return Result::Ok(null);
+        }
+        if !self.indef {
+            self.remaining -= 1;
         }
         let key = self.de.deserialize_string()?;
         return Result::Ok(Option::Some(key));
@@ -1324,10 +1333,11 @@ impl DeserializeMap for CborMapAccess {
 
 impl DeserializeStruct for CborStructAccess {
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
-        let [ended, remaining] = self.de.container_step(self.remaining, self.indef)?;
-        self.remaining = remaining;
-        if ended {
+        if self.de.container_step(self.remaining, self.indef)? {
             return Result::Ok(null);
+        }
+        if !self.indef {
+            self.remaining -= 1;
         }
         // Fast path: a definite-length text key matches the schema straight from
         // the input bytes, no allocation (RFC 8949 §6.1: text-string keys).
@@ -1624,7 +1634,11 @@ impl Deserializer for CborDeserializer {
     /// transparently unwrapping any self-described prefix and entering the
     /// depth guard. Returns `[remaining, indef]` for the access to carry
     /// (`remaining` is `-1` for an indefinite container).
-    fn begin_container(&mut self, want_major: u8, expected: String) -> Result<[i64, bool], DeserializeError> {
+    ///
+    /// `expected` is the type-mismatch diagnostic, passed by reference (a
+    /// module-global constant) so the common success path allocates nothing;
+    /// the message is only copied on the cold error path.
+    fn begin_container(&mut self, want_major: u8, expected: &String) -> Result<[i64, bool], DeserializeError> {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             if major == MAJOR_TAG && arg == TAG_SELF_DESCRIBED {
@@ -1632,7 +1646,7 @@ impl Deserializer for CborDeserializer {
             }
             if major != want_major {
                 builtin::cold_path();
-                return Result::Err(DeserializeError::unexpected_type(expected, self.pos as i64));
+                return Result::Err(DeserializeError::unexpected_type(*expected, self.pos as i64));
             }
             self.enter()?;
             let remaining: i64 = if indef { -1 } else { arg as i64 };
@@ -1641,12 +1655,12 @@ impl Deserializer for CborDeserializer {
     }
 
     fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError> with stores[self] {
-        let [remaining, indef] = self.begin_container(MAJOR_ARRAY, "expected array")?;
+        let [remaining, indef] = self.begin_container(MAJOR_ARRAY, &MSG_EXPECTED_ARRAY)?;
         return Result::Ok(CborSeqAccess { de: self, remaining, indef, done: false });
     }
 
     fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError> with stores[self] {
-        let [remaining, indef] = self.begin_container(MAJOR_MAP, "expected map")?;
+        let [remaining, indef] = self.begin_container(MAJOR_MAP, &MSG_EXPECTED_MAP)?;
         return Result::Ok(CborMapAccess { de: self, remaining, indef });
     }
 
@@ -1655,7 +1669,7 @@ impl Deserializer for CborDeserializer {
         name: &String,
         num_fields: i32,
     ) -> Result<CborStructAccess, DeserializeError> with stores[self] {
-        let [remaining, indef] = self.begin_container(MAJOR_MAP, "expected map for struct")?;
+        let [remaining, indef] = self.begin_container(MAJOR_MAP, &MSG_EXPECTED_MAP_FOR_STRUCT)?;
         return Result::Ok(CborStructAccess { de: self, remaining, indef });
     }
 

@@ -3764,8 +3764,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Condition::Expr(cond_expr) => {
                 let condition = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
-                let then_branch =
-                    self.reify_block_with_position(&if_stmt.then_block, ctx, expected_type, tail_value);
+                let then_branch = self.reify_block_with_position(
+                    &if_stmt.then_block,
+                    ctx,
+                    expected_type,
+                    tail_value,
+                );
                 let else_branch = if_stmt
                     .else_block
                     .as_ref()
