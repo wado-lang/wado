@@ -1,19 +1,19 @@
-//! Regression for issue #1342: cross-module default-argument AstId collision.
+//! Regression for issue #1342: a foreign default-argument value that
+//! constructs a struct must compile correctly when re-resolved at a
+//! cross-module call site.
 //!
 //! `dep_make` (in the dependency module) has a defaulted parameter whose
-//! default value constructs `DepThing`. Calling `dep_make(5)` here omits that
-//! argument, so annotate re-resolves the foreign default expression. Its
-//! struct-literal node carries the dependency module's dense `AstId`; keyed
-//! under THIS module (the old bug) it overwrote a local `LocalPair { … }`
-//! literal that shares the same dense `AstId`, retagging it with the wrong
-//! type. Codegen then emitted a `struct.new` of the wrong type — "WIR
-//! pipeline generated invalid core Wasm module". The fix keys a foreign
-//! default's facts under its owning module (see `Elaborator::ann_key`).
+//! default builds `DepThing`. Calling `dep_make(5)` here omits it, so annotate
+//! re-resolves that foreign default expression under this module's
+//! perspective. Each node's facts must land on the node's own identity, never
+//! on a same-numbered local node. (Pre-fix this overwrote a `LocalPair` literal
+//! sharing the callee node's dense per-module id; the root fix made every
+//! `AstId` globally unique, so the collision is now impossible by construction
+//! rather than merely avoided.) `DepThing` is imported so the default's struct
+//! type is resolvable here, as the original `atn.wado` context made it.
 //!
-//! The many `LocalPair` literals form a band of consecutive `AstId`s so the
-//! collision is robust to small `AstId` shifts; `dep_make`'s default must be
-//! resolvable here, hence `DepThing` is imported (mirroring how the original
-//! `atn.wado` could see the colliding struct).
+//! `LocalPair` (2 fields) and `DepThing` (4 fields) differ in shape, so any
+//! mis-attribution would surface as a hard `struct.new` type error.
 
 use { dep_make, DepThing } from "./sub/bug_default_arg_xmod_dep.wado";
 
@@ -22,44 +22,13 @@ struct LocalPair {
     y: i32,
 }
 
-// Keeps the `DepThing` import live (its resolvability is the point).
+// Keeps the `DepThing` import live (its resolvability at the call site is the point).
 fn first_field(t: &DepThing) -> i32 { return t.a; }
 
 export fn run() {
-    let p0 = LocalPair { x: 0, y: 0 };
-    let p1 = LocalPair { x: 1, y: 1 };
-    let p2 = LocalPair { x: 2, y: 2 };
-    let p3 = LocalPair { x: 3, y: 3 };
-    let p4 = LocalPair { x: 4, y: 4 };
-    let p5 = LocalPair { x: 5, y: 5 };
-    let p6 = LocalPair { x: 6, y: 6 };
-    let p7 = LocalPair { x: 7, y: 7 };
-    let p8 = LocalPair { x: 8, y: 8 };
-    let p9 = LocalPair { x: 9, y: 9 };
-    let p10 = LocalPair { x: 10, y: 10 };
-    let p11 = LocalPair { x: 11, y: 11 };
-    let p12 = LocalPair { x: 12, y: 12 };
-    let p13 = LocalPair { x: 13, y: 13 };
-    let p14 = LocalPair { x: 14, y: 14 };
-    let p15 = LocalPair { x: 15, y: 15 };
-    let p16 = LocalPair { x: 16, y: 16 };
-    let p17 = LocalPair { x: 17, y: 17 };
-    let p18 = LocalPair { x: 18, y: 18 };
-    let p19 = LocalPair { x: 19, y: 19 };
-    let p20 = LocalPair { x: 20, y: 20 };
-    let p21 = LocalPair { x: 21, y: 21 };
-    let p22 = LocalPair { x: 22, y: 22 };
-    let p23 = LocalPair { x: 23, y: 23 };
-    let p24 = LocalPair { x: 24, y: 24 };
-    let p25 = LocalPair { x: 25, y: 25 };
-    let p26 = LocalPair { x: 26, y: 26 };
-    let p27 = LocalPair { x: 27, y: 27 };
-    let p28 = LocalPair { x: 28, y: 28 };
-    let p29 = LocalPair { x: 29, y: 29 };
+    let p = LocalPair { x: 10, y: 20 };
     let r = dep_make(5);
-    let s = 0 + p0.x + p1.x + p2.x + p3.x + p4.x + p5.x + p6.x + p7.x + p8.x + p9.x + p10.x + p11.x + p12.x + p13.x + p14.x + p15.x + p16.x + p17.x + p18.x + p19.x + p20.x + p21.x + p22.x + p23.x + p24.x + p25.x + p26.x + p27.x + p28.x + p29.x;
-    // sum(0..29) == 435; dep_make(5) == 5 + 1 + 2 + 3 + 4 == 15.
-    assert s == 435;
+    assert p.x + p.y == 30;
     assert r == 15;
     assert first_field(&DepThing { a: 7, b: 0, c: 0, d: 0 }) == 7;
 }

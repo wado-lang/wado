@@ -1,18 +1,5 @@
-//! Dependency module for `bug_default_arg_xmod` (issue #1342).
-//!
-//! `dep_make`'s second parameter has a default value that constructs a struct
-//! defined in THIS module. When a foreign module calls `dep_make` and omits
-//! that argument, the elaborator re-resolves this default expression at the
-//! call site. Its AST nodes carry this module's dense `AstId`s, which must be
-//! keyed under THIS module — not the caller's — or they overwrite the caller's
-//! same-numbered local nodes.
-//!
-//! The two `filler*` functions exist only to position the default expression's
-//! `AstId` so it lands inside the caller's band of local struct-literal
-//! `AstId`s, making the collision deterministic for this regression.
-
-pub fn filler1() -> i32 { return 1; }
-pub fn filler2() -> i32 { return 2; }
+//! Dependency module for `bug_default_arg_xmod` (issue #1342): a callee whose
+//! default argument value constructs a struct defined in this module.
 
 pub struct DepThing {
     pub a: i32,

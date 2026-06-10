@@ -375,9 +375,7 @@ impl SymbolTable {
                 {
                     aliases.push((
                         alias_name.clone(),
-                        self.module_of(symbol.defined_at)
-                            .expect("defined symbol has a registered module")
-                            .clone(),
+                        symbol.module_source().clone(),
                         symbol.name.clone(),
                     ));
                 }
@@ -535,6 +533,32 @@ mod tests {
         assert!(symbol.is_some());
         assert_eq!(symbol.unwrap().defined_at, key);
         assert_eq!(symbol.unwrap().name, "println");
+    }
+
+    #[test]
+    fn module_of_recovers_the_defining_module() {
+        // `define` registers the symbol's space -> module mapping, so a bare
+        // `AstId` round-trips back to its declaring module without carrying
+        // the module in the key (the role `SymbolKey` used to play). Ids use
+        // real per-module spaces, exactly as the parser mints them.
+        let mut table = SymbolTable::new();
+        let cli = ModuleSource::cli();
+        let space_a = crate::ast::AstIdSpace::next();
+        let space_b = crate::ast::AstIdSpace::next();
+        assert_ne!(space_a, space_b, "each parse mints a distinct space");
+
+        let id = table.define(
+            &cli,
+            AstId::new(space_a, 0),
+            "f",
+            SymbolKind::BuiltinType,
+            None,
+        );
+        assert_eq!(table.module_of(id), Some(&cli));
+        assert_eq!(table.get(&id).unwrap().module_source(), &cli);
+
+        // An id from a space never `define`d here has no registered module.
+        assert_eq!(table.module_of(AstId::new(space_b, 0)), None);
     }
 
     #[test]

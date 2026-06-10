@@ -3153,6 +3153,43 @@ mod ast_id_tests {
 
     /// Collect every `(AstId, Span)` emitted while walking `items` using the
     /// default [`AstVisitor`] traversal.
+
+    #[test]
+    fn ast_id_spaces_are_unique_per_parse() {
+        // Each top-level parse mints a fresh `AstIdSpace`, so the same dense
+        // local index in two modules yields globally distinct `AstId`s — the
+        // invariant that makes per-node fact maps collision-proof (issue #1342).
+        let a = parse("fn f() { let x = 1; }\n");
+        let b = parse("fn f() { let x = 1; }\n");
+        assert_ne!(a.ast_id_space(), b.ast_id_space());
+        let a0 = AstId::new(a.ast_id_space(), 0);
+        let b0 = AstId::new(b.ast_id_space(), 0);
+        assert_eq!(
+            a0.local(),
+            b0.local(),
+            "locals still restart at 0 per module"
+        );
+        assert_ne!(a0, b0, "same local in different modules must not collide");
+    }
+
+    #[test]
+    fn template_interpolations_share_one_module_space() {
+        // Interpolations historically restarted ids at 0 and collided on
+        // `AstId(0)`; sub-parsers now continue the parent's space + counter,
+        // so every id in one module tree shares one space and a unique local.
+        let m = parse("fn f(a: i32, b: i32) -> i32 { return `{a}{b}`.len(); }\n");
+        let ids = collect_ids(&m.items);
+        let space = m.ast_id_space();
+        let mut seen: IndexSet<AstId> = IndexSet::default();
+        for (id, _) in &ids {
+            assert_eq!(id.space(), space, "id {id:?} not in the module's space");
+            assert!(
+                seen.insert(*id),
+                "duplicate id {id:?} (interpolation collision)"
+            );
+        }
+    }
+
     fn collect_ids(items: &[Item]) -> Vec<(AstId, Span)> {
         struct Collector(Vec<(AstId, Span)>);
         impl AstVisitor for Collector {
