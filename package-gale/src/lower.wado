@@ -1889,7 +1889,8 @@ fn lower_scan_repeat(
             if let Group(g) = rep.element {
                 if g.alternatives.len() == 1
                     && has_nested_optional_in_alt(&g.alternatives[0])
-                    && !alt_has_variable_repeat(&g.alternatives[0]) {
+                    && !alt_has_variable_repeat(&g.alternatives[0])
+                    && !shape_optional_count_exceeds_cap(&g.alternatives[0].elements) {
                     return lower_scan_optional_lookahead_group(
                         &g.alternatives[0],
                         ctx,
@@ -3376,11 +3377,33 @@ fn collect_optional_leading_tokens(inner: &Element) -> List<String> {
     return tokens;
 }
 
+/// Maximum number of nullable sub-elements for which shape enumeration
+/// (2^n) is worthwhile. Beyond this, both the parse-side
+/// (`try_optional_shape_lookahead`) and scan-side (`lower_scan_repeat`)
+/// shape paths fall back to the non-enumerating strategy (8 → at most
+/// 256 shapes). They must agree, so both consult the shared predicate.
+global MAX_SHAPE_OPTIONALS: i32 = 8;
+
+/// True when the alt has more nullable (shape-contributing) elements than
+/// `MAX_SHAPE_OPTIONALS`, so the 2^n shape enumeration must be skipped.
+/// Shared by the parse-side and scan-side shape gates to keep them in
+/// lockstep.
+fn shape_optional_count_exceeds_cap(elements: &List<Element>) -> bool {
+    let mut nullable_count = 0;
+    for let elem of elements {
+        if is_nullable(elem) {
+            nullable_count += 1;
+        }
+    }
+    return nullable_count > MAX_SHAPE_OPTIONALS;
+}
+
 /// Try to materialise an `OptionalShapeLookahead` strategy. Fires
 /// when the inner is a single-alt Group with at least one nested
 /// Optional Repeat — emit enumerates 2^n shapes (longest-first) and
 /// guards each on the per-position kind set computed from
-/// `ctx.first_of_element`. Returns `null` for other inner shapes.
+/// `ctx.first_of_element`. Returns `null` for other inner shapes or when
+/// there are more than `MAX_SHAPE_OPTIONALS` nullable sub-elements.
 fn try_optional_shape_lookahead(inner: &Element, ctx: &mut GenContext) -> Option<RepeatStrategy> {
     if let Group(g) = inner {
         if g.alternatives.len() != 1 {
@@ -3403,6 +3426,12 @@ fn try_optional_shape_lookahead(inner: &Element, ctx: &mut GenContext) -> Option
             }
         }
         if !has_nested {
+            return null;
+        }
+        // Shape enumeration is 2^n; cap it so a pathological alt with many
+        // independent optionals neither blows up compile time nor overflows
+        // `1 << n` (i32). Past the cap, fall back to the scan-guard strategy.
+        if shape_optional_count_exceeds_cap(elements) {
             return null;
         }
         let shapes = compute_shapes_for_alt(elements);
