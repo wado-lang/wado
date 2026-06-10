@@ -124,10 +124,9 @@ impl GuardFact {
     ) -> Option<GuardFact> {
         let lhs_vn = engine.value(lhs)?;
         let rhs_vn = engine.value(rhs)?;
+        // `decompose_add_const` only accumulates non-negative constants,
+        // so `max_offset >= 0` holds by construction.
         let (var_vn, max_offset) = decompose_add_const(engine, lhs_vn);
-        if max_offset < 0 {
-            return None;
-        }
         Some(GuardFact {
             var_vn,
             max_offset,

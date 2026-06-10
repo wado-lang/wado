@@ -1,8 +1,11 @@
 //! Loop-Invariant Code Motion (LICM) for Wado NIR
 //!
 //! This module hoists loop-invariant computations out of loops to improve performance.
-//! It identifies field accesses on variables that don't change within a loop and moves
-//! those accesses before the loop.
+//! Two kinds of candidates move to the pre-header: field accesses on
+//! variables the loop does not modify (legality via [`ModifiedVars`]), and
+//! pure-arithmetic subtrees whose `Local` leaves are pre-header-stable —
+//! each leaf's use-site `ValueId` equals the loop-entry snapshot value
+//! ([`Engine::loop_entry_value`]), deduped by `ValueId` (see [`ArithHoist`]).
 //!
 //! Runs on the worklist rewrite engine (combine migration; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a

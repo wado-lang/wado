@@ -15,12 +15,14 @@
 //! - `If` snapshots `current_value`, walks both branches, then merges:
 //!   diverging locals hash-cons a [`ValueKind::Select`] keyed on the
 //!   condition's value, falling back to `Opaque` if the condition is impure.
+//!   Heap state joins per arm over fall-through arms only ([`Builder::join_heap`]).
 //! - `Match` / `Switch` walk every arm and merge n-ary: if every arm agrees
 //!   on a local, that value carries; otherwise the local goes `Opaque`.
 //!   N-ary `Select` chains are not yet constructed.
-//! - `Loop` pre-scans the body for locals it may write and reassigns each
-//!   to a fresh `Opaque` before walking the body; post-loop those locals
-//!   stay `Opaque`. Stage 6 swaps recurring-pattern locals to `LoopPhi`.
+//! - `Loop` pre-scans the body for locals it may write, snapshots
+//!   `current_value` into [`ValueGraphBuild::loop_entry_values`], and
+//!   reassigns each written local to a fresh `Opaque` before walking the
+//!   body; post-loop those locals stay `Opaque`.
 //! - `LabeledBlock` marks every local written in its subtree `Opaque` on
 //!   exit, since `break` paths can carry writes the fall-through state
 //!   never observes.
@@ -43,8 +45,9 @@ use super::{HeapVersion, ValueId, ValuePool};
 /// Granularity is per `field_index`: a direct write to `obj.f` bumps the
 /// `f` slot only, so a later read of `obj.g` keeps its prior version and
 /// shares a `ValueId` with earlier reads. Opaque writes (Call,
-/// `Index` / `Deref` assign target, Loop entry, branch merge) call
-/// [`HeapState::bump_all`], invalidating every field. Refinement to
+/// `Index` / `Deref` assign target, Loop entry) call
+/// [`HeapState::bump_all`], invalidating every field; branch endpoints
+/// join per arm instead ([`Builder::join_heap`]). Refinement to
 /// `(receiver_root, field)` granularity via `mod_ref.rs` is a follow-up.
 struct HeapState {
     /// Next fresh version to hand out.
@@ -158,12 +161,13 @@ pub struct ValueGraphBuild {
 /// seeding makes parameters visible in the loop-entry snapshots
 /// (`loop_entry_values`), which are taken before any in-loop read.
 ///
-/// `alias_unsafe` are locals whose object is reference-aliased (the caller's
-/// `address_taken_locals` / `stores_aliased_locals`, e.g. the `with stores[p]`
-/// effect's `p`). The builder unions them with a body scan for live
-/// `&local` / `&mut local` and suppresses field store→load seeding on those
-/// receivers, matching `store_load_forward`'s own exclusion so the `stores`
-/// effect's "no field forwarding for aliased locals" contract is upheld.
+/// `alias_unsafe` are locals whose object is reference-aliased. The engine
+/// supplies the complete set — the canonical `address_taken_locals` /
+/// `stores_aliased_locals` (e.g. the `with stores[p]` effect's `p`) unioned
+/// with its session-cached [`Body::collect_address_taken_locals`] scan —
+/// and the builder suppresses field store→load seeding on those receivers,
+/// matching `store_load_forward`'s own exclusion so the `stores` effect's
+/// "no field forwarding for aliased locals" contract is upheld.
 pub fn build(
     body: &Body,
     param_locals: &[u32],
