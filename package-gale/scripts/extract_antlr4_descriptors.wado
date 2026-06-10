@@ -21,7 +21,7 @@
 //!
 //! Default categories (Phase 1): Sets, LexerExec, ParseTrees.
 
-use { args, env, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { args, env, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use {
     Preopens,
     Descriptor,
@@ -1044,7 +1044,7 @@ fn parse_cli_args(arguments: List<String>) -> CliArgs {
     return CliArgs { want_all, categories, finalize_stage_b_oracle };
 }
 
-export fn run() with Stdout, Stderr, Environment, Preopens {
+export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let cli = parse_cli_args(args());
     let want_all = cli.want_all;
     let mut categories = cli.categories;
@@ -1052,7 +1052,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("extract: no preopened directories available (run via `wado run`)");
-        return;
+        exit(1);
     }
     let root = dirs[0].0;
 
@@ -1069,7 +1069,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             eprintln("extract: the antlr4 submodule appears to be missing.");
             eprintln("extract: run: git submodule update --init --recommend-shallow vendor/antlr4");
             eprintln("extract: (this script never auto-initializes submodules)");
-            return;
+            exit(1);
         },
     };
 
@@ -1094,7 +1094,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot open 'package-gale/tests' for writing");
-            return;
+            exit(1);
         },
     };
 
@@ -1103,7 +1103,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/");
-            return;
+            exit(1);
         },
     };
 
@@ -1121,7 +1121,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/grammars/");
-            return;
+            exit(1);
         },
     };
 
@@ -1129,7 +1129,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/stage_b/");
-            return;
+            exit(1);
         },
     };
 
@@ -1137,7 +1137,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/stage_a/");
-            return;
+            exit(1);
         },
     };
 
@@ -1147,7 +1147,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         Ok(d) => d,
         Err(_) => {
             eprintln("extract: cannot create or open antlr4-compat/oracle-pending/");
-            return;
+            exit(1);
         },
     };
 
@@ -1689,7 +1689,7 @@ fn write_oracle_pending_files(
 /// shell wrapper successfully ran the oracle); sweep any prior test
 /// whose `.input` has gone away. `ORACLE_VERSION` env stamps the test
 /// header with the resolved jar version.
-fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
+fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, Exit {
     let pending_root = match open_dir(root, &"package-gale/tests/antlr4-compat/oracle-pending", false) {
         Ok(d) => d,
         Err(_) => {
@@ -1700,14 +1700,14 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
         Ok(d) => d,
         Err(_) => {
             eprintln("finalize: cannot open antlr4-compat/");
-            return;
+            exit(1);
         },
     };
     let oracle_out_root = match ensure_dir(&compat_dir, &"stage_b_oracle") {
         Ok(d) => d,
         Err(_) => {
             eprintln("finalize: cannot create stage_b_oracle/");
-            return;
+            exit(1);
         },
     };
     let status_text = match read_file_to_string(root, &status_file_path()) {
