@@ -1315,6 +1315,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .args
                 .iter()
                 .all(|a| self.is_concrete_type_arg(a, impl_params, impl_module)),
+            ast::Type::Tuple(elems) => elems
+                .iter()
+                .all(|e| self.is_concrete_type_arg(e, impl_params, impl_module)),
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+                self.is_concrete_type_arg(inner, impl_params, impl_module)
+            }
             _ => false,
         }
     }

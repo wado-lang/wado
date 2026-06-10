@@ -14,6 +14,12 @@ impl Tag for List<Token> {
     }
 }
 
+impl Tag for List<[Token, i32]> {
+    fn tag(&self) -> i32 {
+        return 400 + self.len() as i32;
+    }
+}
+
 pub fn tag_via_bound_b<T: Tag>(x: &T) -> i32 {
     return x.tag();
 }

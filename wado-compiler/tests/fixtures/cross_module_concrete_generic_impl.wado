@@ -1,7 +1,9 @@
-// Two modules each declare a distinct `Token`/`Tag` and an
-// `impl Tag for List<Token>`. Routed through a generic bound, module B's
-// list must reach module B's impl, not module A's — the two impls share the
-// simple name `List<Token>` but distinct module-qualified arguments.
+// Two modules each declare a distinct `Token`/`Tag` and impls
+// `Tag for List<Token>` and `Tag for List<[Token, i32]>`. Routed through a
+// generic bound, module B's list must reach module B's impl, not module A's —
+// the impls share the head name `List` but have distinct module-qualified
+// arguments. The tuple argument additionally exercises a shape with no
+// module spelling in the AST, routed via the resolved instantiated name.
 //
 // Regression guard for issue #1348.
 
@@ -19,6 +21,16 @@ test "cross-module concrete generic impl with same-simple-name argument" {
     // Through a generic bound, each module's list must reach its own impl.
     assert tag_via_bound_a(&a) == 101;
     assert tag_via_bound_b(&b) == 201;
+}
+
+test "cross-module concrete generic impl with tuple argument" {
+    let a: List<[TokA, i32]> = [[TokA { n: 1 }, 10]];
+    let b: List<[TokB, i32]> = [[TokB { n: 2 }, 20]];
+
+    assert a.tag() == 301;
+    assert b.tag() == 401;
+    assert tag_via_bound_a(&a) == 301;
+    assert tag_via_bound_b(&b) == 401;
 }
 
 __DATA__

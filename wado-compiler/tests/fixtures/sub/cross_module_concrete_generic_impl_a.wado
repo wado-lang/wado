@@ -13,6 +13,14 @@ impl Tag for List<Token> {
     }
 }
 
+// A tuple argument has no module spelling in the AST; routing it relies on the
+// resolved instantiated name recorded post-resolution.
+impl Tag for List<[Token, i32]> {
+    fn tag(&self) -> i32 {
+        return 300 + self.len() as i32;
+    }
+}
+
 pub fn tag_via_bound_a<T: Tag>(x: &T) -> i32 {
     return x.tag();
 }

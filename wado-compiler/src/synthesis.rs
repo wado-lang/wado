@@ -163,6 +163,7 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
                     module_source,
                     is_concrete,
                 );
+                record_concrete_instantiation(&mut record, info, trait_name, module_source);
             }
         }
         for impl_block in &tir_module.impls {
@@ -180,11 +181,35 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
                         module_source,
                         is_concrete,
                     );
+                    record_concrete_instantiation(&mut record, info, trait_name, module_source);
                 }
             }
         }
     }
     impls
+}
+
+/// Index a concrete impl on a generic head (`impl Tag for List<Token>`) under
+/// its resolved instantiated receiver (`info.struct_name`, e.g.
+/// `List<.../Token>`), distinct from the bare head (`info.base_struct_name`),
+/// so the monomorphizer routes it to this module instead of colliding with
+/// another module's `impl Tag for List<OtherToken>` on the shared head key
+/// (issue #1348). The resolved spelling covers every argument shape (tuples,
+/// refs, nested generics) with no AST re-derivation.
+fn record_concrete_instantiation(
+    record: &mut impl FnMut(String, String, &ModuleSource, bool),
+    info: &crate::name::LocalMethodName,
+    trait_name: &str,
+    module_source: &ModuleSource,
+) {
+    if info.struct_name != info.base_struct_name {
+        record(
+            info.struct_name.clone(),
+            trait_name.to_string(),
+            module_source,
+            true,
+        );
+    }
 }
 
 /// Decide whether a synthesised trait-method impl whose `&self` parameter

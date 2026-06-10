@@ -464,26 +464,15 @@ impl TraitEnv {
                         // Track the concrete subset separately: only impl
                         // blocks with no type parameters at all qualify
                         // (e.g. `impl Display for String`, not
-                        // `impl<T> Inspect for List<T>`).
+                        // `impl<T> Inspect for List<T>`). Indexed by the bare
+                        // head only; a concrete impl on a generic head
+                        // (`impl Trait for List<u8>`) is additionally indexed
+                        // under its resolved instantiated name post-resolution
+                        // by `synthesis::collect_synthesised_impls`.
                         if impl_block.type_params.is_empty() {
                             let cmodules = concrete_trait_impl_modules.entry(key).or_default();
                             if !cmodules.contains(module_source) {
                                 cmodules.push(module_source.clone());
-                            }
-                            // Also index under the qualified instantiated name
-                            // (`List<u8>`), which substituted call sites query.
-                            let canon = |name: &str| canonical_key(module_source, name);
-                            if let Some(inst) = instantiated_type_name(&impl_block.ty, &canon) {
-                                let ikey = (inst, trait_name.clone());
-                                let imodules = trait_impl_modules.entry(ikey.clone()).or_default();
-                                if !imodules.contains(module_source) {
-                                    imodules.push(module_source.clone());
-                                }
-                                let icmodules =
-                                    concrete_trait_impl_modules.entry(ikey).or_default();
-                                if !icmodules.contains(module_source) {
-                                    icmodules.push(module_source.clone());
-                                }
                             }
                         }
                     }
@@ -1141,49 +1130,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .extend(tp.bounds.clone());
             }
         }
-    }
-}
-
-/// Instantiated name for a concrete generic impl head, qualified to match
-/// the call site's `mangle_type_name` (issue #1348). `None` for non-generic
-/// heads and argument shapes [`qualified_type_arg`] cannot spell.
-fn instantiated_type_name(ty: &ast::Type, canon: &dyn Fn(&str) -> DeclKey) -> Option<String> {
-    let ast::Type::Generic(generic) = ty else {
-        return None;
-    };
-    let mut args = Vec::with_capacity(generic.args.len());
-    for arg in &generic.args {
-        args.push(qualified_type_arg(arg, canon)?);
-    }
-    Some(crate::name::mangle_generic_name(&generic.name, &args))
-}
-
-/// One type argument qualified from the AST like
-/// [`crate::tir::TypeTable::mangle_type_arg_for_generic`] does from a `TypeId`.
-fn qualified_type_arg(ty: &ast::Type, canon: &dyn Fn(&str) -> DeclKey) -> Option<String> {
-    match ty {
-        ast::Type::Named(named) => {
-            if super::is_primitive_type_name(&named.name) {
-                Some(named.name.clone())
-            } else {
-                let (module, name) = canon(&named.name);
-                Some(format!("{module}/{name}"))
-            }
-        }
-        ast::Type::Generic(generic) => {
-            let mut args = Vec::with_capacity(generic.args.len());
-            for arg in &generic.args {
-                args.push(qualified_type_arg(arg, canon)?);
-            }
-            let (module, name) = canon(&generic.name);
-            let unqualified = crate::name::mangle_generic_name(&name, &args);
-            Some(format!("{module}/{unqualified}"))
-        }
-        ast::Type::Reference(inner) => Some(format!("&{}", qualified_type_arg(inner, canon)?)),
-        ast::Type::MutReference(inner) => {
-            Some(format!("&mut {}", qualified_type_arg(inner, canon)?))
-        }
-        _ => None,
     }
 }
 
