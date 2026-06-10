@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781096565959,
+  "lastUpdate": 1781100238096,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32001,6 +32001,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/77bafeacda8793f4f25668c6d47da4959811bdf6"
         },
         "date": 1781096565417,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e646db9c29fd14cc65f2899653354d85685e310",
+          "message": "Merge pull request #1351 from wado-lang/claude/core-json-code-review-mhu6q4\n\nfix(core): harden JSON/CBOR stdlib and fix compiler bugs they exposed",
+          "timestamp": "2026-06-10T22:54:42+09:00",
+          "tree_id": "f03830e27e0827973553f7920387e2864ae21aa3",
+          "url": "https://github.com/wado-lang/wado/commit/5e646db9c29fd14cc65f2899653354d85685e310"
+        },
+        "date": 1781100237546,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
