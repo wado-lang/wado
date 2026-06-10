@@ -146,8 +146,10 @@ impl u128 {
         let [m, exp] = self.round_to_mantissa(53);
         // Assemble the IEEE-754 double directly: biased exponent in bits
         // 62..=52, the 52-bit mantissa (the leading 1 is implicit) in bits
-        // 51..=0. `exp` is 64..=127, biasing to 1087..=1150 — always a
-        // finite normal, so no special-casing is needed.
+        // 51..=0. `exp` is 64..=128 (128 when rounding overflowed the
+        // mantissa, e.g. u128::MAX → 2^128), biasing to 1087..=1151 — far
+        // below the infinity pattern (2047), so the result is always a
+        // finite normal and no special-casing is needed.
         let biased = (exp + 1023) as u64;
         let mantissa: u64 = m & (1 << 52) - 1;
         let bits: u64 = biased << 52 | mantissa;
