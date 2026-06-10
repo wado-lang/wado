@@ -171,19 +171,13 @@ _Fields are private._
 
 #### `pub fn expect_char(&mut self, c: i32) -> Result<(), DeserializeError>`
 
-#### `pub fn expect_literal(&mut self, lit: String) -> Result<(), DeserializeError>`
-
 #### `pub fn read_json_string(&mut self) -> Result<String, DeserializeError>`
 
 #### `pub fn read_number_raw(&mut self) -> Result<String, DeserializeError>`
 
-#### `pub fn has_exp_or_dot(&self, raw: &String) -> bool`
-
-#### `pub fn parse_i32_from(&self, raw: &String, start: i64) -> Result<i32, DeserializeError>`
-
-#### `pub fn parse_i64_from(&self, raw: &String, start: i64) -> Result<i64, DeserializeError>`
-
-#### `pub fn parse_u64_from(&self, raw: &String, start: i64) -> Result<u64, DeserializeError>`
+Reads a JSON number token as a String. Validates the token's prefix
+(optional '-' followed by a digit), then delegates the scan to
+`skip_number`.
 
 #### `pub fn skip_number(&mut self)`
 

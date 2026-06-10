@@ -31,8 +31,18 @@ use {
     Visitor,
 } from "core:serde";
 
-use { parse as fpfmt_parse } from "core:prelude/fpfmt.wado";
+use {
+    parse as fpfmt_parse,
+    PARSE_DIGITS_MAX as FPFMT_DIGITS_MAX,
+    PARSE_EXP_MAX as FPFMT_EXP_MAX,
+    PARSE_EXP_MIN as FPFMT_EXP_MIN,
+} from "core:prelude/fpfmt.wado";
 use { encode_with as base64_encode_with, decode as base64_decode, Encoding } from "core:base64";
+
+/// 2^63 and 2^64 as f64 (both exactly representable): the overflow bounds
+/// for i64 / u64 in the float-fallback integer parsing paths.
+global TWO_POW_63: f64 = 9223372036854775808.0;
+global TWO_POW_64: f64 = 18446744073709551616.0;
 
 /// Writes a byte string as a base64url (no padding) JSON string into buf.
 /// Matches RFC 8949 §6.1 advice for representing binary data as JSON text.
@@ -65,6 +75,104 @@ pub fn write_escaped_string(buf: &mut String, s: &String) {
         }
     }
     buf.push('"');
+}
+
+// Scalar JSON encoding shared by the compact, pretty, and canonical
+// serializers — only their container handling differs.
+
+fn write_json_i32(buf: &mut String, v: i32) -> Result<(), SerializeError> {
+    buf.push_str(&`{v}`);
+    return Result::Ok(());
+}
+
+fn write_json_i64(buf: &mut String, v: i64) -> Result<(), SerializeError> {
+    // Values outside the f64 safe-integer range are serialized as strings
+    // so JS consumers don't lose precision.
+    if v > f64::MAX_SAFE_INTEGER as i64 || v < f64::MIN_SAFE_INTEGER as i64 {
+        buf.push_str(&`"{v}"`);
+    } else {
+        buf.push_str(&`{v}`);
+    }
+    return Result::Ok(());
+}
+
+fn write_json_u32(buf: &mut String, v: u32) -> Result<(), SerializeError> {
+    buf.push_str(&`{v}`);
+    return Result::Ok(());
+}
+
+fn write_json_u64(buf: &mut String, v: u64) -> Result<(), SerializeError> {
+    // Values above the f64 safe-integer range are serialized as strings
+    // so JS consumers don't lose precision.
+    if v > f64::MAX_SAFE_INTEGER as u64 {
+        buf.push_str(&`"{v}"`);
+    } else {
+        buf.push_str(&`{v}`);
+    }
+    return Result::Ok(());
+}
+
+fn write_json_i128(buf: &mut String, v: i128) -> Result<(), SerializeError> {
+    // 128-bit values always exceed the f64 safe-integer range: always a string.
+    buf.push_str(&`"{v}"`);
+    return Result::Ok(());
+}
+
+fn write_json_u128(buf: &mut String, v: u128) -> Result<(), SerializeError> {
+    buf.push_str(&`"{v}"`);
+    return Result::Ok(());
+}
+
+fn write_json_f64(buf: &mut String, v: f64) -> Result<(), SerializeError> {
+    if v.is_nan() {
+        return Result::Err(SerializeError {
+            kind: SerializeErrorKind::UnsupportedValue,
+            message: "NaN is not allowed in JSON",
+        });
+    }
+    if !v.is_finite() {
+        return Result::Err(SerializeError {
+            kind: SerializeErrorKind::UnsupportedValue,
+            message: "Infinity is not allowed in JSON",
+        });
+    }
+    buf.push_str(&`{v}`);
+    return Result::Ok(());
+}
+
+fn write_json_f32(buf: &mut String, v: f32) -> Result<(), SerializeError> {
+    // f32 widens losslessly; the NaN / Infinity checks and formatting are shared.
+    return write_json_f64(buf, v as f64);
+}
+
+fn write_json_bool(buf: &mut String, v: bool) -> Result<(), SerializeError> {
+    if v {
+        buf.push_str(&"true");
+    } else {
+        buf.push_str(&"false");
+    }
+    return Result::Ok(());
+}
+
+fn write_json_char(buf: &mut String, v: char) -> Result<(), SerializeError> {
+    let s = `{v}`;
+    write_escaped_string(buf, &s);
+    return Result::Ok(());
+}
+
+fn write_json_string(buf: &mut String, v: &String) -> Result<(), SerializeError> {
+    write_escaped_string(buf, v);
+    return Result::Ok(());
+}
+
+fn write_json_bytes(buf: &mut String, v: ByteSlice) -> Result<(), SerializeError> {
+    write_base64_string(buf, v);
+    return Result::Ok(());
+}
+
+fn write_json_null(buf: &mut String) -> Result<(), SerializeError> {
+    buf.push_str(&"null");
+    return Result::Ok(());
 }
 
 struct JsonSeqSerializer {
@@ -185,111 +293,55 @@ impl Serializer for JsonSerializer {
     type VariantSerializer = JsonVariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.push_str(&`{v}`);
-        return Result::Ok(());
+        return write_json_i32(self.buf, v);
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        // Values outside the f64 safe-integer range are serialized as strings
-        // so JS consumers don't lose precision.
-        if v > f64::MAX_SAFE_INTEGER as i64 || v < f64::MIN_SAFE_INTEGER as i64 {
-            self.buf.push_str(&`"{v}"`);
-        } else {
-            self.buf.push_str(&`{v}`);
-        }
-        return Result::Ok(());
+        return write_json_i64(self.buf, v);
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        self.buf.push_str(&`{v}`);
-        return Result::Ok(());
+        return write_json_u32(self.buf, v);
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        // Values above the f64 safe-integer range are serialized as strings
-        // so JS consumers don't lose precision.
-        if v > f64::MAX_SAFE_INTEGER as u64 {
-            self.buf.push_str(&`"{v}"`);
-        } else {
-            self.buf.push_str(&`{v}`);
-        }
-        return Result::Ok(());
+        return write_json_u64(self.buf, v);
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
-        // i128 always serialized as string (always exceeds JS safe integer range)
-        self.buf.push_str(&`"{v}"`);
-        return Result::Ok(());
+        return write_json_i128(self.buf, v);
     }
 
     fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
-        // u128 always serialized as string (always exceeds JS safe integer range)
-        self.buf.push_str(&`"{v}"`);
-        return Result::Ok(());
+        return write_json_u128(self.buf, v);
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
-        if v.is_nan() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "NaN is not allowed in JSON",
-            });
-        }
-        if !v.is_finite() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "Infinity is not allowed in JSON",
-            });
-        }
-        self.buf.push_str(&`{v as f64}`);
-        return Result::Ok(());
+        return write_json_f32(self.buf, v);
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
-        if v.is_nan() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "NaN is not allowed in JSON",
-            });
-        }
-        if !v.is_finite() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "Infinity is not allowed in JSON",
-            });
-        }
-        self.buf.push_str(&`{v}`);
-        return Result::Ok(());
+        return write_json_f64(self.buf, v);
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
-        if v {
-            self.buf.push_str(&"true");
-        } else {
-            self.buf.push_str(&"false");
-        }
-        return Result::Ok(());
+        return write_json_bool(self.buf, v);
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
-        let s = `{v}`;
-        write_escaped_string(self.buf, &s);
-        return Result::Ok(());
+        return write_json_char(self.buf, v);
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        write_escaped_string(self.buf, v);
-        return Result::Ok(());
+        return write_json_string(self.buf, v);
     }
 
     fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
-        write_base64_string(self.buf, v);
-        return Result::Ok(());
+        return write_json_bytes(self.buf, v);
     }
 
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
-        self.buf.push_str(&"null");
-        return Result::Ok(());
+        return write_json_null(self.buf);
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> {
@@ -496,105 +548,55 @@ impl Serializer for PrettyJsonSerializer {
     type VariantSerializer = PrettyJsonVariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.push_str(&`{v}`);
-        return Result::Ok(());
+        return write_json_i32(self.buf, v);
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        if v > f64::MAX_SAFE_INTEGER as i64 || v < f64::MIN_SAFE_INTEGER as i64 {
-            self.buf.push_str(&`"{v}"`);
-        } else {
-            self.buf.push_str(&`{v}`);
-        }
-        return Result::Ok(());
+        return write_json_i64(self.buf, v);
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        self.buf.push_str(&`{v}`);
-        return Result::Ok(());
+        return write_json_u32(self.buf, v);
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        if v > f64::MAX_SAFE_INTEGER as u64 {
-            self.buf.push_str(&`"{v}"`);
-        } else {
-            self.buf.push_str(&`{v}`);
-        }
-        return Result::Ok(());
+        return write_json_u64(self.buf, v);
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
-        self.buf.push_str(&`"{v}"`);
-        return Result::Ok(());
+        return write_json_i128(self.buf, v);
     }
 
     fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
-        self.buf.push_str(&`"{v}"`);
-        return Result::Ok(());
+        return write_json_u128(self.buf, v);
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
-        if v.is_nan() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "NaN is not allowed in JSON",
-            });
-        }
-        if !v.is_finite() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "Infinity is not allowed in JSON",
-            });
-        }
-        self.buf.push_str(&`{v as f64}`);
-        return Result::Ok(());
+        return write_json_f32(self.buf, v);
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
-        if v.is_nan() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "NaN is not allowed in JSON",
-            });
-        }
-        if !v.is_finite() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "Infinity is not allowed in JSON",
-            });
-        }
-        self.buf.push_str(&`{v}`);
-        return Result::Ok(());
+        return write_json_f64(self.buf, v);
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
-        if v {
-            self.buf.push_str(&"true");
-        } else {
-            self.buf.push_str(&"false");
-        }
-        return Result::Ok(());
+        return write_json_bool(self.buf, v);
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
-        let s = `{v}`;
-        write_escaped_string(self.buf, &s);
-        return Result::Ok(());
+        return write_json_char(self.buf, v);
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        write_escaped_string(self.buf, v);
-        return Result::Ok(());
+        return write_json_string(self.buf, v);
     }
 
     fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
-        write_base64_string(self.buf, v);
-        return Result::Ok(());
+        return write_json_bytes(self.buf, v);
     }
 
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
-        self.buf.push_str(&"null");
-        return Result::Ok(());
+        return write_json_null(self.buf);
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<PrettyJsonSeqSerializer, SerializeError> {
@@ -661,9 +663,9 @@ pub struct JsonDeserializer {
     pub pos: i32,
 }
 
-/// A scanned JSON number token: sign, the first 19 significant digits (the
-/// most that always fit a u64), the digit counts needed to reconstruct the
-/// scale, and the explicit exponent.
+/// A scanned JSON number token: sign, the first `FPFMT_DIGITS_MAX`
+/// significant digits, the digit counts needed to reconstruct the scale,
+/// and the explicit exponent.
 struct ScannedNumber {
     neg: bool,
     digits: u64,
@@ -674,24 +676,124 @@ struct ScannedNumber {
 }
 
 /// Reconstructs the f64 value of a scanned number token. Exponents outside
-/// fpfmt's domain (f64's finite range is ~1e-324..2e308, plus the 19 mantissa
-/// digits of slack) clamp to ±infinity / ±zero.
+/// fpfmt's domain clamp to ±infinity / ±zero.
 fn scanned_to_f64(n: &ScannedNumber) -> f64 {
     if n.digits == 0 {
         return if n.neg { -0.0 } else { 0.0 };
     }
-    // Integer digits beyond the 19 accumulated ones shift the scale up;
+    // Integer digits beyond the accumulated ones shift the scale up;
     // dropped fraction digits only truncate precision.
-    let extra_int_digits = if n.int_digits > 19 { n.int_digits - 19 } else { 0 };
+    let extra_int_digits = if n.int_digits > FPFMT_DIGITS_MAX { n.int_digits - FPFMT_DIGITS_MAX } else { 0 };
     let eff_p = n.exp - n.frac_digits + extra_int_digits;
-    if eff_p > 350 {
+    if eff_p > FPFMT_EXP_MAX {
         return if n.neg { f64::NEG_INFINITY } else { f64::INFINITY };
     }
-    if eff_p < -351 {
+    if eff_p < FPFMT_EXP_MIN {
         return if n.neg { -0.0 } else { 0.0 };
     }
     let v = fpfmt_parse(n.digits, eff_p);
     return if n.neg { -v } else { v };
+}
+
+/// True when a raw number token has a '.' or an exponent marker, i.e. it
+/// needs the float-based integer fallback.
+fn has_exp_or_dot(raw: &String) -> bool {
+    for let mut i = 0; i < raw.len(); i += 1 {
+        let b = raw.get_byte_unchecked(i) as i32;
+        if b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Maps an integer `from_str` failure onto a deserialize error.
+fn int_from_str_error(kind: IntErrorKind, range_msg: String, start: i64) -> DeserializeError {
+    return match kind {
+        PosOverflow | NegOverflow => DeserializeError::overflow(range_msg, start),
+        _ => DeserializeError::invalid_value("invalid digit in number", start),
+    };
+}
+
+/// Parses a string-encoded JSON integer (e.g. an i64 beyond the f64
+/// safe-integer range, which `write_json_i64` emits as a string).
+fn parse_i64_from(raw: &String, start: i64) -> Result<i64, DeserializeError> {
+    if has_exp_or_dot(raw) {
+        // Reconstruct via f64 for scientific notation (e.g. 1e2 → 100).
+        return match f64::from_str(raw) {
+            Ok(v) && v != f64::floor(v) => {
+                builtin::cold_path();
+                Result::Err(DeserializeError::unexpected_type(
+                    "expected integer, got float",
+                    start,
+                ));
+            },
+            Ok(v) && v >= TWO_POW_63 || v < -TWO_POW_63 => {
+                builtin::cold_path();
+                Result::Err(DeserializeError::overflow(
+                    "value out of range for i64",
+                    start,
+                ));
+            },
+            Ok(v) => Result::Ok(v as i64),
+            Err(_) => {
+                builtin::cold_path();
+                Result::Err(DeserializeError::invalid_value("invalid number", start));
+            },
+        };
+    }
+    return match i64::from_str(raw) {
+        Ok(v) => Result::Ok(v),
+        Err(e) => {
+            builtin::cold_path();
+            Result::Err(int_from_str_error(e.kind(), "value out of range for i64", start));
+        },
+    };
+}
+
+/// Parses a string-encoded JSON unsigned integer (the string form
+/// `write_json_u64` emits beyond the f64 safe-integer range).
+fn parse_u64_from(raw: &String, start: i64) -> Result<u64, DeserializeError> {
+    if raw.len() > 0 && raw.get_byte_unchecked(0) as i32 == '-' as i32 {
+        builtin::cold_path();
+        return Result::Err(DeserializeError::overflow("negative value for u64", start));
+    }
+    if has_exp_or_dot(raw) {
+        return match f64::from_str(raw) {
+            // The leading-byte check above misses forms like " -1e3";
+            // f64::from_str is the final authority on the sign.
+            Ok(v) && v < 0.0 => {
+                builtin::cold_path();
+                Result::Err(DeserializeError::overflow("negative value for u64", start));
+            },
+            Ok(v) && v != f64::floor(v) => {
+                builtin::cold_path();
+                Result::Err(DeserializeError::unexpected_type(
+                    "expected integer, got float",
+                    start,
+                ));
+            },
+            Ok(v) && v >= TWO_POW_64 => {
+                builtin::cold_path();
+                Result::Err(DeserializeError::overflow(
+                    "value out of range for u64",
+                    start,
+                ));
+            },
+            Ok(v) => Result::Ok(v as u64),
+            Err(_) => {
+                builtin::cold_path();
+                Result::Err(DeserializeError::invalid_value("invalid number", start));
+            },
+        };
+    }
+    return match u64::from_str(raw) {
+        Ok(v) => Result::Ok(v),
+        Err(e) => {
+            builtin::cold_path();
+            Result::Err(int_from_str_error(e.kind(), "value out of range for u64", start));
+        },
+    };
 }
 
 impl JsonDeserializer {
@@ -708,12 +810,11 @@ impl JsonDeserializer {
 
     pub fn skip_whitespace(&mut self) {
         // Fast exit when next byte isn't whitespace. All JSON whitespace bytes
-        // (space 0x20, tab 0x09, LF 0x0A, CR 0x0D) are <= 0x20, so the single
-        // comparison `b > 32` is enough to reject non-whitespace without
-        // checking each character individually.
+        // (space, tab, LF, CR) are <= ' ' (0x20), so a single comparison
+        // rejects non-whitespace without checking each character individually.
         while self.pos < self.input.len() {
             let b = self.input.get_unchecked(self.pos) as i32;
-            if b > 32 {
+            if b > ' ' as i32 {
                 return;
             }
             if b == ' ' as i32 || b == '\t' as i32 || b == '\n' as i32 || b == '\r' as i32 {
@@ -742,24 +843,28 @@ impl JsonDeserializer {
         return Result::Ok(());
     }
 
-    pub fn expect_literal(&mut self, lit: String) -> Result<(), DeserializeError> {
-        let start = self.pos;
-        let lit_len = lit.len();
-        if self.pos + lit_len > self.input.len() {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(self.pos as i64));
+    /// Consumes a ':' — inline fast path for the common no-whitespace case.
+    fn expect_colon(&mut self) -> Result<(), DeserializeError> {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == ':' as i32 {
+            self.pos += 1;
+            return Result::Ok(());
         }
-        for let mut i = 0; i < lit_len; i += 1 {
-            if self.input.get_unchecked(self.pos + i) != lit.get_byte_unchecked(i) {
+        return self.expect_char(':' as i32);
+    }
+
+    /// Builds a String from `input[start..end)` with UTF-8 validation
+    /// (RFC 8259 §8.1); invalid bytes are reported as `MalformedInput`.
+    fn slice_to_string(&self, start: i32, end: i32) -> Result<String, DeserializeError> {
+        return match String::from_utf8_slice(self.input.slice(start, end)) {
+            Ok(s) => Result::Ok(s),
+            Err(_) => {
                 builtin::cold_path();
-                return Result::Err(DeserializeError::malformed(
-                    `expected '{lit}'`,
+                Result::Err(DeserializeError::malformed(
+                    "invalid UTF-8 in string",
                     start as i64,
                 ));
-            }
-        }
-        self.pos += lit_len;
-        return Result::Ok(());
+            },
+        };
     }
 
     pub fn read_json_string(&mut self) -> Result<String, DeserializeError> {
@@ -789,38 +894,18 @@ impl JsonDeserializer {
             }
             scan_pos += 1;
         }
-        let prefix_len = scan_pos - prefix_start;
 
         // Fast path: no escapes. The token is `input[prefix_start..scan_pos)`;
-        // build it with checked UTF-8 construction (only string *content* can be
-        // multi-byte; JSON structure is ASCII). Invalid UTF-8 is `MalformedInput`.
+        // only string *content* can be multi-byte — JSON structure is ASCII.
         if scan_pos < input_len && self.input.get_unchecked(scan_pos) as i32 == '"' as i32 {
-            let result = match String::from_utf8_slice(self.input.slice(prefix_start, prefix_start + prefix_len)) {
-                Ok(s) => s,
-                Err(_) => {
-                    builtin::cold_path();
-                    return Result::Err(DeserializeError::malformed(
-                        "invalid UTF-8 in string",
-                        prefix_start as i64,
-                    ));
-                },
-            };
+            let result = self.slice_to_string(prefix_start, scan_pos)?;
             self.pos = scan_pos + 1;
             return Result::Ok(result);
         }
 
         // Slow path: has escape sequences (or hit EOF). Build the escape-free
-        // prefix with checked UTF-8 construction, then handle escapes.
-        let mut result = match String::from_utf8_slice(self.input.slice(prefix_start, prefix_start + prefix_len)) {
-            Ok(s) => s,
-            Err(_) => {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::malformed(
-                    "invalid UTF-8 in string",
-                    prefix_start as i64,
-                ));
-            },
-        };
+        // prefix, then handle escapes.
+        let mut result = self.slice_to_string(prefix_start, scan_pos)?;
         self.pos = scan_pos;
 
         loop {
@@ -836,18 +921,9 @@ impl JsonDeserializer {
                 }
                 self.pos += 1;
             }
-            let chunk_len = self.pos - chunk_start;
-            if chunk_len > 0 {
-                match String::from_utf8_slice(self.input.slice(chunk_start, self.pos)) {
-                    Ok(s) => result.push_str(&s),
-                    Err(_) => {
-                        builtin::cold_path();
-                        return Result::Err(DeserializeError::malformed(
-                            "invalid UTF-8 in string",
-                            chunk_start as i64,
-                        ));
-                    },
-                }
+            if self.pos > chunk_start {
+                let chunk = self.slice_to_string(chunk_start, self.pos)?;
+                result.push_str(&chunk);
             }
 
             if self.pos >= self.input.len() {
@@ -873,8 +949,8 @@ impl JsonDeserializer {
                 'n' => result.push('\n'),
                 'r' => result.push('\r'),
                 't' => result.push('\t'),
-                'b' => result.push(8 as u8 as char),
-                'f' => result.push(12 as u8 as char),
+                'b' => result.push('\u0008'),
+                'f' => result.push('\u000C'),
                 'u' => {
                     // read_unicode_escape consumes through the last hex digit
                     // (including a trailing low-surrogate escape), so skip the
@@ -964,67 +1040,29 @@ impl JsonDeserializer {
         };
     }
 
+    /// Reads a JSON number token as a String. Validates the token's prefix
+    /// (optional '-' followed by a digit), then delegates the scan to
+    /// `skip_number`.
     pub fn read_number_raw(&mut self) -> Result<String, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos;
-        if self.pos >= self.input.len() {
+        let mut probe = self.pos;
+        if probe < self.input.len() && self.input.get_unchecked(probe) as i32 == '-' as i32 {
+            probe += 1;
+        }
+        if probe >= self.input.len() {
             builtin::cold_path();
-            return Result::Err(DeserializeError::eof(self.pos as i64));
+            return Result::Err(DeserializeError::eof(probe as i64));
         }
-        if self.input.get_unchecked(self.pos) as i32 == '-' as i32 {
-            self.pos += 1;
-        }
-        if self.pos >= self.input.len() {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(self.pos as i64));
-        }
-        let first = self.input.get_unchecked(self.pos) as i32;
-        if first < '0' as i32 || first > '9' as i32 {
+        let first = self.input.get_unchecked(probe) as i32;
+        if !('0' as i32 <= first <= '9' as i32) {
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type(
                 "expected number",
-                self.pos as i64,
+                probe as i64,
             ));
         }
-        while self.pos < self.input.len() {
-            let b = self.input.get_unchecked(self.pos) as i32;
-            if '0' as i32 <= b <= '9' as i32 {
-                self.pos += 1;
-            } else {
-                break;
-            }
-        }
-        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '.' as i32 {
-            self.pos += 1;
-            while self.pos < self.input.len() {
-                let b = self.input.get_unchecked(self.pos) as i32;
-                if '0' as i32 <= b <= '9' as i32 {
-                    self.pos += 1;
-                } else {
-                    break;
-                }
-            }
-        }
-        if self.pos < self.input.len() {
-            let b = self.input.get_unchecked(self.pos) as i32;
-            if b == 'e' as i32 || b == 'E' as i32 {
-                self.pos += 1;
-                if self.pos < self.input.len() {
-                    let sign = self.input.get_unchecked(self.pos) as i32;
-                    if sign == '+' as i32 || sign == '-' as i32 {
-                        self.pos += 1;
-                    }
-                }
-                while self.pos < self.input.len() {
-                    let b2 = self.input.get_unchecked(self.pos) as i32;
-                    if '0' as i32 <= b2 <= '9' as i32 {
-                        self.pos += 1;
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
+        self.skip_number();
         // A number token is ASCII (digits, sign, '.', 'e'/'E'), so it is valid
         // UTF-8 by construction. Build it in one bulk copy and skip the UTF-8
         // validation that `from_utf8_slice` would do — number-heavy input makes
@@ -1033,151 +1071,6 @@ impl JsonDeserializer {
             self.input.slice(start, self.pos).to_array(),
             self.pos - start,
         ));
-    }
-
-    pub fn has_exp_or_dot(&self, raw: &String) -> bool {
-        for let mut i = 0; i < raw.len(); i += 1 {
-            let b = raw.get_byte_unchecked(i) as i32;
-            if b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    pub fn parse_i32_from(&self, raw: &String, start: i64) -> Result<i32, DeserializeError> {
-        let has_exp = self.has_exp_or_dot(raw);
-        if has_exp {
-            // Parse via f64 for scientific notation (e.g. 1e2 → 100)
-            return match f64::from_str(raw) {
-                Ok(v) && v != f64::floor(v) => {
-                    builtin::cold_path();
-                    Result::Err(DeserializeError::unexpected_type(
-                        "expected integer, got float",
-                        start,
-                    ));
-                },
-                Ok(v) && v < -2147483648.0 || v > 2147483647.0 => {
-                    builtin::cold_path();
-                    Result::Err(
-                        DeserializeError::overflow("value out of range for i32", start),
-                    );
-                },
-                Ok(v) => Result::Ok(v as i32),
-                Err(_) => {
-                    builtin::cold_path();
-                    Result::Err(DeserializeError::invalid_value("invalid number", start));
-                },
-            };
-        }
-        return match i32::from_str(raw) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => {
-                builtin::cold_path();
-                Result::Err(match e.kind() {
-                    PosOverflow | NegOverflow => DeserializeError::overflow(
-                        "value out of range for i32",
-                        start,
-                    ),
-                    _ => DeserializeError::invalid_value("invalid digit in number", start),
-                });
-            },
-        };
-    }
-
-    pub fn parse_i64_from(&self, raw: &String, start: i64) -> Result<i64, DeserializeError> {
-        let has_exp = self.has_exp_or_dot(raw);
-        if has_exp {
-            return match f64::from_str(raw) {
-                Ok(v) && v != f64::floor(v) => {
-                    builtin::cold_path();
-                    Result::Err(DeserializeError::unexpected_type(
-                        "expected integer, got float",
-                        start,
-                    ));
-                },
-                // 2^63 is exactly representable in f64; values at or beyond
-                // it (or below -2^63) cannot fit an i64.
-                Ok(v) && v >= 9223372036854775808.0 || v < -9223372036854775808.0 => {
-                    builtin::cold_path();
-                    Result::Err(DeserializeError::overflow(
-                        "value out of range for i64",
-                        start,
-                    ));
-                },
-                Ok(v) => Result::Ok(v as i64),
-                Err(_) => {
-                    builtin::cold_path();
-                    Result::Err(DeserializeError::invalid_value("invalid number", start));
-                },
-            };
-        }
-        return match i64::from_str(raw) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => {
-                builtin::cold_path();
-                Result::Err(match e.kind() {
-                    PosOverflow | NegOverflow => DeserializeError::overflow(
-                        "value out of range for i64",
-                        start,
-                    ),
-                    _ => DeserializeError::invalid_value("invalid digit in number", start),
-                });
-            },
-        };
-    }
-
-    pub fn parse_u64_from(&self, raw: &String, start: i64) -> Result<u64, DeserializeError> {
-        if raw.len() > 0 && raw.get_byte_unchecked(0) as i32 == '-' as i32 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::overflow("negative value for u64", start));
-        }
-        let has_exp = self.has_exp_or_dot(raw);
-        if has_exp {
-            return match f64::from_str(raw) {
-                Ok(v) && v < 0.0 => {
-                    builtin::cold_path();
-                    Result::Err(DeserializeError::overflow(
-                        "negative value for u64",
-                        start,
-                    ));
-                },
-                Ok(v) && v != f64::floor(v) => {
-                    builtin::cold_path();
-                    Result::Err(DeserializeError::unexpected_type(
-                        "expected integer, got float",
-                        start,
-                    ));
-                },
-                // 2^64 is exactly representable in f64; values at or beyond
-                // it cannot fit a u64.
-                Ok(v) && v >= 18446744073709551616.0 => {
-                    builtin::cold_path();
-                    Result::Err(DeserializeError::overflow(
-                        "value out of range for u64",
-                        start,
-                    ));
-                },
-                Ok(v) => Result::Ok(v as u64),
-                Err(_) => {
-                    builtin::cold_path();
-                    Result::Err(DeserializeError::invalid_value("invalid number", start));
-                },
-            };
-        }
-        return match u64::from_str(raw) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => {
-                builtin::cold_path();
-                Result::Err(match e.kind() {
-                    PosOverflow | NegOverflow => DeserializeError::overflow(
-                        "value out of range for u64",
-                        start,
-                    ),
-                    _ => DeserializeError::invalid_value("invalid digit", start),
-                });
-            },
-        };
     }
 
     /// Advances past a JSON number in `self.input` without allocating a String.
@@ -1227,9 +1120,9 @@ impl JsonDeserializer {
     }
 
     /// Scans the JSON number token at `pos` (whitespace already skipped).
-    /// Only the first 19 significant digits are accumulated — the most that
-    /// always fit a u64. Dropped fraction digits merely truncate precision,
-    /// while dropped integer digits shift the scale via `int_digits`.
+    /// Only the first `FPFMT_DIGITS_MAX` significant digits are accumulated.
+    /// Dropped fraction digits merely truncate precision, while dropped
+    /// integer digits shift the scale via `int_digits`.
     fn scan_number(&mut self) -> Result<ScannedNumber, DeserializeError> {
         if self.pos >= self.input.len() {
             builtin::cold_path();
@@ -1259,7 +1152,7 @@ impl JsonDeserializer {
         while self.pos < self.input.len() {
             let b = self.input.get_unchecked(self.pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
-                if acc_digits < 19 {
+                if acc_digits < FPFMT_DIGITS_MAX {
                     digits = digits * 10 + (b - '0' as i32) as u64;
                     acc_digits += 1;
                 }
@@ -1277,7 +1170,7 @@ impl JsonDeserializer {
             while self.pos < self.input.len() {
                 let b = self.input.get_unchecked(self.pos) as i32;
                 if '0' as i32 <= b <= '9' as i32 {
-                    if acc_digits < 19 {
+                    if acc_digits < FPFMT_DIGITS_MAX {
                         digits = digits * 10 + (b - '0' as i32) as u64;
                         frac_digits += 1;
                         acc_digits += 1;
@@ -1307,9 +1200,10 @@ impl JsonDeserializer {
                 while self.pos < self.input.len() {
                     let b = self.input.get_unchecked(self.pos) as i32;
                     if '0' as i32 <= b <= '9' as i32 {
-                        // Saturate instead of overflowing i32: any exponent
-                        // this large is already far outside the f64 range.
-                        if exp < 100000 {
+                        // Stop accumulating once past fpfmt's domain: the
+                        // value stays exact where it matters and saturates
+                        // (instead of overflowing i32) on absurd exponents.
+                        if exp <= FPFMT_EXP_MAX {
                             exp = exp * 10 + (b - '0' as i32);
                         }
                         self.pos += 1;
@@ -1339,9 +1233,10 @@ impl JsonDeserializer {
         let start = self.pos as i64;
         let n = self.scan_number()?;
         if !n.has_frac_or_exp {
-            // `digits` is exact for up to 19 digits; longer tokens always overflow i32.
-            let limit: u64 = if n.neg { 2147483648 } else { i32::MAX as u64 };
-            if n.int_digits > 19 || n.digits > limit {
+            // `digits` is exact within FPFMT_DIGITS_MAX digits; longer tokens
+            // always overflow i32. i32::MIN's magnitude is one above i32::MAX.
+            let limit: u64 = if n.neg { i32::MAX as u64 + 1 } else { i32::MAX as u64 };
+            if n.int_digits > FPFMT_DIGITS_MAX || n.digits > limit {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::overflow(
                     "value out of range for i32",
@@ -1377,8 +1272,8 @@ impl JsonDeserializer {
         let n = self.scan_number()?;
         if !n.has_frac_or_exp {
             // i64::MIN's magnitude (2^63) is one above i64::MAX.
-            let limit: u64 = if n.neg { 9223372036854775808 } else { i64::MAX as u64 };
-            if n.int_digits > 19 || n.digits > limit {
+            let limit: u64 = if n.neg { i64::MAX as u64 + 1 } else { i64::MAX as u64 };
+            if n.int_digits > FPFMT_DIGITS_MAX || n.digits > limit {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::overflow(
                     "value out of range for i64",
@@ -1404,9 +1299,7 @@ impl JsonDeserializer {
                 start,
             ));
         }
-        // 2^63 is exactly representable in f64; values at or beyond it
-        // (or below -2^63) cannot fit an i64.
-        if v >= 9223372036854775808.0 || v < -9223372036854775808.0 {
+        if v >= TWO_POW_63 || v < -TWO_POW_63 {
             builtin::cold_path();
             return Result::Err(DeserializeError::overflow(
                 "value out of range for i64",
@@ -1426,15 +1319,18 @@ impl JsonDeserializer {
         }
         let n = self.scan_number()?;
         if !n.has_frac_or_exp {
-            if n.int_digits <= 19 {
+            if n.int_digits <= FPFMT_DIGITS_MAX {
                 return Result::Ok(n.digits);
             }
-            if n.int_digits == 20 {
-                // The scanner keeps only 19 digits, but u64::MAX has 20, so
-                // re-parse the token exactly (a number token is ASCII).
+            if n.int_digits == FPFMT_DIGITS_MAX + 1 {
+                // The scanner caps at FPFMT_DIGITS_MAX digits, but u64::MAX
+                // has one more, so re-parse the token exactly (a number token
+                // is ASCII, and with no sign / '.' / exponent here its length
+                // equals its digit count).
+                let len = n.int_digits;
                 let raw = String::internal_from_utf8_raw(
-                    self.input.slice(self.pos - 20, self.pos).to_array(),
-                    20,
+                    self.input.slice(self.pos - len, self.pos).to_array(),
+                    len,
                 );
                 return match u64::from_str(&raw) {
                     Ok(v) => Result::Ok(v),
@@ -1461,9 +1357,7 @@ impl JsonDeserializer {
                 start,
             ));
         }
-        // 2^64 is exactly representable in f64; values at or beyond it
-        // cannot fit a u64.
-        if v < 0.0 || v >= 18446744073709551616.0 {
+        if v < 0.0 || v >= TWO_POW_64 {
             builtin::cold_path();
             return Result::Err(DeserializeError::overflow(
                 "value out of range for u64",
@@ -1639,7 +1533,7 @@ impl JsonDeserializer {
                 self.skip_number();
                 return Result::Ok(());
             },
-            c && c >= '0' && c <= '9' => {
+            c && '0' <= c <= '9' => {
                 self.skip_number();
                 return Result::Ok(());
             },
@@ -1727,11 +1621,7 @@ impl DeserializeMap for JsonMapAccess {
         }
         self.first = false;
         let key = self.de.read_json_string()?;
-        if self.de.pos < self.de.input.len() && self.de.input.get_unchecked(self.de.pos) as i32 == ':' as i32 {
-            self.de.pos += 1;
-        } else {
-            self.de.expect_char(':' as i32)?;
-        }
+        self.de.expect_colon()?;
         return Result::Ok(Option::Some(key));
     }
 
@@ -1797,11 +1687,7 @@ impl DeserializeStruct for JsonStructAccess {
             // Fast path: key has no escapes, compare directly from input buffer
             let key_end = self.de.pos;
             self.de.pos += 1;  // skip closing '"'
-            if self.de.pos < self.de.input.len() && self.de.input.get_unchecked(self.de.pos) as i32 == ':' as i32 {
-                self.de.pos += 1;
-            } else {
-                self.de.expect_char(':' as i32)?;
-            }
+            self.de.expect_colon()?;
             let idx = match S::lookup(self.de.input.slice(key_start, key_end)) {
                 Some(i) => i,
                 None => -1,
@@ -1881,15 +1767,16 @@ impl Deserializer for JsonDeserializer {
         // Accept string-encoded integers (for large values serialized as strings)
         if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '"' as i32 {
             let s = self.read_json_string()?;
-            return self.parse_i64_from(&s, start);
+            return parse_i64_from(&s, start);
         }
         return self.parse_i64_direct();
     }
 
     fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        self.skip_whitespace();
         let start = self.pos as i64;
         let v = self.parse_i64_direct()?;
-        if v < 0 || v > 4294967295 {
+        if v < 0 || v > u32::MAX as i64 {
             builtin::cold_path();
             return Result::Err(DeserializeError::overflow(
                 "value out of range for u32",
@@ -1905,7 +1792,7 @@ impl Deserializer for JsonDeserializer {
         // Accept string-encoded integers (for large values serialized as strings)
         if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '"' as i32 {
             let s = self.read_json_string()?;
-            return self.parse_u64_from(&s, start);
+            return parse_u64_from(&s, start);
         }
         return self.parse_u64_direct();
     }
@@ -1924,13 +1811,7 @@ impl Deserializer for JsonDeserializer {
             Ok(v) => Result::Ok(v),
             Err(e) => {
                 builtin::cold_path();
-                Result::Err(match e.kind() {
-                    PosOverflow | NegOverflow => DeserializeError::overflow(
-                        "value out of range for i128",
-                        start,
-                    ),
-                    _ => DeserializeError::invalid_value("invalid digit in number", start),
-                });
+                Result::Err(int_from_str_error(e.kind(), "value out of range for i128", start));
             },
         };
     }
@@ -1951,13 +1832,7 @@ impl Deserializer for JsonDeserializer {
             Ok(v) => Result::Ok(v),
             Err(e) => {
                 builtin::cold_path();
-                Result::Err(match e.kind() {
-                    PosOverflow | NegOverflow => DeserializeError::overflow(
-                        "value out of range for u128",
-                        start,
-                    ),
-                    _ => DeserializeError::invalid_value("invalid digit in number", start),
-                });
+                Result::Err(int_from_str_error(e.kind(), "value out of range for u128", start));
             },
         };
     }
@@ -2036,14 +1911,11 @@ impl Deserializer for JsonDeserializer {
 
     fn is_null(&mut self) -> Result<bool, DeserializeError> {
         self.skip_whitespace();
-        if self.pos + 4 <= self.input.len() {
-            if self.input.get_unchecked(self.pos) as i32 == 'n' as i32
-                && self.input.get_unchecked(self.pos + 1) as i32 == 'u' as i32
-                && self.input.get_unchecked(self.pos + 2) as i32 == 'l' as i32
-                && self.input.get_unchecked(self.pos + 3) as i32 == 'l' as i32 {
-                self.pos += 4;
-                return Result::Ok(true);
-            }
+        // In JSON, only the `null` literal starts with 'n', so a mismatch
+        // after it is malformed input rather than "not null".
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == 'n' as i32 {
+            self.expect_null()?;
+            return Result::Ok(true);
         }
         return Result::Ok(false);
     }
@@ -2289,94 +2161,55 @@ impl Serializer for CanonicalJsonSerializer {
     type VariantSerializer = CanonicalVariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_i32(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_i32(self.buf, v);
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_i64(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_i64(self.buf, v);
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_u32(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_u32(self.buf, v);
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_u64(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_u64(self.buf, v);
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_i128(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_i128(self.buf, v);
     }
 
     fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_u128(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_u128(self.buf, v);
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_f32(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_f32(self.buf, v);
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_f64(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_f64(self.buf, v);
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_bool(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_bool(self.buf, v);
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_char(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_char(self.buf, v);
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_string(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_string(self.buf, v);
     }
 
     fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_bytes(v);
-        self.buf = j.buf;
-        return r;
+        return write_json_bytes(self.buf, v);
     }
 
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
-        let mut j = JsonSerializer { buf: self.buf };
-        let r = j.serialize_null();
-        self.buf = j.buf;
-        return r;
+        return write_json_null(self.buf);
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<CanonicalSeqSerializer, SerializeError> {
