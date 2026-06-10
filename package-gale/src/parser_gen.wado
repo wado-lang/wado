@@ -33,7 +33,7 @@ use {
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
-use { PredictionNode, build_prediction } from "./prediction.wado";
+use { PredictionNode, build_prediction, prediction_collect_all_indices } from "./prediction.wado";
 use {
     alt_is_wildcard_led,
     compute_overlap_groups,
@@ -5783,7 +5783,7 @@ fn gen_prediction_code_inner(
         // the Leaf would generate incorrect code: don't consume or increment
         // skip — the Leaf will fall back to the scan-tournament helper.
         let mut node_alts: List<i32> = [];
-        collect_prediction_alts(&c.child, &mut node_alts);
+        prediction_collect_all_indices(&c.child, &mut node_alts);
         let mut elem_matches = !node_alts.is_empty();
         for let a of &node_alts {
             if skip >= alts[*a].elements.len()
@@ -6019,32 +6019,6 @@ fn gen_prediction_code_inner(
 /// Check if a consumed element matches the expected element at a given skip position.
 /// Returns true only for exact terminal matches (TokenRef or Literal).
 /// Unwraps Labels to compare inner elements.
-/// Collect every alternative index reachable under a prediction node (the
-/// Leaf / Ambiguous alts of the subtree). The Consume validation checks the
-/// consumed element against each of them.
-fn collect_prediction_alts(node: &PredictionNode, out: &mut List<i32>) {
-    match node {
-        Leaf(idx) => {
-            if !out.contains(idx) {
-                out.push(*idx);
-            }
-        },
-        Dispatch(d) => {
-            for let b of &d.branches {
-                collect_prediction_alts(&b.child, out);
-            }
-        },
-        Consume(c) => collect_prediction_alts(&c.child, out),
-        Ambiguous(a) => {
-            for let i of &a.alts {
-                if !out.contains(i) {
-                    out.push(*i);
-                }
-            }
-        },
-    }
-}
-
 fn elements_match(consumed: &Element, expected: &Element) -> bool {
     let exp = unwrap_label(expected);
     if let TokenRef(a) = consumed {

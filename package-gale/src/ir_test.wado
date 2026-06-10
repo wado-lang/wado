@@ -34,6 +34,23 @@ test "merge_grammars keeps a name that IS the suffix (no empty base)" {
     assert merged.name == "Parser", `name={merged.name}`;
 }
 
+test "merge_grammars tolerates a numeric channel id with no channels block" {
+    // `channel(2)` is a legal ANTLR4 integer-literal channel that is stored
+    // as-is and does NOT come from a `channels { }` block, so it has no
+    // remap entry. Merging (2+ grammars) must leave it unchanged, not panic.
+    let lexer = parse("lexer grammar FooLexer;\nC : '#' -> channel(2) ;").unwrap();
+    let parser = parse("parser grammar FooParser;\nr : C ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+    let mut found = false;
+    for let r of &merged.lexer_rules {
+        if r.name == "C" {
+            assert r.channel == 2, `channel={r.channel}`;
+            found = true;
+        }
+    }
+    assert found, "rule C not found in merged grammar";
+}
+
 test "Grammar construction" {
     let g = Grammar {
         name: "JSON",

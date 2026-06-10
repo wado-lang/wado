@@ -1295,18 +1295,23 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
 
             // Write slave grammars if present.
             let mut slave_relpaths: List<String> = [];
+            let mut slave_failed = false;
             for let mut i = 0; i < parsed.slave_grammars.len(); i += 1 {
                 let slave_name = `{base}.slave{i + 1}.g4`;
                 if let Err(_) = write_file_string(&cat_out_dir, &slave_name, &parsed.slave_grammars[i]) {
-                    // Count like a failed main-grammar write so the
-                    // "leave previous files untouched" protection fires;
-                    // silently emitting the descriptor as if the slave
-                    // never existed corrupts the composite.
                     eprintln(`extract: cannot write {key} {slave_name}`);
-                    category_errors += 1;
-                    continue;
+                    slave_failed = true;
+                    break;
                 }
                 slave_relpaths.push(`{*category}/{slave_name}`);
+            }
+            if slave_failed {
+                // Skip emitting the whole descriptor — a composite that
+                // references a slave we failed to write is corrupt. Count it
+                // like a failed main-grammar write so the "leave previous
+                // files untouched" protection fires for the category.
+                category_errors += 1;
+                continue;
             }
 
             if let Todo(_) = &triage {

@@ -667,16 +667,16 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
             if r.set_mode >= 0 {
                 r.set_mode = remap[r.set_mode];
             }
-            // Remap user-defined channel ids (>= 2). 0 and 1 are predefined.
-            // `src_idx` indexes the source grammar's declared channels, and
-            // every channel reference is validated at parse time, so it is
-            // always in range — a miss is an internal inconsistency, not
-            // input we should silently pass through with a stale id.
+            // Remap NAME-declared channel ids (>= 2; 0 and 1 are predefined)
+            // to their position in the merged channel list. A numeric
+            // `channel(N)` literal is an explicit id that does not come from
+            // the source grammar's `channels { }` block, so it has no
+            // `chan_remap` entry — leave it unchanged rather than remapping.
             if r.channel >= 2 {
                 let src_idx = r.channel - 2;
-                assert src_idx < chan_remap.len(),
-                    `merge_grammars: channel id {r.channel} has no remap entry`;
-                r.channel = chan_remap[src_idx];
+                if src_idx < chan_remap.len() {
+                    r.channel = chan_remap[src_idx];
+                }
             }
             lexer_rules.push(r);
         }

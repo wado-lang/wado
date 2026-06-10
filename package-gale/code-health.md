@@ -38,6 +38,7 @@ These are the highest-risk remaining bugs: a static-prediction edge or a parse/s
 - [ ] Emitters write `#[TODO]` before `// triage:` but every committed generated file has the reverse (post-`wado format`) order — raw regeneration output is not format-stable. Emit in the post-format order. `scripts/extract_antlr4_descriptors.wado:676-678` and 4 sibling emitters
 - [ ] `parse_cli_args` silently ignores unknown `--` flags (a typo'd `--finalize-stage-b-oracl` runs a full extract). `scripts/extract_antlr4_descriptors.wado:1034-1038`
 - [ ] Any stderr output from TestRig is classified as a parse error (exit 2), so benign runtime warnings drop the entry from Stage B′; the oracle jar is fetched with no checksum. `scripts/antlr4-oracle.sh:188-199`, `:129-140`
+- [ ] `action_strip`'s `[...]` now ends at the first unescaped `]` (correct for char sets, the corpus case). This loses the depth tracking that handled a rule-argument / `catch` action whose host type contains `[]` (`r[int[] arr]`, `catch [T[] xs]`): such an action ends early and its remainder leaks into the grammar text. No corpus grammar exercises this (all nested-`[` cases are char sets), but a context-aware stripper (distinguish set vs arg-action by position) would handle both. `src/g4/action_strip.wado:38-61`
 
 ### Diagnostics and minor
 
