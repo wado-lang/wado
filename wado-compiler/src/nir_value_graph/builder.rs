@@ -752,12 +752,32 @@ impl<'a> Builder<'a> {
     /// Seed the field-store map from a `let x = S { f: v, … }` binding, where
     /// `recv` is `x`'s (fresh-opaque) `ValueId` and `value_expr` is the bound
     /// expression. Each pure field value is seeded at the current version of
-    /// its field, so a later `x.f` read forwards it. Only a direct
-    /// `StructLiteral` is handled — block- / labeled-block-wrapped
-    /// constructors (the inlined-constructor shape) are a follow-up; missing
-    /// them only costs forwarding, never soundness.
+    /// its field, so a later `x.f` read forwards it.
+    ///
+    /// Unlabeled `Block` wrappers are peered through to their trailing
+    /// expression — the shape constructor inlining leaves behind
+    /// (`let arr = { let n = …; …; List { repr, used: n } }`); an unlabeled
+    /// block has no break target, so the tail is its sole producer.
+    /// `LabeledBlock` wrappers (whose value exits via `break label:`) are a
+    /// follow-up; missing them only costs forwarding, never soundness.
     fn seed_struct_literal_fields(&mut self, recv: ValueId, value_expr: ExprId) {
-        let ExprKind::StructLiteral { fields, .. } = &self.body.exprs[value_expr].kind else {
+        let mut producer = value_expr;
+        loop {
+            match &self.body.exprs[producer].kind {
+                ExprKind::StructLiteral { .. } => break,
+                ExprKind::Block(b) => {
+                    let Some(&last) = self.body.blocks[*b].stmts.last() else {
+                        return;
+                    };
+                    let StmtKind::Expr(tail) = &self.body.stmts[last].kind else {
+                        return;
+                    };
+                    producer = *tail;
+                }
+                _ => return,
+            }
+        }
+        let ExprKind::StructLiteral { fields, .. } = &self.body.exprs[producer].kind else {
             return;
         };
         // Clone out the (field_index, value-expr) pairs to release the body
@@ -2084,6 +2104,56 @@ mod tests {
         root_with(&mut body, vec![let_x, let_n]);
         let r = build_t(&body, &[]);
         assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(5));
+    }
+
+    #[test]
+    fn block_wrapped_struct_literal_let_seeds_field_reads() {
+        // fn(limit) { let x = { let n = limit + 1; S { f0: n } }; let m = x.f0; }
+        // The block tail is the sole producer, so x.f0 forwards n's value
+        // (`limit + 1`) — the constructor-inlining shape.
+        let mut body = empty_body();
+        let limit_read = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let n_value = binary(&mut body, NirBinaryOp::Add, limit_read, one);
+        let let_n = let_stmt(&mut body, 1, n_value, false);
+        let n_read = local_ref(&mut body, 1);
+        let struct_lit = alloc_expr(
+            &mut body,
+            ExprKind::StructLiteral {
+                struct_type: TypeTable::UNIT,
+                struct_name: "S".to_string(),
+                fields: vec![crate::nir_arena::ArenaStructField {
+                    name: "f0".to_string(),
+                    value: n_read,
+                    field_index: 0,
+                }],
+            },
+        );
+        let tail_stmt = alloc_stmt(&mut body, StmtKind::Expr(struct_lit));
+        let inner_block = block_with(&mut body, vec![let_n, tail_stmt]);
+        let block_expr = alloc_expr(&mut body, ExprKind::Block(inner_block));
+        let let_x = let_stmt(&mut body, 2, block_expr, false);
+        let recv = local_ref(&mut body, 2);
+        let read = field_access(&mut body, recv, 0);
+        let let_m = let_stmt(&mut body, 3, read, false);
+        root_with(&mut body, vec![let_x, let_m]);
+        let param = NirParam {
+            name: "limit".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 0,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build_t(&body, &[param]);
+        // x.f0 forwards n = limit + 1.
+        assert_eq!(r.value_of[&read], r.value_of[&n_value]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::Binary {
+                op: NirBinaryOp::Add,
+                ..
+            }
+        ));
     }
 
     #[test]
