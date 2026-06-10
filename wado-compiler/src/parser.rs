@@ -4481,22 +4481,28 @@ impl Parser {
             if self.check(&TokenKind::Lt) {
                 self.advance();
                 let args = self.parse_type_args()?;
+                // Span must cover `namespace::type<...>` through the closing
+                // `>`, not stop at the namespace token: a short span lets an
+                // inner type-argument node (textually to the right) win
+                // trailing-comment ownership, dropping the comment.
+                let end_span = self.tokens[self.pos - 1].span;
 
                 return Ok(Type::NamespacedGeneric(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
                     args,
-                    span: start_span,
+                    span: start_span.merge(&end_span),
                 }));
             } else {
                 // Namespaced type without generics: namespace::type
+                let end_span = self.tokens[self.pos - 1].span;
                 return Ok(Type::NamespacedGeneric(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
                     args: Vec::new(),
-                    span: start_span,
+                    span: start_span.merge(&end_span),
                 }));
             }
         }
@@ -4504,12 +4510,17 @@ impl Parser {
         if self.check(&TokenKind::Lt) {
             self.advance();
             let args = self.parse_type_args()?;
+            // Span must cover `Name<...>` through the closing `>`, not stop at
+            // the name token: a short span lets an inner type-argument node
+            // (textually to the right) win trailing-comment ownership, which
+            // silently drops the declaration's trailing comment.
+            let end_span = self.tokens[self.pos - 1].span;
 
             Ok(Type::Generic(GenericType {
                 id: self.alloc_ast_id(),
                 name,
                 args,
-                span: start_span,
+                span: start_span.merge(&end_span),
             }))
         } else {
             Ok(Type::Named(NamedType {

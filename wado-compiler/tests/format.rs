@@ -471,6 +471,47 @@ fn run() {
     );
 }
 
+/// A trailing comment after a declaration whose type is a generic
+/// (`Foo<...>`) used to be dropped: the generic type's span ended at its
+/// name token rather than at the closing `>`, so an inner type-argument
+/// node (textually to the right) became the comment's owner and the
+/// unparser never emitted trailing comments for inner type arguments.
+/// Regression guard for variant cases and struct fields.
+#[test]
+fn test_format_preserves_trailing_comment_on_generic_type() {
+    let source = r"pub variant Value {
+    List(List<Value>),  // a list value
+    Object(TreeMap<String, Value>),  // string keys only
+    Other,  // plain case
+}
+
+struct Config {
+    entries: TreeMap<String, Value>,  // the entries
+    count: i32,  // how many
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    for comment in [
+        "// a list value",
+        "// string keys only",
+        "// plain case",
+        "// the entries",
+        "// how many",
+    ] {
+        assert!(
+            formatted.contains(comment),
+            "trailing comment `{comment}` should be preserved:\n{formatted}"
+        );
+    }
+    // Comments must not migrate onto the wrong line, and format is stable.
+    assert!(
+        formatted.contains("Object(TreeMap<String, Value>),  // string keys only"),
+        "comment must stay on its own declaration line:\n{formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
 #[test]
 fn test_format_comment_at_file_start() {
     let source = r"// First line comment
