@@ -220,6 +220,14 @@ run = "cargo llvm-cov --all-features --workspace"
 description = "Run tests with coverage (HTML report)"
 run = "cargo llvm-cov --all-features --workspace --html"
 
+[tasks.test-format]
+description = """\
+Run formatter invariant tests over the fixtures + stdlib corpus: idempotency, \
+AST round-trip, and no comment drop. The corpus is not reformatted in place \
+(fixtures double as parser tests), but it is the richest edge-case input.\
+"""
+run = "cargo test -p wado-compiler --test format"
+
 [tasks.format]
 description = "Format Rust and Markdown files"
 run = """
