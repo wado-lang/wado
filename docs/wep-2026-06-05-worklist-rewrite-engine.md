@@ -264,6 +264,8 @@ algebraic rules over `Select` and `Opaque` provenance.
 
 #### Stage 6 — const_folding, condition_implication, licm
 
+Detailed design: [Stage 6 Value Rules](./wep-2026-06-10-stage6-value-rules.md).
+
 - [ ] Env-free `const_folding` rewritten as algebraic rules over Value
       kinds (`Binary(Add, Int(a), Int(b)) → Int(a+b)`, `Binary(Add, ?x,
       Int(0)) → ?x`, …). Rules apply destructively against the
