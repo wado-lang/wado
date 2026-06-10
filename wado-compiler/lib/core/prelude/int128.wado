@@ -35,27 +35,6 @@ impl u128 {
         return u128 { low, high };
     }
 
-    /// Create a u128 from a string of decimal digits, with optional `_`
-    /// separators. For error-checked parsing use `from_str` instead.
-    pub fn from_string(s: String) -> u128 {
-        let mut result = u128::zero();
-        let mut i = 0;
-        let len = s.len();
-        let bytes = s.internal_raw_bytes();
-        let ten: u128 = 10;
-        while i < len {
-            let byte = builtin::array_get_u8(&bytes, i);
-            let digit = byte as i32 - '0' as i32;
-            // Only `_` digit separators may interleave the digits.
-            assert 0 <= digit <= 9 || byte == '_' as u8;
-            if 0 <= digit <= 9 {
-                result = result * ten + u128::from_u64(digit as u64);
-            }
-            i += 1;
-        }
-        return result;
-    }
-
     /// Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
     pub fn from_str_hex(s: &String) -> Result<u128, ParseIntError> {
         return u128::from_str_radix(s, 16);
@@ -701,45 +680,6 @@ impl i128 {
     #[compiler_item("i128_from_pair")]
     pub fn from_pair(low: u64, high: i64) -> i128 {
         return i128 { low, high };
-    }
-
-    /// Create an i128 from a string of decimal digits, optionally prefixed
-    /// with '-' and with optional `_` separators. For error-checked parsing
-    /// use `from_str` instead.
-    pub fn from_string(s: String) -> i128 {
-        let len = s.len();
-        if len == 0 {
-            return i128::zero();
-        }
-
-        let bytes = s.internal_raw_bytes();
-
-        // Check for negative sign
-        let first_byte = builtin::array_get_u8(&bytes, 0);
-        let is_negative = first_byte == '-' as u8;
-        let start_idx = if is_negative { 1 } else { 0 };
-
-        // Parse the absolute value as u128
-        let mut abs_value = u128::zero();
-        let mut i = start_idx;
-        let ten: u128 = 10;
-        while i < len {
-            let byte = builtin::array_get_u8(&bytes, i);
-            let digit = byte as i32 - '0' as i32;
-            // Only `_` digit separators may interleave the digits.
-            assert 0 <= digit <= 9 || byte == '_' as u8;
-            if 0 <= digit <= 9 {
-                abs_value = abs_value * ten + u128::from_u64(digit as u64);
-            }
-            i += 1;
-        }
-
-        // Convert to i128
-        let result = i128::from_u128(abs_value);
-        if is_negative {
-            return -result;
-        }
-        return result;
     }
 
     /// Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`).

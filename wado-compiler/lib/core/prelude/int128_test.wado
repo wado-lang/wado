@@ -229,34 +229,8 @@ test "i128 negative Display via template string" {
     assert `{c}` == "-9876";
 }
 
-test "u128 from_string small" {
-    let a: u128 = 100;
-    assert u128::from_string("100") == a;
-}
-
-test "u128 from_string larger than u64 max" {
-    let b = u128::from_string("18446744073709551616");
-    assert b.to_string() == "18446744073709551616";
-}
-
-test "i128 from_string positive" {
-    let a: i128 = 100;
-    assert i128::from_string("100") == a;
-}
-
-test "i128 from_string negative" {
-    let a: i128 = -100;
-    assert i128::from_string("-100") == a;
-}
-
-test "u128 arithmetic with from_string" {
-    let a = u128::from_string("100");
-    let b: u128 = 150;
-    assert a + u128::from_string("50") == b;
-}
-
 test "u128 max value" {
-    let max = u128::from_string("340282366920938463463374607431768211455");
+    let max: u128 = 340282366920938463463374607431768211455;
     assert max.to_string() == "340282366920938463463374607431768211455";
     assert max.low() == 18446744073709551615;
     assert max.high() == 18446744073709551615;
@@ -268,12 +242,12 @@ test "u128 max u64 value" {
 }
 
 test "i128 max value" {
-    let max = i128::from_string("170141183460469231731687303715884105727");
+    let max: i128 = 170141183460469231731687303715884105727;
     assert max.to_string() == "170141183460469231731687303715884105727";
 }
 
 test "i128 min value is negative" {
-    let min = i128::from_string("-170141183460469231731687303715884105728");
+    let min: i128 = -170141183460469231731687303715884105728;
     assert min.to_string() == "-170141183460469231731687303715884105728";
     assert min.is_negative();
 }

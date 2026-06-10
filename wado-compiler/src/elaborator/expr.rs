@@ -2677,7 +2677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
-        // For large literals: 170... as i128 → i128::from_string("170...")
+        // For large literals: 170... as i128 → i128::from_pair(low, high)
         let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
             ResolvedType::Struct { name, .. } => Some(name),
             _ => None,
