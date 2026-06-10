@@ -1003,7 +1003,16 @@ impl<'a> Builder<'a> {
                 self.block_falls_through(*then_block)
                     || else_block.is_none_or(|eb| self.block_falls_through(eb))
             }
-            StmtKind::LabeledBlock { block, .. } => self.block_falls_through(*block),
+            // A labeled block falls through when its body reaches the
+            // bottom OR any `break` targets the block's OWN label — such a
+            // break resumes right after the block, i.e. it IS fall-through.
+            // The tail-only `block_falls_through` walk cannot see early
+            // self-breaks (`lbl: { if d { break lbl; } return; }`), so scan
+            // the subtree too. Over-approximating the break's reachability
+            // only adds an arm to the join, which is sound.
+            StmtKind::LabeledBlock { block, label } => {
+                self.block_falls_through(*block) || block_breaks_to(self.body, *block, label)
+            }
             // A `Loop` falls through only via `break`, which we do not
             // analyse here; treat it as falling through.
             StmtKind::Loop { .. } => true,
@@ -1125,6 +1134,28 @@ impl<'a> Builder<'a> {
             }
         }
     }
+}
+
+/// Whether `block`'s subtree contains a `break` targeting `label`. Used by
+/// [`Builder::stmt_falls_through`] to classify a labeled block whose body
+/// exits via a break to its own label as falling through.
+fn block_breaks_to(body: &Body, block: BlockId, label: &str) -> bool {
+    block_breaks_to_node(body, NodeRef::Block(block), label)
+}
+
+fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
+    if let NodeRef::Stmt(s) = node
+        && let StmtKind::Break {
+            label: Some(brk), ..
+        } = &body.stmts[s].kind
+        && brk == label
+    {
+        return true;
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    kids.into_iter()
+        .any(|c| block_breaks_to_node(body, c, label))
 }
 
 /// Scan `block`'s subtree for `&local` / `&mut local` (`Unary::Ref` /

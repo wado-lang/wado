@@ -1099,7 +1099,16 @@ fn stmt_falls_through(body: &Body, s: StmtId, type_table: &TypeTable) -> bool {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             !is_never_type(body.exprs[*value].type_id, type_table)
         }
-        StmtKind::LabeledBlock { block, .. } => block_falls_through(body, *block, type_table),
+        // A labeled block falls through when its body reaches the bottom OR
+        // any `break` targets the block's OWN label — such a break resumes
+        // right after the block, i.e. it IS fall-through. The tail-only
+        // `block_falls_through` walk cannot see early self-breaks
+        // (`lbl: { if d { break lbl; } return; }`); see the e2e fixture
+        // `labeled_block_self_break_field_write.wado`.
+        StmtKind::LabeledBlock { block, label } => {
+            block_falls_through(body, *block, type_table)
+                || has_break_to(body, NodeRef::Block(*block), label)
+        }
         StmtKind::If {
             then_block,
             else_block,

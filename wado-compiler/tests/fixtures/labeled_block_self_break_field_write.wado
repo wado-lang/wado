@@ -1,0 +1,64 @@
+// A statement-form labeled block whose arms `break` to the block's OWN
+// label falls through to the code after the block. The fall-through
+// analyses (the ValueGraph heap join, const_folding's field-env join)
+// must not classify such an arm as diverging: doing so drops the arm's
+// field writes from the join, and a later read folds to the stale
+// pre-branch value (printed 11 instead of 19 at -O1+ when it regressed).
+
+use { println, Stdout } from "core:cli";
+
+struct Inner {
+    pub f: i32,
+}
+
+struct Outer {
+    pub inner: Inner,
+    pub pad: i32,
+}
+
+fn opaque_bool(n: i32) -> bool {
+    if n <= 0 {
+        return true;
+    }
+    return opaque_bool(n - 1);
+}
+
+fn check(c: bool, d: bool) -> i32 {
+    let mut o = Outer { inner: Inner { f: 1 }, pad: 0 };
+    let a = o.inner.f;
+    if c {
+        lbl: {
+            if d {
+                o.inner.f = 9;
+                break lbl;
+            } else {
+                break lbl;
+            }
+        }
+    }
+    return a * 10 + o.inner.f;
+}
+
+fn check2(c: bool) -> i32 {
+    let mut o = Outer { inner: Inner { f: 1 }, pad: 0 };
+    let a = o.inner.f;
+    if c {
+        lbl: {
+            o.inner.f = 9;
+            break lbl;
+        }
+    }
+    return a * 10 + o.inner.f;
+}
+
+export fn run() with Stdout {
+    let t = opaque_bool(3);
+    println(`{check(t, t)}`);
+    println(`{check(t, !t)}`);
+    println(`{check(!t, t)}`);
+    println(`{check2(t)}`);
+    println(`{check2(!t)}`);
+}
+
+__DATA__
+{"stdout": "19\n11\n11\n19\n11\n"}
