@@ -247,7 +247,19 @@ fixpoint today); identity rules land separately with reviewed diffs.
 This is a pure refactor (byte-identical), and removes the last
 non-engine mutation path in the optimizer.
 
-### Increment 6.3 — condition_implication on ValueIds
+### Increment 6.3 — condition_implication on ValueIds (landed)
+
+Landed: `condition_implication.rs` went from 1,940 to ~750 lines. All
+three guard kinds (loop guard, dominating if-condition, early-exit /
+short-circuit) unified into one `GuardFact { var_vn, max_offset,
+bound_vn, is_strict }`, evaluated by `Add` decomposition + `ValueId`
+identity + integer-constant kinds. The `DefMap` / `Taints` /
+`KillEvents` / `Bound` / `resolve_*` machinery is deleted. One builder
+extension was needed for `<=`-guard parity: struct-literal field
+seeding peers through unlabeled `Block` wrappers to the trailing
+expression (the constructor-inlining shape), so `arr.used` carries
+`vn(limit) + 1` and the plus-one regime fires. Verified on the full
+fixture + E2E suite and `mise run test-wado` (3311 tests).
 
 A guard fact becomes a pair of `ValueId`s captured at the guard
 position: `Guard { var: ValueId, bound: ValueId, strict: bool }` (loop

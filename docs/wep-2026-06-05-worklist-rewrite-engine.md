@@ -274,8 +274,10 @@ Detailed design: [Stage 6 Value Rules](./wep-2026-06-10-stage6-value-rules.md).
 - [ ] Env-bound `const_folding`: `niri.rs` refactored to stop mutating
       `Body` in place. `reduce_*_a` becomes a Value-returning pure
       function; the caller decides whether to commit via the engine.
-- [ ] `condition_implication`'s bound comparisons collapse onto
+- [x] `condition_implication`'s bound comparisons collapse onto
       `ValueId` equality; dominating-guard tracking stays Skel-side.
+      All guard kinds unified into one ValueId-based `GuardFact`; the
+      `DefMap` / taint / kill machinery deleted (1,940 → ~750 lines).
 - [ ] `licm` recognises loop-invariance as "this `ValueId` does not
       depend on any `LoopPhi` for the current loop". Hoisting becomes a
       Skel rewrite over invariant operand subgraphs.
