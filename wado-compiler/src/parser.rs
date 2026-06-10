@@ -3288,14 +3288,16 @@ impl Parser {
     fn parse_cast_expr(&mut self) -> ParseResult<Expr> {
         let mut expr = self.parse_unary_expr()?;
         while *self.peek_kind() == TokenKind::As {
-            let start_span = self.peek().span;
             self.advance();
             let target_type = self.parse_type()?;
+            // Span the operand through the target type, not just the `as` token,
+            // so the target type node can't steal a trailing comment.
+            let span = expr.span().merge(&target_type.span());
             expr = Expr::Cast(Box::new(CastExpr {
                 id: self.alloc_ast_id(),
                 expr,
                 target_type,
-                span: start_span,
+                span,
             }));
         }
         Ok(expr)
@@ -5094,6 +5096,10 @@ impl Parser {
         // - Scalar: `Some(T)` (single type in parentheses)
         // - Tuple: `Rectangle([f64, f64])` (tuple type as single payload)
         // - Struct: `Named({ w: f64, h: f64 })` (struct type as single payload)
+        // Span end: the closing `)` when present, else the case name. Using the
+        // payload type's end instead would stop short of `)`, letting an inner
+        // type node steal a trailing comment (see the generic-type span fix).
+        let mut last_end = name_span;
         let payload = if self.check(&TokenKind::LParen) {
             self.advance();
             let payload_type = self.parse_type()?;
@@ -5104,16 +5110,12 @@ impl Parser {
                     span: self.peek().span,
                 });
             }
-            self.expect(&TokenKind::RParen)?;
+            last_end = self.expect(&TokenKind::RParen)?.span;
             Some(payload_type)
         } else {
             None
         };
 
-        // Case span covers the full extent — start through the payload
-        // type's end, when present. A start-only span would leave the
-        // payload's descendant ids extending past the parent.
-        let last_end = payload.as_ref().map_or(name_span, Type::span);
         let span = start_span.merge(&last_end);
 
         Ok(VariantCase {
@@ -5166,7 +5168,9 @@ impl Parser {
         }
         self.expect(&TokenKind::Eq)?;
         let ty = self.parse_type()?;
-        self.expect(&TokenKind::Semicolon)?;
+        // Span through the `;`, not just the `type` keyword, so the RHS type
+        // node can't steal a trailing comment.
+        let end_span = self.expect(&TokenKind::Semicolon)?.span;
         Ok(Item::Newtype(Newtype {
             id,
             name,
@@ -5175,7 +5179,7 @@ impl Parser {
             type_params,
             ty,
             attrs,
-            span: start_span,
+            span: start_span.merge(&end_span),
         }))
     }
 
