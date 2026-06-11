@@ -457,17 +457,26 @@ Rollout (each step gated by the full E2E suite):
       which had omitted the error-code the kiln transmission future needs.
       Pure-compute now drops the dead import; sha256 and kiln keep it. Full
       e2e green (4766 tests).
-- [ ] R2 — Rewire codegen to emit from the plan; delete the duplicated
-      decision logic so codegen only encodes. The flat FQ list from R1 is
-      insufficient to drive codegen: each import uses a distinct mechanism
-      (the shared `wasi:cli/types` instance; a function-bearing interface
-      instance with its funcs + resource exports; a resource-defining
-      interface instance; the HTTP `types`/`client` instances), and the
-      resource-deferral ordering is load-bearing for wasm-encoder. So R2
-      first enriches the plan into ordered, categorized entries
-      (`{ fq, kind, funcs, resources, … }`), then makes codegen iterate and
-      encode them. A naive "gate membership on the flat plan" shortcut
-      double-imports `wasi:cli/types` and is not viable.
+- [~] R2 — Rewire codegen to emit from the plan; delete the duplicated
+  decision logic so codegen only encodes. Done incrementally, each step
+  gated by the full e2e suite:
+  - [x] The flat FQ list cannot drive codegen — confirmed empirically: a
+        flat-membership gate on the function-interface loop processes
+        `wasi:cli/types` (which is in the plan but is the shared `error-code`
+        instance, not a function interface), yielding an invalid component
+        (`wasi_filesystem` / `wasi_tls_result_error`: "instance N has no
+        export error-code"). So the plan now carries an `ImportKind` per entry
+        (`SharedTypes`, `FunctionInterface`, `ResourceSource`, `HttpTypes`,
+        `HttpClient`), built in `wir_build`.
+  - [x] Membership for `wasi:cli/types`, the function-bearing interfaces
+        (Phase 1), and `wasi:http/types` is now decided by the plan; codegen
+        reads `ImportKind` and encodes. The function loop imports only
+        `FunctionInterface` entries. Full e2e green (4766 tests).
+  - [ ] Phase 2/3 (resource-defining and resource-using interfaces) and
+        `wasi:http/client` remain codegen-driven. Their membership is
+        `ctx`-state-dependent (resource pre-imports, dedup), so making them
+        plan-driven means restructuring those phases to separate decision
+        from encoding — the remaining bulk of R2.
 - [x] R3 — The WIT emitter reads the plan for its world import refs
       (`WitEmitOptions::world_imports`), replacing the effect-row derivation;
       `wado wit` compiles through optimize (on a silent host) to obtain it.
