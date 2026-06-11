@@ -1171,6 +1171,7 @@ impl<'a> WirContext<'a> {
             needed_canonicals,
             // Resolved by `build_wir_package` once `needed_canonicals` is final.
             imported_cm_interfaces: Vec::new(),
+            import_plan: Vec::new(),
             defined_func_base: DEFINED_FUNC_BASE,
         }
     }

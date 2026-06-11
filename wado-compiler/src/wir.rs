@@ -22,6 +22,31 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 
+/// How a CM interface is imported, so codegen dispatches to the right encoding.
+/// The flat FQ list cannot drive codegen because each kind uses a distinct
+/// mechanism (e.g. the shared `wasi:cli/types` instance vs a function-bearing
+/// interface instance).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportKind {
+    /// `wasi:cli/types` — the shared `error-code` enum instance.
+    SharedTypes,
+    /// A function-bearing interface (cli/stdout, clocks/monotonic-clock, …).
+    FunctionInterface,
+    /// A resource-defining interface imported so its resource type is available.
+    ResourceSource,
+    /// `wasi:http/types`.
+    HttpTypes,
+    /// `wasi:http/client`.
+    HttpClient,
+}
+
+/// One entry of the WIR-level import plan: a CM interface FQ and its category.
+#[derive(Debug, Clone)]
+pub struct ImportEntry {
+    pub fq: String,
+    pub kind: ImportKind,
+}
+
 /// A complete Wasm module in WIR form.
 /// Contains all information needed to emit a valid Wasm binary.
 #[derive(Debug)]
@@ -63,13 +88,15 @@ pub struct WirPackage {
     /// Populated during WIR translation via `WirContext::ensure_canonical`.
     /// Used by the component codegen to determine which canonical imports to generate.
     pub needed_canonicals: IndexSet<CanonicalIntrinsic>,
-    /// The complete set of CM interface FQs this component imports — the
-    /// WIR-level import plan resolved by
-    /// [`crate::wir_build::component_imports::resolve_imported_cm_interfaces`]
-    /// once `needed_canonicals` is final. The single source of truth for the
-    /// import set (codegen, the WIT producer, and CM embedding read it). See
-    /// WEP `wep-2026-05-02-wit-interoperability.md` §"Faithful imports".
+    /// The complete set of CM interface FQs this component imports — the flat
+    /// view of the import plan, read by the WIT producer and CM embedding for
+    /// the world's import refs. See WEP
+    /// `wep-2026-05-02-wit-interoperability.md` §"Faithful imports".
     pub imported_cm_interfaces: Vec<String>,
+    /// The import plan with each FQ's category, in codegen emission order.
+    /// Codegen iterates this to decide membership per phase rather than
+    /// re-deriving it (the `codegen.rs` principle: codegen emits the plan).
+    pub import_plan: Vec<ImportEntry>,
     /// Absolute Wasm function index of the first defined function (i.e. the
     /// number of imported functions). Defined function `i` (the `i`-th entry
     /// in [`functions`](Self::functions)) has the absolute index
@@ -252,6 +279,7 @@ impl WirPackage {
             dead_global_indices: IndexSet::default(),
             needed_canonicals: IndexSet::default(),
             imported_cm_interfaces: Vec::new(),
+            import_plan: Vec::new(),
             defined_func_base: 0,
         }
     }

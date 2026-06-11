@@ -16,39 +16,46 @@ use crate::ast::Type;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload};
+use crate::wir::{CanonicalIntrinsic, CmFuturePayload, ImportEntry, ImportKind};
 
-/// Compute the imported CM interface FQs for `project`, mirroring the decision
+/// Resolve the categorized import plan for `project`, mirroring the decision
 /// codegen's import phases make from `used_wasi_functions`, the registry, and
-/// the WIR-level canonical intrinsics. Returns a sorted, de-duplicated list.
+/// the WIR-level canonical intrinsics. Entries are in codegen emission order.
 #[must_use]
-pub fn resolve_imported_cm_interfaces(
+pub fn resolve_import_plan(
     project: &NirPackage,
     needed_canonicals: &IndexSet<CanonicalIntrinsic>,
-) -> Vec<String> {
+) -> Vec<ImportEntry> {
     let registry = project.cm_interface_registry;
-    let mut imports: IndexSet<String> = IndexSet::default();
+    let mut entries: Vec<ImportEntry> = Vec::new();
+    let mut seen: IndexSet<String> = IndexSet::default();
+    let mut push = |entries: &mut Vec<ImportEntry>, fq: String, kind: ImportKind| {
+        if seen.insert(fq.clone()) {
+            entries.push(ImportEntry { fq, kind });
+        }
+    };
 
-    // No blanket "kiln forbids WASI" early-return here: the kiln-generator world
-    // forbids WASI *interfaces* (stdout/stderr/…), and `optimize/dce.rs` already
-    // keeps `used_wasi_functions` empty for it, so the interface phases below
-    // naturally yield nothing. But the generator's `task return` transmission
-    // future still needs the canonical cli `error-code`, so Phase 0 must remain
-    // governed by `needs_canonical_cli_error_code`, not a WASI-allowed flag.
+    // No blanket "kiln forbids WASI" early-return: the kiln-generator world
+    // forbids WASI *interfaces*, and `optimize/dce.rs` keeps `used_wasi_functions`
+    // empty for it, so the interface phases below yield nothing. But its
+    // `task return` transmission future still needs the canonical cli
+    // `error-code`, so Phase 0 stays governed by the predicate below.
 
-    // Phase 0: `wasi:cli/types` provides the shared `error-code` enum — the
-    // canonical fallback for `result<_, error-code>` bindings. Needed iff a used
-    // interface's signature references it (cli stdin/stdout/stderr) OR an
-    // async-export transmission future resolves to the cli error-code (its
-    // `Transmission` source is `cli`; e.g. a kiln generator's `task return`).
+    // Phase 0: `wasi:cli/types` (shared `error-code` enum) — needed iff a used
+    // interface references the cli error-code OR an async-export transmission
+    // future resolves to it (`Transmission("cli")`, e.g. a kiln generator).
     if needs_canonical_cli_error_code(project, needed_canonicals)
         && let Some(version) = registry.get_cli_version()
     {
-        imports.insert(format!("wasi:cli/types@{version}"));
+        push(
+            &mut entries,
+            format!("wasi:cli/types@{version}"),
+            ImportKind::SharedTypes,
+        );
     }
 
-    // Phase 1: every interface with a function in `used_wasi_functions`, plus
-    // the resource-defining interfaces for resources those signatures touch.
+    // Phase 1: every interface with a function in `used_wasi_functions`, in
+    // registry order. Records the resources those signatures touch for Phase 2.
     let mut needed_resources: IndexSet<String> = IndexSet::default();
     for interface_info in registry.interfaces() {
         if interface_info.interface == "run"
@@ -70,7 +77,11 @@ pub fn resolve_imported_cm_interfaces(
         if used.is_empty() {
             continue;
         }
-        imports.insert(interface_info.path.clone());
+        push(
+            &mut entries,
+            interface_info.path.clone(),
+            ImportKind::FunctionInterface,
+        );
         for func in used {
             if let Some(ret) = &func.return_type {
                 collect_resources_in_type(ret, registry, &mut needed_resources);
@@ -81,8 +92,8 @@ pub fn resolve_imported_cm_interfaces(
         }
     }
 
-    // Resource-defining interfaces for every referenced resource (transitive:
-    // a resource's defining interface may itself reference further resources).
+    // Phase 2: resource-defining interfaces for every referenced resource
+    // (transitive: a defining interface may reference further resources).
     let mut worklist: Vec<String> = needed_resources.iter().cloned().collect();
     let mut seen_resources: IndexSet<String> = IndexSet::default();
     while let Some(resource) = worklist.pop() {
@@ -93,9 +104,7 @@ pub fn resolve_imported_cm_interfaces(
             continue;
         };
         let source = source.to_string();
-        imports.insert(source.clone());
-        // The defining interface's own signatures may reference further
-        // resources; queue those too.
+        push(&mut entries, source.clone(), ImportKind::ResourceSource);
         let mut more: IndexSet<String> = IndexSet::default();
         for info in registry.interfaces().filter(|i| i.path == source) {
             for func in &info.functions {
@@ -110,20 +119,33 @@ pub fn resolve_imported_cm_interfaces(
         worklist.extend(more);
     }
 
-    // Phase 4: HTTP interfaces are imported under the handler / Client
-    // conditions codegen uses.
+    // Phase 4: HTTP interfaces under the handler / Client conditions.
     if (project.has_http_handler_export || project.has_interface("Client"))
         && let Some(version) = registry.get_package_version("http")
     {
-        imports.insert(format!("wasi:http/types@{version}"));
+        push(
+            &mut entries,
+            format!("wasi:http/types@{version}"),
+            ImportKind::HttpTypes,
+        );
     }
     if project.has_interface("Client")
         && let Some(version) = registry.get_package_version("http")
     {
-        imports.insert(format!("wasi:http/client@{version}"));
+        push(
+            &mut entries,
+            format!("wasi:http/client@{version}"),
+            ImportKind::HttpClient,
+        );
     }
 
-    let mut out: Vec<String> = imports.into_iter().collect();
+    entries
+}
+
+/// The flat sorted FQ list, for the WIT producer's world import refs.
+#[must_use]
+pub fn import_plan_fqs(plan: &[ImportEntry]) -> Vec<String> {
+    let mut out: Vec<String> = plan.iter().map(|e| e.fq.clone()).collect();
     out.sort();
     out
 }

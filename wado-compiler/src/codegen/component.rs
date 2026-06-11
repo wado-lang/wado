@@ -32,15 +32,10 @@ pub fn build_component(
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
 
-    // Generate CM imports. Which interfaces are imported is decided by the
-    // WIR-level plan (the single source of truth), which codegen reads rather
-    // than re-deriving; codegen's job is to encode each.
-    generate_cm_imports(
-        &mut builder,
-        &mut ctx,
-        project,
-        &wir_package.imported_cm_interfaces,
-    );
+    // Generate CM imports. Which interfaces are imported, and in what category,
+    // is decided by the WIR-level plan (the single source of truth); codegen
+    // reads it rather than re-deriving, and its job is to encode each.
+    generate_cm_imports(&mut builder, &mut ctx, project, &wir_package.import_plan);
 
     // Type: result unit for run function (needed for task.return)
     let result_unit_type = ctx.register_type("result-unit");
@@ -1723,11 +1718,12 @@ fn generate_cm_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    import_plan: &[String],
+    import_plan: &[crate::wir::ImportEntry],
 ) {
-    let plan_has = |prefix: &str| import_plan.iter().any(|fq| fq.starts_with(prefix));
-    let needs_cli_types = plan_has("wasi:cli/types@");
-    let needs_http_types = plan_has("wasi:http/types@");
+    use crate::wir::ImportKind;
+    let has_kind = |kind: ImportKind| import_plan.iter().any(|e| e.kind == kind);
+    let needs_cli_types = has_kind(ImportKind::SharedTypes);
+    let needs_http_types = has_kind(ImportKind::HttpTypes);
     let cli_version = project
         .cm_interface_registry
         .get_cli_version()
@@ -1791,7 +1787,13 @@ fn generate_cm_imports(
         if interface_info.package == "http" {
             continue;
         }
-        if !import_plan.contains(&interface_info.path) {
+        // Membership: the plan lists this FQ as a function-bearing interface.
+        // (The shared `wasi:cli/types` is `SharedTypes`, not `FunctionInterface`,
+        // so it is correctly excluded from this loop and handled by Phase 0.)
+        if !import_plan
+            .iter()
+            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::FunctionInterface)
+        {
             continue;
         }
 

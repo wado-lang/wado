@@ -3026,6 +3026,7 @@ mod tests {
             dead_global_indices: IndexSet::default(),
             needed_canonicals: IndexSet::default(),
             imported_cm_interfaces: Vec::new(),
+            import_plan: Vec::new(),
             defined_func_base: 0,
         }
     }
