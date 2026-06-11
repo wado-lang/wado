@@ -274,10 +274,12 @@ Builder prerequisites (landed):
 - Field store→load seeding: `obj.f = v` and struct-literal `let`s seed
   `(receiver, field, version) → value`, peering through block /
   labeled-block constructor wrappers with a sole-producer check.
-  Version monotonicity makes stale seeds unreachable. Seeding is
-  suppressed for reference-aliased receivers: every session passes the
-  canonical `address_taken_locals` / `stores_aliased_locals`, unioned
-  with one session-cached `Body::collect_address_taken_locals` scan.
+  Seeding needs no alias exclusion: the heap version is global per
+  `field_index`, so any write to field `f` — through any receiver or
+  reference alias — bumps the `f` version and a read at the post-write
+  version misses every prior `f` seed (calls / deref / global writes
+  `bump_all`). Version monotonicity thus makes stale seeds unreachable
+  even for reference-aliased receivers, so they seed like any other.
 - Per-loop pre-header snapshots of `current_value`
   (`Engine::loop_entry_value`); parameters must be seeded up front
   (`Engine::set_param_locals`) to appear in them.
