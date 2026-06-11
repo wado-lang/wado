@@ -18,7 +18,7 @@ use wit_encoder::{
 };
 
 use crate::semantics::Semantics;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{EffectRef, PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// How much of the referenced interface graph to inline into the WIT document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -98,6 +98,15 @@ struct Emitter<'a> {
     emitted: BTreeSet<String>,
 }
 
+/// One exported function gathered from the frontend, before WIT rendering.
+struct ExportedFn {
+    name: String,
+    params: Vec<(String, TypeId)>,
+    return_type: TypeId,
+    /// Concrete effect (interface) names from the `with` clause.
+    effects: Vec<String>,
+}
+
 /// Name-indexed view of the user-authored type declarations.
 #[derive(Default)]
 struct TypeDecls<'a> {
@@ -139,19 +148,43 @@ impl<'a> Emitter<'a> {
 
     fn build_package(&mut self, opts: &WitEmitOptions) -> Result<Package, WitEmitError> {
         let exports = self.collect_exported_functions();
+        let world_info = self
+            .sem
+            .world_registry()
+            .and_then(|registry| registry.get(&opts.world_fq));
 
-        // Render every exported function signature first, which seeds `pending`
-        // with the user types they reference.
-        let mut funcs: Vec<StandaloneFunc> = Vec::new();
-        for (name, params, ret) in &exports {
-            let mut func = StandaloneFunc::new(to_kebab(name), false);
-            let mut wit_params = Params::empty();
-            for (pname, pty) in params {
-                wit_params.push(to_kebab(pname), self.map_type(*pty)?);
+        // Imports: the CM interfaces the program uses. The effect system makes
+        // each exported function's effect row name every interface it (and its
+        // callees) touch, so the union over exports is the faithful import set.
+        // Resolve each effect name to its FQ via the target world's import table.
+        let mut import_fqs: BTreeSet<String> = BTreeSet::new();
+        for export in &exports {
+            for effect in &export.effects {
+                if let Some(info) = world_info
+                    && let Some(import) = info.imports.iter().find(|i| i.interface_name == *effect)
+                    && let Some(fq) = &import.cm_interface_fq
+                {
+                    import_fqs.insert(fq.clone());
+                }
             }
-            func.set_params(wit_params);
-            func.set_result(self.map_return(*ret)?);
-            funcs.push(func);
+        }
+
+        // Partition exports into world-conformance entry points (`run` /
+        // `handle`, which map to a standard export interface like
+        // `wasi:cli/run`) and ordinary user exports.
+        let mut export_fqs: BTreeSet<String> = BTreeSet::new();
+        let mut user_funcs: Vec<StandaloneFunc> = Vec::new();
+        for export in &exports {
+            if let Some(fq) = world_info.and_then(|info| {
+                info.exports
+                    .iter()
+                    .find(|e| e.name == export.name)
+                    .and_then(|e| e.from_interface_fq.clone())
+            }) {
+                export_fqs.insert(fq);
+                continue;
+            }
+            user_funcs.push(self.render_function(export)?);
         }
 
         // Expand the transitive closure of referenced user types into TypeDefs.
@@ -160,21 +193,28 @@ impl<'a> Emitter<'a> {
         let mut package = Package::new(PackageName::new("root", "component", None));
         let mut world = World::new(to_kebab(&world_local_name(&opts.world_fq)));
 
-        if funcs.is_empty() {
-            // No exports: an empty world (see "World-less libraries" in the WEP).
+        for fq in &import_fqs {
+            world.named_interface_import(fq.clone());
+        }
+        for fq in &export_fqs {
+            world.named_interface_export(fq.clone());
+        }
+
+        if user_funcs.is_empty() {
+            // No ordinary user exports beyond world conformance.
         } else if type_defs.is_empty() {
             // Only functions, no referenced user types: direct world exports.
-            for func in funcs {
+            for func in user_funcs {
                 world.item(WorldItem::function_export(func));
             }
         } else {
-            // Group exports and their types into the default interface.
+            // Group user exports and their types into the default interface.
             let iface_name = to_kebab(&opts.default_interface_name);
             let mut iface = Interface::new(iface_name.clone());
             for ty in type_defs {
                 iface.type_def(ty);
             }
-            for func in funcs {
+            for func in user_funcs {
                 iface.function(func);
             }
             package.interface(iface);
@@ -185,9 +225,22 @@ impl<'a> Emitter<'a> {
         Ok(package)
     }
 
+    /// Render one exported function to a WIT `StandaloneFunc`, seeding `pending`
+    /// with any user types it references.
+    fn render_function(&mut self, export: &ExportedFn) -> Result<StandaloneFunc, WitEmitError> {
+        let mut func = StandaloneFunc::new(to_kebab(&export.name), false);
+        let mut wit_params = Params::empty();
+        for (pname, pty) in &export.params {
+            wit_params.push(to_kebab(pname), self.map_type(*pty)?);
+        }
+        func.set_params(wit_params);
+        func.set_result(self.map_return(export.return_type)?);
+        Ok(func)
+    }
+
     /// Exported functions across every loaded user module, in module-then-decl
-    /// order: `(name, params, return_type)`.
-    fn collect_exported_functions(&self) -> Vec<(String, Vec<(String, TypeId)>, TypeId)> {
+    /// order.
+    fn collect_exported_functions(&self) -> Vec<ExportedFn> {
         let mut out = Vec::new();
         for module in self.sem.tir_modules.values() {
             // Only user-authored modules contribute to the WIT contract; the
@@ -207,7 +260,20 @@ impl<'a> Emitter<'a> {
                     .iter()
                     .map(|p| (p.name.clone(), p.type_id))
                     .collect();
-                out.push((func.name.clone(), params, func.return_type));
+                let effects = func
+                    .effects
+                    .iter()
+                    .filter_map(|e| match e {
+                        EffectRef::Concrete { name, .. } => Some(name.clone()),
+                        EffectRef::Param { .. } => None,
+                    })
+                    .collect();
+                out.push(ExportedFn {
+                    name: func.name.clone(),
+                    params,
+                    return_type: func.return_type,
+                    effects,
+                });
             }
         }
         out

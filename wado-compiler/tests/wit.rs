@@ -74,6 +74,21 @@ fn record_export_groups_into_default_interface() {
 }
 
 #[test]
+fn cli_program_emits_faithful_world_imports_and_run_export() {
+    // A `run` entry with `with Stdout` maps to the standard `wasi:cli/run`
+    // export and imports the used `wasi:cli/stdout` interface by FQ.
+    let text = emit(
+        "use { println } from \"core:cli\";\n\
+         export fn run() with Stdout { println(\"hi\"); }",
+    );
+    assert!(text.contains("world command {"), "\n{text}");
+    assert!(text.contains("import wasi:cli/stdout@"), "\n{text}");
+    assert!(text.contains("export wasi:cli/run@"), "\n{text}");
+    // `run` is not a bare function export under the faithful mapping.
+    assert!(!text.contains("export run:"), "\n{text}");
+}
+
+#[test]
 fn string_and_list_and_option_map_to_wit() {
     let text = emit("export fn lookup(keys: List<String>, maybe: Option<String>, n: u32) { }");
     assert!(
