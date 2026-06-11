@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781135640813,
+  "lastUpdate": 1781139970239,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32153,6 +32153,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 432037,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "07ed890b2ad6409330bcb05b107edbe5c83a8073",
+          "message": "Merge pull request #1354 from wado-lang/claude/nice-darwin-fwkd0p\n\nperf(optimizer): migrate condition_implication and licm onto the ValueGraph",
+          "timestamp": "2026-06-11T09:57:07+09:00",
+          "tree_id": "a8748e358ad76a41e2587d2041f36ba845b3b617",
+          "url": "https://github.com/wado-lang/wado/commit/07ed890b2ad6409330bcb05b107edbe5c83a8073"
+        },
+        "date": 1781139969880,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432497,
             "unit": "bytes"
           }
         ]
