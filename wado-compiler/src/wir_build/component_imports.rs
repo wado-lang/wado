@@ -56,6 +56,10 @@ pub fn resolve_import_plan(
 
     // Phase 1: every interface with a function in `used_wasi_functions`, in
     // registry order. Records the resources those signatures touch for Phase 2.
+    // An interface whose used signatures reference a resource *defined by another*
+    // interface is categorized `ResourceUsingInterface` (codegen defers it to the
+    // resource-using phase, after the resource-defining interfaces are imported);
+    // otherwise it is a plain `FunctionInterface`.
     let mut needed_resources: IndexSet<String> = IndexSet::default();
     for interface_info in registry.interfaces() {
         if interface_info.interface == "run"
@@ -77,19 +81,27 @@ pub fn resolve_import_plan(
         if used.is_empty() {
             continue;
         }
-        push(
-            &mut entries,
-            interface_info.path.clone(),
-            ImportKind::FunctionInterface,
-        );
-        for func in used {
+        let mut here: IndexSet<String> = IndexSet::default();
+        for func in &used {
             if let Some(ret) = &func.return_type {
-                collect_resources_in_type(ret, registry, &mut needed_resources);
+                collect_resources_in_type(ret, registry, &mut here);
             }
             for (_, _, ty) in &func.params {
-                collect_resources_in_type(ty, registry, &mut needed_resources);
+                collect_resources_in_type(ty, registry, &mut here);
             }
         }
+        let uses_external_resources = here.iter().any(|resource| {
+            registry
+                .get_resource_source_interface(resource)
+                .is_some_and(|src| src != interface_info.path)
+        });
+        let kind = if uses_external_resources {
+            ImportKind::ResourceUsingInterface
+        } else {
+            ImportKind::FunctionInterface
+        };
+        push(&mut entries, interface_info.path.clone(), kind);
+        needed_resources.extend(here);
     }
 
     // Phase 2: resource-defining interfaces for every referenced resource

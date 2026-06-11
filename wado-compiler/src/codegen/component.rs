@@ -1810,7 +1810,10 @@ fn generate_cm_imports(
             })
             .collect();
 
-        // Collect resource types referenced in any function signature.
+        // Collect resource types referenced in any function signature. The plan
+        // guarantees these resolve to resources this interface defines itself
+        // (a signature touching an externally-defined resource would have been
+        // categorized `ResourceUsingInterface` and handled by Phase 3 instead).
         let mut needed_resources: Vec<String> = Vec::new();
         for func in &supported_functions {
             if let Some(ret_ty) = &func.return_type {
@@ -1823,19 +1826,6 @@ fn generate_cm_imports(
             for (_, _, ty) in &func.params {
                 collect_resources_in_type(ty, project.cm_interface_registry, &mut needed_resources);
             }
-        }
-
-        // Interfaces that reference resources DEFINED BY OTHER interfaces must be deferred
-        // until those resource-defining interfaces are imported (via import_resource_using_interfaces,
-        // Phase 3). Interfaces that define their own resources (source path == self) are handled here.
-        let uses_external_resources = needed_resources.iter().any(|resource_name| {
-            project
-                .cm_interface_registry
-                .get_resource_source_interface(resource_name)
-                .is_some_and(|src| src != interface_info.path.as_str())
-        });
-        if uses_external_resources {
-            continue;
         }
 
         let instance_type_name = format!("{}-instance-type", interface_info.interface);
@@ -3053,11 +3043,13 @@ fn import_resource_using_interfaces(
         if interface_info.package == "http" {
             continue;
         }
-        // Membership cross-check: the plan lists this as a function-bearing
-        // interface (the deferred, resource-using ones reach Phase 3).
+        // Membership: the plan categorizes this interface as resource-using
+        // (a function-bearing interface whose signatures reference resources
+        // defined elsewhere). The plan is the single source of truth; codegen
+        // only encodes what the plan lists.
         if !import_plan
             .iter()
-            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::FunctionInterface)
+            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::ResourceUsingInterface)
         {
             continue;
         }
@@ -3073,10 +3065,6 @@ fn import_resource_using_interfaces(
                 project.used_wasi_functions.contains(&func_key)
             })
             .collect();
-
-        if supported_functions.is_empty() {
-            continue;
-        }
 
         // Collect resources used in function signatures
         let mut needed_resources: Vec<String> = Vec::new();

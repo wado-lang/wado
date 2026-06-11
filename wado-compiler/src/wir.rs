@@ -30,8 +30,15 @@ use crate::token::Span;
 pub enum ImportKind {
     /// `wasi:cli/types` — the shared `error-code` enum instance.
     SharedTypes,
-    /// A function-bearing interface (cli/stdout, clocks/monotonic-clock, …).
+    /// A function-bearing interface whose signatures touch only resources it
+    /// defines itself, if any (cli/stdout, clocks/monotonic-clock, …). Encoded
+    /// inline by codegen's main import loop.
     FunctionInterface,
+    /// A function-bearing interface whose signatures reference resources
+    /// *defined by another* interface (e.g. `filesystem/preopens` returning
+    /// `descriptor`). Deferred to the resource-using phase, which imports it
+    /// after the resource-defining interfaces it depends on.
+    ResourceUsingInterface,
     /// A resource-defining interface imported so its resource type is available.
     ResourceSource,
     /// `wasi:http/types`.
