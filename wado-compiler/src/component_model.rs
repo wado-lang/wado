@@ -1724,6 +1724,57 @@ impl CmInterfaceRegistry {
             })
     }
 
+    /// Iterate over enums from a specific interface (matched by prefix).
+    /// Returns (`wado_name`, `cm_name`, `cm_variant_names`) in insertion order.
+    pub fn enums_for_interface(
+        &self,
+        interface_prefix: &str,
+    ) -> impl Iterator<Item = (&str, &str, &[String])> {
+        self.enums
+            .iter()
+            .filter_map(move |((source, name), (cm_name, variants))| {
+                if source.starts_with(interface_prefix) {
+                    Some((name.as_str(), cm_name.as_str(), variants.as_slice()))
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Iterate over flags from a specific interface (matched by prefix).
+    /// Returns (`wado_name`, `cm_name`, `cm_member_names`) in insertion order.
+    pub fn flags_for_interface(
+        &self,
+        interface_prefix: &str,
+    ) -> impl Iterator<Item = (&str, &str, &[String])> {
+        self.flags
+            .iter()
+            .filter_map(move |((source, name), (cm_name, members))| {
+                if source.starts_with(interface_prefix) {
+                    Some((name.as_str(), cm_name.as_str(), members.as_slice()))
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Iterate over newtypes from a specific interface (matched by prefix).
+    /// Returns (`wado_name`, `base_type`) in insertion order.
+    pub fn newtypes_for_interface(
+        &self,
+        interface_prefix: &str,
+    ) -> impl Iterator<Item = (&str, &Type)> {
+        self.newtypes
+            .iter()
+            .filter_map(move |((source, name), ty)| {
+                if source.starts_with(interface_prefix) {
+                    Some((name.as_str(), ty))
+                } else {
+                    None
+                }
+            })
+    }
+
     /// Get the resource type from a return type (if it's Option<ResourceName>)
     /// Returns (Wado name, CM name) if the return type references a resource
     pub fn get_resource_from_return_type(

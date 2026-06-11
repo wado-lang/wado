@@ -9,6 +9,7 @@ use crate::wir::WirPackage;
 
 mod calls;
 mod canonical_abi;
+pub mod component_imports;
 pub mod component_plan;
 mod context;
 mod functions;
@@ -43,5 +44,14 @@ pub fn build_wir_package(package: &NirPackage) -> WirPackage {
     translate::translate_function_bodies(&mut ctx);
 
     // Step 4: Build the final WirPackage
-    ctx.into_wir_package()
+    let mut wir = ctx.into_wir_package();
+
+    // Step 5: Resolve the categorized CM import plan now that `needed_canonicals`
+    // is final — both the NIR facts (`used_wasi_functions`, the registry) and
+    // the WIR canonical intrinsics (transmission sources) are available here, so
+    // this is the single place with the full picture. Codegen reads the plan to
+    // decide membership per phase; the WIT producer reads the flat list.
+    wir.import_plan = component_imports::resolve_import_plan(package, &wir.needed_canonicals);
+    wir.imported_cm_interfaces = component_imports::import_plan_fqs(&wir.import_plan);
+    wir
 }

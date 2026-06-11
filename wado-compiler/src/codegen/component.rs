@@ -32,8 +32,10 @@ pub fn build_component(
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
 
-    // Generate WASI imports dynamically from registry
-    generate_cm_imports(&mut builder, &mut ctx, project);
+    // Generate CM imports. Which interfaces are imported, and in what category,
+    // is decided by the WIR-level plan (the single source of truth); codegen
+    // reads it rather than re-deriving, and its job is to encode each.
+    generate_cm_imports(&mut builder, &mut ctx, project, &wir_package.import_plan);
 
     // Type: result unit for run function (needed for task.return)
     let result_unit_type = ctx.register_type("result-unit");
@@ -281,9 +283,15 @@ pub fn build_component(
             ctx.core_func_idx(local_name),
         ));
     }
-    if (project.has_http_handler_export || project.has_interface("Client"))
-        && ctx.has_core_func("http-fields-constructor")
-    {
+    // The HTTP request-construction core funcs are exported from the core
+    // instance whenever `wasi:http/types` is imported — the plan's `HttpTypes`
+    // condition (handler export or the Client effect), read here rather than
+    // re-derived from project queries.
+    let imports_http_types = wir_package
+        .import_plan
+        .iter()
+        .any(|e| e.kind == crate::wir::ImportKind::HttpTypes);
+    if imports_http_types && ctx.has_core_func("http-fields-constructor") {
         wasi_exports.push((
             "http-fields-constructor".to_string(),
             ExportKind::Func,
@@ -387,7 +395,7 @@ pub fn build_component(
 
     let mut component_bytes = builder.finish();
 
-    if project.has_http_handler_export {
+    if component_plan.has_http_handler_export {
         append_http_handler_export(&mut component_bytes, &ctx, project);
     }
 
@@ -1716,52 +1724,65 @@ fn generate_cm_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
+    import_plan: &[crate::wir::ImportEntry],
 ) {
+    use crate::wir::ImportKind;
+    let has_kind = |kind: ImportKind| import_plan.iter().any(|e| e.kind == kind);
+    let needs_cli_types = has_kind(ImportKind::SharedTypes);
+    let needs_http_types = has_kind(ImportKind::HttpTypes);
     let cli_version = project
         .cm_interface_registry
         .get_cli_version()
         .expect("WASI CLI version not found in registry - lib/wasi/*.wado not loaded?");
 
-    // Import wasi:cli/types for shared types (error-code)
-    let cli_types_interface = format!("wasi:cli/types@{cli_version}");
-    let error_code_cm_name = project
-        .cm_interface_registry
-        .get_enum_cm_name_by_interface(&cli_types_interface, "ErrorCode")
-        .expect("ErrorCode CM name not found in wasi:cli/types");
-    let error_code_variants = project
-        .cm_interface_registry
-        .get_enum_variants_by_interface(&cli_types_interface, "ErrorCode")
-        .expect("ErrorCode enum not found in wasi:cli/types");
-    let types_instance_type = ctx.register_type("types-instance-type");
-    {
-        let (_, enc) = builder.ty(Some("types-instance-type"));
-        let mut instance_type = InstanceType::new();
-        instance_type
-            .ty()
-            .defined_type()
-            .enum_type(error_code_variants.iter().map(String::as_str));
-        instance_type.export(
-            error_code_cm_name,
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
+    // Import wasi:cli/types for the shared `error-code` enum, when the plan says
+    // it is needed (a used interface references it, or an async-export
+    // transmission future resolves to the cli error-code). A pure-compute or
+    // clock-only program drops this otherwise-dead import.
+    if needs_cli_types {
+        let cli_types_interface = format!("wasi:cli/types@{cli_version}");
+        let error_code_cm_name = project
+            .cm_interface_registry
+            .get_enum_cm_name_by_interface(&cli_types_interface, "ErrorCode")
+            .expect("ErrorCode CM name not found in wasi:cli/types");
+        let error_code_variants = project
+            .cm_interface_registry
+            .get_enum_variants_by_interface(&cli_types_interface, "ErrorCode")
+            .expect("ErrorCode enum not found in wasi:cli/types");
+        let types_instance_type = ctx.register_type("types-instance-type");
+        {
+            let (_, enc) = builder.ty(Some("types-instance-type"));
+            let mut instance_type = InstanceType::new();
+            instance_type
+                .ty()
+                .defined_type()
+                .enum_type(error_code_variants.iter().map(String::as_str));
+            instance_type.export(
+                error_code_cm_name,
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
+            );
+            enc.instance(&instance_type);
+        }
+
+        ctx.register_instance("types");
+        let types_import_path = format!("wasi:cli/types@{cli_version}");
+        builder.import(
+            &types_import_path,
+            wasm_encoder::ComponentTypeRef::Instance(types_instance_type),
         );
-        enc.instance(&instance_type);
+
+        ctx.register_type("error-code");
+        builder.alias_export(
+            ctx.instance_idx("types"),
+            error_code_cm_name,
+            ComponentExportKind::Type,
+        );
     }
 
-    ctx.register_instance("types");
-    let types_import_path = format!("wasi:cli/types@{cli_version}");
-    builder.import(
-        &types_import_path,
-        wasm_encoder::ComponentTypeRef::Instance(types_instance_type),
-    );
-
-    ctx.register_type("error-code");
-    builder.alias_export(
-        ctx.instance_idx("types"),
-        error_code_cm_name,
-        ComponentExportKind::Type,
-    );
-
-    // Generate imports for each interface in the registry
+    // Generate imports for each interface in the registry. Membership comes
+    // from the plan — codegen imports an interface iff the plan lists it (the
+    // function-bearing, non-resource-using interfaces; resource-defining and
+    // resource-using interfaces are handled by the later phases).
     for interface_info in project.cm_interface_registry.interfaces() {
         if interface_info.interface == "run" {
             continue;
@@ -1772,7 +1793,17 @@ fn generate_cm_imports(
         if interface_info.package == "http" {
             continue;
         }
+        // Membership: the plan lists this FQ as a function-bearing interface.
+        // (The shared `wasi:cli/types` is `SharedTypes`, not `FunctionInterface`,
+        // so it is correctly excluded from this loop and handled by Phase 0.)
+        if !import_plan
+            .iter()
+            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::FunctionInterface)
+        {
+            continue;
+        }
 
+        // Which functions of this interface to expose in its instance type.
         let supported_functions: Vec<_> = interface_info
             .functions
             .iter()
@@ -1780,19 +1811,15 @@ fn generate_cm_imports(
                 if !project.cm_interface_registry.is_function_supported(func) {
                     return false;
                 }
-                // Use per-function check (same as wir_build) to avoid including
-                // unused functions that reference unsupported types (e.g. Stream<u8>
-                // in tuples when read_via_stream is not called).
                 let func_key = format!("{}::{}", func.interface_name, func.method_name);
                 project.used_wasi_functions.contains(&func_key)
             })
             .collect();
 
-        if supported_functions.is_empty() {
-            continue;
-        }
-
-        // Collect resource types referenced in any function signature.
+        // Collect resource types referenced in any function signature. The plan
+        // guarantees these resolve to resources this interface defines itself
+        // (a signature touching an externally-defined resource would have been
+        // categorized `ResourceUsingInterface` and handled by Phase 3 instead).
         let mut needed_resources: Vec<String> = Vec::new();
         for func in &supported_functions {
             if let Some(ret_ty) = &func.return_type {
@@ -1805,19 +1832,6 @@ fn generate_cm_imports(
             for (_, _, ty) in &func.params {
                 collect_resources_in_type(ty, project.cm_interface_registry, &mut needed_resources);
             }
-        }
-
-        // Interfaces that reference resources DEFINED BY OTHER interfaces must be deferred
-        // until those resource-defining interfaces are imported (via import_resource_using_interfaces,
-        // Phase 3). Interfaces that define their own resources (source path == self) are handled here.
-        let uses_external_resources = needed_resources.iter().any(|resource_name| {
-            project
-                .cm_interface_registry
-                .get_resource_source_interface(resource_name)
-                .is_some_and(|src| src != interface_info.path.as_str())
-        });
-        if uses_external_resources {
-            continue;
         }
 
         let instance_type_name = format!("{}-instance-type", interface_info.interface);
@@ -2303,17 +2317,27 @@ fn generate_cm_imports(
     }
 
     // Import interfaces with resource types
-    import_interfaces_with_resources(builder, ctx, project);
+    import_interfaces_with_resources(builder, ctx, project, import_plan);
 
-    // Import wasi:http/types when the world exports an HTTP handler
-    // or when the code uses the HTTP Client effect (e.g., CLI programs
-    // that make outgoing HTTP requests).
-    if project.has_http_handler_export || project.has_interface("Client") {
+    // Import wasi:http/types when the plan calls for it (the world exports an
+    // HTTP handler, or the code uses the HTTP Client effect). The decision lives
+    // in the WIR-level plan; codegen reads it.
+    if needs_http_types {
         import_http_types_for_service(project, builder, ctx);
     }
 
-    // Import wasi:http/client if Client::send is used
-    if project.has_interface("Client") && ctx.has_type("http-handler-result") {
+    // Import wasi:http/client when the plan lists it (the program uses the HTTP
+    // Client effect). The plan guarantees `HttpClient` implies `HttpTypes`, and
+    // the types phase above registers `http-handler-result` / `http-request`,
+    // which `import_http_client` looks up unconditionally. Assert that invariant
+    // rather than re-deriving membership: a plan that lists `HttpClient` without
+    // `HttpTypes` is a bug, and this turns the resulting `type_idx` panic into a
+    // named diagnostic.
+    if has_kind(ImportKind::HttpClient) {
+        debug_assert!(
+            ctx.has_type("http-handler-result"),
+            "HttpClient in import plan without HttpTypes: wasi:http/types must be imported first",
+        );
         import_http_client(builder, ctx, project);
     }
 }
@@ -2735,7 +2759,6 @@ fn import_interface_with_resource(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     interface_info: &crate::component_model::CmInterfaceInfo,
-    project: &NirPackage,
 ) {
     let Some((_resource_wado_name, resource_cm_name)) = &interface_info.resource_type else {
         return;
@@ -2751,7 +2774,9 @@ fn import_interface_with_resource(
 
     let local_name = func.local_alias_name();
 
-    if !project.has_interface(&func.interface_name) || ctx.has_comp_func(&local_name) {
+    // Membership is decided by the plan (`ResourceGetter`) at the call site; this
+    // guard is only idempotency (the getter was already emitted in this run).
+    if ctx.has_comp_func(&local_name) {
         return;
     }
 
@@ -2825,149 +2850,188 @@ fn import_interface_with_resource(
     );
 }
 
+/// Import a resource-defining source interface once and alias its resource
+/// type(s) — and its `error-code`, for transmission futures — into the outer
+/// component scope. Idempotent on `source_path` (keyed on the package-qualified
+/// instance-type name, a real builder type), so repeated requests from different
+/// consumers collapse to a single import.
+///
+/// This is the single place that emits a minimal, methods-less source instance.
+/// Both the plan-driven resource-source phase and the resource-using phase's
+/// pre-import call it, so the source-instance shape and its outer aliases live
+/// in exactly one place rather than two divergent copies.
+fn import_resource_source(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    source_path: &str,
+) {
+    let Some(cm_import) = crate::ast::CmImport::parse(source_path) else {
+        return;
+    };
+
+    // Package-qualified names avoid collisions between same-named interfaces from
+    // different packages (e.g. `wasi:cli/types` vs `wasi:filesystem/types`, both
+    // interface `types`). The instance-type name doubles as the idempotency key:
+    // it is a real builder type, so reusing it never desyncs the ctx/builder
+    // type-index counters the way a phantom marker type would.
+    let instance_name = format!("{}-{}", cm_import.package, cm_import.interface);
+    let instance_type_name = format!("{instance_name}-instance-type");
+    if ctx.has_type(&instance_type_name) {
+        return;
+    }
+
+    // The resources this interface defines (usually exactly one).
+    let resources: Vec<(String, String)> = project
+        .cm_interface_registry
+        .resources_for_interface(source_path)
+        .map(|(name, cm_name)| (name.to_string(), cm_name.to_string()))
+        .collect();
+    if resources.is_empty() {
+        return;
+    }
+
+    // Does this source define its own ErrorCode (needed by transmission futures)?
+    let source_has_error_code = project
+        .cm_interface_registry
+        .variants_for_interface(source_path)
+        .any(|(name, _, _)| name == "ErrorCode")
+        || project
+            .cm_interface_registry
+            .has_enum_in_interface(source_path, "ErrorCode");
+
+    let instance_type_idx = ctx.register_type(&instance_type_name);
+    let mut local_type_idx = 0u32;
+    {
+        let (_, enc) = builder.ty(Some(&instance_type_name));
+        let mut instance_type = InstanceType::new();
+        for (_, cm_name) in &resources {
+            instance_type.export(
+                cm_name,
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+            );
+            local_type_idx += 1;
+        }
+
+        // Include error-code export so it can be aliased at outer scope for
+        // Transmission future types.
+        if source_has_error_code {
+            let interface_variants: Vec<_> = project
+                .cm_interface_registry
+                .variants_for_interface(source_path)
+                .filter(|(name, _, _)| *name == "ErrorCode")
+                .collect();
+            if let Some((_, cm_name, cases)) = interface_variants.first() {
+                let cm_cases: Vec<(&str, Option<ComponentValType>)> = cases
+                    .iter()
+                    .map(|c| {
+                        let payload = c.payload.as_ref().map(|_ty| {
+                            // For simplicity, all payloads are option<string>
+                            instance_type
+                                .ty()
+                                .defined_type()
+                                .option(ComponentValType::Primitive(PrimitiveValType::String));
+                            let option_idx = local_type_idx;
+                            local_type_idx += 1;
+                            ComponentValType::Type(option_idx)
+                        });
+                        (c.cm_name.as_str(), payload)
+                    })
+                    .collect();
+                instance_type.ty().defined_type().variant(cm_cases);
+                let variant_idx = local_type_idx;
+                instance_type.export(
+                    *cm_name,
+                    wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(variant_idx)),
+                );
+            }
+        }
+        enc.instance(&instance_type);
+    }
+
+    ctx.register_instance(&instance_name);
+    builder.import(
+        source_path,
+        wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
+    );
+
+    for (_, cm_name) in &resources {
+        let resource_type_name = format!("resource:{cm_name}");
+        if !ctx.has_type(&resource_type_name) {
+            ctx.register_type(&resource_type_name);
+            builder.alias_export(
+                ctx.instance_idx(&instance_name),
+                cm_name,
+                ComponentExportKind::Type,
+            );
+        }
+    }
+
+    if source_has_error_code {
+        let error_code_key = format!("{}-error-code", cm_import.package);
+        if !ctx.has_type(&error_code_key) {
+            ctx.register_type(&error_code_key);
+            builder.alias_export(
+                ctx.instance_idx(&instance_name),
+                "error-code",
+                ComponentExportKind::Type,
+            );
+        }
+    }
+}
+
 fn import_interfaces_with_resources(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
+    import_plan: &[crate::wir::ImportEntry],
 ) {
+    use crate::wir::ImportKind;
     let interfaces_with_resources: Vec<_> = project
         .cm_interface_registry
         .interfaces()
         .filter(|info| info.resource_type.is_some() && info.package != "http")
         .collect();
 
-    // Phase 1: Import resource-defining interfaces
-    let mut imported_source_interfaces: IndexSet<String> = IndexSet::default();
+    // Phase 1: Import resource-defining source interfaces the plan calls for.
+    // Iterate the getter interfaces (for a stable import order) and import each
+    // referenced source via the shared `import_resource_source` helper, which is
+    // idempotent and also handles the outer resource / error-code aliases.
+    // Membership is the plan's: a source is imported iff listed as
+    // `ResourceSource` (the plan decides that from `has_interface`).
     for interface_info in &interfaces_with_resources {
         let Some((resource_wado_name, _resource_cm_name)) = &interface_info.resource_type else {
             continue;
         };
-
         let Some(source_path) = project
             .cm_interface_registry
             .get_resource_source_interface(resource_wado_name)
         else {
             continue;
         };
-
         if source_path == interface_info.path {
             continue;
         }
-
-        let is_needed = interface_info.functions.first().is_some_and(|f| {
-            project.has_interface(&f.interface_name) && !ctx.has_comp_func(&f.local_alias_name())
-        });
-        if !is_needed {
-            continue;
-        }
-
-        if imported_source_interfaces.contains(source_path) {
-            continue;
-        }
-        imported_source_interfaces.insert(source_path.to_string());
-
-        let Some(resource_cm_name) = project
-            .cm_interface_registry
-            .get_resource_cm_name(resource_wado_name)
-        else {
-            continue;
-        };
-
-        let Some(cm_import) = crate::ast::CmImport::parse(source_path) else {
-            continue;
-        };
-
-        // Check if this source interface defines ErrorCode
-        let source_has_error_code = project
-            .cm_interface_registry
-            .variants_for_interface(source_path)
-            .any(|(name, _, _)| name == "ErrorCode")
-            || project
-                .cm_interface_registry
-                .has_enum_in_interface(source_path, "ErrorCode");
-
-        let instance_type_name = format!("{}-instance-type", cm_import.interface);
-        let instance_type_idx = ctx.register_type(&instance_type_name);
-        #[allow(unused_assignments)]
-        let mut local_type_idx = 0u32;
+        if !import_plan
+            .iter()
+            .any(|e| e.fq == source_path && e.kind == ImportKind::ResourceSource)
         {
-            let (_, enc) = builder.ty(Some(&instance_type_name));
-            let mut instance_type = InstanceType::new();
-            instance_type.export(
-                resource_cm_name,
-                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
-            );
-            local_type_idx += 1; // resource export
-
-            // Include error-code export so it can be aliased at outer scope
-            // for Transmission future types.
-            if source_has_error_code {
-                let interface_variants: Vec<_> = project
-                    .cm_interface_registry
-                    .variants_for_interface(source_path)
-                    .filter(|(name, _, _)| *name == "ErrorCode")
-                    .collect();
-                if let Some((_, cm_name, cases)) = interface_variants.first() {
-                    // Build variant cases inline
-                    let cm_cases: Vec<(&str, Option<ComponentValType>)> = cases
-                        .iter()
-                        .map(|c| {
-                            let payload = c.payload.as_ref().map(|_ty| {
-                                // For simplicity, all payloads are option<string>
-                                instance_type
-                                    .ty()
-                                    .defined_type()
-                                    .option(ComponentValType::Primitive(PrimitiveValType::String));
-                                let option_idx = local_type_idx;
-                                local_type_idx += 1;
-                                ComponentValType::Type(option_idx)
-                            });
-                            (c.cm_name.as_str(), payload)
-                        })
-                        .collect();
-                    instance_type.ty().defined_type().variant(cm_cases);
-                    let variant_idx = local_type_idx;
-                    instance_type.export(
-                        *cm_name,
-                        wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(variant_idx)),
-                    );
-                }
-            }
-            enc.instance(&instance_type);
+            continue;
         }
-
-        ctx.register_instance(&cm_import.interface);
-        builder.import(
-            source_path,
-            wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
-        );
-
-        let resource_type_name = format!("resource:{resource_cm_name}");
-        ctx.register_type(&resource_type_name);
-        builder.alias_export(
-            ctx.instance_idx(&cm_import.interface),
-            resource_cm_name,
-            ComponentExportKind::Type,
-        );
-
-        // Alias error-code at outer scope
-        if source_has_error_code {
-            let package = &cm_import.package;
-            let error_code_key = format!("{package}-error-code");
-            if !ctx.has_type(&error_code_key) {
-                ctx.register_type(&error_code_key);
-                builder.alias_export(
-                    ctx.instance_idx(&cm_import.interface),
-                    "error-code",
-                    ComponentExportKind::Type,
-                );
-            }
-        }
+        import_resource_source(builder, ctx, project, source_path);
     }
 
-    // Phase 2: Import function interfaces that use those resources
+    // Phase 2: Import the resource-getter interfaces the plan lists
+    // (`ResourceGetter`). Membership is the plan's — codegen no longer re-derives
+    // it from the program's `with` set.
     for interface_info in &interfaces_with_resources {
-        import_interface_with_resource(builder, ctx, interface_info, project);
+        if !import_plan
+            .iter()
+            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::ResourceGetter)
+        {
+            continue;
+        }
+        import_interface_with_resource(builder, ctx, interface_info);
     }
 
     // Register per-package error-code aliases for resource-defining interfaces.
@@ -2997,7 +3061,7 @@ fn import_interfaces_with_resources(
     // (e.g. wasi:filesystem/preopens whose get-directories returns a list of descriptors
     // from wasi:filesystem/types). These must be imported AFTER Phase 1 so that the
     // resource outer-aliases are available in ctx.
-    import_resource_using_interfaces(builder, ctx, project);
+    import_resource_using_interfaces(builder, ctx, project, import_plan);
 }
 
 /// Import interfaces that reference resources from other interfaces but don't define resources
@@ -3009,7 +3073,9 @@ fn import_resource_using_interfaces(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
+    import_plan: &[crate::wir::ImportEntry],
 ) {
+    use crate::wir::ImportKind;
     for interface_info in project.cm_interface_registry.interfaces() {
         if interface_info.interface == "run" {
             continue;
@@ -3018,6 +3084,16 @@ fn import_resource_using_interfaces(
             continue;
         }
         if interface_info.package == "http" {
+            continue;
+        }
+        // Membership: the plan categorizes this interface as resource-using
+        // (a function-bearing interface whose signatures reference resources
+        // defined elsewhere). The plan is the single source of truth; codegen
+        // only encodes what the plan lists.
+        if !import_plan
+            .iter()
+            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::ResourceUsingInterface)
+        {
             continue;
         }
 
@@ -3032,10 +3108,6 @@ fn import_resource_using_interfaces(
                 project.used_wasi_functions.contains(&func_key)
             })
             .collect();
-
-        if supported_functions.is_empty() {
-            continue;
-        }
 
         // Collect resources used in function signatures
         let mut needed_resources: Vec<String> = Vec::new();
@@ -3081,61 +3153,35 @@ fn import_resource_using_interfaces(
         // such resources must be exported directly inside the per-interface
         // instance type emitted below, not aliased through an outer scope.
         for resource_name in &needed_resources {
-            if let Some(source) = project
+            let Some(source) = project
                 .cm_interface_registry
                 .find_wasi_resource_source(resource_name)
-                && let Some(cm_name) = project
-                    .cm_interface_registry
-                    .get_resource_cm_name_by_source(source, resource_name)
-            {
-                let outer_resource_type_name = format!("resource:{cm_name}");
-                if ctx.has_type(&outer_resource_type_name) {
-                    continue; // already imported
-                }
-                let Some(source_path) = project
-                    .cm_interface_registry
-                    .get_resource_source_interface(resource_name)
-                else {
-                    continue;
-                };
-                if source_path == interface_info.path.as_str() {
-                    // Self-owned resource — declared inline in the main
-                    // instance type to satisfy the constructor/method spec.
-                    continue;
-                }
-                let Some(cm_import) = crate::ast::CmImport::parse(source_path) else {
-                    continue;
-                };
-                // Use package-qualified names to avoid collision with same-named interfaces
-                // from different packages (e.g., wasi:cli/types vs wasi:filesystem/types).
-                let src_instance_name = format!("{}-{}", cm_import.package, cm_import.interface);
-                let src_instance_type_name = format!("{src_instance_name}-instance-type");
-                if !ctx.has_type(&src_instance_type_name) {
-                    // Import the resource-defining interface minimally (just the resource export)
-                    let src_instance_type_idx = ctx.register_type(&src_instance_type_name);
-                    {
-                        let (_, enc) = builder.ty(Some(&src_instance_type_name));
-                        let mut src_it = InstanceType::new();
-                        src_it.export(
-                            cm_name,
-                            wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
-                        );
-                        enc.instance(&src_it);
-                    }
-                    ctx.register_instance(&src_instance_name);
-                    builder.import(
-                        source_path,
-                        wasm_encoder::ComponentTypeRef::Instance(src_instance_type_idx),
-                    );
-                }
-                // Alias the resource type into the outer component scope
-                ctx.register_type(&outer_resource_type_name);
-                builder.alias_export(
-                    ctx.instance_idx(&src_instance_name),
-                    cm_name,
-                    ComponentExportKind::Type,
-                );
+            else {
+                continue;
+            };
+            let Some(cm_name) = project
+                .cm_interface_registry
+                .get_resource_cm_name_by_source(source, resource_name)
+            else {
+                continue;
+            };
+            if ctx.has_type(&format!("resource:{cm_name}")) {
+                continue; // already imported (by the main loop or the source phase)
             }
+            let Some(source_path) = project
+                .cm_interface_registry
+                .get_resource_source_interface(resource_name)
+            else {
+                continue;
+            };
+            if source_path == interface_info.path.as_str() {
+                // Self-owned resource — declared inline in the instance type
+                // below to satisfy the constructor/method spec.
+                continue;
+            }
+            // Pre-import the resource-defining source through the shared helper so
+            // its resource type is outer-aliased before we build this instance.
+            import_resource_source(builder, ctx, project, source_path);
         }
 
         // Build a map: resource_wado_name -> local_type_idx_in_instance_type

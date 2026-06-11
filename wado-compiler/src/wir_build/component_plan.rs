@@ -30,6 +30,11 @@ pub struct ComponentPlan {
     /// to resolve `HandlerResult` to the per-world `{pkg}-handler-result`
     /// registered type.
     pub world_package: Option<String>,
+    /// Whether the target world exports a `wasi:http/handler`. Codegen appends
+    /// the handler export to the finished component when set. This is an export
+    /// decision, so it lives on the plan rather than being re-derived in codegen;
+    /// `link` computes it once and passes it to `build_component_plan`.
+    pub has_http_handler_export: bool,
 }
 
 /// A world export to create at the component boundary.
@@ -121,6 +126,7 @@ pub fn build_component_plan(
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
+    has_http_handler_export: bool,
 ) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
@@ -177,6 +183,7 @@ pub fn build_component_plan(
         world_exports,
         test_exports,
         world_package,
+        has_http_handler_export,
     }
 }
 

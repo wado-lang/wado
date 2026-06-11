@@ -183,12 +183,12 @@ form is unambiguous and minimal.
   `--world` flag is given. Acceptable as a default; not a structural problem.
 - Synthetic `TEST_WORLD` constant in `world_registry.rs`. Used for the test
   harness; does not block external WIT support.
-- HTTP handler specialization in `codegen/component.rs` (`has_http_handler_export`,
-  `append_http_handler_export`, gated paths in `emit_world_exports`). This is
-  the largest world-specific block left in the compiler and is the main item
-  to design out as part of this work. With `WorldExportInfo::from_interface_fq`
-  now populated, a Phase 2 step can drive HTTP detection from the interface
-  FQ directly and retire `append_http_handler_export`.
+- HTTP handler specialization in `codegen/component.rs`. The _decision_ is now
+  plan-driven (`ComponentPlan::has_http_handler_export`), but the
+  `append_http_handler_export` post-finish byte-append mechanism itself remains.
+  Retiring it — folding the handler export into `emit_world_exports` so HTTP
+  detection comes from the interface FQ (`WorldExportInfo::from_interface_fq`,
+  now populated) — is the largest world-specific block left to design out.
 - `stdlib::ALL_WASI_MODULES` is an `include_str!`-driven static list. Adding a
   new WASI/CM library currently requires either putting the binding `.wado`
   in this list or feeding it through `CompilerHost`. Neither path reads
@@ -238,8 +238,8 @@ plus the target world FQ and produces:
 
 - A WIT text document (consumed by `wado wit`).
 - A `component-type` custom section payload, derived from that WIT text
-  via `wit-parser` + `wit-component::metadata::encode` (consumed by
-  `wado compile --embed-wit=<scope>`).
+  via `wit-parser` + `wit-component::metadata::encode` (embedded by
+  `wado compile`, which is default-on).
 
 Codegen is unaffected. The `codegen.rs` principle ("emits `Package` as is,
 without knowledge of earlier phases") still holds; the WIT bundle is
@@ -340,6 +340,8 @@ established in [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md):
   the owning interface even if not explicitly listed.
 - `#![no_default_interface]` disables the default-interface fallback;
   every non-entry-point export must live in an explicit `export interface`.
+- When no entry point is present at all, the world is emitted empty and the
+  interfaces stand alone in the package (see "World-less libraries").
 
 ### Imported interface resolution and scope
 
@@ -362,21 +364,119 @@ the package's own contract; consumers need an external WIT registry to
 resolve `wasi:*` references. Both are well-defined; the choice is
 deployment-policy, not technical.
 
-The scope is required at the CLI; there is no built-in default. A
-project-level default may be set in `wado.toml`:
+The default scope is `full`. It needs no configuration and produces a
+self-describing component, which is the first-class outcome for both
+single-file scripts and manifest-backed projects (see "Embedding policy"
+below). A project may change the default to `local` in `wado.toml`:
 
 ```toml
 [wit]
-scope = "full"   # or "local"
+scope = "local"   # override the built-in `full` default
 ```
 
-When `wado.toml` provides `[wit].scope`, the CLI flag may be omitted and
-inherits that value. Without a manifest-level setting _and_ without a CLI
-flag, the command errors out asking the user to choose.
+`[wit].scope` only changes which scope is used; it never decides _whether_
+WIT is embedded (see "Embedding policy" below for that). When WIT _is_
+embedded, the scope resolution order is: explicit `--embed-wit=<scope>`,
+then `[wit].scope`, then the built-in `full`.
 
 Stdlib interfaces under `lib/wasi/**` are emitted with the same machinery
 as user interfaces; there is no special-case "stdlib" code path. Each
 `pub interface` is a uniform building block.
+
+### Faithful imports: a WIR-level component interface plan
+
+The world's import set must equal what the compiled component actually
+imports — otherwise the embedded `component-type` (Phase 2) misrepresents
+the binary. Verification across the example/benchmark corpus showed the
+first cut (deriving imports from exported functions' effect rows plus a
+type-reference closure) is _not_ faithful in two ways:
+
+- It over-includes interfaces that only contribute a type _alias_ (e.g.
+  `wasi:clocks/types`, which provides `duration = u64`). A type alias is
+  transparent and creates no component import.
+- It misses implicit runtime imports — chiefly `wasi:cli/stderr`, which the
+  `assert` / panic path writes to even though no `with` clause names it.
+
+Both stem from deriving the set semantically. The authoritative set is the
+one the codegen import logic already computes from `used_wasi_functions`
+(the DCE-populated set of called functions, which _does_ include the
+implicit `Stderr::write_via_stream`) plus the registry. Re-deriving it in
+the emitter would duplicate that logic and risk divergence; reading it back
+from the emitted component bytes is redundant work.
+
+Decision: the complete import/export interface set is built once, as
+structured data, at the WIR layer, and codegen merely emits it. This
+restores the `codegen.rs` principle ("emit `Package` as is, without
+knowledge of earlier phases"), which the current four-phase import logic in
+`codegen/component.rs` (`generate_cm_imports` + the resource-deferral phases
+
+- the HTTP phase, lines ~1715–3305) violates.
+
+Mechanics:
+
+- The decision depends on `used_wasi_functions`, populated post-DCE
+  (`optimize/dce.rs`), so the plan is built _after_ DCE — later than the
+  current `ComponentPlan`, which is built pre-DCE and carries exports only.
+- The plan enumerates, in deterministic order, the imported CM interface
+  FQs and, per interface, the functions / resources / types to expose; plus
+  the exported interface FQs (already available via
+  `WorldInfo::exports[].from_interface_fq`).
+- Imported FQ rule (mirrors today's codegen): `wasi:cli/types` when any WASI
+  function is used (shared `error-code`); every interface with a function in
+  `used_wasi_functions`; the resource-defining interfaces for resources
+  those signatures reference (transitively); and `wasi:http/{types,client}`
+  under the HTTP-handler / `Client` conditions.
+- `wado wit` and the Phase 2 embedder both read this plan for the world's
+  `import` / `export` refs. `full`-scope nested-package bodies stay a
+  type-closure over those FQs (which _does_ follow type aliases, so the
+  `use duration` reference resolves), kept separate from the import set.
+
+Rollout (each step gated by the full E2E suite):
+
+- [x] R1 — Build the plan as structured data in `wir_build::component_imports`
+      (`resolve_import_plan`, flattened by `import_plan_fqs`), stored in
+      `WirPackage::{import_plan, imported_cm_interfaces}`. Built at the end of
+      `build_wir_package`, the one place with the full picture: the NIR facts
+      (`used_wasi_functions`, registry) _and_ the WIR canonical intrinsics
+      (`needed_canonicals`). `tests/wit_import_plan.rs` validates it equals the
+      compiled component's CM imports across the CLI corpus, the HTTP service
+      (resources), and a pure-compute program.
+- [x] R2 — Codegen emits CM imports/exports from the plan and only encodes; no
+      `has_interface` / `has_http_handler_export` / registry re-derivation is
+      left for interface- or world-level decisions. The flat FQ list alone can't
+      drive codegen — each category needs a distinct encoding (the shared
+      `wasi:cli/types` `error-code` instance vs. a function-bearing instance vs.
+      a resource source/getter/using interface vs. HTTP) — so every entry carries
+      an `ImportKind`: `SharedTypes`, `FunctionInterface`, `ResourceUsingInterface`,
+      `ResourceSource`, `ResourceGetter`, `HttpTypes`, `HttpClient`. Decisions
+      worth recording:
+  - `wasi:cli/types` (the canonical `error-code`) is imported iff a used
+    signature references it OR an async-export transmission future resolves to
+    it (`Transmission("cli")`, e.g. a kiln generator's `task return`). The second
+    condition needs `needed_canonicals`, which is why the plan is built at the
+    WIR layer rather than post-DCE on `NirPackage`.
+  - The two resource-source import paths are unified in one idempotent
+    `import_resource_source` helper, keyed on the package-qualified instance-type
+    name (collision-free across same-named interfaces like `wasi:cli/types` vs.
+    `wasi:filesystem/types`).
+  - Resource-getter membership follows `NirPackage::has_interface` — a
+    `used_wasi_functions` test, _not_ the registry's same-named `with`-set
+    predicate. The getter FQ lands in the faithful world import set.
+  - `append_http_handler_export`, the HTTP `client`, and the HTTP request-
+    construction core-func exports read the plan / `ComponentPlan`; world and
+    test exports were already plan-driven via `ComponentPlan::{world_exports,
+    test_exports}`.
+  - Function-level selection within an imported interface still reads
+    `used_wasi_functions` directly. That is package data codegen may read (like
+    `project.functions`), not a re-derived phase decision, so it does not violate
+    the `codegen.rs` principle.
+- [x] R3 — The WIT emitter reads the plan for its world import refs
+      (`WitEmitOptions::world_imports`), replacing the effect-row derivation;
+      `wado wit` compiles through optimize (on a silent host) to obtain it.
+      `wado wit` imports are now faithful: implicit `wasi:cli/stderr` is
+      included, type-alias-only `wasi:clocks/types` is excluded, and `full`
+      scope still self-describes (the alias interface stays a nested package).
+      Phase 2 (embedding) will read the same plan when it lands.
 
 ### Embedding target and format
 
@@ -397,47 +497,101 @@ Consumers extract via `wasm-tools component wit output.wasm`. Round-trip
 verification (Wado emits → wasm-tools decodes → matches the text from
 `wado wit`) is a required fixture for every world shape.
 
+### Embedding policy
+
+Two roles, clearly separated:
+
+- `wado wit` writes the WIT as **text**, for humans to read and for
+  tooling to diff. It is an inspection aid, not the deliverable.
+- `wado compile` embeds the **binary** `component-type` section. This is
+  what makes the output a first-class Component Model citizen — composable
+  with `wac`, publishable with `wkg`, transpilable with `jco`, and
+  consumable by another Wado compiler.
+
+Because a component without embedded WIT is a second-class CM citizen,
+and because Wado treats single-file scripts as first-class, **`wado
+compile` embeds WIT by default** — with or without a `wado.toml`. The
+manifest is a tuning knob for the _scope_ (`full` vs `local`), never the
+switch that turns embedding on. `--no-wit` is the single, explicit
+opt-out.
+
+`-Os` is the exception: it is the production build for frontend delivery
+(`jco`-transpiled to core Wasm + JS for the browser), where the WIT
+metadata is dead weight that never reaches a CM host. So `-Os` defaults
+to no embedding, exactly as if `--no-wit` were passed. An explicit
+`--embed-wit=<scope>` still forces embedding under `-Os` for the rare
+case that wants both the smallest symbols and a self-describing component.
+
+Embedding is a property of producing a distributable artifact, so it
+applies to `wado compile` only. `wado run`, `wado serve`, and `wado test`
+compile to an ephemeral in-memory component and never embed WIT, keeping
+the inner dev loop small and fast.
+
 ### CLI surfaces
 
 `wado wit` — standalone WIT text:
 
 ```sh
-wado wit --scope full file.wado                          # stdout
-wado wit --scope local -o file.wit file.wado             # file output
-wado wit --scope full --world wasi:http/service file.wado
+wado wit file.wado                                 # stdout, default scope (full)
+wado wit --scope local -o file.wit file.wado       # file output, user-only WIT
+wado wit --world wasi:http/service file.wado       # pick the target world
 ```
 
-Backed by `wit_emit::emit_wit_text`. Runs `semantics_of` and stops; no
-TIR build, no monomorphize, no lower, no codegen. Mirrors `wado dump` in
-pipeline depth.
+Backed by `wit_emit::emit_wit_text`. Runs `wado_compiler::semantics()` —
+the public async `Semantics`-only entry, which parses, loads, and analyzes,
+then stops; no monomorphize, no lower, no codegen. Mirrors `wado dump` in
+pipeline depth, but carries no `-O` level: WIT is a pre-codegen fact, so
+the optimization level is irrelevant. Takes a single positional target —
+a `.wado` file or a directory (see "Input resolution"); passing more than
+one is an error. `--world` reuses the same flag and
+default (`wasi:cli/command`, overridable by the `__DATA__` world) as
+`wado compile`. `--scope` is optional and defaults per the resolution
+order above. When the file has no world entry point (a library-shaped
+`.wado` with only `pub interface` / bare `export` items), the emitter
+produces an **empty world** — see "World-less libraries" under Open
+Design Questions.
 
-`--scope` is required when `wado.toml` does not provide `[wit].scope`.
-
-`wado compile --embed-wit=<scope>` / `--no-wit` — embed WIT in the
-compiled component:
+`wado compile` — embed WIT in the compiled component (default on):
 
 ```sh
-wado compile --embed-wit=full file.wado    # self-describing component
-wado compile --embed-wit=local file.wado   # user-only WIT, refs upstream
+wado compile file.wado                     # embeds, scope = full (default)
+wado compile --embed-wit=local file.wado   # embeds, user-only WIT, refs upstream
 wado compile --no-wit file.wado            # explicit opt-out
-wado compile file.wado                     # Phase 1: same as --no-wit
 ```
 
-`--embed-wit` always takes a value. `--embed-wit` without a value is a
-CLI error. `--no-wit` takes no value.
+`--embed-wit=<scope>` overrides the resolved scope for one invocation; it
+always takes a value (`full` or `local`), and `--embed-wit` without a
+value is a CLI error. `--no-wit` takes no value and is mutually exclusive
+with `--embed-wit`.
 
-Rollout:
+### Input resolution
 
-- Phase 1 (this WEP): embedding is opt-in via `--embed-wit=<scope>`.
-  Plain `wado compile` does not embed.
-- Phase 2: when a `wado.toml` has `[wit].scope`, plain `wado compile`
-  embeds with that scope. `--no-wit` overrides the manifest. The CLI
-  default in single-file mode remains "no embedding" because there is no
-  manifest to read.
+`wado wit` does not take a `.wado` file only. The positional input is a
+_target_ that resolves through `manifest::resolve_input`:
 
-There is no global "default-on" step. The scope is policy that lives in
-the manifest, and the manifest is what turns embedding on by default for
-a project.
+| Input       | Resolution                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| `foo.wado`  | A file is a single Wado source — analyze it directly.                                        |
+| a directory | A directory is a Wado package — load `<dir>/wado.toml` and resolve the entry source from it. |
+| (omitted)   | Discover the nearest `wado.toml` upward from the cwd.                                        |
+
+`file = source`, `dir = package` is the whole rule — no third "manifest
+file" form. A bare `wado.toml` path is not a target; point at its directory
+instead. All three forms already work in `resolve_input`, and `wado
+compile` routes through the same helper, so `wado wit` and `wado compile`
+share one input model with no new plumbing.
+
+When resolution goes through a manifest, the CLI loads it (via
+`load_nearest_manifest`) to source two inputs that single-file mode lacks:
+`WitEmitOptions::default_interface_name` from `[package].name`, and the
+`--scope` default from `[wit].scope`. A bare `.wado` file falls back to the
+file stem for the name and `full` for the scope.
+
+World selection follows from the same resolution: `--world` wins when
+given; otherwise the manifest's declared entry picks both the source and
+the world, in precedence order `command` → `service` → `lib`. A `lib`-only
+project resolves to the library case (empty world; see "World-less
+libraries").
 
 ### Implementation phases
 
@@ -479,37 +633,72 @@ Each phase ends with green E2E tests for the listed fixtures.
   - [ ] `wado-compiler/src/wit_emit.rs`: type mapping, kebabification,
         interface grouping, transitive-type closure, both `full` and
         `local` scopes.
-  - [ ] `WitEmitOptions::default_interface_name` — `[package].name`
-        from `wado.toml` or entry-file stem, threaded in from the CLI
-        rather than read off `Semantics`.
+  - [ ] `WitEmitOptions { scope, world_fq, default_interface_name }`.
+        `world_fq` is the resolved target world; `default_interface_name`
+        is `[package].name` from `wado.toml` or the entry-file stem. Both
+        are threaded in from the CLI rather than read off `Semantics`.
+  - [ ] No-entry-point files emit an empty world (the resolved world name
+        with no exports), so library-shaped `.wado` still produces valid
+        WIT. The fuller "world-less library" model is deferred.
   - [ ] `wado-cli/src/wit.rs` subcommand + `Cmd::Wit` registration in
-        `wado-cli/src/main.rs`.
+        `wado-cli/src/main.rs`. Single positional target (file or
+        directory) resolved via the existing `resolve_input`; no `-O` flag;
+        calls `wado_compiler::semantics()`
+        and bails silently when `Semantics::is_complete()` is false
+        (diagnostics already emitted by the host). When the target resolves
+        through a manifest, read `[package].name` via
+        `load_nearest_manifest` for `default_interface_name`. The
+        `[wit].scope` default lands in Phase 3; until then scope is the
+        `--scope` flag or `full`.
   - [ ] E2E fixtures under `wado-compiler/tests/fixtures/wit/`: empty
         world, default-interface, explicit-interface, multiple-interfaces,
         `wasi:cli/command`, `wasi:http/service`, `core:kiln/generator`.
   - [ ] Each fixture is parsed back with `wit-parser` to confirm the
         emitted text is syntactically valid WIT.
 
-- [ ] Phase 2 — `wado compile --embed-wit=<scope>`
+- [ ] Phase 2 — `wado compile` embedding (default on, scope `full`)
   - [ ] `wado-compiler/src/wit_bundle.rs`: text → `Resolve` →
         `wit_component::metadata::encode` → custom-section append.
-  - [ ] `--embed-wit=<scope>` and `--no-wit` flags on `CompileOptions`
-        with the mutual-exclusion check.
+  - [ ] `--embed-wit=<scope>` and `--no-wit` flags on `CompileOptions`,
+        mutually exclusive; embedding defaults to `full` when neither is
+        given, except under `-Os` which defaults to no embedding (an
+        explicit `--embed-wit` still forces it). `wado run` / `serve` /
+        `test` never embed.
   - [ ] Postprocess hook in `codegen/postprocess.rs` (or the immediate
         caller of `build_component`).
-  - [ ] Round-trip fixture: for every Phase 1 fixture, compile with
-        `--embed-wit=full`, then run `wasm-tools component wit` on the
-        output and assert it matches `wado wit --scope full`.
+  - [ ] Round-trip fixture: for every Phase 1 fixture, compile (default
+        `full`), then run `wasm-tools component wit` on the output and
+        assert it matches `wado wit`.
 
-- [ ] Phase 3 — Manifest-driven enable
+- [ ] Phase 3 — Manifest scope override
   - [ ] Parse `[wit].scope` in `wado-manifest`.
-  - [ ] `wado compile` reads the manifest scope when no CLI flag is
-        given; `--no-wit` overrides.
+  - [ ] `wado compile` uses `[wit].scope` as the scope when no CLI flag is
+        given; the built-in default stays `full`; `--embed-wit` overrides
+        the manifest; `--no-wit` opts out entirely.
   - [ ] Update WEP: WIT Bundling status from "designed" to "implemented"
-        and reconcile its "default-on" wording with the manifest-driven
+        and reconcile its wording with the default-on, manifest-tunes-scope
         rule documented here.
 
 ## Open Design Questions
+
+### World-less libraries
+
+A `.wado` file may carry only `pub interface` declarations and bare
+`export` items with no world entry point (`fn run` / `fn handle`). Such a
+file is conceptually a _library_: a bag of interfaces meant to be consumed
+by other components, not a runnable world. WIT can express this — a package
+may contain interface definitions with no world, or with a world that only
+re-exports interfaces — but Wado has not yet decided what a world-less
+library _is_ at the language level (how it is declared, published, and
+depended upon).
+
+Until that is settled, `wado wit` and `wado compile` take the conservative
+path: a file with no world entry point emits an **empty world** (the
+resolved world name, no exports) alongside its interface definitions. This
+keeps the output valid WIT and round-trippable without committing to a
+library model. Promoting world-less libraries to a first-class concept —
+and deciding whether the emitted world should disappear entirely rather
+than be empty — is deferred to a future WEP.
 
 ### World structure faithfulness
 
@@ -565,9 +754,9 @@ will get one when work starts.
 - [ ] Producer side: emit WIT text and embed `component-type` in output
       (WEP: WIT Bundling for the format; this WEP §"Producer Side: WIT
       Generation and Embedding" for the detailed design). Designed; Phase 0
-      is a `Semantics` refactor, Phase 1 is `wado wit`, Phase 2 is
-      `wado compile --embed-wit=<scope>`, Phase 3 reads
-      `[wit].scope` from `wado.toml`.
+      is a `Semantics` refactor, Phase 1 is `wado wit`, Phase 2 makes
+      `wado compile` embed WIT by default (scope `full`, `--no-wit` to opt
+      out), Phase 3 lets `[wit].scope` in `wado.toml` retune the scope.
 - [ ] Decide world structure faithfulness level (L2 vs L3) and document.
 - [ ] Implement `contract` declaration with the chosen scope rules (revise
       WEP: World Conformance accordingly).
