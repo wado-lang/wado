@@ -440,7 +440,16 @@ Rollout (each step gated by the full E2E suite):
       corpus and the HTTP service (resources). Codegen unchanged. Imports
       only for now; exports still come from `WorldInfo`.
 - [ ] R2 — Rewire codegen to emit from the plan; delete the duplicated
-      decision logic so codegen only encodes.
+      decision logic so codegen only encodes. The flat FQ list from R1 is
+      insufficient to drive codegen: each import uses a distinct mechanism
+      (the shared `wasi:cli/types` instance; a function-bearing interface
+      instance with its funcs + resource exports; a resource-defining
+      interface instance; the HTTP `types`/`client` instances), and the
+      resource-deferral ordering is load-bearing for wasm-encoder. So R2
+      first enriches the plan into ordered, categorized entries
+      (`{ fq, kind, funcs, resources, … }`), then makes codegen iterate and
+      encode them. A naive "gate membership on the flat plan" shortcut
+      double-imports `wasi:cli/types` and is not viable.
 - [ ] R3 — Point the WIT emitter (and Phase 2) at the plan for world refs,
       replacing the effect-row derivation.
 
