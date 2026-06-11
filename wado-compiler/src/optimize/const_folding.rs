@@ -39,11 +39,11 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
+use crate::nir::NirFunction;
 use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind,
 };
-use crate::nir::NirFunction;
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
@@ -468,9 +468,12 @@ impl ConstFoldVisitor<'_> {
         for s in stmts {
             changed |= self.visit_stmt(engine, s);
         }
-        changed |= self
-            .interpreter
-            .reduce_local_block_via(&mut EngineSink { engine: &mut *engine }, block);
+        changed |= self.interpreter.reduce_local_block_via(
+            &mut EngineSink {
+                engine: &mut *engine,
+            },
+            block,
+        );
         changed
     }
 
@@ -723,8 +726,12 @@ impl ConstFoldVisitor<'_> {
 
     /// Commit a single-node niri rewrite at `e` through the engine.
     fn reduce_local(&mut self, engine: &mut Engine, e: ExprId) -> bool {
-        self.interpreter
-            .reduce_local_via(&mut EngineSink { engine: &mut *engine }, e)
+        self.interpreter.reduce_local_via(
+            &mut EngineSink {
+                engine: &mut *engine,
+            },
+            e,
+        )
     }
 
     fn visit_pattern(&mut self, engine: &mut Engine, p: PatId) -> bool {
