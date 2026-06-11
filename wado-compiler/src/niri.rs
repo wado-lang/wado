@@ -1408,6 +1408,49 @@ impl<'a> Interpreter<'a> {
         None
     }
 
+    /// The flow-sensitive constant value of `e`, as the literal [`ExprKind`]
+    /// that should replace it, or `None` when `e` does not fold to a constant.
+    ///
+    /// This is the value-substitution subset of
+    /// [`reduce_local_a`](Self::reduce_local_a) — `env`-bound locals, forwarded
+    /// `field_env` fields, immutable globals, literal arithmetic, and pure CTFE
+    /// — returning the new kind instead of mutating `body`. The structural
+    /// rewrites (short-circuit / `if` / `match` collapse) are *not* included;
+    /// they reshape more than one node and are committed separately through the
+    /// engine edit API. The caller installs the returned kind via
+    /// `Engine::replace_expr_kind` so the parent map / use index stay coherent.
+    pub fn flow_fold_kind_a(&mut self, body: &Body, e: ExprId) -> Option<ExprKind> {
+        if let Lattice::Const(v) = self.try_fold_a(body, e) {
+            return Some(value_to_arena_kind(v));
+        }
+        if let ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &body.exprs[e].kind
+            && let Lattice::Const(v) = self.global_lattice(module_source, name)
+        {
+            return Some(value_to_arena_kind(v));
+        }
+        if let ExprKind::FieldAccess {
+            expr: inner,
+            field_name,
+            ..
+        } = &body.exprs[e].kind
+            && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+            && let Some(v) = self
+                .field_env
+                .get(index)
+                .and_then(|m| m.get(field_name.as_str()))
+                .copied()
+        {
+            return Some(value_to_arena_kind(v));
+        }
+        if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
+            return Some(value_to_arena_kind(v));
+        }
+        None
+    }
+
     /// Splice a constant-condition `if` statement into its parent block.
     pub fn reduce_local_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
         let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
