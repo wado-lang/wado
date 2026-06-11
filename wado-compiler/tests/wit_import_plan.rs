@@ -108,8 +108,8 @@ fn plan_matches_component_across_cli_corpus() {
 
 #[test]
 fn plan_matches_component_for_pure_compute() {
-    // A program that uses no WASI function still imports wasi:cli/types
-    // (codegen's unconditional canonical error-code import); the plan must too.
+    // A program that references no error-code drops the dead wasi:cli/types
+    // import; the plan and the component agree (both empty here).
     let source = "export fn run() {\n\
                       let mut x = 0;\n\
                       let mut i = 0;\n\
@@ -118,7 +118,7 @@ fn plan_matches_component_for_pure_compute() {
     let plan = plan_imports(source);
     let actual = actual_imports(source);
     assert_eq!(plan, actual, "\nplan:   {plan:?}\nactual: {actual:?}");
-    assert!(plan.iter().any(|i| i.contains("cli/types")), "{plan:?}");
+    assert!(!plan.iter().any(|i| i.contains("cli/types")), "{plan:?}");
 }
 
 #[test]
