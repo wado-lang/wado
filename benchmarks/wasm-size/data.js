@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781139970239,
+  "lastUpdate": 1781221690971,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32177,6 +32177,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/07ed890b2ad6409330bcb05b107edbe5c83a8073"
         },
         "date": 1781139969880,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432497,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e9ea2fd7832d0b49e530c23211a1cebdecea5ed8",
+          "message": "Merge pull request #1355 from wado-lang/claude/cm-1-0-wado-readiness-tqrd44\n\nfeat(wit): WIT interoperability — `wado wit` emitter and plan-driven CM imports/exports",
+          "timestamp": "2026-06-12T08:39:23+09:00",
+          "tree_id": "3f3899dc9f25c7ac65ac5df8cb9f4bdc414522b7",
+          "url": "https://github.com/wado-lang/wado/commit/e9ea2fd7832d0b49e530c23211a1cebdecea5ed8"
+        },
+        "date": 1781221690728,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
