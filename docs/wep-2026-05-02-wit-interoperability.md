@@ -450,8 +450,13 @@ Rollout (each step gated by the full E2E suite):
       (`{ fq, kind, funcs, resources, … }`), then makes codegen iterate and
       encode them. A naive "gate membership on the flat plan" shortcut
       double-imports `wasi:cli/types` and is not viable.
-- [ ] R3 — Point the WIT emitter (and Phase 2) at the plan for world refs,
-      replacing the effect-row derivation.
+- [x] R3 — The WIT emitter reads the plan for its world import refs
+      (`WitEmitOptions::world_imports`), replacing the effect-row derivation;
+      `wado wit` compiles through optimize (on a silent host) to obtain it.
+      `wado wit` imports are now faithful: implicit `wasi:cli/stderr` is
+      included, type-alias-only `wasi:clocks/types` is excluded, and `full`
+      scope still self-describes (the alias interface stays a nested package).
+      Phase 2 (embedding) will read the same plan when it lands.
 
 ### Embedding target and format
 
