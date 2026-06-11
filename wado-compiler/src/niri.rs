@@ -98,7 +98,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
-use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirFunction, NirLiteralPattern, NirUnaryOp};
 use crate::nir_arena::{
@@ -352,96 +351,11 @@ pub const DEFAULT_STEP_BUDGET: u32 = 1000;
 // Field knowledge
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// A dense set of local indices, backed by a bitset indexed by the local
-/// index itself.
-///
-/// Local indices within a function body are dense (`0..locals.len()`), so
-/// this replaces an `IndexSet<u32>` used purely for membership with a
-/// hash-free bitset — the same idea as [`crate::tir::TypeSet`]. The alias
-/// analysis rebuilds these sets for every function on every const-fold
-/// iteration, so dropping the per-grow allocation + hashing of an
-/// `IndexSet` is worthwhile.
-#[derive(Default, Clone, Debug)]
-pub struct LocalSet {
-    words: Vec<u64>,
-}
+/// `LocalSet` / `AliasInfo` now live in `nir_value_graph::alias` (the
+/// builder owns the field/alias dataflow). Re-exported here for the
+/// transition; removed when niri's field_env machinery is deleted.
+pub use crate::nir_value_graph::alias::{AliasInfo, LocalSet};
 
-impl LocalSet {
-    /// An empty set pre-sized to hold `locals` indices without regrowing.
-    #[must_use]
-    pub fn with_capacity(locals: usize) -> Self {
-        Self {
-            words: vec![0; locals.div_ceil(64)],
-        }
-    }
-
-    fn slot(index: u32) -> (usize, u64) {
-        ((index / 64) as usize, 1u64 << (index % 64))
-    }
-
-    /// Insert `index`, returning `true` if it was not already present.
-    pub fn insert(&mut self, index: u32) -> bool {
-        let (word, mask) = Self::slot(index);
-        if word >= self.words.len() {
-            self.words.resize(word + 1, 0);
-        }
-        let newly = self.words[word] & mask == 0;
-        self.words[word] |= mask;
-        newly
-    }
-
-    /// Whether `index` is a member.
-    #[must_use]
-    pub fn contains(&self, index: u32) -> bool {
-        let (word, mask) = Self::slot(index);
-        self.words.get(word).is_some_and(|w| w & mask != 0)
-    }
-
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.words.iter().all(|&w| w == 0)
-    }
-
-    /// Iterate members in ascending index order.
-    pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
-        self.words.iter().enumerate().flat_map(|(wi, &word)| {
-            (0..64u32)
-                .filter(move |&b| word & (1u64 << b) != 0)
-                .map(move |b| wi as u32 * 64 + b)
-        })
-    }
-}
-
-/// Per-function alias / aliasing-trackability annotations consumed by
-/// the interpreter's field-knowledge bookkeeping.
-///
-/// These three sets are computed once per function by the driving
-/// visitor (typically from the function's stable
-/// `address_taken_locals` / `stores_aliased_locals` plus a body walk
-/// that catches transient inlined-in copies), then handed to the
-/// interpreter via [`Interpreter::set_alias_info`].
-///
-/// - `aliased`: locals reachable through some other handle (`&x`,
-///   `&mut x`, captured by a closure, struct-field-stored, etc.).
-///   Field knowledge IS recorded for these locals; the flow-sensitive
-///   walk drops their entries at every side-effect boundary (call,
-///   dereferenced write, …) where an unseen alias could have mutated
-///   the storage.
-/// - `untrackable`: locals whose aliasing escapes our analysis (e.g.
-///   stashed across a `stores`-annotated callee). Field knowledge is
-///   **never** recorded for these; that matches the conservatism the
-///   OLD WIR-level `const_forward` had for stores-passed args.
-/// - `alias_groups`: union-find groups of locals connected by
-///   reference-typed `let dst = src` copies (`Box<T>`, `List<T>`,
-///   `&T`, `&mut T`). Used to widen field-assignment invalidation:
-///   writing `dst.field = …` must drop the same field on every
-///   alias.
-#[derive(Default, Clone, Debug)]
-pub struct AliasInfo {
-    pub aliased: LocalSet,
-    pub untrackable: LocalSet,
-    pub alias_groups: IndexMap<u32, IndexSet<u32>>,
-}
 
 /// Snapshot of [`Interpreter::field_env`] returned by
 /// [`Interpreter::snapshot_fields`]. Restored verbatim by

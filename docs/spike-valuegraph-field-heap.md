@@ -173,5 +173,31 @@ levels) + `test-wado` + `package-gale` compile.
 
 ## Scaffolding landed in this spike
 
-- `HeapVersion` derives `Ord` (`nir_value_graph.rs`).
+- `HeapVersion` derives `Ord` (`nir_value_graph.rs`) — needed by the new
+  `version_of` max.
+- **Alias analysis relocated** into `nir_value_graph/alias.rs`: `LocalSet`,
+  `AliasInfo`, `build_alias_info` + helpers + the value-copy helpers, moved
+  below the `optimize` layer so the builder can use them without a cycle.
+  `niri` now re-exports `AliasInfo` / `LocalSet` from there (transition).
+  Build is green. This is the foundation the builder `HeapState` rewrite
+  and the cross-pass `AliasInfo` wiring build on.
 - This spec.
+
+## Remaining (next session) — precise checklist
+
+1. `builder.rs` `HeapState`: `per_field` → `per_slot:(local,field)` +
+   `per_local:local` + `default`; `version_of(Option<root>, field)` = max;
+   `bump_slot` / `bump_local` / `bump_all`; mirror in `HeapSnapshot`.
+2. `Builder::receiver_root(ExprId) -> Option<u32>`.
+3. Builder holds `&AliasInfo` (replace `alias_unsafe`). `Engine::set_alias_info`;
+   `builder::build(body, params, &AliasInfo)`.
+4. Assign / FieldAccess-read / Call / struct-seed / `join_heap` / Loop:
+   per the "Builder walk changes" section above.
+5. Provide `AliasInfo` from `store_load_forward`, `cse`, `licm`,
+   `condition_implication` (they have `func` escape sets + `project.type_table`;
+   call `build_alias_info`). Sound default when absent (conservative `bump_all`
+   on calls) so non-opted-in sessions stay correct.
+6. Delete `ConstFoldVisitor` + niri `field_env`; const-fold → engine rule
+   keeping field forwarding in the builder.
+7. Regen ALL goldens; hand-review every diff equal-or-better; full e2e +
+   test-wado + package-gale.

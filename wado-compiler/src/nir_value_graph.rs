@@ -10,6 +10,7 @@
 //! and store-load-forward rules. See
 //! `docs/wep-2026-06-05-worklist-rewrite-engine.md`.
 
+pub mod alias;
 pub mod builder;
 
 use crate::hashmap::IndexMap;
