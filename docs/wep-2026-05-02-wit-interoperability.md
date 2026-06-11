@@ -433,25 +433,30 @@ Mechanics:
 
 Rollout (each step gated by the full E2E suite):
 
-- [x] R1 — Build the plan post-DCE as additive structured data on
-      `NirPackage` (`wir_build::component_imports`, stored in
-      `NirPackage::imported_cm_interfaces`). `tests/wit_import_plan.rs`
-      validates it equals the compiled component's CM imports across the CLI
-      corpus and the HTTP service (resources). Codegen unchanged. Imports
-      only for now; exports still come from `WorldInfo`.
-- [ ] R2 opportunity — Codegen imports `wasi:cli/types` unconditionally (the
-      canonical `error-code`), so a pure-compute program carries a dead
-      import. A first attempt to trim it with a plan-level predicate
-      (`needs_canonical_cli_error_code`, gating both codegen and the plan)
-      was reverted: the canonical `error-code` is needed not only by
-      interface signatures but by async-export _transmission futures_
-      (`build_transmission_future_type_for`, e.g. a kiln generator's
-      `task return`), whose "cli" source is decided by codegen's
-      canonical-intrinsic analysis — not visible from `used_wasi_functions`
-      or the world export declaration. The e2e suite caught it
-      (`kiln_provider` tests: `unknown component type: error-code`). The trim
-      therefore needs codegen's transmission-source analysis and must be done
-      _inside_ R2 (codegen owns the decision), not as a separate predicate.
+- [x] R1 — Build the plan as structured data in `wir_build::component_imports`
+      (`resolve_imported_cm_interfaces`), stored in
+      `WirPackage::imported_cm_interfaces`. Built at the end of
+      `build_wir_package`, the one place with the full picture: the NIR facts
+      (`used_wasi_functions`, registry) _and_ the WIR canonical intrinsics
+      (`needed_canonicals`). `tests/wit_import_plan.rs` validates it equals the
+      compiled component's CM imports across the CLI corpus, the HTTP service
+      (resources), and a pure-compute program. Imports only; exports still
+      come from `WorldInfo`. (Initially built post-DCE on `NirPackage`, then
+      moved to the WIR layer once it turned out the import decision also
+      depends on `needed_canonicals` — see below.)
+- [x] R2 step — `wasi:cli/types` (the canonical `error-code`) is now imported
+      conditionally. It is needed iff a used interface references the cli
+      error-code OR an async-export transmission future resolves to it
+      (`Transmission("cli")`, e.g. a kiln generator's `task return`). Codegen
+      reads `wir_package.imported_cm_interfaces` to gate its Phase 0 import —
+      the decision lives in `wir_build`, codegen only emits. A first attempt
+      gated the trim on interface signatures alone and broke kiln generators
+      (`unknown component type: error-code`); the fix was to add the
+      transmission-source condition (available from `needed_canonicals` at the
+      WIR layer) and drop the over-aggressive "kiln forbids WASI" early-return,
+      which had omitted the error-code the kiln transmission future needs.
+      Pure-compute now drops the dead import; sha256 and kiln keep it. Full
+      e2e green (4766 tests).
 - [ ] R2 — Rewire codegen to emit from the plan; delete the duplicated
       decision logic so codegen only encodes. The flat FQ list from R1 is
       insufficient to drive codegen: each import uses a distinct mechanism
