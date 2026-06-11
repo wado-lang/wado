@@ -1,16 +1,15 @@
-//! Post-DCE resolution of the complete set of CM interface FQs the component
-//! imports, as structured data at the WIR layer.
+//! The complete set of CM interfaces the component imports, resolved as
+//! structured data at the WIR layer.
 //!
-//! Today the import decision lives in `codegen/component.rs` (the four-phase
-//! `generate_cm_imports` + resource phases + HTTP phase), which violates the
-//! `codegen.rs` principle ("emit `Package` as is, without knowledge of earlier
-//! phases"). WEP `wep-2026-05-02-wit-interoperability.md` §"Faithful imports"
-//! moves the decision here so codegen, the WIT producer, and CM embedding all
-//! read one source of truth.
+//! This is where the import decision lives. Codegen (`generate_cm_imports` + the
+//! resource and HTTP phases), the WIT producer (`wit_emit`), and the CM embedding
+//! all read this one plan rather than each re-deriving membership from the
+//! registry / `used_wasi_functions` — upholding the `codegen.rs` principle
+//! ("emit `Package` as is, without knowledge of earlier phases"). See WEP
+//! `wep-2026-05-02-wit-interoperability.md` §"Faithful imports".
 //!
-//! This is R1: the plan is built additively and validated against the real
-//! component (see `tests/wit_import_plan.rs`); codegen still computes its own
-//! imports until R2 rewires it to consume the plan.
+//! `tests/wit_import_plan.rs` asserts the plan equals the compiled component's
+//! actual CM imports, so the two cannot drift.
 
 use crate::ast::Type;
 use crate::component_model::CmInterfaceRegistry;
@@ -18,9 +17,10 @@ use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, ImportEntry, ImportKind};
 
-/// Resolve the categorized import plan for `project`, mirroring the decision
-/// codegen's import phases make from `used_wasi_functions`, the registry, and
-/// the WIR-level canonical intrinsics. Entries are in codegen emission order.
+/// Resolve the categorized import plan for `project` from `used_wasi_functions`,
+/// the registry, and the WIR-level canonical intrinsics. This is the decision
+/// codegen's import phases then read and encode. Entries are in codegen emission
+/// order.
 #[must_use]
 pub fn resolve_import_plan(
     project: &NirPackage,

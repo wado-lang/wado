@@ -2852,8 +2852,9 @@ fn import_interface_with_resource(
 
 /// Import a resource-defining source interface once and alias its resource
 /// type(s) — and its `error-code`, for transmission futures — into the outer
-/// component scope. Idempotent on `source_path` (keyed on a marker type), so
-/// repeated requests from different consumers collapse to a single import.
+/// component scope. Idempotent on `source_path` (keyed on the package-qualified
+/// instance-type name, a real builder type), so repeated requests from different
+/// consumers collapse to a single import.
 ///
 /// This is the single place that emits a minimal, methods-less source instance.
 /// Both the plan-driven resource-source phase and the resource-using phase's
@@ -2997,7 +2998,7 @@ fn import_interfaces_with_resources(
     // referenced source via the shared `import_resource_source` helper, which is
     // idempotent and also handles the outer resource / error-code aliases.
     // Membership is the plan's: a source is imported iff listed as
-    // `ResourceSource` (its `has_interface`-driven membership, mirrored there).
+    // `ResourceSource` (the plan decides that from `has_interface`).
     for interface_info in &interfaces_with_resources {
         let Some((resource_wado_name, _resource_cm_name)) = &interface_info.resource_type else {
             continue;

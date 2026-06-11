@@ -5,10 +5,11 @@
 //! output — declared interfaces, exported items, the active world, and the
 //! type table — and renders a WIT document with [`wit_encoder`].
 //!
-//! `wado wit` prints the text; `wado compile` (Phase 2) reuses the same text
-//! to derive the embedded `component-type` custom section. WIT is fully
-//! determined by name and type resolution, so emission reads [`Semantics`]
-//! and never touches monomorphize / lower / codegen.
+//! `wado wit` prints the text. A planned Phase 2 (`wado compile` embedding, not
+//! yet implemented) will reuse the same text to derive the embedded
+//! `component-type` custom section. WIT is fully determined by name and type
+//! resolution, so emission reads [`Semantics`] and never touches monomorphize /
+//! lower / codegen.
 
 use std::collections::{BTreeMap, BTreeSet};
 
