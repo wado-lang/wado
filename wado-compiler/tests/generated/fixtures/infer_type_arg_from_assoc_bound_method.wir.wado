@@ -538,11 +538,6 @@ fn "wado-compiler/tests/fixtures/infer_type_arg_from_assoc_bound_method.wado/Gen
         return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     }
     index = self.idx;
-    if @unlikely(index >= self.items.used) {
-        cold_path;
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
     v = builtin::array_get<i32>(self.items.repr, index);
     self.idx = self.idx + 1;
     return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: v };

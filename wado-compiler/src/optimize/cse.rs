@@ -36,7 +36,7 @@ use std::cell::Cell;
 use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
-use crate::nir::NirFunction;
+use crate::nir::{NirBinaryOp, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -55,9 +55,14 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
         let rule = CseRule {
             applied: Cell::new(false),
         };
+        // Only the canonical sets know aliases with no surviving Ref node
+        // (`with stores[p]`); field seeding must stay off for them.
+        let mut alias_unsafe = func.address_taken_locals.clone();
+        alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_unsafe_locals(alias_unsafe);
         engine.run(&[&rule])
     })
 }
@@ -215,9 +220,14 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
 }
 
 /// Collect every `Binary` subexpression of `expr` paired with its `ValueId`.
-/// Recurses through Binary/Unary so candidates like `!(p * p <= limit)`
-/// are reached. Two-pass: pass 1 collects candidates under `&body`;
-/// pass 2 attaches `ValueIds` (which needs `&mut engine`).
+/// Two-pass: pass 1 collects under `&body`; pass 2 attaches `ValueId`s
+/// (needs `&mut engine`).
+///
+/// A short-circuit `&&` / `||` right operand is not descended into: the
+/// hoisted `let __cse` evaluates unconditionally, so extracting from the
+/// conditional operand could introduce a trap (e.g. a division) the source
+/// never performs — see `cse_short_circuit_no_trap.wado`. A candidate that
+/// *is* the operator hoists whole, and its clone still short-circuits.
 fn collect_binary_candidates(
     engine: &mut Engine,
     expr: ExprId,
@@ -228,10 +238,12 @@ fn collect_binary_candidates(
         let mut stack: Vec<ExprId> = vec![expr];
         while let Some(e) = stack.pop() {
             match &body.exprs[e].kind {
-                ExprKind::Binary { left, right, .. } => {
+                ExprKind::Binary { left, op, right } => {
                     binary_exprs.push((e, body.exprs[e].type_id, body.exprs[e].span));
                     stack.push(*left);
-                    stack.push(*right);
+                    if !matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
+                        stack.push(*right);
+                    }
                 }
                 ExprKind::Unary { expr: inner, .. } => {
                     stack.push(*inner);

@@ -1,8 +1,11 @@
 //! Loop-Invariant Code Motion (LICM) for Wado NIR
 //!
 //! This module hoists loop-invariant computations out of loops to improve performance.
-//! It identifies field accesses on variables that don't change within a loop and moves
-//! those accesses before the loop.
+//! Two kinds of candidates move to the pre-header: field accesses on
+//! variables the loop does not modify (legality via [`ModifiedVars`]), and
+//! pure-arithmetic subtrees whose `Local` leaves are pre-header-stable —
+//! each leaf's use-site `ValueId` equals the loop-entry snapshot value
+//! ([`Engine::loop_entry_value`]), deduped by `ValueId` (see [`ArithHoist`]).
 //!
 //! Runs on the worklist rewrite engine (combine migration; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
@@ -25,6 +28,7 @@ use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatKind, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -151,9 +155,18 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             type_table: &type_table,
             applied: Cell::new(false),
         };
-        let NirFunction { body, locals, .. } = &mut *func;
+        let mut alias_unsafe = func.address_taken_locals.clone();
+        alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
+        let NirFunction {
+            body,
+            locals,
+            params,
+            ..
+        } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_unsafe_locals(alias_unsafe);
+        engine.set_param_locals(params.iter().map(|p| p.local_index).collect());
         engine.run(&[&rule])
     })
 }
@@ -195,7 +208,10 @@ fn licm_block(
     let mut changed = false;
     let mut new_stmts = Vec::new();
 
-    for s in std::mem::take(&mut engine.body.blocks[block].stmts) {
+    // Iterate a clone, not `mem::take`: `hoist_invariant_arith` rebuilds
+    // the value graph from the body root mid-walk, so ancestor blocks must
+    // stay populated.
+    for s in engine.body.blocks[block].stmts.clone() {
         // Classify without holding the borrow across the mutable recursion.
         enum Shape {
             Loop(BlockId),
@@ -317,12 +333,11 @@ fn licm_loop(
 
         if candidates.is_empty() {
             // Field-hoisting has converged for this loop. Try hoisting maximal
-            // loop-invariant pure-arithmetic subexpressions (e.g. the
+            // pre-header-stable pure-arithmetic subexpressions (e.g. the
             // `_licm_end - _licm_start` a scan loop recomputes in its guard
             // every iteration). Runs here, after field-hoisting, so the
-            // `_licm_*` locals it created are visible as loop-invariant
-            // operands.
-            if hoist_invariant_arith(engine, loop_body, &modified_vars, &mut all_hoist_stmts) {
+            // `_licm_*` locals it created are visible as stable operands.
+            if hoist_invariant_arith(engine, loop_body, &mut all_hoist_stmts) {
                 continue;
             }
             break;
@@ -1256,180 +1271,187 @@ fn is_hoistable_binop(op: crate::nir::NirBinaryOp) -> bool {
     )
 }
 
-/// Whether `e` is a pure-arithmetic tree whose every leaf is a loop-invariant
-/// scalar local or a numeric/bool/char literal. Such a tree evaluates to the
-/// same value on every iteration. A `Local` is invariant when
-/// `collect_modified_vars` did not mark it fully modified — which covers
-/// reassignment, `&mut`/`&` borrows, by-reference call args, and loop-body
-/// `let`/pattern bindings.
+/// Whether `e`'s shape fits the hoistable-arithmetic grammar: a tree of
+/// pure, total ops over `Local` and numeric/bool/char literal leaves.
 ///
 /// `Cast` is deliberately excluded: a float→int cast lowers to the trapping
 /// `i32.trunc_f64_s` family (not `trunc_sat`), so hoisting one to the
 /// pre-header could trap on a NaN/out-of-range value where a zero-iteration
 /// loop never would — the same trap-soundness reason `Div`/`Mod` are excluded.
-fn is_invariant_arith(body: &Body, e: ExprId, modified: &ModifiedVars) -> bool {
+fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::IntLiteral { .. }
         | ExprKind::FloatLiteral { .. }
         | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_) => true,
-        ExprKind::Local { index, .. } => !modified.fully.contains(index),
+        | ExprKind::CharLiteral(_)
+        | ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             is_hoistable_binop(*op)
-                && is_invariant_arith(body, *left, modified)
-                && is_invariant_arith(body, *right, modified)
+                && is_hoistable_arith_shape(body, *left)
+                && is_hoistable_arith_shape(body, *right)
         }
         ExprKind::Unary { op, expr } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
-                && is_invariant_arith(body, *expr, modified)
+                && is_hoistable_arith_shape(body, *expr)
         }
         _ => false,
     }
 }
 
-/// Whether the arithmetic tree contains at least one `Local` leaf. A
-/// constant-only tree is left for constant folding — hoisting it gains nothing.
-fn arith_has_local(body: &Body, e: ExprId) -> bool {
+/// Collect every `Local` leaf of a hoistable-arithmetic tree.
+fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32)>) {
     match &body.exprs[e].kind {
-        ExprKind::Local { .. } => true,
+        ExprKind::Local { index, .. } => out.push((e, *index)),
         ExprKind::Binary { left, right, .. } => {
-            arith_has_local(body, *left) || arith_has_local(body, *right)
+            collect_arith_local_leaves(body, *left, out);
+            collect_arith_local_leaves(body, *right, out);
         }
-        ExprKind::Unary { expr, .. } => arith_has_local(body, *expr),
-        _ => false,
+        ExprKind::Unary { expr, .. } => collect_arith_local_leaves(body, *expr, out),
+        _ => {}
     }
 }
 
-/// Whether `e` is a compound (`Binary` / `Unary`) loop-invariant arithmetic
-/// expression worth hoisting into a pre-loop temp.
-fn is_hoistable_invariant_compound(body: &Body, e: ExprId, modified: &ModifiedVars) -> bool {
-    let compound = matches!(
-        &body.exprs[e].kind,
-        ExprKind::Binary { .. } | ExprKind::Unary { .. }
-    );
-    compound && is_invariant_arith(body, e, modified) && arith_has_local(body, e)
+/// Inputs shared by the arithmetic-hoist candidate walk.
+struct ArithHoist<'a> {
+    /// The loop whose pre-header the candidates move to.
+    loop_body: BlockId,
+    /// Locals bound by hoist `let`s whose statements are not in the tree
+    /// yet (the caller prepends them after `licm_loop` returns): no entry
+    /// value, but read-only pre-header temps are stable by construction.
+    pending_hoist_locals: &'a IndexSet<u32>,
+    /// Address-taken locals — the `ValueGraph` does not model writes
+    /// through references, so their use-site values cannot be trusted.
+    address_taken: &'a IndexSet<u32>,
 }
 
-/// Structural equality over the hoistable-arithmetic grammar (`Local`,
-/// numeric/bool/char literals, `Binary` / `Unary`). Used to dedup equal
-/// invariant expressions into a single hoisted temp.
-fn arith_exprs_equal(body: &Body, a: ExprId, b: ExprId) -> bool {
-    if body.exprs[a].type_id != body.exprs[b].type_id {
-        return false;
+impl ArithHoist<'_> {
+    /// Whether `e` is a compound arithmetic expression that may move to
+    /// the pre-header, returning its `ValueId` for dedup. Each `Local`
+    /// leaf's use-site value must equal the pre-header entry value, so the
+    /// hoisted clone computes what every occurrence reads — cross-iteration
+    /// invariance alone would wrongly admit `loop { x = 5; … x + n … }`.
+    fn candidate(&self, engine: &mut Engine, e: ExprId) -> Option<ValueId> {
+        let compound = matches!(
+            &engine.body.exprs[e].kind,
+            ExprKind::Binary { .. } | ExprKind::Unary { .. }
+        );
+        if !compound || !is_hoistable_arith_shape(engine.body, e) {
+            return None;
+        }
+        let mut leaves: Vec<(ExprId, u32)> = Vec::new();
+        collect_arith_local_leaves(engine.body, e, &mut leaves);
+        // A constant-only tree is left for constant folding.
+        if leaves.is_empty() {
+            return None;
+        }
+        for (leaf, idx) in leaves {
+            if self.pending_hoist_locals.contains(&idx) {
+                continue;
+            }
+            if self.address_taken.contains(&idx) {
+                return None;
+            }
+            let use_vn = engine.value(leaf);
+            let entry_vn = engine.loop_entry_value(self.loop_body, idx);
+            match (use_vn, entry_vn) {
+                (Some(u), Some(en)) if u == en => {}
+                _ => return None,
+            }
+        }
+        engine.value(e)
     }
-    match (&body.exprs[a].kind, &body.exprs[b].kind) {
-        (ExprKind::Local { index: i1, .. }, ExprKind::Local { index: i2, .. }) => i1 == i2,
-        (ExprKind::IntLiteral { value: v1, .. }, ExprKind::IntLiteral { value: v2, .. }) => {
-            v1 == v2
-        }
-        (ExprKind::FloatLiteral { value: v1, .. }, ExprKind::FloatLiteral { value: v2, .. }) => {
-            v1.to_bits() == v2.to_bits()
-        }
-        (ExprKind::BoolLiteral(x), ExprKind::BoolLiteral(y)) => x == y,
-        (ExprKind::CharLiteral(x), ExprKind::CharLiteral(y)) => x == y,
-        (
-            ExprKind::Binary {
-                left: l1,
-                op: o1,
-                right: r1,
-            },
-            ExprKind::Binary {
-                left: l2,
-                op: o2,
-                right: r2,
-            },
-        ) => o1 == o2 && arith_exprs_equal(body, *l1, *l2) && arith_exprs_equal(body, *r1, *r2),
-        (ExprKind::Unary { op: o1, expr: e1 }, ExprKind::Unary { op: o2, expr: e2 }) => {
-            o1 == o2 && arith_exprs_equal(body, *e1, *e2)
-        }
-        _ => false,
-    }
-}
 
-/// Collect the maximal loop-invariant arithmetic subexpressions in `block`.
-/// "Maximal" means a hoistable expression whose parent is not itself
-/// hoistable, so each whole invariant tree is hoisted once. Nested loops are
-/// skipped — the recursive `licm_loop` call hoists each nested loop's own
-/// invariants into that loop's pre-header.
-fn collect_invariant_arith_in_block(
-    body: &Body,
-    block: BlockId,
-    modified: &ModifiedVars,
-    out: &mut Vec<ExprId>,
-) {
-    for s in &body.blocks[block].stmts {
-        collect_invariant_arith_in_stmt(body, *s, modified, out);
-    }
-}
-
-fn collect_invariant_arith_in_stmt(
-    body: &Body,
-    s: StmtId,
-    modified: &ModifiedVars,
-    out: &mut Vec<ExprId>,
-) {
-    // Do not descend into nested loops: their invariant expressions are
-    // hoisted to their own pre-header by the recursive `licm_loop` call.
-    if matches!(body.stmts[s].kind, StmtKind::Loop { .. }) {
-        return;
-    }
-    for child in stmt_child_nodes(body, s) {
-        match child {
-            Child::Expr(e) => collect_invariant_arith_in_expr(body, e, modified, out),
-            Child::Block(b) => collect_invariant_arith_in_block(body, b, modified, out),
+    /// Collect the maximal hoistable arithmetic subexpressions in `block`,
+    /// paired with their `ValueId`s. "Maximal" means a hoistable expression
+    /// whose parent is not itself hoistable, so each whole tree is hoisted
+    /// once. Nested loops are skipped — the recursive `licm_loop` call
+    /// hoists each nested loop's own invariants into that loop's pre-header.
+    fn collect_in_block(
+        &self,
+        engine: &mut Engine,
+        block: BlockId,
+        out: &mut Vec<(ExprId, ValueId)>,
+    ) {
+        for s in engine.body.blocks[block].stmts.clone() {
+            self.collect_in_stmt(engine, s, out);
         }
     }
-}
 
-fn collect_invariant_arith_in_expr(
-    body: &Body,
-    e: ExprId,
-    modified: &ModifiedVars,
-    out: &mut Vec<ExprId>,
-) {
-    if is_hoistable_invariant_compound(body, e, modified) {
-        out.push(e);
-        return; // maximal: do not recurse into a hoisted tree's children.
+    fn collect_in_stmt(&self, engine: &mut Engine, s: StmtId, out: &mut Vec<(ExprId, ValueId)>) {
+        if matches!(engine.body.stmts[s].kind, StmtKind::Loop { .. }) {
+            return;
+        }
+        for child in stmt_child_nodes(engine.body, s) {
+            match child {
+                Child::Expr(e) => self.collect_in_expr(engine, e, out),
+                Child::Block(b) => self.collect_in_block(engine, b, out),
+            }
+        }
     }
-    for child in expr_child_nodes(body, e) {
-        match child {
-            Child::Expr(c) => collect_invariant_arith_in_expr(body, c, modified, out),
-            Child::Block(b) => collect_invariant_arith_in_block(body, b, modified, out),
+
+    fn collect_in_expr(&self, engine: &mut Engine, e: ExprId, out: &mut Vec<(ExprId, ValueId)>) {
+        if let Some(vn) = self.candidate(engine, e) {
+            out.push((e, vn));
+            return; // maximal: do not recurse into a hoisted tree's children.
+        }
+        for child in expr_child_nodes(engine.body, e) {
+            match child {
+                Child::Expr(c) => self.collect_in_expr(engine, c, out),
+                Child::Block(b) => self.collect_in_block(engine, b, out),
+            }
         }
     }
 }
 
-/// Hoist maximal loop-invariant pure-arithmetic subexpressions out of
-/// `loop_body`, structurally deduping equal expressions into one temp each.
-/// Returns whether anything was hoisted. The pre-header `let`s are appended
-/// to `all_hoist_stmts` (prepended before the loop by the caller).
+/// Hoist maximal pre-header-stable pure-arithmetic subexpressions out of
+/// `loop_body`, one temp per distinct `ValueId` (so copies share: `let t =
+/// x; … t + y … x + y …`). The `let`s are appended to `all_hoist_stmts`,
+/// which the caller prepends before the loop.
 fn hoist_invariant_arith(
     engine: &mut Engine,
     loop_body: BlockId,
-    modified: &ModifiedVars,
     all_hoist_stmts: &mut Vec<StmtId>,
 ) -> bool {
-    let mut found = Vec::new();
-    collect_invariant_arith_in_block(engine.body, loop_body, modified, &mut found);
+    // Earlier hoist rounds rewrote the body; rebuild so use-site values
+    // and the entry snapshot are current.
+    engine.invalidate_value_graph();
+
+    let mut pending_hoist_locals: IndexSet<u32> = IndexSet::default();
+    for &s in all_hoist_stmts.iter() {
+        if let StmtKind::Let { local_index, .. } = &engine.body.stmts[s].kind {
+            pending_hoist_locals.insert(*local_index);
+        }
+    }
+    let address_taken: IndexSet<u32> = engine.body_address_taken().clone();
+
+    let walk = ArithHoist {
+        loop_body,
+        pending_hoist_locals: &pending_hoist_locals,
+        address_taken: &address_taken,
+    };
+    let mut found: Vec<(ExprId, ValueId)> = Vec::new();
+    walk.collect_in_block(engine, loop_body, &mut found);
     if found.is_empty() {
         return false;
     }
 
-    // Group occurrences by structural equality (representative = first seen).
-    let mut groups: Vec<Vec<ExprId>> = Vec::new();
-    'next: for e in found {
+    // Group occurrences by (ValueId, type): equal values of equal type share
+    // one temp. The type key is belt-and-braces — same-`ValueId` trees over
+    // a shared `Local` leaf already agree on types.
+    let mut groups: Vec<(ValueId, TypeId, Vec<ExprId>)> = Vec::new();
+    'next: for (e, vn) in found {
+        let ty = engine.body.exprs[e].type_id;
         for g in &mut groups {
-            if arith_exprs_equal(engine.body, g[0], e) {
-                g.push(e);
+            if g.0 == vn && g.1 == ty {
+                g.2.push(e);
                 continue 'next;
             }
         }
-        groups.push(vec![e]);
+        groups.push((vn, ty, vec![e]));
     }
 
-    for occ in groups {
+    for (_, type_id, occ) in groups {
         let rep = occ[0];
-        let type_id = engine.body.exprs[rep].type_id;
         let name = format!("_licm_arith_{}", engine.locals().len());
         let new_idx = engine.alloc_local(name.clone(), type_id, /* is_mut */ false);
 

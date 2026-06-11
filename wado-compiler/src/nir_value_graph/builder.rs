@@ -15,12 +15,14 @@
 //! - `If` snapshots `current_value`, walks both branches, then merges:
 //!   diverging locals hash-cons a [`ValueKind::Select`] keyed on the
 //!   condition's value, falling back to `Opaque` if the condition is impure.
+//!   Heap state joins per arm over fall-through arms only ([`Builder::join_heap`]).
 //! - `Match` / `Switch` walk every arm and merge n-ary: if every arm agrees
 //!   on a local, that value carries; otherwise the local goes `Opaque`.
 //!   N-ary `Select` chains are not yet constructed.
-//! - `Loop` pre-scans the body for locals it may write and reassigns each
-//!   to a fresh `Opaque` before walking the body; post-loop those locals
-//!   stay `Opaque`. Stage 6 swaps recurring-pattern locals to `LoopPhi`.
+//! - `Loop` pre-scans the body for locals it may write, snapshots
+//!   `current_value` into [`ValueGraphBuild::loop_entry_values`], and
+//!   reassigns each written local to a fresh `Opaque` before walking the
+//!   body; post-loop those locals stay `Opaque`.
 //! - `LabeledBlock` marks every local written in its subtree `Opaque` on
 //!   exit, since `break` paths can carry writes the fall-through state
 //!   never observes.
@@ -28,9 +30,9 @@
 //!   with `Opaque`.
 
 use crate::hashmap::IndexMap;
-use crate::nir::{NirBinaryOp, NirParam, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
 };
 
 use super::{HeapVersion, ValueId, ValuePool};
@@ -43,8 +45,9 @@ use super::{HeapVersion, ValueId, ValuePool};
 /// Granularity is per `field_index`: a direct write to `obj.f` bumps the
 /// `f` slot only, so a later read of `obj.g` keeps its prior version and
 /// shares a `ValueId` with earlier reads. Opaque writes (Call,
-/// `Index` / `Deref` assign target, Loop entry, branch merge) call
-/// [`HeapState::bump_all`], invalidating every field. Refinement to
+/// `Index` / `Deref` assign target, Loop entry) call
+/// [`HeapState::bump_all`], invalidating every field; branch endpoints
+/// join per arm instead ([`Builder::join_heap`]). Refinement to
 /// `(receiver_root, field)` granularity via `mod_ref.rs` is a follow-up.
 struct HeapState {
     /// Next fresh version to hand out.
@@ -112,6 +115,15 @@ struct HeapSnapshot {
     default_version: HeapVersion,
 }
 
+impl HeapSnapshot {
+    fn version_of(&self, field_index: u32) -> HeapVersion {
+        self.per_field
+            .get(&field_index)
+            .copied()
+            .unwrap_or(self.default_version)
+    }
+}
+
 /// The result of running [`build`] over a function body: the populated
 /// pool plus the side-table mapping pure `ExprId`s to their `ValueId`.
 ///
@@ -128,22 +140,44 @@ pub struct ValueGraphBuild {
     /// `Local` read with the forwarded literal, avoiding `repr` churn in
     /// diagnostic output and NIR dumps.
     pub literal_source: IndexMap<ValueId, ExprId>,
+    /// Per-loop pre-header snapshot of `current_value`, keyed by the loop
+    /// body's `BlockId`. Hoisting to the pre-header requires each `Local`
+    /// leaf's use-site value to equal this entry value — cross-iteration
+    /// invariance is not enough (`loop { x = 5; … x + n … }` has an
+    /// invariant use value that differs from the pre-header `x`).
+    pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
 /// Build the `ValueGraph` for one function body.
 ///
-/// `params` seed `current_value` with one fresh `Opaque` per parameter, so a
-/// `Local { index: param.local_index }` read returns that Opaque every time
-/// until the parameter is reassigned (which the builder picks up the same
-/// way as any other `Assign`).
-pub fn build(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
-    let mut b = Builder::new(body);
-    b.seed_params(params);
+/// `param_locals` are the local indices of the function's parameters; each
+/// seeds `current_value` with one fresh `Opaque`, so a `Local` read returns
+/// that Opaque every time until the parameter is reassigned (which the
+/// builder picks up the same way as any other `Assign`). An unseeded local's
+/// first read mints an equivalent fallback `Opaque`, but only up-front
+/// seeding makes parameters visible in the loop-entry snapshots
+/// (`loop_entry_values`), which are taken before any in-loop read.
+///
+/// `alias_unsafe` are locals whose object is reference-aliased. The engine
+/// supplies the complete set — the canonical `address_taken_locals` /
+/// `stores_aliased_locals` (e.g. the `with stores[p]` effect's `p`) unioned
+/// with its session-cached [`Body::collect_address_taken_locals`] scan —
+/// and the builder suppresses field store→load seeding on those receivers,
+/// matching `store_load_forward`'s own exclusion so the `stores` effect's
+/// "no field forwarding for aliased locals" contract is upheld.
+pub fn build(
+    body: &Body,
+    param_locals: &[u32],
+    alias_unsafe: &crate::hashmap::IndexSet<u32>,
+) -> ValueGraphBuild {
+    let mut b = Builder::new(body, alias_unsafe);
+    b.seed_params(param_locals);
     b.walk_block(body.root);
     ValueGraphBuild {
         pool: b.pool,
         value_of: b.value_of,
         literal_source: b.literal_source,
+        loop_entry_values: b.loop_entry_values,
     }
 }
 
@@ -159,10 +193,22 @@ struct Builder<'a> {
     /// `ValueId` → first source `ExprId` for literal values, so consumers can
     /// reuse the original `repr`. See [`ValueGraphBuild::literal_source`].
     literal_source: IndexMap<ValueId, ExprId>,
+    /// Store→load forwarding for fields: the value last stored to
+    /// `(receiver, field, version)`, returned for reads at the same triple.
+    /// Versions are monotonic and never reused, so a write or branch join
+    /// bumps past a stale entry — no invalidation needed.
+    field_store: IndexMap<(ValueId, u32, HeapVersion), ValueId>,
+    /// Locals whose object is reference-aliased; field seeding is suppressed
+    /// for them (see [`build`]).
+    alias_unsafe: crate::hashmap::IndexSet<u32>,
+    /// Per-loop pre-header `current_value` snapshots. See
+    /// [`ValueGraphBuild::loop_entry_values`].
+    loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
 impl<'a> Builder<'a> {
-    fn new(body: &'a Body) -> Self {
+    fn new(body: &'a Body, alias_unsafe: &crate::hashmap::IndexSet<u32>) -> Self {
+        let unsafe_locals = alias_unsafe.clone();
         Self {
             body,
             pool: ValuePool::new(),
@@ -170,13 +216,16 @@ impl<'a> Builder<'a> {
             current_value: IndexMap::default(),
             heap_state: HeapState::new(),
             literal_source: IndexMap::default(),
+            field_store: IndexMap::default(),
+            alias_unsafe: unsafe_locals,
+            loop_entry_values: IndexMap::default(),
         }
     }
 
-    fn seed_params(&mut self, params: &[NirParam]) {
-        for param in params {
+    fn seed_params(&mut self, param_locals: &[u32]) {
+        for &idx in param_locals {
             let opaque = self.pool.fresh_opaque();
-            self.current_value.insert(param.local_index, opaque);
+            self.current_value.insert(idx, opaque);
         }
     }
 
@@ -196,6 +245,12 @@ impl<'a> Builder<'a> {
                     .walk_expr(value)
                     .unwrap_or_else(|| self.pool.fresh_opaque());
                 self.current_value.insert(local_index, v);
+                // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
+                // each pure field so a later `x.f` read forwards the literal.
+                // Skipped when `x` is reference-aliased.
+                if !self.alias_unsafe.contains(&local_index) {
+                    self.seed_struct_literal_fields(v, value);
+                }
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
                 self.walk_expr(value);
@@ -227,16 +282,24 @@ impl<'a> Builder<'a> {
                 let saved_heap = self.heap_state.snapshot();
                 self.walk_block(then_block);
                 let then_state = std::mem::replace(&mut self.current_value, saved.clone());
+                let then_heap = self.heap_state.snapshot();
+                let then_falls = self.block_falls_through(then_block);
                 self.heap_state.restore(saved_heap.clone());
-                if let Some(eb) = else_block {
+                let (else_heap, else_falls) = if let Some(eb) = else_block {
                     self.walk_block(eb);
-                }
+                    let h = self.heap_state.snapshot();
+                    let f = self.block_falls_through(eb);
+                    self.heap_state.restore(saved_heap.clone());
+                    (h, f)
+                } else {
+                    (saved_heap.clone(), true)
+                };
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
-                self.heap_state.restore(saved_heap);
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
-                // Conservative bump_all after the merge — per-arm join is
-                // a follow-up.
-                self.heap_state.bump_all();
+                self.join_heap(
+                    &saved_heap,
+                    &[(then_heap, then_falls), (else_heap, else_falls)],
+                );
             }
             StmtKind::Loop { body: lb } => {
                 self.walk_loop(lb);
@@ -374,15 +437,31 @@ impl<'a> Builder<'a> {
                 // value, so a write inside `value` must not be visible to
                 // those reads.
                 let target_kind = self.body.exprs[target].kind.clone();
-                match &target_kind {
-                    ExprKind::Local { .. } => {}
+                // Capture the receiver's `ValueId` (and whether it is a
+                // seed-safe bare `Local`) for a `obj.f = …` store, so the
+                // post-bump version can be seeded for store→load forwarding.
+                let recv_seed = match &target_kind {
+                    ExprKind::Local { .. } => None,
                     ExprKind::FieldAccess { expr: recv, .. } => {
-                        self.walk_expr(*recv);
+                        let recv_local = match &self.body.exprs[*recv].kind {
+                            ExprKind::Local { index, .. } => Some(*index),
+                            _ => None,
+                        };
+                        let recv_v = self.walk_expr(*recv);
+                        // Seed only a bare, non-aliased `Local` receiver; an
+                        // aliased object (`with stores[p]`) or a deeper place
+                        // (`a.b.f = …`) is left un-seeded so a later read
+                        // re-derives an opaque `FieldAccess`.
+                        match (recv_v, recv_local) {
+                            (Some(rv), Some(idx)) if !self.alias_unsafe.contains(&idx) => Some(rv),
+                            _ => None,
+                        }
                     }
                     _ => {
                         self.walk_expr(target);
+                        None
                     }
-                }
+                };
                 let v = self
                     .walk_expr(value)
                     .unwrap_or_else(|| self.pool.fresh_opaque());
@@ -392,6 +471,10 @@ impl<'a> Builder<'a> {
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
                         self.heap_state.bump_field(field_index);
+                        if let Some(recv_v) = recv_seed {
+                            let ver = self.heap_state.version_of(field_index);
+                            self.field_store.insert((recv_v, field_index, ver), v);
+                        }
                     }
                     _ => {
                         self.heap_state.bump_all();
@@ -423,14 +506,24 @@ impl<'a> Builder<'a> {
                 let saved_heap = self.heap_state.snapshot();
                 self.walk_block(then_branch);
                 let then_state = std::mem::replace(&mut self.current_value, saved.clone());
+                let then_heap = self.heap_state.snapshot();
+                let then_falls = self.block_falls_through(then_branch);
                 self.heap_state.restore(saved_heap.clone());
-                if let Some(eb) = else_branch {
+                let (else_heap, else_falls) = if let Some(eb) = else_branch {
                     self.walk_block(eb);
-                }
+                    let h = self.heap_state.snapshot();
+                    let f = self.block_falls_through(eb);
+                    self.heap_state.restore(saved_heap.clone());
+                    (h, f)
+                } else {
+                    (saved_heap.clone(), true)
+                };
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
-                self.heap_state.restore(saved_heap);
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
-                self.heap_state.bump_all();
+                self.join_heap(
+                    &saved_heap,
+                    &[(then_heap, then_falls), (else_heap, else_falls)],
+                );
                 None
             }
             ExprKind::LabeledBlock { block, .. } => {
@@ -443,7 +536,6 @@ impl<'a> Builder<'a> {
             ExprKind::Match { expr: scrut, arms } => {
                 self.walk_expr(scrut);
                 self.walk_match_arms(&arms);
-                self.heap_state.bump_all();
                 None
             }
             ExprKind::Switch {
@@ -457,18 +549,24 @@ impl<'a> Builder<'a> {
                 let saved_heap = self.heap_state.snapshot();
                 let mut arm_states: Vec<IndexMap<u32, ValueId>> =
                     Vec::with_capacity(arms.len() + 1);
+                let mut arm_heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len() + 1);
                 for arm in &arms {
                     self.current_value.clone_from(&saved);
                     self.heap_state.restore(saved_heap.clone());
                     self.walk_block(*arm);
                     arm_states.push(self.current_value.clone());
+                    arm_heaps.push((self.heap_state.snapshot(), self.block_falls_through(*arm)));
                 }
                 self.current_value.clone_from(&saved);
-                self.heap_state.restore(saved_heap);
+                self.heap_state.restore(saved_heap.clone());
                 self.walk_block(default);
+                arm_heaps.push((
+                    self.heap_state.snapshot(),
+                    self.block_falls_through(default),
+                ));
                 arm_states.push(std::mem::replace(&mut self.current_value, saved.clone()));
                 self.merge_n_arms(&saved, &arm_states);
-                self.heap_state.bump_all();
+                self.join_heap(&saved_heap, &arm_heaps);
                 None
             }
 
@@ -483,6 +581,11 @@ impl<'a> Builder<'a> {
                 // instance) propagates None.
                 let recv = self.walk_expr(inner)?;
                 let heap_ver = self.heap_state.version_of(field_index);
+                // Store→load forwarding: a value stored to this exact
+                // `(receiver, field, version)` is the value this read sees.
+                if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
+                    return Some(stored);
+                }
                 Some(self.pool.field_access(recv, field_index, heap_ver))
             }
             ExprKind::Index { expr: inner, index } => {
@@ -561,6 +664,73 @@ impl<'a> Builder<'a> {
 
     fn record_literal(&mut self, expr: ExprId, value: ValueId) {
         self.literal_source.entry(value).or_insert(expr);
+    }
+
+    /// Seed the field-store map from a `let x = S { f: v, … }` binding so a
+    /// later `x.f` read forwards `v`. Wrappers are peered through to the
+    /// sole producing tail: an unlabeled `Block`'s trailing expression, or a
+    /// `LabeledBlock` whose only `break label:` is the trailing
+    /// value-carrying statement (any other break to the label means
+    /// multiple producers — stop, soundness over coverage).
+    fn seed_struct_literal_fields(&mut self, recv: ValueId, value_expr: ExprId) {
+        let mut producer = value_expr;
+        loop {
+            match &self.body.exprs[producer].kind {
+                ExprKind::StructLiteral { .. } => break,
+                ExprKind::Block(b) => {
+                    let Some(&last) = self.body.blocks[*b].stmts.last() else {
+                        return;
+                    };
+                    let StmtKind::Expr(tail) = &self.body.stmts[last].kind else {
+                        return;
+                    };
+                    producer = *tail;
+                }
+                ExprKind::LabeledBlock { block, label, .. } => {
+                    let (block, label) = (*block, label.clone());
+                    let stmts = &self.body.blocks[block].stmts;
+                    let Some(&last) = stmts.last() else {
+                        return;
+                    };
+                    let StmtKind::Break {
+                        label: Some(brk),
+                        value: Some(value),
+                    } = &self.body.stmts[last].kind
+                    else {
+                        return;
+                    };
+                    if *brk != label {
+                        return;
+                    }
+                    let value = *value;
+                    // The trailing break must be the sole producer: no other
+                    // break to this label anywhere else in the block or in
+                    // the carried value.
+                    let earlier_break = stmts[..stmts.len() - 1]
+                        .iter()
+                        .any(|s| block_breaks_to_node(self.body, NodeRef::Stmt(*s), &label));
+                    if earlier_break
+                        || block_breaks_to_node(self.body, NodeRef::Expr(value), &label)
+                    {
+                        return;
+                    }
+                    producer = value;
+                }
+                _ => return,
+            }
+        }
+        let ExprKind::StructLiteral { fields, .. } = &self.body.exprs[producer].kind else {
+            return;
+        };
+        // Clone out the (field_index, value-expr) pairs to release the body
+        // borrow before mutating `field_store`.
+        let pairs: Vec<(u32, ExprId)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
+        for (field_index, field_value) in pairs {
+            if let Some(&fv) = self.value_of.get(&field_value) {
+                let ver = self.heap_state.version_of(field_index);
+                self.field_store.insert((recv, field_index, ver), fv);
+            }
+        }
     }
 
     fn read_local(&mut self, idx: u32) -> ValueId {
@@ -671,6 +841,95 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// Join the heap state at a branch endpoint: a field keeps its
+    /// pre-branch version iff every fall-through arm left it unchanged;
+    /// otherwise it bumps. Non-fall-through arms (terminated by `break` /
+    /// `return` / `continue`) are excluded — their writes never reach code
+    /// after the branch. No fall-through arm ⇒ post-state is `pre`.
+    fn join_heap(&mut self, pre: &HeapSnapshot, arms: &[(HeapSnapshot, bool)]) {
+        let live: Vec<&HeapSnapshot> = arms
+            .iter()
+            .filter_map(|(h, falls)| falls.then_some(h))
+            .collect();
+        if live.is_empty() {
+            self.heap_state.restore(pre.clone());
+            return;
+        }
+        let default_changed = live
+            .iter()
+            .any(|a| a.default_version != pre.default_version);
+        let new_default = if default_changed {
+            self.heap_state.fresh()
+        } else {
+            pre.default_version
+        };
+        let mut field_keys: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
+        for k in pre.per_field.keys() {
+            field_keys.insert(*k);
+        }
+        for a in &live {
+            for k in a.per_field.keys() {
+                field_keys.insert(*k);
+            }
+        }
+        let mut new_per_field: IndexMap<u32, HeapVersion> = IndexMap::default();
+        for f in field_keys {
+            let pre_v = pre.version_of(f);
+            let unchanged = live.iter().all(|a| a.version_of(f) == pre_v);
+            if unchanged {
+                // Only fields differing from the default need an explicit
+                // entry; a default-changed join must pin survivors so they
+                // are not read at the fresh default.
+                if pre_v != new_default {
+                    new_per_field.insert(f, pre_v);
+                }
+            } else {
+                let fresh = self.heap_state.fresh();
+                new_per_field.insert(f, fresh);
+            }
+        }
+        self.heap_state.per_field = new_per_field;
+        self.heap_state.default_version = new_default;
+    }
+
+    /// Whether control can reach the bottom of `block`. Mirrors
+    /// `const_folding`'s `block_falls_through` minus never-type detection
+    /// (the builder has no `TypeTable`): a `panic()`-terminated arm is
+    /// conservatively treated as falling through, which only costs
+    /// precision — it modifies no field, so including it in a heap join
+    /// keeps the pre-branch versions anyway.
+    fn block_falls_through(&self, block: crate::nir_arena::BlockId) -> bool {
+        match self.body.blocks[block].stmts.last() {
+            None => true,
+            Some(&last) => self.stmt_falls_through(last),
+        }
+    }
+
+    fn stmt_falls_through(&self, s: StmtId) -> bool {
+        match &self.body.stmts[s].kind {
+            StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => false,
+            StmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.block_falls_through(*then_block)
+                    || else_block.is_none_or(|eb| self.block_falls_through(eb))
+            }
+            // A break targeting the block's OWN label resumes right after
+            // it — that IS fall-through, and the tail-only walk cannot see
+            // early self-breaks, so scan the subtree too. Over-approximating
+            // the break's reachability only adds an arm to the join (sound).
+            StmtKind::LabeledBlock { block, label } => {
+                self.block_falls_through(*block) || block_breaks_to(self.body, *block, label)
+            }
+            // A `Loop` falls through only via `break`, which we do not
+            // analyse here; treat it as falling through.
+            StmtKind::Loop { .. } => true,
+            _ => true,
+        }
+    }
+
     fn walk_match_arms(&mut self, arms: &[ArmData]) {
         // Guards are evaluated sequentially at runtime: when guard 0 has
         // side effects and returns false, guard 1 and arm 1's body run
@@ -701,6 +960,7 @@ impl<'a> Builder<'a> {
         let saved = self.current_value.clone();
         let saved_heap = self.heap_state.snapshot();
         let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());
+        let mut arm_heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len());
         for arm in arms {
             self.current_value.clone_from(&saved);
             self.heap_state.restore(saved_heap.clone());
@@ -710,10 +970,16 @@ impl<'a> Builder<'a> {
             }
             self.walk_expr(arm.body);
             states.push(self.current_value.clone());
+            // Match arm bodies are expressions; without a `TypeTable` the
+            // builder cannot detect a never-typed (`=> return …`) body, so
+            // every arm is conservatively treated as falling through. A
+            // returning arm contributes only its field writes to the join,
+            // which is sound (those fields bump) if imprecise.
+            arm_heaps.push((self.heap_state.snapshot(), true));
         }
         self.current_value.clone_from(&saved);
-        self.heap_state.restore(saved_heap);
         self.merge_n_arms(&saved, &states);
+        self.join_heap(&saved_heap, &arm_heaps);
     }
 
     /// Reassign every local the body may write to a fresh `Opaque` before
@@ -725,6 +991,10 @@ impl<'a> Builder<'a> {
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
         collect_writes_in_block(self.body, body_block, &mut writes);
+        // Snapshot before the reassigned-local opaques below overwrite the
+        // written locals' pre-loop values.
+        self.loop_entry_values
+            .insert(body_block, self.current_value.clone());
         for idx in &writes {
             if self.current_value.contains_key(idx) {
                 let opaque = self.pool.fresh_opaque();
@@ -757,6 +1027,28 @@ impl<'a> Builder<'a> {
             }
         }
     }
+}
+
+/// Whether `block`'s subtree contains a `break` targeting `label`. Used by
+/// [`Builder::stmt_falls_through`] to classify a labeled block whose body
+/// exits via a break to its own label as falling through.
+fn block_breaks_to(body: &Body, block: BlockId, label: &str) -> bool {
+    block_breaks_to_node(body, NodeRef::Block(block), label)
+}
+
+fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
+    if let NodeRef::Stmt(s) = node
+        && let StmtKind::Break {
+            label: Some(brk), ..
+        } = &body.stmts[s].kind
+        && brk == label
+    {
+        return true;
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    kids.into_iter()
+        .any(|c| block_breaks_to_node(body, c, label))
 }
 
 /// Collect every local index that an `Assign`-to-bare-`Local`, a `Let`, or
@@ -845,6 +1137,12 @@ mod tests {
     use crate::token::Span;
 
     // ----- Body builders for tests -----
+
+    /// `build` with no reference-aliased locals — the common test case.
+    fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
+        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
+        build(body, &param_locals, &crate::hashmap::IndexSet::default())
+    }
 
     fn empty_body() -> Body {
         Body::empty()
@@ -981,7 +1279,7 @@ mod tests {
         let lit = int_lit(&mut body, 42);
         let s = alloc_stmt(&mut body, StmtKind::Expr(lit));
         root_with(&mut body, vec![s]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         let v = r.value_of[&lit];
         assert_eq!(r.pool.kind(v), &ValueKind::Int(42));
     }
@@ -995,7 +1293,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s2 = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, s2]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         let lit_v = r.value_of[&lit];
         let read_v = r.value_of[&read];
         assert_eq!(lit_v, read_v);
@@ -1015,7 +1313,7 @@ mod tests {
         let add_b = binary(&mut body, NirBinaryOp::Add, one_b, two_b);
         let let_b = let_stmt(&mut body, 1, add_b, false);
         root_with(&mut body, vec![let_a, let_b]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         assert_eq!(r.value_of[&add_a], r.value_of[&add_b]);
     }
 
@@ -1030,7 +1328,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, assign, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
     }
 
@@ -1058,7 +1356,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         let read_v = r.value_of[&read];
         match r.pool.kind(read_v) {
             ValueKind::Select { cond, then, else_ } => {
@@ -1091,7 +1389,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         match r.pool.kind(r.value_of[&read]) {
             ValueKind::Select { cond, then, else_ } => {
                 assert_eq!(r.pool.kind(*cond), &ValueKind::Bool(true));
@@ -1126,7 +1424,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         // Both arms wrote Int(2); the merge picks that without a Select.
         assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
     }
@@ -1146,7 +1444,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, loop_s, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
@@ -1170,7 +1468,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_x, let_i, loop_s, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         // `x` is not touched by the loop, so it retains its Int(1).
         assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
     }
@@ -1191,7 +1489,7 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build(&body, &[param]);
+        let r = build_t(&body, &[param]);
         let v1 = r.value_of[&read1];
         let v2 = r.value_of[&read2];
         assert_eq!(v1, v2);
@@ -1218,7 +1516,7 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build(&body, &[param]);
+        let r = build_t(&body, &[param]);
         // Both `x + 1` expressions share a ValueId because `x` is a stable
         // (write-once) Opaque and `1` is hash-consed.
         assert_eq!(r.value_of[&add_a], r.value_of[&add_b]);
@@ -1249,7 +1547,7 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, s]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
@@ -1271,7 +1569,7 @@ mod tests {
         let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1));
         let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2));
         root_with(&mut body, vec![s1, s2]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         assert_eq!(r.value_of[&read1], r.value_of[&read2]);
         assert!(matches!(
             r.pool.kind(r.value_of[&read1]),
@@ -1310,7 +1608,7 @@ mod tests {
         let let_b2 = let_stmt(&mut body, 4, read_b2, false);
 
         root_with(&mut body, vec![let_a, let_b, write, let_a2, let_b2]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
 
         // `obj.f` reads straddle a write of `f`: different heap versions, distinct VN.
         assert_ne!(r.value_of[&read_a], r.value_of[&read_a2]);
@@ -1338,7 +1636,7 @@ mod tests {
         let let_2 = let_stmt(&mut body, 2, read2, false);
 
         root_with(&mut body, vec![let_1, call_s, let_2]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         assert_ne!(r.value_of[&read1], r.value_of[&read2]);
     }
 
@@ -1350,7 +1648,7 @@ mod tests {
         let fa = field_access(&mut body, call, 0);
         let s = alloc_stmt(&mut body, StmtKind::Expr(fa));
         root_with(&mut body, vec![s]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         assert!(!r.value_of.contains_key(&fa));
     }
 
@@ -1403,7 +1701,7 @@ mod tests {
         let switch_s = alloc_stmt(&mut body, StmtKind::Expr(switch_e));
 
         root_with(&mut body, vec![let_pre, switch_s]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         // The read inside arm 1 must share a VN with the pre-switch read.
         assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_arm]);
     }
@@ -1444,7 +1742,7 @@ mod tests {
             },
         );
         root_with(&mut body, vec![let_pre, if_s]);
-        let r = build(&body, &[param_seed()]);
+        let r = build_t(&body, &[param_seed()]);
         assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_else]);
     }
 
@@ -1494,12 +1792,391 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_x, lb_stmt, s_read]);
-        let r = build(&body, &[]);
+        let r = build_t(&body, &[]);
         // Post-LB `x` must be Opaque — the break-path write of 2 means the
         // value is unknown, even though fall-through never observes it.
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
+        ));
+    }
+
+    // ----- Reachability-aware heap join at branch endpoints -----
+
+    #[test]
+    fn break_guard_does_not_split_field_versions() {
+        // fn(obj) {
+        //     let a = obj.f;
+        //     if cond { break; }      // guard arm: no field write, does not fall through
+        //     let b = obj.f;          // must share VN with `a`
+        // }
+        // The previous unconditional `bump_all` after the `if` split the
+        // heap version, denying every desugared loop's guard/body field VN
+        // sharing. The reachability-aware join keeps it.
+        let mut body = empty_body();
+        let recv_a = local_ref(&mut body, 0);
+        let read_a = field_access(&mut body, recv_a, 0);
+        let let_a = let_stmt(&mut body, 1, read_a, false);
+
+        let cond = bool_lit(&mut body, true);
+        let brk = alloc_stmt(
+            &mut body,
+            StmtKind::Break {
+                label: None,
+                value: None,
+            },
+        );
+        let then_block = block_with(&mut body, vec![brk]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+
+        let recv_b = local_ref(&mut body, 0);
+        let read_b = field_access(&mut body, recv_b, 0);
+        let let_b = let_stmt(&mut body, 2, read_b, false);
+
+        root_with(&mut body, vec![let_a, if_s, let_b]);
+        let r = build_t(&body, &[param_seed()]);
+        assert_eq!(r.value_of[&read_a], r.value_of[&read_b]);
+    }
+
+    #[test]
+    fn if_arm_field_write_bumps_after_merge() {
+        // fn(obj) {
+        //     let a = obj.f;
+        //     if cond { obj.f = 1; }   // fall-through arm writes f
+        //     let b = obj.f;           // value now unknown -> distinct VN
+        // }
+        let mut body = empty_body();
+        let recv_a = local_ref(&mut body, 0);
+        let read_a = field_access(&mut body, recv_a, 0);
+        let let_a = let_stmt(&mut body, 1, read_a, false);
+
+        let cond = bool_lit(&mut body, true);
+        let recv_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let write = field_assign_stmt(&mut body, recv_w, 0, one);
+        let then_block = block_with(&mut body, vec![write]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+
+        let recv_b = local_ref(&mut body, 0);
+        let read_b = field_access(&mut body, recv_b, 0);
+        let let_b = let_stmt(&mut body, 2, read_b, false);
+
+        root_with(&mut body, vec![let_a, if_s, let_b]);
+        let r = build_t(&body, &[param_seed()]);
+        assert_ne!(r.value_of[&read_a], r.value_of[&read_b]);
+    }
+
+    #[test]
+    fn if_writing_other_field_keeps_unwritten_field_version() {
+        // fn(obj) {
+        //     let g0 = obj.g;
+        //     if cond { obj.f = 1; }   // writes f, not g
+        //     let g1 = obj.g;          // g unchanged -> same VN
+        //     let f1 = obj.f;          // f written on a fall-through arm
+        //     let f2 = obj.f;          // two reads at the same post-merge version share
+        // }
+        let mut body = empty_body();
+        let recv_g0 = local_ref(&mut body, 0);
+        let read_g0 = field_access(&mut body, recv_g0, 1);
+        let let_g0 = let_stmt(&mut body, 1, read_g0, false);
+
+        let cond = bool_lit(&mut body, true);
+        let recv_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let write = field_assign_stmt(&mut body, recv_w, 0, one);
+        let then_block = block_with(&mut body, vec![write]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+
+        let recv_g1 = local_ref(&mut body, 0);
+        let read_g1 = field_access(&mut body, recv_g1, 1);
+        let let_g1 = let_stmt(&mut body, 2, read_g1, false);
+        let recv_f1 = local_ref(&mut body, 0);
+        let read_f1 = field_access(&mut body, recv_f1, 0);
+        let let_f1 = let_stmt(&mut body, 3, read_f1, false);
+        let recv_f2 = local_ref(&mut body, 0);
+        let read_f2 = field_access(&mut body, recv_f2, 0);
+        let let_f2 = let_stmt(&mut body, 4, read_f2, false);
+
+        root_with(&mut body, vec![let_g0, if_s, let_g1, let_f1, let_f2]);
+        let r = build_t(&body, &[param_seed()]);
+        // `g` untouched across the if: same VN.
+        assert_eq!(r.value_of[&read_g0], r.value_of[&read_g1]);
+        // `f` reads after the merge are at one fresh post-merge version.
+        assert_eq!(r.value_of[&read_f1], r.value_of[&read_f2]);
+        // …but distinct from the pre-if `f` value (there was none here) is
+        // not asserted; the merge gave `f` a fresh version, which the two
+        // post reads share.
+    }
+
+    // ----- Field store→load forwarding -----
+
+    #[test]
+    fn field_store_forwards_to_later_read() {
+        // fn(obj) { obj.f = 7; let y = obj.f; }
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        let read_v = r.value_of[&read];
+        assert_eq!(r.pool.kind(read_v), &ValueKind::Int(7));
+        assert_eq!(read_v, r.value_of[&seven]);
+    }
+
+    #[test]
+    fn field_store_does_not_forward_after_overwrite() {
+        // fn(obj) { obj.f = 7; obj.f = 9; let y = obj.f; } -> sees 9
+        let mut body = empty_body();
+        let recv_w1 = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write1 = field_assign_stmt(&mut body, recv_w1, 0, seven);
+        let recv_w2 = local_ref(&mut body, 0);
+        let nine = int_lit(&mut body, 9);
+        let write2 = field_assign_stmt(&mut body, recv_w2, 0, nine);
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write1, write2, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(9));
+    }
+
+    #[test]
+    fn field_store_does_not_forward_across_call() {
+        // fn(obj) { obj.f = 7; foo(); let y = obj.f; } -> opaque read
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, call_s, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn struct_literal_let_seeds_field_reads() {
+        // fn() { let x = S { f0: 5, f1: 6 }; let n = x.f0; } -> n == 5
+        let mut body = empty_body();
+        let five = int_lit(&mut body, 5);
+        let six = int_lit(&mut body, 6);
+        let struct_lit = alloc_expr(
+            &mut body,
+            ExprKind::StructLiteral {
+                struct_type: TypeTable::UNIT,
+                struct_name: "S".to_string(),
+                fields: vec![
+                    crate::nir_arena::ArenaStructField {
+                        name: "f0".to_string(),
+                        value: five,
+                        field_index: 0,
+                    },
+                    crate::nir_arena::ArenaStructField {
+                        name: "f1".to_string(),
+                        value: six,
+                        field_index: 1,
+                    },
+                ],
+            },
+        );
+        let let_x = let_stmt(&mut body, 0, struct_lit, false);
+        let recv = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv, 0);
+        let let_n = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![let_x, let_n]);
+        let r = build_t(&body, &[]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(5));
+    }
+
+    #[test]
+    fn block_wrapped_struct_literal_let_seeds_field_reads() {
+        // fn(limit) { let x = { let n = limit + 1; S { f0: n } }; let m = x.f0; }
+        // The block tail is the sole producer, so x.f0 forwards n's value
+        // (`limit + 1`) — the constructor-inlining shape.
+        let mut body = empty_body();
+        let limit_read = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let n_value = binary(&mut body, NirBinaryOp::Add, limit_read, one);
+        let let_n = let_stmt(&mut body, 1, n_value, false);
+        let n_read = local_ref(&mut body, 1);
+        let struct_lit = alloc_expr(
+            &mut body,
+            ExprKind::StructLiteral {
+                struct_type: TypeTable::UNIT,
+                struct_name: "S".to_string(),
+                fields: vec![crate::nir_arena::ArenaStructField {
+                    name: "f0".to_string(),
+                    value: n_read,
+                    field_index: 0,
+                }],
+            },
+        );
+        let tail_stmt = alloc_stmt(&mut body, StmtKind::Expr(struct_lit));
+        let inner_block = block_with(&mut body, vec![let_n, tail_stmt]);
+        let block_expr = alloc_expr(&mut body, ExprKind::Block(inner_block));
+        let let_x = let_stmt(&mut body, 2, block_expr, false);
+        let recv = local_ref(&mut body, 2);
+        let read = field_access(&mut body, recv, 0);
+        let let_m = let_stmt(&mut body, 3, read, false);
+        root_with(&mut body, vec![let_x, let_m]);
+        let param = NirParam {
+            name: "limit".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 0,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build_t(&body, &[param]);
+        // x.f0 forwards n = limit + 1.
+        assert_eq!(r.value_of[&read], r.value_of[&n_value]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::Binary {
+                op: NirBinaryOp::Add,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn aliased_receiver_is_not_seeded() {
+        // fn(obj) { obj.f = 7; let y = obj.f; } but `obj` (local 0) is
+        // reference-aliased → no forwarding; the read stays opaque.
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, let_y]);
+        let mut aliased = crate::hashmap::IndexSet::default();
+        aliased.insert(0u32);
+        let r = build(&body, &[param_seed().local_index], &aliased);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    // ----- Loop-entry value snapshots -----
+
+    #[test]
+    fn loop_entry_values_distinguish_written_locals_from_params() {
+        // fn(n) { let mut i = 0; loop { let s = i + n; i = i + 1; } }
+        // In-body reads: `n` (unwritten param) matches its pre-header entry
+        // value; `i` (loop-written) does not — the entry snapshot keeps the
+        // pre-loop Int(0) while the body reads the fresh loop opaque.
+        let mut body = empty_body();
+        let zero = int_lit(&mut body, 0);
+        let let_i = let_stmt(&mut body, 1, zero, true);
+        let i_read = local_ref(&mut body, 1);
+        let n_read = local_ref(&mut body, 0);
+        let sum = binary(&mut body, NirBinaryOp::Add, i_read, n_read);
+        let let_s = let_stmt(&mut body, 2, sum, false);
+        let i_read2 = local_ref(&mut body, 1);
+        let one = int_lit(&mut body, 1);
+        let plus = binary(&mut body, NirBinaryOp::Add, i_read2, one);
+        let assign = assign_stmt(&mut body, 1, plus);
+        let lb = block_with(&mut body, vec![let_s, assign]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        root_with(&mut body, vec![let_i, loop_s]);
+        let n = NirParam {
+            name: "n".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 0,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build_t(&body, &[n]);
+        let entries = &r.loop_entry_values[&lb];
+        assert_eq!(entries.get(&0).copied(), Some(r.value_of[&n_read]));
+        assert_eq!(r.pool.kind(entries[&1]), &ValueKind::Int(0));
+        assert_ne!(entries[&1], r.value_of[&i_read]);
+    }
+
+    #[test]
+    fn loop_seeded_constant_field_read_folds() {
+        // fn(obj) { loop { obj.f = 1; let x = obj.f; } }
+        // The store seeds obj.f = 1 within the iteration, so the read
+        // folds to the literal even inside a loop body.
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let write = field_assign_stmt(&mut body, recv_w, 0, one);
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_x = let_stmt(&mut body, 1, read, false);
+        let lb = block_with(&mut body, vec![write, let_x]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        root_with(&mut body, vec![loop_s]);
+        let r = build_t(&body, &[param_seed()]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+    }
+
+    #[test]
+    fn body_scanned_address_taken_receiver_is_not_seeded() {
+        // fn(obj) { obj.f = 7; let r = &obj; let y = obj.f; }
+        // The live `&obj` makes `obj` address-taken via
+        // `Body::collect_address_taken_locals` — the scan the engine unions
+        // into the exclusion set before every graph build — so the store is
+        // not seeded.
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let obj_ref_inner = local_ref(&mut body, 0);
+        let obj_ref = alloc_expr(
+            &mut body,
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: obj_ref_inner,
+            },
+        );
+        let let_r = let_stmt(&mut body, 1, obj_ref, false);
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 2, read, false);
+        root_with(&mut body, vec![write, let_r, let_y]);
+        let mut scanned = crate::hashmap::IndexSet::default();
+        body.collect_address_taken_locals(&mut scanned);
+        assert!(scanned.contains(&0));
+        let r = build(&body, &[param_seed().local_index], &scanned);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
         ));
     }
 }

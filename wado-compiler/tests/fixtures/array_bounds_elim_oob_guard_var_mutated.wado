@@ -1,0 +1,22 @@
+// Test: a bounds check AFTER the guard variable is mutated must survive.
+// The loop guard proves `i < arr.len()` for the value of `i` read at the
+// guard. After `i += 1`, a read of `i` denotes a different value, so the
+// guard no longer implies `i < arr.len()` — at the last iteration `i`
+// equals `arr.len()` and `arr[i]` must panic, not be elided into a raw
+// wasm trap (or worse, a silent stale read).
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let arr: List<i32> = [10, 20, 30];
+    let mut i = 0;
+    let mut sum = 0;
+    while i < arr.len() {
+        i += 1;
+        sum += arr[i];
+    }
+    println(`{sum}`);
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}

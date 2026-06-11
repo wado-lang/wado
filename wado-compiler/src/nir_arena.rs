@@ -807,6 +807,26 @@ impl Body {
     /// Invoke `f` on every id-bearing child of `node`, in source order.
     /// Arms / fields / call args are transparent (their inline child ids are
     /// visited directly). Leaf nodes invoke `f` zero times.
+    /// Collect every local with a live `&local` / `&mut local` in the body.
+    /// The canonical `address_taken_locals` / `stores_aliased_locals` sets
+    /// go stale after `inline` / `ref_elim` copy reference nodes, so
+    /// alias-sensitive consumers union this scan in.
+    pub fn collect_address_taken_locals(&self, out: &mut crate::hashmap::IndexSet<u32>) {
+        let mut stack: Vec<NodeRef> = vec![NodeRef::Block(self.root)];
+        while let Some(node) = stack.pop() {
+            if let NodeRef::Expr(id) = node
+                && let ExprKind::Unary {
+                    op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
+                    expr: inner,
+                } = &self.exprs[id].kind
+                && let ExprKind::Local { index, .. } = &self.exprs[*inner].kind
+            {
+                out.insert(*index);
+            }
+            self.for_each_child(node, |c| stack.push(c));
+        }
+    }
+
     pub fn for_each_child(&self, node: NodeRef, mut f: impl FnMut(NodeRef)) {
         match node {
             NodeRef::Block(b) => {
