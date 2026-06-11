@@ -288,11 +288,26 @@ Migrations:
 
 - [ ] Env-free `const_folding` as algebraic rules over Value kinds.
       Landed slice: `store_load_forward` substitutes any read whose VN
-      is a literal (including seeded field reads). The smart-constructor
-      arithmetic folding is deferred until it can _replace_
-      `const_folding`'s folding rather than duplicate it.
-- [ ] Env-bound `const_folding`: `niri.rs` refactored to stop mutating
-      `Body` in place; the caller commits via the engine.
+      is a literal (including seeded field reads). Remaining: the
+      ValuePool's smart constructors (`binary` / `unary` / `cast`) fold
+      literal operands into a literal `ValueId`. Correctness needs the
+      operand width and signedness, so `ValueKind::Int` carries a numeric
+      type (or the constructor takes the result `TypeId`); `i32 + i32`
+      then wraps at 32 bits exactly as `niri` does. This is the last
+      capability the builder lacks before `field_env` is deletable: a
+      forwarded `max.low → -1` is only useful if the enclosing
+      `-1 == -1` folds too. (Measured: with field forwarding complete,
+      the only fixtures that still need the visitor's field path are the
+      six whose asserts hinge on such a comparison fold — int128,
+      static_1/2, coerce_int_3, match_literal_i128.)
+- [ ] Env-bound `const_folding`: delete the const-fold visitor's
+      `field_env` (now fully modelled by the ValueGraph builder —
+      per-`(receiver-root, field)` versioning, selective loop / call
+      invalidation, struct-literal seeding on `let` and `Assign`) and the
+      `niri.rs` in-place `Body` mutation; the caller commits via the
+      engine. Gated on the typed fold above plus re-running forwarding
+      after the HFS pass (so HFS-introduced `__hfs_x = obj.f` shadow
+      inits fold to their seeded constant rather than re-loading).
 - [x] `condition_implication`: all guard kinds (loop, dominating,
       early-exit, short-circuit, bitmask) unified into one
       `GuardFact { var_vn, max_offset, bound_vn, is_strict }` with
@@ -317,7 +332,7 @@ Migrations:
 - [ ] Simple induction-variable recognition (`Opaque` tagged with
       `{ base, step }` in a side table). Not needed by the landed
       consumers — post-increment reads already appear as
-      `Add(opaque_i, step)` — so deferred until a rule wants it.
+      `Add(opaque_i, step)` — so this lands when a rule first wants it.
 
 #### Stage 9 — Interprocedural worklist
 
