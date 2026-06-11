@@ -131,11 +131,12 @@ pub fn resolve_import_plan(
         worklist.extend(more);
     }
 
-    // Phase 2 (continued): mirror codegen's `is_needed` — a resource-using
-    // interface present in the program's `with` set (`has_interface`) pulls in
-    // the interface that *defines* its resource, even when its accessor function
-    // is never called (so `used_wasi_functions` would miss it, e.g. terminal
-    // interfaces declared but not invoked).
+    // Phase 2 (continued): mirror codegen's `is_needed` — a resource-getter
+    // interface whose accessor is used (`NirPackage::has_interface`, i.e. a
+    // `{interface}::` entry exists in `used_wasi_functions`) pulls in the
+    // interface that *defines* its resource. NOTE: `has_interface` here is the
+    // `NirPackage` method (used-function membership), NOT the registry's
+    // `with`-set predicate; the two are distinct and codegen uses this one.
     for interface_info in registry.interfaces() {
         let Some((resource_wado_name, _)) = &interface_info.resource_type else {
             continue;
@@ -156,9 +157,11 @@ pub fn resolve_import_plan(
     }
 
     // Phase 3: resource-getter interfaces (returning `option<resource>`). Codegen
-    // imports one iff the program's `with` set declares it (`has_interface`),
-    // independent of whether the accessor is ever called — mirror that here so
-    // the getter FQ lands in the plan (and thus the faithful world import set).
+    // imports one iff its accessor is used — `NirPackage::has_interface`, which
+    // tests whether a `{interface}::` function appears in `used_wasi_functions`
+    // (not the registry's `with`-set predicate of the same name). Mirror that
+    // gate here so the getter FQ lands in the plan (and the faithful world
+    // import set).
     for interface_info in registry.interfaces() {
         if interface_info.resource_type.is_none() || interface_info.package == "http" {
             continue;

@@ -494,9 +494,11 @@ Rollout (each step gated by the full E2E suite):
         Membership is now the plan's. Full e2e green.
   - [x] The resource-getter interfaces (returning `option<resource>`, e.g.
         `wasi:cli/terminal-stdin`) are now a distinct plan kind (`ResourceGetter`).
-        The plan lists a getter iff the program's `with` set declares it
-        (`has_interface`), independent of whether the accessor is ever called;
-        codegen's getter phase reads the plan, and `import_interface_with_resource`
+        The plan lists a getter iff its accessor is used
+        (`NirPackage::has_interface`, a `used_wasi_functions` membership test —
+        not the registry's same-named `with`-set predicate), the gate codegen
+        applied inline before; codegen's getter phase reads the plan, and
+        `import_interface_with_resource`
         drops its `has_interface` gate (keeping only the `has_comp_func`
         idempotency check). The getter FQ now also lands in the faithful world
         import set. Full e2e green.

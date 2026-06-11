@@ -44,8 +44,9 @@ pub enum ImportKind {
     /// A getter interface returning `option<resource>` for a resource defined by
     /// another interface (e.g. `wasi:cli/terminal-stdin` → `terminal-input`).
     /// Emitted by codegen's resource phase (after the resource sources it depends
-    /// on). Membership mirrors the program's `with` set (`has_interface`), so an
-    /// interface declared but whose accessor is never called is still imported.
+    /// on). Membership follows `NirPackage::has_interface` (whether the getter's
+    /// accessor appears in `used_wasi_functions`), the same gate codegen applied
+    /// inline before this became plan-driven.
     ResourceGetter,
     /// `wasi:http/types`.
     HttpTypes,
