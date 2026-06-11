@@ -148,7 +148,10 @@ pub(super) fn builder_alias_sets(
         stores_aliased_locals,
         type_table,
     );
-    (info.aliased.iter().collect(), info.untrackable.iter().collect())
+    (
+        info.aliased.iter().collect(),
+        info.untrackable.iter().collect(),
+    )
 }
 
 /// Recognize `Call(helper, [arg])` where `helper` is a synthesized
