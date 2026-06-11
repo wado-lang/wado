@@ -183,12 +183,12 @@ form is unambiguous and minimal.
   `--world` flag is given. Acceptable as a default; not a structural problem.
 - Synthetic `TEST_WORLD` constant in `world_registry.rs`. Used for the test
   harness; does not block external WIT support.
-- HTTP handler specialization in `codegen/component.rs` (`has_http_handler_export`,
-  `append_http_handler_export`, gated paths in `emit_world_exports`). This is
-  the largest world-specific block left in the compiler and is the main item
-  to design out as part of this work. With `WorldExportInfo::from_interface_fq`
-  now populated, a Phase 2 step can drive HTTP detection from the interface
-  FQ directly and retire `append_http_handler_export`.
+- HTTP handler specialization in `codegen/component.rs`. The _decision_ is now
+  plan-driven (`ComponentPlan::has_http_handler_export`), but the
+  `append_http_handler_export` post-finish byte-append mechanism itself remains.
+  Retiring it — folding the handler export into `emit_world_exports` so HTTP
+  detection comes from the interface FQ (`WorldExportInfo::from_interface_fq`,
+  now populated) — is the largest world-specific block left to design out.
 - `stdlib::ALL_WASI_MODULES` is an `include_str!`-driven static list. Adding a
   new WASI/CM library currently requires either putting the binding `.wado`
   in this list or feeding it through `CompilerHost`. Neither path reads
@@ -434,83 +434,42 @@ Mechanics:
 Rollout (each step gated by the full E2E suite):
 
 - [x] R1 — Build the plan as structured data in `wir_build::component_imports`
-      (`resolve_imported_cm_interfaces`), stored in
-      `WirPackage::imported_cm_interfaces`. Built at the end of
+      (`resolve_import_plan`, flattened by `import_plan_fqs`), stored in
+      `WirPackage::{import_plan, imported_cm_interfaces}`. Built at the end of
       `build_wir_package`, the one place with the full picture: the NIR facts
       (`used_wasi_functions`, registry) _and_ the WIR canonical intrinsics
       (`needed_canonicals`). `tests/wit_import_plan.rs` validates it equals the
       compiled component's CM imports across the CLI corpus, the HTTP service
-      (resources), and a pure-compute program. Imports only; exports still
-      come from `WorldInfo`. (Initially built post-DCE on `NirPackage`, then
-      moved to the WIR layer once it turned out the import decision also
-      depends on `needed_canonicals` — see below.)
-- [x] R2 step — `wasi:cli/types` (the canonical `error-code`) is now imported
-      conditionally. It is needed iff a used interface references the cli
-      error-code OR an async-export transmission future resolves to it
-      (`Transmission("cli")`, e.g. a kiln generator's `task return`). Codegen
-      reads `wir_package.imported_cm_interfaces` to gate its Phase 0 import —
-      the decision lives in `wir_build`, codegen only emits. A first attempt
-      gated the trim on interface signatures alone and broke kiln generators
-      (`unknown component type: error-code`); the fix was to add the
-      transmission-source condition (available from `needed_canonicals` at the
-      WIR layer) and drop the over-aggressive "kiln forbids WASI" early-return,
-      which had omitted the error-code the kiln transmission future needs.
-      Pure-compute now drops the dead import; sha256 and kiln keep it. Full
-      e2e green (4766 tests).
-- [x] R2 — Rewire codegen to emit from the plan; delete the duplicated
-      decision logic so codegen only encodes. Done incrementally, each step
-      gated by the full e2e suite:
-  - [x] The flat FQ list cannot drive codegen — confirmed empirically: a
-        flat-membership gate on the function-interface loop processes
-        `wasi:cli/types` (which is in the plan but is the shared `error-code`
-        instance, not a function interface), yielding an invalid component
-        (`wasi_filesystem` / `wasi_tls_result_error`: "instance N has no
-        export error-code"). So the plan now carries an `ImportKind` per entry
-        (`SharedTypes`, `FunctionInterface`, `ResourceUsingInterface`,
-        `ResourceSource`, `ResourceGetter`, `HttpTypes`, `HttpClient`), built in
-        `wir_build`.
-  - [x] Membership for `wasi:cli/types`, the function-bearing interfaces
-        (Phase 1), and `wasi:http/types` is now decided by the plan; codegen
-        reads `ImportKind` and encodes. The function loop imports only
-        `FunctionInterface` entries. Full e2e green (4766 tests).
-  - [x] Resource-using interfaces are now a distinct plan kind. Phase 1 of
-        the plan builder classifies a function-bearing interface as
-        `ResourceUsingInterface` when its used signatures reference a resource
-        _defined by another_ interface, and `FunctionInterface` otherwise.
-        Codegen's resource-using phase gates on the new kind, and the main
-        import loop drops its registry-derived deferral check — that membership
-        is now the plan's. Full e2e green.
-  - [x] The resource-defining source phase is now plan-driven, and the two
-        source-import code paths are unified. A single `import_resource_source`
-        helper emits the minimal, methods-less source instance and its outer
-        resource / error-code aliases; it is idempotent (keyed on the
-        package-qualified instance-type name, which is collision-free across
-        same-named interfaces like `wasi:cli/types` vs `wasi:filesystem/types`)
-        and called from both the resource-source phase and the resource-using
-        phase's pre-import. With the duplication gone, the resource-source phase
-        dropped its `is_needed` gate: the `has_interface` half is exactly the
-        plan's `ResourceSource` membership, and the `!ctx.has_comp_func` half was
-        a no-op there (getter comp-funcs are emitted later, in the getter phase).
-        Membership is now the plan's. Full e2e green.
-  - [x] The resource-getter interfaces (returning `option<resource>`, e.g.
-        `wasi:cli/terminal-stdin`) are now a distinct plan kind (`ResourceGetter`).
-        The plan lists a getter iff its accessor is used
-        (`NirPackage::has_interface`, a `used_wasi_functions` membership test —
-        not the registry's same-named `with`-set predicate), the gate codegen
-        applied inline before; codegen's getter phase reads the plan, and
-        `import_interface_with_resource`
-        drops its `has_interface` gate (keeping only the `has_comp_func`
-        idempotency check). The getter FQ now also lands in the faithful world
-        import set. Full e2e green.
-  - [x] `wasi:http/client` is now plan-driven: the plan already carried an
-        `HttpClient` entry, and codegen's client phase gates on it rather than
-        re-deriving `has_interface("Client")`. The HTTP request-construction core
-        funcs are likewise gated on the plan's `HttpTypes` membership.
-  - [x] Export side — `append_http_handler_export` is decided by the export plan
-        (`ComponentPlan::has_http_handler_export`, computed once in `link` and
-        passed to `build_component_plan`) rather than re-derived from `NirPackage`
-        in codegen. All world/test exports were already plan-driven via
-        `ComponentPlan::{world_exports, test_exports}`.
+      (resources), and a pure-compute program.
+- [x] R2 — Codegen emits CM imports/exports from the plan and only encodes; no
+      `has_interface` / `has_http_handler_export` / registry re-derivation is
+      left for interface- or world-level decisions. The flat FQ list alone can't
+      drive codegen — each category needs a distinct encoding (the shared
+      `wasi:cli/types` `error-code` instance vs. a function-bearing instance vs.
+      a resource source/getter/using interface vs. HTTP) — so every entry carries
+      an `ImportKind`: `SharedTypes`, `FunctionInterface`, `ResourceUsingInterface`,
+      `ResourceSource`, `ResourceGetter`, `HttpTypes`, `HttpClient`. Decisions
+      worth recording:
+  - `wasi:cli/types` (the canonical `error-code`) is imported iff a used
+    signature references it OR an async-export transmission future resolves to
+    it (`Transmission("cli")`, e.g. a kiln generator's `task return`). The second
+    condition needs `needed_canonicals`, which is why the plan is built at the
+    WIR layer rather than post-DCE on `NirPackage`.
+  - The two resource-source import paths are unified in one idempotent
+    `import_resource_source` helper, keyed on the package-qualified instance-type
+    name (collision-free across same-named interfaces like `wasi:cli/types` vs.
+    `wasi:filesystem/types`).
+  - Resource-getter membership follows `NirPackage::has_interface` — a
+    `used_wasi_functions` test, _not_ the registry's same-named `with`-set
+    predicate. The getter FQ lands in the faithful world import set.
+  - `append_http_handler_export`, the HTTP `client`, and the HTTP request-
+    construction core-func exports read the plan / `ComponentPlan`; world and
+    test exports were already plan-driven via `ComponentPlan::{world_exports,
+    test_exports}`.
+  - Function-level selection within an imported interface still reads
+    `used_wasi_functions` directly. That is package data codegen may read (like
+    `project.functions`), not a re-derived phase decision, so it does not violate
+    the `codegen.rs` principle.
 - [x] R3 — The WIT emitter reads the plan for its world import refs
       (`WitEmitOptions::world_imports`), replacing the effect-row derivation;
       `wado wit` compiles through optimize (on a silent host) to obtain it.
