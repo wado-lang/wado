@@ -43,11 +43,12 @@ use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, Rule};
+use crate::nir::NirFunction;
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    Arm, CalleeMap, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
-    Value, is_ctfe_eligible,
+    Arm, CalleeMap, EditSink, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter,
+    Lattice, Value, is_ctfe_eligible,
 };
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
@@ -98,6 +99,7 @@ fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionG
     visitor.interpreter.with_callees(&callees);
     visitor.interpreter.with_globals(&globals);
     visitor.interpreter.with_global_fields(&global_fields);
+    let mut buffers = EngineBuffers::default();
     for (i, func_rc) in project.functions.iter().enumerate() {
         let fid = FunctionId::new(i);
         if let Some(g) = gate.as_deref_mut()
@@ -106,10 +108,14 @@ fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionG
             continue;
         }
         let mut func = func_rc.borrow_mut();
-        let address_taken = func.address_taken_locals.clone();
-        let stores_aliased = func.stores_aliased_locals.clone();
-        let locals = func.locals.clone();
-        let func_changed = if let Some(body) = func.body.as_mut() {
+        let NirFunction {
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            ..
+        } = &mut *func;
+        let func_changed = if let Some(body) = body.as_mut() {
             // Local indices are unique per function, not project-wide,
             // so reset the interpreter's env at every function boundary.
             visitor.interpreter.enter_function();
@@ -118,11 +124,20 @@ fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionG
             // body walk for transient inlined-in copies). The interpreter
             // consults these every time the visitor calls `bind_field` /
             // `invalidate_field` / `invalidate_aliased_fields`.
-            let alias_info =
-                build_alias_info(body, &locals, &address_taken, &stores_aliased, &type_table);
+            let alias_info = build_alias_info(
+                body,
+                locals,
+                address_taken_locals,
+                stores_aliased_locals,
+                &type_table,
+            );
             visitor.interpreter.set_alias_info(alias_info);
-            let root = body.root;
-            visitor.visit_block(body, root)
+            // Drive the flow-sensitive walk over an engine session so every
+            // rewrite commits coherently (the engine is the commit mechanism;
+            // the visitor still drives the bottom-up program-order walk).
+            let mut engine = Engine::new(body, &mut buffers, locals);
+            let root = engine.body.root;
+            visitor.visit_block(&mut engine, root)
         } else {
             false
         };
@@ -176,6 +191,42 @@ impl Rule for ConstFoldRule<'_> {
         };
         engine.replace_expr_kind(id, kind);
         true
+    }
+}
+
+/// Engine-routed [`EditSink`]: the flow-sensitive const-fold visitor commits
+/// every niri rewrite through `Engine::*` so the real body's parent map and
+/// use index stay coherent (the visitor walks bottom-up in its own order; the
+/// engine is the commit mechanism, not the driver).
+struct EngineSink<'e, 'a> {
+    engine: &'e mut Engine<'a>,
+}
+
+impl EditSink for EngineSink<'_, '_> {
+    fn body(&self) -> &Body {
+        self.engine.body
+    }
+    fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
+        self.engine.replace_expr_kind(e, kind);
+    }
+    fn become_expr(&mut self, dst: ExprId, src: ExprId) {
+        self.engine.become_expr(dst, src);
+    }
+    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId {
+        self.engine.alloc_expr(kind, type_id, span)
+    }
+    fn alloc_stmt(&mut self, kind: StmtKind, span: crate::token::Span) -> StmtId {
+        self.engine.alloc_stmt(kind, span)
+    }
+    fn alloc_block(
+        &mut self,
+        stmts: Vec<StmtId>,
+        span: crate::token::Span,
+    ) -> crate::nir_arena::BlockId {
+        self.engine.alloc_block(stmts, span)
+    }
+    fn set_block_stmts(&mut self, block: crate::nir_arena::BlockId, stmts: Vec<StmtId>) {
+        self.engine.set_block_stmts(block, stmts);
     }
 }
 
@@ -408,20 +459,22 @@ fn expr_shape(body: &Body, e: ExprId) -> ExprShape {
 }
 
 impl ConstFoldVisitor<'_> {
-    fn visit_block(&mut self, body: &mut Body, block: BlockId) -> bool {
+    fn visit_block(&mut self, engine: &mut Engine, block: BlockId) -> bool {
         // Bottom-up: walk children first so each If stmt's condition is
         // already folded to a literal (when feasible) by the time we
         // ask the interpreter to splice the chosen branch into this block.
-        let stmts = body.blocks[block].stmts.clone();
+        let stmts = engine.body.blocks[block].stmts.clone();
         let mut changed = false;
         for s in stmts {
-            changed |= self.visit_stmt(body, s);
+            changed |= self.visit_stmt(engine, s);
         }
-        changed |= self.interpreter.reduce_local_block_a(body, block);
+        changed |= self
+            .interpreter
+            .reduce_local_block_via(&mut EngineSink { engine: &mut *engine }, block);
         changed
     }
 
-    fn visit_stmt(&mut self, body: &mut Body, s: StmtId) -> bool {
+    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool {
         // Control-flow stmts need branch-aware field-env handling so
         // a `local.field = …` inside a branch doesn't leak as known
         // field knowledge to code that runs only when the branch was
@@ -429,19 +482,19 @@ impl ConstFoldVisitor<'_> {
         // channel is `let mut`, recorded preemptively as `NonConst`),
         // so the existing single-walk env handling stays intact.
         let is_control = matches!(
-            &body.stmts[s].kind,
+            &engine.body.stmts[s].kind,
             StmtKind::Loop { .. } | StmtKind::LabeledBlock { .. } | StmtKind::If { .. }
         );
         if !is_control {
             // Bottom-up: walk children first so the RHS of `let x = …`
             // is already folded by the time we record `x` in env /
             // field_env.
-            let changed = self.walk_children(body, NodeRef::Stmt(s));
-            self.update_env_from_stmt(body, s);
+            let changed = self.walk_children(engine, NodeRef::Stmt(s));
+            self.update_env_from_stmt(engine.body, s);
             return changed;
         }
 
-        match &body.stmts[s].kind {
+        match &engine.body.stmts[s].kind {
             StmtKind::Loop { body: lb } => {
                 // Loop back-edge: compute the set of entities the body
                 // could mutate, drop only those, then snapshot the
@@ -461,10 +514,10 @@ impl ConstFoldVisitor<'_> {
                 // iteration fixpoint: at body entry and at post-loop,
                 // only facts unaffected by the body hold.
                 let lb = *lb;
-                let writes = collect_loop_write_effects(body, lb);
+                let writes = collect_loop_write_effects(engine.body, lb);
                 self.apply_loop_invalidations(&writes);
                 let snap = self.interpreter.snapshot_fields();
-                let changed = self.visit_block(body, lb);
+                let changed = self.visit_block(engine, lb);
                 self.interpreter.restore_fields(snap);
                 changed
             }
@@ -480,8 +533,8 @@ impl ConstFoldVisitor<'_> {
                 // straight through.
                 let block = *block;
                 let label = label.clone();
-                let changed = self.visit_block(body, block);
-                if has_non_tail_break_to(body, &label, block) {
+                let changed = self.visit_block(engine, block);
+                if has_non_tail_break_to(engine.body, &label, block) {
                     self.interpreter.clear_fields();
                 }
                 changed
@@ -494,12 +547,12 @@ impl ConstFoldVisitor<'_> {
                 let condition = *condition;
                 let then_block = *then_block;
                 let else_block = *else_block;
-                let mut changed = self.visit_expr(body, condition);
+                let mut changed = self.visit_expr(engine, condition);
                 let snap_pre = self.interpreter.snapshot_fields();
                 // Capture reachability BEFORE the walk: see
                 // `block_falls_through`'s doc.
-                let then_reachable = block_falls_through(body, then_block, self.type_table);
-                changed |= self.visit_block(body, then_block);
+                let then_reachable = block_falls_through(engine.body, then_block, self.type_table);
+                changed |= self.visit_block(engine, then_block);
                 let snap_then = self.interpreter.snapshot_fields();
                 self.interpreter.restore_fields(snap_pre.clone());
                 let mut arms = vec![Arm {
@@ -507,8 +560,8 @@ impl ConstFoldVisitor<'_> {
                     post_state: snap_then,
                 }];
                 if let Some(eb) = else_block {
-                    let else_reachable = block_falls_through(body, eb, self.type_table);
-                    changed |= self.visit_block(body, eb);
+                    let else_reachable = block_falls_through(engine.body, eb, self.type_table);
+                    changed |= self.visit_block(engine, eb);
                     let snap_else = self.interpreter.snapshot_fields();
                     arms.push(Arm {
                         reachable: else_reachable,
@@ -529,7 +582,7 @@ impl ConstFoldVisitor<'_> {
         }
     }
 
-    fn visit_expr(&mut self, body: &mut Body, e: ExprId) -> bool {
+    fn visit_expr(&mut self, engine: &mut Engine, e: ExprId) -> bool {
         // `Assign { target, value }` is special-cased: the OUTER `target`
         // expression is an lvalue (write position) and niri's leaf
         // rewrites — particularly the `FieldAccess(Local, field)`
@@ -539,20 +592,20 @@ impl ConstFoldVisitor<'_> {
         // indexee of an `Index`) are read positions; walk those, but
         // leave the outer `target` shape opaque. After the walk,
         // observe what was assigned so the field env stays in sync.
-        if matches!(&body.exprs[e].kind, ExprKind::Assign { .. }) {
-            return self.visit_assign(body, e);
+        if matches!(&engine.body.exprs[e].kind, ExprKind::Assign { .. }) {
+            return self.visit_assign(engine, e);
         }
 
         // Branch / scope expressions — fork or clear field state so
         // a `local.field = …` inside one arm doesn't leak as known
         // field knowledge to code reachable only when another arm
         // ran.
-        match expr_shape(body, e) {
+        match expr_shape(engine.body, e) {
             ExprShape::If(condition, then_branch, else_branch) => {
-                let mut changed = self.visit_expr(body, condition);
+                let mut changed = self.visit_expr(engine, condition);
                 let snap_pre = self.interpreter.snapshot_fields();
-                let then_reachable = block_falls_through(body, then_branch, self.type_table);
-                changed |= self.visit_block(body, then_branch);
+                let then_reachable = block_falls_through(engine.body, then_branch, self.type_table);
+                changed |= self.visit_block(engine, then_branch);
                 let snap_then = self.interpreter.snapshot_fields();
                 self.interpreter.restore_fields(snap_pre.clone());
                 let mut arms = vec![Arm {
@@ -560,8 +613,8 @@ impl ConstFoldVisitor<'_> {
                     post_state: snap_then,
                 }];
                 if let Some(eb) = else_branch {
-                    let else_reachable = block_falls_through(body, eb, self.type_table);
-                    changed |= self.visit_block(body, eb);
+                    let else_reachable = block_falls_through(engine.body, eb, self.type_table);
+                    changed |= self.visit_block(engine, eb);
                     let snap_else = self.interpreter.snapshot_fields();
                     arms.push(Arm {
                         reachable: else_reachable,
@@ -575,20 +628,20 @@ impl ConstFoldVisitor<'_> {
                 }
                 let post_state = FieldSnapshot::join_arms(snap_pre, arms);
                 self.interpreter.restore_fields(post_state);
-                changed |= self.interpreter.reduce_local_a(body, e);
+                changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::Match(scrutinee, arms) => {
-                let mut changed = self.visit_expr(body, scrutinee);
+                let mut changed = self.visit_expr(engine, scrutinee);
                 let snap_pre = self.interpreter.snapshot_fields();
                 let mut arm_results: Vec<Arm> = Vec::with_capacity(arms.len());
                 for arm in &arms {
                     let body_reachable =
-                        !is_never_type(body.exprs[arm.body].type_id, self.type_table);
+                        !is_never_type(engine.body.exprs[arm.body].type_id, self.type_table);
                     if let Some(g) = arm.guard {
-                        changed |= self.visit_expr(body, g);
+                        changed |= self.visit_expr(engine, g);
                     }
-                    changed |= self.visit_expr(body, arm.body);
+                    changed |= self.visit_expr(engine, arm.body);
                     let snap_arm = self.interpreter.snapshot_fields();
                     self.interpreter.restore_fields(snap_pre.clone());
                     arm_results.push(Arm {
@@ -598,16 +651,16 @@ impl ConstFoldVisitor<'_> {
                 }
                 let post_state = FieldSnapshot::join_arms(snap_pre, arm_results);
                 self.interpreter.restore_fields(post_state);
-                changed |= self.interpreter.reduce_local_a(body, e);
+                changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::Switch(scrutinee, arms, default) => {
-                let mut changed = self.visit_expr(body, scrutinee);
+                let mut changed = self.visit_expr(engine, scrutinee);
                 let snap_pre = self.interpreter.snapshot_fields();
                 let mut arm_results: Vec<Arm> = Vec::with_capacity(arms.len() + 1);
                 for arm in &arms {
-                    let arm_reachable = block_falls_through(body, *arm, self.type_table);
-                    changed |= self.visit_block(body, *arm);
+                    let arm_reachable = block_falls_through(engine.body, *arm, self.type_table);
+                    changed |= self.visit_block(engine, *arm);
                     let snap_arm = self.interpreter.snapshot_fields();
                     self.interpreter.restore_fields(snap_pre.clone());
                     arm_results.push(Arm {
@@ -615,8 +668,8 @@ impl ConstFoldVisitor<'_> {
                         post_state: snap_arm,
                     });
                 }
-                let default_reachable = block_falls_through(body, default, self.type_table);
-                changed |= self.visit_block(body, default);
+                let default_reachable = block_falls_through(engine.body, default, self.type_table);
+                changed |= self.visit_block(engine, default);
                 let snap_default = self.interpreter.snapshot_fields();
                 arm_results.push(Arm {
                     reachable: default_reachable,
@@ -624,7 +677,7 @@ impl ConstFoldVisitor<'_> {
                 });
                 let post_state = FieldSnapshot::join_arms(snap_pre, arm_results);
                 self.interpreter.restore_fields(post_state);
-                changed |= self.interpreter.reduce_local_a(body, e);
+                changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::Block(b) => {
@@ -633,8 +686,8 @@ impl ConstFoldVisitor<'_> {
                 // no label so no `break label:` can refer to it from
                 // inside, and any invalidation the body performed
                 // legitimately reflects post-block state.
-                let mut changed = self.visit_block(body, b);
-                changed |= self.interpreter.reduce_local_a(body, e);
+                let mut changed = self.visit_block(engine, b);
+                changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::Labeled(block, label) => {
@@ -649,47 +702,53 @@ impl ConstFoldVisitor<'_> {
                 // post-block state would be the join of break points
                 // and the bottom — fall back to clearing rather than
                 // computing the join.
-                let mut changed = self.visit_block(body, block);
-                if has_non_tail_break_to(body, &label, block) {
+                let mut changed = self.visit_block(engine, block);
+                if has_non_tail_break_to(engine.body, &label, block) {
                     self.interpreter.clear_fields();
                 }
-                changed |= self.interpreter.reduce_local_a(body, e);
+                changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::None => {
                 // Bottom-up walk for the remaining expressions.
-                let mut changed = self.walk_children(body, NodeRef::Expr(e));
+                let mut changed = self.walk_children(engine, NodeRef::Expr(e));
                 // After children have been walked, observe side effects
                 // that could have mutated aliased state.
-                self.update_field_env_from_expr(body, e);
-                changed |= self.interpreter.reduce_local_a(body, e);
+                self.update_field_env_from_expr(engine.body, e);
+                changed |= self.reduce_local(engine, e);
                 changed
             }
         }
     }
 
-    fn visit_pattern(&mut self, body: &mut Body, p: PatId) -> bool {
+    /// Commit a single-node niri rewrite at `e` through the engine.
+    fn reduce_local(&mut self, engine: &mut Engine, e: ExprId) -> bool {
+        self.interpreter
+            .reduce_local_via(&mut EngineSink { engine: &mut *engine }, e)
+    }
+
+    fn visit_pattern(&mut self, engine: &mut Engine, p: PatId) -> bool {
         // Patterns carry no foldable value of their own, but a
         // `ConstantValue { expr }` pattern wraps an expression that
         // must still be reduced. The generic walk routes that expr
         // back through `visit_expr`.
-        self.walk_children(body, NodeRef::Pat(p))
+        self.walk_children(engine, NodeRef::Pat(p))
     }
 
     /// Recurse into every id-bearing child of `node`. The const-fold special
     /// cases (control flow, `Assign`) are handled by the callers before they
     /// reach this generic walk, so the only nodes routed here are the
     /// straight-line ones.
-    fn walk_children(&mut self, body: &mut Body, node: NodeRef) -> bool {
+    fn walk_children(&mut self, engine: &mut Engine, node: NodeRef) -> bool {
         let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
+        engine.body.for_each_child(node, |c| kids.push(c));
         let mut changed = false;
         for c in kids {
             changed |= match c {
-                NodeRef::Stmt(s) => self.visit_stmt(body, s),
-                NodeRef::Expr(ex) => self.visit_expr(body, ex),
-                NodeRef::Block(b) => self.visit_block(body, b),
-                NodeRef::Pat(p) => self.visit_pattern(body, p),
+                NodeRef::Stmt(s) => self.visit_stmt(engine, s),
+                NodeRef::Expr(ex) => self.visit_expr(engine, ex),
+                NodeRef::Block(b) => self.visit_block(engine, b),
+                NodeRef::Pat(p) => self.visit_pattern(engine, p),
             };
         }
         changed
@@ -709,29 +768,29 @@ impl ConstFoldVisitor<'_> {
     /// - Any more complex target shape (`(*p).field = …`,
     ///   `arr[i] = …`, etc.): conservatively invalidate every
     ///   aliased local's fields.
-    fn visit_assign(&mut self, body: &mut Body, e: ExprId) -> bool {
-        let (target, value) = match &body.exprs[e].kind {
+    fn visit_assign(&mut self, engine: &mut Engine, e: ExprId) -> bool {
+        let (target, value) = match &engine.body.exprs[e].kind {
             ExprKind::Assign { target, value } => (*target, *value),
             _ => unreachable!("visit_assign called on non-Assign"),
         };
-        let mut changed = self.visit_expr(body, value);
-        let inner_to_walk = match &body.exprs[target].kind {
+        let mut changed = self.visit_expr(engine, value);
+        let inner_to_walk = match &engine.body.exprs[target].kind {
             ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
                 Some(*inner)
             }
             _ => None,
         };
         if let Some(inner) = inner_to_walk {
-            changed |= self.visit_expr(body, inner);
+            changed |= self.visit_expr(engine, inner);
         }
         // Field-env update based on the (post-walk) target shape.
-        let tgt = match &body.exprs[target].kind {
+        let tgt = match &engine.body.exprs[target].kind {
             ExprKind::Local { index, .. } => AssignTarget::Local(*index),
             ExprKind::FieldAccess {
                 expr: inner,
                 field_name,
                 ..
-            } => match &body.exprs[*inner].kind {
+            } => match &engine.body.exprs[*inner].kind {
                 ExprKind::Local { index, .. } => {
                     AssignTarget::FieldOnLocal(*index, field_name.clone())
                 }
@@ -746,11 +805,11 @@ impl ConstFoldVisitor<'_> {
                 // transfer for `dst = src` (Local→Local copy on a ref
                 // type, where both names alias the same heap object).
                 self.interpreter.invalidate_local(index);
-                self.update_field_env_from_let(body, index, value);
+                self.update_field_env_from_let(engine.body, index, value);
             }
             AssignTarget::FieldOnLocal(local_index, field_name) => {
                 self.interpreter.invalidate_field(local_index, &field_name);
-                if let Some(v) = Value::from_arena_literal(body, value, self.type_table) {
+                if let Some(v) = Value::from_arena_literal(engine.body, value, self.type_table) {
                     self.interpreter.bind_field(local_index, &field_name, v);
                 }
             }
@@ -761,7 +820,7 @@ impl ConstFoldVisitor<'_> {
                 self.interpreter.invalidate_aliased_fields();
             }
         }
-        changed |= self.interpreter.reduce_local_a(body, e);
+        changed |= self.reduce_local(engine, e);
         changed
     }
 
