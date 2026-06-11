@@ -240,6 +240,10 @@ struct Builder<'a> {
     aliased: crate::hashmap::IndexSet<u32>,
     /// `stores`-aliased locals whose fields are never seeded. See [`build`].
     untrackable: crate::hashmap::IndexSet<u32>,
+    /// `local → pointee local` for `let r = &v` references, so `r.f` forwards
+    /// from `v`'s field slot (reference look-through). Cleared when `r` or the
+    /// pointee is reassigned. See [`Builder::update_ref_target`].
+    ref_targets: IndexMap<u32, u32>,
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
@@ -261,8 +265,51 @@ impl<'a> Builder<'a> {
             field_store: IndexMap::default(),
             aliased: aliased.clone(),
             untrackable: untrackable.clone(),
+            ref_targets: IndexMap::default(),
             loop_entry_values: IndexMap::default(),
         }
+    }
+
+    /// Record / clear `local`'s reference target from its new RHS. `let r = &v`
+    /// (a bare-`Local` `v`) records `r → v` so a later `r.f` read forwards from
+    /// `v`'s field slot ([`Builder::reference_lookthrough`]). Any other RHS
+    /// clears `r`'s entry, and a reassignment of any local invalidates every
+    /// reference still pointing at it (the old pointee may have moved).
+    fn update_ref_target(&mut self, local: u32, value: ExprId) {
+        // Reassigning `local` invalidates references that pointed at it.
+        self.ref_targets.retain(|_, &mut pointee| pointee != local);
+        let target = match &self.body.exprs[value].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr: inner,
+            } => match &self.body.exprs[*inner].kind {
+                ExprKind::Local { index, .. } => Some(*index),
+                _ => None,
+            },
+            _ => None,
+        };
+        match target {
+            Some(pointee) if pointee != local => {
+                self.ref_targets.insert(local, pointee);
+            }
+            _ => {
+                self.ref_targets.swap_remove(&local);
+            }
+        }
+    }
+
+    /// If `recv_expr` is a bare `Local` known to reference a pointee local
+    /// (`let r = &v`), return that pointee's current receiver `ValueId` and
+    /// root local, so `r.f` forwards from `v`'s field slot. The pointee's slot
+    /// state (including call / write invalidation) is used as-is, so a stale
+    /// forward is impossible — at worst the lookup misses and `r.f` re-derives.
+    fn reference_lookthrough(&self, recv_expr: ExprId) -> Option<(ValueId, u32)> {
+        let ExprKind::Local { index, .. } = &self.body.exprs[recv_expr].kind else {
+            return None;
+        };
+        let pointee = *self.ref_targets.get(index)?;
+        let pointee_vn = *self.current_value.get(&pointee)?;
+        Some((pointee_vn, pointee))
     }
 
     /// The bare-`Local` root of a (possibly nested) field-access place, or
@@ -312,6 +359,7 @@ impl<'a> Builder<'a> {
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
                 self.seed_struct_literal_fields(local_index, v, value);
+                self.update_ref_target(local_index, value);
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
                 self.walk_expr(value);
@@ -525,6 +573,7 @@ impl<'a> Builder<'a> {
                         // object; seed each pure field like the `Let` case so a
                         // later `local.f` read forwards the literal.
                         self.seed_struct_literal_fields(index, v, value);
+                        self.update_ref_target(index, value);
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
                         let (root, recv_v, bare_local) = field_place.expect("field target");
@@ -654,8 +703,14 @@ impl<'a> Builder<'a> {
                 // The receiver must be a pure value for the FieldAccess to
                 // get a ValueId — an impure receiver (a Call result, for
                 // instance) propagates None.
-                let root = self.receiver_root(inner);
-                let recv = self.walk_expr(inner)?;
+                let walked = self.walk_expr(inner)?;
+                // Reference look-through: a read `r.f` where `r = &v` forwards
+                // from `v`'s field slot (the pointee's current VN / root),
+                // using `v`'s live slot state so a stale forward is impossible.
+                let (recv, root) = match self.reference_lookthrough(inner) {
+                    Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
+                    None => (walked, self.receiver_root(inner)),
+                };
                 let heap_ver = self.heap_state.version_of(root, field_index);
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
@@ -2343,6 +2398,76 @@ mod tests {
         root_with(&mut body, vec![let_x, let_n]);
         let r = build_t(&body, &[]);
         assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(5));
+    }
+
+    /// `let v = S { f0: 7 }` then a one-field struct literal helper.
+    fn one_field_struct(body: &mut Body, value: ExprId) -> ExprId {
+        alloc_expr(
+            body,
+            ExprKind::StructLiteral {
+                struct_type: TypeTable::UNIT,
+                struct_name: "S".to_string(),
+                fields: vec![crate::nir_arena::ArenaStructField {
+                    name: "f0".to_string(),
+                    value,
+                    field_index: 0,
+                }],
+            },
+        )
+    }
+
+    fn ref_of_local(body: &mut Body, idx: u32) -> ExprId {
+        let inner = local_ref(body, idx);
+        alloc_expr(
+            body,
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: inner,
+            },
+        )
+    }
+
+    #[test]
+    fn reference_lookthrough_forwards_pointee_field() {
+        // fn() { let v = S { f0: 7 }; let r = &v; let y = r.f0; }
+        // `r = &v`, so `r.f0` forwards from `v`'s seeded field slot.
+        let mut body = empty_body();
+        let seven = int_lit(&mut body, 7);
+        let struct_lit = one_field_struct(&mut body, seven);
+        let let_v = let_stmt(&mut body, 0, struct_lit, false);
+        let ref_v = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 1, ref_v, false);
+        let recv_r = local_ref(&mut body, 1);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 2, read, false);
+        root_with(&mut body, vec![let_v, let_r, let_y]);
+        let r = build_t(&body, &[]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+    }
+
+    #[test]
+    fn reference_lookthrough_dropped_when_pointee_reassigned() {
+        // fn() { let mut v = S { f0: 7 }; let r = &v; v = S { f0: 9 }; let y = r.f0; }
+        // Reassigning `v` clears `r`'s look-through (the old pointee may have
+        // moved), so `r.f0` re-derives rather than forwarding the stale 7.
+        let mut body = empty_body();
+        let seven = int_lit(&mut body, 7);
+        let struct_lit = one_field_struct(&mut body, seven);
+        let let_v = let_stmt(&mut body, 0, struct_lit, true);
+        let ref_v = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 1, ref_v, false);
+        let nine = int_lit(&mut body, 9);
+        let struct_lit2 = one_field_struct(&mut body, nine);
+        let reassign = assign_stmt(&mut body, 0, struct_lit2);
+        let recv_r = local_ref(&mut body, 1);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 2, read, false);
+        root_with(&mut body, vec![let_v, let_r, reassign, let_y]);
+        let r = build_t(&body, &[]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
     }
 
     #[test]
