@@ -479,17 +479,21 @@ Rollout (each step gated by the full E2E suite):
         Codegen's resource-using phase gates on the new kind, and the main
         import loop drops its registry-derived deferral check — that membership
         is now the plan's. Full e2e green.
-  - [ ] Phase 2 (resource-defining interfaces) and `wasi:http/client` remain
-        partly codegen-driven. Phase 2 cross-checks the plan's `ResourceSource`
-        entries, but retains a residual `ctx`-state guard: its `is_needed`
-        gate's `has_interface` half is mirrored by the plan, yet the
-        `!ctx.has_comp_func` dedup is intrinsic to codegen ordering. The
-        plan's `ResourceSource` set deliberately spans both Phase 2 (a
-        resource-using interface in the `with` set) and Phase 3's pre-import
-        path (a resource appearing only in a return type); fully removing
-        Phase 2's `is_needed` would make it import the closure-only sources
-        that Phase 3 owns. Unifying those two source-import paths is the
-        prerequisite, and is left as a follow-up.
+  - [x] The resource-defining source phase is now plan-driven, and the two
+        source-import code paths are unified. A single `import_resource_source`
+        helper emits the minimal, methods-less source instance and its outer
+        resource / error-code aliases; it is idempotent (keyed on the
+        package-qualified instance-type name, which is collision-free across
+        same-named interfaces like `wasi:cli/types` vs `wasi:filesystem/types`)
+        and called from both the resource-source phase and the resource-using
+        phase's pre-import. With the duplication gone, the resource-source phase
+        dropped its `is_needed` gate: the `has_interface` half is exactly the
+        plan's `ResourceSource` membership, and the `!ctx.has_comp_func` half was
+        a no-op there (getter comp-funcs are emitted later, in the getter phase).
+        Membership is now the plan's. Full e2e green.
+  - [ ] `wasi:http/client` remains codegen-driven (a small, isolated
+        `has_interface("Client")` gate); folding it into the plan is a minor
+        follow-up.
 - [x] R3 — The WIT emitter reads the plan for its world import refs
       (`WitEmitOptions::world_imports`), replacing the effect-row derivation;
       `wado wit` compiles through optimize (on a silent host) to obtain it.
