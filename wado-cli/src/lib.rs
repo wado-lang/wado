@@ -31,5 +31,6 @@ pub mod syntax;
 pub mod test;
 pub mod timezone_host;
 pub mod tls_trust;
+pub mod wit;
 
 pub use compiler_host::FilesystemCompilerHost;

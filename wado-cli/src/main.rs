@@ -20,6 +20,7 @@ enum Cmd {
     Format,
     Doc,
     Dump,
+    Wit,
     Syntax,
     Lsp,
     Query,
@@ -36,6 +37,7 @@ impl Cmd {
         Self::Format,
         Self::Doc,
         Self::Dump,
+        Self::Wit,
         Self::Syntax,
         Self::Lsp,
         Self::Query,
@@ -52,6 +54,7 @@ impl Cmd {
             Self::Format => "format",
             Self::Doc => "doc",
             Self::Dump => "dump",
+            Self::Wit => "wit",
             Self::Syntax => "syntax",
             Self::Lsp => "lsp",
             Self::Query => "query",
@@ -61,6 +64,7 @@ impl Cmd {
     const fn args(self) -> &'static str {
         match self {
             Self::Compile | Self::Run | Self::Serve | Self::Check => "[options] [file.wado]",
+            Self::Wit => "[options] [file.wado | dir]",
             Self::Test => "[options] [files or dirs...]",
             Self::Format | Self::Doc | Self::Dump => "[options] <file.wado>...",
             Self::Init | Self::Syntax | Self::Lsp => "[options]",
@@ -79,6 +83,7 @@ impl Cmd {
             Self::Format => "Format a Wado source file",
             Self::Doc => "Generate documentation from source files",
             Self::Dump => "Dump compiler internal state",
+            Self::Wit => "Emit the WIT contract for a Wado program",
             Self::Syntax => "Generate syntax definition files",
             Self::Lsp => "Start the language server (LSP over stdio)",
             Self::Query => "Query language service information",
@@ -215,6 +220,10 @@ async fn dispatch() -> Result<(), CliExit> {
                 Cmd::Dump => {
                     let opts = wado_cli::dump::parse_args(parser)?;
                     Box::pin(wado_cli::dump::run(opts)).await
+                }
+                Cmd::Wit => {
+                    let opts = wado_cli::wit::parse_args(parser)?;
+                    Box::pin(wado_cli::wit::run(opts)).await
                 }
                 Cmd::Syntax => {
                     let opts = wado_cli::syntax::parse_args(parser)?;

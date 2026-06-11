@@ -54,6 +54,7 @@ pub mod wir_build;
 pub mod wir_optimize;
 pub mod wir_unparse;
 pub mod wir_visitor;
+pub mod wit_emit;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
@@ -1165,7 +1166,7 @@ pub fn format(source: &str) -> Result<String, CompileError> {
 /// A comment present in `before` but missing from `after` (by delimiter+text
 /// multiset; `emit_comment` is verbatim so relocation keeps the same key).
 fn dropped_comment(before: &str, after: &str) -> Option<String> {
-    use std::collections::HashMap;
+    use crate::hashmap::IndexMap;
     fn delim(kind: comment::CommentKind) -> &'static str {
         match kind {
             comment::CommentKind::Line => "//",
@@ -1174,8 +1175,8 @@ fn dropped_comment(before: &str, after: &str) -> Option<String> {
             comment::CommentKind::Block => "/*",
         }
     }
-    fn bag(src: &str) -> HashMap<(&'static str, String), usize> {
-        let mut bag = HashMap::new();
+    fn bag(src: &str) -> IndexMap<(&'static str, String), usize> {
+        let mut bag = IndexMap::default();
         for c in lexer::lex(src).comments {
             *bag.entry((delim(c.kind), c.text)).or_default() += 1;
         }

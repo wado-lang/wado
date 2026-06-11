@@ -1,0 +1,85 @@
+//! Tests for `wit_emit::emit_wit_text` — the WIT producer (WEP
+//! `wep-2026-05-02-wit-interoperability.md`, Phase 1).
+//!
+//! Each case asserts the rendered WIT text and re-parses it with `wit-parser`
+//! to confirm the output is syntactically valid WIT.
+
+#![allow(unused_crate_dependencies)]
+
+mod common;
+
+use common::InMemoryHost;
+use wado_compiler::semantics::semantics;
+use wado_compiler::wit_emit::{WitEmitOptions, WitScope, emit_wit_text};
+
+fn block_on<F: std::future::Future>(future: F) -> F::Output {
+    tokio::runtime::Runtime::new().unwrap().block_on(future)
+}
+
+/// Emit WIT for `source` targeting the default CLI world.
+fn emit(source: &str) -> String {
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    assert!(sem.is_complete(), "semantics did not complete for source");
+    let opts = WitEmitOptions {
+        scope: WitScope::Full,
+        world_fq: "wasi:cli/command".to_string(),
+        default_interface_name: "entry".to_string(),
+    };
+    emit_wit_text(&sem, &opts).expect("emit_wit_text failed")
+}
+
+/// Assert the emitted WIT equals `expected` and is valid WIT.
+fn check(source: &str, expected: &str) {
+    let text = emit(source);
+    assert_eq!(
+        text.trim_end(),
+        expected.trim_end(),
+        "\n--- emitted ---\n{text}"
+    );
+    let mut resolve = wit_parser::Resolve::new();
+    resolve
+        .push_str("emitted.wit", &text)
+        .expect("emitted WIT failed to re-parse");
+}
+
+#[test]
+fn empty_world_when_no_exports() {
+    check(
+        "fn helper() -> i32 { return 42; }",
+        "package root:component;\n\nworld command {\n}",
+    );
+}
+
+#[test]
+fn functions_only_become_direct_world_exports() {
+    check(
+        "export fn add(a: i32, b: i32) -> i32 { return a + b; }",
+        "package root:component;\n\nworld command {\n  export add: func(a: s32, b: s32) -> s32;\n}",
+    );
+}
+
+#[test]
+fn record_export_groups_into_default_interface() {
+    check(
+        "pub struct Point { x: f64, y: f64 }\n\
+         export fn midpoint(a: Point, b: Point) -> Point { return a; }",
+        "package root:component;\n\n\
+         interface entry {\n  \
+           record point {\n    x: f64,\n    y: f64,\n  }\n  \
+           midpoint: func(a: point, b: point) -> point;\n\
+         }\n\n\
+         world command {\n  export entry;\n}",
+    );
+}
+
+#[test]
+fn string_and_list_and_option_map_to_wit() {
+    let text = emit("export fn lookup(keys: List<String>, maybe: Option<String>, n: u32) { }");
+    assert!(
+        text.contains("export lookup: func(keys: list<string>, maybe: option<string>, n: u32);"),
+        "\n{text}"
+    );
+    let mut resolve = wit_parser::Resolve::new();
+    resolve.push_str("emitted.wit", &text).expect("valid WIT");
+}
