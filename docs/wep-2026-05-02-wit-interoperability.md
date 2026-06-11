@@ -340,6 +340,8 @@ established in [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md):
   the owning interface even if not explicitly listed.
 - `#![no_default_interface]` disables the default-interface fallback;
   every non-entry-point export must live in an explicit `export interface`.
+- When no entry point is present at all, the world is emitted empty and the
+  interfaces stand alone in the package (see "World-less libraries").
 
 ### Imported interface resolution and scope
 
@@ -440,12 +442,18 @@ wado wit --scope local -o file.wit file.wado       # file output, user-only WIT
 wado wit --world wasi:http/service file.wado       # pick the target world
 ```
 
-Backed by `wit_emit::emit_wit_text`. Runs `semantics_of` (already a public
-`Semantics`-only entry point) and stops; no TIR build, no monomorphize, no
-lower, no codegen. Mirrors `wado dump` in pipeline depth. Takes exactly one
-source file; passing more than one is an error. `--world` reuses the same
-flag and default (`wasi:cli/command`) as `wado compile`. `--scope` is
-optional and defaults per the resolution order above.
+Backed by `wit_emit::emit_wit_text`. Runs `wado_compiler::semantics()` —
+the public async `Semantics`-only entry, which parses, loads, and analyzes,
+then stops; no monomorphize, no lower, no codegen. Mirrors `wado dump` in
+pipeline depth, but carries no `-O` level: WIT is a pre-codegen fact, so
+the optimization level is irrelevant. Takes exactly one source file;
+passing more than one is an error. `--world` reuses the same flag and
+default (`wasi:cli/command`, overridable by the `__DATA__` world) as
+`wado compile`. `--scope` is optional and defaults per the resolution
+order above. When the file has no world entry point (a library-shaped
+`.wado` with only `pub interface` / bare `export` items), the emitter
+produces an **empty world** — see "World-less libraries" under Open
+Design Questions.
 
 `wado compile` — embed WIT in the compiled component (default on):
 
@@ -500,11 +508,18 @@ Each phase ends with green E2E tests for the listed fixtures.
   - [ ] `wado-compiler/src/wit_emit.rs`: type mapping, kebabification,
         interface grouping, transitive-type closure, both `full` and
         `local` scopes.
-  - [ ] `WitEmitOptions::default_interface_name` — `[package].name`
-        from `wado.toml` or entry-file stem, threaded in from the CLI
-        rather than read off `Semantics`.
+  - [ ] `WitEmitOptions { scope, world_fq, default_interface_name }`.
+        `world_fq` is the resolved target world; `default_interface_name`
+        is `[package].name` from `wado.toml` or the entry-file stem. Both
+        are threaded in from the CLI rather than read off `Semantics`.
+  - [ ] No-entry-point files emit an empty world (the resolved world name
+        with no exports), so library-shaped `.wado` still produces valid
+        WIT. The fuller "world-less library" model is deferred.
   - [ ] `wado-cli/src/wit.rs` subcommand + `Cmd::Wit` registration in
-        `wado-cli/src/main.rs`.
+        `wado-cli/src/main.rs`. Single input only; no `-O` flag; calls
+        `wado_compiler::semantics()` and bails silently when
+        `Semantics::is_complete()` is false (diagnostics already emitted by
+        the host).
   - [ ] E2E fixtures under `wado-compiler/tests/fixtures/wit/`: empty
         world, default-interface, explicit-interface, multiple-interfaces,
         `wasi:cli/command`, `wasi:http/service`, `core:kiln/generator`.
@@ -535,6 +550,25 @@ Each phase ends with green E2E tests for the listed fixtures.
         rule documented here.
 
 ## Open Design Questions
+
+### World-less libraries
+
+A `.wado` file may carry only `pub interface` declarations and bare
+`export` items with no world entry point (`fn run` / `fn handle`). Such a
+file is conceptually a _library_: a bag of interfaces meant to be consumed
+by other components, not a runnable world. WIT can express this — a package
+may contain interface definitions with no world, or with a world that only
+re-exports interfaces — but Wado has not yet decided what a world-less
+library _is_ at the language level (how it is declared, published, and
+depended upon).
+
+Until that is settled, `wado wit` and `wado compile` take the conservative
+path: a file with no world entry point emits an **empty world** (the
+resolved world name, no exports) alongside its interface definitions. This
+keeps the output valid WIT and round-trippable without committing to a
+library model. Promoting world-less libraries to a first-class concept —
+and deciding whether the emitted world should disappear entirely rather
+than be empty — is deferred to a future WEP.
 
 ### World structure faithfulness
 
