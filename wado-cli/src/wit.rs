@@ -133,10 +133,18 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
         return Err(CliExit::silent_failure(1));
     }
 
+    let world = opts.world.unwrap_or_else(|| DEFAULT_WORLD.to_string());
+
+    // The faithful world import set is the WIR-level plan, available only after
+    // DCE — so compile through optimize to read it. Diagnostics were already
+    // surfaced by the `semantics` pass above; a quiet host avoids duplicates.
+    let world_imports = resolve_world_imports(&source, &input, &world).await;
+
     let emit_opts = WitEmitOptions {
         scope: opts.scope,
-        world_fq: opts.world.unwrap_or_else(|| DEFAULT_WORLD.to_string()),
+        world_fq: world,
         default_interface_name: default_interface_name(&input),
+        world_imports,
     };
 
     let text = wit_emit::emit_wit_text(&sem, &emit_opts)
@@ -151,6 +159,36 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
         None => print!("{text}"),
     }
     Ok(())
+}
+
+/// Compile `source` through optimize (on a silent host, so diagnostics are not
+/// re-emitted) and read the faithful import set from the WIR-level plan
+/// (`NirPackage::imported_cm_interfaces`). Returns empty on any failure; the
+/// caller has already validated the program with `semantics`.
+async fn resolve_world_imports(source: &str, input: &str, world: &str) -> Vec<String> {
+    let base_path = Path::new(input)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    let host = FilesystemCompilerHost::silent(base_path);
+    match wado_compiler::dump_with_host_and_world(
+        source,
+        &host,
+        Some(input),
+        wado_compiler::OptLevel::O2,
+        Some(world),
+        None,
+        None,
+        &[],
+    )
+    .await
+    {
+        Ok(result) => result
+            .optimized_package
+            .map(|pkg| pkg.imported_cm_interfaces)
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
 }
 
 /// The default interface name: the manifest `[package].name` when the input

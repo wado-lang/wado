@@ -11,22 +11,55 @@ mod common;
 use common::InMemoryHost;
 use wado_compiler::semantics::semantics;
 use wado_compiler::wit_emit::{WitEmitOptions, WitScope, emit_wit_text};
+use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
 
-/// Emit WIT for `source` targeting the default CLI world, under `scope`.
-fn emit_scope(source: &str, scope: WitScope) -> String {
+/// The WIR-level import plan (`NirPackage::imported_cm_interfaces`) for
+/// `source` under `world_fq`, the faithful world import set the emitter reads.
+fn import_plan(source: &str, world_fq: &str) -> Vec<String> {
+    let host = InMemoryHost::new();
+    // Tolerant like the CLI's `resolve_world_imports`: a program that does not
+    // compile to a full component (e.g. no world entry point) has no faithful
+    // import set, which is the empty set for the emitter's purposes.
+    match block_on(dump_with_host_and_world(
+        source,
+        &host,
+        Some("entry.wado"),
+        OptLevel::O2,
+        Some(world_fq),
+        None,
+        None,
+        &[],
+    )) {
+        Ok(dump) => dump
+            .optimized_package
+            .map(|pkg| pkg.imported_cm_interfaces)
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Emit WIT for `source` under `scope` targeting `world_fq`, feeding the
+/// emitter the faithful import plan as the CLI does.
+fn emit_world(source: &str, scope: WitScope, world_fq: &str) -> String {
     let host = InMemoryHost::new();
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     assert!(sem.is_complete(), "semantics did not complete for source");
     let opts = WitEmitOptions {
         scope,
-        world_fq: "wasi:cli/command".to_string(),
+        world_fq: world_fq.to_string(),
         default_interface_name: "entry".to_string(),
+        world_imports: import_plan(source, world_fq),
     };
     emit_wit_text(&sem, &opts).expect("emit_wit_text failed")
+}
+
+/// Emit WIT for `source` targeting the default CLI world, under `scope`.
+fn emit_scope(source: &str, scope: WitScope) -> String {
+    emit_world(source, scope, "wasi:cli/command")
 }
 
 /// Emit WIT for `source` under `local` scope (no inlined nested packages).
@@ -105,15 +138,7 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
         "/../example/http_server.wado"
     ))
     .expect("read http_server example");
-    let host = InMemoryHost::new();
-    let sem = block_on(semantics(&source, &host, Some("entry.wado")));
-    assert!(sem.is_complete(), "semantics did not complete");
-    let opts = WitEmitOptions {
-        scope: WitScope::Full,
-        world_fq: "wasi:http/service".to_string(),
-        default_interface_name: "service".to_string(),
-    };
-    let text = emit_wit_text(&sem, &opts).expect("emit failed");
+    let text = emit_world(&source, WitScope::Full, "wasi:http/service");
 
     assert!(text.contains("export wasi:http/handler@"), "\n{text}");
     assert!(text.contains("resource fields {"), "\n{text}");

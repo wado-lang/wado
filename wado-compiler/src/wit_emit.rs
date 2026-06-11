@@ -18,7 +18,7 @@ use wit_encoder::{
 };
 
 use crate::semantics::Semantics;
-use crate::tir::{EffectRef, PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// How much of the referenced interface graph to inline into the WIT document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -44,6 +44,11 @@ pub struct WitEmitOptions {
     /// Name for the synthesized default interface that groups bare exports.
     /// Sourced from `[package].name` or the entry-file stem.
     pub default_interface_name: String,
+    /// The CM interface FQs the compiled component imports — the WIR-level
+    /// import plan (`NirPackage::imported_cm_interfaces`). The authoritative,
+    /// faithful world import set; injected by the caller because it is computed
+    /// post-DCE and is unavailable from `Semantics` alone.
+    pub world_imports: Vec<String>,
 }
 
 /// A failure that prevents emitting valid WIT.
@@ -118,8 +123,6 @@ struct ExportedFn {
     name: String,
     params: Vec<(String, TypeId)>,
     return_type: TypeId,
-    /// Concrete effect (interface) names from the `with` clause.
-    effects: Vec<String>,
 }
 
 /// Name-indexed view of the user-authored type declarations.
@@ -169,26 +172,13 @@ impl<'a> Emitter<'a> {
             .world_registry()
             .and_then(|registry| registry.get(&opts.world_fq));
 
-        // Imports: the CM interfaces the program uses. The effect system makes
-        // each exported function's effect row name every interface it (and its
-        // callees) touch, so the union over exports is the faithful root set.
-        // Resolve each effect name to its FQ via the target world's import table.
-        let mut import_roots: BTreeSet<String> = BTreeSet::new();
-        for export in &exports {
-            for effect in &export.effects {
-                if let Some(info) = world_info
-                    && let Some(import) = info.imports.iter().find(|i| i.interface_name == *effect)
-                    && let Some(fq) = &import.cm_interface_fq
-                {
-                    import_roots.insert(fq.clone());
-                }
-            }
-        }
-        // A used interface drags in the interfaces its own signatures reference
-        // (e.g. `wasi:cli/stdout` returns `output-stream` from `wasi:io/streams`,
-        // which in turn references `wasi:io/error`). The real component imports
-        // that whole closure, so the WIT must too.
-        let import_fqs = self.transitive_import_closure(import_roots);
+        // World imports: the faithful set the compiled component imports,
+        // computed post-DCE at the WIR layer and injected by the caller (WEP
+        // `wep-2026-05-02-wit-interoperability.md` §"Faithful imports"). This
+        // includes implicit runtime imports (e.g. `wasi:cli/stderr` for assert)
+        // and excludes type-alias-only interfaces — neither visible from the
+        // effect rows alone.
+        let import_fqs: BTreeSet<String> = opts.world_imports.iter().cloned().collect();
 
         // Partition exports into world-conformance entry points (`run` /
         // `handle`, which map to a standard export interface like
@@ -208,9 +198,11 @@ impl<'a> Emitter<'a> {
             user_funcs.push(self.render_function(export)?);
         }
 
-        // Record the referenced CM interfaces for `full`-scope inlining. The
-        // export interfaces' own transitive deps must be inlined too.
-        let mut referenced: BTreeSet<String> = import_fqs.clone();
+        // `full`-scope nested-package bodies need the full type closure over the
+        // imports and exports — a superset of the world import list, because a
+        // `use duration` reference pulls in `wasi:clocks/types` even though the
+        // component does not import that type-alias-only interface.
+        let mut referenced: BTreeSet<String> = self.transitive_import_closure(import_fqs.clone());
         referenced.extend(self.transitive_import_closure(export_fqs.clone()));
         self.referenced_interfaces = referenced;
 
@@ -287,19 +279,10 @@ impl<'a> Emitter<'a> {
                     .iter()
                     .map(|p| (p.name.clone(), p.type_id))
                     .collect();
-                let effects = func
-                    .effects
-                    .iter()
-                    .filter_map(|e| match e {
-                        EffectRef::Concrete { name, .. } => Some(name.clone()),
-                        EffectRef::Param { .. } => None,
-                    })
-                    .collect();
                 out.push(ExportedFn {
                     name: func.name.clone(),
                     params,
                     return_type: func.return_type,
-                    effects,
                 });
             }
         }
