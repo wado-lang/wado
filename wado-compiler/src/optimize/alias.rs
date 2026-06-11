@@ -129,6 +129,28 @@ pub(super) fn build_alias_info(
     }
 }
 
+/// The `aliased` and `untrackable` local sets the `ValueGraph` builder needs,
+/// as plain `IndexSet`s (the builder is below the `optimize` layer and does
+/// not depend on `niri`'s `LocalSet`). A thin wrapper over [`build_alias_info`]
+/// so every engine-driven pass feeds the builder the same alias view the
+/// const-fold visitor uses.
+pub(super) fn builder_alias_sets(
+    body: &Body,
+    locals: &[crate::nir::NirLocal],
+    address_taken_locals: &IndexSet<u32>,
+    stores_aliased_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+) -> (IndexSet<u32>, IndexSet<u32>) {
+    let info = build_alias_info(
+        body,
+        locals,
+        address_taken_locals,
+        stores_aliased_locals,
+        type_table,
+    );
+    (info.aliased.iter().collect(), info.untrackable.iter().collect())
+}
+
 /// Recognize `Call(helper, [arg])` where `helper` is a synthesized
 /// `$value_copy$T<id>` registered in the helpers map, reading the arena
 /// body. Returns the argument expression id so the caller can copy

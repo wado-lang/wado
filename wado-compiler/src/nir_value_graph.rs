@@ -51,8 +51,9 @@ impl OpaqueId {
 /// builder bumps the version on every `SkelTree` node that may write the heap;
 /// reads at the same `(receiver, field, heap_ver)` triple share a
 /// `ValueId`, automatically forwarding stored values. Granularity is
-/// per-field in the MVP.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
+/// per-`(receiver-root, field)`; `version_of` maxes the per-slot,
+/// per-local, per-field, and default generations, so `Ord` is required.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct HeapVersion(u32);
 
 impl HeapVersion {

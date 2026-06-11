@@ -986,18 +986,18 @@ fn "wado-compiler/tests/fixtures/http_fields_from_list_error.wado/__cm_binding__
     let ptr: i32;
     let len_25: i32;
     let arr_26: ref Array<u8>;
-    let _licm_used_27: i32;
     let _licm_repr_28: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>";
+    let __cse_31: bool;
     __entries_len = entries.used;
     __entries_base = "mem/realloc"(0, 0, 4, __entries_len * 16);
     __entries_i = 0;
-    _licm_used_27 = entries.used;
     _licm_repr_28 = entries.repr;
     b69: block {
         l70: loop {
-            break_if b69 __entries_i >= __entries_len;
+            __cse_31 = __entries_i >= __entries_len;
+            break_if b69 __cse_31;
             __entries_addr = __entries_base + (__entries_i * 16);
-            if @unlikely(__entries_i >= _licm_used_27) {
+            if @unlikely(__cse_31) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;

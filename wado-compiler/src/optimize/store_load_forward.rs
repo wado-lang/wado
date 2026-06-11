@@ -32,6 +32,7 @@ use cranelift_entity::EntityRef;
 use super::gate::{FunctionGate, GatedPass};
 
 pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let type_table = project.type_table.borrow();
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::StoreLoadForward, len, |fid| {
@@ -39,15 +40,29 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
         if func.body.is_none() {
             return false;
         }
-        // Forwarding-ineligible locals: the canonical sets plus the
-        // engine's body scan — the canonical sets are static elaboration
-        // records and go stale after `inline` / `ref_elim` copy `Ref`
-        // nodes (see `elide_local::ElideRule`).
+        // `Local`-read forwarding excludes address-taken / `stores`-aliased
+        // locals: the canonical sets plus the engine's body scan — the
+        // canonical sets are static elaboration records and go stale after
+        // `inline` / `ref_elim` copy `Ref` nodes (see `elide_local::ElideRule`).
         let mut unsafe_locals = func.address_taken_locals.clone();
         unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
-        let NirFunction { body, locals, .. } = &mut *func;
+        let NirFunction {
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            ..
+        } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let (aliased, untrackable) = super::alias::builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+        );
         let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_sets(aliased, untrackable);
         unsafe_locals.extend(engine.body_address_taken().iter().copied());
         let rule = StoreLoadForwardRule {
             applied: Cell::new(false),

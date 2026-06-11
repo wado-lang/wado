@@ -159,11 +159,22 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             body,
             locals,
             params,
+            address_taken_locals,
+            stores_aliased_locals,
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let (aliased, untrackable) = super::alias::builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+        );
+        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_param_locals(params.iter().map(|p| p.local_index).collect());
+        engine.set_alias_sets(aliased, untrackable);
+        engine.set_param_locals(param_locals);
         engine.run(&[&rule])
     })
 }

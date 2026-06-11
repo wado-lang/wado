@@ -39,23 +39,34 @@ use super::{HeapVersion, ValueId, ValuePool};
 
 /// Per-function heap-version tracker. The builder threads one `HeapState`
 /// through the walk; on every Skel node that may write the heap, the
-/// appropriate field's version (or every field's version, for opaque
-/// writes) bumps to a fresh value.
+/// appropriate generation bumps to a fresh value. A read's effective
+/// version is the max of every generation that could cover it
+/// ([`HeapState::version_of`]); `field_store` keys carry that version, so a
+/// stale seed is naturally unreachable once any covering generation bumps.
 ///
-/// Granularity is per `field_index`: a direct write to `obj.f` bumps the
-/// `f` slot only, so a later read of `obj.g` keeps its prior version and
-/// shares a `ValueId` with earlier reads. Opaque writes (Call,
-/// `Index` / `Deref` assign target, Loop entry) call
-/// [`HeapState::bump_all`], invalidating every field; branch endpoints
-/// join per arm instead ([`Builder::join_heap`]). Refinement to
-/// `(receiver_root, field)` granularity via `mod_ref.rs` is a follow-up.
+/// Granularity is per-`(receiver-root, field)`:
+/// - `per_slot[(root, field)]` — bumped by a direct `root.field = …` store
+///   on a non-aliased bare-`Local` receiver, so a write to `a.f` leaves
+///   `b.f` (a different object, same `field_index`) untouched.
+/// - `per_local[root]` — bumped when every field of `root` may have changed:
+///   a call while `root` is reference-aliased (the callee can reach its
+///   object). Non-aliased locals' fields survive a call.
+/// - `field_global[field]` — bumped by a write to `field` through an
+///   aliased or non-bare-`Local` receiver (`a.b.f`, `r.f` for a reference
+///   `r`): every alias of that field is invalidated without tracking which
+///   locals alias which.
+/// - `default_version` — covers everything; [`HeapState::bump_all`] advances
+///   it for truly opaque writes (deref / index store, global set, indirect
+///   call, loop entry).
+///
+/// Branch endpoints join per arm instead of bumping ([`Builder::join_heap`]).
 struct HeapState {
     /// Next fresh version to hand out.
     next: HeapVersion,
-    /// Current version of each `field_index` we have seen written.
-    per_field: IndexMap<u32, HeapVersion>,
-    /// Version returned for `field_indices` not yet in `per_field`.
-    /// `bump_all` advances this; `bump_field` does not.
+    per_slot: IndexMap<(u32, u32), HeapVersion>,
+    per_local: IndexMap<u32, HeapVersion>,
+    field_global: IndexMap<u32, HeapVersion>,
+    /// Version covering slots in none of the maps above.
     default_version: HeapVersion,
 }
 
@@ -63,7 +74,9 @@ impl HeapState {
     fn new() -> Self {
         Self {
             next: HeapVersion::INITIAL.bump(),
-            per_field: IndexMap::default(),
+            per_slot: IndexMap::default(),
+            per_local: IndexMap::default(),
+            field_global: IndexMap::default(),
             default_version: HeapVersion::INITIAL,
         }
     }
@@ -74,54 +87,75 @@ impl HeapState {
         v
     }
 
-    fn version_of(&self, field_index: u32) -> HeapVersion {
-        self.per_field
-            .get(&field_index)
-            .copied()
-            .unwrap_or(self.default_version)
+    /// The effective version a read of `root.field` sees: the max of every
+    /// generation that could have invalidated it. `root` is `None` when the
+    /// receiver is not a determinable bare `Local`, so per-slot / per-local
+    /// precision does not apply — only `field_global` and `default`.
+    fn version_of(&self, root: Option<u32>, field: u32) -> HeapVersion {
+        let mut v = self.default_version;
+        if let Some(&fg) = self.field_global.get(&field) {
+            v = v.max(fg);
+        }
+        if let Some(r) = root {
+            if let Some(&pl) = self.per_local.get(&r) {
+                v = v.max(pl);
+            }
+            if let Some(&ps) = self.per_slot.get(&(r, field)) {
+                v = v.max(ps);
+            }
+        }
+        v
     }
 
-    fn bump_field(&mut self, field_index: u32) {
+    fn bump_slot(&mut self, root: u32, field: u32) {
         let v = self.fresh();
-        self.per_field.insert(field_index, v);
+        self.per_slot.insert((root, field), v);
+    }
+
+    fn bump_local(&mut self, root: u32) {
+        let v = self.fresh();
+        self.per_local.insert(root, v);
+    }
+
+    fn bump_field_global(&mut self, field: u32) {
+        let v = self.fresh();
+        self.field_global.insert(field, v);
     }
 
     fn bump_all(&mut self) {
         let v = self.fresh();
-        self.per_field.clear();
+        self.per_slot.clear();
+        self.per_local.clear();
+        self.field_global.clear();
         self.default_version = v;
     }
 
-    /// Snapshot the read-visible state (`per_field`, `default_version`)
-    /// only. `next` is a monotonic counter shared across the whole
-    /// function, so arms restored from the snapshot never reuse a version
-    /// another arm allocated.
+    /// Snapshot the read-visible state only. `next` is a monotonic counter
+    /// shared across the whole function, so arms restored from the snapshot
+    /// never reuse a version another arm allocated.
     fn snapshot(&self) -> HeapSnapshot {
         HeapSnapshot {
-            per_field: self.per_field.clone(),
+            per_slot: self.per_slot.clone(),
+            per_local: self.per_local.clone(),
+            field_global: self.field_global.clone(),
             default_version: self.default_version,
         }
     }
 
     fn restore(&mut self, snap: HeapSnapshot) {
-        self.per_field = snap.per_field;
+        self.per_slot = snap.per_slot;
+        self.per_local = snap.per_local;
+        self.field_global = snap.field_global;
         self.default_version = snap.default_version;
     }
 }
 
 #[derive(Clone)]
 struct HeapSnapshot {
-    per_field: IndexMap<u32, HeapVersion>,
+    per_slot: IndexMap<(u32, u32), HeapVersion>,
+    per_local: IndexMap<u32, HeapVersion>,
+    field_global: IndexMap<u32, HeapVersion>,
     default_version: HeapVersion,
-}
-
-impl HeapSnapshot {
-    fn version_of(&self, field_index: u32) -> HeapVersion {
-        self.per_field
-            .get(&field_index)
-            .copied()
-            .unwrap_or(self.default_version)
-    }
 }
 
 /// The result of running [`build`] over a function body: the populated
@@ -158,14 +192,22 @@ pub struct ValueGraphBuild {
 /// seeding makes parameters visible in the loop-entry snapshots
 /// (`loop_entry_values`), which are taken before any in-loop read.
 ///
-/// Field store→load seeding needs no alias exclusion: the heap version is
-/// global per `field_index`, so *any* write to field `f` — through any
-/// receiver or reference alias — bumps the `f` version and invalidates every
-/// prior `f` store, and calls / deref / global writes `bump_all`. A read at
-/// the post-write version therefore never forwards a stale value, so an
-/// aliased receiver's fields are seeded exactly like any other's.
-pub fn build(body: &Body, param_locals: &[u32]) -> ValueGraphBuild {
-    let mut b = Builder::new(body);
+/// `aliased` are locals whose object is reference-aliased — address-taken,
+/// `with stores[p]`, or reference-typed (`let r = &x`, `Box`, `List`, `&T`).
+/// A write to such a local's field, or a call that may reach its object,
+/// invalidates the field through the conservative `field_global` / `per_local`
+/// generations rather than the precise `per_slot` one. `untrackable` is the
+/// `stores`-aliased subset whose fields are never seeded (their aliasing
+/// escapes entirely). A non-aliased local's object is reachable only through
+/// that local, so its `per_slot` fields survive calls and other objects'
+/// same-`field_index` writes (see [`HeapState`]).
+pub fn build(
+    body: &Body,
+    param_locals: &[u32],
+    aliased: &crate::hashmap::IndexSet<u32>,
+    untrackable: &crate::hashmap::IndexSet<u32>,
+) -> ValueGraphBuild {
+    let mut b = Builder::new(body, aliased, untrackable);
     b.seed_params(param_locals);
     b.walk_block(body.root);
     ValueGraphBuild {
@@ -193,13 +235,22 @@ struct Builder<'a> {
     /// Versions are monotonic and never reused, so a write or branch join
     /// bumps past a stale entry — no invalidation needed.
     field_store: IndexMap<(ValueId, u32, HeapVersion), ValueId>,
+    /// Reference-aliased locals; their field writes / calls invalidate
+    /// conservatively. See [`build`].
+    aliased: crate::hashmap::IndexSet<u32>,
+    /// `stores`-aliased locals whose fields are never seeded. See [`build`].
+    untrackable: crate::hashmap::IndexSet<u32>,
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
 impl<'a> Builder<'a> {
-    fn new(body: &'a Body) -> Self {
+    fn new(
+        body: &'a Body,
+        aliased: &crate::hashmap::IndexSet<u32>,
+        untrackable: &crate::hashmap::IndexSet<u32>,
+    ) -> Self {
         Self {
             body,
             pool: ValuePool::new(),
@@ -208,7 +259,30 @@ impl<'a> Builder<'a> {
             heap_state: HeapState::new(),
             literal_source: IndexMap::default(),
             field_store: IndexMap::default(),
+            aliased: aliased.clone(),
+            untrackable: untrackable.clone(),
             loop_entry_values: IndexMap::default(),
+        }
+    }
+
+    /// The bare-`Local` root of a (possibly nested) field-access place, or
+    /// `None` if the receiver is not rooted in a `Local` (a call result, an
+    /// index, a deref, …). `a.b.f` roots at `a`.
+    fn receiver_root(&self, recv_expr: ExprId) -> Option<u32> {
+        match &self.body.exprs[recv_expr].kind {
+            ExprKind::Local { index, .. } => Some(*index),
+            ExprKind::FieldAccess { expr, .. } => self.receiver_root(*expr),
+            _ => None,
+        }
+    }
+
+    /// A direct / method call may mutate any field of any reference-aliased
+    /// local (the callee reaches its object via an escaped reference or a
+    /// global). Non-aliased locals' objects are unreachable, so their fields
+    /// survive; bump only the aliased locals' per-local generation.
+    fn bump_call_effects(&mut self) {
+        for &l in &self.aliased {
+            self.heap_state.bump_local(l);
         }
     }
 
@@ -237,7 +311,7 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
-                self.seed_struct_literal_fields(v, value);
+                self.seed_struct_literal_fields(local_index, v, value);
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
                 self.walk_expr(value);
@@ -424,25 +498,17 @@ impl<'a> Builder<'a> {
                 // value, so a write inside `value` must not be visible to
                 // those reads.
                 let target_kind = self.body.exprs[target].kind.clone();
-                // Capture the receiver's `ValueId` (and whether it is a
-                // seed-safe bare `Local`) for a `obj.f = …` store, so the
-                // post-bump version can be seeded for store→load forwarding.
-                let recv_seed = match &target_kind {
+                // Capture the field place's root local, receiver `ValueId`,
+                // and whether it is a bare `Local` — so the post-bump version
+                // can be seeded for store→load forwarding.
+                let field_place = match &target_kind {
                     ExprKind::Local { .. } => None,
                     ExprKind::FieldAccess { expr: recv, .. } => {
-                        let recv_local = match &self.body.exprs[*recv].kind {
-                            ExprKind::Local { index, .. } => Some(*index),
-                            _ => None,
-                        };
+                        let bare_local =
+                            matches!(&self.body.exprs[*recv].kind, ExprKind::Local { .. });
+                        let root = self.receiver_root(*recv);
                         let recv_v = self.walk_expr(*recv);
-                        // Seed only a bare `Local` receiver; a deeper place
-                        // (`a.b.f = …`) is left un-seeded so a later read
-                        // re-derives an opaque `FieldAccess`. Reference aliasing
-                        // needs no exclusion — see [`build`].
-                        match (recv_v, recv_local) {
-                            (Some(rv), Some(_)) => Some(rv),
-                            _ => None,
-                        }
+                        Some((root, recv_v, bare_local))
                     }
                     _ => {
                         self.walk_expr(target);
@@ -457,10 +523,28 @@ impl<'a> Builder<'a> {
                         self.current_value.insert(index, v);
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
-                        self.heap_state.bump_field(field_index);
-                        if let Some(recv_v) = recv_seed {
-                            let ver = self.heap_state.version_of(field_index);
-                            self.field_store.insert((recv_v, field_index, ver), v);
+                        let (root, recv_v, bare_local) = field_place.expect("field target");
+                        // A non-aliased bare-`Local` root takes the precise
+                        // per-slot bump — a write to `a.f` leaves every other
+                        // object's `f` untouched. An aliased root, or a deeper
+                        // place (`a.b.f`, whose pointee may be shared), bumps
+                        // the field globally so every alias of `f` is
+                        // invalidated.
+                        match root {
+                            Some(r) if bare_local && !self.aliased.contains(&r) => {
+                                self.heap_state.bump_slot(r, field_index);
+                            }
+                            _ => self.heap_state.bump_field_global(field_index),
+                        }
+                        // Seed forwarding for a bare-`Local`, non-`untrackable`
+                        // receiver: a later `recv.f` read at the same version
+                        // forwards `v`.
+                        if let (Some(rv), Some(r)) = (recv_v, root)
+                            && bare_local
+                            && !self.untrackable.contains(&r)
+                        {
+                            let ver = self.heap_state.version_of(Some(r), field_index);
+                            self.field_store.insert((rv, field_index, ver), v);
                         }
                     }
                     _ => {
@@ -566,8 +650,9 @@ impl<'a> Builder<'a> {
                 // The receiver must be a pure value for the FieldAccess to
                 // get a ValueId — an impure receiver (a Call result, for
                 // instance) propagates None.
+                let root = self.receiver_root(inner);
                 let recv = self.walk_expr(inner)?;
-                let heap_ver = self.heap_state.version_of(field_index);
+                let heap_ver = self.heap_state.version_of(root, field_index);
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
                 if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
@@ -617,13 +702,14 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_expr(a.expr);
                 }
-                self.heap_state.bump_all();
+                self.bump_call_effects();
                 None
             }
             ExprKind::CmRawCall { args, .. } => {
                 for a in args {
                     self.walk_expr(a);
                 }
+                // Raw CM calls have opaque captures; stay fully conservative.
                 self.heap_state.bump_all();
                 None
             }
@@ -632,7 +718,7 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_expr(a.expr);
                 }
-                self.heap_state.bump_all();
+                self.bump_call_effects();
                 None
             }
             ExprKind::IndirectCall { callee, args } => {
@@ -659,7 +745,11 @@ impl<'a> Builder<'a> {
     /// `LabeledBlock` whose only `break label:` is the trailing
     /// value-carrying statement (any other break to the label means
     /// multiple producers — stop, soundness over coverage).
-    fn seed_struct_literal_fields(&mut self, recv: ValueId, value_expr: ExprId) {
+    fn seed_struct_literal_fields(&mut self, root: u32, recv: ValueId, value_expr: ExprId) {
+        // `untrackable` (`stores`-aliased) receivers never seed.
+        if self.untrackable.contains(&root) {
+            return;
+        }
         let mut producer = value_expr;
         loop {
             match &self.body.exprs[producer].kind {
@@ -714,7 +804,7 @@ impl<'a> Builder<'a> {
         let pairs: Vec<(u32, ExprId)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
         for (field_index, field_value) in pairs {
             if let Some(&fv) = self.value_of.get(&field_value) {
-                let ver = self.heap_state.version_of(field_index);
+                let ver = self.heap_state.version_of(Some(root), field_index);
                 self.field_store.insert((recv, field_index, ver), fv);
             }
         }
@@ -828,11 +918,18 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Join the heap state at a branch endpoint: a field keeps its
-    /// pre-branch version iff every fall-through arm left it unchanged;
-    /// otherwise it bumps. Non-fall-through arms (terminated by `break` /
-    /// `return` / `continue`) are excluded — their writes never reach code
-    /// after the branch. No fall-through arm ⇒ post-state is `pre`.
+    /// Join the heap state at a branch endpoint: each overlay generation
+    /// keeps its pre-branch version iff every fall-through arm left it
+    /// unchanged; otherwise it bumps fresh. Non-fall-through arms (terminated
+    /// by `break` / `return` / `continue`) are excluded — their writes never
+    /// reach code after the branch. No fall-through arm ⇒ post-state is `pre`.
+    ///
+    /// Each of `per_slot` / `per_local` / `field_global` joins independently
+    /// (an absent overlay entry contributes the snapshot's `default_version`
+    /// in [`HeapState::version_of`], so the per-overlay join mirrors the
+    /// single-map case sharing the joined default). `version_of` maxes the
+    /// overlays, so a join that is too coarse only raises a read's version —
+    /// never lowers it below an arm's — keeping the join sound.
     fn join_heap(&mut self, pre: &HeapSnapshot, arms: &[(HeapSnapshot, bool)]) {
         let live: Vec<&HeapSnapshot> = arms
             .iter()
@@ -850,33 +947,71 @@ impl<'a> Builder<'a> {
         } else {
             pre.default_version
         };
-        let mut field_keys: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
-        for k in pre.per_field.keys() {
-            field_keys.insert(*k);
+        let new_per_slot = self.join_overlay(
+            new_default,
+            &pre.per_slot,
+            pre.default_version,
+            live.iter().map(|a| (&a.per_slot, a.default_version)),
+        );
+        let new_per_local = self.join_overlay(
+            new_default,
+            &pre.per_local,
+            pre.default_version,
+            live.iter().map(|a| (&a.per_local, a.default_version)),
+        );
+        let new_field_global = self.join_overlay(
+            new_default,
+            &pre.field_global,
+            pre.default_version,
+            live.iter().map(|a| (&a.field_global, a.default_version)),
+        );
+        self.heap_state.per_slot = new_per_slot;
+        self.heap_state.per_local = new_per_local;
+        self.heap_state.field_global = new_field_global;
+        self.heap_state.default_version = new_default;
+    }
+
+    /// Join one overlay map across the live arms. A key keeps its pre version
+    /// iff every arm's effective version (its own entry, else that arm's
+    /// `default_version`) equals the pre effective version; otherwise it
+    /// bumps fresh. Survivors equal to `new_default` are dropped (the default
+    /// already covers them); other survivors are pinned so a raised default
+    /// does not swallow them.
+    fn join_overlay<'s, K>(
+        &mut self,
+        new_default: HeapVersion,
+        pre_map: &IndexMap<K, HeapVersion>,
+        pre_default: HeapVersion,
+        arms: impl Iterator<Item = (&'s IndexMap<K, HeapVersion>, HeapVersion)> + Clone,
+    ) -> IndexMap<K, HeapVersion>
+    where
+        K: Copy + Eq + std::hash::Hash + 's,
+    {
+        let mut keys: crate::hashmap::IndexSet<K> = crate::hashmap::IndexSet::default();
+        for k in pre_map.keys() {
+            keys.insert(*k);
         }
-        for a in &live {
-            for k in a.per_field.keys() {
-                field_keys.insert(*k);
+        for (m, _) in arms.clone() {
+            for k in m.keys() {
+                keys.insert(*k);
             }
         }
-        let mut new_per_field: IndexMap<u32, HeapVersion> = IndexMap::default();
-        for f in field_keys {
-            let pre_v = pre.version_of(f);
-            let unchanged = live.iter().all(|a| a.version_of(f) == pre_v);
+        let mut out: IndexMap<K, HeapVersion> = IndexMap::default();
+        for k in keys {
+            let pre_v = pre_map.get(&k).copied().unwrap_or(pre_default);
+            let unchanged = arms
+                .clone()
+                .all(|(m, d)| m.get(&k).copied().unwrap_or(d) == pre_v);
             if unchanged {
-                // Only fields differing from the default need an explicit
-                // entry; a default-changed join must pin survivors so they
-                // are not read at the fresh default.
                 if pre_v != new_default {
-                    new_per_field.insert(f, pre_v);
+                    out.insert(k, pre_v);
                 }
             } else {
                 let fresh = self.heap_state.fresh();
-                new_per_field.insert(f, fresh);
+                out.insert(k, fresh);
             }
         }
-        self.heap_state.per_field = new_per_field;
-        self.heap_state.default_version = new_default;
+        out
     }
 
     /// Whether control can reach the bottom of `block`. Mirrors
@@ -1127,7 +1262,19 @@ mod tests {
 
     fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        build(body, &param_locals)
+        let empty = crate::hashmap::IndexSet::default();
+        build(body, &param_locals, &empty, &empty)
+    }
+
+    /// `build` with an explicit reference-aliased set (no `untrackable`).
+    fn build_aliased(
+        body: &Body,
+        params: &[NirParam],
+        aliased: &crate::hashmap::IndexSet<u32>,
+    ) -> ValueGraphBuild {
+        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
+        let empty = crate::hashmap::IndexSet::default();
+        build(body, &param_locals, aliased, &empty)
     }
 
     fn empty_body() -> Body {
@@ -1603,27 +1750,35 @@ mod tests {
     }
 
     #[test]
-    fn call_invalidates_all_fields() {
-        // fn(obj) {
-        //     let a = obj.f;
-        //     foo();
-        //     let a2 = obj.f;  // bump_all invalidates -> distinct VN
-        // }
-        let mut body = empty_body();
-        let recv1 = local_ref(&mut body, 0);
-        let read1 = field_access(&mut body, recv1, 0);
-        let let_1 = let_stmt(&mut body, 1, read1, false);
-
-        let call = call_void(&mut body);
-        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
-
-        let recv2 = local_ref(&mut body, 0);
-        let read2 = field_access(&mut body, recv2, 0);
-        let let_2 = let_stmt(&mut body, 2, read2, false);
-
-        root_with(&mut body, vec![let_1, call_s, let_2]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_ne!(r.value_of[&read1], r.value_of[&read2]);
+    fn call_invalidates_aliased_fields_only() {
+        // fn(obj) { let a = obj.f; foo(); let a2 = obj.f; }
+        // A call may reach a reference-aliased object, so an aliased `obj`'s
+        // field re-derives across the call (distinct VN). A non-aliased
+        // `obj`'s object is unreachable, so its field survives (same VN).
+        let build_call_straddle = |aliased: Option<u32>| {
+            let mut body = empty_body();
+            let recv1 = local_ref(&mut body, 0);
+            let read1 = field_access(&mut body, recv1, 0);
+            let let_1 = let_stmt(&mut body, 1, read1, false);
+            let call = call_void(&mut body);
+            let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+            let recv2 = local_ref(&mut body, 0);
+            let read2 = field_access(&mut body, recv2, 0);
+            let let_2 = let_stmt(&mut body, 2, read2, false);
+            root_with(&mut body, vec![let_1, call_s, let_2]);
+            let mut set = crate::hashmap::IndexSet::default();
+            if let Some(idx) = aliased {
+                set.insert(idx);
+            }
+            let r = build_aliased(&body, &[param_seed()], &set);
+            (r.value_of[&read1], r.value_of[&read2])
+        };
+        // Aliased `obj`: the call invalidates its field.
+        let (a1, a2) = build_call_straddle(Some(0));
+        assert_ne!(a1, a2);
+        // Non-aliased `obj`: the field survives the call.
+        let (n1, n2) = build_call_straddle(None);
+        assert_eq!(n1, n2);
     }
 
     #[test]
@@ -1953,8 +2108,34 @@ mod tests {
     }
 
     #[test]
-    fn field_store_does_not_forward_across_call() {
-        // fn(obj) { obj.f = 7; foo(); let y = obj.f; } -> opaque read
+    fn aliased_field_store_does_not_forward_across_call() {
+        // fn(obj) { obj.f = 7; foo(); let y = obj.f; } with `obj`
+        // reference-aliased -> the call may reach obj's object, so the read
+        // re-derives (opaque).
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, call_s, let_y]);
+        let mut aliased = crate::hashmap::IndexSet::default();
+        aliased.insert(0u32);
+        let r = build_aliased(&body, &[param_seed()], &aliased);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn nonaliased_field_store_forwards_across_call() {
+        // Same body with `obj` NOT aliased: `foo()` cannot reach obj's object
+        // (it never escaped), so `obj.f` still forwards 7 across the call —
+        // the per-(root, field) precision the global model lacked.
         let mut body = empty_body();
         let recv_w = local_ref(&mut body, 0);
         let seven = int_lit(&mut body, 7);
@@ -1966,10 +2147,7 @@ mod tests {
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, call_s, let_y]);
         let r = build_t(&body, &[param_seed()]);
-        assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
-            ValueKind::FieldAccess { .. }
-        ));
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
     }
 
     #[test]
@@ -2060,9 +2238,8 @@ mod tests {
     fn aliased_receiver_is_seeded_without_intervening_write() {
         // fn(obj) { obj.f = 7; let y = obj.f; } — even if `obj` is
         // reference-aliased, no heap write intervenes, so `obj.f` forwards 7.
-        // Reference aliasing needs no special handling: any write through any
-        // alias bumps the global per-field version (see the soundness test
-        // `other_receiver_same_field_write_blocks_forward`).
+        // A later aliased write would invalidate it (see the soundness test
+        // `aliased_other_receiver_same_field_blocks_forward`).
         let mut body = empty_body();
         let recv_w = local_ref(&mut body, 0);
         let seven = int_lit(&mut body, 7);
@@ -2131,13 +2308,11 @@ mod tests {
     }
 
     #[test]
-    fn other_receiver_same_field_write_blocks_forward() {
+    fn nonaliased_other_receiver_same_field_forwards() {
         // fn(a, b) { a.f = 1; b.f = 5; let y = a.f; }
-        // Even if `b` aliases `a` at runtime (e.g. `b = &a`), the write
-        // `b.f = 5` bumps the global per-field version, so the later `a.f`
-        // read does NOT forward the stale 1 — it re-derives an opaque
-        // `FieldAccess`. This is the soundness guarantee that lets the builder
-        // seed aliased receivers without a per-alias exclusion.
+        // `a` and `b` are distinct non-aliased objects, so `b.f = 5` bumps
+        // only `b`'s per-slot generation; `a.f` forwards 1 (the same-layout
+        // precision the global per-field model lost).
         let mut body = empty_body();
         let recv_a_w = local_ref(&mut body, 0);
         let one = int_lit(&mut body, 1);
@@ -2150,6 +2325,30 @@ mod tests {
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![write_a, write_b, let_y]);
         let r = build_t(&body, &[param_seed()]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+    }
+
+    #[test]
+    fn aliased_other_receiver_same_field_blocks_forward() {
+        // fn(a, b) { a.f = 1; b.f = 5; let y = a.f; } with `b` reference-
+        // aliased (e.g. `b = &a`). A write through an aliased receiver bumps
+        // the field globally — every alias of `f` is invalidated — so `a.f`
+        // re-derives instead of forwarding the stale 1. This is the soundness
+        // guarantee the per-slot precision relies on.
+        let mut body = empty_body();
+        let recv_a_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let write_a = field_assign_stmt(&mut body, recv_a_w, 0, one);
+        let recv_b_w = local_ref(&mut body, 1);
+        let five = int_lit(&mut body, 5);
+        let write_b = field_assign_stmt(&mut body, recv_b_w, 0, five);
+        let recv_a_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_a_r, 0);
+        let let_y = let_stmt(&mut body, 2, read, false);
+        root_with(&mut body, vec![write_a, write_b, let_y]);
+        let mut aliased = crate::hashmap::IndexSet::default();
+        aliased.insert(1u32);
+        let r = build_aliased(&body, &[param_seed()], &aliased);
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }

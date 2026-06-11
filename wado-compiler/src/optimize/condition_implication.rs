@@ -45,6 +45,7 @@ use cranelift_entity::EntityRef;
 use super::gate::{FunctionGate, GatedPass};
 
 pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let type_table = project.type_table.borrow();
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ConditionImplication, len, |fid| {
@@ -55,9 +56,23 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut Functio
         let rule = ConditionImplicationRule {
             applied: Cell::new(false),
         };
-        let NirFunction { body, locals, .. } = &mut *func;
+        let NirFunction {
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            ..
+        } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let (aliased, untrackable) = super::alias::builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+        );
         let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_sets(aliased, untrackable);
         engine.run(&[&rule])
     })
 }

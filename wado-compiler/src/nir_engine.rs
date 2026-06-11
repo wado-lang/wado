@@ -103,6 +103,14 @@ pub struct Engine<'a> {
     /// edits rescans. Consumed by `Local`-read exclusions
     /// (`store_load_forward`, licm's arithmetic hoist).
     body_address_taken: Option<IndexSet<u32>>,
+    /// Reference-aliased locals (address-taken / `with stores[p]` /
+    /// reference-typed). The `ValueGraph` builder invalidates these
+    /// conservatively across field writes and calls; non-aliased locals get
+    /// precise per-`(root, field)` forwarding. Empty unless a pass supplies it
+    /// via [`Engine::set_alias_sets`] before the first `value` query.
+    aliased_locals: IndexSet<u32>,
+    /// The `stores`-aliased subset whose fields are never seeded.
+    untrackable_locals: IndexSet<u32>,
     /// Parameter local indices, seeded as stable `Opaque`s. Only up-front
     /// seeding makes parameters visible in the loop-entry snapshots, so
     /// passes consuming [`Engine::loop_entry_value`] must call
@@ -128,6 +136,8 @@ impl<'a> Engine<'a> {
             locals,
             value_graph: None,
             body_address_taken: None,
+            aliased_locals: IndexSet::default(),
+            untrackable_locals: IndexSet::default(),
             param_locals: Vec::new(),
         };
         engine.build_parents();
@@ -226,11 +236,30 @@ impl<'a> Engine<'a> {
         }
     }
 
+    /// Record the function's reference-aliased and `stores`-aliased locals so
+    /// the lazily-built `ValueGraph` invalidates field forwarding for them at
+    /// the right granularity. Must be called before the first value query; a
+    /// later change forces a rebuild on next query. Without it the builder
+    /// treats every receiver as non-aliased — sound only when the function has
+    /// no reference aliasing, so passes that may see aliasing must supply it.
+    pub fn set_alias_sets(&mut self, aliased: IndexSet<u32>, untrackable: IndexSet<u32>) {
+        if self.aliased_locals != aliased || self.untrackable_locals != untrackable {
+            self.aliased_locals = aliased;
+            self.untrackable_locals = untrackable;
+            self.value_graph = None;
+        }
+    }
+
     fn ensure_value_graph(&mut self) {
         if self.value_graph.is_some() {
             return;
         }
-        let build = crate::nir_value_graph::builder::build(&*self.body, &self.param_locals);
+        let build = crate::nir_value_graph::builder::build(
+            &*self.body,
+            &self.param_locals,
+            &self.aliased_locals,
+            &self.untrackable_locals,
+        );
         self.value_graph = Some(build);
     }
 

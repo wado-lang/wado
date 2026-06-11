@@ -979,19 +979,19 @@ fn "wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_set"(
     let ptr: i32;
     let len_26: i32;
     let arr_27: ref Array<u8>;
-    let _licm_used_28: i32;
     let _licm_repr_29: ref "Array<core:prelude/list.wado/List<u8>>";
+    let __cse_32: bool;
     __name_packed = "core:internal/cm_lower_string"(name);
     __value_len = value.used;
     __value_base = "mem/realloc"(0, 0, 4, __value_len * 8);
     __value_i = 0;
-    _licm_used_28 = value.used;
     _licm_repr_29 = value.repr;
     b71: block {
         l72: loop {
-            break_if b71 __value_i >= __value_len;
+            __cse_32 = __value_i >= __value_len;
+            break_if b71 __cse_32;
             __value_addr = __value_base + (__value_i * 8);
-            if @unlikely(__value_i >= _licm_used_28) {
+            if @unlikely(__cse_32) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
