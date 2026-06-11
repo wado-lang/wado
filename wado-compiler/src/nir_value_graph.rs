@@ -52,7 +52,7 @@ impl OpaqueId {
 /// reads at the same `(receiver, field, heap_ver)` triple share a
 /// `ValueId`, automatically forwarding stored values. Granularity is
 /// per-field in the MVP.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct HeapVersion(u32);
 
 impl HeapVersion {
