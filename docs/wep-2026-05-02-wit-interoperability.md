@@ -373,8 +373,9 @@ scope = "local"   # override the built-in `full` default
 ```
 
 `[wit].scope` only changes which scope is used; it never decides _whether_
-WIT is embedded. The resolution order is: explicit CLI flag, then
-`[wit].scope`, then the built-in `full`.
+WIT is embedded (see "Embedding policy" below for that). When WIT _is_
+embedded, the scope resolution order is: explicit `--embed-wit=<scope>`,
+then `[wit].scope`, then the built-in `full`.
 
 Stdlib interfaces under `lib/wasi/**` are emitted with the same machinery
 as user interfaces; there is no special-case "stdlib" code path. Each
@@ -416,6 +417,13 @@ compile` embeds WIT by default** — with or without a `wado.toml`. The
 manifest is a tuning knob for the _scope_ (`full` vs `local`), never the
 switch that turns embedding on. `--no-wit` is the single, explicit
 opt-out.
+
+`-Os` is the exception: it is the production build for frontend delivery
+(`jco`-transpiled to core Wasm + JS for the browser), where the WIT
+metadata is dead weight that never reaches a CM host. So `-Os` defaults
+to no embedding, exactly as if `--no-wit` were passed. An explicit
+`--embed-wit=<scope>` still forces embedding under `-Os` for the rare
+case that wants both the smallest symbols and a self-describing component.
 
 Embedding is a property of producing a distributable artifact, so it
 applies to `wado compile` only. `wado run`, `wado serve`, and `wado test`
@@ -508,7 +516,9 @@ Each phase ends with green E2E tests for the listed fixtures.
         `wit_component::metadata::encode` → custom-section append.
   - [ ] `--embed-wit=<scope>` and `--no-wit` flags on `CompileOptions`,
         mutually exclusive; embedding defaults to `full` when neither is
-        given. `wado run` / `serve` / `test` never embed.
+        given, except under `-Os` which defaults to no embedding (an
+        explicit `--embed-wit` still forces it). `wado run` / `serve` /
+        `test` never embed.
   - [ ] Postprocess hook in `codegen/postprocess.rs` (or the immediate
         caller of `build_component`).
   - [ ] Round-trip fixture: for every Phase 1 fixture, compile (default
