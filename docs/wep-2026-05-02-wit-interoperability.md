@@ -383,6 +383,64 @@ Stdlib interfaces under `lib/wasi/**` are emitted with the same machinery
 as user interfaces; there is no special-case "stdlib" code path. Each
 `pub interface` is a uniform building block.
 
+### Faithful imports: a WIR-level component interface plan
+
+The world's import set must equal what the compiled component actually
+imports — otherwise the embedded `component-type` (Phase 2) misrepresents
+the binary. Verification across the example/benchmark corpus showed the
+first cut (deriving imports from exported functions' effect rows plus a
+type-reference closure) is _not_ faithful in two ways:
+
+- It over-includes interfaces that only contribute a type _alias_ (e.g.
+  `wasi:clocks/types`, which provides `duration = u64`). A type alias is
+  transparent and creates no component import.
+- It misses implicit runtime imports — chiefly `wasi:cli/stderr`, which the
+  `assert` / panic path writes to even though no `with` clause names it.
+
+Both stem from deriving the set semantically. The authoritative set is the
+one the codegen import logic already computes from `used_wasi_functions`
+(the DCE-populated set of called functions, which _does_ include the
+implicit `Stderr::write_via_stream`) plus the registry. Re-deriving it in
+the emitter would duplicate that logic and risk divergence; reading it back
+from the emitted component bytes is redundant work.
+
+Decision: the complete import/export interface set is built once, as
+structured data, at the WIR layer, and codegen merely emits it. This
+restores the `codegen.rs` principle ("emit `Package` as is, without
+knowledge of earlier phases"), which the current four-phase import logic in
+`codegen/component.rs` (`generate_cm_imports` + the resource-deferral phases
+
+- the HTTP phase, lines ~1715–3305) violates.
+
+Mechanics:
+
+- The decision depends on `used_wasi_functions`, populated post-DCE
+  (`optimize/dce.rs`), so the plan is built _after_ DCE — later than the
+  current `ComponentPlan`, which is built pre-DCE and carries exports only.
+- The plan enumerates, in deterministic order, the imported CM interface
+  FQs and, per interface, the functions / resources / types to expose; plus
+  the exported interface FQs (already available via
+  `WorldInfo::exports[].from_interface_fq`).
+- Imported FQ rule (mirrors today's codegen): `wasi:cli/types` when any WASI
+  function is used (shared `error-code`); every interface with a function in
+  `used_wasi_functions`; the resource-defining interfaces for resources
+  those signatures reference (transitively); and `wasi:http/{types,client}`
+  under the HTTP-handler / `Client` conditions.
+- `wado wit` and the Phase 2 embedder both read this plan for the world's
+  `import` / `export` refs. `full`-scope nested-package bodies stay a
+  type-closure over those FQs (which _does_ follow type aliases, so the
+  `use duration` reference resolves), kept separate from the import set.
+
+Rollout (each step gated by the full E2E suite):
+
+- [ ] R1 — Build the plan post-DCE as additive structured data on
+      `NirPackage`; validate it equals the real component's import/export
+      sections across the example/benchmark corpus. Codegen unchanged.
+- [ ] R2 — Rewire codegen to emit from the plan; delete the duplicated
+      decision logic so codegen only encodes.
+- [ ] R3 — Point the WIT emitter (and Phase 2) at the plan for world refs,
+      replacing the effect-row derivation.
+
 ### Embedding target and format
 
 Wado emits a complete component in a single pass, so there is no
