@@ -124,6 +124,24 @@ impl TriviaMap {
         &self.dangling
     }
 
+    /// Every comment across all buckets, sorted by source position. Used by
+    /// the unparser to emit interior comments positionally where node-keyed
+    /// lookup is insufficient (e.g. a comment attached to a descendant of a
+    /// collection element).
+    pub fn all_comments(&self) -> Vec<Comment> {
+        let mut all: Vec<Comment> = self
+            .leading
+            .values()
+            .chain(self.trailing.values())
+            .chain(self.inner_tail.values())
+            .flatten()
+            .chain(self.dangling.iter())
+            .cloned()
+            .collect();
+        all.sort_by_key(|c| c.span.start);
+        all
+    }
+
     /// Drop every leading-trivia entry whose key is `>= threshold`.
     /// Used by the parser when a speculative branch backtracks: the
     /// AST ids it allocated are about to be re-issued, so any trivia
@@ -199,10 +217,19 @@ impl NodeLookup {
             }
         }
         let bucket = self.by_end_line.get(&c.span.line)?;
+        // Largest end, then smallest start. On a full tie (a node and a child
+        // sharing the exact span, e.g. an expression statement and its sole
+        // expression) keep the first — the outermost — since the unparser emits
+        // trailing comments at statement/item granularity. `fold` keeps the
+        // earlier candidate on ties; `max_by_key` would keep the later (inner).
+        let key = |s: &Span| (s.end, std::cmp::Reverse(s.start));
         bucket
             .iter()
             .filter(|(_, s)| s.end <= c.span.start)
-            .max_by_key(|(_, s)| (s.end, std::cmp::Reverse(s.start)))
+            .fold(None, |best: Option<&(AstId, Span)>, cand| match best {
+                Some(b) if key(&b.1) >= key(&cand.1) => best,
+                _ => Some(cand),
+            })
             .map(|(id, _)| *id)
     }
 }

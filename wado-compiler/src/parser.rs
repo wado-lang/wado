@@ -2933,7 +2933,20 @@ impl Parser {
     // Expression parsing with precedence climbing
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
-        self.parse_assignment_expr()
+        let expr = self.parse_assignment_expr()?;
+        // A `matches` left over after a full expression means a lower-precedence
+        // scrutinee (`x as T`, `-x`, `a + b`) that postfix `matches` can't bind.
+        // Suggest parens instead of a bare "expected `;`".
+        if self.check(&TokenKind::Matches) {
+            return Err(ParseError {
+                message: "`matches` binds tighter than unary, `as`, and binary \
+                          operators; parenthesize the scrutinee: \
+                          `(expr) matches { pattern }`"
+                    .to_owned(),
+                span: self.peek().span,
+            });
+        }
+        Ok(expr)
     }
 
     /// Parse assignment expression: `target = value` or `target op= value`
@@ -3275,14 +3288,16 @@ impl Parser {
     fn parse_cast_expr(&mut self) -> ParseResult<Expr> {
         let mut expr = self.parse_unary_expr()?;
         while *self.peek_kind() == TokenKind::As {
-            let start_span = self.peek().span;
             self.advance();
             let target_type = self.parse_type()?;
+            // Span the operand through the target type, not just the `as` token,
+            // so the target type node can't steal a trailing comment.
+            let span = expr.span().merge(&target_type.span());
             expr = Expr::Cast(Box::new(CastExpr {
                 id: self.alloc_ast_id(),
                 expr,
                 target_type,
-                span: start_span,
+                span,
             }));
         }
         Ok(expr)
@@ -4481,22 +4496,26 @@ impl Parser {
             if self.check(&TokenKind::Lt) {
                 self.advance();
                 let args = self.parse_type_args()?;
+                // Span through the closing `>`; otherwise an inner type-arg node
+                // to the right wins trailing-comment ownership (drops the comment).
+                let end_span = self.tokens[self.pos - 1].span;
 
                 return Ok(Type::NamespacedGeneric(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
                     args,
-                    span: start_span,
+                    span: start_span.merge(&end_span),
                 }));
             } else {
                 // Namespaced type without generics: namespace::type
+                let end_span = self.tokens[self.pos - 1].span;
                 return Ok(Type::NamespacedGeneric(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
                     args: Vec::new(),
-                    span: start_span,
+                    span: start_span.merge(&end_span),
                 }));
             }
         }
@@ -4504,12 +4523,14 @@ impl Parser {
         if self.check(&TokenKind::Lt) {
             self.advance();
             let args = self.parse_type_args()?;
+            // Span through the closing `>` (see the namespaced case above).
+            let end_span = self.tokens[self.pos - 1].span;
 
             Ok(Type::Generic(GenericType {
                 id: self.alloc_ast_id(),
                 name,
                 args,
-                span: start_span,
+                span: start_span.merge(&end_span),
             }))
         } else {
             Ok(Type::Named(NamedType {
@@ -5075,6 +5096,10 @@ impl Parser {
         // - Scalar: `Some(T)` (single type in parentheses)
         // - Tuple: `Rectangle([f64, f64])` (tuple type as single payload)
         // - Struct: `Named({ w: f64, h: f64 })` (struct type as single payload)
+        // Span end: the closing `)` when present, else the case name. Using the
+        // payload type's end instead would stop short of `)`, letting an inner
+        // type node steal a trailing comment (see the generic-type span fix).
+        let mut last_end = name_span;
         let payload = if self.check(&TokenKind::LParen) {
             self.advance();
             let payload_type = self.parse_type()?;
@@ -5085,16 +5110,12 @@ impl Parser {
                     span: self.peek().span,
                 });
             }
-            self.expect(&TokenKind::RParen)?;
+            last_end = self.expect(&TokenKind::RParen)?.span;
             Some(payload_type)
         } else {
             None
         };
 
-        // Case span covers the full extent — start through the payload
-        // type's end, when present. A start-only span would leave the
-        // payload's descendant ids extending past the parent.
-        let last_end = payload.as_ref().map_or(name_span, Type::span);
         let span = start_span.merge(&last_end);
 
         Ok(VariantCase {
@@ -5147,7 +5168,9 @@ impl Parser {
         }
         self.expect(&TokenKind::Eq)?;
         let ty = self.parse_type()?;
-        self.expect(&TokenKind::Semicolon)?;
+        // Span through the `;`, not just the `type` keyword, so the RHS type
+        // node can't steal a trailing comment.
+        let end_span = self.expect(&TokenKind::Semicolon)?.span;
         Ok(Item::Newtype(Newtype {
             id,
             name,
@@ -5156,7 +5179,7 @@ impl Parser {
             type_params,
             ty,
             attrs,
-            span: start_span,
+            span: start_span.merge(&end_span),
         }))
     }
 
@@ -5925,6 +5948,23 @@ mod tests {
         let module = parser.parse();
         let errors = parser.take_errors();
         (module, errors)
+    }
+
+    /// A `matches` on a lower-precedence scrutinee (`x as i32`) should suggest
+    /// parentheses, not emit a bare "expected `;`".
+    #[test]
+    fn test_matches_on_low_precedence_scrutinee_suggests_parens() {
+        for src in [
+            "fn r() -> bool { return x as i32 matches { 0 }; }",
+            "fn r() -> bool { return x as i32 matches { 0 } }",
+        ] {
+            let err = parse(src).unwrap_err();
+            assert!(
+                err.message.contains("parenthe"),
+                "expected a parenthesization hint, got: {}",
+                err.message
+            );
+        }
     }
 
     #[test]

@@ -1150,7 +1150,46 @@ pub fn format(source: &str) -> Result<String, CompileError> {
 
     // Unparse (no lowering - preserve high-level constructs)
     let unparser = unparse::Unparser::new().with_trivia(&trivia);
-    Ok(unparser.unparse(&ast))
+    let formatted = unparser.unparse(&ast);
+
+    // Refuse to emit output that loses a comment (comments are node-attached,
+    // so one wedged between tokens can be dropped).
+    if let Some(missing) = dropped_comment(source, &formatted) {
+        return Err(CompileError::Format {
+            message: format!("formatting would drop a comment ({missing})"),
+        });
+    }
+    Ok(formatted)
+}
+
+/// A comment present in `before` but missing from `after` (by delimiter+text
+/// multiset; `emit_comment` is verbatim so relocation keeps the same key).
+fn dropped_comment(before: &str, after: &str) -> Option<String> {
+    use std::collections::HashMap;
+    fn delim(kind: comment::CommentKind) -> &'static str {
+        match kind {
+            comment::CommentKind::Line => "//",
+            comment::CommentKind::DocLine => "///",
+            comment::CommentKind::ModuleDoc => "//!",
+            comment::CommentKind::Block => "/*",
+        }
+    }
+    fn bag(src: &str) -> HashMap<(&'static str, String), usize> {
+        let mut bag = HashMap::new();
+        for c in lexer::lex(src).comments {
+            *bag.entry((delim(c.kind), c.text)).or_default() += 1;
+        }
+        bag
+    }
+    let after_bag = bag(after);
+    for (key, before_count) in bag(before) {
+        if before_count > after_bag.get(&key).copied().unwrap_or(0) {
+            let (delim, text) = key;
+            let snippet: String = text.trim().chars().take(40).collect();
+            return Some(format!("`{delim}{snippet}`"));
+        }
+    }
+    None
 }
 
 /// Result of parsing a source file (AST + AstId-keyed trivia, no compilation).
@@ -1264,6 +1303,9 @@ pub enum CompileError {
         column: usize,
         filename: Option<String>,
     },
+    /// The formatter would not round-trip the input (e.g. it would drop a
+    /// comment). Reported instead of silently emitting lossy output.
+    Format { message: String },
 }
 
 impl CompileError {
@@ -1360,6 +1402,7 @@ impl std::fmt::Display for CompileError {
                     write!(f, "analysis error: {message}")
                 }
             }
+            CompileError::Format { message } => write!(f, "format error: {message}"),
         }
     }
 }
