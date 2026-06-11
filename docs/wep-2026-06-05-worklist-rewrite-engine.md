@@ -310,25 +310,29 @@ Migrations:
       `BodySink` backs the in-place CTFE scratch path, an `EngineSink` (in
       `optimize::const_folding`) backs the real walk. Goldens byte-identical;
       full e2e green.
-- [ ] Retire the visitor's `field_env` into the ValueGraph (D). The
-      ValueGraph already forwards value-typed `obj.f` reads (per-`(receiver-
-      root, field)` versioning, selective loop / call invalidation, struct-
-      literal seeding on `let` and `Assign`). `field_env`'s irreducible role
-      is **reference-alias** field forwarding: `let self = &v; … self.f …`
-      reads `v`'s field through the reference, which the ValueGraph keys by
-      receiver VN (`Ref(v)` ≠ `v`) and so misses — the WEP deliberately keeps
-      `Ref` Skel-side. Closing it needs builder **reference look-through**:
-      track `let self = &v` (bare-`Local` `v`) so `self.f` forwards from `v`'s
-      slot (dropping the map entry when `v` or `self` is reassigned). Sound
-      for reads; full forwarding additionally needs ref-kind info so an
-      _immutable_ `&v` survives a call (an address-taken `v` is otherwise
-      `bump_local`-invalidated, but an immutable ref cannot mutate it). With
-      look-through landed, the value-typed `field_env` reads become redundant
-      with `engine.value`, and the remaining 6 reference-cluster fixtures
-      (int128, static_1/2, coerce_int_3, match_literal_i128) fold without it.
-      The 20 hfs fixtures are a separate pass-ordering point — re-run
-      forwarding after HFS so an HFS-introduced `__hfs_x = obj.f` shadow init
-      folds to its seeded constant instead of re-loading.
+- [x] ValueGraph reference look-through (the value-typed half of D). A
+      `let r = &v` reference now forwards `r.f` from `v`'s field slot in the
+      builder (`ref_targets`, cleared on reassignment; the pointee's live slot
+      state is used as-is, so a stale forward is impossible). This closed the
+      ValueGraph's reference-aliasing blind spot — `Ref(v) ≠ v` by receiver VN
+      — that the WEP had kept Skel-side. Nine goldens improve (the
+      `opt_licm_immut_ref*` cluster now const-folds immutable-ref fields).
+- [ ] `field_env` is NOT deletable — it is niri's CTFE field state, not a
+      duplicate of the ValueGraph (measured: disabling it regresses 29
+      fixtures even with look-through landed). The decisive path is
+      `Interpreter::expr_to_lattice_a`: niri's compile-time _evaluator_ reads
+      `field_env` to resolve a `FieldAccess(Local, field)` to a constant
+      _during_ CTFE (e.g. `int128 as f64` evaluating `as_f64(&v)` over `v`'s
+      fields). The ValueGraph forwards field reads in the _IR_ (feeding
+      `store_load_forward`), but does not feed niri's interpreter, so the two
+      are complementary, not redundant: the ValueGraph owns store→load
+      forwarding; `field_env` owns CTFE field reads. Truly unifying would
+      require niri's CTFE to read field constants from the ValueGraph
+      (`engine.value` of the field), but CTFE runs mid-walk on mutated /
+      inlined / scratch bodies where the once-built graph does not apply — a
+      large re-plumbing of uncertain value. Recommendation: keep `field_env`
+      as the CTFE field-constant store; the duplication the WEP set out to
+      remove (store→load forwarding) is gone, which is the real win.
 - [x] `condition_implication`: all guard kinds (loop, dominating,
       early-exit, short-circuit, bitmask) unified into one
       `GuardFact { var_vn, max_offset, bound_vn, is_strict }` with
