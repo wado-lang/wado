@@ -2327,9 +2327,17 @@ fn generate_cm_imports(
     }
 
     // Import wasi:http/client when the plan lists it (the program uses the HTTP
-    // Client effect). The plan guarantees `wasi:http/types` is imported too, so
-    // `http-handler-result` is registered by the time we get here.
+    // Client effect). The plan guarantees `HttpClient` implies `HttpTypes`, and
+    // the types phase above registers `http-handler-result` / `http-request`,
+    // which `import_http_client` looks up unconditionally. Assert that invariant
+    // rather than re-deriving membership: a plan that lists `HttpClient` without
+    // `HttpTypes` is a bug, and this turns the resulting `type_idx` panic into a
+    // named diagnostic.
     if has_kind(ImportKind::HttpClient) {
+        debug_assert!(
+            ctx.has_type("http-handler-result"),
+            "HttpClient in import plan without HttpTypes: wasi:http/types must be imported first",
+        );
         import_http_client(builder, ctx, project);
     }
 }

@@ -28,6 +28,14 @@ pub fn resolve_import_plan(
 ) -> Vec<ImportEntry> {
     let registry = project.cm_interface_registry;
     let mut entries: Vec<ImportEntry> = Vec::new();
+    // Dedup by FQ alone — one import per interface, the first kind pushed wins.
+    // This is sound because a given FQ is only ever pushed under a single kind:
+    // the phases below partition interfaces by shape (function-bearing vs.
+    // resource-defining vs. resource-getter), and those shapes are mutually
+    // exclusive in the registry (a resource-getter has `resource_type.is_some()`,
+    // which Phase 1 skips, and a getter never defines the resource it returns, so
+    // its FQ is never also a `ResourceSource`). If that ever stops holding, this
+    // must become a `(fq, kind)` dedup with explicit precedence.
     let mut seen: IndexSet<String> = IndexSet::default();
     let mut push = |entries: &mut Vec<ImportEntry>, fq: String, kind: ImportKind| {
         if seen.insert(fq.clone()) {
@@ -131,51 +139,38 @@ pub fn resolve_import_plan(
         worklist.extend(more);
     }
 
-    // Phase 2 (continued): mirror codegen's `is_needed` — a resource-getter
-    // interface whose accessor is used (`NirPackage::has_interface`, i.e. a
-    // `{interface}::` entry exists in `used_wasi_functions`) pulls in the
-    // interface that *defines* its resource. NOTE: `has_interface` here is the
-    // `NirPackage` method (used-function membership), NOT the registry's
-    // `with`-set predicate; the two are distinct and codegen uses this one.
+    // Phase 3: resource-getter interfaces (returning `option<resource>`) whose
+    // accessor is used. The gate is `NirPackage::has_interface` — whether a
+    // `{interface}::` function appears in `used_wasi_functions` — which is the
+    // gate codegen applies inline, NOT the registry's same-named `with`-set
+    // predicate; the two are distinct. For each used getter the plan carries two
+    // imports: the getter interface itself (`ResourceGetter`; codegen's getter
+    // phase — http getters go through the HTTP phase instead, so they are
+    // excluded here) and, when the returned resource is *defined elsewhere*, that
+    // defining interface (`ResourceSource`, so the resource type is in scope
+    // before the getter is encoded).
     for interface_info in registry.interfaces() {
         let Some((resource_wado_name, _)) = &interface_info.resource_type else {
             continue;
         };
-        let Some(source) = registry.get_resource_source_interface(resource_wado_name) else {
-            continue;
-        };
-        if source == interface_info.path {
-            continue;
-        }
         let needed = interface_info
             .functions
             .first()
             .is_some_and(|f| project.has_interface(&f.interface_name));
-        if needed {
-            push(&mut entries, source.to_string(), ImportKind::ResourceSource);
-        }
-    }
-
-    // Phase 3: resource-getter interfaces (returning `option<resource>`). Codegen
-    // imports one iff its accessor is used — `NirPackage::has_interface`, which
-    // tests whether a `{interface}::` function appears in `used_wasi_functions`
-    // (not the registry's `with`-set predicate of the same name). Mirror that
-    // gate here so the getter FQ lands in the plan (and the faithful world
-    // import set).
-    for interface_info in registry.interfaces() {
-        if interface_info.resource_type.is_none() || interface_info.package == "http" {
+        if !needed {
             continue;
         }
-        let needed = interface_info
-            .functions
-            .first()
-            .is_some_and(|f| project.has_interface(&f.interface_name));
-        if needed {
+        if interface_info.package != "http" {
             push(
                 &mut entries,
                 interface_info.path.clone(),
                 ImportKind::ResourceGetter,
             );
+        }
+        if let Some(source) = registry.get_resource_source_interface(resource_wado_name)
+            && source != interface_info.path
+        {
+            push(&mut entries, source.to_string(), ImportKind::ResourceSource);
         }
     }
 

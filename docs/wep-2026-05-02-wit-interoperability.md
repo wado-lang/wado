@@ -507,9 +507,9 @@ Rollout (each step gated by the full E2E suite):
         re-deriving `has_interface("Client")`. The HTTP request-construction core
         funcs are likewise gated on the plan's `HttpTypes` membership.
   - [x] Export side — `append_http_handler_export` is decided by the export plan
-        (`ComponentPlan::has_http_handler_export`, computed in `build_component_plan`
-        from the world registry) rather than re-derived from `NirPackage` in
-        codegen. All world/test exports were already plan-driven via
+        (`ComponentPlan::has_http_handler_export`, computed once in `link` and
+        passed to `build_component_plan`) rather than re-derived from `NirPackage`
+        in codegen. All world/test exports were already plan-driven via
         `ComponentPlan::{world_exports, test_exports}`.
 - [x] R3 — The WIT emitter reads the plan for its world import refs
       (`WitEmitOptions::world_imports`), replacing the effect-row derivation;

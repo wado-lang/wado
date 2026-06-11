@@ -7,7 +7,7 @@ use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, is_unit_type};
 use crate::hashmap::IndexMap;
 use crate::tir::TirTest;
-use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
+use crate::world_registry::{WorldExportInfo, WorldRegistry};
 
 /// Plan for the Component Model structure.
 ///
@@ -32,8 +32,8 @@ pub struct ComponentPlan {
     pub world_package: Option<String>,
     /// Whether the target world exports a `wasi:http/handler`. Codegen appends
     /// the handler export to the finished component when set. This is an export
-    /// decision, so it lives on the plan rather than being re-derived from the
-    /// world registry in codegen.
+    /// decision, so it lives on the plan rather than being re-derived in codegen;
+    /// `link` computes it once and passes it to `build_component_plan`.
     pub has_http_handler_export: bool,
 }
 
@@ -126,6 +126,7 @@ pub fn build_component_plan(
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
+    has_http_handler_export: bool,
 ) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
@@ -177,10 +178,6 @@ pub fn build_component_plan(
             .get(target_world)
             .map(|w| w.package().to_string())
     };
-
-    let has_http_handler_export = world_registry
-        .get(target_world)
-        .is_some_and(WorldInfo::has_http_handler_export);
 
     ComponentPlan {
         world_exports,
