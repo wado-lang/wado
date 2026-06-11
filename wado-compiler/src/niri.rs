@@ -687,6 +687,67 @@ mod field_snapshot_tests {
 ///   participate in the CM async runtime; not CTFE-safe.
 /// - `stores.is_empty()` — `stores[...]` is moot for CTFE (we don't pass
 ///   refs), but bail conservatively.
+/// Commit sink for niri's body rewrites. The rewrite logic reads through
+/// [`EditSink::body`] and commits every edit through the sink, so two backends
+/// can share it: [`BodySink`] mutates a `Body` in place — used for throwaway
+/// CTFE scratch bodies, where coherence with an engine's parent map / use
+/// index is moot — while the optimize layer's `EngineSink` routes every edit
+/// through `Engine::*` so the real body's maps stay coherent (the Stage 6
+/// env-bound const_folding migration).
+pub(crate) trait EditSink {
+    fn body(&self) -> &Body;
+    /// Replace `e`'s kind. The new kind's children must already be parented to
+    /// `e` (literals have none); use [`EditSink::become_expr`] to move an
+    /// existing node's content into `e`.
+    fn replace_kind(&mut self, e: ExprId, kind: ExprKind);
+    /// Make `dst` take `src`'s content (`dst` becomes `src`).
+    fn become_expr(&mut self, dst: ExprId, src: ExprId);
+    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId;
+    fn alloc_stmt(&mut self, kind: StmtKind, span: crate::token::Span) -> StmtId;
+    fn alloc_block(&mut self, stmts: Vec<StmtId>, span: crate::token::Span) -> BlockId;
+    fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>);
+}
+
+/// In-place [`EditSink`] over a raw `Body`. Used for CTFE scratch reduction,
+/// where the body is discarded after the value is read, so duplicated child
+/// references and stale parent links do not matter.
+pub(crate) struct BodySink<'a> {
+    pub body: &'a mut Body,
+}
+
+impl EditSink for BodySink<'_> {
+    fn body(&self) -> &Body {
+        self.body
+    }
+    fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
+        self.body.exprs[e].kind = kind;
+    }
+    fn become_expr(&mut self, dst: ExprId, src: ExprId) {
+        // Clone src's whole node into dst (the original short-circuit rewrite
+        // did `body.exprs[e] = body.exprs[keep].clone()`); the scratch body is
+        // discarded, so the shared child references and the still-live `src`
+        // node are harmless.
+        let node = self.body.exprs[src].clone();
+        self.body.exprs[dst] = node;
+    }
+    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId {
+        self.body.exprs.push(ExprNode {
+            kind,
+            type_id,
+            span,
+        })
+    }
+    fn alloc_stmt(&mut self, kind: StmtKind, span: crate::token::Span) -> StmtId {
+        self.body.stmts.push(StmtNode { kind, span })
+    }
+    fn alloc_block(&mut self, stmts: Vec<StmtId>, span: crate::token::Span) -> BlockId {
+        self.body.blocks.push(BlockNode { stmts, span })
+    }
+    fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
+        self.body.blocks[block].stmts = stmts;
+    }
+}
+
 /// - `inline_hint != InlineHint::Never` — respect the user's explicit
 ///   "do not expand this" annotation.
 /// - `type_params` and `impl_type_params` empty — CTFE runs after
@@ -1320,61 +1381,79 @@ impl<'a> Interpreter<'a> {
     // ───────────────────────────────────────────────────────────────────────
 
     /// The single-node rewrites at `e` (no recursion into children).
-    pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
-        if let Lattice::Const(v) = self.try_fold_a(body, e) {
-            body.exprs[e].kind = value_to_arena_kind(v);
-            return true;
+    pub(crate) fn reduce_local_block_via<S: EditSink>(
+        &mut self,
+        sink: &mut S,
+        block: BlockId,
+    ) -> bool {
+        let body = sink.body();
+        let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
+            matches!(
+                &body.stmts[*s].kind,
+                StmtKind::If { condition, .. }
+                    if matches!(body.exprs[*condition].kind, ExprKind::BoolLiteral(_))
+            )
+        });
+        if !has_constant_if {
+            return false;
         }
-        // GlobalVarGet → recorded Const.
-        let global_v = if let ExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } = &body.exprs[e].kind
-        {
-            match self.global_lattice(module_source, name) {
-                Lattice::Const(v) => Some(v),
-                _ => None,
-            }
-        } else {
-            None
-        };
-        if let Some(v) = global_v {
-            body.exprs[e].kind = value_to_arena_kind(v);
-            return true;
-        }
-        // FieldAccess(Local, field) → field_env Const.
-        let field_v = if let ExprKind::FieldAccess {
-            expr: inner,
-            field_name,
-            ..
-        } = &body.exprs[e].kind
-        {
-            if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
-                self.field_env
-                    .get(index)
-                    .and_then(|m| m.get(field_name.as_str()))
-                    .copied()
+        let old_stmts = body.blocks[block].stmts.clone();
+        let mut new_stmts: Vec<StmtId> = Vec::new();
+        for s in old_stmts {
+            let body = sink.body();
+            let spliced = if let StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } = &body.stmts[s].kind
+            {
+                if let ExprKind::BoolLiteral(value) = body.exprs[*condition].kind {
+                    Some((value, *then_block, *else_block))
+                } else {
+                    None
+                }
             } else {
                 None
+            };
+            if let Some((value, then_block, else_block)) = spliced {
+                if value {
+                    new_stmts.extend(sink.body().blocks[then_block].stmts.clone());
+                } else if let Some(eb) = else_block {
+                    new_stmts.extend(sink.body().blocks[eb].stmts.clone());
+                }
+                continue;
             }
-        } else {
-            None
-        };
-        if let Some(v) = field_v {
-            body.exprs[e].kind = value_to_arena_kind(v);
+            new_stmts.push(s);
+        }
+        sink.set_block_stmts(block, new_stmts);
+        true
+    }
+
+    /// In-place wrapper over [`Self::reduce_local_via`] for the CTFE
+    /// scratch-body path.
+    pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+        let mut sink = BodySink { body };
+        self.reduce_local_via(&mut sink, e)
+    }
+
+    /// Reduce `e` to its flow-sensitive constant value or collapse a constant
+    /// branch, committing through `sink`. The value substitutions
+    /// ([`Self::flow_fold_kind_a`]) and the structural collapses
+    /// (short-circuit / `if` / `match`) all route through the sink, so the
+    /// engine-routed visitor keeps the parent map / use index coherent and the
+    /// scratch-body CTFE path mutates in place.
+    pub(crate) fn reduce_local_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
+        if let Some(kind) = self.flow_fold_kind_a(sink.body(), e) {
+            sink.replace_kind(e, kind);
             return true;
         }
-        if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
-            body.exprs[e].kind = value_to_arena_kind(v);
+        if rewrite_short_circuit_via(sink, e) {
             return true;
         }
-        if rewrite_short_circuit_a(body, e) {
+        if self.rewrite_if_expr_via(sink, e) {
             return true;
         }
-        if self.rewrite_if_expr_a(body, e) {
-            return true;
-        }
-        self.rewrite_match_expr_a(body, e)
+        self.rewrite_match_expr_via(sink, e)
     }
 
     /// The environment-free constant value of `e`, as the literal [`ExprKind`]
@@ -1452,46 +1531,12 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Splice a constant-condition `if` statement into its parent block.
+    /// In-place wrapper over [`Self::reduce_local_block_via`] for the CTFE
+    /// scratch-body path; the engine-routed visitor uses the `via` form with
+    /// an `EngineSink`.
     pub fn reduce_local_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
-        let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
-            matches!(
-                &body.stmts[*s].kind,
-                StmtKind::If { condition, .. }
-                    if matches!(body.exprs[*condition].kind, ExprKind::BoolLiteral(_))
-            )
-        });
-        if !has_constant_if {
-            return false;
-        }
-        let old_stmts = std::mem::take(&mut body.blocks[block].stmts);
-        let mut new_stmts: Vec<crate::nir_arena::StmtId> = Vec::new();
-        for s in old_stmts {
-            let spliced = if let StmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } = &body.stmts[s].kind
-            {
-                if let ExprKind::BoolLiteral(value) = body.exprs[*condition].kind {
-                    Some((value, *then_block, *else_block))
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            if let Some((value, then_block, else_block)) = spliced {
-                if value {
-                    new_stmts.extend(body.blocks[then_block].stmts.clone());
-                } else if let Some(eb) = else_block {
-                    new_stmts.extend(body.blocks[eb].stmts.clone());
-                }
-                continue;
-            }
-            new_stmts.push(s);
-        }
-        body.blocks[block].stmts = new_stmts;
-        true
+        let mut sink = BodySink { body };
+        self.reduce_local_block_via(&mut sink, block)
     }
 
     /// Bottom-up reduce the subtree rooted at `e` over the kinds the engine
@@ -1616,8 +1661,8 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Collapse an `if` with a constant condition or equal arms.
-    fn rewrite_if_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
-        let (condition, then_branch, else_branch) = match &body.exprs[e].kind {
+    fn rewrite_if_expr_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
+        let (condition, then_branch, else_branch) = match &sink.body().exprs[e].kind {
             ExprKind::If {
                 condition,
                 then_branch,
@@ -1625,28 +1670,29 @@ impl<'a> Interpreter<'a> {
             } => (*condition, *then_branch, *else_branch),
             _ => return false,
         };
-        let cond_lat = self.expr_to_lattice_a(body, condition);
+        let cond_lat = self.expr_to_lattice_a(sink.body(), condition);
 
         // (1) Constant condition → splice the chosen arm.
         if let Lattice::Const(Value::Bool(b)) = cond_lat {
-            body.exprs[e].kind = if b {
+            let kind = if b {
                 ExprKind::Block(then_branch)
             } else if let Some(eb) = else_branch {
                 ExprKind::Block(eb)
             } else {
                 ExprKind::Unit
             };
+            sink.replace_kind(e, kind);
             return true;
         }
 
         // (2)/(3) require both arms Const.
-        let Lattice::Const(t) = self.block_lattice_a(body, then_branch) else {
+        let Lattice::Const(t) = self.block_lattice_a(sink.body(), then_branch) else {
             return false;
         };
         let Some(eb) = else_branch else {
             return false;
         };
-        let Lattice::Const(ev) = self.block_lattice_a(body, eb) else {
+        let Lattice::Const(ev) = self.block_lattice_a(sink.body(), eb) else {
             return false;
         };
 
@@ -1655,13 +1701,16 @@ impl<'a> Interpreter<'a> {
             && t_b != e_b
         {
             if t_b {
-                let cond_kind = body.exprs[condition].kind.clone();
-                body.exprs[e].kind = cond_kind;
+                let cond_kind = sink.body().exprs[condition].kind.clone();
+                sink.replace_kind(e, cond_kind);
             } else {
-                body.exprs[e].kind = ExprKind::Unary {
-                    op: NirUnaryOp::Not,
-                    expr: condition,
-                };
+                sink.replace_kind(
+                    e,
+                    ExprKind::Unary {
+                        op: NirUnaryOp::Not,
+                        expr: condition,
+                    },
+                );
             }
             return true;
         }
@@ -1670,15 +1719,16 @@ impl<'a> Interpreter<'a> {
         if t != ev {
             return false;
         }
-        if !is_speculatable_a(body, condition) {
+        if !is_speculatable_a(sink.body(), condition) {
             return false;
         }
-        body.exprs[e].kind = value_to_arena_kind(t);
+        sink.replace_kind(e, value_to_arena_kind(t));
         true
     }
 
     /// Collapse a `match` with a constant scrutinee or a bool-discriminator shape.
-    fn rewrite_match_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+    fn rewrite_match_expr_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
+        let body = sink.body();
         let scrutinee = match &body.exprs[e].kind {
             ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
             _ => return false,
@@ -1693,13 +1743,13 @@ impl<'a> Interpreter<'a> {
             };
 
         // Rule 1: const scrutinee → splice the chosen arm.
-        if let Lattice::Const(scrut_v) = self.expr_to_lattice_a(body, scrutinee) {
+        if let Lattice::Const(scrut_v) = self.expr_to_lattice_a(sink.body(), scrutinee) {
             let mut chosen: Option<usize> = None;
             for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
                 if guard.is_some() {
                     return false;
                 }
-                match self.pattern_matches_a(body, &scrut_v, *pat) {
+                match self.pattern_matches_a(sink.body(), &scrut_v, *pat) {
                     PatternMatch::Yes => {
                         chosen = Some(i);
                         break;
@@ -1712,57 +1762,54 @@ impl<'a> Interpreter<'a> {
                 return false;
             };
             let body_e = arms_data[idx].2;
-            let span = body.exprs[body_e].span;
-            let stmt = body.stmts.push(StmtNode {
-                kind: StmtKind::Expr(body_e),
-                span,
-            });
-            let block = body.blocks.push(BlockNode {
-                stmts: vec![stmt],
-                span,
-            });
-            body.exprs[e].kind = ExprKind::Block(block);
+            let span = sink.body().exprs[body_e].span;
+            let stmt = sink.alloc_stmt(StmtKind::Expr(body_e), span);
+            let block = sink.alloc_block(vec![stmt], span);
+            sink.replace_kind(e, ExprKind::Block(block));
             return true;
         }
 
         // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
         // The scrutinee is preserved inside the synthesised `Binary`, and the
         // `Match` node `e` keeps its own span — only its `kind` is replaced.
-        if let Some(replacement) = try_match_bool_discriminator_a(body, &arms_data) {
-            let right = body.exprs.push(ExprNode {
-                kind: ExprKind::EnumConstruct {
+        if let Some(replacement) = try_match_bool_discriminator_a(sink.body(), &arms_data) {
+            let right = sink.alloc_expr(
+                ExprKind::EnumConstruct {
                     enum_type: replacement.enum_type,
                     case_index: replacement.case_index,
                     case_name: replacement.case_name,
                 },
-                type_id: replacement.enum_type,
-                span: replacement.span,
-            });
-            body.exprs[e].kind = ExprKind::Binary {
-                left: scrutinee,
-                op: NirBinaryOp::Eq,
-                right,
-            };
+                replacement.enum_type,
+                replacement.span,
+            );
+            sink.replace_kind(
+                e,
+                ExprKind::Binary {
+                    left: scrutinee,
+                    op: NirBinaryOp::Eq,
+                    right,
+                },
+            );
             return true;
         }
 
         // Rule 3: non-const speculatable scrutinee, all-arms-equal.
-        if !is_speculatable_a(body, scrutinee) {
+        if !is_speculatable_a(sink.body(), scrutinee) {
             return false;
         }
         if arms_data.iter().any(|(g, _, _, _)| g.is_some()) {
             return false;
         }
-        let arms_for_exh: Vec<ArmData> = match &body.exprs[e].kind {
+        let arms_for_exh: Vec<ArmData> = match &sink.body().exprs[e].kind {
             ExprKind::Match { arms, .. } => arms.clone(),
             _ => unreachable!(),
         };
-        if !is_provably_exhaustive_a(body, &arms_for_exh) {
+        if !is_provably_exhaustive_a(sink.body(), &arms_for_exh) {
             return false;
         }
         let mut common: Option<Value> = None;
         for (_, _, b, _) in &arms_data {
-            let Lattice::Const(v) = self.expr_to_lattice_a(body, *b) else {
+            let Lattice::Const(v) = self.expr_to_lattice_a(sink.body(), *b) else {
                 return false;
             };
             match common {
@@ -1772,7 +1819,7 @@ impl<'a> Interpreter<'a> {
             }
         }
         let v = common.expect("at least one arm");
-        body.exprs[e].kind = value_to_arena_kind(v);
+        sink.replace_kind(e, value_to_arena_kind(v));
         true
     }
 
@@ -2064,27 +2111,22 @@ fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
 }
 
 /// Simplify `false && x` / `true || x` and their mirror forms.
-fn rewrite_short_circuit_a(body: &mut Body, e: ExprId) -> bool {
-    enum Pick {
-        Left,
-        Right,
-    }
-    let pick = match &body.exprs[e].kind {
+fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
+    let body = sink.body();
+    let keep = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
             match (&body.exprs[*left].kind, *op, &body.exprs[*right].kind) {
                 (ExprKind::BoolLiteral(false), NirBinaryOp::Or, _)
-                | (ExprKind::BoolLiteral(true), NirBinaryOp::And, _) => (Pick::Right, *right),
+                | (ExprKind::BoolLiteral(true), NirBinaryOp::And, _) => *right,
                 (_, NirBinaryOp::Or, ExprKind::BoolLiteral(false))
-                | (_, NirBinaryOp::And, ExprKind::BoolLiteral(true)) => (Pick::Left, *left),
+                | (_, NirBinaryOp::And, ExprKind::BoolLiteral(true)) => *left,
                 _ => return false,
             }
         }
         _ => return false,
     };
-    let (_, keep) = pick;
     // Become the kept operand. The other operand is left orphaned.
-    let kept = body.exprs[keep].clone();
-    body.exprs[e] = kept;
+    sink.become_expr(e, keep);
     true
 }
 
