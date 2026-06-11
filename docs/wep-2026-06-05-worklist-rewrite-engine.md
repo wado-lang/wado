@@ -300,14 +300,35 @@ Migrations:
       the only fixtures that still need the visitor's field path are the
       six whose asserts hinge on such a comparison fold — int128,
       static_1/2, coerce_int_3, match_literal_i128.)
-- [ ] Env-bound `const_folding`: delete the const-fold visitor's
-      `field_env` (now fully modelled by the ValueGraph builder —
-      per-`(receiver-root, field)` versioning, selective loop / call
-      invalidation, struct-literal seeding on `let` and `Assign`) and the
-      `niri.rs` in-place `Body` mutation; the caller commits via the
-      engine. Gated on the typed fold above plus re-running forwarding
-      after the HFS pass (so HFS-introduced `__hfs_x = obj.f` shadow
-      inits fold to their seeded constant rather than re-loading).
+- [x] Env-bound `const_folding` — niri commits via the engine. The
+      const-fold visitor drives its bottom-up flow-sensitive walk over an
+      `Engine` session and commits every niri rewrite through an `EditSink`
+      (`replace_kind` / `become_expr` / `alloc_*` / `set_block_stmts`) instead
+      of mutating `Body` in place, so the parent map / use index stay coherent
+      through the walk. niri's rewrites are sink-generic (`reduce_local_via`,
+      `reduce_local_block_via`, the short-circuit / if / match collapses); a
+      `BodySink` backs the in-place CTFE scratch path, an `EngineSink` (in
+      `optimize::const_folding`) backs the real walk. Goldens byte-identical;
+      full e2e green.
+- [ ] Retire the visitor's `field_env` into the ValueGraph (D). The
+      ValueGraph already forwards value-typed `obj.f` reads (per-`(receiver-
+      root, field)` versioning, selective loop / call invalidation, struct-
+      literal seeding on `let` and `Assign`). `field_env`'s irreducible role
+      is **reference-alias** field forwarding: `let self = &v; … self.f …`
+      reads `v`'s field through the reference, which the ValueGraph keys by
+      receiver VN (`Ref(v)` ≠ `v`) and so misses — the WEP deliberately keeps
+      `Ref` Skel-side. Closing it needs builder **reference look-through**:
+      track `let self = &v` (bare-`Local` `v`) so `self.f` forwards from `v`'s
+      slot (dropping the map entry when `v` or `self` is reassigned). Sound
+      for reads; full forwarding additionally needs ref-kind info so an
+      _immutable_ `&v` survives a call (an address-taken `v` is otherwise
+      `bump_local`-invalidated, but an immutable ref cannot mutate it). With
+      look-through landed, the value-typed `field_env` reads become redundant
+      with `engine.value`, and the remaining 6 reference-cluster fixtures
+      (int128, static_1/2, coerce_int_3, match_literal_i128) fold without it.
+      The 20 hfs fixtures are a separate pass-ordering point — re-run
+      forwarding after HFS so an HFS-introduced `__hfs_x = obj.f` shadow init
+      folds to its seeded constant instead of re-loading.
 - [x] `condition_implication`: all guard kinds (loop, dominating,
       early-exit, short-circuit, bitmask) unified into one
       `GuardFact { var_vn, max_offset, bound_vn, is_strict }` with
