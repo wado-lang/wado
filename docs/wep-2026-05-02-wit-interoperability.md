@@ -472,11 +472,24 @@ Rollout (each step gated by the full E2E suite):
         (Phase 1), and `wasi:http/types` is now decided by the plan; codegen
         reads `ImportKind` and encodes. The function loop imports only
         `FunctionInterface` entries. Full e2e green (4766 tests).
-  - [ ] Phase 2/3 (resource-defining and resource-using interfaces) and
-        `wasi:http/client` remain codegen-driven. Their membership is
-        `ctx`-state-dependent (resource pre-imports, dedup), so making them
-        plan-driven means restructuring those phases to separate decision
-        from encoding — the remaining bulk of R2.
+  - [x] Resource-using interfaces are now a distinct plan kind. Phase 1 of
+        the plan builder classifies a function-bearing interface as
+        `ResourceUsingInterface` when its used signatures reference a resource
+        _defined by another_ interface, and `FunctionInterface` otherwise.
+        Codegen's resource-using phase gates on the new kind, and the main
+        import loop drops its registry-derived deferral check — that membership
+        is now the plan's. Full e2e green.
+  - [ ] Phase 2 (resource-defining interfaces) and `wasi:http/client` remain
+        partly codegen-driven. Phase 2 cross-checks the plan's `ResourceSource`
+        entries, but retains a residual `ctx`-state guard: its `is_needed`
+        gate's `has_interface` half is mirrored by the plan, yet the
+        `!ctx.has_comp_func` dedup is intrinsic to codegen ordering. The
+        plan's `ResourceSource` set deliberately spans both Phase 2 (a
+        resource-using interface in the `with` set) and Phase 3's pre-import
+        path (a resource appearing only in a return type); fully removing
+        Phase 2's `is_needed` would make it import the closure-only sources
+        that Phase 3 owns. Unifying those two source-import paths is the
+        prerequisite, and is left as a follow-up.
 - [x] R3 — The WIT emitter reads the plan for its world import refs
       (`WitEmitOptions::world_imports`), replacing the effect-row derivation;
       `wado wit` compiles through optimize (on a silent host) to obtain it.
