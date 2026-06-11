@@ -32,14 +32,12 @@ pub fn resolve_imported_cm_interfaces(project: &NirPackage) -> Vec<String> {
         return Vec::new();
     }
 
-    // Phase 0: `wasi:cli/types` provides the shared `error-code` enum, the
-    // canonical fallback for `result<_, error-code>` bindings. It is needed iff
-    // a used interface's signature actually references that error-code (the cli
-    // stdin/stdout/stderr interfaces); a pure-compute or clock-only program
-    // does not pull it in. Codegen gates its Phase 0 on the same predicate.
-    if needs_canonical_cli_error_code(project)
-        && let Some(version) = registry.get_cli_version()
-    {
+    // Phase 0: `wasi:cli/types` provides the shared `error-code` enum, imported
+    // unconditionally by codegen (it also backs async-export transmission
+    // futures, not just interface signatures), so the plan matches. Trimming it
+    // needs codegen's transmission-source analysis and is deferred into the
+    // fuller R2 (see WEP §"Faithful imports").
+    if let Some(version) = registry.get_cli_version() {
         imports.insert(format!("wasi:cli/types@{version}"));
     }
 
@@ -122,46 +120,6 @@ pub fn resolve_imported_cm_interfaces(project: &NirPackage) -> Vec<String> {
     let mut out: Vec<String> = imports.into_iter().collect();
     out.sort();
     out
-}
-
-/// Whether the component needs the canonical `wasi:cli/types#error-code` —
-/// i.e. a used WASI function's signature references it. Codegen's Phase 0
-/// `wasi:cli/types` import and this plan are both gated on this predicate, so
-/// the dead import is dropped for programs that never touch that error-code.
-#[must_use]
-pub fn needs_canonical_cli_error_code(project: &NirPackage) -> bool {
-    project.cm_interface_registry.interfaces().any(|interface| {
-        interface.functions.iter().any(|func| {
-            let key = format!("{}::{}", func.interface_name, func.method_name);
-            project.used_wasi_functions.contains(&key)
-                && (func
-                    .return_type
-                    .as_ref()
-                    .is_some_and(references_cli_error_code)
-                    || func
-                        .params
-                        .iter()
-                        .any(|(_, _, ty)| references_cli_error_code(ty)))
-        })
-    })
-}
-
-/// Whether `ty` references the canonical `wasi:cli/types` `ErrorCode`.
-fn references_cli_error_code(ty: &Type) -> bool {
-    match ty {
-        Type::Named(named) => {
-            named.name == "ErrorCode"
-                && named
-                    .source_interface
-                    .as_deref()
-                    .is_some_and(|s| s.starts_with("wasi:cli/types"))
-        }
-        Type::Generic(generic) => generic.args.iter().any(references_cli_error_code),
-        Type::NamespacedGeneric(generic) => generic.args.iter().any(references_cli_error_code),
-        Type::Tuple(elems) => elems.iter().any(references_cli_error_code),
-        Type::Reference(inner) | Type::MutReference(inner) => references_cli_error_code(inner),
-        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Error(_) => false,
-    }
 }
 
 /// Collect resource type names referenced anywhere in `ty` (recursing through

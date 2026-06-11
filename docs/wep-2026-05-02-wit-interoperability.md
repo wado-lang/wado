@@ -439,13 +439,19 @@ Rollout (each step gated by the full E2E suite):
       validates it equals the compiled component's CM imports across the CLI
       corpus and the HTTP service (resources). Codegen unchanged. Imports
       only for now; exports still come from `WorldInfo`.
-- [ ] R2 opportunity — Codegen imports `wasi:cli/types` unconditionally
-      (the canonical `error-code` fallback), so even a pure-compute program
-      that references no `error-code` carries a dead `wasi:cli/types` import.
-      When the import decision moves into the plan, trim this to "only when
-      `error-code` is actually referenced". The change is tangled with the
-      `resolve_error_code_idx` binding machinery, so it belongs in R2, not a
-      separate pre-R2 edit to the same code.
+- [ ] R2 opportunity — Codegen imports `wasi:cli/types` unconditionally (the
+      canonical `error-code`), so a pure-compute program carries a dead
+      import. A first attempt to trim it with a plan-level predicate
+      (`needs_canonical_cli_error_code`, gating both codegen and the plan)
+      was reverted: the canonical `error-code` is needed not only by
+      interface signatures but by async-export _transmission futures_
+      (`build_transmission_future_type_for`, e.g. a kiln generator's
+      `task return`), whose "cli" source is decided by codegen's
+      canonical-intrinsic analysis — not visible from `used_wasi_functions`
+      or the world export declaration. The e2e suite caught it
+      (`kiln_provider` tests: `unknown component type: error-code`). The trim
+      therefore needs codegen's transmission-source analysis and must be done
+      _inside_ R2 (codegen owns the decision), not as a separate predicate.
 - [ ] R2 — Rewire codegen to emit from the plan; delete the duplicated
       decision logic so codegen only encodes. The flat FQ list from R1 is
       insufficient to drive codegen: each import uses a distinct mechanism
