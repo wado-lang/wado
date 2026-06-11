@@ -1018,9 +1018,10 @@ fn world_local_name(world_fq: &str) -> String {
 /// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to WIT
 /// kebab-case.
 fn to_kebab(name: &str) -> String {
+    let chars: Vec<char> = name.chars().collect();
     let mut out = String::with_capacity(name.len() + 4);
     let mut prev_lower_or_digit = false;
-    for ch in name.chars() {
+    for (i, &ch) in chars.iter().enumerate() {
         if ch == '_' {
             if !out.ends_with('-') && !out.is_empty() {
                 out.push('-');
@@ -1029,7 +1030,14 @@ fn to_kebab(name: &str) -> String {
             continue;
         }
         if ch.is_ascii_uppercase() {
-            if prev_lower_or_digit {
+            // Break before an uppercase letter that starts a new word: either
+            // after a lowercase/digit (`myApi` -> `my-api`), or at the end of
+            // an acronym run when the next char is lowercase
+            // (`HTTPServer` -> `http-server`).
+            let acronym_boundary = chars.get(i + 1).is_some_and(char::is_ascii_lowercase)
+                && i > 0
+                && chars[i - 1].is_ascii_uppercase();
+            if (prev_lower_or_digit || acronym_boundary) && !out.is_empty() {
                 out.push('-');
             }
             out.push(ch.to_ascii_lowercase());
