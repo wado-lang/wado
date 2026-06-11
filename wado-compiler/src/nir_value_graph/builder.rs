@@ -30,7 +30,7 @@
 //!   with `Opaque`.
 
 use crate::hashmap::IndexMap;
-use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::nir::{FunctionRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
 };
@@ -521,6 +521,10 @@ impl<'a> Builder<'a> {
                 match target_kind {
                     ExprKind::Local { index, .. } => {
                         self.current_value.insert(index, v);
+                        // `local = S { f: lit, … }` rebinds `local` to a fresh
+                        // object; seed each pure field like the `Let` case so a
+                        // later `local.f` read forwards the literal.
+                        self.seed_struct_literal_fields(index, v, value);
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
                         let (root, recv_v, bare_local) = field_place.expect("field target");
@@ -1104,15 +1108,21 @@ impl<'a> Builder<'a> {
         self.join_heap(&saved_heap, &arm_heaps);
     }
 
-    /// Reassign every local the body may write to a fresh `Opaque` before
-    /// and after the walk, and bump the heap state on both sides. The body
-    /// may run 0..N times, so in-body reads must not share `ValueId`s
-    /// with pre-loop reads, and post-loop reads must not share them with
-    /// in-body reads. (Locals declared inside the loop need no pre-seed:
+    /// Reassign every local the body may write to a fresh `Opaque`, and
+    /// invalidate the heap fields the body may write, before and after the
+    /// walk. The body may run 0..N times, so in-body reads must not share
+    /// `ValueId`s with pre-loop reads, and post-loop reads must not share them
+    /// with in-body reads. (Locals declared inside the loop need no pre-seed:
     /// they get fresh `Opaque`s as the body walks.)
+    ///
+    /// Heap invalidation is selective ([`collect_loop_heap_effects`]): a field
+    /// the body never writes — directly, through a reference, or via a
+    /// non-builtin call — keeps its pre-loop version, so a `table.used = 256`
+    /// before a builtin-only loop still forwards inside and after it.
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
         collect_writes_in_block(self.body, body_block, &mut writes);
+        let heap_effects = collect_loop_heap_effects(self.body, body_block);
         // Snapshot before the reassigned-local opaques below overwrite the
         // written locals' pre-loop values.
         self.loop_entry_values
@@ -1123,7 +1133,7 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
-        self.heap_state.bump_all();
+        self.apply_loop_heap_effects(&heap_effects);
         self.walk_block(body_block);
         for idx in &writes {
             if self.current_value.contains_key(idx) {
@@ -1131,7 +1141,31 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
-        self.heap_state.bump_all();
+        self.apply_loop_heap_effects(&heap_effects);
+    }
+
+    /// Invalidate the heap generations a loop body may write (see
+    /// [`collect_loop_heap_effects`]). A written `local.field` bumps that
+    /// local's `per_slot` (or `field_global` when the local is aliased); a
+    /// `&mut`/method/mut-arg borrow bumps the local's `per_local`; an external
+    /// write (non-builtin call, indirect call, opaque store) invalidates every
+    /// reference-aliased local's fields. Non-touched fields survive.
+    fn apply_loop_heap_effects(&mut self, eff: &LoopHeapEffects) {
+        for &(local, field) in &eff.written_fields {
+            if self.aliased.contains(&local) {
+                self.heap_state.bump_field_global(field);
+            } else {
+                self.heap_state.bump_slot(local, field);
+            }
+        }
+        for &local in &eff.mut_borrowed {
+            self.heap_state.bump_local(local);
+        }
+        if eff.has_external_writes {
+            for &local in &self.aliased {
+                self.heap_state.bump_local(local);
+            }
+        }
     }
 
     /// After a flow-opaque construct (`LabeledBlock` with potential breaks),
@@ -1171,6 +1205,133 @@ fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
     body.for_each_child(node, |c| kids.push(c));
     kids.into_iter()
         .any(|c| block_breaks_to_node(body, c, label))
+}
+
+/// A loop body's heap-write effects, used to invalidate exactly the fields a
+/// loop may mutate (mirrors `const_folding`'s `LoopWriteEffects`). Reassigned
+/// locals are handled separately by `walk_loop`'s `Opaque` reassignment.
+#[derive(Default)]
+struct LoopHeapEffects {
+    /// `local.field = …` (bare-`Local` receiver) targets.
+    written_fields: crate::hashmap::IndexSet<(u32, u32)>,
+    /// `&mut local`, `&mut local.field`, a `&mut` call arg, or a method
+    /// receiver — the callee may store through the reference.
+    mut_borrowed: crate::hashmap::IndexSet<u32>,
+    /// A non-builtin call, indirect / CM call, or opaque-target store
+    /// (`(*p).f`, `arr[i]`, deep field) that may mutate aliased state from
+    /// outside the straight-line walk.
+    has_external_writes: bool,
+}
+
+/// True when `func` is a builtin / monomorphized-builtin intrinsic that
+/// operates below the struct-field layer (`array_set`, `memory_grow`, …) and
+/// so never mutates a tracked `(root, field)` slot. Mirrors
+/// `const_folding::is_field_env_pure_call`.
+fn is_builtin_pure_call(func: &FunctionRef) -> bool {
+    func.builtin_name().is_some() || func.monomorphized_builtin_name().is_some()
+}
+
+/// Walk down a `local.f.g.…` field chain to its rooted local index, or `None`
+/// if rooted at a non-`Local` (e.g. `(*p).f`).
+fn root_local_of(body: &Body, e: ExprId) -> Option<u32> {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::FieldAccess { expr: inner, .. } => root_local_of(body, *inner),
+        _ => None,
+    }
+}
+
+fn collect_loop_heap_effects(body: &Body, block: BlockId) -> LoopHeapEffects {
+    let mut eff = LoopHeapEffects::default();
+    collect_loop_heap_node(body, NodeRef::Block(block), &mut eff);
+    eff
+}
+
+fn collect_loop_heap_node(body: &Body, node: NodeRef, eff: &mut LoopHeapEffects) {
+    if let NodeRef::Expr(e) = node {
+        record_loop_heap_write(body, e, eff);
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        collect_loop_heap_node(body, c, eff);
+    }
+}
+
+fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
+    match &body.exprs[e].kind {
+        ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
+            // Reassigned locals are handled by `walk_loop`'s opaque reassign.
+            ExprKind::Local { .. } => {}
+            ExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                ..
+            } => match &body.exprs[*inner].kind {
+                ExprKind::Local { index, .. } => {
+                    eff.written_fields.insert((*index, *field_index));
+                }
+                // `(*p).f`, `a.b.f` — opaque receiver; aliased state may move.
+                _ => eff.has_external_writes = true,
+            },
+            // `arr[i] = …` writes an array element, not a tracked field; deref
+            // / other lvalues are opaque. Treat both as external.
+            _ => eff.has_external_writes = true,
+        },
+        ExprKind::Unary {
+            op: NirUnaryOp::MutRef,
+            expr: inner,
+        } => match &body.exprs[*inner].kind {
+            ExprKind::Local { index, .. } => {
+                eff.mut_borrowed.insert(*index);
+            }
+            ExprKind::FieldAccess {
+                expr: receiver,
+                field_index,
+                ..
+            } => match &body.exprs[*receiver].kind {
+                ExprKind::Local { index, .. } => {
+                    eff.written_fields.insert((*index, *field_index));
+                }
+                _ => match root_local_of(body, *receiver) {
+                    Some(root) => {
+                        eff.mut_borrowed.insert(root);
+                    }
+                    None => eff.has_external_writes = true,
+                },
+            },
+            _ => eff.has_external_writes = true,
+        },
+        ExprKind::Call { func, args, .. } => {
+            for arg in args {
+                if arg.is_mut
+                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                {
+                    eff.mut_borrowed.insert(*index);
+                }
+            }
+            if !is_builtin_pure_call(func) {
+                eff.has_external_writes = true;
+            }
+        }
+        ExprKind::MethodCall { receiver, args, .. } => {
+            if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind {
+                eff.mut_borrowed.insert(*index);
+            }
+            for arg in args {
+                if arg.is_mut
+                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                {
+                    eff.mut_borrowed.insert(*index);
+                }
+            }
+            eff.has_external_writes = true;
+        }
+        ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
+            eff.has_external_writes = true;
+        }
+        _ => {}
+    }
 }
 
 /// Collect every local index that an `Assign`-to-bare-`Local`, a `Let`, or
@@ -2305,6 +2466,78 @@ mod tests {
         root_with(&mut body, vec![loop_s]);
         let r = build_t(&body, &[param_seed()]);
         assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+    }
+
+    #[test]
+    fn nonaliased_field_survives_external_call_loop() {
+        // fn(obj) { obj.f = 7; loop { foo(); }; let y = obj.f; }
+        // The loop writes no field of `obj` (only an opaque call), and `obj`
+        // is non-aliased, so the loop's external-write invalidation skips it:
+        // obj.f still forwards 7 after the loop.
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let lb = block_with(&mut body, vec![call_s]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, loop_s, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+    }
+
+    #[test]
+    fn aliased_field_dropped_by_external_call_loop() {
+        // Same shape with `obj` reference-aliased: the loop's opaque call may
+        // reach obj's object, so obj.f re-derives after the loop.
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let lb = block_with(&mut body, vec![call_s]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, loop_s, let_y]);
+        let mut aliased = crate::hashmap::IndexSet::default();
+        aliased.insert(0u32);
+        let r = build_aliased(&body, &[param_seed()], &aliased);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn field_written_in_loop_does_not_survive() {
+        // fn(obj) { obj.f = 7; loop { obj.f = 8; }; let y = obj.f; }
+        // The loop writes obj.f, so the pre-loop 7 is invalidated and the
+        // post-loop read re-derives (the body may have run, leaving 8).
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let recv_lw = local_ref(&mut body, 0);
+        let eight = int_lit(&mut body, 8);
+        let loop_write = field_assign_stmt(&mut body, recv_lw, 0, eight);
+        let lb = block_with(&mut body, vec![loop_write]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, loop_s, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
     }
 
     #[test]
