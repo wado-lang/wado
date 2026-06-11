@@ -151,8 +151,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         cm_interface_registry,
         world_registry,
         used_wasi_functions,
-        // Resolved post-DCE in `optimize/dce.rs::resolve_imports`.
-        imported_cm_interfaces: Vec::new(),
         strip_names,
         codegen_flags,
         // Conservative default; `optimize` overrides per opt level.

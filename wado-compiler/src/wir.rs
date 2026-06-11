@@ -63,6 +63,13 @@ pub struct WirPackage {
     /// Populated during WIR translation via `WirContext::ensure_canonical`.
     /// Used by the component codegen to determine which canonical imports to generate.
     pub needed_canonicals: IndexSet<CanonicalIntrinsic>,
+    /// The complete set of CM interface FQs this component imports — the
+    /// WIR-level import plan resolved by
+    /// [`crate::wir_build::component_imports::resolve_imported_cm_interfaces`]
+    /// once `needed_canonicals` is final. The single source of truth for the
+    /// import set (codegen, the WIT producer, and CM embedding read it). See
+    /// WEP `wep-2026-05-02-wit-interoperability.md` §"Faithful imports".
+    pub imported_cm_interfaces: Vec<String>,
     /// Absolute Wasm function index of the first defined function (i.e. the
     /// number of imported functions). Defined function `i` (the `i`-th entry
     /// in [`functions`](Self::functions)) has the absolute index
@@ -244,6 +251,7 @@ impl WirPackage {
             dead_func_indices: IndexSet::default(),
             dead_global_indices: IndexSet::default(),
             needed_canonicals: IndexSet::default(),
+            imported_cm_interfaces: Vec::new(),
             defined_func_base: 0,
         }
     }

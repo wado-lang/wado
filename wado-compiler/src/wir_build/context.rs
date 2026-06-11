@@ -1169,6 +1169,8 @@ impl<'a> WirContext<'a> {
             dead_func_indices,
             dead_global_indices,
             needed_canonicals,
+            // Resolved by `build_wir_package` once `needed_canonicals` is final.
+            imported_cm_interfaces: Vec::new(),
             defined_func_base: DEFINED_FUNC_BASE,
         }
     }

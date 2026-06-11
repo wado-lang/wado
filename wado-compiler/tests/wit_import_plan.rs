@@ -35,9 +35,7 @@ fn plan_imports(source: &str) -> BTreeSet<String> {
         &[],
     ))
     .expect("dump succeeds");
-    let pkg = dump
-        .optimized_package
-        .expect("optimized package present after dump");
+    let pkg = dump.wir_package.expect("wir package present after dump");
     pkg.imported_cm_interfaces.iter().cloned().collect()
 }
 
@@ -108,9 +106,8 @@ fn plan_matches_component_across_cli_corpus() {
 
 #[test]
 fn plan_matches_component_for_pure_compute() {
-    // wasi:cli/types is imported unconditionally (it also backs async-export
-    // transmission futures); the plan matches the component for a no-wasi
-    // program. Trimming it is deferred into the fuller R2.
+    // A program that references no error-code and has no transmission future
+    // drops the dead wasi:cli/types import; plan and component agree (empty).
     let source = "export fn run() {\n\
                       let mut x = 0;\n\
                       let mut i = 0;\n\
@@ -119,7 +116,7 @@ fn plan_matches_component_for_pure_compute() {
     let plan = plan_imports(source);
     let actual = actual_imports(source);
     assert_eq!(plan, actual, "\nplan:   {plan:?}\nactual: {actual:?}");
-    assert!(plan.iter().any(|i| i.contains("cli/types")), "{plan:?}");
+    assert!(!plan.iter().any(|i| i.contains("cli/types")), "{plan:?}");
 }
 
 #[test]
@@ -153,8 +150,8 @@ fn plan_matches_component_for_http_service_with_resources() {
             &[],
         ))
         .expect("dump succeeds");
-        dump.optimized_package
-            .expect("optimized package present")
+        dump.wir_package
+            .expect("wir package present")
             .imported_cm_interfaces
             .iter()
             .cloned()

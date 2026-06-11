@@ -445,13 +445,6 @@ fn resolve_imports(
         .sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
 
     project.used_wasi_functions = used_wasi_functions;
-
-    // Resolve the complete CM interface import set as structured data now that
-    // `used_wasi_functions` is final (WEP `wep-2026-05-02-wit-interoperability.md`
-    // §"Faithful imports"). Codegen still computes its own imports until R2; a
-    // debug assertion in `codegen/component.rs` cross-checks the two.
-    project.imported_cm_interfaces =
-        crate::wir_build::component_imports::resolve_imported_cm_interfaces(project);
 }
 
 /// Filter string literals to those owned by surviving functions.

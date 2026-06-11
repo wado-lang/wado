@@ -35,7 +35,7 @@ fn import_plan(source: &str, world_fq: &str) -> Vec<String> {
         &[],
     )) {
         Ok(dump) => dump
-            .optimized_package
+            .wir_package
             .map(|pkg| pkg.imported_cm_interfaces)
             .unwrap_or_default(),
         Err(_) => Vec::new(),

@@ -32,8 +32,15 @@ pub fn build_component(
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
 
-    // Generate WASI imports dynamically from registry
-    generate_cm_imports(&mut builder, &mut ctx, project);
+    // Generate WASI imports dynamically from registry. Whether the shared
+    // `wasi:cli/types` (`error-code`) is imported is decided by the WIR-level
+    // plan (the single source of truth), which codegen reads rather than
+    // re-deriving.
+    let needs_cli_types = wir_package
+        .imported_cm_interfaces
+        .iter()
+        .any(|fq| fq.starts_with("wasi:cli/types@"));
+    generate_cm_imports(&mut builder, &mut ctx, project, needs_cli_types);
 
     // Type: result unit for run function (needed for task.return)
     let result_unit_type = ctx.register_type("result-unit");
@@ -1716,55 +1723,56 @@ fn generate_cm_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
+    needs_cli_types: bool,
 ) {
     let cli_version = project
         .cm_interface_registry
         .get_cli_version()
         .expect("WASI CLI version not found in registry - lib/wasi/*.wado not loaded?");
 
-    // Import wasi:cli/types for shared types (error-code). This is imported
-    // unconditionally: besides interface signatures, the canonical error-code
-    // backs async-export transmission futures (e.g. a kiln generator's
-    // `task return`), so it is needed more broadly than a plan-level predicate
-    // can see. Trimming it requires codegen's transmission-source analysis, so
-    // it is deferred into the fuller R2 (see WEP §"Faithful imports").
-    let cli_types_interface = format!("wasi:cli/types@{cli_version}");
-    let error_code_cm_name = project
-        .cm_interface_registry
-        .get_enum_cm_name_by_interface(&cli_types_interface, "ErrorCode")
-        .expect("ErrorCode CM name not found in wasi:cli/types");
-    let error_code_variants = project
-        .cm_interface_registry
-        .get_enum_variants_by_interface(&cli_types_interface, "ErrorCode")
-        .expect("ErrorCode enum not found in wasi:cli/types");
-    let types_instance_type = ctx.register_type("types-instance-type");
-    {
-        let (_, enc) = builder.ty(Some("types-instance-type"));
-        let mut instance_type = InstanceType::new();
-        instance_type
-            .ty()
-            .defined_type()
-            .enum_type(error_code_variants.iter().map(String::as_str));
-        instance_type.export(
-            error_code_cm_name,
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
+    // Import wasi:cli/types for the shared `error-code` enum, when the plan says
+    // it is needed (a used interface references it, or an async-export
+    // transmission future resolves to the cli error-code). A pure-compute or
+    // clock-only program drops this otherwise-dead import.
+    if needs_cli_types {
+        let cli_types_interface = format!("wasi:cli/types@{cli_version}");
+        let error_code_cm_name = project
+            .cm_interface_registry
+            .get_enum_cm_name_by_interface(&cli_types_interface, "ErrorCode")
+            .expect("ErrorCode CM name not found in wasi:cli/types");
+        let error_code_variants = project
+            .cm_interface_registry
+            .get_enum_variants_by_interface(&cli_types_interface, "ErrorCode")
+            .expect("ErrorCode enum not found in wasi:cli/types");
+        let types_instance_type = ctx.register_type("types-instance-type");
+        {
+            let (_, enc) = builder.ty(Some("types-instance-type"));
+            let mut instance_type = InstanceType::new();
+            instance_type
+                .ty()
+                .defined_type()
+                .enum_type(error_code_variants.iter().map(String::as_str));
+            instance_type.export(
+                error_code_cm_name,
+                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(0)),
+            );
+            enc.instance(&instance_type);
+        }
+
+        ctx.register_instance("types");
+        let types_import_path = format!("wasi:cli/types@{cli_version}");
+        builder.import(
+            &types_import_path,
+            wasm_encoder::ComponentTypeRef::Instance(types_instance_type),
         );
-        enc.instance(&instance_type);
+
+        ctx.register_type("error-code");
+        builder.alias_export(
+            ctx.instance_idx("types"),
+            error_code_cm_name,
+            ComponentExportKind::Type,
+        );
     }
-
-    ctx.register_instance("types");
-    let types_import_path = format!("wasi:cli/types@{cli_version}");
-    builder.import(
-        &types_import_path,
-        wasm_encoder::ComponentTypeRef::Instance(types_instance_type),
-    );
-
-    ctx.register_type("error-code");
-    builder.alias_export(
-        ctx.instance_idx("types"),
-        error_code_cm_name,
-        ComponentExportKind::Type,
-    );
 
     // Generate imports for each interface in the registry
     for interface_info in project.cm_interface_registry.interfaces() {

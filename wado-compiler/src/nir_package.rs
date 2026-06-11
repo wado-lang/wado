@@ -76,12 +76,6 @@ pub struct NirPackage {
 
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: IndexSet<String>,
-    /// Complete set of CM interface FQs the component imports, resolved post-DCE
-    /// by [`crate::wir_build::component_imports::resolve_imported_cm_interfaces`].
-    /// Empty until the optimizer's import resolution runs. The structured source
-    /// of truth for WIT producer-side emission (WEP
-    /// `wep-2026-05-02-wit-interoperability.md` §"Faithful imports").
-    pub imported_cm_interfaces: Vec<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.

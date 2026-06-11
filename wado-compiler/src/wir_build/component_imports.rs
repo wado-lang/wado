@@ -16,28 +16,34 @@ use crate::ast::Type;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
+use crate::wir::{CanonicalIntrinsic, CmFuturePayload};
 
 /// Compute the imported CM interface FQs for `project`, mirroring the decision
-/// codegen's import phases make from `used_wasi_functions` + the registry.
-/// Returns a sorted, de-duplicated list.
+/// codegen's import phases make from `used_wasi_functions`, the registry, and
+/// the WIR-level canonical intrinsics. Returns a sorted, de-duplicated list.
 #[must_use]
-pub fn resolve_imported_cm_interfaces(project: &NirPackage) -> Vec<String> {
+pub fn resolve_imported_cm_interfaces(
+    project: &NirPackage,
+    needed_canonicals: &IndexSet<CanonicalIntrinsic>,
+) -> Vec<String> {
     let registry = project.cm_interface_registry;
     let mut imports: IndexSet<String> = IndexSet::default();
 
-    // The kiln-generator-shaped worlds forbid every WASI interface, matching
-    // the suppression in `optimize/dce.rs`.
-    let wasi_allowed = !project.world_imports_interface("KilnHost");
-    if !wasi_allowed {
-        return Vec::new();
-    }
+    // No blanket "kiln forbids WASI" early-return here: the kiln-generator world
+    // forbids WASI *interfaces* (stdout/stderr/…), and `optimize/dce.rs` already
+    // keeps `used_wasi_functions` empty for it, so the interface phases below
+    // naturally yield nothing. But the generator's `task return` transmission
+    // future still needs the canonical cli `error-code`, so Phase 0 must remain
+    // governed by `needs_canonical_cli_error_code`, not a WASI-allowed flag.
 
-    // Phase 0: `wasi:cli/types` provides the shared `error-code` enum, imported
-    // unconditionally by codegen (it also backs async-export transmission
-    // futures, not just interface signatures), so the plan matches. Trimming it
-    // needs codegen's transmission-source analysis and is deferred into the
-    // fuller R2 (see WEP §"Faithful imports").
-    if let Some(version) = registry.get_cli_version() {
+    // Phase 0: `wasi:cli/types` provides the shared `error-code` enum — the
+    // canonical fallback for `result<_, error-code>` bindings. Needed iff a used
+    // interface's signature references it (cli stdin/stdout/stderr) OR an
+    // async-export transmission future resolves to the cli error-code (its
+    // `Transmission` source is `cli`; e.g. a kiln generator's `task return`).
+    if needs_canonical_cli_error_code(project, needed_canonicals)
+        && let Some(version) = registry.get_cli_version()
+    {
         imports.insert(format!("wasi:cli/types@{version}"));
     }
 
@@ -120,6 +126,60 @@ pub fn resolve_imported_cm_interfaces(project: &NirPackage) -> Vec<String> {
     let mut out: Vec<String> = imports.into_iter().collect();
     out.sort();
     out
+}
+
+/// Whether the component needs the canonical `wasi:cli/types#error-code`.
+/// Codegen's Phase 0 import is gated on the plan, which is gated on this.
+fn needs_canonical_cli_error_code(
+    project: &NirPackage,
+    needed_canonicals: &IndexSet<CanonicalIntrinsic>,
+) -> bool {
+    // Import side: a used interface's signature references the cli error-code.
+    let import_side = project.cm_interface_registry.interfaces().any(|interface| {
+        interface.functions.iter().any(|func| {
+            let key = format!("{}::{}", func.interface_name, func.method_name);
+            project.used_wasi_functions.contains(&key)
+                && (func
+                    .return_type
+                    .as_ref()
+                    .is_some_and(references_cli_error_code)
+                    || func
+                        .params
+                        .iter()
+                        .any(|(_, _, ty)| references_cli_error_code(ty)))
+        })
+    });
+    if import_side {
+        return true;
+    }
+
+    // Transmission side: an async-export transmission future whose error-code
+    // source is `cli` (the canonical error-code), e.g. a kiln generator's
+    // `task return result<_, error-code>`.
+    needed_canonicals.iter().any(|canonical| {
+        matches!(
+            canonical.future_payload(),
+            Some(CmFuturePayload::Transmission(source)) if source == "cli"
+        )
+    })
+}
+
+/// Whether `ty` references the canonical `wasi:cli/types` `ErrorCode`.
+fn references_cli_error_code(ty: &Type) -> bool {
+    match ty {
+        Type::Named(named) => {
+            named.name == "ErrorCode"
+                && named
+                    .source_interface
+                    .as_deref()
+                    .is_some_and(|s| s.starts_with("wasi:cli/types"))
+        }
+        Type::Generic(generic) => generic.args.iter().any(references_cli_error_code),
+        Type::NamespacedGeneric(generic) => generic.args.iter().any(references_cli_error_code),
+        Type::Tuple(elems) => elems.iter().any(references_cli_error_code),
+        Type::Reference(inner) | Type::MutReference(inner) => references_cli_error_code(inner),
+        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Error(_) => false,
+    }
 }
 
 /// Collect resource type names referenced anywhere in `ty` (recursing through

@@ -184,7 +184,7 @@ async fn resolve_world_imports(source: &str, input: &str, world: &str) -> Vec<St
     .await
     {
         Ok(result) => result
-            .optimized_package
+            .wir_package
             .map(|pkg| pkg.imported_cm_interfaces)
             .unwrap_or_default(),
         Err(_) => Vec::new(),

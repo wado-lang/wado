@@ -44,5 +44,14 @@ pub fn build_wir_package(package: &NirPackage) -> WirPackage {
     translate::translate_function_bodies(&mut ctx);
 
     // Step 4: Build the final WirPackage
-    ctx.into_wir_package()
+    let mut wir = ctx.into_wir_package();
+
+    // Step 5: Resolve the complete CM import set now that `needed_canonicals`
+    // is final — both the NIR facts (`used_wasi_functions`, the registry) and
+    // the WIR canonical intrinsics (transmission sources) are available here, so
+    // this is the single place with the full picture. Codegen and the WIT
+    // producer read `wir.imported_cm_interfaces` rather than re-deciding.
+    wir.imported_cm_interfaces =
+        component_imports::resolve_imported_cm_interfaces(package, &wir.needed_canonicals);
+    wir
 }
