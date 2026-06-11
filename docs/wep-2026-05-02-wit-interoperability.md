@@ -238,8 +238,8 @@ plus the target world FQ and produces:
 
 - A WIT text document (consumed by `wado wit`).
 - A `component-type` custom section payload, derived from that WIT text
-  via `wit-parser` + `wit-component::metadata::encode` (consumed by
-  `wado compile --embed-wit=<scope>`).
+  via `wit-parser` + `wit-component::metadata::encode` (embedded by
+  `wado compile`, which is default-on).
 
 Codegen is unaffected. The `codegen.rs` principle ("emits `Package` as is,
 without knowledge of earlier phases") still holds; the WIT bundle is
@@ -362,17 +362,19 @@ the package's own contract; consumers need an external WIT registry to
 resolve `wasi:*` references. Both are well-defined; the choice is
 deployment-policy, not technical.
 
-The scope is required at the CLI; there is no built-in default. A
-project-level default may be set in `wado.toml`:
+The default scope is `full`. It needs no configuration and produces a
+self-describing component, which is the first-class outcome for both
+single-file scripts and manifest-backed projects (see "Embedding policy"
+below). A project may change the default to `local` in `wado.toml`:
 
 ```toml
 [wit]
-scope = "full"   # or "local"
+scope = "local"   # override the built-in `full` default
 ```
 
-When `wado.toml` provides `[wit].scope`, the CLI flag may be omitted and
-inherits that value. Without a manifest-level setting _and_ without a CLI
-flag, the command errors out asking the user to choose.
+`[wit].scope` only changes which scope is used; it never decides _whether_
+WIT is embedded. The resolution order is: explicit CLI flag, then
+`[wit].scope`, then the built-in `full`.
 
 Stdlib interfaces under `lib/wasi/**` are emitted with the same machinery
 as user interfaces; there is no special-case "stdlib" code path. Each
@@ -397,47 +399,58 @@ Consumers extract via `wasm-tools component wit output.wasm`. Round-trip
 verification (Wado emits → wasm-tools decodes → matches the text from
 `wado wit`) is a required fixture for every world shape.
 
+### Embedding policy
+
+Two roles, clearly separated:
+
+- `wado wit` writes the WIT as **text**, for humans to read and for
+  tooling to diff. It is an inspection aid, not the deliverable.
+- `wado compile` embeds the **binary** `component-type` section. This is
+  what makes the output a first-class Component Model citizen — composable
+  with `wac`, publishable with `wkg`, transpilable with `jco`, and
+  consumable by another Wado compiler.
+
+Because a component without embedded WIT is a second-class CM citizen,
+and because Wado treats single-file scripts as first-class, **`wado
+compile` embeds WIT by default** — with or without a `wado.toml`. The
+manifest is a tuning knob for the _scope_ (`full` vs `local`), never the
+switch that turns embedding on. `--no-wit` is the single, explicit
+opt-out.
+
+Embedding is a property of producing a distributable artifact, so it
+applies to `wado compile` only. `wado run`, `wado serve`, and `wado test`
+compile to an ephemeral in-memory component and never embed WIT, keeping
+the inner dev loop small and fast.
+
 ### CLI surfaces
 
 `wado wit` — standalone WIT text:
 
 ```sh
-wado wit --scope full file.wado                          # stdout
-wado wit --scope local -o file.wit file.wado             # file output
-wado wit --scope full --world wasi:http/service file.wado
+wado wit file.wado                                 # stdout, default scope (full)
+wado wit --scope local -o file.wit file.wado       # file output, user-only WIT
+wado wit --world wasi:http/service file.wado       # pick the target world
 ```
 
-Backed by `wit_emit::emit_wit_text`. Runs `semantics_of` and stops; no
-TIR build, no monomorphize, no lower, no codegen. Mirrors `wado dump` in
-pipeline depth.
+Backed by `wit_emit::emit_wit_text`. Runs `semantics_of` (already a public
+`Semantics`-only entry point) and stops; no TIR build, no monomorphize, no
+lower, no codegen. Mirrors `wado dump` in pipeline depth. Takes exactly one
+source file; passing more than one is an error. `--world` reuses the same
+flag and default (`wasi:cli/command`) as `wado compile`. `--scope` is
+optional and defaults per the resolution order above.
 
-`--scope` is required when `wado.toml` does not provide `[wit].scope`.
-
-`wado compile --embed-wit=<scope>` / `--no-wit` — embed WIT in the
-compiled component:
+`wado compile` — embed WIT in the compiled component (default on):
 
 ```sh
-wado compile --embed-wit=full file.wado    # self-describing component
-wado compile --embed-wit=local file.wado   # user-only WIT, refs upstream
+wado compile file.wado                     # embeds, scope = full (default)
+wado compile --embed-wit=local file.wado   # embeds, user-only WIT, refs upstream
 wado compile --no-wit file.wado            # explicit opt-out
-wado compile file.wado                     # Phase 1: same as --no-wit
 ```
 
-`--embed-wit` always takes a value. `--embed-wit` without a value is a
-CLI error. `--no-wit` takes no value.
-
-Rollout:
-
-- Phase 1 (this WEP): embedding is opt-in via `--embed-wit=<scope>`.
-  Plain `wado compile` does not embed.
-- Phase 2: when a `wado.toml` has `[wit].scope`, plain `wado compile`
-  embeds with that scope. `--no-wit` overrides the manifest. The CLI
-  default in single-file mode remains "no embedding" because there is no
-  manifest to read.
-
-There is no global "default-on" step. The scope is policy that lives in
-the manifest, and the manifest is what turns embedding on by default for
-a project.
+`--embed-wit=<scope>` overrides the resolved scope for one invocation; it
+always takes a value (`full` or `local`), and `--embed-wit` without a
+value is a CLI error. `--no-wit` takes no value and is mutually exclusive
+with `--embed-wit`.
 
 ### Implementation phases
 
@@ -490,23 +503,25 @@ Each phase ends with green E2E tests for the listed fixtures.
   - [ ] Each fixture is parsed back with `wit-parser` to confirm the
         emitted text is syntactically valid WIT.
 
-- [ ] Phase 2 — `wado compile --embed-wit=<scope>`
+- [ ] Phase 2 — `wado compile` embedding (default on, scope `full`)
   - [ ] `wado-compiler/src/wit_bundle.rs`: text → `Resolve` →
         `wit_component::metadata::encode` → custom-section append.
-  - [ ] `--embed-wit=<scope>` and `--no-wit` flags on `CompileOptions`
-        with the mutual-exclusion check.
+  - [ ] `--embed-wit=<scope>` and `--no-wit` flags on `CompileOptions`,
+        mutually exclusive; embedding defaults to `full` when neither is
+        given. `wado run` / `serve` / `test` never embed.
   - [ ] Postprocess hook in `codegen/postprocess.rs` (or the immediate
         caller of `build_component`).
-  - [ ] Round-trip fixture: for every Phase 1 fixture, compile with
-        `--embed-wit=full`, then run `wasm-tools component wit` on the
-        output and assert it matches `wado wit --scope full`.
+  - [ ] Round-trip fixture: for every Phase 1 fixture, compile (default
+        `full`), then run `wasm-tools component wit` on the output and
+        assert it matches `wado wit`.
 
-- [ ] Phase 3 — Manifest-driven enable
+- [ ] Phase 3 — Manifest scope override
   - [ ] Parse `[wit].scope` in `wado-manifest`.
-  - [ ] `wado compile` reads the manifest scope when no CLI flag is
-        given; `--no-wit` overrides.
+  - [ ] `wado compile` uses `[wit].scope` as the scope when no CLI flag is
+        given; the built-in default stays `full`; `--embed-wit` overrides
+        the manifest; `--no-wit` opts out entirely.
   - [ ] Update WEP: WIT Bundling status from "designed" to "implemented"
-        and reconcile its "default-on" wording with the manifest-driven
+        and reconcile its wording with the default-on, manifest-tunes-scope
         rule documented here.
 
 ## Open Design Questions
@@ -565,9 +580,9 @@ will get one when work starts.
 - [ ] Producer side: emit WIT text and embed `component-type` in output
       (WEP: WIT Bundling for the format; this WEP §"Producer Side: WIT
       Generation and Embedding" for the detailed design). Designed; Phase 0
-      is a `Semantics` refactor, Phase 1 is `wado wit`, Phase 2 is
-      `wado compile --embed-wit=<scope>`, Phase 3 reads
-      `[wit].scope` from `wado.toml`.
+      is a `Semantics` refactor, Phase 1 is `wado wit`, Phase 2 makes
+      `wado compile` embed WIT by default (scope `full`, `--no-wit` to opt
+      out), Phase 3 lets `[wit].scope` in `wado.toml` retune the scope.
 - [ ] Decide world structure faithfulness level (L2 vs L3) and document.
 - [ ] Implement `contract` declaration with the chosen scope rules (revise
       WEP: World Conformance accordingly).
