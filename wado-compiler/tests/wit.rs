@@ -97,6 +97,40 @@ fn cli_program_emits_faithful_world_imports_and_run_export() {
 }
 
 #[test]
+fn full_scope_reconstructs_resource_methods_and_reparses() {
+    // The HTTP service exercises resources (request/response/fields) with
+    // methods, statics, and constructors, plus the `handle` entry point.
+    let source = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../example/http_server.wado"
+    ))
+    .expect("read http_server example");
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(&source, &host, Some("entry.wado")));
+    assert!(sem.is_complete(), "semantics did not complete");
+    let opts = WitEmitOptions {
+        scope: WitScope::Full,
+        world_fq: "wasi:http/service".to_string(),
+        default_interface_name: "service".to_string(),
+    };
+    let text = emit_wit_text(&sem, &opts).expect("emit failed");
+
+    assert!(text.contains("export wasi:http/handler@"), "\n{text}");
+    assert!(text.contains("resource fields {"), "\n{text}");
+    assert!(text.contains("constructor();"), "\n{text}");
+    assert!(text.contains("static func"), "\n{text}");
+    // The `self` parameter of instance methods is dropped.
+    assert!(text.contains("get-method: func() ->"), "\n{text}");
+    // No raw CM method markers leak into the WIT.
+    assert!(!text.contains("[method]"), "\n{text}");
+
+    let mut resolve = wit_parser::Resolve::new();
+    resolve
+        .push_str("service.wit", &text)
+        .expect("resource WIT failed to re-parse");
+}
+
+#[test]
 fn full_scope_inlines_referenced_interfaces_and_reparses() {
     // `full` scope inlines the referenced WASI interfaces as nested packages,
     // producing a self-describing document that re-parses without a registry.

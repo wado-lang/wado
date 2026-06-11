@@ -13,8 +13,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use wit_encoder::{
-    Field, Flag, Interface, Package, PackageName, Params, StandaloneFunc, Type, TypeDef,
-    VariantCase, World, WorldItem,
+    Field, Flag, Interface, Package, PackageName, Params, ResourceFunc, StandaloneFunc, Type,
+    TypeDef, VariantCase, World, WorldItem,
 };
 
 use crate::semantics::Semantics;
@@ -443,32 +443,58 @@ impl<'a> Emitter<'a> {
                 self.map_ast_type(base, fq, &mut uses)?,
             ));
         }
-        for (_, cm_name) in registry.resources_for_interface(fq) {
-            // Resource methods are not yet reconstructed; the bare resource
-            // keeps the document valid for interfaces that only name the type.
-            iface.type_def(TypeDef::resource(
-                cm_name.to_string(),
-                Vec::<wit_encoder::ResourceFunc>::new(),
-            ));
-        }
 
-        // Functions.
+        // Functions: resource methods/statics/constructors nest under their
+        // resource; everything else is a free interface function.
+        let mut resource_funcs: BTreeMap<String, Vec<ResourceFunc>> = BTreeMap::new();
+        let mut free_funcs: Vec<StandaloneFunc> = Vec::new();
         for info in infos.iter().filter(|i| i.path == fq) {
             for func in &info.functions {
-                let mut wit_func = StandaloneFunc::new(func.wasi_func_name.clone(), func.is_async);
-                let mut params = Params::empty();
-                for (_, cm_name, ty) in &func.params {
-                    params.push(cm_name.clone(), self.map_ast_type(ty, fq, &mut uses)?);
+                if let Some((kind, resource, member)) = parse_resource_func(&func.wasi_func_name) {
+                    let rf = self.build_resource_func(func, kind, member, fq, &mut uses)?;
+                    resource_funcs
+                        .entry(resource.to_string())
+                        .or_default()
+                        .push(rf);
+                } else {
+                    let mut wit_func =
+                        StandaloneFunc::new(func.wasi_func_name.clone(), func.is_async);
+                    let mut params = Params::empty();
+                    for (_, cm_name, ty) in &func.params {
+                        params.push(cm_name.clone(), self.map_ast_type(ty, fq, &mut uses)?);
+                    }
+                    wit_func.set_params(params);
+                    wit_func.set_result(self.map_cm_result(
+                        &func.return_type,
+                        func.is_async,
+                        fq,
+                        &mut uses,
+                    )?);
+                    free_funcs.push(wit_func);
                 }
-                wit_func.set_params(params);
-                wit_func.set_result(self.map_cm_result(
-                    &func.return_type,
-                    func.is_async,
-                    fq,
-                    &mut uses,
-                )?);
-                iface.function(wit_func);
             }
+        }
+
+        // Resources, in declaration order, each with its reconstructed methods.
+        let mut resource_order: Vec<String> = Vec::new();
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        for (_, cm_name) in registry.resources_for_interface(fq) {
+            if seen.insert(cm_name.to_string()) {
+                resource_order.push(cm_name.to_string());
+            }
+        }
+        for key in resource_funcs.keys() {
+            if seen.insert(key.clone()) {
+                resource_order.push(key.clone());
+            }
+        }
+        for resource in resource_order {
+            let funcs = resource_funcs.remove(&resource).unwrap_or_default();
+            iface.type_def(TypeDef::resource(resource, funcs));
+        }
+
+        for func in free_funcs {
+            iface.function(func);
         }
 
         // `use` statements for types borrowed from other interfaces.
@@ -481,6 +507,34 @@ impl<'a> Emitter<'a> {
         }
 
         Ok(iface)
+    }
+
+    /// Reconstruct one resource method/static/constructor as a `ResourceFunc`.
+    fn build_resource_func(
+        &self,
+        func: &crate::component_model::CmFunctionInfo,
+        kind: ResKind,
+        member: &str,
+        fq: &str,
+        uses: &mut Vec<(String, String)>,
+    ) -> Result<ResourceFunc, WitEmitError> {
+        let mut rf = match kind {
+            ResKind::Constructor => ResourceFunc::constructor(),
+            ResKind::Method => ResourceFunc::method(member.to_string(), func.is_async),
+            ResKind::Static => ResourceFunc::static_(member.to_string(), func.is_async),
+        };
+        // Instance methods take the resource handle as an implicit `self`, which
+        // WIT omits from the parameter list.
+        let skip_self = usize::from(matches!(kind, ResKind::Method));
+        let mut params = Params::empty();
+        for (_, cm_name, ty) in func.params.iter().skip(skip_self) {
+            params.push(cm_name.clone(), self.map_ast_type(ty, fq, uses)?);
+        }
+        rf.set_params(params);
+        if !matches!(kind, ResKind::Constructor) {
+            rf.set_result(self.map_cm_result(&func.return_type, func.is_async, fq, uses)?);
+        }
+        Ok(rf)
     }
 
     /// Map a CM function's return type to a WIT result, unwrapping the `Future`
@@ -511,6 +565,36 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// Resolve the WIT name of a CM-defined named type, using the registry's
+    /// `cm_name` (which preserves acronym casing, e.g. `DNS-error-payload`) so
+    /// references match their definitions. Records a cross-interface `use`.
+    fn cm_type_name(
+        &self,
+        named: &crate::ast::NamedType,
+        current_fq: &str,
+        uses: &mut Vec<(String, String)>,
+    ) -> String {
+        let cm_name = self
+            .sem
+            .cm_interface_registry()
+            .zip(named.source_interface.as_deref())
+            .and_then(|(reg, src)| {
+                reg.get_struct_cm_name_by_source(src, &named.name)
+                    .or_else(|| reg.get_variant_cm_name_by_source(src, &named.name))
+                    .or_else(|| reg.get_enum_cm_name_by_source(src, &named.name))
+                    .or_else(|| reg.get_flags_cm_name_by_source(src, &named.name))
+                    .or_else(|| reg.get_resource_cm_name_by_source(src, &named.name))
+            })
+            .map(str::to_string)
+            .unwrap_or_else(|| to_kebab(&named.name));
+        if let Some(src) = &named.source_interface
+            && src != current_fq
+        {
+            uses.push((src.clone(), cm_name.clone()));
+        }
+        cm_name
+    }
+
     /// Map an AST type from a CM signature to its WIT type, recording any
     /// cross-interface named-type references in `uses` as `(source_fq, item)`.
     fn map_ast_type(
@@ -525,23 +609,15 @@ impl<'a> Emitter<'a> {
                 if let Some(prim) = primitive_by_name(&named.name) {
                     return Ok(prim);
                 }
-                if let Some(src) = &named.source_interface
-                    && src != current_fq
-                {
-                    uses.push((src.clone(), to_kebab(&named.name)));
-                }
-                Ok(Type::named(to_kebab(&named.name)))
+                let cm_name = self.cm_type_name(named, current_fq, uses);
+                Ok(Type::named(cm_name))
             }
             AstType::Generic(generic) => self.map_ast_generic(generic, current_fq, uses),
             AstType::Reference(inner) | AstType::MutReference(inner) => {
                 // `&Resource` becomes `borrow<resource>` in WIT.
                 if let AstType::Named(named) = inner.as_ref() {
-                    if let Some(src) = &named.source_interface
-                        && src != current_fq
-                    {
-                        uses.push((src.clone(), to_kebab(&named.name)));
-                    }
-                    return Ok(Type::borrow(to_kebab(&named.name)));
+                    let cm_name = self.cm_type_name(named, current_fq, uses);
+                    return Ok(Type::borrow(cm_name));
                 }
                 self.map_ast_type(inner, current_fq, uses)
             }
@@ -788,6 +864,32 @@ fn describe_type(ty: &ResolvedType) -> String {
         ResolvedType::Unit => "unit `()`".to_string(),
         ResolvedType::Never => "never `!`".to_string(),
         other => format!("{other:?}"),
+    }
+}
+
+/// The kind of resource-associated function, encoded by the `#[cm]` fragment
+/// prefix (`[method]` / `[static]` / `[constructor]`).
+#[derive(Clone, Copy)]
+enum ResKind {
+    Method,
+    Static,
+    Constructor,
+}
+
+/// Classify a CM function name as a resource method/static/constructor,
+/// returning `(kind, resource_cm_name, member_name)`. Free functions yield
+/// `None`.
+fn parse_resource_func(wasi_func_name: &str) -> Option<(ResKind, &str, &str)> {
+    if let Some(resource) = wasi_func_name.strip_prefix("[constructor]") {
+        Some((ResKind::Constructor, resource, ""))
+    } else if let Some(rest) = wasi_func_name.strip_prefix("[method]") {
+        let (resource, member) = rest.split_once('.')?;
+        Some((ResKind::Method, resource, member))
+    } else if let Some(rest) = wasi_func_name.strip_prefix("[static]") {
+        let (resource, member) = rest.split_once('.')?;
+        Some((ResKind::Static, resource, member))
+    } else {
+        None
     }
 }
 
