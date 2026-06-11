@@ -40,7 +40,17 @@ pub fn build_component(
         .imported_cm_interfaces
         .iter()
         .any(|fq| fq.starts_with("wasi:cli/types@"));
-    generate_cm_imports(&mut builder, &mut ctx, project, needs_cli_types);
+    let needs_http_types = wir_package
+        .imported_cm_interfaces
+        .iter()
+        .any(|fq| fq.starts_with("wasi:http/types@"));
+    generate_cm_imports(
+        &mut builder,
+        &mut ctx,
+        project,
+        needs_cli_types,
+        needs_http_types,
+    );
 
     // Type: result unit for run function (needed for task.return)
     let result_unit_type = ctx.register_type("result-unit");
@@ -1724,6 +1734,7 @@ fn generate_cm_imports(
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
     needs_cli_types: bool,
+    needs_http_types: bool,
 ) {
     let cli_version = project
         .cm_interface_registry
@@ -2318,10 +2329,10 @@ fn generate_cm_imports(
     // Import interfaces with resource types
     import_interfaces_with_resources(builder, ctx, project);
 
-    // Import wasi:http/types when the world exports an HTTP handler
-    // or when the code uses the HTTP Client effect (e.g., CLI programs
-    // that make outgoing HTTP requests).
-    if project.has_http_handler_export || project.has_interface("Client") {
+    // Import wasi:http/types when the plan calls for it (the world exports an
+    // HTTP handler, or the code uses the HTTP Client effect). The decision lives
+    // in the WIR-level plan; codegen reads it.
+    if needs_http_types {
         import_http_types_for_service(project, builder, ctx);
     }
 
