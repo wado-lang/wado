@@ -16,17 +16,22 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
 
-/// Emit WIT for `source` targeting the default CLI world.
-fn emit(source: &str) -> String {
+/// Emit WIT for `source` targeting the default CLI world, under `scope`.
+fn emit_scope(source: &str, scope: WitScope) -> String {
     let host = InMemoryHost::new();
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     assert!(sem.is_complete(), "semantics did not complete for source");
     let opts = WitEmitOptions {
-        scope: WitScope::Full,
+        scope,
         world_fq: "wasi:cli/command".to_string(),
         default_interface_name: "entry".to_string(),
     };
     emit_wit_text(&sem, &opts).expect("emit_wit_text failed")
+}
+
+/// Emit WIT for `source` under `local` scope (no inlined nested packages).
+fn emit(source: &str) -> String {
+    emit_scope(source, WitScope::Local)
 }
 
 /// Assert the emitted WIT equals `expected` and is valid WIT.
@@ -89,6 +94,26 @@ fn cli_program_emits_faithful_world_imports_and_run_export() {
     assert!(text.contains("export wasi:cli/run@"), "\n{text}");
     // `run` is not a bare function export under the faithful mapping.
     assert!(!text.contains("export run:"), "\n{text}");
+}
+
+#[test]
+fn full_scope_inlines_referenced_interfaces_and_reparses() {
+    // `full` scope inlines the referenced WASI interfaces as nested packages,
+    // producing a self-describing document that re-parses without a registry.
+    let text = emit_scope(
+        "use { println } from \"core:cli\";\n\
+         export fn run() with Stdout { println(\"hi\"); }",
+        WitScope::Full,
+    );
+    assert!(text.contains("package wasi:cli@"), "\n{text}");
+    assert!(text.contains("interface stdout {"), "\n{text}");
+    assert!(text.contains("enum error-code {"), "\n{text}");
+    assert!(text.contains("use types.{"), "\n{text}");
+
+    let mut resolve = wit_parser::Resolve::new();
+    resolve
+        .push_str("full.wit", &text)
+        .expect("full-scope WIT failed to re-parse");
 }
 
 #[test]

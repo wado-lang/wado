@@ -81,7 +81,19 @@ pub fn emit_wit_text(sem: &Semantics, opts: &WitEmitOptions) -> Result<String, W
 
     let mut emitter = Emitter::new(sem);
     let package = emitter.build_package(opts)?;
-    Ok(package.to_string())
+    let mut out = package.to_string();
+
+    // `full` scope inlines every referenced CM interface as a nested package,
+    // preserving the original package/version structure (the same shape
+    // `wasm-tools component wit` emits), so the document is self-describing and
+    // re-parses without an external registry.
+    if opts.scope == WitScope::Full {
+        for nested in emitter.build_nested_packages()? {
+            out.push('\n');
+            out.push_str(&nested.to_string());
+        }
+    }
+    Ok(out)
 }
 
 /// Drives one emission pass over the frontend's TIR modules.
@@ -91,6 +103,9 @@ struct Emitter<'a> {
     /// User-authored type declarations keyed by source name, gathered across
     /// every loaded user module so referenced types can be looked up by name.
     decls: TypeDecls<'a>,
+    /// CM interface FQs referenced by the world (imports + exports), to inline
+    /// under `full` scope. Populated by `build_package`.
+    referenced_interfaces: BTreeSet<String>,
     /// Named user types referenced by emitted signatures, in discovery order,
     /// awaiting a `TypeDef`. Keyed by source name to dedupe.
     pending: BTreeMap<String, TypeId>,
@@ -141,6 +156,7 @@ impl<'a> Emitter<'a> {
             sem,
             types: &sem.types,
             decls,
+            referenced_interfaces: BTreeSet::new(),
             pending: BTreeMap::new(),
             emitted: BTreeSet::new(),
         }
@@ -191,6 +207,12 @@ impl<'a> Emitter<'a> {
             }
             user_funcs.push(self.render_function(export)?);
         }
+
+        // Record the referenced CM interfaces for `full`-scope inlining. The
+        // export interfaces' own transitive deps must be inlined too.
+        let mut referenced: BTreeSet<String> = import_fqs.clone();
+        referenced.extend(self.transitive_import_closure(export_fqs.clone()));
+        self.referenced_interfaces = referenced;
 
         // Expand the transitive closure of referenced user types into TypeDefs.
         let type_defs = self.drain_pending_type_defs()?;
@@ -325,6 +347,282 @@ impl<'a> Emitter<'a> {
             }
         }
         visited
+    }
+
+    /// Build one nested `package` per referenced CM package, each holding the
+    /// full reconstructed definitions of the referenced interfaces in it.
+    fn build_nested_packages(&self) -> Result<Vec<wit_encoder::NestedPackage>, WitEmitError> {
+        let Some(registry) = self.sem.cm_interface_registry() else {
+            return Ok(Vec::new());
+        };
+        let infos: Vec<crate::component_model::CmInterfaceInfo> = registry.interfaces().collect();
+
+        // Group the referenced interface FQs by their owning package.
+        let mut by_package: BTreeMap<(String, String, String), Vec<String>> = BTreeMap::new();
+        for fq in &self.referenced_interfaces {
+            let Some(parts) = FqParts::parse(fq) else {
+                continue;
+            };
+            by_package
+                .entry((parts.namespace, parts.package, parts.version))
+                .or_default()
+                .push(fq.clone());
+        }
+
+        let mut packages = Vec::new();
+        for ((namespace, package, version), fqs) in by_package {
+            let semver = semver::Version::parse(&version).map_err(|_| {
+                WitEmitError::UnrepresentableType {
+                    description: format!("package version `{version}` is not valid semver"),
+                }
+            })?;
+            let name = PackageName::new(namespace, package, Some(semver));
+            let mut nested = wit_encoder::NestedPackage::new(name);
+            for fq in fqs {
+                nested.interface(self.reconstruct_interface(&fq, &infos, registry)?);
+            }
+            packages.push(nested);
+        }
+        Ok(packages)
+    }
+
+    /// Reconstruct one WIT `interface` from the CM registry: its functions, the
+    /// types it defines, and `use` statements for types it borrows from other
+    /// interfaces.
+    fn reconstruct_interface(
+        &self,
+        fq: &str,
+        infos: &[crate::component_model::CmInterfaceInfo],
+        registry: &crate::component_model::CmInterfaceRegistry,
+    ) -> Result<Interface, WitEmitError> {
+        let local_name = FqParts::parse(fq)
+            .map(|p| p.interface)
+            .unwrap_or_else(|| fq.to_string());
+        let mut iface = Interface::new(local_name);
+        let mut uses: Vec<(String, String)> = Vec::new();
+
+        // Types the interface defines.
+        for (_, cm_name, fields) in registry.structs_for_interface(fq) {
+            let mut wit_fields = Vec::new();
+            for (field_name, field_ty) in fields {
+                wit_fields.push(Field::new(
+                    field_name.clone(),
+                    self.map_ast_type(field_ty, fq, &mut uses)?,
+                ));
+            }
+            iface.type_def(TypeDef::record(cm_name.to_string(), wit_fields));
+        }
+        for (_, cm_name, cases) in registry.variants_for_interface(fq) {
+            let mut wit_cases = Vec::new();
+            for case in cases {
+                match &case.payload {
+                    Some(payload) => wit_cases.push(VariantCase::value(
+                        case.cm_name.clone(),
+                        self.map_ast_type(payload, fq, &mut uses)?,
+                    )),
+                    None => wit_cases.push(VariantCase::empty(case.cm_name.clone())),
+                }
+            }
+            iface.type_def(TypeDef::variant(cm_name.to_string(), wit_cases));
+        }
+        for (_, cm_name, variants) in registry.enums_for_interface(fq) {
+            iface.type_def(TypeDef::enum_(
+                cm_name.to_string(),
+                variants.iter().map(String::clone),
+            ));
+        }
+        for (_, cm_name, members) in registry.flags_for_interface(fq) {
+            iface.type_def(TypeDef::flags(
+                cm_name.to_string(),
+                members.iter().map(|m| Flag::new(m.clone())),
+            ));
+        }
+        for (wado_name, base) in registry.newtypes_for_interface(fq) {
+            iface.type_def(TypeDef::type_(
+                to_kebab(wado_name),
+                self.map_ast_type(base, fq, &mut uses)?,
+            ));
+        }
+        for (_, cm_name) in registry.resources_for_interface(fq) {
+            // Resource methods are not yet reconstructed; the bare resource
+            // keeps the document valid for interfaces that only name the type.
+            iface.type_def(TypeDef::resource(
+                cm_name.to_string(),
+                Vec::<wit_encoder::ResourceFunc>::new(),
+            ));
+        }
+
+        // Functions.
+        for info in infos.iter().filter(|i| i.path == fq) {
+            for func in &info.functions {
+                let mut wit_func = StandaloneFunc::new(func.wasi_func_name.clone(), func.is_async);
+                let mut params = Params::empty();
+                for (_, cm_name, ty) in &func.params {
+                    params.push(cm_name.clone(), self.map_ast_type(ty, fq, &mut uses)?);
+                }
+                wit_func.set_params(params);
+                wit_func.set_result(self.map_cm_result(
+                    &func.return_type,
+                    func.is_async,
+                    fq,
+                    &mut uses,
+                )?);
+                iface.function(wit_func);
+            }
+        }
+
+        // `use` statements for types borrowed from other interfaces.
+        let mut applied: BTreeSet<(String, String)> = BTreeSet::new();
+        for (source_fq, item) in uses {
+            let target = use_target(fq, &source_fq);
+            if applied.insert((target.clone(), item.clone())) {
+                iface.use_type(target, item, None);
+            }
+        }
+
+        Ok(iface)
+    }
+
+    /// Map a CM function's return type to a WIT result, unwrapping the `Future`
+    /// wrapper on async functions and collapsing unit to "no result".
+    fn map_cm_result(
+        &self,
+        ret: &Option<crate::ast::Type>,
+        is_async: bool,
+        fq: &str,
+        uses: &mut Vec<(String, String)>,
+    ) -> Result<Option<Type>, WitEmitError> {
+        use crate::ast::Type as AstType;
+        let Some(ty) = ret else {
+            return Ok(None);
+        };
+        let inner: Option<&AstType> = if is_async {
+            match ty {
+                AstType::Generic(g) if g.name == "Future" => g.args.first(),
+                other => Some(other),
+            }
+        } else {
+            Some(ty)
+        };
+        match inner {
+            None => Ok(None),
+            Some(t) if is_ast_unit(t) => Ok(None),
+            Some(t) => Ok(Some(self.map_ast_type(t, fq, uses)?)),
+        }
+    }
+
+    /// Map an AST type from a CM signature to its WIT type, recording any
+    /// cross-interface named-type references in `uses` as `(source_fq, item)`.
+    fn map_ast_type(
+        &self,
+        ty: &crate::ast::Type,
+        current_fq: &str,
+        uses: &mut Vec<(String, String)>,
+    ) -> Result<Type, WitEmitError> {
+        use crate::ast::Type as AstType;
+        match ty {
+            AstType::Named(named) => {
+                if let Some(prim) = primitive_by_name(&named.name) {
+                    return Ok(prim);
+                }
+                if let Some(src) = &named.source_interface
+                    && src != current_fq
+                {
+                    uses.push((src.clone(), to_kebab(&named.name)));
+                }
+                Ok(Type::named(to_kebab(&named.name)))
+            }
+            AstType::Generic(generic) => self.map_ast_generic(generic, current_fq, uses),
+            AstType::Reference(inner) | AstType::MutReference(inner) => {
+                // `&Resource` becomes `borrow<resource>` in WIT.
+                if let AstType::Named(named) = inner.as_ref() {
+                    if let Some(src) = &named.source_interface
+                        && src != current_fq
+                    {
+                        uses.push((src.clone(), to_kebab(&named.name)));
+                    }
+                    return Ok(Type::borrow(to_kebab(&named.name)));
+                }
+                self.map_ast_type(inner, current_fq, uses)
+            }
+            AstType::Tuple(elems) => {
+                let mut mapped = Vec::new();
+                for elem in elems {
+                    mapped.push(self.map_ast_type(elem, current_fq, uses)?);
+                }
+                Ok(Type::tuple(mapped))
+            }
+            AstType::NamespacedGeneric(_)
+            | AstType::Function(_)
+            | AstType::TypePackSpread(_, _)
+            | AstType::Error(_) => Err(WitEmitError::UnrepresentableType {
+                description: format!("CM signature type `{ty:?}` has no WIT form"),
+            }),
+        }
+    }
+
+    fn map_ast_generic(
+        &self,
+        generic: &crate::ast::GenericType,
+        current_fq: &str,
+        uses: &mut Vec<(String, String)>,
+    ) -> Result<Type, WitEmitError> {
+        let args = &generic.args;
+        match generic.name.as_str() {
+            "Option" if args.len() == 1 => {
+                Ok(Type::option(self.map_ast_type(&args[0], current_fq, uses)?))
+            }
+            "List" if args.len() == 1 => {
+                Ok(Type::list(self.map_ast_type(&args[0], current_fq, uses)?))
+            }
+            "Result" if args.len() == 2 => {
+                let ok = self.map_ast_result_arm(&args[0], current_fq, uses)?;
+                let err = self.map_ast_result_arm(&args[1], current_fq, uses)?;
+                Ok(match (ok, err) {
+                    (None, None) => Type::result_empty(),
+                    (Some(o), None) => Type::result_ok(o),
+                    (None, Some(e)) => Type::result_err(e),
+                    (Some(o), Some(e)) => Type::result_both(o, e),
+                })
+            }
+            "Tuple" => {
+                let mut mapped = Vec::new();
+                for arg in args {
+                    mapped.push(self.map_ast_type(arg, current_fq, uses)?);
+                }
+                Ok(Type::tuple(mapped))
+            }
+            "Stream" => match args.first() {
+                Some(elem) => Ok(Type::stream(Some(
+                    self.map_ast_type(elem, current_fq, uses)?,
+                ))),
+                None => Ok(Type::stream(None)),
+            },
+            "Future" => match args.first() {
+                Some(inner) => Ok(Type::future(Some(
+                    self.map_ast_type(inner, current_fq, uses)?,
+                ))),
+                None => Ok(Type::future(None)),
+            },
+            "AsyncCall" if args.len() == 1 => self.map_ast_type(&args[0], current_fq, uses),
+            other => Err(WitEmitError::UnrepresentableType {
+                description: format!("generic `{other}` with {} argument(s)", args.len()),
+            }),
+        }
+    }
+
+    /// Map one arm of a `Result<Ok, Err>`: unit becomes the empty arm.
+    fn map_ast_result_arm(
+        &self,
+        ty: &crate::ast::Type,
+        current_fq: &str,
+        uses: &mut Vec<(String, String)>,
+    ) -> Result<Option<Type>, WitEmitError> {
+        if is_ast_unit(ty) {
+            Ok(None)
+        } else {
+            Ok(Some(self.map_ast_type(ty, current_fq, uses)?))
+        }
     }
 
     fn drain_pending_type_defs(&mut self) -> Result<Vec<TypeDef>, WitEmitError> {
@@ -490,6 +788,75 @@ fn describe_type(ty: &ResolvedType) -> String {
         ResolvedType::Unit => "unit `()`".to_string(),
         ResolvedType::Never => "never `!`".to_string(),
         other => format!("{other:?}"),
+    }
+}
+
+/// The parsed components of a CM interface FQ, e.g.
+/// `wasi:cli/stdout@0.3.0` -> (`wasi`, `cli`, `stdout`, `0.3.0`).
+struct FqParts {
+    namespace: String,
+    package: String,
+    interface: String,
+    version: String,
+}
+
+impl FqParts {
+    fn parse(fq: &str) -> Option<Self> {
+        let (path, version) = fq.split_once('@')?;
+        let (ns_pkg, interface) = path.split_once('/')?;
+        let (namespace, package) = ns_pkg.split_once(':')?;
+        Some(Self {
+            namespace: namespace.to_string(),
+            package: package.to_string(),
+            interface: interface.to_string(),
+            version: version.to_string(),
+        })
+    }
+}
+
+/// The `use` target for a type defined in `source_fq` referenced from
+/// `current_fq`: a bare interface name within the same package, else the full
+/// `namespace:package/interface@version` path.
+fn use_target(current_fq: &str, source_fq: &str) -> String {
+    match (FqParts::parse(current_fq), FqParts::parse(source_fq)) {
+        (Some(cur), Some(src)) if cur.namespace == src.namespace && cur.package == src.package => {
+            src.interface
+        }
+        (_, Some(src)) => format!(
+            "{}:{}/{}@{}",
+            src.namespace, src.package, src.interface, src.version
+        ),
+        _ => source_fq.to_string(),
+    }
+}
+
+/// Map a Wado primitive type name to its WIT type, if it names a primitive.
+fn primitive_by_name(name: &str) -> Option<Type> {
+    let ty = match name {
+        "i8" => Type::S8,
+        "i16" => Type::S16,
+        "i32" => Type::S32,
+        "i64" => Type::S64,
+        "u8" => Type::U8,
+        "u16" => Type::U16,
+        "u32" => Type::U32,
+        "u64" => Type::U64,
+        "f32" => Type::F32,
+        "f64" => Type::F64,
+        "bool" => Type::Bool,
+        "char" => Type::Char,
+        "String" => Type::String,
+        _ => return None,
+    };
+    Some(ty)
+}
+
+/// Whether an AST type is the unit type `()`.
+fn is_ast_unit(ty: &crate::ast::Type) -> bool {
+    match ty {
+        crate::ast::Type::Tuple(elems) => elems.is_empty(),
+        crate::ast::Type::Named(named) => named.name == "()",
+        _ => false,
     }
 }
 
