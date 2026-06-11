@@ -171,7 +171,15 @@ impl RadixRouter {
         }
     }
 
-    fn walk(&self, node_id: i32, path: &String, pos: i32, plen: i32, method: Method, params: &mut TreeMap<String, String>) -> i32 {
+    fn walk(
+        &self,
+        node_id: i32,
+        path: &String,
+        pos: i32,
+        plen: i32,
+        method: Method,
+        params: &mut TreeMap<String, String>,
+    ) -> i32 {
         if pos >= plen {
             if self.nodes[node_id].handler_id >= 0 && self.nodes[node_id].method == method {
                 return self.nodes[node_id].handler_id;

@@ -916,7 +916,11 @@ impl Deserializer for PathParamsDeserializer {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a map", -1));
     }
 
-    fn begin_struct(&mut self, _name: &String, _num_fields: i32) -> Result<PathParamsStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct(
+        &mut self,
+        _name: &String,
+        _num_fields: i32,
+    ) -> Result<PathParamsStructAccess, DeserializeError> with stores[self] {
         // Nested structs are unsupported: `PathParams` is a flat key/value
         // surface, so a nested `begin_struct` (cursor != 0) means a field
         // typed as another struct asked us to descend into it. Refuse loudly
@@ -930,7 +934,11 @@ impl Deserializer for PathParamsDeserializer {
         return Result::Ok(PathParamsStructAccess { de: *self });
     }
 
-    fn begin_variant(&mut self, _type_name: &String, _num_cases: i32) -> Result<PathParamsVariantStub, DeserializeError> with stores[self] {
+    fn begin_variant(
+        &mut self,
+        _type_name: &String,
+        _num_cases: i32,
+    ) -> Result<PathParamsVariantStub, DeserializeError> with stores[self] {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a variant", -1));
     }
 

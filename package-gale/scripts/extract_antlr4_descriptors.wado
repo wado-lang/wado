@@ -1816,7 +1816,9 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, 
             let input_text = match read_file_to_string(&pending_cat, input_filename) {
                 Ok(s) => s,
                 Err(_) => {
-                    eprintln(`finalize: cannot read oracle-pending/{category}/{*input_filename} — dropping stale test`);
+                    eprintln(
+                        `finalize: cannot read oracle-pending/{category}/{*input_filename} — dropping stale test`,
+                    );
                     pending_no_expected += 1;
                     let _ = remove_file(&oracle_cat, &test_filename);
                     continue;
