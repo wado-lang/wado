@@ -83,6 +83,9 @@ fn cli_program_emits_faithful_world_imports_and_run_export() {
     );
     assert!(text.contains("world command {"), "\n{text}");
     assert!(text.contains("import wasi:cli/stdout@"), "\n{text}");
+    // Transitive: stdout's signature references `ErrorCode` from wasi:cli/types,
+    // so the faithful import set includes it too.
+    assert!(text.contains("import wasi:cli/types@"), "\n{text}");
     assert!(text.contains("export wasi:cli/run@"), "\n{text}");
     // `run` is not a bare function export under the faithful mapping.
     assert!(!text.contains("export run:"), "\n{text}");

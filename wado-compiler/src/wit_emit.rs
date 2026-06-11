@@ -155,19 +155,24 @@ impl<'a> Emitter<'a> {
 
         // Imports: the CM interfaces the program uses. The effect system makes
         // each exported function's effect row name every interface it (and its
-        // callees) touch, so the union over exports is the faithful import set.
+        // callees) touch, so the union over exports is the faithful root set.
         // Resolve each effect name to its FQ via the target world's import table.
-        let mut import_fqs: BTreeSet<String> = BTreeSet::new();
+        let mut import_roots: BTreeSet<String> = BTreeSet::new();
         for export in &exports {
             for effect in &export.effects {
                 if let Some(info) = world_info
                     && let Some(import) = info.imports.iter().find(|i| i.interface_name == *effect)
                     && let Some(fq) = &import.cm_interface_fq
                 {
-                    import_fqs.insert(fq.clone());
+                    import_roots.insert(fq.clone());
                 }
             }
         }
+        // A used interface drags in the interfaces its own signatures reference
+        // (e.g. `wasi:cli/stdout` returns `output-stream` from `wasi:io/streams`,
+        // which in turn references `wasi:io/error`). The real component imports
+        // that whole closure, so the WIT must too.
+        let import_fqs = self.transitive_import_closure(import_roots);
 
         // Partition exports into world-conformance entry points (`run` /
         // `handle`, which map to a standard export interface like
@@ -277,6 +282,49 @@ impl<'a> Emitter<'a> {
             }
         }
         out
+    }
+
+    /// Expand a set of directly-used CM interface FQs to the full set the
+    /// component imports, following each interface's function and type
+    /// signatures to the interfaces they reference.
+    fn transitive_import_closure(&self, roots: BTreeSet<String>) -> BTreeSet<String> {
+        let Some(registry) = self.sem.cm_interface_registry() else {
+            return roots;
+        };
+        let infos: Vec<crate::component_model::CmInterfaceInfo> = registry.interfaces().collect();
+
+        let mut visited: BTreeSet<String> = BTreeSet::new();
+        let mut work: Vec<String> = roots.into_iter().collect();
+        while let Some(fq) = work.pop() {
+            if !visited.insert(fq.clone()) {
+                continue;
+            }
+            // Interfaces referenced by this interface's function signatures.
+            for info in infos.iter().filter(|i| i.path == fq) {
+                for func in &info.functions {
+                    for (_, _, ty) in &func.params {
+                        collect_named_type_sources(ty, &mut work);
+                    }
+                    if let Some(ret) = &func.return_type {
+                        collect_named_type_sources(ret, &mut work);
+                    }
+                }
+            }
+            // Interfaces referenced by the types this interface defines.
+            for (_, _, fields) in registry.structs_for_interface(&fq) {
+                for (_, ty) in fields {
+                    collect_named_type_sources(ty, &mut work);
+                }
+            }
+            for (_, _, cases) in registry.variants_for_interface(&fq) {
+                for case in cases {
+                    if let Some(payload) = &case.payload {
+                        collect_named_type_sources(payload, &mut work);
+                    }
+                }
+            }
+        }
+        visited
     }
 
     fn drain_pending_type_defs(&mut self) -> Result<Vec<TypeDef>, WitEmitError> {
@@ -442,6 +490,47 @@ fn describe_type(ty: &ResolvedType) -> String {
         ResolvedType::Unit => "unit `()`".to_string(),
         ResolvedType::Never => "never `!`".to_string(),
         other => format!("{other:?}"),
+    }
+}
+
+/// Collect the source-interface FQs of every CM-defined named type referenced
+/// by `ty` (recursing through generics, tuples, references, and function
+/// types). Only `wasi:` / `core:` sources are CM interfaces worth importing.
+fn collect_named_type_sources(ty: &crate::ast::Type, out: &mut Vec<String>) {
+    use crate::ast::Type;
+    match ty {
+        Type::Named(named) => {
+            if let Some(src) = &named.source_interface
+                && (src.starts_with("wasi:") || src.starts_with("core:"))
+            {
+                out.push(src.clone());
+            }
+        }
+        Type::Generic(generic) => {
+            for arg in &generic.args {
+                collect_named_type_sources(arg, out);
+            }
+        }
+        Type::NamespacedGeneric(generic) => {
+            for arg in &generic.args {
+                collect_named_type_sources(arg, out);
+            }
+        }
+        Type::Function(func) => {
+            for param in &func.params {
+                collect_named_type_sources(param, out);
+            }
+            collect_named_type_sources(&func.return_type, out);
+        }
+        Type::Tuple(elems) => {
+            for elem in elems {
+                collect_named_type_sources(elem, out);
+            }
+        }
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            collect_named_type_sources(inner, out);
+        }
+        Type::TypePackSpread(_, _) | Type::Error(_) => {}
     }
 }
 
