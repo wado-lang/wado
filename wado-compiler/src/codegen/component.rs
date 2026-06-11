@@ -2321,7 +2321,7 @@ fn generate_cm_imports(
     }
 
     // Import interfaces with resource types
-    import_interfaces_with_resources(builder, ctx, project);
+    import_interfaces_with_resources(builder, ctx, project, import_plan);
 
     // Import wasi:http/types when the plan calls for it (the world exports an
     // HTTP handler, or the code uses the HTTP Client effect). The decision lives
@@ -2847,7 +2847,9 @@ fn import_interfaces_with_resources(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
+    import_plan: &[crate::wir::ImportEntry],
 ) {
+    use crate::wir::ImportKind;
     let interfaces_with_resources: Vec<_> = project
         .cm_interface_registry
         .interfaces()
@@ -2869,6 +2871,17 @@ fn import_interfaces_with_resources(
         };
 
         if source_path == interface_info.path {
+            continue;
+        }
+
+        // Membership cross-check: the plan must list this resource-defining
+        // interface as `ResourceSource`. (Verification step toward making the
+        // plan authoritative for the resource phases; the `is_needed` ctx check
+        // below is retained for now.)
+        if !import_plan
+            .iter()
+            .any(|e| e.fq == source_path && e.kind == ImportKind::ResourceSource)
+        {
             continue;
         }
 
@@ -3015,7 +3028,7 @@ fn import_interfaces_with_resources(
     // (e.g. wasi:filesystem/preopens whose get-directories returns a list of descriptors
     // from wasi:filesystem/types). These must be imported AFTER Phase 1 so that the
     // resource outer-aliases are available in ctx.
-    import_resource_using_interfaces(builder, ctx, project);
+    import_resource_using_interfaces(builder, ctx, project, import_plan);
 }
 
 /// Import interfaces that reference resources from other interfaces but don't define resources
@@ -3027,7 +3040,9 @@ fn import_resource_using_interfaces(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
+    import_plan: &[crate::wir::ImportEntry],
 ) {
+    use crate::wir::ImportKind;
     for interface_info in project.cm_interface_registry.interfaces() {
         if interface_info.interface == "run" {
             continue;
@@ -3036,6 +3051,14 @@ fn import_resource_using_interfaces(
             continue;
         }
         if interface_info.package == "http" {
+            continue;
+        }
+        // Membership cross-check: the plan lists this as a function-bearing
+        // interface (the deferred, resource-using ones reach Phase 3).
+        if !import_plan
+            .iter()
+            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::FunctionInterface)
+        {
             continue;
         }
 
