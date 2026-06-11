@@ -119,6 +119,30 @@ pub fn resolve_import_plan(
         worklist.extend(more);
     }
 
+    // Phase 2 (continued): mirror codegen's `is_needed` — a resource-using
+    // interface present in the program's `with` set (`has_interface`) pulls in
+    // the interface that *defines* its resource, even when its accessor function
+    // is never called (so `used_wasi_functions` would miss it, e.g. terminal
+    // interfaces declared but not invoked).
+    for interface_info in registry.interfaces() {
+        let Some((resource_wado_name, _)) = &interface_info.resource_type else {
+            continue;
+        };
+        let Some(source) = registry.get_resource_source_interface(resource_wado_name) else {
+            continue;
+        };
+        if source == interface_info.path {
+            continue;
+        }
+        let needed = interface_info
+            .functions
+            .first()
+            .is_some_and(|f| project.has_interface(&f.interface_name));
+        if needed {
+            push(&mut entries, source.to_string(), ImportKind::ResourceSource);
+        }
+    }
+
     // Phase 4: HTTP interfaces under the handler / Client conditions.
     if (project.has_http_handler_export || project.has_interface("Client"))
         && let Some(version) = registry.get_package_version("http")
