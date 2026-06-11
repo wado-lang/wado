@@ -447,8 +447,8 @@ the public async `Semantics`-only entry, which parses, loads, and analyzes,
 then stops; no monomorphize, no lower, no codegen. Mirrors `wado dump` in
 pipeline depth, but carries no `-O` level: WIT is a pre-codegen fact, so
 the optimization level is irrelevant. Takes a single positional target —
-a `.wado` file, a directory, or a `wado.toml` (see "Input resolution");
-passing more than one is an error. `--world` reuses the same flag and
+a `.wado` file or a directory (see "Input resolution"); passing more than
+one is an error. `--world` reuses the same flag and
 default (`wasi:cli/command`, overridable by the `__DATA__` world) as
 `wado compile`. `--scope` is optional and defaults per the resolution
 order above. When the file has no world entry point (a library-shaped
@@ -472,22 +472,19 @@ with `--embed-wit`.
 ### Input resolution
 
 `wado wit` does not take a `.wado` file only. The positional input is a
-_target_ that resolves through `manifest::resolve_input` in three forms:
+_target_ that resolves through `manifest::resolve_input`:
 
-| Input               | Resolution                                                       |
-| ------------------- | ---------------------------------------------------------------- |
-| `foo.wado`          | Single-file mode — analyze the file directly.                    |
-| a directory         | Load `<dir>/wado.toml`, resolve the entry source from it.        |
-| `path/to/wado.toml` | Load that manifest, resolve the entry source from its directory. |
-| (omitted)           | Discover the nearest `wado.toml` upward from the cwd (existing). |
+| Input       | Resolution                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| `foo.wado`  | A file is a single Wado source — analyze it directly.                                        |
+| a directory | A directory is a Wado package — load `<dir>/wado.toml` and resolve the entry source from it. |
+| (omitted)   | Discover the nearest `wado.toml` upward from the cwd.                                        |
 
-The directory and omitted forms already work. The `wado.toml`-file form is
-the gap to close: `resolve_input` currently passes any non-directory path
-through unchanged, so a `wado.toml` argument is mis-handled as Wado source.
-The fix is to treat a path whose file name is `wado.toml` as a manifest,
-not a source file. This is a shared CLI concern, so `wado compile` (which
-already routes through `resolve_input`) inherits the same three forms — it
-should accept a directory or `wado.toml` just as `wado wit` does.
+`file = source`, `dir = package` is the whole rule — no third "manifest
+file" form. A bare `wado.toml` path is not a target; point at its directory
+instead. All three forms already work in `resolve_input`, and `wado
+compile` routes through the same helper, so `wado wit` and `wado compile`
+share one input model with no new plumbing.
 
 When resolution goes through a manifest, the CLI loads it (via
 `load_nearest_manifest`) to source two inputs that single-file mode lacks:
@@ -548,13 +545,10 @@ Each phase ends with green E2E tests for the listed fixtures.
   - [ ] No-entry-point files emit an empty world (the resolved world name
         with no exports), so library-shaped `.wado` still produces valid
         WIT. The fuller "world-less library" model is deferred.
-  - [ ] Extend `manifest::resolve_input` to treat a path named `wado.toml`
-        as a manifest (today it falls through as a source file). This is
-        shared CLI plumbing; `wado compile` picks up the same three input
-        forms for free.
   - [ ] `wado-cli/src/wit.rs` subcommand + `Cmd::Wit` registration in
-        `wado-cli/src/main.rs`. Single positional target resolved via
-        `resolve_input`; no `-O` flag; calls `wado_compiler::semantics()`
+        `wado-cli/src/main.rs`. Single positional target (file or
+        directory) resolved via the existing `resolve_input`; no `-O` flag;
+        calls `wado_compiler::semantics()`
         and bails silently when `Semantics::is_complete()` is false
         (diagnostics already emitted by the host). When the target resolves
         through a manifest, read `[package].name` via
