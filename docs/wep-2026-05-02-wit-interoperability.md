@@ -457,17 +457,18 @@ Rollout (each step gated by the full E2E suite):
       which had omitted the error-code the kiln transmission future needs.
       Pure-compute now drops the dead import; sha256 and kiln keep it. Full
       e2e green (4766 tests).
-- [~] R2 — Rewire codegen to emit from the plan; delete the duplicated
-  decision logic so codegen only encodes. Done incrementally, each step
-  gated by the full e2e suite:
+- [x] R2 — Rewire codegen to emit from the plan; delete the duplicated
+      decision logic so codegen only encodes. Done incrementally, each step
+      gated by the full e2e suite:
   - [x] The flat FQ list cannot drive codegen — confirmed empirically: a
         flat-membership gate on the function-interface loop processes
         `wasi:cli/types` (which is in the plan but is the shared `error-code`
         instance, not a function interface), yielding an invalid component
         (`wasi_filesystem` / `wasi_tls_result_error`: "instance N has no
         export error-code"). So the plan now carries an `ImportKind` per entry
-        (`SharedTypes`, `FunctionInterface`, `ResourceSource`, `HttpTypes`,
-        `HttpClient`), built in `wir_build`.
+        (`SharedTypes`, `FunctionInterface`, `ResourceUsingInterface`,
+        `ResourceSource`, `ResourceGetter`, `HttpTypes`, `HttpClient`), built in
+        `wir_build`.
   - [x] Membership for `wasi:cli/types`, the function-bearing interfaces
         (Phase 1), and `wasi:http/types` is now decided by the plan; codegen
         reads `ImportKind` and encodes. The function loop imports only
@@ -491,9 +492,23 @@ Rollout (each step gated by the full E2E suite):
         plan's `ResourceSource` membership, and the `!ctx.has_comp_func` half was
         a no-op there (getter comp-funcs are emitted later, in the getter phase).
         Membership is now the plan's. Full e2e green.
-  - [ ] `wasi:http/client` remains codegen-driven (a small, isolated
-        `has_interface("Client")` gate); folding it into the plan is a minor
-        follow-up.
+  - [x] The resource-getter interfaces (returning `option<resource>`, e.g.
+        `wasi:cli/terminal-stdin`) are now a distinct plan kind (`ResourceGetter`).
+        The plan lists a getter iff the program's `with` set declares it
+        (`has_interface`), independent of whether the accessor is ever called;
+        codegen's getter phase reads the plan, and `import_interface_with_resource`
+        drops its `has_interface` gate (keeping only the `has_comp_func`
+        idempotency check). The getter FQ now also lands in the faithful world
+        import set. Full e2e green.
+  - [x] `wasi:http/client` is now plan-driven: the plan already carried an
+        `HttpClient` entry, and codegen's client phase gates on it rather than
+        re-deriving `has_interface("Client")`. The HTTP request-construction core
+        funcs are likewise gated on the plan's `HttpTypes` membership.
+  - [x] Export side — `append_http_handler_export` is decided by the export plan
+        (`ComponentPlan::has_http_handler_export`, computed in `build_component_plan`
+        from the world registry) rather than re-derived from `NirPackage` in
+        codegen. All world/test exports were already plan-driven via
+        `ComponentPlan::{world_exports, test_exports}`.
 - [x] R3 — The WIT emitter reads the plan for its world import refs
       (`WitEmitOptions::world_imports`), replacing the effect-row derivation;
       `wado wit` compiles through optimize (on a silent host) to obtain it.

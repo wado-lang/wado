@@ -7,7 +7,7 @@ use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, is_unit_type};
 use crate::hashmap::IndexMap;
 use crate::tir::TirTest;
-use crate::world_registry::{WorldExportInfo, WorldRegistry};
+use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
 
 /// Plan for the Component Model structure.
 ///
@@ -30,6 +30,11 @@ pub struct ComponentPlan {
     /// to resolve `HandlerResult` to the per-world `{pkg}-handler-result`
     /// registered type.
     pub world_package: Option<String>,
+    /// Whether the target world exports a `wasi:http/handler`. Codegen appends
+    /// the handler export to the finished component when set. This is an export
+    /// decision, so it lives on the plan rather than being re-derived from the
+    /// world registry in codegen.
+    pub has_http_handler_export: bool,
 }
 
 /// A world export to create at the component boundary.
@@ -173,10 +178,15 @@ pub fn build_component_plan(
             .map(|w| w.package().to_string())
     };
 
+    let has_http_handler_export = world_registry
+        .get(target_world)
+        .is_some_and(WorldInfo::has_http_handler_export);
+
     ComponentPlan {
         world_exports,
         test_exports,
         world_package,
+        has_http_handler_export,
     }
 }
 

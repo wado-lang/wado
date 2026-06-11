@@ -283,9 +283,15 @@ pub fn build_component(
             ctx.core_func_idx(local_name),
         ));
     }
-    if (project.has_http_handler_export || project.has_interface("Client"))
-        && ctx.has_core_func("http-fields-constructor")
-    {
+    // The HTTP request-construction core funcs are exported from the core
+    // instance whenever `wasi:http/types` is imported — the plan's `HttpTypes`
+    // condition (handler export or the Client effect), read here rather than
+    // re-derived from project queries.
+    let imports_http_types = wir_package
+        .import_plan
+        .iter()
+        .any(|e| e.kind == crate::wir::ImportKind::HttpTypes);
+    if imports_http_types && ctx.has_core_func("http-fields-constructor") {
         wasi_exports.push((
             "http-fields-constructor".to_string(),
             ExportKind::Func,
@@ -389,7 +395,7 @@ pub fn build_component(
 
     let mut component_bytes = builder.finish();
 
-    if project.has_http_handler_export {
+    if component_plan.has_http_handler_export {
         append_http_handler_export(&mut component_bytes, &ctx, project);
     }
 
@@ -2320,8 +2326,10 @@ fn generate_cm_imports(
         import_http_types_for_service(project, builder, ctx);
     }
 
-    // Import wasi:http/client if Client::send is used
-    if project.has_interface("Client") && ctx.has_type("http-handler-result") {
+    // Import wasi:http/client when the plan lists it (the program uses the HTTP
+    // Client effect). The plan guarantees `wasi:http/types` is imported too, so
+    // `http-handler-result` is registered by the time we get here.
+    if has_kind(ImportKind::HttpClient) {
         import_http_client(builder, ctx, project);
     }
 }
@@ -2743,7 +2751,6 @@ fn import_interface_with_resource(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     interface_info: &crate::component_model::CmInterfaceInfo,
-    project: &NirPackage,
 ) {
     let Some((_resource_wado_name, resource_cm_name)) = &interface_info.resource_type else {
         return;
@@ -2759,7 +2766,9 @@ fn import_interface_with_resource(
 
     let local_name = func.local_alias_name();
 
-    if !project.has_interface(&func.interface_name) || ctx.has_comp_func(&local_name) {
+    // Membership is decided by the plan (`ResourceGetter`) at the call site; this
+    // guard is only idempotency (the getter was already emitted in this run).
+    if ctx.has_comp_func(&local_name) {
         return;
     }
 
@@ -3003,9 +3012,17 @@ fn import_interfaces_with_resources(
         import_resource_source(builder, ctx, project, source_path);
     }
 
-    // Phase 2: Import function interfaces that use those resources
+    // Phase 2: Import the resource-getter interfaces the plan lists
+    // (`ResourceGetter`). Membership is the plan's — codegen no longer re-derives
+    // it from the program's `with` set.
     for interface_info in &interfaces_with_resources {
-        import_interface_with_resource(builder, ctx, interface_info, project);
+        if !import_plan
+            .iter()
+            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::ResourceGetter)
+        {
+            continue;
+        }
+        import_interface_with_resource(builder, ctx, interface_info);
     }
 
     // Register per-package error-code aliases for resource-defining interfaces.

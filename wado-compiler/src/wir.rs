@@ -41,6 +41,12 @@ pub enum ImportKind {
     ResourceUsingInterface,
     /// A resource-defining interface imported so its resource type is available.
     ResourceSource,
+    /// A getter interface returning `option<resource>` for a resource defined by
+    /// another interface (e.g. `wasi:cli/terminal-stdin` → `terminal-input`).
+    /// Emitted by codegen's resource phase (after the resource sources it depends
+    /// on). Membership mirrors the program's `with` set (`has_interface`), so an
+    /// interface declared but whose accessor is never called is still imported.
+    ResourceGetter,
     /// `wasi:http/types`.
     HttpTypes,
     /// `wasi:http/client`.

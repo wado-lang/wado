@@ -155,6 +155,27 @@ pub fn resolve_import_plan(
         }
     }
 
+    // Phase 3: resource-getter interfaces (returning `option<resource>`). Codegen
+    // imports one iff the program's `with` set declares it (`has_interface`),
+    // independent of whether the accessor is ever called — mirror that here so
+    // the getter FQ lands in the plan (and thus the faithful world import set).
+    for interface_info in registry.interfaces() {
+        if interface_info.resource_type.is_none() || interface_info.package == "http" {
+            continue;
+        }
+        let needed = interface_info
+            .functions
+            .first()
+            .is_some_and(|f| project.has_interface(&f.interface_name));
+        if needed {
+            push(
+                &mut entries,
+                interface_info.path.clone(),
+                ImportKind::ResourceGetter,
+            );
+        }
+    }
+
     // Phase 4: HTTP interfaces under the handler / Client conditions.
     if (project.has_http_handler_export || project.has_interface("Client"))
         && let Some(version) = registry.get_package_version("http")
