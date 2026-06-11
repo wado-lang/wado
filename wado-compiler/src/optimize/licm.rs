@@ -155,8 +155,6 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             type_table: &type_table,
             applied: Cell::new(false),
         };
-        let mut alias_unsafe = func.address_taken_locals.clone();
-        alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction {
             body,
             locals,
@@ -165,7 +163,6 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_unsafe_locals(alias_unsafe);
         engine.set_param_locals(params.iter().map(|p| p.local_index).collect());
         engine.run(&[&rule])
     })

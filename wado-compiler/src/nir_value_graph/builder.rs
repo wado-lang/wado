@@ -158,19 +158,14 @@ pub struct ValueGraphBuild {
 /// seeding makes parameters visible in the loop-entry snapshots
 /// (`loop_entry_values`), which are taken before any in-loop read.
 ///
-/// `alias_unsafe` are locals whose object is reference-aliased. The engine
-/// supplies the complete set — the canonical `address_taken_locals` /
-/// `stores_aliased_locals` (e.g. the `with stores[p]` effect's `p`) unioned
-/// with its session-cached [`Body::collect_address_taken_locals`] scan —
-/// and the builder suppresses field store→load seeding on those receivers,
-/// matching `store_load_forward`'s own exclusion so the `stores` effect's
-/// "no field forwarding for aliased locals" contract is upheld.
-pub fn build(
-    body: &Body,
-    param_locals: &[u32],
-    alias_unsafe: &crate::hashmap::IndexSet<u32>,
-) -> ValueGraphBuild {
-    let mut b = Builder::new(body, alias_unsafe);
+/// Field store→load seeding needs no alias exclusion: the heap version is
+/// global per `field_index`, so *any* write to field `f` — through any
+/// receiver or reference alias — bumps the `f` version and invalidates every
+/// prior `f` store, and calls / deref / global writes `bump_all`. A read at
+/// the post-write version therefore never forwards a stale value, so an
+/// aliased receiver's fields are seeded exactly like any other's.
+pub fn build(body: &Body, param_locals: &[u32]) -> ValueGraphBuild {
+    let mut b = Builder::new(body);
     b.seed_params(param_locals);
     b.walk_block(body.root);
     ValueGraphBuild {
@@ -198,17 +193,13 @@ struct Builder<'a> {
     /// Versions are monotonic and never reused, so a write or branch join
     /// bumps past a stale entry — no invalidation needed.
     field_store: IndexMap<(ValueId, u32, HeapVersion), ValueId>,
-    /// Locals whose object is reference-aliased; field seeding is suppressed
-    /// for them (see [`build`]).
-    alias_unsafe: crate::hashmap::IndexSet<u32>,
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
 impl<'a> Builder<'a> {
-    fn new(body: &'a Body, alias_unsafe: &crate::hashmap::IndexSet<u32>) -> Self {
-        let unsafe_locals = alias_unsafe.clone();
+    fn new(body: &'a Body) -> Self {
         Self {
             body,
             pool: ValuePool::new(),
@@ -217,7 +208,6 @@ impl<'a> Builder<'a> {
             heap_state: HeapState::new(),
             literal_source: IndexMap::default(),
             field_store: IndexMap::default(),
-            alias_unsafe: unsafe_locals,
             loop_entry_values: IndexMap::default(),
         }
     }
@@ -247,10 +237,7 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
-                // Skipped when `x` is reference-aliased.
-                if !self.alias_unsafe.contains(&local_index) {
-                    self.seed_struct_literal_fields(v, value);
-                }
+                self.seed_struct_literal_fields(v, value);
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
                 self.walk_expr(value);
@@ -448,12 +435,12 @@ impl<'a> Builder<'a> {
                             _ => None,
                         };
                         let recv_v = self.walk_expr(*recv);
-                        // Seed only a bare, non-aliased `Local` receiver; an
-                        // aliased object (`with stores[p]`) or a deeper place
+                        // Seed only a bare `Local` receiver; a deeper place
                         // (`a.b.f = …`) is left un-seeded so a later read
-                        // re-derives an opaque `FieldAccess`.
+                        // re-derives an opaque `FieldAccess`. Reference aliasing
+                        // needs no exclusion — see [`build`].
                         match (recv_v, recv_local) {
-                            (Some(rv), Some(idx)) if !self.alias_unsafe.contains(&idx) => Some(rv),
+                            (Some(rv), Some(_)) => Some(rv),
                             _ => None,
                         }
                     }
@@ -1138,10 +1125,9 @@ mod tests {
 
     // ----- Body builders for tests -----
 
-    /// `build` with no reference-aliased locals — the common test case.
     fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        build(body, &param_locals, &crate::hashmap::IndexSet::default())
+        build(body, &param_locals)
     }
 
     fn empty_body() -> Body {
@@ -2071,9 +2057,12 @@ mod tests {
     }
 
     #[test]
-    fn aliased_receiver_is_not_seeded() {
-        // fn(obj) { obj.f = 7; let y = obj.f; } but `obj` (local 0) is
-        // reference-aliased → no forwarding; the read stays opaque.
+    fn aliased_receiver_is_seeded_without_intervening_write() {
+        // fn(obj) { obj.f = 7; let y = obj.f; } — even if `obj` is
+        // reference-aliased, no heap write intervenes, so `obj.f` forwards 7.
+        // Reference aliasing needs no special handling: any write through any
+        // alias bumps the global per-field version (see the soundness test
+        // `other_receiver_same_field_write_blocks_forward`).
         let mut body = empty_body();
         let recv_w = local_ref(&mut body, 0);
         let seven = int_lit(&mut body, 7);
@@ -2082,13 +2071,8 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, let_y]);
-        let mut aliased = crate::hashmap::IndexSet::default();
-        aliased.insert(0u32);
-        let r = build(&body, &[param_seed().local_index], &aliased);
-        assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
-            ValueKind::FieldAccess { .. }
-        ));
+        let r = build_t(&body, &[param_seed()]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
     }
 
     // ----- Loop-entry value snapshots -----
@@ -2147,33 +2131,25 @@ mod tests {
     }
 
     #[test]
-    fn body_scanned_address_taken_receiver_is_not_seeded() {
-        // fn(obj) { obj.f = 7; let r = &obj; let y = obj.f; }
-        // The live `&obj` makes `obj` address-taken via
-        // `Body::collect_address_taken_locals` — the scan the engine unions
-        // into the exclusion set before every graph build — so the store is
-        // not seeded.
+    fn other_receiver_same_field_write_blocks_forward() {
+        // fn(a, b) { a.f = 1; b.f = 5; let y = a.f; }
+        // Even if `b` aliases `a` at runtime (e.g. `b = &a`), the write
+        // `b.f = 5` bumps the global per-field version, so the later `a.f`
+        // read does NOT forward the stale 1 — it re-derives an opaque
+        // `FieldAccess`. This is the soundness guarantee that lets the builder
+        // seed aliased receivers without a per-alias exclusion.
         let mut body = empty_body();
-        let recv_w = local_ref(&mut body, 0);
-        let seven = int_lit(&mut body, 7);
-        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
-        let obj_ref_inner = local_ref(&mut body, 0);
-        let obj_ref = alloc_expr(
-            &mut body,
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                expr: obj_ref_inner,
-            },
-        );
-        let let_r = let_stmt(&mut body, 1, obj_ref, false);
-        let recv_r = local_ref(&mut body, 0);
-        let read = field_access(&mut body, recv_r, 0);
+        let recv_a_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let write_a = field_assign_stmt(&mut body, recv_a_w, 0, one);
+        let recv_b_w = local_ref(&mut body, 1);
+        let five = int_lit(&mut body, 5);
+        let write_b = field_assign_stmt(&mut body, recv_b_w, 0, five);
+        let recv_a_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_a_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
-        root_with(&mut body, vec![write, let_r, let_y]);
-        let mut scanned = crate::hashmap::IndexSet::default();
-        body.collect_address_taken_locals(&mut scanned);
-        assert!(scanned.contains(&0));
-        let r = build(&body, &[param_seed().local_index], &scanned);
+        root_with(&mut body, vec![write_a, write_b, let_y]);
+        let r = build_t(&body, &[param_seed()]);
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }

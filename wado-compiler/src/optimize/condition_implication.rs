@@ -55,14 +55,9 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut Functio
         let rule = ConditionImplicationRule {
             applied: Cell::new(false),
         };
-        // Guard facts consume seeded field values; only the canonical sets
-        // know aliases with no surviving Ref node (`with stores[p]`).
-        let mut alias_unsafe = func.address_taken_locals.clone();
-        alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_unsafe_locals(alias_unsafe);
         engine.run(&[&rule])
     })
 }

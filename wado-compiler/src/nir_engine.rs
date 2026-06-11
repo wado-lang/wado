@@ -97,18 +97,11 @@ pub struct Engine<'a> {
     /// [`Engine::invalidate_value_graph`]. See [`crate::nir_value_graph`]
     /// for the data model.
     value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
-    /// Locals whose object is reference-aliased (the owning function's
-    /// `address_taken_locals` / `stores_aliased_locals`). Passed to the
-    /// `ValueGraph` builder so field store→load seeding is suppressed for
-    /// them, matching `store_load_forward`'s exclusion. Empty unless a pass
-    /// sets it via [`Engine::set_alias_unsafe_locals`] before the first
-    /// `value` query.
-    alias_unsafe_locals: IndexSet<u32>,
     /// Per-session cache of the body's live `&local` / `&mut local` scan
-    /// (see [`Body::collect_address_taken_locals`]). Computed on the first
-    /// graph build, cleared with [`Engine::invalidate_value_graph`] so a
-    /// rebuild after edits rescans. Unioned with `alias_unsafe_locals`
-    /// before reaching the builder.
+    /// (see [`Body::collect_address_taken_locals`]). Computed on first use,
+    /// cleared with [`Engine::invalidate_value_graph`] so a rebuild after
+    /// edits rescans. Consumed by `Local`-read exclusions
+    /// (`store_load_forward`, licm's arithmetic hoist).
     body_address_taken: Option<IndexSet<u32>>,
     /// Parameter local indices, seeded as stable `Opaque`s. Only up-front
     /// seeding makes parameters visible in the loop-entry snapshots, so
@@ -134,7 +127,6 @@ impl<'a> Engine<'a> {
             buf,
             locals,
             value_graph: None,
-            alias_unsafe_locals: IndexSet::default(),
             body_address_taken: None,
             param_locals: Vec::new(),
         };
@@ -223,18 +215,6 @@ impl<'a> Engine<'a> {
         self.body_address_taken.as_ref().unwrap()
     }
 
-    /// Record the function's reference-aliased locals so the lazily-built
-    /// `ValueGraph` suppresses field store→load seeding for them (the
-    /// `with stores[p]` "no field forwarding" contract). Must be called
-    /// before the first [`Engine::value`] query, since the graph caches on
-    /// first build; a later call forces a rebuild on next query.
-    pub fn set_alias_unsafe_locals(&mut self, locals: IndexSet<u32>) {
-        if self.alias_unsafe_locals != locals {
-            self.alias_unsafe_locals = locals;
-            self.value_graph = None;
-        }
-    }
-
     /// Record the owning function's parameter local indices so the
     /// lazily-built `ValueGraph` seeds them up front (see the field doc on
     /// `param_locals`). Must be called before the first value query; a later
@@ -250,18 +230,7 @@ impl<'a> Engine<'a> {
         if self.value_graph.is_some() {
             return;
         }
-        // The builder receives the complete exclusion set — canonical alias
-        // sets unioned with the session's body scan — and scans nothing
-        // itself.
-        let mut alias_unsafe = self.alias_unsafe_locals.clone();
-        if self.body_address_taken.is_none() {
-            let mut set = IndexSet::default();
-            self.body.collect_address_taken_locals(&mut set);
-            self.body_address_taken = Some(set);
-        }
-        alias_unsafe.extend(self.body_address_taken.as_ref().unwrap().iter().copied());
-        let build =
-            crate::nir_value_graph::builder::build(&*self.body, &self.param_locals, &alias_unsafe);
+        let build = crate::nir_value_graph::builder::build(&*self.body, &self.param_locals);
         self.value_graph = Some(build);
     }
 

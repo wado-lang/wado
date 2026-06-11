@@ -1,6 +1,7 @@
-// Optimization: when a function declares `stores` for a parameter,
-// the local IS aliased and field forwarding must NOT eliminate the check.
-// This is the inverse of stores_optimize_field_forward.wado.
+// Optimization soundness: a mutation through a stored (aliased) reference
+// must block field store→load forwarding. `hold_ref` stores `&p`, so writing
+// `h.pair.a` mutates `p` itself. Forwarding the struct-literal `p.a = 42` past
+// that write would be a miscompile — the read must observe the new value.
 
 use { println, Stdout } from "core:cli";
 
@@ -20,16 +21,17 @@ fn hold_ref(p: &Pair) -> Holder with stores[p] {
 
 export fn run() with Stdout {
     let p = Pair { a: 42, b: 99 };
-    // hold_ref stores &p, so p is aliased — field forwarding is unsafe.
     let h = hold_ref(&p);
-    // The assert must remain because the optimizer cannot prove p.a is still 42.
-    assert p.a == 42;
-    println(`{h.pair.a}`);
+    // Mutate `p` through the stored reference: `p.a` is now 7, not 42.
+    h.pair.a = 7;
+    // Forwarding the stale 42 here would be unsound, so the check survives.
+    assert p.a == 7;
+    println(`{p.a}`);
 }
 
 __DATA__
 {
-    "stdout": "42\n",
+    "stdout": "7\n",
     "wir_expect:O2": [
         "core:internal/panic"
     ]

@@ -48,7 +48,6 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_unsafe_locals(unsafe_locals.clone());
         unsafe_locals.extend(engine.body_address_taken().iter().copied());
         let rule = StoreLoadForwardRule {
             applied: Cell::new(false),
