@@ -433,9 +433,12 @@ Mechanics:
 
 Rollout (each step gated by the full E2E suite):
 
-- [ ] R1 — Build the plan post-DCE as additive structured data on
-      `NirPackage`; validate it equals the real component's import/export
-      sections across the example/benchmark corpus. Codegen unchanged.
+- [x] R1 — Build the plan post-DCE as additive structured data on
+      `NirPackage` (`wir_build::component_imports`, stored in
+      `NirPackage::imported_cm_interfaces`). `tests/wit_import_plan.rs`
+      validates it equals the compiled component's CM imports across the CLI
+      corpus and the HTTP service (resources). Codegen unchanged. Imports
+      only for now; exports still come from `WorldInfo`.
 - [ ] R2 — Rewire codegen to emit from the plan; delete the duplicated
       decision logic so codegen only encodes.
 - [ ] R3 — Point the WIT emitter (and Phase 2) at the plan for world refs,
