@@ -32,24 +32,14 @@ pub fn build_component(
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
 
-    // Generate WASI imports dynamically from registry. Whether the shared
-    // `wasi:cli/types` (`error-code`) is imported is decided by the WIR-level
-    // plan (the single source of truth), which codegen reads rather than
-    // re-deriving.
-    let needs_cli_types = wir_package
-        .imported_cm_interfaces
-        .iter()
-        .any(|fq| fq.starts_with("wasi:cli/types@"));
-    let needs_http_types = wir_package
-        .imported_cm_interfaces
-        .iter()
-        .any(|fq| fq.starts_with("wasi:http/types@"));
+    // Generate CM imports. Which interfaces are imported is decided by the
+    // WIR-level plan (the single source of truth), which codegen reads rather
+    // than re-deriving; codegen's job is to encode each.
     generate_cm_imports(
         &mut builder,
         &mut ctx,
         project,
-        needs_cli_types,
-        needs_http_types,
+        &wir_package.imported_cm_interfaces,
     );
 
     // Type: result unit for run function (needed for task.return)
@@ -1733,9 +1723,11 @@ fn generate_cm_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    needs_cli_types: bool,
-    needs_http_types: bool,
+    import_plan: &[String],
 ) {
+    let plan_has = |prefix: &str| import_plan.iter().any(|fq| fq.starts_with(prefix));
+    let needs_cli_types = plan_has("wasi:cli/types@");
+    let needs_http_types = plan_has("wasi:http/types@");
     let cli_version = project
         .cm_interface_registry
         .get_cli_version()
@@ -1785,7 +1777,10 @@ fn generate_cm_imports(
         );
     }
 
-    // Generate imports for each interface in the registry
+    // Generate imports for each interface in the registry. Membership comes
+    // from the plan — codegen imports an interface iff the plan lists it (the
+    // function-bearing, non-resource-using interfaces; resource-defining and
+    // resource-using interfaces are handled by the later phases).
     for interface_info in project.cm_interface_registry.interfaces() {
         if interface_info.interface == "run" {
             continue;
@@ -1796,7 +1791,11 @@ fn generate_cm_imports(
         if interface_info.package == "http" {
             continue;
         }
+        if !import_plan.contains(&interface_info.path) {
+            continue;
+        }
 
+        // Which functions of this interface to expose in its instance type.
         let supported_functions: Vec<_> = interface_info
             .functions
             .iter()
@@ -1804,17 +1803,10 @@ fn generate_cm_imports(
                 if !project.cm_interface_registry.is_function_supported(func) {
                     return false;
                 }
-                // Use per-function check (same as wir_build) to avoid including
-                // unused functions that reference unsupported types (e.g. Stream<u8>
-                // in tuples when read_via_stream is not called).
                 let func_key = format!("{}::{}", func.interface_name, func.method_name);
                 project.used_wasi_functions.contains(&func_key)
             })
             .collect();
-
-        if supported_functions.is_empty() {
-            continue;
-        }
 
         // Collect resource types referenced in any function signature.
         let mut needed_resources: Vec<String> = Vec::new();
