@@ -439,6 +439,13 @@ Rollout (each step gated by the full E2E suite):
       validates it equals the compiled component's CM imports across the CLI
       corpus and the HTTP service (resources). Codegen unchanged. Imports
       only for now; exports still come from `WorldInfo`.
+- [ ] R2 opportunity — Codegen imports `wasi:cli/types` unconditionally
+      (the canonical `error-code` fallback), so even a pure-compute program
+      that references no `error-code` carries a dead `wasi:cli/types` import.
+      When the import decision moves into the plan, trim this to "only when
+      `error-code` is actually referenced". The change is tangled with the
+      `resolve_error_code_idx` binding machinery, so it belongs in R2, not a
+      separate pre-R2 edit to the same code.
 - [ ] R2 — Rewire codegen to emit from the plan; delete the duplicated
       decision logic so codegen only encodes. The flat FQ list from R1 is
       insufficient to drive codegen: each import uses a distinct mechanism

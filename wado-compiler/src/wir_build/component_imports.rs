@@ -33,10 +33,12 @@ pub fn resolve_imported_cm_interfaces(project: &NirPackage) -> Vec<String> {
     }
 
     // Phase 0: `wasi:cli/types` provides the shared `error-code` enum and is
-    // imported whenever the component uses any WASI function.
-    if !project.used_wasi_functions.is_empty()
-        && let Some(version) = registry.get_cli_version()
-    {
+    // imported unconditionally by codegen's `generate_cm_imports` (the canonical
+    // fallback for `result<_, error-code>` bindings), so the plan must too —
+    // even for a pure-compute program that references no WASI function. Trimming
+    // this to "only when error-code is actually referenced" is an R2
+    // optimization, made once codegen reads the plan.
+    if let Some(version) = registry.get_cli_version() {
         imports.insert(format!("wasi:cli/types@{version}"));
     }
 

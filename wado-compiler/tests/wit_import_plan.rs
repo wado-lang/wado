@@ -107,6 +107,21 @@ fn plan_matches_component_across_cli_corpus() {
 }
 
 #[test]
+fn plan_matches_component_for_pure_compute() {
+    // A program that uses no WASI function still imports wasi:cli/types
+    // (codegen's unconditional canonical error-code import); the plan must too.
+    let source = "export fn run() {\n\
+                      let mut x = 0;\n\
+                      let mut i = 0;\n\
+                      while i < 100 { x += i; i += 1; }\n\
+                  }";
+    let plan = plan_imports(source);
+    let actual = actual_imports(source);
+    assert_eq!(plan, actual, "\nplan:   {plan:?}\nactual: {actual:?}");
+    assert!(plan.iter().any(|i| i.contains("cli/types")), "{plan:?}");
+}
+
+#[test]
 fn plan_includes_implicit_stderr_when_component_does() {
     // sha256 uses asserts on runtime values, so the real component imports
     // wasi:cli/stderr; the plan must include it (it is not in any `with` row).
