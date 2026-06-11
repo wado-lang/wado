@@ -201,13 +201,20 @@ pub struct ValueGraphBuild {
 /// escapes entirely). A non-aliased local's object is reachable only through
 /// that local, so its `per_slot` fields survive calls and other objects'
 /// same-`field_index` writes (see [`HeapState`]).
+///
+/// `mut_escaped` is the subset of `aliased` a call may actually mutate (locals
+/// with a *mutable* escape — `&mut v`, a mut-ref argument, a `&mut self`
+/// receiver, or a `stores` stash). [`Builder::bump_call_effects`] bumps only
+/// these across a call; a reference-aliased local whose every escape is an
+/// immutable `&v` keeps its forwarded fields, since no callee can mutate it.
 pub fn build(
     body: &Body,
     param_locals: &[u32],
     aliased: &crate::hashmap::IndexSet<u32>,
     untrackable: &crate::hashmap::IndexSet<u32>,
+    mut_escaped: &crate::hashmap::IndexSet<u32>,
 ) -> ValueGraphBuild {
-    let mut b = Builder::new(body, aliased, untrackable);
+    let mut b = Builder::new(body, aliased, untrackable, mut_escaped);
     b.seed_params(param_locals);
     b.walk_block(body.root);
     ValueGraphBuild {
@@ -240,6 +247,9 @@ struct Builder<'a> {
     aliased: crate::hashmap::IndexSet<u32>,
     /// `stores`-aliased locals whose fields are never seeded. See [`build`].
     untrackable: crate::hashmap::IndexSet<u32>,
+    /// Locals a call may mutate (mutable escape). Only these are bumped by
+    /// [`Builder::bump_call_effects`]. See [`build`].
+    mut_escaped: crate::hashmap::IndexSet<u32>,
     /// `local → pointee local` for `let r = &v` references, so `r.f` forwards
     /// from `v`'s field slot (reference look-through). Cleared when `r` or the
     /// pointee is reassigned. See [`Builder::update_ref_target`].
@@ -254,6 +264,7 @@ impl<'a> Builder<'a> {
         body: &'a Body,
         aliased: &crate::hashmap::IndexSet<u32>,
         untrackable: &crate::hashmap::IndexSet<u32>,
+        mut_escaped: &crate::hashmap::IndexSet<u32>,
     ) -> Self {
         Self {
             body,
@@ -265,6 +276,7 @@ impl<'a> Builder<'a> {
             field_store: IndexMap::default(),
             aliased: aliased.clone(),
             untrackable: untrackable.clone(),
+            mut_escaped: mut_escaped.clone(),
             ref_targets: IndexMap::default(),
             loop_entry_values: IndexMap::default(),
         }
@@ -323,12 +335,17 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// A direct / method call may mutate any field of any reference-aliased
-    /// local (the callee reaches its object via an escaped reference or a
-    /// global). Non-aliased locals' objects are unreachable, so their fields
-    /// survive; bump only the aliased locals' per-local generation.
+    /// A direct / method call may mutate any field of a local the callee can
+    /// reach *and* mutate — one with a mutable escape (`&mut v`, a mut-ref
+    /// argument, a `&mut self` receiver, or a `stores` stash). The callee
+    /// reaches such an object via an escaped mutable reference or a global, and
+    /// a mutable reference may have been retained, so any later call is a
+    /// potential mutation point — bump every `mut_escaped` local, not only this
+    /// call's arguments. Non-`mut_escaped` locals (non-aliased, or aliased only
+    /// through an immutable `&v`) cannot be mutated by any callee, so their
+    /// fields survive the call.
     fn bump_call_effects(&mut self) {
-        for &l in &self.aliased {
+        for &l in &self.mut_escaped {
             self.heap_state.bump_local(l);
         }
     }
@@ -1479,10 +1496,12 @@ mod tests {
     fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
-        build(body, &param_locals, &empty, &empty)
+        build(body, &param_locals, &empty, &empty, &empty)
     }
 
-    /// `build` with an explicit reference-aliased set (no `untrackable`).
+    /// `build` with an explicit reference-aliased set (no `untrackable`). The
+    /// aliased set doubles as `mut_escaped` so these tests exercise the
+    /// call-invalidation path (a mutably-aliased local is clobbered by calls).
     fn build_aliased(
         body: &Body,
         params: &[NirParam],
@@ -1490,7 +1509,7 @@ mod tests {
     ) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
-        build(body, &param_locals, aliased, &empty)
+        build(body, &param_locals, aliased, &empty, aliased)
     }
 
     fn empty_body() -> Body {

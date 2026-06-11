@@ -33,6 +33,8 @@ use super::gate::{FunctionGate, GatedPass};
 
 pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
+    let first_param_types = super::alias::first_param_types(project);
+    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::StoreLoadForward, len, |fid| {
@@ -54,15 +56,17 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let (aliased, untrackable) = super::alias::builder_alias_sets(
+        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
             body,
             locals,
             address_taken_locals,
             stores_aliased_locals,
             &type_table,
+            &first_param_types,
+            &call_immutability,
         );
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_sets(aliased, untrackable);
+        engine.set_alias_sets(aliased, untrackable, mut_escaped);
         unsafe_locals.extend(engine.body_address_taken().iter().copied());
         let rule = StoreLoadForwardRule {
             applied: Cell::new(false),

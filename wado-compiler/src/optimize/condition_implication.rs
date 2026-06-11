@@ -46,6 +46,8 @@ use super::gate::{FunctionGate, GatedPass};
 
 pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
+    let first_param_types = super::alias::first_param_types(project);
+    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ConditionImplication, len, |fid| {
@@ -64,15 +66,17 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut Functio
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let (aliased, untrackable) = super::alias::builder_alias_sets(
+        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
             body,
             locals,
             address_taken_locals,
             stores_aliased_locals,
             &type_table,
+            &first_param_types,
+            &call_immutability,
         );
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_sets(aliased, untrackable);
+        engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.run(&[&rule])
     })
 }

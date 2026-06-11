@@ -111,6 +111,12 @@ pub struct Engine<'a> {
     aliased_locals: IndexSet<u32>,
     /// The `stores`-aliased subset whose fields are never seeded.
     untrackable_locals: IndexSet<u32>,
+    /// The subset of `aliased_locals` a call may actually mutate (locals with a
+    /// mutable escape: `&mut v`, mut-ref args, `&mut self` receivers, or a
+    /// `stores` stash). The `ValueGraph` builder bumps only these across calls,
+    /// so immutable-`&v`-only locals keep their forwarded fields. Empty unless a
+    /// pass supplies it via [`Engine::set_alias_sets`].
+    mut_escaped_locals: IndexSet<u32>,
     /// Parameter local indices, seeded as stable `Opaque`s. Only up-front
     /// seeding makes parameters visible in the loop-entry snapshots, so
     /// passes consuming [`Engine::loop_entry_value`] must call
@@ -138,6 +144,7 @@ impl<'a> Engine<'a> {
             body_address_taken: None,
             aliased_locals: IndexSet::default(),
             untrackable_locals: IndexSet::default(),
+            mut_escaped_locals: IndexSet::default(),
             param_locals: Vec::new(),
         };
         engine.build_parents();
@@ -242,10 +249,19 @@ impl<'a> Engine<'a> {
     /// later change forces a rebuild on next query. Without it the builder
     /// treats every receiver as non-aliased — sound only when the function has
     /// no reference aliasing, so passes that may see aliasing must supply it.
-    pub fn set_alias_sets(&mut self, aliased: IndexSet<u32>, untrackable: IndexSet<u32>) {
-        if self.aliased_locals != aliased || self.untrackable_locals != untrackable {
+    pub fn set_alias_sets(
+        &mut self,
+        aliased: IndexSet<u32>,
+        untrackable: IndexSet<u32>,
+        mut_escaped: IndexSet<u32>,
+    ) {
+        if self.aliased_locals != aliased
+            || self.untrackable_locals != untrackable
+            || self.mut_escaped_locals != mut_escaped
+        {
             self.aliased_locals = aliased;
             self.untrackable_locals = untrackable;
+            self.mut_escaped_locals = mut_escaped;
             self.value_graph = None;
         }
     }
@@ -259,6 +275,7 @@ impl<'a> Engine<'a> {
             &self.param_locals,
             &self.aliased_locals,
             &self.untrackable_locals,
+            &self.mut_escaped_locals,
         );
         self.value_graph = Some(build);
     }

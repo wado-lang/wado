@@ -129,18 +129,53 @@ pub(super) fn build_alias_info(
     }
 }
 
-/// The `aliased` and `untrackable` local sets the `ValueGraph` builder needs,
-/// as plain `IndexSet`s (the builder is below the `optimize` layer and does
-/// not depend on `niri`'s `LocalSet`). A thin wrapper over [`build_alias_info`]
-/// so every engine-driven pass feeds the builder the same alias view the
-/// const-fold visitor uses.
+/// The `(module_source, func_name) → first-param type` map. Mirrors the
+/// `FirstParamTypes` map `copy_prop` builds: it lets the mutable-escape scan
+/// decide whether a method call takes `&self` (immutable, cannot mutate the
+/// receiver) or `&mut self` from the callee's declared signature, without a
+/// whole-program mod-ref analysis. Build once per pass over all functions.
+pub(super) fn first_param_types(
+    project: &NirPackage,
+) -> IndexMap<(ModuleSource, String), TypeId> {
+    let mut map = IndexMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        if let Some(first_param) = func.params.first() {
+            map.insert(
+                (func.module_source.clone(), func.name.clone()),
+                first_param.type_id,
+            );
+        }
+    }
+    map
+}
+
+/// The `aliased`, `untrackable`, and `mut_escaped` local sets the `ValueGraph`
+/// builder needs, as plain `IndexSet`s (the builder is below the `optimize`
+/// layer and does not depend on `niri`'s `LocalSet`). A thin wrapper over
+/// [`build_alias_info`] (for `aliased` / `untrackable`) plus the mutable-escape
+/// analysis (for `mut_escaped`), so every engine-driven pass feeds the builder
+/// the same alias view the const-fold visitor uses.
+///
+/// `mut_escaped` is the subset of `aliased` a call can actually mutate. It is
+/// derived *subtractively* from the proven-conservative `aliased` set: a local
+/// is dropped from `mut_escaped` only when it is **provably immutable across
+/// calls** — its type is transitively free of shared mutable state
+/// ([`CallImmutability::is_call_immutable`]) *and* it has no syntactic mutable
+/// escape ([`collect_mut_escaped_node`]: `&mut v`, a mut-ref argument, a
+/// `&mut self` receiver, or a `stores` stash). Everything else stays, so the
+/// set is always ⊆ `aliased` and never bumps fewer locals than soundness
+/// allows. The builder still uses the full `aliased` set for field-*write*
+/// granularity; only call effects consult `mut_escaped`.
 pub(super) fn builder_alias_sets(
     body: &Body,
     locals: &[crate::nir::NirLocal],
     address_taken_locals: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
-) -> (IndexSet<u32>, IndexSet<u32>) {
+    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    call_immutability: &CallImmutability,
+) -> (IndexSet<u32>, IndexSet<u32>, IndexSet<u32>) {
     let info = build_alias_info(
         body,
         locals,
@@ -148,10 +183,269 @@ pub(super) fn builder_alias_sets(
         stores_aliased_locals,
         type_table,
     );
-    (
-        info.aliased.iter().collect(),
-        info.untrackable.iter().collect(),
-    )
+    let aliased: IndexSet<u32> = info.aliased.iter().collect();
+    let mut_escaped = build_mut_escaped(
+        body,
+        locals,
+        &aliased,
+        stores_aliased_locals,
+        type_table,
+        first_param_types,
+        call_immutability,
+    );
+    (aliased, info.untrackable.iter().collect(), mut_escaped)
+}
+
+/// Compute the per-function `mut_escaped` set subtractively from `aliased`.
+///
+/// 1. Collect the body's *syntactic* mutable-escape sites
+///    ([`collect_mut_escaped_node`]) plus `stores_aliased_locals` (an inlined
+///    `stores`-annotated callee stashed the reference, mutability unknown).
+/// 2. Keep every `aliased` local whose type is not provably call-immutable
+///    *or* that has a syntactic mutable escape; drop the rest (provably
+///    immutable: no callee can mutate them).
+/// 3. Close the result over the reference alias groups, so that mutating one
+///    member of an alias group (a `let dst = src` reference copy, or two
+///    same-pointee reference params) clobbers the whole group's fields.
+fn build_mut_escaped(
+    body: &Body,
+    locals: &[crate::nir::NirLocal],
+    aliased: &IndexSet<u32>,
+    stores_aliased_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    call_immutability: &CallImmutability,
+) -> IndexSet<u32> {
+    let mut syntactic_mut: IndexSet<u32> = stores_aliased_locals.iter().copied().collect();
+    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+        collect_mut_escaped_node(body, node, type_table, first_param_types, &mut syntactic_mut);
+    });
+    let local_type = |idx: u32| locals.get(idx as usize).map(|l| l.type_id);
+    let mut esc: IndexSet<u32> = aliased
+        .iter()
+        .copied()
+        .filter(|&v| {
+            // Provably immutable across calls ⇒ drop from `mut_escaped`.
+            // Anything we cannot prove immutable stays (conservative).
+            let provably_immutable = !syntactic_mut.contains(&v)
+                && local_type(v).is_some_and(|t| call_immutability.is_call_immutable(t));
+            !provably_immutable
+        })
+        .collect();
+    // Close over reference alias groups: if any group member is mutably
+    // escaped, every member's pointee may be mutated through it.
+    let same_pointee_edges = same_pointee_reference_edges(locals, type_table);
+    let groups = collect_alias_groups(body, type_table, &same_pointee_edges);
+    if !groups.is_empty() {
+        let seed: Vec<u32> = esc.iter().copied().collect();
+        for v in seed {
+            if let Some(group) = groups.get(&v) {
+                for &member in group {
+                    esc.insert(member);
+                }
+            }
+        }
+    }
+    esc
+}
+
+/// Transitive "a value of this type cannot be mutated by a callee that receives
+/// it by value or by immutable reference" predicate, memoised per pass.
+///
+/// A value escaping into a call is mutable through that call only if it carries
+/// *shared mutable state*: a `&mut T`, a `Box<T>` / `List<T>` cell, a raw
+/// `Array<T>`, a resource handle, a reactive cell, or a variant/generic/unknown
+/// shape we cannot see into. A type free of all of those — primitives, plain
+/// value structs of such fields (e.g. `i128 { low: i64, high: i64 }`), enums,
+/// flags, and immutable `&T` references — is deep-copied on pass-by-value and
+/// cannot be written through an immutable reference, so no callee can change
+/// the fields the `ValueGraph` forwards. (Cross-handle mutation of a `&T`
+/// pointee is handled separately by the alias-group closure in
+/// [`build_mut_escaped`].)
+///
+/// Owns a struct-field map cloned from `project.structs`, so it borrows only
+/// `type_table` for the pass's lifetime.
+pub(super) struct CallImmutability<'a> {
+    type_table: &'a TypeTable,
+    struct_fields: IndexMap<(String, ModuleSource), Vec<TypeId>>,
+    box_name: String,
+    list_name: String,
+    memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
+}
+
+impl<'a> CallImmutability<'a> {
+    pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable) -> Self {
+        let struct_fields = project
+            .structs
+            .iter()
+            .map(|s| {
+                (
+                    (s.name.clone(), s.module_source.clone()),
+                    s.fields.iter().map(|f| f.type_id).collect(),
+                )
+            })
+            .collect();
+        let items = type_table.compiler_items();
+        let box_name = items
+            .struct_name(crate::compiler_item::CompilerItem::Box)
+            .to_string();
+        let list_name = items
+            .struct_name(crate::compiler_item::CompilerItem::List)
+            .to_string();
+        Self {
+            type_table,
+            struct_fields,
+            box_name,
+            list_name,
+            memo: std::cell::RefCell::default(),
+        }
+    }
+
+    pub(super) fn is_call_immutable(&self, type_id: TypeId) -> bool {
+        self.walk(type_id, &mut Vec::new())
+    }
+
+    fn walk(&self, type_id: TypeId, stack: &mut Vec<TypeId>) -> bool {
+        if let Some(&cached) = self.memo.borrow().get(&type_id) {
+            return cached;
+        }
+        // A struct can only reach itself through a `Box`/`List`/reference
+        // field (value types cannot be infinite-sized), all of which return
+        // `false` before recursing, so a cycle implies an immutable shape.
+        if stack.contains(&type_id) {
+            return true;
+        }
+        stack.push(type_id);
+        let result = match self.type_table.get(type_id) {
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            // `&T` is immutable: a callee cannot write through it. The pointee
+            // being mutated through a *different* handle is the alias-group
+            // closure's concern, not this type-shape check.
+            | ResolvedType::Ref(_) => true,
+            ResolvedType::Newtype { base_type, .. } => {
+                let base = *base_type;
+                self.walk(base, stack)
+            }
+            ResolvedType::Struct {
+                name,
+                module_source,
+                base_name,
+                ..
+            } => {
+                let is_box_or_list = base_name.as_deref() == Some(self.box_name.as_str())
+                    || base_name.as_deref() == Some(self.list_name.as_str());
+                if is_box_or_list {
+                    false
+                } else {
+                    let key = (name.clone(), module_source.clone());
+                    match self.struct_fields.get(&key).cloned() {
+                        Some(fields) => fields.iter().all(|&f| self.walk(f, stack)),
+                        // Unknown layout (not in the registry) — conservative.
+                        None => false,
+                    }
+                }
+            }
+            // `&mut T`, `Box`/`List` (as `GenericInstance`), raw arrays,
+            // resources, reactive cells, variants, generics, type params, and
+            // unknowns may all carry shared mutable state — conservative.
+            _ => false,
+        };
+        stack.pop();
+        self.memo.borrow_mut().insert(type_id, result);
+        result
+    }
+}
+
+/// The bare-`Local` root of a place expression, looking through `Unary`
+/// (`&`/`&mut`/deref), `Cast`, `FieldAccess`, and `Index`. `&mut a.b.f` and
+/// `a.b.f` both root at `a`. `None` when the place is not rooted in a local
+/// (a call result, a literal, …).
+fn root_local_of(body: &Body, id: crate::nir_arena::ExprId) -> Option<u32> {
+    match &body.exprs[id].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Unary { expr, .. }
+        | ExprKind::Cast { expr, .. }
+        | ExprKind::FieldAccess { expr, .. }
+        | ExprKind::Index { expr, .. } => root_local_of(body, *expr),
+        _ => None,
+    }
+}
+
+/// Flag the roots of mutable-escape sites in a single node:
+///
+/// - `&mut v` — the inner place's root is mutably referenced.
+/// - `f(…, mut arg, …)` — a mut-ref call argument's root.
+/// - `recv.m(…)` where `m` takes `&mut self` (or the receiver expression is
+///   already a `&mut`), plus the method's own mut-ref arguments. Receiver
+///   mutability comes from the callee's declared first-param type
+///   (`first_param_types`); an unknown callee is treated conservatively as
+///   mutating its receiver.
+///
+/// Immutable `&v` is deliberately *not* a mutable escape: a `&self` receiver
+/// or `&T` argument cannot mutate the pointee, so the local's fields survive
+/// across the call.
+fn collect_mut_escaped_node(
+    body: &Body,
+    node: NodeRef,
+    type_table: &TypeTable,
+    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    out: &mut IndexSet<u32>,
+) {
+    let NodeRef::Expr(e) = node else {
+        return;
+    };
+    match &body.exprs[e].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::MutRef,
+            expr: inner,
+        } => {
+            if let Some(r) = root_local_of(body, *inner) {
+                out.insert(r);
+            }
+        }
+        ExprKind::Call { args, .. } => {
+            for arg in args {
+                if arg.is_mut
+                    && let Some(r) = root_local_of(body, arg.expr)
+                {
+                    out.insert(r);
+                }
+            }
+        }
+        ExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } => {
+            let key = (func.module_source.clone(), func.name.clone());
+            let callee_mutates_receiver = match first_param_types.get(&key) {
+                Some(&tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+                // Unknown callee (builtin / extern not in the project): be
+                // conservative and assume it may mutate its receiver.
+                None => true,
+            };
+            let receiver_is_mut_ref =
+                matches!(type_table.get(body.exprs[*receiver].type_id), ResolvedType::MutRef(_));
+            if (callee_mutates_receiver || receiver_is_mut_ref)
+                && let Some(r) = root_local_of(body, *receiver)
+            {
+                out.insert(r);
+            }
+            for arg in args {
+                if arg.is_mut
+                    && let Some(r) = root_local_of(body, arg.expr)
+                {
+                    out.insert(r);
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Recognize `Call(helper, [arg])` where `helper` is a synthesized
