@@ -317,22 +317,49 @@ Migrations:
       ValueGraph's reference-aliasing blind spot — `Ref(v) ≠ v` by receiver VN
       — that the WEP had kept Skel-side. Nine goldens improve (the
       `opt_licm_immut_ref*` cluster now const-folds immutable-ref fields).
-- [ ] `field_env` is NOT deletable — it is niri's CTFE field state, not a
-      duplicate of the ValueGraph (measured: disabling it regresses 29
-      fixtures even with look-through landed). The decisive path is
-      `Interpreter::expr_to_lattice_a`: niri's compile-time _evaluator_ reads
-      `field_env` to resolve a `FieldAccess(Local, field)` to a constant
-      _during_ CTFE (e.g. `int128 as f64` evaluating `as_f64(&v)` over `v`'s
-      fields). The ValueGraph forwards field reads in the _IR_ (feeding
-      `store_load_forward`), but does not feed niri's interpreter, so the two
-      are complementary, not redundant: the ValueGraph owns store→load
-      forwarding; `field_env` owns CTFE field reads. Truly unifying would
-      require niri's CTFE to read field constants from the ValueGraph
-      (`engine.value` of the field), but CTFE runs mid-walk on mutated /
-      inlined / scratch bodies where the once-built graph does not apply — a
-      large re-plumbing of uncertain value. Recommendation: keep `field_env`
-      as the CTFE field-constant store; the duplication the WEP set out to
-      remove (store→load forwarding) is gone, which is the real win.
+- [x] ValueGraph call-survival for immutable-only locals (`mut_escaped`). The
+      builder used to invalidate every reference-aliased local's fields on
+      every call (`bump_call_effects` over the whole `aliased` set), so a field
+      read never forwarded across a call once the local's address was taken —
+      even when the only handle was an immutable `&v`. `optimize::alias` now
+      derives a `mut_escaped` set _subtractively_ from the proven-conservative
+      `aliased` set: a local is dropped only when it is provably immutable
+      across calls — its type is transitively free of shared mutable state
+      (`CallImmutability`: no `&mut`, `Box`/`List`, array, resource, reactive,
+      or variant/generic/unknown shape) _and_ it has no syntactic mutable
+      escape (`&mut v`, a mut-ref argument, a `&mut self` receiver read from the
+      callee's declared first-param type à la `copy_prop`, or a `stores`
+      stash). The result is closed over the reference alias groups so a `&mut`
+      to a shared pointee still clobbers every alias. `bump_call_effects` bumps
+      only `mut_escaped`; field-_write_ granularity still uses the full
+      `aliased`. Effect: POD value structs whose only escape is an immutable
+      `&self` receiver (e.g. `i128`/`u128`) keep their forwarded fields across
+      the formatter calls, so the `high < 0` branch in the inlined `abs_u128`
+      folds away — a CTFE-cluster fold the IR-level ValueGraph passes now do
+      _without_ niri's evaluator. Five goldens improve; full e2e green. (A
+      first attempt built `mut_escaped` additively from syntactic `&mut` sites
+      and miscompiled `ref_2` — boxing erases the `&mut`, and a Box/List value
+      passed by value is itself a mutable handle; the subtractive,
+      type-driven model above is the fix.)
+- [ ] `field_env` not yet deletable, but its irreducible role is now narrower
+      than previously thought. With `mut_escaped` landed, disabling `field_env`
+      regresses 26 fixtures (down from 29), and the regressions are IR-level
+      forwarding gaps, not CTFE-evaluator gaps:
+  - HFS shadow-init forwarding (~16, `hfs_*` / `opt_hfs_*`): `field_scalarize`
+    runs once after the fixpoint loop and emits `__hfs_x = c.x`; the only
+    post-scalarize fold is `const_fold_post_global`, which uses `field_env` to
+    fold `c.x → 0`. No ValueGraph forwarding (`store_load_forward`) runs after
+    `field_scalarize`, so the shadow init stays a load without `field_env`.
+  - int128 const-object dedup (`coerce_int_3`, `int128_cast_to_primitives`):
+    `field_env` lets globalization recognise a repeated `u128 { 1000, 0 }` and
+    hoist it into one shared global; without it each site re-emits the struct.
+  - `mut_param` / `mut_param_merged` / `ref_1`: mutable-reference field reads
+    the ValueGraph still drops conservatively.
+    Deletion path: run a ValueGraph store→load forward in the post-scalarize
+    cleanup (closes the HFS cluster), reproduce the const-object dedup and the
+    mut-ref reads, then delete `field_env`. The store→load duplication the WEP
+    set out to remove is already gone; what remains is reproducing these three
+    IR-level folds before the evaluator's field map can be retired.
 - [x] `condition_implication`: all guard kinds (loop, dominating,
       early-exit, short-circuit, bitmask) unified into one
       `GuardFact { var_vn, max_offset, bound_vn, is_strict }` with

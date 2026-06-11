@@ -134,9 +134,7 @@ pub(super) fn build_alias_info(
 /// decide whether a method call takes `&self` (immutable, cannot mutate the
 /// receiver) or `&mut self` from the callee's declared signature, without a
 /// whole-program mod-ref analysis. Build once per pass over all functions.
-pub(super) fn first_param_types(
-    project: &NirPackage,
-) -> IndexMap<(ModuleSource, String), TypeId> {
+pub(super) fn first_param_types(project: &NirPackage) -> IndexMap<(ModuleSource, String), TypeId> {
     let mut map = IndexMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
@@ -218,7 +216,13 @@ fn build_mut_escaped(
 ) -> IndexSet<u32> {
     let mut syntactic_mut: IndexSet<u32> = stores_aliased_locals.iter().copied().collect();
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
-        collect_mut_escaped_node(body, node, type_table, first_param_types, &mut syntactic_mut);
+        collect_mut_escaped_node(
+            body,
+            node,
+            type_table,
+            first_param_types,
+            &mut syntactic_mut,
+        );
     });
     let local_type = |idx: u32| locals.get(idx as usize).map(|l| l.type_id);
     let mut esc: IndexSet<u32> = aliased
@@ -429,8 +433,10 @@ fn collect_mut_escaped_node(
                 // conservative and assume it may mutate its receiver.
                 None => true,
             };
-            let receiver_is_mut_ref =
-                matches!(type_table.get(body.exprs[*receiver].type_id), ResolvedType::MutRef(_));
+            let receiver_is_mut_ref = matches!(
+                type_table.get(body.exprs[*receiver].type_id),
+                ResolvedType::MutRef(_)
+            );
             if (callee_mutates_receiver || receiver_is_mut_ref)
                 && let Some(r) = root_local_of(body, *receiver)
             {
