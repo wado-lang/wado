@@ -791,8 +791,8 @@ fn lsp_inlay_hint_returns_type_and_parameter_hints() {
         "expected `: i32` type hint for `let total = ...`; got {labels:?}",
     );
     assert!(
-        labels.contains(&"a:") && labels.contains(&"b:"),
-        "expected `a:`/`b:` parameter hints; got {labels:?}",
+        labels.contains(&"a: ") && labels.contains(&"b: "),
+        "expected `a: `/`b: ` parameter hints; got {labels:?}",
     );
     // Each hint kind is the wire integer (Type=1, Parameter=2).
     for hint in hints {
