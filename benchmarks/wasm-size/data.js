@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781273918028,
+  "lastUpdate": 1781275064068,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32265,6 +32265,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9c66cbecbb2be52f2c7b50ddbc76cd11e0875e23"
         },
         "date": 1781273917478,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432251,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "219d0993c80a97ec4b480aefcf7b878ddf12eb8d",
+          "message": "Merge pull request #1358 from wado-lang/gfx/rustc-1.96\n\nchore: update rustc & deps",
+          "timestamp": "2026-06-12T23:26:43+09:00",
+          "tree_id": "9f637488a6c3f92e1b8ac7e7bbc7761e995b5954",
+          "url": "https://github.com/wado-lang/wado/commit/219d0993c80a97ec4b480aefcf7b878ddf12eb8d"
+        },
+        "date": 1781275063676,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
