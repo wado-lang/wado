@@ -158,6 +158,29 @@ struct HeapSnapshot {
     default_version: HeapVersion,
 }
 
+/// A snapshot of *all* flow-sensitive builder state at a program point:
+/// per-local values (`current_value`), heap versions (`heap_state`), and
+/// reference look-through targets (`ref_targets`). Captured, restored, and
+/// merged as a unit ([`Builder::flow_snapshot`] / [`Builder::flow_restore`] /
+/// [`Builder::flow_join_two`] / [`Builder::flow_join_n`]) so a control-flow
+/// join can never handle one component and silently forget another — the bug
+/// class that let a branch/loop-reassigned reference forward a stale pointee.
+#[derive(Clone)]
+struct FlowSnapshot {
+    current_value: IndexMap<u32, ValueId>,
+    heap: HeapSnapshot,
+    ref_targets: IndexMap<u32, u32>,
+}
+
+/// One arm's exit state for a branch join, plus whether control falls through
+/// to the merge point. A non-fall-through arm (`break` / `return` /
+/// `continue`) contributes only its heap writes to the join — see
+/// [`Builder::join_heap`].
+struct FlowArm {
+    state: FlowSnapshot,
+    falls_through: bool,
+}
+
 /// The result of running [`build`] over a function body: the populated
 /// pool plus the side-table mapping pure `ExprId`s to their `ValueId`.
 ///
@@ -476,32 +499,28 @@ impl<'a> Builder<'a> {
                 else_block,
             } => {
                 let cond_v = self.walk_expr(condition);
-                let saved = self.current_value.clone();
-                let saved_heap = self.heap_state.snapshot();
-                let saved_refs = self.ref_targets.clone();
+                let pre = self.flow_snapshot();
                 self.walk_block(then_block);
-                let then_state = std::mem::replace(&mut self.current_value, saved.clone());
-                let then_refs = std::mem::replace(&mut self.ref_targets, saved_refs.clone());
-                let then_heap = self.heap_state.snapshot();
-                let then_falls = self.block_falls_through(then_block);
-                self.heap_state.restore(saved_heap.clone());
-                let (else_heap, else_falls) = if let Some(eb) = else_block {
-                    self.walk_block(eb);
-                    let h = self.heap_state.snapshot();
-                    let f = self.block_falls_through(eb);
-                    self.heap_state.restore(saved_heap.clone());
-                    (h, f)
-                } else {
-                    (saved_heap.clone(), true)
+                let then_arm = FlowArm {
+                    falls_through: self.block_falls_through(then_block),
+                    state: self.flow_snapshot(),
                 };
-                let else_state = std::mem::replace(&mut self.current_value, saved.clone());
-                let else_refs = std::mem::replace(&mut self.ref_targets, saved_refs.clone());
-                self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
-                self.merge_ref_targets(&[then_refs, else_refs]);
-                self.join_heap(
-                    &saved_heap,
-                    &[(then_heap, then_falls), (else_heap, else_falls)],
-                );
+                self.flow_restore(&pre);
+                let else_arm = if let Some(eb) = else_block {
+                    self.walk_block(eb);
+                    let arm = FlowArm {
+                        falls_through: self.block_falls_through(eb),
+                        state: self.flow_snapshot(),
+                    };
+                    self.flow_restore(&pre);
+                    arm
+                } else {
+                    FlowArm {
+                        state: pre.clone(),
+                        falls_through: true,
+                    }
+                };
+                self.flow_join_two(cond_v, &pre, then_arm, else_arm);
             }
             StmtKind::Loop { body: lb } => {
                 self.walk_loop(lb);
@@ -728,32 +747,28 @@ impl<'a> Builder<'a> {
                 else_branch,
             } => {
                 let cond_v = self.walk_expr(condition);
-                let saved = self.current_value.clone();
-                let saved_heap = self.heap_state.snapshot();
-                let saved_refs = self.ref_targets.clone();
+                let pre = self.flow_snapshot();
                 self.walk_block(then_branch);
-                let then_state = std::mem::replace(&mut self.current_value, saved.clone());
-                let then_refs = std::mem::replace(&mut self.ref_targets, saved_refs.clone());
-                let then_heap = self.heap_state.snapshot();
-                let then_falls = self.block_falls_through(then_branch);
-                self.heap_state.restore(saved_heap.clone());
-                let (else_heap, else_falls) = if let Some(eb) = else_branch {
-                    self.walk_block(eb);
-                    let h = self.heap_state.snapshot();
-                    let f = self.block_falls_through(eb);
-                    self.heap_state.restore(saved_heap.clone());
-                    (h, f)
-                } else {
-                    (saved_heap.clone(), true)
+                let then_arm = FlowArm {
+                    falls_through: self.block_falls_through(then_branch),
+                    state: self.flow_snapshot(),
                 };
-                let else_state = std::mem::replace(&mut self.current_value, saved.clone());
-                let else_refs = std::mem::replace(&mut self.ref_targets, saved_refs.clone());
-                self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
-                self.merge_ref_targets(&[then_refs, else_refs]);
-                self.join_heap(
-                    &saved_heap,
-                    &[(then_heap, then_falls), (else_heap, else_falls)],
-                );
+                self.flow_restore(&pre);
+                let else_arm = if let Some(eb) = else_branch {
+                    self.walk_block(eb);
+                    let arm = FlowArm {
+                        falls_through: self.block_falls_through(eb),
+                        state: self.flow_snapshot(),
+                    };
+                    self.flow_restore(&pre);
+                    arm
+                } else {
+                    FlowArm {
+                        state: pre.clone(),
+                        falls_through: true,
+                    }
+                };
+                self.flow_join_two(cond_v, &pre, then_arm, else_arm);
                 None
             }
             ExprKind::LabeledBlock { block, .. } => {
@@ -775,35 +790,17 @@ impl<'a> Builder<'a> {
                 ..
             } => {
                 self.walk_expr(scrutinee);
-                let saved = self.current_value.clone();
-                let saved_heap = self.heap_state.snapshot();
-                let saved_refs = self.ref_targets.clone();
-                let mut arm_states: Vec<IndexMap<u32, ValueId>> =
-                    Vec::with_capacity(arms.len() + 1);
-                let mut arm_heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len() + 1);
-                let mut arm_refs: Vec<IndexMap<u32, u32>> = Vec::with_capacity(arms.len() + 1);
-                for arm in &arms {
-                    self.current_value.clone_from(&saved);
-                    self.heap_state.restore(saved_heap.clone());
-                    self.ref_targets.clone_from(&saved_refs);
-                    self.walk_block(*arm);
-                    arm_states.push(self.current_value.clone());
-                    arm_heaps.push((self.heap_state.snapshot(), self.block_falls_through(*arm)));
-                    arm_refs.push(self.ref_targets.clone());
+                let pre = self.flow_snapshot();
+                let mut flow_arms: Vec<FlowArm> = Vec::with_capacity(arms.len() + 1);
+                for arm in arms.iter().copied().chain(std::iter::once(default)) {
+                    self.flow_restore(&pre);
+                    self.walk_block(arm);
+                    flow_arms.push(FlowArm {
+                        falls_through: self.block_falls_through(arm),
+                        state: self.flow_snapshot(),
+                    });
                 }
-                self.current_value.clone_from(&saved);
-                self.heap_state.restore(saved_heap.clone());
-                self.ref_targets.clone_from(&saved_refs);
-                self.walk_block(default);
-                arm_heaps.push((
-                    self.heap_state.snapshot(),
-                    self.block_falls_through(default),
-                ));
-                arm_refs.push(self.ref_targets.clone());
-                arm_states.push(std::mem::replace(&mut self.current_value, saved.clone()));
-                self.merge_n_arms(&saved, &arm_states);
-                self.merge_ref_targets(&arm_refs);
-                self.join_heap(&saved_heap, &arm_heaps);
+                self.flow_join_n(&pre, flow_arms);
                 None
             }
 
@@ -1028,6 +1025,73 @@ impl<'a> Builder<'a> {
             | PatKind::Enum { .. }
             | PatKind::Range { .. } => {}
         }
+    }
+
+    /// Capture all flow-sensitive state (`current_value`, `heap_state`,
+    /// `ref_targets`) at the current program point as one [`FlowSnapshot`].
+    fn flow_snapshot(&self) -> FlowSnapshot {
+        FlowSnapshot {
+            current_value: self.current_value.clone(),
+            heap: self.heap_state.snapshot(),
+            ref_targets: self.ref_targets.clone(),
+        }
+    }
+
+    /// Reset all flow-sensitive state to a previously captured snapshot. Used
+    /// between branch arms so each arm walks from the common pre-branch state.
+    fn flow_restore(&mut self, snap: &FlowSnapshot) {
+        self.current_value.clone_from(&snap.current_value);
+        self.heap_state.restore(snap.heap.clone());
+        self.ref_targets.clone_from(&snap.ref_targets);
+    }
+
+    /// Join an if-style two-arm endpoint over all three flow components at
+    /// once: values via [`Builder::merge_two_arms`] (Select-aware), heap via
+    /// [`Builder::join_heap`], references via [`Builder::merge_ref_targets`].
+    fn flow_join_two(
+        &mut self,
+        cond_v: Option<ValueId>,
+        pre: &FlowSnapshot,
+        then_arm: FlowArm,
+        else_arm: FlowArm,
+    ) {
+        // Start from the pre-branch base so arm-local bindings (keys absent
+        // from `pre`) do not leak past the merge; `merge_two_arms` then
+        // overwrites every pre-branch key with its joined value.
+        self.current_value.clone_from(&pre.current_value);
+        self.merge_two_arms(
+            cond_v,
+            &pre.current_value,
+            &then_arm.state.current_value,
+            &else_arm.state.current_value,
+        );
+        self.merge_ref_targets(&[then_arm.state.ref_targets, else_arm.state.ref_targets]);
+        self.join_heap(
+            &pre.heap,
+            &[
+                (then_arm.state.heap, then_arm.falls_through),
+                (else_arm.state.heap, else_arm.falls_through),
+            ],
+        );
+    }
+
+    /// Join an n-arm endpoint (Switch / Match) over all three flow components
+    /// at once. Consumes the arms to split them into the per-component vectors
+    /// the underlying joins expect without extra clones.
+    fn flow_join_n(&mut self, pre: &FlowSnapshot, arms: Vec<FlowArm>) {
+        let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());
+        let mut heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len());
+        let mut refs: Vec<IndexMap<u32, u32>> = Vec::with_capacity(arms.len());
+        for a in arms {
+            states.push(a.state.current_value);
+            heaps.push((a.state.heap, a.falls_through));
+            refs.push(a.state.ref_targets);
+        }
+        // See `flow_join_two`: reset to the pre-branch base before merging.
+        self.current_value.clone_from(&pre.current_value);
+        self.merge_n_arms(&pre.current_value, &states);
+        self.merge_ref_targets(&refs);
+        self.join_heap(&pre.heap, &heaps);
     }
 
     /// Merge an if-style two-arm structural endpoint. For each local that
@@ -1284,34 +1348,26 @@ impl<'a> Builder<'a> {
             self.heap_state.bump_all();
         }
 
-        let saved = self.current_value.clone();
-        let saved_heap = self.heap_state.snapshot();
-        let saved_refs = self.ref_targets.clone();
-        let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());
-        let mut arm_heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len());
-        let mut arm_refs: Vec<IndexMap<u32, u32>> = Vec::with_capacity(arms.len());
+        let pre = self.flow_snapshot();
+        let mut flow_arms: Vec<FlowArm> = Vec::with_capacity(arms.len());
         for arm in arms {
-            self.current_value.clone_from(&saved);
-            self.heap_state.restore(saved_heap.clone());
-            self.ref_targets.clone_from(&saved_refs);
+            self.flow_restore(&pre);
             self.bind_pattern_opaque(arm.pattern);
             if let Some(g) = arm.guard {
                 self.walk_expr(g);
             }
             self.walk_expr(arm.body);
-            states.push(self.current_value.clone());
             // Match arm bodies are expressions; without a `TypeTable` the
             // builder cannot detect a never-typed (`=> return …`) body, so
             // every arm is conservatively treated as falling through. A
             // returning arm contributes only its field writes to the join,
             // which is sound (those fields bump) if imprecise.
-            arm_heaps.push((self.heap_state.snapshot(), true));
-            arm_refs.push(self.ref_targets.clone());
+            flow_arms.push(FlowArm {
+                state: self.flow_snapshot(),
+                falls_through: true,
+            });
         }
-        self.current_value.clone_from(&saved);
-        self.merge_n_arms(&saved, &states);
-        self.merge_ref_targets(&arm_refs);
-        self.join_heap(&saved_heap, &arm_heaps);
+        self.flow_join_n(&pre, flow_arms);
     }
 
     /// Reassign every local the body may write to a fresh `Opaque`, and
