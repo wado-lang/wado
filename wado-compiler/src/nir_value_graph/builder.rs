@@ -253,7 +253,13 @@ struct Builder<'a> {
     mut_escaped: crate::hashmap::IndexSet<u32>,
     /// `local → pointee local` for `let r = &v` references, so `r.f` forwards
     /// from `v`'s field slot (reference look-through). Cleared when `r` or the
-    /// pointee is reassigned. See [`Builder::update_ref_target`].
+    /// pointee is reassigned ([`Builder::update_ref_target`]). This is
+    /// flow-sensitive state and follows the same join discipline as
+    /// `current_value`: every branch joins it ([`Builder::merge_ref_targets`] —
+    /// an entry survives only if all arms agree) and every loop / labeled-block
+    /// drops the entries its body may reassign ([`Builder::drop_ref_targets_for`]),
+    /// so a reference whose target diverges becomes unknown rather than
+    /// forwarding a stale pointee.
     ref_targets: IndexMap<u32, u32>,
     /// Type table for constant folding of pure arithmetic on literal operands
     /// (`Binary` / `Unary`). `None` disables folding (the value graph still
@@ -472,8 +478,10 @@ impl<'a> Builder<'a> {
                 let cond_v = self.walk_expr(condition);
                 let saved = self.current_value.clone();
                 let saved_heap = self.heap_state.snapshot();
+                let saved_refs = self.ref_targets.clone();
                 self.walk_block(then_block);
                 let then_state = std::mem::replace(&mut self.current_value, saved.clone());
+                let then_refs = std::mem::replace(&mut self.ref_targets, saved_refs.clone());
                 let then_heap = self.heap_state.snapshot();
                 let then_falls = self.block_falls_through(then_block);
                 self.heap_state.restore(saved_heap.clone());
@@ -487,7 +495,9 @@ impl<'a> Builder<'a> {
                     (saved_heap.clone(), true)
                 };
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
+                let else_refs = std::mem::replace(&mut self.ref_targets, saved_refs.clone());
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
+                self.merge_ref_targets(&[then_refs, else_refs]);
                 self.join_heap(
                     &saved_heap,
                     &[(then_heap, then_falls), (else_heap, else_falls)],
@@ -581,17 +591,20 @@ impl<'a> Builder<'a> {
                     // substitute later reads with the never-stored value.
                     let saved_cur = self.current_value.clone();
                     let rhs = self.walk_expr(right);
-                    let changed: Vec<u32> = self
+                    let changed: crate::hashmap::IndexSet<u32> = self
                         .current_value
                         .iter()
                         .filter_map(|(&k, &v)| {
                             saved_cur.get(&k).and_then(|s| (*s != v).then_some(k))
                         })
                         .collect();
-                    for k in changed {
+                    for &k in &changed {
                         let opaque = self.pool.fresh_opaque();
                         self.current_value.insert(k, opaque);
                     }
+                    // A reference the conditionally-run rhs reassigned (or whose
+                    // pointee it reassigned) no longer has a known target.
+                    self.drop_ref_targets_for(&changed);
                     self.heap_state.bump_all();
                     rhs
                 } else {
@@ -717,8 +730,10 @@ impl<'a> Builder<'a> {
                 let cond_v = self.walk_expr(condition);
                 let saved = self.current_value.clone();
                 let saved_heap = self.heap_state.snapshot();
+                let saved_refs = self.ref_targets.clone();
                 self.walk_block(then_branch);
                 let then_state = std::mem::replace(&mut self.current_value, saved.clone());
+                let then_refs = std::mem::replace(&mut self.ref_targets, saved_refs.clone());
                 let then_heap = self.heap_state.snapshot();
                 let then_falls = self.block_falls_through(then_branch);
                 self.heap_state.restore(saved_heap.clone());
@@ -732,7 +747,9 @@ impl<'a> Builder<'a> {
                     (saved_heap.clone(), true)
                 };
                 let else_state = std::mem::replace(&mut self.current_value, saved.clone());
+                let else_refs = std::mem::replace(&mut self.ref_targets, saved_refs.clone());
                 self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
+                self.merge_ref_targets(&[then_refs, else_refs]);
                 self.join_heap(
                     &saved_heap,
                     &[(then_heap, then_falls), (else_heap, else_falls)],
@@ -760,25 +777,32 @@ impl<'a> Builder<'a> {
                 self.walk_expr(scrutinee);
                 let saved = self.current_value.clone();
                 let saved_heap = self.heap_state.snapshot();
+                let saved_refs = self.ref_targets.clone();
                 let mut arm_states: Vec<IndexMap<u32, ValueId>> =
                     Vec::with_capacity(arms.len() + 1);
                 let mut arm_heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len() + 1);
+                let mut arm_refs: Vec<IndexMap<u32, u32>> = Vec::with_capacity(arms.len() + 1);
                 for arm in &arms {
                     self.current_value.clone_from(&saved);
                     self.heap_state.restore(saved_heap.clone());
+                    self.ref_targets.clone_from(&saved_refs);
                     self.walk_block(*arm);
                     arm_states.push(self.current_value.clone());
                     arm_heaps.push((self.heap_state.snapshot(), self.block_falls_through(*arm)));
+                    arm_refs.push(self.ref_targets.clone());
                 }
                 self.current_value.clone_from(&saved);
                 self.heap_state.restore(saved_heap.clone());
+                self.ref_targets.clone_from(&saved_refs);
                 self.walk_block(default);
                 arm_heaps.push((
                     self.heap_state.snapshot(),
                     self.block_falls_through(default),
                 ));
+                arm_refs.push(self.ref_targets.clone());
                 arm_states.push(std::mem::replace(&mut self.current_value, saved.clone()));
                 self.merge_n_arms(&saved, &arm_states);
+                self.merge_ref_targets(&arm_refs);
                 self.join_heap(&saved_heap, &arm_heaps);
                 None
             }
@@ -1066,6 +1090,38 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// Join `ref_targets` across branch arms walked from a common pre-state:
+    /// a `r → v` look-through survives only if every arm ends with that exact
+    /// mapping. A reference reassigned (or cleared) in some arm becomes unknown
+    /// and is dropped, so a post-branch `r.f` re-derives rather than forwarding
+    /// a stale pointee. This is the `ref_targets` counterpart to
+    /// [`Builder::merge_n_arms`]: a diverging reference is dropped exactly as a
+    /// diverging value falls to `Opaque`. Each `arm_refs` entry is the arm's
+    /// post-walk map, so an entry untouched by every arm (inherited from the
+    /// shared pre-state) is present in all and survives.
+    fn merge_ref_targets(&mut self, arm_refs: &[IndexMap<u32, u32>]) {
+        let Some((first, rest)) = arm_refs.split_first() else {
+            return;
+        };
+        let mut merged: IndexMap<u32, u32> = IndexMap::default();
+        for (&r, &v) in first {
+            if rest.iter().all(|a| a.get(&r) == Some(&v)) {
+                merged.insert(r, v);
+            }
+        }
+        self.ref_targets = merged;
+    }
+
+    /// Drop `ref_targets` entries a loop / labeled-block body may invalidate by
+    /// reassigning `writes`: a reference among `writes` loses its known target,
+    /// and a reference whose pointee is among `writes` may point at a moved
+    /// object. The `ref_targets` counterpart to those constructs' `Opaque`
+    /// reassignment of `current_value` for the same locals.
+    fn drop_ref_targets_for(&mut self, writes: &crate::hashmap::IndexSet<u32>) {
+        self.ref_targets
+            .retain(|src, pointee| !writes.contains(src) && !writes.contains(pointee));
+    }
+
     /// Join the heap state at a branch endpoint: each overlay generation
     /// keeps its pre-branch version iff every fall-through arm left it
     /// unchanged; otherwise it bumps fresh. Non-fall-through arms (terminated
@@ -1223,17 +1279,21 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
+        self.drop_ref_targets_for(&guard_writes);
         if any_guard {
             self.heap_state.bump_all();
         }
 
         let saved = self.current_value.clone();
         let saved_heap = self.heap_state.snapshot();
+        let saved_refs = self.ref_targets.clone();
         let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());
         let mut arm_heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len());
+        let mut arm_refs: Vec<IndexMap<u32, u32>> = Vec::with_capacity(arms.len());
         for arm in arms {
             self.current_value.clone_from(&saved);
             self.heap_state.restore(saved_heap.clone());
+            self.ref_targets.clone_from(&saved_refs);
             self.bind_pattern_opaque(arm.pattern);
             if let Some(g) = arm.guard {
                 self.walk_expr(g);
@@ -1246,9 +1306,11 @@ impl<'a> Builder<'a> {
             // returning arm contributes only its field writes to the join,
             // which is sound (those fields bump) if imprecise.
             arm_heaps.push((self.heap_state.snapshot(), true));
+            arm_refs.push(self.ref_targets.clone());
         }
         self.current_value.clone_from(&saved);
         self.merge_n_arms(&saved, &states);
+        self.merge_ref_targets(&arm_refs);
         self.join_heap(&saved_heap, &arm_heaps);
     }
 
@@ -1277,6 +1339,7 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
+        self.drop_ref_targets_for(&writes);
         self.apply_loop_heap_effects(&heap_effects);
         self.walk_block(body_block);
         for idx in &writes {
@@ -1285,6 +1348,7 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
+        self.drop_ref_targets_for(&writes);
         self.apply_loop_heap_effects(&heap_effects);
     }
 
@@ -1326,6 +1390,7 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
+        self.drop_ref_targets_for(&writes);
     }
 }
 
@@ -2554,6 +2619,183 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![let_v, let_r, reassign, let_y]);
+        let r = build_t(&body, &[]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn ref_reassigned_in_loop_does_not_forward_stale_pointee() {
+        // fn() { let v1 = S{f0:1}; let v2 = S{f0:2}; let mut r = &v1;
+        //        loop { r = &v2; } let y = r.f0; }
+        // If the loop runs 0 times, r is still &v1, so r.f0 must NOT fold to 2:
+        // a reference reassigned in the loop loses its known target.
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let s1 = one_field_struct(&mut body, one);
+        let let_v1 = let_stmt(&mut body, 0, s1, false);
+        let two = int_lit(&mut body, 2);
+        let s2 = one_field_struct(&mut body, two);
+        let let_v2 = let_stmt(&mut body, 1, s2, false);
+        let ref_v1 = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 2, ref_v1, true);
+        let ref_v2 = ref_of_local(&mut body, 1);
+        let reassign = assign_stmt(&mut body, 2, ref_v2);
+        let lb = block_with(&mut body, vec![reassign]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        let recv_r = local_ref(&mut body, 2);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 3, read, false);
+        root_with(&mut body, vec![let_v1, let_v2, let_r, loop_s, let_y]);
+        let r = build_t(&body, &[]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn ref_reassigned_in_one_branch_does_not_forward_stale_pointee() {
+        // fn(c) { let v1 = S{f0:1}; let v2 = S{f0:2}; let mut r = &v1;
+        //         if c { r = &v2; } let y = r.f0; }
+        // r is &v2 only when c, so r.f0 must NOT fold to a single constant: a
+        // reference reassigned in just one arm becomes unknown at the join.
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let s1 = one_field_struct(&mut body, one);
+        let let_v1 = let_stmt(&mut body, 0, s1, false);
+        let two = int_lit(&mut body, 2);
+        let s2 = one_field_struct(&mut body, two);
+        let let_v2 = let_stmt(&mut body, 1, s2, false);
+        let ref_v1 = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 2, ref_v1, true);
+        let cond = bool_lit(&mut body, true);
+        let ref_v2 = ref_of_local(&mut body, 1);
+        let reassign = assign_stmt(&mut body, 2, ref_v2);
+        let then_block = block_with(&mut body, vec![reassign]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+        let recv_r = local_ref(&mut body, 2);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 3, read, false);
+        root_with(&mut body, vec![let_v1, let_v2, let_r, if_s, let_y]);
+        let r = build_t(&body, &[]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn ref_untouched_in_branch_still_forwards() {
+        // fn(c) { let v = S{f0:7}; let r = &v; if c { } let y = r.f0; }
+        // The branch never touches `r`, so its look-through survives the join
+        // and r.f0 still forwards 7 (precision guard against over-dropping).
+        let mut body = empty_body();
+        let seven = int_lit(&mut body, 7);
+        let s = one_field_struct(&mut body, seven);
+        let let_v = let_stmt(&mut body, 0, s, false);
+        let ref_v = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 1, ref_v, false);
+        let cond = bool_lit(&mut body, true);
+        let then_block = block_with(&mut body, vec![]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+        let recv_r = local_ref(&mut body, 1);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 2, read, false);
+        root_with(&mut body, vec![let_v, let_r, if_s, let_y]);
+        let r = build_t(&body, &[]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+    }
+
+    #[test]
+    fn ref_set_to_same_pointee_in_both_arms_forwards() {
+        // fn(c) { let v=S{f0:1}; let w=S{f0:2}; let mut r=&v;
+        //         if c { r = &w; } else { r = &w; } let y = r.f0; }
+        // Both arms agree r = &w, so the join keeps the look-through and r.f0
+        // forwards w's 2 (precision guard: agreeing reassignments survive).
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let s_v = one_field_struct(&mut body, one);
+        let let_v = let_stmt(&mut body, 0, s_v, false);
+        let two = int_lit(&mut body, 2);
+        let s_w = one_field_struct(&mut body, two);
+        let let_w = let_stmt(&mut body, 1, s_w, false);
+        let ref_v = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 2, ref_v, true);
+        let cond = bool_lit(&mut body, true);
+        let ref_w_then = ref_of_local(&mut body, 1);
+        let assign_then = assign_stmt(&mut body, 2, ref_w_then);
+        let then_block = block_with(&mut body, vec![assign_then]);
+        let ref_w_else = ref_of_local(&mut body, 1);
+        let assign_else = assign_stmt(&mut body, 2, ref_w_else);
+        let else_block = block_with(&mut body, vec![assign_else]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: Some(else_block),
+            },
+        );
+        let recv_r = local_ref(&mut body, 2);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 3, read, false);
+        root_with(&mut body, vec![let_v, let_w, let_r, if_s, let_y]);
+        let r = build_t(&body, &[]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
+    }
+
+    #[test]
+    fn ref_reassigned_in_short_circuit_rhs_does_not_forward_stale_pointee() {
+        // fn(c) { let v1=S{f0:1}; let v2=S{f0:2}; let mut r=&v1;
+        //         let b = c && { r = &v2; true }; let y = r.f0; }
+        // The rhs runs only when c, so r may still be &v1; r.f0 must NOT fold
+        // to 2. The conditionally-run rhs drops the reassigned reference.
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let s1 = one_field_struct(&mut body, one);
+        let let_v1 = let_stmt(&mut body, 0, s1, false);
+        let two = int_lit(&mut body, 2);
+        let s2 = one_field_struct(&mut body, two);
+        let let_v2 = let_stmt(&mut body, 1, s2, false);
+        let ref_v1 = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 2, ref_v1, true);
+        let cond = bool_lit(&mut body, true);
+        let ref_v2 = ref_of_local(&mut body, 1);
+        let assign = assign_stmt(&mut body, 2, ref_v2);
+        let tru = bool_lit(&mut body, true);
+        let tru_stmt = alloc_stmt(&mut body, StmtKind::Expr(tru));
+        let rhs_block = block_with(&mut body, vec![assign, tru_stmt]);
+        let rhs_expr = alloc_expr(&mut body, ExprKind::Block(rhs_block));
+        let and = alloc_expr(
+            &mut body,
+            ExprKind::Binary {
+                left: cond,
+                op: NirBinaryOp::And,
+                right: rhs_expr,
+            },
+        );
+        let let_b = let_stmt(&mut body, 3, and, false);
+        let recv_r = local_ref(&mut body, 2);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 4, read, false);
+        root_with(&mut body, vec![let_v1, let_v2, let_r, let_b, let_y]);
         let r = build_t(&body, &[]);
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
