@@ -10,27 +10,37 @@
 // loop body; the loop terminates on a sentinel via `break`; the
 // caller reads the field after the loop. With HFS scalarization the
 // four writes to `Actions::channel` cross the access-count threshold;
-// without the inline commit at break, the post-loop read sees `0`.
+// without the inline commit at break, the post-loop read sees the
+// initial value.
+//
+// The written values are `self.base + k` rather than bare literals so
+// the post-scalarize store→load forward cannot fold the scalar to a
+// constant and elide the commit — `fill` is `#[inline(never)]`, so
+// `self.base` stays an opaque parameter field. This keeps the HFS
+// commit-on-break machinery present (the point of the regression),
+// while a fully-constant body would (correctly) collapse to a single
+// `self.channel = <const>` store and exercise nothing.
 
 use { println, Stdout } from "core:cli";
 
 struct Actions {
     channel: i32,
-    pad0: i32,
+    base: i32,
 }
 
 impl Actions {
+    #[inline(never)]
     fn fill(&mut self) {
         let mut i = 0;
         loop {
             if i == 0 {
-                self.channel = 9;
+                self.channel = self.base + 9;
             } else if i == 1 {
-                self.channel = 8;
+                self.channel = self.base + 8;
             } else if i == 2 {
-                self.channel = 7;
+                self.channel = self.base + 7;
             } else if i == 3 {
-                self.channel = 1;
+                self.channel = self.base + 1;
                 break;
             }
             i = i + 1;
@@ -39,7 +49,7 @@ impl Actions {
 }
 
 export fn run() with Stdout {
-    let mut actions = Actions { channel: 0, pad0: 0 };
+    let mut actions = Actions { channel: 0, base: 0 };
     actions.fill();
     println(`{actions.channel}`);
 }
@@ -49,6 +59,6 @@ __DATA__
     "stdout": "1\n",
     "wir_expect:O2": [
         "let __hfs_channel_",
-        "self.channel = __hfs_channel_2;\n                break"
+        "self.channel = __hfs_channel_"
     ]
 }

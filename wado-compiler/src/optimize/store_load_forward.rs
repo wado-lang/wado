@@ -39,41 +39,86 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::StoreLoadForward, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
-        if func.body.is_none() {
-            return false;
-        }
-        // `Local`-read forwarding excludes address-taken / `stores`-aliased
-        // locals: the canonical sets plus the engine's body scan — the
-        // canonical sets are static elaboration records and go stale after
-        // `inline` / `ref_elim` copy `Ref` nodes (see `elide_local::ElideRule`).
-        let mut unsafe_locals = func.address_taken_locals.clone();
-        unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
-        let NirFunction {
-            body,
-            locals,
-            address_taken_locals,
-            stores_aliased_locals,
-            ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
-        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
-            body,
-            locals,
-            address_taken_locals,
-            stores_aliased_locals,
+        forward_one(
+            &mut func,
             &type_table,
             &first_param_types,
             &call_immutability,
-        );
-        let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_sets(aliased, untrackable, mut_escaped);
-        unsafe_locals.extend(engine.body_address_taken().iter().copied());
-        let rule = StoreLoadForwardRule {
-            applied: Cell::new(false),
-            unsafe_locals,
-        };
-        engine.run(&[&rule])
+            &mut buffers,
+        )
     })
+}
+
+/// Ungated variant: forwards stores to loads in every function. Used by the
+/// post-`field_scalarize` cleanup, which runs once outside the gated loop so
+/// the scalarization shadow inits (`__hfs_x = obj.f`) get their fields
+/// forwarded to constants — the load→literal fold `field_scalarize` leaves to
+/// a later pass, and the only one that runs after it.
+pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
+    let type_table = project.type_table.borrow();
+    let first_param_types = super::alias::first_param_types(project);
+    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
+    let mut buffers = EngineBuffers::default();
+    let mut changed = false;
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        changed |= forward_one(
+            &mut func,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+            &mut buffers,
+        );
+    }
+    changed
+}
+
+/// Run store→load forwarding over one function body. Returns whether anything
+/// changed. Shared by the gated loop pass and the ungated post-scalarize run.
+fn forward_one(
+    func: &mut NirFunction,
+    type_table: &crate::tir::TypeTable,
+    first_param_types: &crate::hashmap::IndexMap<
+        (crate::module_source::ModuleSource, String),
+        crate::tir::TypeId,
+    >,
+    call_immutability: &super::alias::CallImmutability,
+    buffers: &mut EngineBuffers,
+) -> bool {
+    if func.body.is_none() {
+        return false;
+    }
+    // `Local`-read forwarding excludes address-taken / `stores`-aliased
+    // locals: the canonical sets plus the engine's body scan — the
+    // canonical sets are static elaboration records and go stale after
+    // `inline` / `ref_elim` copy `Ref` nodes (see `elide_local::ElideRule`).
+    let mut unsafe_locals = func.address_taken_locals.clone();
+    unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
+    let NirFunction {
+        body,
+        locals,
+        address_taken_locals,
+        stores_aliased_locals,
+        ..
+    } = &mut *func;
+    let body = body.as_mut().expect("checked above");
+    let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+        body,
+        locals,
+        address_taken_locals,
+        stores_aliased_locals,
+        type_table,
+        first_param_types,
+        call_immutability,
+    );
+    let mut engine = Engine::new(body, buffers, locals);
+    engine.set_alias_sets(aliased, untrackable, mut_escaped);
+    unsafe_locals.extend(engine.body_address_taken().iter().copied());
+    let rule = StoreLoadForwardRule {
+        applied: Cell::new(false),
+        unsafe_locals,
+    };
+    engine.run(&[&rule])
 }
 
 /// Standalone-session rule whose single `apply_block` performs the whole-
