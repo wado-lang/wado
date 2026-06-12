@@ -14,7 +14,42 @@ pub mod builder;
 
 use crate::hashmap::IndexMap;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::tir::TypeId;
+use crate::tir::{PrimitiveType, TypeId};
+
+/// Bridge a literal [`ValueKind`] to niri's [`crate::const_eval::Value`] for
+/// constant folding, applying the same prim-consistency filter niri's own
+/// `Value::from_arena_literal` enforces: an `Int` only with an integer prim
+/// (`is_int_prim` — excludes `i128`/`u128`/`v128`), a `Float` only with
+/// `F32`/`F64`. `prim` is the operand's resolved primitive type (from its NIR
+/// type), needed for the integer width / float precision. Returns `None` for a
+/// non-literal kind, a missing prim, or a prim niri would refuse — so the
+/// value-graph const-folder and `store_load_forward`'s literal synthesizer fold
+/// exactly the set niri's CTFE folds, from one definition.
+pub(crate) fn value_kind_to_const(
+    kind: &ValueKind,
+    prim: Option<PrimitiveType>,
+) -> Option<crate::const_eval::Value> {
+    use crate::const_eval::Value;
+    Some(match kind {
+        ValueKind::Int(value) => {
+            let prim = prim.filter(|p| crate::const_eval::is_int_prim(*p))?;
+            Value::Int {
+                value: *value,
+                prim,
+            }
+        }
+        ValueKind::Float(bits) => {
+            let prim = prim.filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
+            Value::Float {
+                value: f64::from_bits(*bits),
+                prim,
+            }
+        }
+        ValueKind::Bool(b) => Value::Bool(*b),
+        ValueKind::Char(c) => Value::Char(*c),
+        _ => return None,
+    })
+}
 
 /// Opaque handle for a pure value. Two structurally-equivalent values share
 /// one `ValueId` (hash-consed). Allocated by [`ValuePool::intern`].
@@ -51,8 +86,9 @@ impl OpaqueId {
 /// builder bumps the version on every `SkelTree` node that may write the heap;
 /// reads at the same `(receiver, field, heap_ver)` triple share a
 /// `ValueId`, automatically forwarding stored values. Granularity is
-/// per-field in the MVP.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
+/// per-`(receiver-root, field)`; `version_of` maxes the per-slot,
+/// per-local, per-field, and default generations, so `Ord` is required.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct HeapVersion(u32);
 
 impl HeapVersion {

@@ -1,6 +1,8 @@
-// Optimization: mixed stores and non-stores calls on different locals.
-// `read_point` (no stores) gets inlined and field forwarding succeeds for `a`.
-// `capture_point` (stores[p]) aliases `b`, preventing field forwarding.
+// Optimization: mixed forwarding outcomes.
+// `read_point` (no stores) inlines and `a.x` forwards → its assert folds.
+// `capture_point` (stores[p]) aliases `b`; mutating `b.x` through the stored
+// reference blocks forwarding → `b.x`'s assert survives (forwarding the stale
+// 30 past the write would be a miscompile).
 
 use { println, Stdout } from "core:cli";
 
@@ -27,20 +29,22 @@ export fn run() with Stdout {
     let a = Point { x: 10, y: 20 };
     let b = Point { x: 30, y: 40 };
 
-    // a: non-stores call, inlined → field forwarding eliminates this assert's panic.
+    // a: non-stores call, inlined → field forwarding eliminates this assert.
     let _ = read_point(&a);
     assert a.x == 10;
 
-    // b: stores call, aliased → field forwarding cannot eliminate this assert's panic.
-    let _ = capture_point(&b);
-    assert b.x == 30;
+    // b: stores call, aliased; mutate through the stored ref, then read back.
+    // Forwarding cannot eliminate this assert — `b.x` is now 70.
+    let r = capture_point(&b);
+    r.p.x = 70;
+    assert b.x == 70;
 
     println(`{a.x} {b.x}`);
 }
 
 __DATA__
 {
-    "stdout": "10 30\n",
+    "stdout": "10 70\n",
     "wir_expect:O2": [
         "core:internal/panic"
     ]

@@ -109,7 +109,7 @@ use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
-use store_load_forward::forward_stores_to_loads;
+use store_load_forward::{forward_stores_to_loads, forward_stores_to_loads_all};
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 
@@ -667,6 +667,19 @@ fn run_optimization_passes(
         scalarize_hot_fields(p);
         true // always runs once, mark as changed for profiling visibility
     });
+    // Forward the scalarization shadow inits (`__hfs_x = obj.f`) to constants.
+    // `field_scalarize` runs after the fixed-point loop, so no in-loop
+    // `store_load_forward` sees its shadow reads; this once-over folds an
+    // `obj.f` whose field the ValueGraph still knows (`obj` built from a
+    // constant literal upstream) into the literal, before globalization. Runs
+    // before `const_object_globalization` so it never sees the nullable
+    // `GlobalVarGet`s globalization emits.
+    run_pass(
+        "nir/store_load_forward_post_scalarize",
+        project,
+        profiler,
+        forward_stores_to_loads_all,
+    );
     // Final cleanup: flatten any `__tmpl:` labeled blocks the fixpoint
     // preserved as anchors for `tmpl_hoist`. `tmpl_hoist` has finished
     // by now (it runs inside the fixpoint loop), so the wrappers are

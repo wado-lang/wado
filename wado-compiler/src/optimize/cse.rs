@@ -45,6 +45,9 @@ use crate::tir::TypeId;
 use crate::token::Span;
 
 pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let type_table = project.type_table.borrow();
+    let first_param_types = super::alias::first_param_types(project);
+    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::Cse, len, |fid| {
@@ -55,14 +58,26 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
         let rule = CseRule {
             applied: Cell::new(false),
         };
-        // Only the canonical sets know aliases with no surviving Ref node
-        // (`with stores[p]`); field seeding must stay off for them.
-        let mut alias_unsafe = func.address_taken_locals.clone();
-        alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
-        let NirFunction { body, locals, .. } = &mut *func;
+        let NirFunction {
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            ..
+        } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+        );
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_unsafe_locals(alias_unsafe);
+        engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_value_graph_type_table(&type_table);
         engine.run(&[&rule])
     })
 }

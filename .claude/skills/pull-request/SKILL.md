@@ -20,7 +20,7 @@ It may include a scope, e.g. `feat(optimizer)`.
 
 ## Description
 
-Describe the outcome of the whole branch.
+Describe the outcome of the whole branch (origin/main...HEAD -- use three dots).
 
 Do not include trial-and-error history; the commits does.
 

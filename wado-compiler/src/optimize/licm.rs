@@ -144,6 +144,8 @@ impl ModifiedVars {
 /// Apply Loop-Invariant Code Motion to all functions in the project.
 pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
+    let first_param_types = super::alias::first_param_types(project);
+    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::Licm, len, |fid| {
@@ -155,18 +157,29 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             type_table: &type_table,
             applied: Cell::new(false),
         };
-        let mut alias_unsafe = func.address_taken_locals.clone();
-        alias_unsafe.extend(func.stores_aliased_locals.iter().copied());
         let NirFunction {
             body,
             locals,
             params,
+            address_taken_locals,
+            stores_aliased_locals,
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+        );
+        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_unsafe_locals(alias_unsafe);
-        engine.set_param_locals(params.iter().map(|p| p.local_index).collect());
+        engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_value_graph_type_table(&type_table);
+        engine.set_param_locals(param_locals);
         engine.run(&[&rule])
     })
 }

@@ -30,7 +30,7 @@
 //!   with `Opaque`.
 
 use crate::hashmap::IndexMap;
-use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::nir::{FunctionRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
 };
@@ -39,23 +39,34 @@ use super::{HeapVersion, ValueId, ValuePool};
 
 /// Per-function heap-version tracker. The builder threads one `HeapState`
 /// through the walk; on every Skel node that may write the heap, the
-/// appropriate field's version (or every field's version, for opaque
-/// writes) bumps to a fresh value.
+/// appropriate generation bumps to a fresh value. A read's effective
+/// version is the max of every generation that could cover it
+/// ([`HeapState::version_of`]); `field_store` keys carry that version, so a
+/// stale seed is naturally unreachable once any covering generation bumps.
 ///
-/// Granularity is per `field_index`: a direct write to `obj.f` bumps the
-/// `f` slot only, so a later read of `obj.g` keeps its prior version and
-/// shares a `ValueId` with earlier reads. Opaque writes (Call,
-/// `Index` / `Deref` assign target, Loop entry) call
-/// [`HeapState::bump_all`], invalidating every field; branch endpoints
-/// join per arm instead ([`Builder::join_heap`]). Refinement to
-/// `(receiver_root, field)` granularity via `mod_ref.rs` is a follow-up.
+/// Granularity is per-`(receiver-root, field)`:
+/// - `per_slot[(root, field)]` — bumped by a direct `root.field = …` store
+///   on a non-aliased bare-`Local` receiver, so a write to `a.f` leaves
+///   `b.f` (a different object, same `field_index`) untouched.
+/// - `per_local[root]` — bumped when every field of `root` may have changed:
+///   a call while `root` is reference-aliased (the callee can reach its
+///   object). Non-aliased locals' fields survive a call.
+/// - `field_global[field]` — bumped by a write to `field` through an
+///   aliased or non-bare-`Local` receiver (`a.b.f`, `r.f` for a reference
+///   `r`): every alias of that field is invalidated without tracking which
+///   locals alias which.
+/// - `default_version` — covers everything; [`HeapState::bump_all`] advances
+///   it for truly opaque writes (deref / index store, global set, indirect
+///   call, loop entry).
+///
+/// Branch endpoints join per arm instead of bumping ([`Builder::join_heap`]).
 struct HeapState {
     /// Next fresh version to hand out.
     next: HeapVersion,
-    /// Current version of each `field_index` we have seen written.
-    per_field: IndexMap<u32, HeapVersion>,
-    /// Version returned for `field_indices` not yet in `per_field`.
-    /// `bump_all` advances this; `bump_field` does not.
+    per_slot: IndexMap<(u32, u32), HeapVersion>,
+    per_local: IndexMap<u32, HeapVersion>,
+    field_global: IndexMap<u32, HeapVersion>,
+    /// Version covering slots in none of the maps above.
     default_version: HeapVersion,
 }
 
@@ -63,7 +74,9 @@ impl HeapState {
     fn new() -> Self {
         Self {
             next: HeapVersion::INITIAL.bump(),
-            per_field: IndexMap::default(),
+            per_slot: IndexMap::default(),
+            per_local: IndexMap::default(),
+            field_global: IndexMap::default(),
             default_version: HeapVersion::INITIAL,
         }
     }
@@ -74,54 +87,98 @@ impl HeapState {
         v
     }
 
-    fn version_of(&self, field_index: u32) -> HeapVersion {
-        self.per_field
-            .get(&field_index)
-            .copied()
-            .unwrap_or(self.default_version)
+    /// The effective version a read of `root.field` sees: the max of every
+    /// generation that could have invalidated it. `root` is `None` when the
+    /// receiver is not a determinable bare `Local`, so per-slot / per-local
+    /// precision does not apply — only `field_global` and `default`.
+    fn version_of(&self, root: Option<u32>, field: u32) -> HeapVersion {
+        let mut v = self.default_version;
+        if let Some(&fg) = self.field_global.get(&field) {
+            v = v.max(fg);
+        }
+        if let Some(r) = root {
+            if let Some(&pl) = self.per_local.get(&r) {
+                v = v.max(pl);
+            }
+            if let Some(&ps) = self.per_slot.get(&(r, field)) {
+                v = v.max(ps);
+            }
+        }
+        v
     }
 
-    fn bump_field(&mut self, field_index: u32) {
+    fn bump_slot(&mut self, root: u32, field: u32) {
         let v = self.fresh();
-        self.per_field.insert(field_index, v);
+        self.per_slot.insert((root, field), v);
+    }
+
+    fn bump_local(&mut self, root: u32) {
+        let v = self.fresh();
+        self.per_local.insert(root, v);
+    }
+
+    fn bump_field_global(&mut self, field: u32) {
+        let v = self.fresh();
+        self.field_global.insert(field, v);
     }
 
     fn bump_all(&mut self) {
         let v = self.fresh();
-        self.per_field.clear();
+        self.per_slot.clear();
+        self.per_local.clear();
+        self.field_global.clear();
         self.default_version = v;
     }
 
-    /// Snapshot the read-visible state (`per_field`, `default_version`)
-    /// only. `next` is a monotonic counter shared across the whole
-    /// function, so arms restored from the snapshot never reuse a version
-    /// another arm allocated.
+    /// Snapshot the read-visible state only. `next` is a monotonic counter
+    /// shared across the whole function, so arms restored from the snapshot
+    /// never reuse a version another arm allocated.
     fn snapshot(&self) -> HeapSnapshot {
         HeapSnapshot {
-            per_field: self.per_field.clone(),
+            per_slot: self.per_slot.clone(),
+            per_local: self.per_local.clone(),
+            field_global: self.field_global.clone(),
             default_version: self.default_version,
         }
     }
 
     fn restore(&mut self, snap: HeapSnapshot) {
-        self.per_field = snap.per_field;
+        self.per_slot = snap.per_slot;
+        self.per_local = snap.per_local;
+        self.field_global = snap.field_global;
         self.default_version = snap.default_version;
     }
 }
 
 #[derive(Clone)]
 struct HeapSnapshot {
-    per_field: IndexMap<u32, HeapVersion>,
+    per_slot: IndexMap<(u32, u32), HeapVersion>,
+    per_local: IndexMap<u32, HeapVersion>,
+    field_global: IndexMap<u32, HeapVersion>,
     default_version: HeapVersion,
 }
 
-impl HeapSnapshot {
-    fn version_of(&self, field_index: u32) -> HeapVersion {
-        self.per_field
-            .get(&field_index)
-            .copied()
-            .unwrap_or(self.default_version)
-    }
+/// A snapshot of *all* flow-sensitive builder state at a program point:
+/// per-local values (`current_value`), heap versions (`heap_state`), and
+/// reference look-through targets (`ref_targets`). Captured, restored, and
+/// merged as a unit ([`Builder::flow_snapshot`] / [`Builder::flow_restore`] /
+/// [`Builder::flow_join_two`] / [`Builder::flow_join_n`]) so a control-flow
+/// join can never handle one component and silently forget another — the bug
+/// class that let a branch/loop-reassigned reference forward a stale pointee.
+#[derive(Clone)]
+struct FlowSnapshot {
+    current_value: IndexMap<u32, ValueId>,
+    heap: HeapSnapshot,
+    ref_targets: IndexMap<u32, u32>,
+}
+
+/// One arm's exit state for a branch join, plus whether control falls through
+/// to the merge point. A non-fall-through arm (`break` / `return` /
+/// `continue`) contributes only its heap writes to the join — see
+/// [`Builder::join_heap`].
+struct FlowArm {
+    state: FlowSnapshot,
+    falls_through: bool,
 }
 
 /// The result of running [`build`] over a function body: the populated
@@ -158,19 +215,30 @@ pub struct ValueGraphBuild {
 /// seeding makes parameters visible in the loop-entry snapshots
 /// (`loop_entry_values`), which are taken before any in-loop read.
 ///
-/// `alias_unsafe` are locals whose object is reference-aliased. The engine
-/// supplies the complete set — the canonical `address_taken_locals` /
-/// `stores_aliased_locals` (e.g. the `with stores[p]` effect's `p`) unioned
-/// with its session-cached [`Body::collect_address_taken_locals`] scan —
-/// and the builder suppresses field store→load seeding on those receivers,
-/// matching `store_load_forward`'s own exclusion so the `stores` effect's
-/// "no field forwarding for aliased locals" contract is upheld.
+/// `aliased` are locals whose object is reference-aliased — address-taken,
+/// `with stores[p]`, or reference-typed (`let r = &x`, `Box`, `List`, `&T`).
+/// A write to such a local's field, or a call that may reach its object,
+/// invalidates the field through the conservative `field_global` / `per_local`
+/// generations rather than the precise `per_slot` one. `untrackable` is the
+/// `stores`-aliased subset whose fields are never seeded (their aliasing
+/// escapes entirely). A non-aliased local's object is reachable only through
+/// that local, so its `per_slot` fields survive calls and other objects'
+/// same-`field_index` writes (see [`HeapState`]).
+///
+/// `mut_escaped` is the subset of `aliased` a call may actually mutate (locals
+/// with a *mutable* escape — `&mut v`, a mut-ref argument, a `&mut self`
+/// receiver, or a `stores` stash). [`Builder::bump_call_effects`] bumps only
+/// these across a call; a reference-aliased local whose every escape is an
+/// immutable `&v` keeps its forwarded fields, since no callee can mutate it.
 pub fn build(
     body: &Body,
     param_locals: &[u32],
-    alias_unsafe: &crate::hashmap::IndexSet<u32>,
+    aliased: &crate::hashmap::IndexSet<u32>,
+    untrackable: &crate::hashmap::IndexSet<u32>,
+    mut_escaped: &crate::hashmap::IndexSet<u32>,
+    type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
-    let mut b = Builder::new(body, alias_unsafe);
+    let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table);
     b.seed_params(param_locals);
     b.walk_block(body.root);
     ValueGraphBuild {
@@ -198,17 +266,41 @@ struct Builder<'a> {
     /// Versions are monotonic and never reused, so a write or branch join
     /// bumps past a stale entry — no invalidation needed.
     field_store: IndexMap<(ValueId, u32, HeapVersion), ValueId>,
-    /// Locals whose object is reference-aliased; field seeding is suppressed
-    /// for them (see [`build`]).
-    alias_unsafe: crate::hashmap::IndexSet<u32>,
+    /// Reference-aliased locals; their field writes / calls invalidate
+    /// conservatively. See [`build`].
+    aliased: crate::hashmap::IndexSet<u32>,
+    /// `stores`-aliased locals whose fields are never seeded. See [`build`].
+    untrackable: crate::hashmap::IndexSet<u32>,
+    /// Locals a call may mutate (mutable escape). Only these are bumped by
+    /// [`Builder::bump_call_effects`]. See [`build`].
+    mut_escaped: crate::hashmap::IndexSet<u32>,
+    /// `local → pointee local` for `let r = &v` references, so `r.f` forwards
+    /// from `v`'s field slot (reference look-through). Cleared when `r` or the
+    /// pointee is reassigned ([`Builder::update_ref_target`]). This is
+    /// flow-sensitive state and follows the same join discipline as
+    /// `current_value`: every branch joins it ([`Builder::merge_ref_targets`] —
+    /// an entry survives only if all arms agree) and every loop / labeled-block
+    /// drops the entries its body may reassign ([`Builder::drop_ref_targets_for`]),
+    /// so a reference whose target diverges becomes unknown rather than
+    /// forwarding a stale pointee.
+    ref_targets: IndexMap<u32, u32>,
+    /// Type table for constant folding of pure arithmetic on literal operands
+    /// (`Binary` / `Unary`). `None` disables folding (the value graph still
+    /// builds structural nodes). See [`Builder::fold_binary_const`].
+    type_table: Option<&'a crate::tir::TypeTable>,
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
 impl<'a> Builder<'a> {
-    fn new(body: &'a Body, alias_unsafe: &crate::hashmap::IndexSet<u32>) -> Self {
-        let unsafe_locals = alias_unsafe.clone();
+    fn new(
+        body: &'a Body,
+        aliased: &crate::hashmap::IndexSet<u32>,
+        untrackable: &crate::hashmap::IndexSet<u32>,
+        mut_escaped: &crate::hashmap::IndexSet<u32>,
+        type_table: Option<&'a crate::tir::TypeTable>,
+    ) -> Self {
         Self {
             body,
             pool: ValuePool::new(),
@@ -217,8 +309,139 @@ impl<'a> Builder<'a> {
             heap_state: HeapState::new(),
             literal_source: IndexMap::default(),
             field_store: IndexMap::default(),
-            alias_unsafe: unsafe_locals,
+            aliased: aliased.clone(),
+            untrackable: untrackable.clone(),
+            mut_escaped: mut_escaped.clone(),
+            ref_targets: IndexMap::default(),
+            type_table,
             loop_entry_values: IndexMap::default(),
+        }
+    }
+
+    /// If both operands are constant literals and `op` is a const-foldable
+    /// pure arithmetic / comparison / bitwise op, fold it exactly as niri's
+    /// CTFE would ([`crate::const_eval::eval_binary`]) and intern the resulting
+    /// literal `ValueId`. Each operand's `PrimitiveType` is read from its own
+    /// NIR type, so integer wrapping matches the runtime width and a
+    /// mixed-prim op (which niri refuses) is not folded. Returns `None` when an
+    /// operand is non-constant, a type is unavailable, or the op is not
+    /// foldable — the caller then builds the structural `Binary` node.
+    fn fold_binary_const(
+        &mut self,
+        op: NirBinaryOp,
+        lhs: ValueId,
+        rhs: ValueId,
+        left: ExprId,
+        right: ExprId,
+    ) -> Option<ValueId> {
+        let tt = self.type_table?;
+        let lv = self.value_to_const(lhs, left, tt)?;
+        let rv = self.value_to_const(rhs, right, tt)?;
+        let result = crate::const_eval::eval_binary(lv, op, rv)?;
+        Some(self.const_to_value(result))
+    }
+
+    /// Const-fold a `Unary` (`Neg` / `Not` / `BitNot`) on a literal operand.
+    fn fold_unary_const(
+        &mut self,
+        op: NirUnaryOp,
+        operand: ValueId,
+        inner: ExprId,
+    ) -> Option<ValueId> {
+        let tt = self.type_table?;
+        let v = self.value_to_const(operand, inner, tt)?;
+        let result = crate::const_eval::eval_unary(op, v)?;
+        Some(self.const_to_value(result))
+    }
+
+    /// Bridge a literal `ValueId` to niri's [`crate::const_eval::Value`], reading the
+    /// operand's `PrimitiveType` from `expr`'s NIR type (needed for the integer
+    /// width / float precision). `None` for non-literal kinds or a missing prim.
+    fn value_to_const(
+        &self,
+        vn: ValueId,
+        expr: ExprId,
+        tt: &crate::tir::TypeTable,
+    ) -> Option<crate::const_eval::Value> {
+        let prim = crate::const_eval::prim_of(self.body.exprs[expr].type_id, tt);
+        super::value_kind_to_const(self.pool.kind(vn), prim)
+    }
+
+    /// Intern niri's folded [`crate::const_eval::Value`] back as a literal `ValueId`.
+    fn const_to_value(&mut self, v: crate::const_eval::Value) -> ValueId {
+        match v {
+            crate::const_eval::Value::Int { value, .. } => self.pool.int(value),
+            crate::const_eval::Value::Float { value, .. } => self.pool.float(value),
+            crate::const_eval::Value::Bool(b) => self.pool.bool(b),
+            crate::const_eval::Value::Char(c) => self.pool.char(c),
+        }
+    }
+
+    /// Record / clear `local`'s reference target from its new RHS. `let r = &v`
+    /// (a bare-`Local` `v`) records `r → v` so a later `r.f` read forwards from
+    /// `v`'s field slot ([`Builder::reference_lookthrough`]). Any other RHS
+    /// clears `r`'s entry, and a reassignment of any local invalidates every
+    /// reference still pointing at it (the old pointee may have moved).
+    fn update_ref_target(&mut self, local: u32, value: ExprId) {
+        // Reassigning `local` invalidates references that pointed at it.
+        self.ref_targets.retain(|_, &mut pointee| pointee != local);
+        let target = match &self.body.exprs[value].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr: inner,
+            } => match &self.body.exprs[*inner].kind {
+                ExprKind::Local { index, .. } => Some(*index),
+                _ => None,
+            },
+            _ => None,
+        };
+        match target {
+            Some(pointee) if pointee != local => {
+                self.ref_targets.insert(local, pointee);
+            }
+            _ => {
+                self.ref_targets.swap_remove(&local);
+            }
+        }
+    }
+
+    /// If `recv_expr` is a bare `Local` known to reference a pointee local
+    /// (`let r = &v`), return that pointee's current receiver `ValueId` and
+    /// root local, so `r.f` forwards from `v`'s field slot. The pointee's slot
+    /// state (including call / write invalidation) is used as-is, so a stale
+    /// forward is impossible — at worst the lookup misses and `r.f` re-derives.
+    fn reference_lookthrough(&self, recv_expr: ExprId) -> Option<(ValueId, u32)> {
+        let ExprKind::Local { index, .. } = &self.body.exprs[recv_expr].kind else {
+            return None;
+        };
+        let pointee = *self.ref_targets.get(index)?;
+        let pointee_vn = *self.current_value.get(&pointee)?;
+        Some((pointee_vn, pointee))
+    }
+
+    /// The bare-`Local` root of a (possibly nested) field-access place, or
+    /// `None` if the receiver is not rooted in a `Local` (a call result, an
+    /// index, a deref, …). `a.b.f` roots at `a`.
+    fn receiver_root(&self, recv_expr: ExprId) -> Option<u32> {
+        match &self.body.exprs[recv_expr].kind {
+            ExprKind::Local { index, .. } => Some(*index),
+            ExprKind::FieldAccess { expr, .. } => self.receiver_root(*expr),
+            _ => None,
+        }
+    }
+
+    /// A direct / method call may mutate any field of a local the callee can
+    /// reach *and* mutate — one with a mutable escape (`&mut v`, a mut-ref
+    /// argument, a `&mut self` receiver, or a `stores` stash). The callee
+    /// reaches such an object via an escaped mutable reference or a global, and
+    /// a mutable reference may have been retained, so any later call is a
+    /// potential mutation point — bump every `mut_escaped` local, not only this
+    /// call's arguments. Non-`mut_escaped` locals (non-aliased, or aliased only
+    /// through an immutable `&v`) cannot be mutated by any callee, so their
+    /// fields survive the call.
+    fn bump_call_effects(&mut self) {
+        for &l in &self.mut_escaped {
+            self.heap_state.bump_local(l);
         }
     }
 
@@ -247,10 +470,8 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
-                // Skipped when `x` is reference-aliased.
-                if !self.alias_unsafe.contains(&local_index) {
-                    self.seed_struct_literal_fields(v, value);
-                }
+                self.seed_struct_literal_fields(local_index, v, value);
+                self.update_ref_target(local_index, value);
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
                 self.walk_expr(value);
@@ -278,28 +499,28 @@ impl<'a> Builder<'a> {
                 else_block,
             } => {
                 let cond_v = self.walk_expr(condition);
-                let saved = self.current_value.clone();
-                let saved_heap = self.heap_state.snapshot();
+                let pre = self.flow_snapshot();
                 self.walk_block(then_block);
-                let then_state = std::mem::replace(&mut self.current_value, saved.clone());
-                let then_heap = self.heap_state.snapshot();
-                let then_falls = self.block_falls_through(then_block);
-                self.heap_state.restore(saved_heap.clone());
-                let (else_heap, else_falls) = if let Some(eb) = else_block {
-                    self.walk_block(eb);
-                    let h = self.heap_state.snapshot();
-                    let f = self.block_falls_through(eb);
-                    self.heap_state.restore(saved_heap.clone());
-                    (h, f)
-                } else {
-                    (saved_heap.clone(), true)
+                let then_arm = FlowArm {
+                    falls_through: self.block_falls_through(then_block),
+                    state: self.flow_snapshot(),
                 };
-                let else_state = std::mem::replace(&mut self.current_value, saved.clone());
-                self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
-                self.join_heap(
-                    &saved_heap,
-                    &[(then_heap, then_falls), (else_heap, else_falls)],
-                );
+                self.flow_restore(&pre);
+                let else_arm = if let Some(eb) = else_block {
+                    self.walk_block(eb);
+                    let arm = FlowArm {
+                        falls_through: self.block_falls_through(eb),
+                        state: self.flow_snapshot(),
+                    };
+                    self.flow_restore(&pre);
+                    arm
+                } else {
+                    FlowArm {
+                        state: pre.clone(),
+                        falls_through: true,
+                    }
+                };
+                self.flow_join_two(cond_v, &pre, then_arm, else_arm);
             }
             StmtKind::Loop { body: lb } => {
                 self.walk_loop(lb);
@@ -389,17 +610,20 @@ impl<'a> Builder<'a> {
                     // substitute later reads with the never-stored value.
                     let saved_cur = self.current_value.clone();
                     let rhs = self.walk_expr(right);
-                    let changed: Vec<u32> = self
+                    let changed: crate::hashmap::IndexSet<u32> = self
                         .current_value
                         .iter()
                         .filter_map(|(&k, &v)| {
                             saved_cur.get(&k).and_then(|s| (*s != v).then_some(k))
                         })
                         .collect();
-                    for k in changed {
+                    for &k in &changed {
                         let opaque = self.pool.fresh_opaque();
                         self.current_value.insert(k, opaque);
                     }
+                    // A reference the conditionally-run rhs reassigned (or whose
+                    // pointee it reassigned) no longer has a known target.
+                    self.drop_ref_targets_for(&changed);
                     self.heap_state.bump_all();
                     rhs
                 } else {
@@ -407,6 +631,9 @@ impl<'a> Builder<'a> {
                 };
                 let lhs = lhs?;
                 let rhs = rhs?;
+                if let Some(folded) = self.fold_binary_const(op, lhs, rhs, left, right) {
+                    return Some(folded);
+                }
                 Some(self.pool.binary(op, lhs, rhs))
             }
             ExprKind::Unary { op, expr: inner } => {
@@ -419,6 +646,9 @@ impl<'a> Builder<'a> {
                     None
                 } else {
                     let operand = self.walk_expr(inner)?;
+                    if let Some(folded) = self.fold_unary_const(op, operand, inner) {
+                        return Some(folded);
+                    }
                     Some(self.pool.unary(op, operand))
                 }
             }
@@ -437,25 +667,17 @@ impl<'a> Builder<'a> {
                 // value, so a write inside `value` must not be visible to
                 // those reads.
                 let target_kind = self.body.exprs[target].kind.clone();
-                // Capture the receiver's `ValueId` (and whether it is a
-                // seed-safe bare `Local`) for a `obj.f = …` store, so the
-                // post-bump version can be seeded for store→load forwarding.
-                let recv_seed = match &target_kind {
+                // Capture the field place's root local, receiver `ValueId`,
+                // and whether it is a bare `Local` — so the post-bump version
+                // can be seeded for store→load forwarding.
+                let field_place = match &target_kind {
                     ExprKind::Local { .. } => None,
                     ExprKind::FieldAccess { expr: recv, .. } => {
-                        let recv_local = match &self.body.exprs[*recv].kind {
-                            ExprKind::Local { index, .. } => Some(*index),
-                            _ => None,
-                        };
+                        let bare_local =
+                            matches!(&self.body.exprs[*recv].kind, ExprKind::Local { .. });
+                        let root = self.receiver_root(*recv);
                         let recv_v = self.walk_expr(*recv);
-                        // Seed only a bare, non-aliased `Local` receiver; an
-                        // aliased object (`with stores[p]`) or a deeper place
-                        // (`a.b.f = …`) is left un-seeded so a later read
-                        // re-derives an opaque `FieldAccess`.
-                        match (recv_v, recv_local) {
-                            (Some(rv), Some(idx)) if !self.alias_unsafe.contains(&idx) => Some(rv),
-                            _ => None,
-                        }
+                        Some((root, recv_v, bare_local))
                     }
                     _ => {
                         self.walk_expr(target);
@@ -468,12 +690,35 @@ impl<'a> Builder<'a> {
                 match target_kind {
                     ExprKind::Local { index, .. } => {
                         self.current_value.insert(index, v);
+                        // `local = S { f: lit, … }` rebinds `local` to a fresh
+                        // object; seed each pure field like the `Let` case so a
+                        // later `local.f` read forwards the literal.
+                        self.seed_struct_literal_fields(index, v, value);
+                        self.update_ref_target(index, value);
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
-                        self.heap_state.bump_field(field_index);
-                        if let Some(recv_v) = recv_seed {
-                            let ver = self.heap_state.version_of(field_index);
-                            self.field_store.insert((recv_v, field_index, ver), v);
+                        let (root, recv_v, bare_local) = field_place.expect("field target");
+                        // A non-aliased bare-`Local` root takes the precise
+                        // per-slot bump — a write to `a.f` leaves every other
+                        // object's `f` untouched. An aliased root, or a deeper
+                        // place (`a.b.f`, whose pointee may be shared), bumps
+                        // the field globally so every alias of `f` is
+                        // invalidated.
+                        match root {
+                            Some(r) if bare_local && !self.aliased.contains(&r) => {
+                                self.heap_state.bump_slot(r, field_index);
+                            }
+                            _ => self.heap_state.bump_field_global(field_index),
+                        }
+                        // Seed forwarding for a bare-`Local`, non-`untrackable`
+                        // receiver: a later `recv.f` read at the same version
+                        // forwards `v`.
+                        if let (Some(rv), Some(r)) = (recv_v, root)
+                            && bare_local
+                            && !self.untrackable.contains(&r)
+                        {
+                            let ver = self.heap_state.version_of(Some(r), field_index);
+                            self.field_store.insert((rv, field_index, ver), v);
                         }
                     }
                     _ => {
@@ -502,28 +747,28 @@ impl<'a> Builder<'a> {
                 else_branch,
             } => {
                 let cond_v = self.walk_expr(condition);
-                let saved = self.current_value.clone();
-                let saved_heap = self.heap_state.snapshot();
+                let pre = self.flow_snapshot();
                 self.walk_block(then_branch);
-                let then_state = std::mem::replace(&mut self.current_value, saved.clone());
-                let then_heap = self.heap_state.snapshot();
-                let then_falls = self.block_falls_through(then_branch);
-                self.heap_state.restore(saved_heap.clone());
-                let (else_heap, else_falls) = if let Some(eb) = else_branch {
-                    self.walk_block(eb);
-                    let h = self.heap_state.snapshot();
-                    let f = self.block_falls_through(eb);
-                    self.heap_state.restore(saved_heap.clone());
-                    (h, f)
-                } else {
-                    (saved_heap.clone(), true)
+                let then_arm = FlowArm {
+                    falls_through: self.block_falls_through(then_branch),
+                    state: self.flow_snapshot(),
                 };
-                let else_state = std::mem::replace(&mut self.current_value, saved.clone());
-                self.merge_two_arms(cond_v, &saved, &then_state, &else_state);
-                self.join_heap(
-                    &saved_heap,
-                    &[(then_heap, then_falls), (else_heap, else_falls)],
-                );
+                self.flow_restore(&pre);
+                let else_arm = if let Some(eb) = else_branch {
+                    self.walk_block(eb);
+                    let arm = FlowArm {
+                        falls_through: self.block_falls_through(eb),
+                        state: self.flow_snapshot(),
+                    };
+                    self.flow_restore(&pre);
+                    arm
+                } else {
+                    FlowArm {
+                        state: pre.clone(),
+                        falls_through: true,
+                    }
+                };
+                self.flow_join_two(cond_v, &pre, then_arm, else_arm);
                 None
             }
             ExprKind::LabeledBlock { block, .. } => {
@@ -545,28 +790,17 @@ impl<'a> Builder<'a> {
                 ..
             } => {
                 self.walk_expr(scrutinee);
-                let saved = self.current_value.clone();
-                let saved_heap = self.heap_state.snapshot();
-                let mut arm_states: Vec<IndexMap<u32, ValueId>> =
-                    Vec::with_capacity(arms.len() + 1);
-                let mut arm_heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len() + 1);
-                for arm in &arms {
-                    self.current_value.clone_from(&saved);
-                    self.heap_state.restore(saved_heap.clone());
-                    self.walk_block(*arm);
-                    arm_states.push(self.current_value.clone());
-                    arm_heaps.push((self.heap_state.snapshot(), self.block_falls_through(*arm)));
+                let pre = self.flow_snapshot();
+                let mut flow_arms: Vec<FlowArm> = Vec::with_capacity(arms.len() + 1);
+                for arm in arms.iter().copied().chain(std::iter::once(default)) {
+                    self.flow_restore(&pre);
+                    self.walk_block(arm);
+                    flow_arms.push(FlowArm {
+                        falls_through: self.block_falls_through(arm),
+                        state: self.flow_snapshot(),
+                    });
                 }
-                self.current_value.clone_from(&saved);
-                self.heap_state.restore(saved_heap.clone());
-                self.walk_block(default);
-                arm_heaps.push((
-                    self.heap_state.snapshot(),
-                    self.block_falls_through(default),
-                ));
-                arm_states.push(std::mem::replace(&mut self.current_value, saved.clone()));
-                self.merge_n_arms(&saved, &arm_states);
-                self.join_heap(&saved_heap, &arm_heaps);
+                self.flow_join_n(&pre, flow_arms);
                 None
             }
 
@@ -579,8 +813,15 @@ impl<'a> Builder<'a> {
                 // The receiver must be a pure value for the FieldAccess to
                 // get a ValueId — an impure receiver (a Call result, for
                 // instance) propagates None.
-                let recv = self.walk_expr(inner)?;
-                let heap_ver = self.heap_state.version_of(field_index);
+                let walked = self.walk_expr(inner)?;
+                // Reference look-through: a read `r.f` where `r = &v` forwards
+                // from `v`'s field slot (the pointee's current VN / root),
+                // using `v`'s live slot state so a stale forward is impossible.
+                let (recv, root) = match self.reference_lookthrough(inner) {
+                    Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
+                    None => (walked, self.receiver_root(inner)),
+                };
+                let heap_ver = self.heap_state.version_of(root, field_index);
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
                 if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
@@ -630,13 +871,14 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_expr(a.expr);
                 }
-                self.heap_state.bump_all();
+                self.bump_call_effects();
                 None
             }
             ExprKind::CmRawCall { args, .. } => {
                 for a in args {
                     self.walk_expr(a);
                 }
+                // Raw CM calls have opaque captures; stay fully conservative.
                 self.heap_state.bump_all();
                 None
             }
@@ -645,7 +887,7 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_expr(a.expr);
                 }
-                self.heap_state.bump_all();
+                self.bump_call_effects();
                 None
             }
             ExprKind::IndirectCall { callee, args } => {
@@ -672,7 +914,11 @@ impl<'a> Builder<'a> {
     /// `LabeledBlock` whose only `break label:` is the trailing
     /// value-carrying statement (any other break to the label means
     /// multiple producers — stop, soundness over coverage).
-    fn seed_struct_literal_fields(&mut self, recv: ValueId, value_expr: ExprId) {
+    fn seed_struct_literal_fields(&mut self, root: u32, recv: ValueId, value_expr: ExprId) {
+        // `untrackable` (`stores`-aliased) receivers never seed.
+        if self.untrackable.contains(&root) {
+            return;
+        }
         let mut producer = value_expr;
         loop {
             match &self.body.exprs[producer].kind {
@@ -727,7 +973,7 @@ impl<'a> Builder<'a> {
         let pairs: Vec<(u32, ExprId)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
         for (field_index, field_value) in pairs {
             if let Some(&fv) = self.value_of.get(&field_value) {
-                let ver = self.heap_state.version_of(field_index);
+                let ver = self.heap_state.version_of(Some(root), field_index);
                 self.field_store.insert((recv, field_index, ver), fv);
             }
         }
@@ -779,6 +1025,73 @@ impl<'a> Builder<'a> {
             | PatKind::Enum { .. }
             | PatKind::Range { .. } => {}
         }
+    }
+
+    /// Capture all flow-sensitive state (`current_value`, `heap_state`,
+    /// `ref_targets`) at the current program point as one [`FlowSnapshot`].
+    fn flow_snapshot(&self) -> FlowSnapshot {
+        FlowSnapshot {
+            current_value: self.current_value.clone(),
+            heap: self.heap_state.snapshot(),
+            ref_targets: self.ref_targets.clone(),
+        }
+    }
+
+    /// Reset all flow-sensitive state to a previously captured snapshot. Used
+    /// between branch arms so each arm walks from the common pre-branch state.
+    fn flow_restore(&mut self, snap: &FlowSnapshot) {
+        self.current_value.clone_from(&snap.current_value);
+        self.heap_state.restore(snap.heap.clone());
+        self.ref_targets.clone_from(&snap.ref_targets);
+    }
+
+    /// Join an if-style two-arm endpoint over all three flow components at
+    /// once: values via [`Builder::merge_two_arms`] (Select-aware), heap via
+    /// [`Builder::join_heap`], references via [`Builder::merge_ref_targets`].
+    fn flow_join_two(
+        &mut self,
+        cond_v: Option<ValueId>,
+        pre: &FlowSnapshot,
+        then_arm: FlowArm,
+        else_arm: FlowArm,
+    ) {
+        // Start from the pre-branch base so arm-local bindings (keys absent
+        // from `pre`) do not leak past the merge; `merge_two_arms` then
+        // overwrites every pre-branch key with its joined value.
+        self.current_value.clone_from(&pre.current_value);
+        self.merge_two_arms(
+            cond_v,
+            &pre.current_value,
+            &then_arm.state.current_value,
+            &else_arm.state.current_value,
+        );
+        self.merge_ref_targets(&[then_arm.state.ref_targets, else_arm.state.ref_targets]);
+        self.join_heap(
+            &pre.heap,
+            &[
+                (then_arm.state.heap, then_arm.falls_through),
+                (else_arm.state.heap, else_arm.falls_through),
+            ],
+        );
+    }
+
+    /// Join an n-arm endpoint (Switch / Match) over all three flow components
+    /// at once. Consumes the arms to split them into the per-component vectors
+    /// the underlying joins expect without extra clones.
+    fn flow_join_n(&mut self, pre: &FlowSnapshot, arms: Vec<FlowArm>) {
+        let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());
+        let mut heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len());
+        let mut refs: Vec<IndexMap<u32, u32>> = Vec::with_capacity(arms.len());
+        for a in arms {
+            states.push(a.state.current_value);
+            heaps.push((a.state.heap, a.falls_through));
+            refs.push(a.state.ref_targets);
+        }
+        // See `flow_join_two`: reset to the pre-branch base before merging.
+        self.current_value.clone_from(&pre.current_value);
+        self.merge_n_arms(&pre.current_value, &states);
+        self.merge_ref_targets(&refs);
+        self.join_heap(&pre.heap, &heaps);
     }
 
     /// Merge an if-style two-arm structural endpoint. For each local that
@@ -841,11 +1154,50 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Join the heap state at a branch endpoint: a field keeps its
-    /// pre-branch version iff every fall-through arm left it unchanged;
-    /// otherwise it bumps. Non-fall-through arms (terminated by `break` /
-    /// `return` / `continue`) are excluded — their writes never reach code
-    /// after the branch. No fall-through arm ⇒ post-state is `pre`.
+    /// Join `ref_targets` across branch arms walked from a common pre-state:
+    /// a `r → v` look-through survives only if every arm ends with that exact
+    /// mapping. A reference reassigned (or cleared) in some arm becomes unknown
+    /// and is dropped, so a post-branch `r.f` re-derives rather than forwarding
+    /// a stale pointee. This is the `ref_targets` counterpart to
+    /// [`Builder::merge_n_arms`]: a diverging reference is dropped exactly as a
+    /// diverging value falls to `Opaque`. Each `arm_refs` entry is the arm's
+    /// post-walk map, so an entry untouched by every arm (inherited from the
+    /// shared pre-state) is present in all and survives.
+    fn merge_ref_targets(&mut self, arm_refs: &[IndexMap<u32, u32>]) {
+        let Some((first, rest)) = arm_refs.split_first() else {
+            return;
+        };
+        let mut merged: IndexMap<u32, u32> = IndexMap::default();
+        for (&r, &v) in first {
+            if rest.iter().all(|a| a.get(&r) == Some(&v)) {
+                merged.insert(r, v);
+            }
+        }
+        self.ref_targets = merged;
+    }
+
+    /// Drop `ref_targets` entries a loop / labeled-block body may invalidate by
+    /// reassigning `writes`: a reference among `writes` loses its known target,
+    /// and a reference whose pointee is among `writes` may point at a moved
+    /// object. The `ref_targets` counterpart to those constructs' `Opaque`
+    /// reassignment of `current_value` for the same locals.
+    fn drop_ref_targets_for(&mut self, writes: &crate::hashmap::IndexSet<u32>) {
+        self.ref_targets
+            .retain(|src, pointee| !writes.contains(src) && !writes.contains(pointee));
+    }
+
+    /// Join the heap state at a branch endpoint: each overlay generation
+    /// keeps its pre-branch version iff every fall-through arm left it
+    /// unchanged; otherwise it bumps fresh. Non-fall-through arms (terminated
+    /// by `break` / `return` / `continue`) are excluded — their writes never
+    /// reach code after the branch. No fall-through arm ⇒ post-state is `pre`.
+    ///
+    /// Each of `per_slot` / `per_local` / `field_global` joins independently
+    /// (an absent overlay entry contributes the snapshot's `default_version`
+    /// in [`HeapState::version_of`], so the per-overlay join mirrors the
+    /// single-map case sharing the joined default). `version_of` maxes the
+    /// overlays, so a join that is too coarse only raises a read's version —
+    /// never lowers it below an arm's — keeping the join sound.
     fn join_heap(&mut self, pre: &HeapSnapshot, arms: &[(HeapSnapshot, bool)]) {
         let live: Vec<&HeapSnapshot> = arms
             .iter()
@@ -863,33 +1215,71 @@ impl<'a> Builder<'a> {
         } else {
             pre.default_version
         };
-        let mut field_keys: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
-        for k in pre.per_field.keys() {
-            field_keys.insert(*k);
+        let new_per_slot = self.join_overlay(
+            new_default,
+            &pre.per_slot,
+            pre.default_version,
+            live.iter().map(|a| (&a.per_slot, a.default_version)),
+        );
+        let new_per_local = self.join_overlay(
+            new_default,
+            &pre.per_local,
+            pre.default_version,
+            live.iter().map(|a| (&a.per_local, a.default_version)),
+        );
+        let new_field_global = self.join_overlay(
+            new_default,
+            &pre.field_global,
+            pre.default_version,
+            live.iter().map(|a| (&a.field_global, a.default_version)),
+        );
+        self.heap_state.per_slot = new_per_slot;
+        self.heap_state.per_local = new_per_local;
+        self.heap_state.field_global = new_field_global;
+        self.heap_state.default_version = new_default;
+    }
+
+    /// Join one overlay map across the live arms. A key keeps its pre version
+    /// iff every arm's effective version (its own entry, else that arm's
+    /// `default_version`) equals the pre effective version; otherwise it
+    /// bumps fresh. Survivors equal to `new_default` are dropped (the default
+    /// already covers them); other survivors are pinned so a raised default
+    /// does not swallow them.
+    fn join_overlay<'s, K>(
+        &mut self,
+        new_default: HeapVersion,
+        pre_map: &IndexMap<K, HeapVersion>,
+        pre_default: HeapVersion,
+        arms: impl Iterator<Item = (&'s IndexMap<K, HeapVersion>, HeapVersion)> + Clone,
+    ) -> IndexMap<K, HeapVersion>
+    where
+        K: Copy + Eq + std::hash::Hash + 's,
+    {
+        let mut keys: crate::hashmap::IndexSet<K> = crate::hashmap::IndexSet::default();
+        for k in pre_map.keys() {
+            keys.insert(*k);
         }
-        for a in &live {
-            for k in a.per_field.keys() {
-                field_keys.insert(*k);
+        for (m, _) in arms.clone() {
+            for k in m.keys() {
+                keys.insert(*k);
             }
         }
-        let mut new_per_field: IndexMap<u32, HeapVersion> = IndexMap::default();
-        for f in field_keys {
-            let pre_v = pre.version_of(f);
-            let unchanged = live.iter().all(|a| a.version_of(f) == pre_v);
+        let mut out: IndexMap<K, HeapVersion> = IndexMap::default();
+        for k in keys {
+            let pre_v = pre_map.get(&k).copied().unwrap_or(pre_default);
+            let unchanged = arms
+                .clone()
+                .all(|(m, d)| m.get(&k).copied().unwrap_or(d) == pre_v);
             if unchanged {
-                // Only fields differing from the default need an explicit
-                // entry; a default-changed join must pin survivors so they
-                // are not read at the fresh default.
                 if pre_v != new_default {
-                    new_per_field.insert(f, pre_v);
+                    out.insert(k, pre_v);
                 }
             } else {
                 let fresh = self.heap_state.fresh();
-                new_per_field.insert(f, fresh);
+                out.insert(k, fresh);
             }
         }
-        self.heap_state.per_field = new_per_field;
-        self.heap_state.default_version = new_default;
+        out
     }
 
     /// Whether control can reach the bottom of `block`. Mirrors
@@ -953,44 +1343,48 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
+        self.drop_ref_targets_for(&guard_writes);
         if any_guard {
             self.heap_state.bump_all();
         }
 
-        let saved = self.current_value.clone();
-        let saved_heap = self.heap_state.snapshot();
-        let mut states: Vec<IndexMap<u32, ValueId>> = Vec::with_capacity(arms.len());
-        let mut arm_heaps: Vec<(HeapSnapshot, bool)> = Vec::with_capacity(arms.len());
+        let pre = self.flow_snapshot();
+        let mut flow_arms: Vec<FlowArm> = Vec::with_capacity(arms.len());
         for arm in arms {
-            self.current_value.clone_from(&saved);
-            self.heap_state.restore(saved_heap.clone());
+            self.flow_restore(&pre);
             self.bind_pattern_opaque(arm.pattern);
             if let Some(g) = arm.guard {
                 self.walk_expr(g);
             }
             self.walk_expr(arm.body);
-            states.push(self.current_value.clone());
             // Match arm bodies are expressions; without a `TypeTable` the
             // builder cannot detect a never-typed (`=> return …`) body, so
             // every arm is conservatively treated as falling through. A
             // returning arm contributes only its field writes to the join,
             // which is sound (those fields bump) if imprecise.
-            arm_heaps.push((self.heap_state.snapshot(), true));
+            flow_arms.push(FlowArm {
+                state: self.flow_snapshot(),
+                falls_through: true,
+            });
         }
-        self.current_value.clone_from(&saved);
-        self.merge_n_arms(&saved, &states);
-        self.join_heap(&saved_heap, &arm_heaps);
+        self.flow_join_n(&pre, flow_arms);
     }
 
-    /// Reassign every local the body may write to a fresh `Opaque` before
-    /// and after the walk, and bump the heap state on both sides. The body
-    /// may run 0..N times, so in-body reads must not share `ValueId`s
-    /// with pre-loop reads, and post-loop reads must not share them with
-    /// in-body reads. (Locals declared inside the loop need no pre-seed:
+    /// Reassign every local the body may write to a fresh `Opaque`, and
+    /// invalidate the heap fields the body may write, before and after the
+    /// walk. The body may run 0..N times, so in-body reads must not share
+    /// `ValueId`s with pre-loop reads, and post-loop reads must not share them
+    /// with in-body reads. (Locals declared inside the loop need no pre-seed:
     /// they get fresh `Opaque`s as the body walks.)
+    ///
+    /// Heap invalidation is selective ([`collect_loop_heap_effects`]): a field
+    /// the body never writes — directly, through a reference, or via a
+    /// non-builtin call — keeps its pre-loop version, so a `table.used = 256`
+    /// before a builtin-only loop still forwards inside and after it.
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
         collect_writes_in_block(self.body, body_block, &mut writes);
+        let heap_effects = collect_loop_heap_effects(self.body, body_block);
         // Snapshot before the reassigned-local opaques below overwrite the
         // written locals' pre-loop values.
         self.loop_entry_values
@@ -1001,7 +1395,8 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
-        self.heap_state.bump_all();
+        self.drop_ref_targets_for(&writes);
+        self.apply_loop_heap_effects(&heap_effects);
         self.walk_block(body_block);
         for idx in &writes {
             if self.current_value.contains_key(idx) {
@@ -1009,7 +1404,32 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
-        self.heap_state.bump_all();
+        self.drop_ref_targets_for(&writes);
+        self.apply_loop_heap_effects(&heap_effects);
+    }
+
+    /// Invalidate the heap generations a loop body may write (see
+    /// [`collect_loop_heap_effects`]). A written `local.field` bumps that
+    /// local's `per_slot` (or `field_global` when the local is aliased); a
+    /// `&mut`/method/mut-arg borrow bumps the local's `per_local`; an external
+    /// write (non-builtin call, indirect call, opaque store) invalidates every
+    /// reference-aliased local's fields. Non-touched fields survive.
+    fn apply_loop_heap_effects(&mut self, eff: &LoopHeapEffects) {
+        for &(local, field) in &eff.written_fields {
+            if self.aliased.contains(&local) {
+                self.heap_state.bump_field_global(field);
+            } else {
+                self.heap_state.bump_slot(local, field);
+            }
+        }
+        for &local in &eff.mut_borrowed {
+            self.heap_state.bump_local(local);
+        }
+        if eff.has_external_writes {
+            for &local in &self.aliased {
+                self.heap_state.bump_local(local);
+            }
+        }
     }
 
     /// After a flow-opaque construct (`LabeledBlock` with potential breaks),
@@ -1026,6 +1446,7 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(*idx, opaque);
             }
         }
+        self.drop_ref_targets_for(&writes);
     }
 }
 
@@ -1049,6 +1470,133 @@ fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
     body.for_each_child(node, |c| kids.push(c));
     kids.into_iter()
         .any(|c| block_breaks_to_node(body, c, label))
+}
+
+/// A loop body's heap-write effects, used to invalidate exactly the fields a
+/// loop may mutate (mirrors `const_folding`'s `LoopWriteEffects`). Reassigned
+/// locals are handled separately by `walk_loop`'s `Opaque` reassignment.
+#[derive(Default)]
+struct LoopHeapEffects {
+    /// `local.field = …` (bare-`Local` receiver) targets.
+    written_fields: crate::hashmap::IndexSet<(u32, u32)>,
+    /// `&mut local`, `&mut local.field`, a `&mut` call arg, or a method
+    /// receiver — the callee may store through the reference.
+    mut_borrowed: crate::hashmap::IndexSet<u32>,
+    /// A non-builtin call, indirect / CM call, or opaque-target store
+    /// (`(*p).f`, `arr[i]`, deep field) that may mutate aliased state from
+    /// outside the straight-line walk.
+    has_external_writes: bool,
+}
+
+/// True when `func` is a builtin / monomorphized-builtin intrinsic that
+/// operates below the struct-field layer (`array_set`, `memory_grow`, …) and
+/// so never mutates a tracked `(root, field)` slot. Mirrors
+/// `const_folding::is_field_env_pure_call`.
+fn is_builtin_pure_call(func: &FunctionRef) -> bool {
+    func.builtin_name().is_some() || func.monomorphized_builtin_name().is_some()
+}
+
+/// Walk down a `local.f.g.…` field chain to its rooted local index, or `None`
+/// if rooted at a non-`Local` (e.g. `(*p).f`).
+fn root_local_of(body: &Body, e: ExprId) -> Option<u32> {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::FieldAccess { expr: inner, .. } => root_local_of(body, *inner),
+        _ => None,
+    }
+}
+
+fn collect_loop_heap_effects(body: &Body, block: BlockId) -> LoopHeapEffects {
+    let mut eff = LoopHeapEffects::default();
+    collect_loop_heap_node(body, NodeRef::Block(block), &mut eff);
+    eff
+}
+
+fn collect_loop_heap_node(body: &Body, node: NodeRef, eff: &mut LoopHeapEffects) {
+    if let NodeRef::Expr(e) = node {
+        record_loop_heap_write(body, e, eff);
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        collect_loop_heap_node(body, c, eff);
+    }
+}
+
+fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
+    match &body.exprs[e].kind {
+        ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
+            // Reassigned locals are handled by `walk_loop`'s opaque reassign.
+            ExprKind::Local { .. } => {}
+            ExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                ..
+            } => match &body.exprs[*inner].kind {
+                ExprKind::Local { index, .. } => {
+                    eff.written_fields.insert((*index, *field_index));
+                }
+                // `(*p).f`, `a.b.f` — opaque receiver; aliased state may move.
+                _ => eff.has_external_writes = true,
+            },
+            // `arr[i] = …` writes an array element, not a tracked field; deref
+            // / other lvalues are opaque. Treat both as external.
+            _ => eff.has_external_writes = true,
+        },
+        ExprKind::Unary {
+            op: NirUnaryOp::MutRef,
+            expr: inner,
+        } => match &body.exprs[*inner].kind {
+            ExprKind::Local { index, .. } => {
+                eff.mut_borrowed.insert(*index);
+            }
+            ExprKind::FieldAccess {
+                expr: receiver,
+                field_index,
+                ..
+            } => match &body.exprs[*receiver].kind {
+                ExprKind::Local { index, .. } => {
+                    eff.written_fields.insert((*index, *field_index));
+                }
+                _ => match root_local_of(body, *receiver) {
+                    Some(root) => {
+                        eff.mut_borrowed.insert(root);
+                    }
+                    None => eff.has_external_writes = true,
+                },
+            },
+            _ => eff.has_external_writes = true,
+        },
+        ExprKind::Call { func, args, .. } => {
+            for arg in args {
+                if arg.is_mut
+                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                {
+                    eff.mut_borrowed.insert(*index);
+                }
+            }
+            if !is_builtin_pure_call(func) {
+                eff.has_external_writes = true;
+            }
+        }
+        ExprKind::MethodCall { receiver, args, .. } => {
+            if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind {
+                eff.mut_borrowed.insert(*index);
+            }
+            for arg in args {
+                if arg.is_mut
+                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                {
+                    eff.mut_borrowed.insert(*index);
+                }
+            }
+            eff.has_external_writes = true;
+        }
+        ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
+            eff.has_external_writes = true;
+        }
+        _ => {}
+    }
 }
 
 /// Collect every local index that an `Assign`-to-bare-`Local`, a `Let`, or
@@ -1138,10 +1686,23 @@ mod tests {
 
     // ----- Body builders for tests -----
 
-    /// `build` with no reference-aliased locals — the common test case.
     fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        build(body, &param_locals, &crate::hashmap::IndexSet::default())
+        let empty = crate::hashmap::IndexSet::default();
+        build(body, &param_locals, &empty, &empty, &empty, None)
+    }
+
+    /// `build` with an explicit reference-aliased set (no `untrackable`). The
+    /// aliased set doubles as `mut_escaped` so these tests exercise the
+    /// call-invalidation path (a mutably-aliased local is clobbered by calls).
+    fn build_aliased(
+        body: &Body,
+        params: &[NirParam],
+        aliased: &crate::hashmap::IndexSet<u32>,
+    ) -> ValueGraphBuild {
+        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
+        let empty = crate::hashmap::IndexSet::default();
+        build(body, &param_locals, aliased, &empty, aliased, None)
     }
 
     fn empty_body() -> Body {
@@ -1617,27 +2178,35 @@ mod tests {
     }
 
     #[test]
-    fn call_invalidates_all_fields() {
-        // fn(obj) {
-        //     let a = obj.f;
-        //     foo();
-        //     let a2 = obj.f;  // bump_all invalidates -> distinct VN
-        // }
-        let mut body = empty_body();
-        let recv1 = local_ref(&mut body, 0);
-        let read1 = field_access(&mut body, recv1, 0);
-        let let_1 = let_stmt(&mut body, 1, read1, false);
-
-        let call = call_void(&mut body);
-        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
-
-        let recv2 = local_ref(&mut body, 0);
-        let read2 = field_access(&mut body, recv2, 0);
-        let let_2 = let_stmt(&mut body, 2, read2, false);
-
-        root_with(&mut body, vec![let_1, call_s, let_2]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_ne!(r.value_of[&read1], r.value_of[&read2]);
+    fn call_invalidates_aliased_fields_only() {
+        // fn(obj) { let a = obj.f; foo(); let a2 = obj.f; }
+        // A call may reach a reference-aliased object, so an aliased `obj`'s
+        // field re-derives across the call (distinct VN). A non-aliased
+        // `obj`'s object is unreachable, so its field survives (same VN).
+        let build_call_straddle = |aliased: Option<u32>| {
+            let mut body = empty_body();
+            let recv1 = local_ref(&mut body, 0);
+            let read1 = field_access(&mut body, recv1, 0);
+            let let_1 = let_stmt(&mut body, 1, read1, false);
+            let call = call_void(&mut body);
+            let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+            let recv2 = local_ref(&mut body, 0);
+            let read2 = field_access(&mut body, recv2, 0);
+            let let_2 = let_stmt(&mut body, 2, read2, false);
+            root_with(&mut body, vec![let_1, call_s, let_2]);
+            let mut set = crate::hashmap::IndexSet::default();
+            if let Some(idx) = aliased {
+                set.insert(idx);
+            }
+            let r = build_aliased(&body, &[param_seed()], &set);
+            (r.value_of[&read1], r.value_of[&read2])
+        };
+        // Aliased `obj`: the call invalidates its field.
+        let (a1, a2) = build_call_straddle(Some(0));
+        assert_ne!(a1, a2);
+        // Non-aliased `obj`: the field survives the call.
+        let (n1, n2) = build_call_straddle(None);
+        assert_eq!(n1, n2);
     }
 
     #[test]
@@ -1967,8 +2536,34 @@ mod tests {
     }
 
     #[test]
-    fn field_store_does_not_forward_across_call() {
-        // fn(obj) { obj.f = 7; foo(); let y = obj.f; } -> opaque read
+    fn aliased_field_store_does_not_forward_across_call() {
+        // fn(obj) { obj.f = 7; foo(); let y = obj.f; } with `obj`
+        // reference-aliased -> the call may reach obj's object, so the read
+        // re-derives (opaque).
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, call_s, let_y]);
+        let mut aliased = crate::hashmap::IndexSet::default();
+        aliased.insert(0u32);
+        let r = build_aliased(&body, &[param_seed()], &aliased);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn nonaliased_field_store_forwards_across_call() {
+        // Same body with `obj` NOT aliased: `foo()` cannot reach obj's object
+        // (it never escaped), so `obj.f` still forwards 7 across the call —
+        // the per-(root, field) precision the global model lacked.
         let mut body = empty_body();
         let recv_w = local_ref(&mut body, 0);
         let seven = int_lit(&mut body, 7);
@@ -1980,10 +2575,7 @@ mod tests {
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, call_s, let_y]);
         let r = build_t(&body, &[param_seed()]);
-        assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
-            ValueKind::FieldAccess { .. }
-        ));
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
     }
 
     #[test]
@@ -2018,6 +2610,253 @@ mod tests {
         root_with(&mut body, vec![let_x, let_n]);
         let r = build_t(&body, &[]);
         assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(5));
+    }
+
+    /// `let v = S { f0: 7 }` then a one-field struct literal helper.
+    fn one_field_struct(body: &mut Body, value: ExprId) -> ExprId {
+        alloc_expr(
+            body,
+            ExprKind::StructLiteral {
+                struct_type: TypeTable::UNIT,
+                struct_name: "S".to_string(),
+                fields: vec![crate::nir_arena::ArenaStructField {
+                    name: "f0".to_string(),
+                    value,
+                    field_index: 0,
+                }],
+            },
+        )
+    }
+
+    fn ref_of_local(body: &mut Body, idx: u32) -> ExprId {
+        let inner = local_ref(body, idx);
+        alloc_expr(
+            body,
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: inner,
+            },
+        )
+    }
+
+    #[test]
+    fn reference_lookthrough_forwards_pointee_field() {
+        // fn() { let v = S { f0: 7 }; let r = &v; let y = r.f0; }
+        // `r = &v`, so `r.f0` forwards from `v`'s seeded field slot.
+        let mut body = empty_body();
+        let seven = int_lit(&mut body, 7);
+        let struct_lit = one_field_struct(&mut body, seven);
+        let let_v = let_stmt(&mut body, 0, struct_lit, false);
+        let ref_v = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 1, ref_v, false);
+        let recv_r = local_ref(&mut body, 1);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 2, read, false);
+        root_with(&mut body, vec![let_v, let_r, let_y]);
+        let r = build_t(&body, &[]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+    }
+
+    #[test]
+    fn reference_lookthrough_dropped_when_pointee_reassigned() {
+        // fn() { let mut v = S { f0: 7 }; let r = &v; v = S { f0: 9 }; let y = r.f0; }
+        // Reassigning `v` clears `r`'s look-through (the old pointee may have
+        // moved), so `r.f0` re-derives rather than forwarding the stale 7.
+        let mut body = empty_body();
+        let seven = int_lit(&mut body, 7);
+        let struct_lit = one_field_struct(&mut body, seven);
+        let let_v = let_stmt(&mut body, 0, struct_lit, true);
+        let ref_v = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 1, ref_v, false);
+        let nine = int_lit(&mut body, 9);
+        let struct_lit2 = one_field_struct(&mut body, nine);
+        let reassign = assign_stmt(&mut body, 0, struct_lit2);
+        let recv_r = local_ref(&mut body, 1);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 2, read, false);
+        root_with(&mut body, vec![let_v, let_r, reassign, let_y]);
+        let r = build_t(&body, &[]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn ref_reassigned_in_loop_does_not_forward_stale_pointee() {
+        // fn() { let v1 = S{f0:1}; let v2 = S{f0:2}; let mut r = &v1;
+        //        loop { r = &v2; } let y = r.f0; }
+        // If the loop runs 0 times, r is still &v1, so r.f0 must NOT fold to 2:
+        // a reference reassigned in the loop loses its known target.
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let s1 = one_field_struct(&mut body, one);
+        let let_v1 = let_stmt(&mut body, 0, s1, false);
+        let two = int_lit(&mut body, 2);
+        let s2 = one_field_struct(&mut body, two);
+        let let_v2 = let_stmt(&mut body, 1, s2, false);
+        let ref_v1 = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 2, ref_v1, true);
+        let ref_v2 = ref_of_local(&mut body, 1);
+        let reassign = assign_stmt(&mut body, 2, ref_v2);
+        let lb = block_with(&mut body, vec![reassign]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        let recv_r = local_ref(&mut body, 2);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 3, read, false);
+        root_with(&mut body, vec![let_v1, let_v2, let_r, loop_s, let_y]);
+        let r = build_t(&body, &[]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn ref_reassigned_in_one_branch_does_not_forward_stale_pointee() {
+        // fn(c) { let v1 = S{f0:1}; let v2 = S{f0:2}; let mut r = &v1;
+        //         if c { r = &v2; } let y = r.f0; }
+        // r is &v2 only when c, so r.f0 must NOT fold to a single constant: a
+        // reference reassigned in just one arm becomes unknown at the join.
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let s1 = one_field_struct(&mut body, one);
+        let let_v1 = let_stmt(&mut body, 0, s1, false);
+        let two = int_lit(&mut body, 2);
+        let s2 = one_field_struct(&mut body, two);
+        let let_v2 = let_stmt(&mut body, 1, s2, false);
+        let ref_v1 = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 2, ref_v1, true);
+        let cond = bool_lit(&mut body, true);
+        let ref_v2 = ref_of_local(&mut body, 1);
+        let reassign = assign_stmt(&mut body, 2, ref_v2);
+        let then_block = block_with(&mut body, vec![reassign]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+        let recv_r = local_ref(&mut body, 2);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 3, read, false);
+        root_with(&mut body, vec![let_v1, let_v2, let_r, if_s, let_y]);
+        let r = build_t(&body, &[]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn ref_untouched_in_branch_still_forwards() {
+        // fn(c) { let v = S{f0:7}; let r = &v; if c { } let y = r.f0; }
+        // The branch never touches `r`, so its look-through survives the join
+        // and r.f0 still forwards 7 (precision guard against over-dropping).
+        let mut body = empty_body();
+        let seven = int_lit(&mut body, 7);
+        let s = one_field_struct(&mut body, seven);
+        let let_v = let_stmt(&mut body, 0, s, false);
+        let ref_v = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 1, ref_v, false);
+        let cond = bool_lit(&mut body, true);
+        let then_block = block_with(&mut body, vec![]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: None,
+            },
+        );
+        let recv_r = local_ref(&mut body, 1);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 2, read, false);
+        root_with(&mut body, vec![let_v, let_r, if_s, let_y]);
+        let r = build_t(&body, &[]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+    }
+
+    #[test]
+    fn ref_set_to_same_pointee_in_both_arms_forwards() {
+        // fn(c) { let v=S{f0:1}; let w=S{f0:2}; let mut r=&v;
+        //         if c { r = &w; } else { r = &w; } let y = r.f0; }
+        // Both arms agree r = &w, so the join keeps the look-through and r.f0
+        // forwards w's 2 (precision guard: agreeing reassignments survive).
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let s_v = one_field_struct(&mut body, one);
+        let let_v = let_stmt(&mut body, 0, s_v, false);
+        let two = int_lit(&mut body, 2);
+        let s_w = one_field_struct(&mut body, two);
+        let let_w = let_stmt(&mut body, 1, s_w, false);
+        let ref_v = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 2, ref_v, true);
+        let cond = bool_lit(&mut body, true);
+        let ref_w_then = ref_of_local(&mut body, 1);
+        let assign_then = assign_stmt(&mut body, 2, ref_w_then);
+        let then_block = block_with(&mut body, vec![assign_then]);
+        let ref_w_else = ref_of_local(&mut body, 1);
+        let assign_else = assign_stmt(&mut body, 2, ref_w_else);
+        let else_block = block_with(&mut body, vec![assign_else]);
+        let if_s = alloc_stmt(
+            &mut body,
+            StmtKind::If {
+                condition: cond,
+                then_block,
+                else_block: Some(else_block),
+            },
+        );
+        let recv_r = local_ref(&mut body, 2);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 3, read, false);
+        root_with(&mut body, vec![let_v, let_w, let_r, if_s, let_y]);
+        let r = build_t(&body, &[]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
+    }
+
+    #[test]
+    fn ref_reassigned_in_short_circuit_rhs_does_not_forward_stale_pointee() {
+        // fn(c) { let v1=S{f0:1}; let v2=S{f0:2}; let mut r=&v1;
+        //         let b = c && { r = &v2; true }; let y = r.f0; }
+        // The rhs runs only when c, so r may still be &v1; r.f0 must NOT fold
+        // to 2. The conditionally-run rhs drops the reassigned reference.
+        let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
+        let s1 = one_field_struct(&mut body, one);
+        let let_v1 = let_stmt(&mut body, 0, s1, false);
+        let two = int_lit(&mut body, 2);
+        let s2 = one_field_struct(&mut body, two);
+        let let_v2 = let_stmt(&mut body, 1, s2, false);
+        let ref_v1 = ref_of_local(&mut body, 0);
+        let let_r = let_stmt(&mut body, 2, ref_v1, true);
+        let cond = bool_lit(&mut body, true);
+        let ref_v2 = ref_of_local(&mut body, 1);
+        let assign = assign_stmt(&mut body, 2, ref_v2);
+        let tru = bool_lit(&mut body, true);
+        let tru_stmt = alloc_stmt(&mut body, StmtKind::Expr(tru));
+        let rhs_block = block_with(&mut body, vec![assign, tru_stmt]);
+        let rhs_expr = alloc_expr(&mut body, ExprKind::Block(rhs_block));
+        let and = alloc_expr(
+            &mut body,
+            ExprKind::Binary {
+                left: cond,
+                op: NirBinaryOp::And,
+                right: rhs_expr,
+            },
+        );
+        let let_b = let_stmt(&mut body, 3, and, false);
+        let recv_r = local_ref(&mut body, 2);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 4, read, false);
+        root_with(&mut body, vec![let_v1, let_v2, let_r, let_b, let_y]);
+        let r = build_t(&body, &[]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
     }
 
     #[test]
@@ -2071,9 +2910,11 @@ mod tests {
     }
 
     #[test]
-    fn aliased_receiver_is_not_seeded() {
-        // fn(obj) { obj.f = 7; let y = obj.f; } but `obj` (local 0) is
-        // reference-aliased → no forwarding; the read stays opaque.
+    fn aliased_receiver_is_seeded_without_intervening_write() {
+        // fn(obj) { obj.f = 7; let y = obj.f; } — even if `obj` is
+        // reference-aliased, no heap write intervenes, so `obj.f` forwards 7.
+        // A later aliased write would invalidate it (see the soundness test
+        // `aliased_other_receiver_same_field_blocks_forward`).
         let mut body = empty_body();
         let recv_w = local_ref(&mut body, 0);
         let seven = int_lit(&mut body, 7);
@@ -2082,13 +2923,8 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, let_y]);
-        let mut aliased = crate::hashmap::IndexSet::default();
-        aliased.insert(0u32);
-        let r = build(&body, &[param_seed().local_index], &aliased);
-        assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
-            ValueKind::FieldAccess { .. }
-        ));
+        let r = build_t(&body, &[param_seed()]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
     }
 
     // ----- Loop-entry value snapshots -----
@@ -2147,33 +2983,119 @@ mod tests {
     }
 
     #[test]
-    fn body_scanned_address_taken_receiver_is_not_seeded() {
-        // fn(obj) { obj.f = 7; let r = &obj; let y = obj.f; }
-        // The live `&obj` makes `obj` address-taken via
-        // `Body::collect_address_taken_locals` — the scan the engine unions
-        // into the exclusion set before every graph build — so the store is
-        // not seeded.
+    fn nonaliased_field_survives_external_call_loop() {
+        // fn(obj) { obj.f = 7; loop { foo(); }; let y = obj.f; }
+        // The loop writes no field of `obj` (only an opaque call), and `obj`
+        // is non-aliased, so the loop's external-write invalidation skips it:
+        // obj.f still forwards 7 after the loop.
         let mut body = empty_body();
         let recv_w = local_ref(&mut body, 0);
         let seven = int_lit(&mut body, 7);
         let write = field_assign_stmt(&mut body, recv_w, 0, seven);
-        let obj_ref_inner = local_ref(&mut body, 0);
-        let obj_ref = alloc_expr(
-            &mut body,
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                expr: obj_ref_inner,
-            },
-        );
-        let let_r = let_stmt(&mut body, 1, obj_ref, false);
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let lb = block_with(&mut body, vec![call_s]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         let recv_r = local_ref(&mut body, 0);
         let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, loop_s, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+    }
+
+    #[test]
+    fn aliased_field_dropped_by_external_call_loop() {
+        // Same shape with `obj` reference-aliased: the loop's opaque call may
+        // reach obj's object, so obj.f re-derives after the loop.
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let call = call_void(&mut body);
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let lb = block_with(&mut body, vec![call_s]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, loop_s, let_y]);
+        let mut aliased = crate::hashmap::IndexSet::default();
+        aliased.insert(0u32);
+        let r = build_aliased(&body, &[param_seed()], &aliased);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn field_written_in_loop_does_not_survive() {
+        // fn(obj) { obj.f = 7; loop { obj.f = 8; }; let y = obj.f; }
+        // The loop writes obj.f, so the pre-loop 7 is invalidated and the
+        // post-loop read re-derives (the body may have run, leaving 8).
+        let mut body = empty_body();
+        let recv_w = local_ref(&mut body, 0);
+        let seven = int_lit(&mut body, 7);
+        let write = field_assign_stmt(&mut body, recv_w, 0, seven);
+        let recv_lw = local_ref(&mut body, 0);
+        let eight = int_lit(&mut body, 8);
+        let loop_write = field_assign_stmt(&mut body, recv_lw, 0, eight);
+        let lb = block_with(&mut body, vec![loop_write]);
+        let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
+        let recv_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_r, 0);
+        let let_y = let_stmt(&mut body, 1, read, false);
+        root_with(&mut body, vec![write, loop_s, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        assert!(matches!(
+            r.pool.kind(r.value_of[&read]),
+            ValueKind::FieldAccess { .. }
+        ));
+    }
+
+    #[test]
+    fn nonaliased_other_receiver_same_field_forwards() {
+        // fn(a, b) { a.f = 1; b.f = 5; let y = a.f; }
+        // `a` and `b` are distinct non-aliased objects, so `b.f = 5` bumps
+        // only `b`'s per-slot generation; `a.f` forwards 1 (the same-layout
+        // precision the global per-field model lost).
+        let mut body = empty_body();
+        let recv_a_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let write_a = field_assign_stmt(&mut body, recv_a_w, 0, one);
+        let recv_b_w = local_ref(&mut body, 1);
+        let five = int_lit(&mut body, 5);
+        let write_b = field_assign_stmt(&mut body, recv_b_w, 0, five);
+        let recv_a_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_a_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
-        root_with(&mut body, vec![write, let_r, let_y]);
-        let mut scanned = crate::hashmap::IndexSet::default();
-        body.collect_address_taken_locals(&mut scanned);
-        assert!(scanned.contains(&0));
-        let r = build(&body, &[param_seed().local_index], &scanned);
+        root_with(&mut body, vec![write_a, write_b, let_y]);
+        let r = build_t(&body, &[param_seed()]);
+        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+    }
+
+    #[test]
+    fn aliased_other_receiver_same_field_blocks_forward() {
+        // fn(a, b) { a.f = 1; b.f = 5; let y = a.f; } with `b` reference-
+        // aliased (e.g. `b = &a`). A write through an aliased receiver bumps
+        // the field globally — every alias of `f` is invalidated — so `a.f`
+        // re-derives instead of forwarding the stale 1. This is the soundness
+        // guarantee the per-slot precision relies on.
+        let mut body = empty_body();
+        let recv_a_w = local_ref(&mut body, 0);
+        let one = int_lit(&mut body, 1);
+        let write_a = field_assign_stmt(&mut body, recv_a_w, 0, one);
+        let recv_b_w = local_ref(&mut body, 1);
+        let five = int_lit(&mut body, 5);
+        let write_b = field_assign_stmt(&mut body, recv_b_w, 0, five);
+        let recv_a_r = local_ref(&mut body, 0);
+        let read = field_access(&mut body, recv_a_r, 0);
+        let let_y = let_stmt(&mut body, 2, read, false);
+        root_with(&mut body, vec![write_a, write_b, let_y]);
+        let mut aliased = crate::hashmap::IndexSet::default();
+        aliased.insert(1u32);
+        let r = build_aliased(&body, &[param_seed()], &aliased);
         assert!(matches!(
             r.pool.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }

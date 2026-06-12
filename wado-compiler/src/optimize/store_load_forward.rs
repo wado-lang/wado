@@ -25,37 +25,101 @@ use crate::nir::NirFunction;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::ValueKind;
+use crate::nir_value_graph::{ValueId, ValueKind};
 
 use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
 
 pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let type_table = project.type_table.borrow();
+    let first_param_types = super::alias::first_param_types(project);
+    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::StoreLoadForward, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
-        if func.body.is_none() {
-            return false;
-        }
-        // Forwarding-ineligible locals: the canonical sets plus the
-        // engine's body scan — the canonical sets are static elaboration
-        // records and go stale after `inline` / `ref_elim` copy `Ref`
-        // nodes (see `elide_local::ElideRule`).
-        let mut unsafe_locals = func.address_taken_locals.clone();
-        unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
-        let NirFunction { body, locals, .. } = &mut *func;
-        let body = body.as_mut().expect("checked above");
-        let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_unsafe_locals(unsafe_locals.clone());
-        unsafe_locals.extend(engine.body_address_taken().iter().copied());
-        let rule = StoreLoadForwardRule {
-            applied: Cell::new(false),
-            unsafe_locals,
-        };
-        engine.run(&[&rule])
+        forward_one(
+            &mut func,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+            &mut buffers,
+        )
     })
+}
+
+/// Ungated variant: forwards stores to loads in every function. Used by the
+/// post-`field_scalarize` cleanup, which runs once outside the gated loop so
+/// the scalarization shadow inits (`__hfs_x = obj.f`) get their fields
+/// forwarded to constants — the load→literal fold `field_scalarize` leaves to
+/// a later pass, and the only one that runs after it.
+pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
+    let type_table = project.type_table.borrow();
+    let first_param_types = super::alias::first_param_types(project);
+    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
+    let mut buffers = EngineBuffers::default();
+    let mut changed = false;
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        changed |= forward_one(
+            &mut func,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+            &mut buffers,
+        );
+    }
+    changed
+}
+
+/// Run store→load forwarding over one function body. Returns whether anything
+/// changed. Shared by the gated loop pass and the ungated post-scalarize run.
+fn forward_one(
+    func: &mut NirFunction,
+    type_table: &crate::tir::TypeTable,
+    first_param_types: &crate::hashmap::IndexMap<
+        (crate::module_source::ModuleSource, String),
+        crate::tir::TypeId,
+    >,
+    call_immutability: &super::alias::CallImmutability,
+    buffers: &mut EngineBuffers,
+) -> bool {
+    if func.body.is_none() {
+        return false;
+    }
+    // `Local`-read forwarding excludes address-taken / `stores`-aliased
+    // locals: the canonical sets plus the engine's body scan — the
+    // canonical sets are static elaboration records and go stale after
+    // `inline` / `ref_elim` copy `Ref` nodes (see `elide_local::ElideRule`).
+    let mut unsafe_locals = func.address_taken_locals.clone();
+    unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
+    let NirFunction {
+        body,
+        locals,
+        address_taken_locals,
+        stores_aliased_locals,
+        ..
+    } = &mut *func;
+    let body = body.as_mut().expect("checked above");
+    let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+        body,
+        locals,
+        address_taken_locals,
+        stores_aliased_locals,
+        type_table,
+        first_param_types,
+        call_immutability,
+    );
+    let mut engine = Engine::new(body, buffers, locals);
+    engine.set_alias_sets(aliased, untrackable, mut_escaped);
+    engine.set_value_graph_type_table(type_table);
+    unsafe_locals.extend(engine.body_address_taken().iter().copied());
+    let rule = StoreLoadForwardRule {
+        applied: Cell::new(false),
+        unsafe_locals,
+    };
+    engine.run(&[&rule])
 }
 
 /// Standalone-session rule whose single `apply_block` performs the whole-
@@ -105,20 +169,41 @@ fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
         ) {
             continue;
         }
-        let Some(src) = engine.literal_source(vid) else {
+        // Prefer an existing source literal (preserves its `repr` / span).
+        // When distinct literal exprs hash-cons to one `ValueId` (e.g. `0` vs
+        // `0x0`), `literal_source` returns the first one — the others' reprs
+        // are lost on substitution. Sound (VN equality ⇒ semantic equality),
+        // but visible in NIR dumps and diagnostic spans for these edge-case
+        // literals. A *folded* value (`1 + 1 → 2` with no literal `2` in the
+        // function) has no source, so synthesize the literal from the value
+        // graph kind, using the read's own type for the integer width / repr.
+        let new_kind = if let Some(src) = engine.literal_source(vid) {
+            engine.body.exprs[src].kind.clone()
+        } else if let Some(kind) = synth_literal_kind(engine, vid, expr) {
+            kind
+        } else {
             continue;
         };
-        // Cloning the source `ExprKind` keeps the substituted node's
-        // `repr` and span. When distinct literal exprs hash-cons to one
-        // `ValueId` (e.g. `0` vs `0x0`), `literal_source` returns the
-        // first one — the others' reprs are lost on substitution. Sound
-        // (VN equality ⇒ semantic equality), but visible in NIR dumps and
-        // diagnostic spans for these edge-case literals.
-        let new_kind = engine.body.exprs[src].kind.clone();
         engine.replace_expr_kind(expr, new_kind);
         changed = true;
     }
     changed
+}
+
+/// Build a literal `ExprKind` for a folded value-graph constant that has no
+/// source literal in the body (e.g. `2` produced by folding `1 + 1` when no
+/// literal `2` exists), using `expr`'s own NIR type for the integer width and
+/// `repr`. Returns `None` for non-literal kinds or when no type table was
+/// supplied (folding disabled). Reuses niri's [`crate::const_eval::value_to_arena_kind`]
+/// so the synthesized literal is byte-identical to what the CTFE path emits.
+fn synth_literal_kind(engine: &mut Engine, vid: ValueId, expr: ExprId) -> Option<ExprKind> {
+    let vk = engine.value_kind(vid).clone();
+    let type_id = engine.body.exprs[expr].type_id;
+    let prim = engine
+        .value_graph_type_table()
+        .and_then(|tt| crate::const_eval::prim_of(type_id, tt));
+    let value = crate::nir_value_graph::value_kind_to_const(&vk, prim)?;
+    Some(crate::const_eval::value_to_arena_kind(value))
 }
 
 /// Collect value-position `Local` and `FieldAccess` read expressions. A

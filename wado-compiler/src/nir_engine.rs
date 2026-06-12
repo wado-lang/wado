@@ -97,24 +97,35 @@ pub struct Engine<'a> {
     /// [`Engine::invalidate_value_graph`]. See [`crate::nir_value_graph`]
     /// for the data model.
     value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
-    /// Locals whose object is reference-aliased (the owning function's
-    /// `address_taken_locals` / `stores_aliased_locals`). Passed to the
-    /// `ValueGraph` builder so field store→load seeding is suppressed for
-    /// them, matching `store_load_forward`'s exclusion. Empty unless a pass
-    /// sets it via [`Engine::set_alias_unsafe_locals`] before the first
-    /// `value` query.
-    alias_unsafe_locals: IndexSet<u32>,
     /// Per-session cache of the body's live `&local` / `&mut local` scan
-    /// (see [`Body::collect_address_taken_locals`]). Computed on the first
-    /// graph build, cleared with [`Engine::invalidate_value_graph`] so a
-    /// rebuild after edits rescans. Unioned with `alias_unsafe_locals`
-    /// before reaching the builder.
+    /// (see [`Body::collect_address_taken_locals`]). Computed on first use,
+    /// cleared with [`Engine::invalidate_value_graph`] so a rebuild after
+    /// edits rescans. Consumed by `Local`-read exclusions
+    /// (`store_load_forward`, licm's arithmetic hoist).
     body_address_taken: Option<IndexSet<u32>>,
+    /// Reference-aliased locals (address-taken / `with stores[p]` /
+    /// reference-typed). The `ValueGraph` builder invalidates these
+    /// conservatively across field writes and calls; non-aliased locals get
+    /// precise per-`(root, field)` forwarding. Empty unless a pass supplies it
+    /// via [`Engine::set_alias_sets`] before the first `value` query.
+    aliased_locals: IndexSet<u32>,
+    /// The `stores`-aliased subset whose fields are never seeded.
+    untrackable_locals: IndexSet<u32>,
+    /// The subset of `aliased_locals` a call may actually mutate (locals with a
+    /// mutable escape: `&mut v`, mut-ref args, `&mut self` receivers, or a
+    /// `stores` stash). The `ValueGraph` builder bumps only these across calls,
+    /// so immutable-`&v`-only locals keep their forwarded fields. Empty unless a
+    /// pass supplies it via [`Engine::set_alias_sets`].
+    mut_escaped_locals: IndexSet<u32>,
     /// Parameter local indices, seeded as stable `Opaque`s. Only up-front
     /// seeding makes parameters visible in the loop-entry snapshots, so
     /// passes consuming [`Engine::loop_entry_value`] must call
     /// [`Engine::set_param_locals`] first.
     param_locals: Vec<u32>,
+    /// Type table for the `ValueGraph` builder's constant folding of pure
+    /// arithmetic. `None` (the default) disables folding. Set via
+    /// [`Engine::set_value_graph_type_table`] before the first value query.
+    vg_type_table: Option<&'a crate::tir::TypeTable>,
 }
 
 impl<'a> Engine<'a> {
@@ -134,9 +145,12 @@ impl<'a> Engine<'a> {
             buf,
             locals,
             value_graph: None,
-            alias_unsafe_locals: IndexSet::default(),
             body_address_taken: None,
+            aliased_locals: IndexSet::default(),
+            untrackable_locals: IndexSet::default(),
+            mut_escaped_locals: IndexSet::default(),
             param_locals: Vec::new(),
+            vg_type_table: None,
         };
         engine.build_parents();
         engine.build_uses();
@@ -223,18 +237,6 @@ impl<'a> Engine<'a> {
         self.body_address_taken.as_ref().unwrap()
     }
 
-    /// Record the function's reference-aliased locals so the lazily-built
-    /// `ValueGraph` suppresses field store→load seeding for them (the
-    /// `with stores[p]` "no field forwarding" contract). Must be called
-    /// before the first [`Engine::value`] query, since the graph caches on
-    /// first build; a later call forces a rebuild on next query.
-    pub fn set_alias_unsafe_locals(&mut self, locals: IndexSet<u32>) {
-        if self.alias_unsafe_locals != locals {
-            self.alias_unsafe_locals = locals;
-            self.value_graph = None;
-        }
-    }
-
     /// Record the owning function's parameter local indices so the
     /// lazily-built `ValueGraph` seeds them up front (see the field doc on
     /// `param_locals`). Must be called before the first value query; a later
@@ -246,22 +248,58 @@ impl<'a> Engine<'a> {
         }
     }
 
+    /// Record the function's reference-aliased and `stores`-aliased locals so
+    /// the lazily-built `ValueGraph` invalidates field forwarding for them at
+    /// the right granularity. Must be called before the first value query; a
+    /// later change forces a rebuild on next query. Without it the builder
+    /// treats every receiver as non-aliased — sound only when the function has
+    /// no reference aliasing, so passes that may see aliasing must supply it.
+    pub fn set_alias_sets(
+        &mut self,
+        aliased: IndexSet<u32>,
+        untrackable: IndexSet<u32>,
+        mut_escaped: IndexSet<u32>,
+    ) {
+        if self.aliased_locals != aliased
+            || self.untrackable_locals != untrackable
+            || self.mut_escaped_locals != mut_escaped
+        {
+            self.aliased_locals = aliased;
+            self.untrackable_locals = untrackable;
+            self.mut_escaped_locals = mut_escaped;
+            self.value_graph = None;
+        }
+    }
+
+    /// Provide the type table so the lazily-built `ValueGraph` folds pure
+    /// arithmetic on literal operands (`2 + 3 → 5`). Must be called before the
+    /// first value query; a later change forces a rebuild on next query.
+    pub fn set_value_graph_type_table(&mut self, type_table: &'a crate::tir::TypeTable) {
+        if self.vg_type_table.map(std::ptr::from_ref) != Some(std::ptr::from_ref(type_table)) {
+            self.vg_type_table = Some(type_table);
+            self.value_graph = None;
+        }
+    }
+
+    /// The type table supplied for value-graph folding, if any. Used by
+    /// `store_load_forward` to synthesize a literal `ExprKind` for a folded
+    /// value that has no pre-existing source literal.
+    pub fn value_graph_type_table(&self) -> Option<&'a crate::tir::TypeTable> {
+        self.vg_type_table
+    }
+
     fn ensure_value_graph(&mut self) {
         if self.value_graph.is_some() {
             return;
         }
-        // The builder receives the complete exclusion set — canonical alias
-        // sets unioned with the session's body scan — and scans nothing
-        // itself.
-        let mut alias_unsafe = self.alias_unsafe_locals.clone();
-        if self.body_address_taken.is_none() {
-            let mut set = IndexSet::default();
-            self.body.collect_address_taken_locals(&mut set);
-            self.body_address_taken = Some(set);
-        }
-        alias_unsafe.extend(self.body_address_taken.as_ref().unwrap().iter().copied());
-        let build =
-            crate::nir_value_graph::builder::build(&*self.body, &self.param_locals, &alias_unsafe);
+        let build = crate::nir_value_graph::builder::build(
+            &*self.body,
+            &self.param_locals,
+            &self.aliased_locals,
+            &self.untrackable_locals,
+            &self.mut_escaped_locals,
+            self.vg_type_table,
+        );
         self.value_graph = Some(build);
     }
 

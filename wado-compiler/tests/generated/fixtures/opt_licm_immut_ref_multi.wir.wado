@@ -110,6 +110,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:__modules_initialized: bool = 0;
+global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado//Config" = struct.new "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado//Config" { threshold: 10, scale: 2 };
+global global:__const_obj_1: ref null "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado//Stats" = struct.new "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado//Stats" { count: 5, total: 0 };
 
 fn "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado/read_config"(c) {
     return c.threshold;
@@ -120,34 +122,24 @@ fn "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado/read_stats"(s) {
 }
 
 fn "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado/run"() with Stdout {
-    let config: ref "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado//Config";
-    let stats: ref "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado//Stats";
     let sum: i32;
     let i: i32;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
-    let _licm_threshold_14: i32;
-    let _licm_count_15: i32;
-    let _licm_arith_16: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    config = struct.new "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado//Config" { threshold: 10, scale: 2 };
-    stats = struct.new "wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado//Stats" { count: 5, total: 0 };
     sum = 0;
     i = 0;
-    _licm_threshold_14 = config.threshold;
-    _licm_count_15 = stats.count;
-    _licm_arith_16 = _licm_threshold_14 * _licm_count_15;
     b0: block {
         l1: loop {
             break_if b0 i >= 4;
-            drop("wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado/read_config"(config));
-            drop("wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado/read_stats"(stats));
-            sum = sum + (_licm_arith_16 * i);
+            drop("wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado/read_config"(global:__const_obj_0));
+            drop("wado-compiler/tests/fixtures/opt_licm_immut_ref_multi.wado/read_stats"(global:__const_obj_1));
+            sum = sum + (50 * i);
             i = i + 1;
             continue l1;
         };

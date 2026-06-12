@@ -97,6 +97,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::const_eval::{
+    eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, is_signed_int, prim_of,
+    value_to_arena_kind,
+};
+// Re-export the const-eval `Value` under `niri` for the public API / tests that
+// historically imported `niri::Value` (it now lives in `const_eval`).
+pub use crate::const_eval::Value;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -105,7 +112,7 @@ use crate::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, StmtId,
     StmtKind, StmtNode,
 };
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results.
 ///
@@ -176,105 +183,6 @@ impl Lattice {
             (Self::NonConst, _) | (_, Self::NonConst) => Self::NonConst,
             (Self::Const(a), Self::Const(b)) if a == b => Self::Const(a),
             (Self::Const(_), Self::Const(_)) => Self::NonConst,
-        }
-    }
-}
-
-/// A typed compile-time value produced by the interpreter.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Value {
-    /// Integer value. `prim` carries the integer type (i8..i64, u8..u64);
-    /// `value` is the raw bit pattern, sign-extended for signed types.
-    Int { value: u64, prim: PrimitiveType },
-    /// Floating-point value. `prim` is `F32` or `F64`. For `F32`, `value`
-    /// holds the f32 result widened to f64.
-    Float { value: f64, prim: PrimitiveType },
-    /// Boolean value.
-    Bool(bool),
-    /// Unicode scalar value (`char`).
-    Char(char),
-}
-
-impl Value {
-    /// Returns the raw integer bit pattern, or `None` if not an int.
-    #[must_use]
-    pub fn as_int(&self) -> Option<(u64, PrimitiveType)> {
-        match self {
-            Self::Int { value, prim } => Some((*value, *prim)),
-            _ => None,
-        }
-    }
-
-    /// Returns the raw float value and width, or `None` if not a float.
-    #[must_use]
-    pub fn as_float(&self) -> Option<(f64, PrimitiveType)> {
-        match self {
-            Self::Float { value, prim } => Some((*value, *prim)),
-            _ => None,
-        }
-    }
-
-    /// Returns the boolean value, or `None` if not a bool.
-    #[must_use]
-    pub fn as_bool(&self) -> Option<bool> {
-        match self {
-            Self::Bool(b) => Some(*b),
-            _ => None,
-        }
-    }
-
-    /// Returns the char value, or `None` if not a char.
-    #[must_use]
-    pub fn as_char(&self) -> Option<char> {
-        match self {
-            Self::Char(c) => Some(*c),
-            _ => None,
-        }
-    }
-
-    /// Render the value as a NIR-compatible literal repr string.
-    #[must_use]
-    pub fn format_repr(&self) -> String {
-        match self {
-            Self::Int { value, prim } => format_int_repr(*value, *prim),
-            Self::Float { value, .. } => format_float_repr(*value),
-            Self::Bool(b) => b.to_string(),
-            Self::Char(c) => format_char_repr(*c),
-        }
-    }
-
-    /// Project an arena expression to a `Value` when it's a primitive literal
-    /// whose `type_id` resolves to a tracked primitive. Returns `None` for
-    /// non-literal shapes (`Local`, `Call`, `Binary`, …), for `String` /
-    /// `Bytes` / `Null` / `Unit` (no `Value` carrier), for the bignum
-    /// primitives `i128` / `u128` (out of scope for niri folding), and for any
-    /// literal whose `type_id` doesn't resolve to a primitive.
-    ///
-    /// Used by the const-fold visitor to turn struct-field literals
-    /// (`StructLiteral { f: 5, … }`) and direct field stores (`obj.f = 5`) into
-    /// `Interpreter::bind_field` / `field_env` entries.
-    #[must_use]
-    pub fn from_arena_literal(body: &Body, e: ExprId, type_table: &TypeTable) -> Option<Self> {
-        let node = &body.exprs[e];
-        match &node.kind {
-            ExprKind::IntLiteral { value, .. } => {
-                let prim = prim_of(node.type_id, type_table).filter(|p| is_int_prim(*p))?;
-                Some(Self::Int {
-                    value: *value,
-                    prim,
-                })
-            }
-            ExprKind::FloatLiteral { value, .. } => {
-                let prim = prim_of(node.type_id, type_table)
-                    .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
-                Some(Self::Float {
-                    value: *value,
-                    prim,
-                })
-            }
-            ExprKind::BoolLiteral(b) => Some(Self::Bool(*b)),
-            ExprKind::CharLiteral(c) => Some(Self::Char(*c)),
-            _ => None,
         }
     }
 }
@@ -687,6 +595,67 @@ mod field_snapshot_tests {
 ///   participate in the CM async runtime; not CTFE-safe.
 /// - `stores.is_empty()` — `stores[...]` is moot for CTFE (we don't pass
 ///   refs), but bail conservatively.
+/// Commit sink for niri's body rewrites. The rewrite logic reads through
+/// [`EditSink::body`] and commits every edit through the sink, so two backends
+/// can share it: [`BodySink`] mutates a `Body` in place — used for throwaway
+/// CTFE scratch bodies, where coherence with an engine's parent map / use
+/// index is moot — while the optimize layer's `EngineSink` routes every edit
+/// through `Engine::*` so the real body's maps stay coherent (the Stage 6
+/// env-bound `const_folding` migration).
+pub(crate) trait EditSink {
+    fn body(&self) -> &Body;
+    /// Replace `e`'s kind. The new kind's children must already be parented to
+    /// `e` (literals have none); use [`EditSink::become_expr`] to move an
+    /// existing node's content into `e`.
+    fn replace_kind(&mut self, e: ExprId, kind: ExprKind);
+    /// Make `dst` take `src`'s content (`dst` becomes `src`).
+    fn become_expr(&mut self, dst: ExprId, src: ExprId);
+    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId;
+    fn alloc_stmt(&mut self, kind: StmtKind, span: crate::token::Span) -> StmtId;
+    fn alloc_block(&mut self, stmts: Vec<StmtId>, span: crate::token::Span) -> BlockId;
+    fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>);
+}
+
+/// In-place [`EditSink`] over a raw `Body`. Used for CTFE scratch reduction,
+/// where the body is discarded after the value is read, so duplicated child
+/// references and stale parent links do not matter.
+pub(crate) struct BodySink<'a> {
+    pub body: &'a mut Body,
+}
+
+impl EditSink for BodySink<'_> {
+    fn body(&self) -> &Body {
+        self.body
+    }
+    fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
+        self.body.exprs[e].kind = kind;
+    }
+    fn become_expr(&mut self, dst: ExprId, src: ExprId) {
+        // Clone src's whole node into dst (the original short-circuit rewrite
+        // did `body.exprs[e] = body.exprs[keep].clone()`); the scratch body is
+        // discarded, so the shared child references and the still-live `src`
+        // node are harmless.
+        let node = self.body.exprs[src].clone();
+        self.body.exprs[dst] = node;
+    }
+    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId {
+        self.body.exprs.push(ExprNode {
+            kind,
+            type_id,
+            span,
+        })
+    }
+    fn alloc_stmt(&mut self, kind: StmtKind, span: crate::token::Span) -> StmtId {
+        self.body.stmts.push(StmtNode { kind, span })
+    }
+    fn alloc_block(&mut self, stmts: Vec<StmtId>, span: crate::token::Span) -> BlockId {
+        self.body.blocks.push(BlockNode { stmts, span })
+    }
+    fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
+        self.body.blocks[block].stmts = stmts;
+    }
+}
+
 /// - `inline_hint != InlineHint::Never` — respect the user's explicit
 ///   "do not expand this" annotation.
 /// - `type_params` and `impl_type_params` empty — CTFE runs after
@@ -1320,61 +1289,79 @@ impl<'a> Interpreter<'a> {
     // ───────────────────────────────────────────────────────────────────────
 
     /// The single-node rewrites at `e` (no recursion into children).
-    pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
-        if let Lattice::Const(v) = self.try_fold_a(body, e) {
-            body.exprs[e].kind = value_to_arena_kind(v);
-            return true;
+    pub(crate) fn reduce_local_block_via<S: EditSink>(
+        &mut self,
+        sink: &mut S,
+        block: BlockId,
+    ) -> bool {
+        let body = sink.body();
+        let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
+            matches!(
+                &body.stmts[*s].kind,
+                StmtKind::If { condition, .. }
+                    if matches!(body.exprs[*condition].kind, ExprKind::BoolLiteral(_))
+            )
+        });
+        if !has_constant_if {
+            return false;
         }
-        // GlobalVarGet → recorded Const.
-        let global_v = if let ExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } = &body.exprs[e].kind
-        {
-            match self.global_lattice(module_source, name) {
-                Lattice::Const(v) => Some(v),
-                _ => None,
-            }
-        } else {
-            None
-        };
-        if let Some(v) = global_v {
-            body.exprs[e].kind = value_to_arena_kind(v);
-            return true;
-        }
-        // FieldAccess(Local, field) → field_env Const.
-        let field_v = if let ExprKind::FieldAccess {
-            expr: inner,
-            field_name,
-            ..
-        } = &body.exprs[e].kind
-        {
-            if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
-                self.field_env
-                    .get(index)
-                    .and_then(|m| m.get(field_name.as_str()))
-                    .copied()
+        let old_stmts = body.blocks[block].stmts.clone();
+        let mut new_stmts: Vec<StmtId> = Vec::new();
+        for s in old_stmts {
+            let body = sink.body();
+            let spliced = if let StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } = &body.stmts[s].kind
+            {
+                if let ExprKind::BoolLiteral(value) = body.exprs[*condition].kind {
+                    Some((value, *then_block, *else_block))
+                } else {
+                    None
+                }
             } else {
                 None
+            };
+            if let Some((value, then_block, else_block)) = spliced {
+                if value {
+                    new_stmts.extend(sink.body().blocks[then_block].stmts.clone());
+                } else if let Some(eb) = else_block {
+                    new_stmts.extend(sink.body().blocks[eb].stmts.clone());
+                }
+                continue;
             }
-        } else {
-            None
-        };
-        if let Some(v) = field_v {
-            body.exprs[e].kind = value_to_arena_kind(v);
+            new_stmts.push(s);
+        }
+        sink.set_block_stmts(block, new_stmts);
+        true
+    }
+
+    /// In-place wrapper over [`Self::reduce_local_via`] for the CTFE
+    /// scratch-body path.
+    pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+        let mut sink = BodySink { body };
+        self.reduce_local_via(&mut sink, e)
+    }
+
+    /// Reduce `e` to its flow-sensitive constant value or collapse a constant
+    /// branch, committing through `sink`. The value substitutions
+    /// ([`Self::flow_fold_kind_a`]) and the structural collapses
+    /// (short-circuit / `if` / `match`) all route through the sink, so the
+    /// engine-routed visitor keeps the parent map / use index coherent and the
+    /// scratch-body CTFE path mutates in place.
+    pub(crate) fn reduce_local_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
+        if let Some(kind) = self.flow_fold_kind_a(sink.body(), e) {
+            sink.replace_kind(e, kind);
             return true;
         }
-        if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
-            body.exprs[e].kind = value_to_arena_kind(v);
+        if rewrite_short_circuit_via(sink, e) {
             return true;
         }
-        if rewrite_short_circuit_a(body, e) {
+        if self.rewrite_if_expr_via(sink, e) {
             return true;
         }
-        if self.rewrite_if_expr_a(body, e) {
-            return true;
-        }
-        self.rewrite_match_expr_a(body, e)
+        self.rewrite_match_expr_via(sink, e)
     }
 
     /// The environment-free constant value of `e`, as the literal [`ExprKind`]
@@ -1408,47 +1395,56 @@ impl<'a> Interpreter<'a> {
         None
     }
 
+    /// The flow-sensitive constant value of `e`, as the literal [`ExprKind`]
+    /// that should replace it, or `None` when `e` does not fold to a constant.
+    ///
+    /// This is the value-substitution subset of
+    /// [`reduce_local_a`](Self::reduce_local_a) — `env`-bound locals, forwarded
+    /// `field_env` fields, immutable globals, literal arithmetic, and pure CTFE
+    /// — returning the new kind instead of mutating `body`. The structural
+    /// rewrites (short-circuit / `if` / `match` collapse) are *not* included;
+    /// they reshape more than one node and are committed separately through the
+    /// engine edit API. The caller installs the returned kind via
+    /// `Engine::replace_expr_kind` so the parent map / use index stay coherent.
+    pub fn flow_fold_kind_a(&mut self, body: &Body, e: ExprId) -> Option<ExprKind> {
+        if let Lattice::Const(v) = self.try_fold_a(body, e) {
+            return Some(value_to_arena_kind(v));
+        }
+        if let ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &body.exprs[e].kind
+            && let Lattice::Const(v) = self.global_lattice(module_source, name)
+        {
+            return Some(value_to_arena_kind(v));
+        }
+        if let ExprKind::FieldAccess {
+            expr: inner,
+            field_name,
+            ..
+        } = &body.exprs[e].kind
+            && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+            && let Some(v) = self
+                .field_env
+                .get(index)
+                .and_then(|m| m.get(field_name.as_str()))
+                .copied()
+        {
+            return Some(value_to_arena_kind(v));
+        }
+        if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
+            return Some(value_to_arena_kind(v));
+        }
+        None
+    }
+
     /// Splice a constant-condition `if` statement into its parent block.
+    /// In-place wrapper over [`Self::reduce_local_block_via`] for the CTFE
+    /// scratch-body path; the engine-routed visitor uses the `via` form with
+    /// an `EngineSink`.
     pub fn reduce_local_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
-        let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
-            matches!(
-                &body.stmts[*s].kind,
-                StmtKind::If { condition, .. }
-                    if matches!(body.exprs[*condition].kind, ExprKind::BoolLiteral(_))
-            )
-        });
-        if !has_constant_if {
-            return false;
-        }
-        let old_stmts = std::mem::take(&mut body.blocks[block].stmts);
-        let mut new_stmts: Vec<crate::nir_arena::StmtId> = Vec::new();
-        for s in old_stmts {
-            let spliced = if let StmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } = &body.stmts[s].kind
-            {
-                if let ExprKind::BoolLiteral(value) = body.exprs[*condition].kind {
-                    Some((value, *then_block, *else_block))
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            if let Some((value, then_block, else_block)) = spliced {
-                if value {
-                    new_stmts.extend(body.blocks[then_block].stmts.clone());
-                } else if let Some(eb) = else_block {
-                    new_stmts.extend(body.blocks[eb].stmts.clone());
-                }
-                continue;
-            }
-            new_stmts.push(s);
-        }
-        body.blocks[block].stmts = new_stmts;
-        true
+        let mut sink = BodySink { body };
+        self.reduce_local_block_via(&mut sink, block)
     }
 
     /// Bottom-up reduce the subtree rooted at `e` over the kinds the engine
@@ -1573,8 +1569,8 @@ impl<'a> Interpreter<'a> {
     }
 
     /// Collapse an `if` with a constant condition or equal arms.
-    fn rewrite_if_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
-        let (condition, then_branch, else_branch) = match &body.exprs[e].kind {
+    fn rewrite_if_expr_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
+        let (condition, then_branch, else_branch) = match &sink.body().exprs[e].kind {
             ExprKind::If {
                 condition,
                 then_branch,
@@ -1582,28 +1578,29 @@ impl<'a> Interpreter<'a> {
             } => (*condition, *then_branch, *else_branch),
             _ => return false,
         };
-        let cond_lat = self.expr_to_lattice_a(body, condition);
+        let cond_lat = self.expr_to_lattice_a(sink.body(), condition);
 
         // (1) Constant condition → splice the chosen arm.
         if let Lattice::Const(Value::Bool(b)) = cond_lat {
-            body.exprs[e].kind = if b {
+            let kind = if b {
                 ExprKind::Block(then_branch)
             } else if let Some(eb) = else_branch {
                 ExprKind::Block(eb)
             } else {
                 ExprKind::Unit
             };
+            sink.replace_kind(e, kind);
             return true;
         }
 
         // (2)/(3) require both arms Const.
-        let Lattice::Const(t) = self.block_lattice_a(body, then_branch) else {
+        let Lattice::Const(t) = self.block_lattice_a(sink.body(), then_branch) else {
             return false;
         };
         let Some(eb) = else_branch else {
             return false;
         };
-        let Lattice::Const(ev) = self.block_lattice_a(body, eb) else {
+        let Lattice::Const(ev) = self.block_lattice_a(sink.body(), eb) else {
             return false;
         };
 
@@ -1612,13 +1609,16 @@ impl<'a> Interpreter<'a> {
             && t_b != e_b
         {
             if t_b {
-                let cond_kind = body.exprs[condition].kind.clone();
-                body.exprs[e].kind = cond_kind;
+                let cond_kind = sink.body().exprs[condition].kind.clone();
+                sink.replace_kind(e, cond_kind);
             } else {
-                body.exprs[e].kind = ExprKind::Unary {
-                    op: NirUnaryOp::Not,
-                    expr: condition,
-                };
+                sink.replace_kind(
+                    e,
+                    ExprKind::Unary {
+                        op: NirUnaryOp::Not,
+                        expr: condition,
+                    },
+                );
             }
             return true;
         }
@@ -1627,15 +1627,16 @@ impl<'a> Interpreter<'a> {
         if t != ev {
             return false;
         }
-        if !is_speculatable_a(body, condition) {
+        if !is_speculatable_a(sink.body(), condition) {
             return false;
         }
-        body.exprs[e].kind = value_to_arena_kind(t);
+        sink.replace_kind(e, value_to_arena_kind(t));
         true
     }
 
     /// Collapse a `match` with a constant scrutinee or a bool-discriminator shape.
-    fn rewrite_match_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+    fn rewrite_match_expr_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
+        let body = sink.body();
         let scrutinee = match &body.exprs[e].kind {
             ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
             _ => return false,
@@ -1650,13 +1651,13 @@ impl<'a> Interpreter<'a> {
             };
 
         // Rule 1: const scrutinee → splice the chosen arm.
-        if let Lattice::Const(scrut_v) = self.expr_to_lattice_a(body, scrutinee) {
+        if let Lattice::Const(scrut_v) = self.expr_to_lattice_a(sink.body(), scrutinee) {
             let mut chosen: Option<usize> = None;
             for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
                 if guard.is_some() {
                     return false;
                 }
-                match self.pattern_matches_a(body, &scrut_v, *pat) {
+                match self.pattern_matches_a(sink.body(), &scrut_v, *pat) {
                     PatternMatch::Yes => {
                         chosen = Some(i);
                         break;
@@ -1669,57 +1670,54 @@ impl<'a> Interpreter<'a> {
                 return false;
             };
             let body_e = arms_data[idx].2;
-            let span = body.exprs[body_e].span;
-            let stmt = body.stmts.push(StmtNode {
-                kind: StmtKind::Expr(body_e),
-                span,
-            });
-            let block = body.blocks.push(BlockNode {
-                stmts: vec![stmt],
-                span,
-            });
-            body.exprs[e].kind = ExprKind::Block(block);
+            let span = sink.body().exprs[body_e].span;
+            let stmt = sink.alloc_stmt(StmtKind::Expr(body_e), span);
+            let block = sink.alloc_block(vec![stmt], span);
+            sink.replace_kind(e, ExprKind::Block(block));
             return true;
         }
 
         // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
         // The scrutinee is preserved inside the synthesised `Binary`, and the
         // `Match` node `e` keeps its own span — only its `kind` is replaced.
-        if let Some(replacement) = try_match_bool_discriminator_a(body, &arms_data) {
-            let right = body.exprs.push(ExprNode {
-                kind: ExprKind::EnumConstruct {
+        if let Some(replacement) = try_match_bool_discriminator_a(sink.body(), &arms_data) {
+            let right = sink.alloc_expr(
+                ExprKind::EnumConstruct {
                     enum_type: replacement.enum_type,
                     case_index: replacement.case_index,
                     case_name: replacement.case_name,
                 },
-                type_id: replacement.enum_type,
-                span: replacement.span,
-            });
-            body.exprs[e].kind = ExprKind::Binary {
-                left: scrutinee,
-                op: NirBinaryOp::Eq,
-                right,
-            };
+                replacement.enum_type,
+                replacement.span,
+            );
+            sink.replace_kind(
+                e,
+                ExprKind::Binary {
+                    left: scrutinee,
+                    op: NirBinaryOp::Eq,
+                    right,
+                },
+            );
             return true;
         }
 
         // Rule 3: non-const speculatable scrutinee, all-arms-equal.
-        if !is_speculatable_a(body, scrutinee) {
+        if !is_speculatable_a(sink.body(), scrutinee) {
             return false;
         }
         if arms_data.iter().any(|(g, _, _, _)| g.is_some()) {
             return false;
         }
-        let arms_for_exh: Vec<ArmData> = match &body.exprs[e].kind {
+        let arms_for_exh: Vec<ArmData> = match &sink.body().exprs[e].kind {
             ExprKind::Match { arms, .. } => arms.clone(),
             _ => unreachable!(),
         };
-        if !is_provably_exhaustive_a(body, &arms_for_exh) {
+        if !is_provably_exhaustive_a(sink.body(), &arms_for_exh) {
             return false;
         }
         let mut common: Option<Value> = None;
         for (_, _, b, _) in &arms_data {
-            let Lattice::Const(v) = self.expr_to_lattice_a(body, *b) else {
+            let Lattice::Const(v) = self.expr_to_lattice_a(sink.body(), *b) else {
                 return false;
             };
             match common {
@@ -1729,7 +1727,7 @@ impl<'a> Interpreter<'a> {
             }
         }
         let v = common.expect("at least one arm");
-        body.exprs[e].kind = value_to_arena_kind(v);
+        sink.replace_kind(e, value_to_arena_kind(v));
         true
     }
 
@@ -1987,25 +1985,6 @@ fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Value <-> ExprKind bridge
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn value_to_arena_kind(v: Value) -> ExprKind {
-    match v {
-        Value::Int { value, prim } => ExprKind::IntLiteral {
-            repr: format_int_repr(value, prim),
-            value,
-        },
-        Value::Float { value, .. } => ExprKind::FloatLiteral {
-            repr: format_float_repr(value),
-            value,
-        },
-        Value::Bool(b) => ExprKind::BoolLiteral(b),
-        Value::Char(c) => ExprKind::CharLiteral(c),
-    }
-}
-
 /// Whether the arms cover every scrutinee (a guardless catch-all exists).
 fn is_provably_exhaustive_a(body: &Body, arms: &[ArmData]) -> bool {
     arms.iter()
@@ -2021,27 +2000,22 @@ fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
 }
 
 /// Simplify `false && x` / `true || x` and their mirror forms.
-fn rewrite_short_circuit_a(body: &mut Body, e: ExprId) -> bool {
-    enum Pick {
-        Left,
-        Right,
-    }
-    let pick = match &body.exprs[e].kind {
+fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
+    let body = sink.body();
+    let keep = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
             match (&body.exprs[*left].kind, *op, &body.exprs[*right].kind) {
                 (ExprKind::BoolLiteral(false), NirBinaryOp::Or, _)
-                | (ExprKind::BoolLiteral(true), NirBinaryOp::And, _) => (Pick::Right, *right),
+                | (ExprKind::BoolLiteral(true), NirBinaryOp::And, _) => *right,
                 (_, NirBinaryOp::Or, ExprKind::BoolLiteral(false))
-                | (_, NirBinaryOp::And, ExprKind::BoolLiteral(true)) => (Pick::Left, *left),
+                | (_, NirBinaryOp::And, ExprKind::BoolLiteral(true)) => *left,
                 _ => return false,
             }
         }
         _ => return false,
     };
-    let (_, keep) = pick;
     // Become the kept operand. The other operand is left orphaned.
-    let kept = body.exprs[keep].clone();
-    body.exprs[e] = kept;
+    sink.become_expr(e, keep);
     true
 }
 
@@ -2127,591 +2101,3 @@ struct EnumEqReplacement {
 }
 
 impl EnumEqReplacement {}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Pure value evaluation (Bool / Int / Float)
-// ──────────────────────────────────────────────────────────────────────────────
-
-/// Evaluate a binary op on two compile-time values.
-fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<Value> {
-    match (left, right) {
-        (Value::Bool(l), Value::Bool(r)) => eval_bool_binary(l, op, r),
-        (Value::Char(l), Value::Char(r)) => eval_char_binary(l, op, r),
-        (Value::Float { value: l, prim: lp }, Value::Float { value: r, prim: rp }) if lp == rp => {
-            eval_float_binary(l, op, r, lp)
-        }
-        (Value::Int { value: l, prim: lp }, Value::Int { value: r, prim: rp }) if lp == rp => {
-            eval_int_binary(l, op, r, lp)
-        }
-        _ => None,
-    }
-}
-
-/// Evaluate a unary op on a compile-time value.
-fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
-    match op {
-        NirUnaryOp::Neg => match operand {
-            Value::Int { value, prim } => {
-                eval_int_neg(value, prim).map(|v| Value::Int { value: v, prim })
-            }
-            Value::Float { value, prim } => {
-                let negated = f64::from_bits(value.to_bits() ^ (1u64 << 63));
-                Some(Value::Float {
-                    value: negated,
-                    prim,
-                })
-            }
-            Value::Bool(_) | Value::Char(_) => None,
-        },
-        NirUnaryOp::Not => match operand {
-            Value::Bool(b) => Some(Value::Bool(!b)),
-            _ => None,
-        },
-        NirUnaryOp::BitNot => match operand {
-            Value::Int { value, prim } => Some(Value::Int {
-                value: truncate_int(!value, prim),
-                prim,
-            }),
-            _ => None,
-        },
-        NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref => None,
-    }
-}
-
-/// Evaluate an `as` cast at compile time.
-///
-/// Source values are the lattice-resolved [`Value`] of the cast input;
-/// `target` is the destination primitive (resolved from the cast node's
-/// `type_id`). Returns `None` for unsupported pairs — the caller maps
-/// that to [`Lattice::NonConst`] so the runtime cast still happens, no
-/// bogus value gets folded in.
-///
-/// The supported set mirrors what the elaborator permits in source:
-///
-/// - `Int` source ↦ Int (already supported), Float, Char (only when
-///   source is `U8` per [`expr.rs`]'s `u8 as char` carve-out).
-/// - `Float` source ↦ Float, Int (saturating, matching Wasm's
-///   `*.trunc_sat_*` semantics — Rust's `as` since 1.45 implements the
-///   same rounding/saturation rules so we forward to it).
-/// - `Bool` source ↦ Int (0/1), Float (0.0/1.0). Bool → Bool is the
-///   identity.
-/// - `Char` source ↦ Int (codepoint, then truncated). Char → Char is the
-///   identity.
-///
-/// 128-bit (`I128`/`U128`) and SIMD (`V128`) targets are reachable here
-/// (they are valid `Primitive` variants) but currently unsupported and
-/// fall through to `None`.
-fn eval_cast(source: Value, target: PrimitiveType) -> Option<Value> {
-    let int_target = is_int_prim(target);
-    let float_target = matches!(target, PrimitiveType::F32 | PrimitiveType::F64);
-    match source {
-        // The source `prim` is irrelevant for int→int because
-        // `truncate_int` operates on the already sign- or zero-extended
-        // u64 representation set up at construction time.
-        Value::Int { value, .. } if int_target => Some(Value::Int {
-            value: truncate_int(value, target),
-            prim: target,
-        }),
-        Value::Int { value, prim } if float_target => Some(int_to_float(value, prim, target)),
-        // Only `u8 as char` is permitted by the elaborator; every u8 is a
-        // valid Unicode scalar, so `char::from(u8)` is total.
-        Value::Int {
-            value,
-            prim: PrimitiveType::U8,
-        } if target == PrimitiveType::Char => Some(Value::Char(char::from(value as u8))),
-
-        Value::Float { value, prim } if float_target => Some(float_to_float(value, prim, target)),
-        Value::Float { value, prim } if int_target => Some(float_to_int(value, prim, target)),
-
-        Value::Bool(b) if int_target => Some(Value::Int {
-            value: u64::from(b),
-            prim: target,
-        }),
-        Value::Bool(b) if float_target => Some(Value::Float {
-            value: if b { 1.0 } else { 0.0 },
-            prim: target,
-        }),
-        Value::Bool(b) if target == PrimitiveType::Bool => Some(Value::Bool(b)),
-
-        Value::Char(c) if int_target => Some(Value::Int {
-            value: truncate_int(u64::from(c as u32), target),
-            prim: target,
-        }),
-        Value::Char(c) if target == PrimitiveType::Char => Some(Value::Char(c)),
-
-        _ => None,
-    }
-}
-
-/// True for the eight integer primitives the engine models. 128-bit
-/// (`I128`/`U128`) is intentionally excluded — those types lower to
-/// stdlib calls in source, not a `Cast` node niri can fold.
-fn is_int_prim(p: PrimitiveType) -> bool {
-    matches!(
-        p,
-        PrimitiveType::I8
-            | PrimitiveType::I16
-            | PrimitiveType::I32
-            | PrimitiveType::I64
-            | PrimitiveType::U8
-            | PrimitiveType::U16
-            | PrimitiveType::U32
-            | PrimitiveType::U64,
-    )
-}
-
-/// Convert an integer (held as the sign-extended u64 bit pattern of
-/// `prim`) into a float of `target` width. Signed widths are routed
-/// through `i64` so the negative range survives; unsigned widths use
-/// `u64` directly. F32 results are widened back to f64 so the engine's
-/// canonical [`Value::Float`] repr is preserved.
-fn int_to_float(value: u64, prim: PrimitiveType, target: PrimitiveType) -> Value {
-    let f = if is_signed_int(prim) {
-        // `truncate_int` already sign-extended `value` into the i64 range
-        // for I8/I16/I32, and an I64 value's u64 bits round-trip through
-        // `as i64 as f64`.
-        match target {
-            PrimitiveType::F32 => f64::from((value as i64) as f32),
-            _ => (value as i64) as f64,
-        }
-    } else {
-        match target {
-            PrimitiveType::F32 => f64::from(value as f32),
-            _ => value as f64,
-        }
-    };
-    Value::Float {
-        value: f,
-        prim: target,
-    }
-}
-
-/// Float ↔ float conversion. Widening (f32 → f64) is a no-op on the
-/// stored f64 since every f32 is exactly representable; narrowing
-/// (f64 → f32) routes through `as f32` to apply the rounding step,
-/// then re-widens to f64 for storage. Same-width casts are the identity.
-fn float_to_float(value: f64, prim: PrimitiveType, target: PrimitiveType) -> Value {
-    let v = match (prim, target) {
-        (PrimitiveType::F64, PrimitiveType::F32) => f64::from(value as f32),
-        (PrimitiveType::F32 | PrimitiveType::F64, PrimitiveType::F64)
-        | (PrimitiveType::F32, PrimitiveType::F32) => value,
-        _ => panic!("float_to_float: non-float prim ({prim:?} → {target:?})"),
-    };
-    Value::Float {
-        value: v,
-        prim: target,
-    }
-}
-
-/// Float → integer with Wasm `trunc_sat` semantics: NaN ↦ 0, ±∞ saturate
-/// to the target's MIN/MAX, finite values truncate toward zero with
-/// saturation. Rust's `as` since 1.45 matches this exactly, so we
-/// dispatch through it for the source/target widths that map directly.
-///
-/// Caller guarantees `target` is one of the i8..u64 primitives (the
-/// dispatch in [`eval_cast`] enforces this); panics otherwise to flag
-/// a bug rather than fabricate a zero.
-fn float_to_int(value: f64, prim: PrimitiveType, target: PrimitiveType) -> Value {
-    // For F32 sources the stored f64 is bit-equivalent to the original
-    // f32, but the truncation must be performed at f32 precision to
-    // match the runtime cast — large magnitudes saturate sooner. Cast
-    // back through f32 first when needed; otherwise the f64 path is a
-    // no-op widening and the same code computes the answer.
-    let raw = match prim {
-        PrimitiveType::F32 => trunc_sat_to_int(f64::from(value as f32), target),
-        _ => trunc_sat_to_int(value, target),
-    };
-    Value::Int {
-        value: truncate_int(raw, target),
-        prim: target,
-    }
-}
-
-/// Saturating float → int conversion, dispatched by target width.
-/// Operates on f64 since every f32 fits exactly; the caller is
-/// responsible for narrowing to f32 precision first when the source
-/// type was F32.
-fn trunc_sat_to_int(value: f64, target: PrimitiveType) -> u64 {
-    match target {
-        PrimitiveType::I8 => i64::from(value as i8) as u64,
-        PrimitiveType::I16 => i64::from(value as i16) as u64,
-        PrimitiveType::I32 => i64::from(value as i32) as u64,
-        PrimitiveType::I64 => value as i64 as u64,
-        PrimitiveType::U8 => u64::from(value as u8),
-        PrimitiveType::U16 => u64::from(value as u16),
-        PrimitiveType::U32 => u64::from(value as u32),
-        PrimitiveType::U64 => value as u64,
-        _ => panic!("trunc_sat_to_int: non-integer target {target:?}"),
-    }
-}
-
-fn eval_bool_binary(l: bool, op: NirBinaryOp, r: bool) -> Option<Value> {
-    match op {
-        NirBinaryOp::And => Some(Value::Bool(l && r)),
-        NirBinaryOp::Or => Some(Value::Bool(l || r)),
-        NirBinaryOp::Eq => Some(Value::Bool(l == r)),
-        NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
-        // bool implements Ord with `false < true`. Spelled with `&&`
-        // rather than `<` to satisfy clippy's `bool_comparison` lint
-        // without tripping `needless_bitwise_bool`.
-        NirBinaryOp::Lt => Some(Value::Bool(!l && r)),
-        NirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        NirBinaryOp::Gt => Some(Value::Bool(l && !r)),
-        NirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
-        _ => None,
-    }
-}
-
-/// `char` comparisons. char implements `Eq` and `Ord` (codepoint
-/// order); arithmetic / bitwise ops are not defined.
-fn eval_char_binary(l: char, op: NirBinaryOp, r: char) -> Option<Value> {
-    match op {
-        NirBinaryOp::Eq => Some(Value::Bool(l == r)),
-        NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
-        NirBinaryOp::Lt => Some(Value::Bool(l < r)),
-        NirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        NirBinaryOp::Gt => Some(Value::Bool(l > r)),
-        NirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
-        _ => None,
-    }
-}
-
-fn eval_int_binary(lval: u64, op: NirBinaryOp, rval: u64, prim: PrimitiveType) -> Option<Value> {
-    match op {
-        NirBinaryOp::Add => Some(Value::Int {
-            value: truncate_int(lval.wrapping_add(rval), prim),
-            prim,
-        }),
-        NirBinaryOp::Sub => Some(Value::Int {
-            value: truncate_int(lval.wrapping_sub(rval), prim),
-            prim,
-        }),
-        NirBinaryOp::Mul => Some(Value::Int {
-            value: truncate_int(lval.wrapping_mul(rval), prim),
-            prim,
-        }),
-        NirBinaryOp::Div => eval_int_div(lval, rval, prim).map(|value| Value::Int { value, prim }),
-        NirBinaryOp::Mod => eval_int_mod(lval, rval, prim).map(|value| Value::Int { value, prim }),
-
-        NirBinaryOp::Eq
-        | NirBinaryOp::NotEq
-        | NirBinaryOp::Lt
-        | NirBinaryOp::LtEq
-        | NirBinaryOp::Gt
-        | NirBinaryOp::GtEq => Some(Value::Bool(eval_int_cmp(lval, op, rval, prim))),
-
-        NirBinaryOp::BitAnd => Some(Value::Int {
-            value: truncate_int(lval & rval, prim),
-            prim,
-        }),
-        NirBinaryOp::BitOr => Some(Value::Int {
-            value: truncate_int(lval | rval, prim),
-            prim,
-        }),
-        NirBinaryOp::BitXor => Some(Value::Int {
-            value: truncate_int(lval ^ rval, prim),
-            prim,
-        }),
-        NirBinaryOp::Shl => Some(Value::Int {
-            value: eval_int_shl(lval, rval, prim),
-            prim,
-        }),
-        NirBinaryOp::Shr => Some(Value::Int {
-            value: eval_int_shr(lval, rval, prim),
-            prim,
-        }),
-
-        NirBinaryOp::And | NirBinaryOp::Or | NirBinaryOp::RefEq | NirBinaryOp::RefNotEq => None,
-    }
-}
-
-fn eval_int_cmp(lval: u64, op: NirBinaryOp, rval: u64, prim: PrimitiveType) -> bool {
-    if is_signed_int(prim) {
-        let l = lval as i64;
-        let r = rval as i64;
-        match op {
-            NirBinaryOp::Eq => l == r,
-            NirBinaryOp::NotEq => l != r,
-            NirBinaryOp::Lt => l < r,
-            NirBinaryOp::LtEq => l <= r,
-            NirBinaryOp::Gt => l > r,
-            NirBinaryOp::GtEq => l >= r,
-            _ => unreachable!(),
-        }
-    } else {
-        match op {
-            NirBinaryOp::Eq => lval == rval,
-            NirBinaryOp::NotEq => lval != rval,
-            NirBinaryOp::Lt => lval < rval,
-            NirBinaryOp::LtEq => lval <= rval,
-            NirBinaryOp::Gt => lval > rval,
-            NirBinaryOp::GtEq => lval >= rval,
-            _ => unreachable!(),
-        }
-    }
-}
-
-fn eval_int_shl(lval: u64, rval: u64, prim: PrimitiveType) -> u64 {
-    let bits = int_bit_width(prim);
-    let shift = (rval as u32) & (bits - 1);
-    truncate_int(lval.wrapping_shl(shift), prim)
-}
-
-fn eval_int_shr(lval: u64, rval: u64, prim: PrimitiveType) -> u64 {
-    let bits = int_bit_width(prim);
-    let shift = (rval as u32) & (bits - 1);
-    if is_signed_int(prim) {
-        let result = (lval as i64).wrapping_shr(shift);
-        truncate_int(result as u64, prim)
-    } else {
-        truncate_int(lval.wrapping_shr(shift), prim)
-    }
-}
-
-fn eval_int_div(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    if rval == 0 {
-        return None;
-    }
-    match prim {
-        PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64 => {
-            Some(truncate_int(lval / rval, prim))
-        }
-        PrimitiveType::I8 => {
-            let result = (lval as i8).wrapping_div(rval as i8);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I16 => {
-            let result = (lval as i16).wrapping_div(rval as i16);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I32 => {
-            if lval as i32 == i32::MIN && rval as i32 == -1 {
-                return None;
-            }
-            let result = (lval as i32).wrapping_div(rval as i32);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I64 => {
-            if lval as i64 == i64::MIN && rval as i64 == -1 {
-                return None;
-            }
-            let result = (lval as i64).wrapping_div(rval as i64);
-            Some(result as u64)
-        }
-        _ => None,
-    }
-}
-
-fn eval_int_mod(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    if rval == 0 {
-        return None;
-    }
-    match prim {
-        PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64 => {
-            Some(truncate_int(lval % rval, prim))
-        }
-        PrimitiveType::I8 => {
-            let result = (lval as i8).wrapping_rem(rval as i8);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I16 => {
-            let result = (lval as i16).wrapping_rem(rval as i16);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I32 => {
-            if lval as i32 == i32::MIN && rval as i32 == -1 {
-                return None;
-            }
-            let result = (lval as i32).wrapping_rem(rval as i32);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I64 => {
-            if lval as i64 == i64::MIN && rval as i64 == -1 {
-                return None;
-            }
-            let result = (lval as i64).wrapping_rem(rval as i64);
-            Some(result as u64)
-        }
-        _ => None,
-    }
-}
-
-fn eval_int_neg(value: u64, prim: PrimitiveType) -> Option<u64> {
-    match prim {
-        PrimitiveType::I8 => {
-            let result = (value as i8).wrapping_neg();
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I16 => {
-            let result = (value as i16).wrapping_neg();
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I32 => {
-            let result = (value as i32).wrapping_neg();
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I64 => {
-            let result = (value as i64).wrapping_neg();
-            Some(result as u64)
-        }
-        _ => None,
-    }
-}
-
-fn eval_float_binary(lval: f64, op: NirBinaryOp, rval: f64, prim: PrimitiveType) -> Option<Value> {
-    match prim {
-        PrimitiveType::F32 => eval_f32_binary(lval, op, rval),
-        PrimitiveType::F64 => eval_f64_binary(lval, op, rval),
-        _ => None,
-    }
-}
-
-fn eval_f64_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
-    match op {
-        NirBinaryOp::Add => non_nan_float(lval + rval, PrimitiveType::F64),
-        NirBinaryOp::Sub => non_nan_float(lval - rval, PrimitiveType::F64),
-        NirBinaryOp::Mul => non_nan_float(lval * rval, PrimitiveType::F64),
-        NirBinaryOp::Div => non_nan_float(lval / rval, PrimitiveType::F64),
-        _ => eval_float_comparison(lval, op, rval),
-    }
-}
-
-fn eval_f32_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
-    let l = lval as f32;
-    let r = rval as f32;
-    match op {
-        NirBinaryOp::Add => non_nan_float(f64::from(l + r), PrimitiveType::F32),
-        NirBinaryOp::Sub => non_nan_float(f64::from(l - r), PrimitiveType::F32),
-        NirBinaryOp::Mul => non_nan_float(f64::from(l * r), PrimitiveType::F32),
-        NirBinaryOp::Div => non_nan_float(f64::from(l / r), PrimitiveType::F32),
-        NirBinaryOp::Eq => Some(Value::Bool(l == r)),
-        NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
-        NirBinaryOp::Lt => Some(Value::Bool(l < r)),
-        NirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        NirBinaryOp::Gt => Some(Value::Bool(l > r)),
-        NirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
-        _ => None,
-    }
-}
-
-fn eval_float_comparison(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
-    match op {
-        NirBinaryOp::Eq => Some(Value::Bool(lval == rval)),
-        NirBinaryOp::NotEq => Some(Value::Bool(lval != rval)),
-        NirBinaryOp::Lt => Some(Value::Bool(lval < rval)),
-        NirBinaryOp::LtEq => Some(Value::Bool(lval <= rval)),
-        NirBinaryOp::Gt => Some(Value::Bool(lval > rval)),
-        NirBinaryOp::GtEq => Some(Value::Bool(lval >= rval)),
-        _ => None,
-    }
-}
-
-fn non_nan_float(value: f64, prim: PrimitiveType) -> Option<Value> {
-    if value.is_nan() {
-        return None;
-    }
-    Some(Value::Float { value, prim })
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Type queries, truncation, formatting
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn is_signed_int(prim: PrimitiveType) -> bool {
-    matches!(
-        prim,
-        PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 | PrimitiveType::I64
-    )
-}
-
-fn int_bit_width(prim: PrimitiveType) -> u32 {
-    match prim {
-        PrimitiveType::I8 | PrimitiveType::U8 => 8,
-        PrimitiveType::I16 | PrimitiveType::U16 => 16,
-        PrimitiveType::I32 | PrimitiveType::U32 => 32,
-        PrimitiveType::I64 | PrimitiveType::U64 => 64,
-        _ => 32,
-    }
-}
-
-fn is_f32_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Primitive(PrimitiveType::F32)
-    )
-}
-
-/// Resolve any primitive type from a [`TypeId`]. Used by the cast path
-/// where the target may be int / float / bool / char (i128/u128/v128
-/// are returned but [`eval_cast`] declines to fold them) and by
-/// `IntLiteral` lattice resolution after a [`is_int_prim`] filter.
-fn prim_of(type_id: TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
-    match type_table.get(type_id) {
-        ResolvedType::Primitive(p) => Some(*p),
-        _ => None,
-    }
-}
-
-/// Truncate / sign-extend an integer bit pattern to fit the target prim.
-#[must_use]
-pub(crate) fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
-    match prim {
-        PrimitiveType::U8 => value & 0xFF,
-        PrimitiveType::U16 => value & 0xFFFF,
-        PrimitiveType::U32 => value & 0xFFFF_FFFF,
-        PrimitiveType::U64 => value,
-        PrimitiveType::I8 => i64::from(value as i8) as u64,
-        PrimitiveType::I16 => i64::from(value as i16) as u64,
-        PrimitiveType::I32 => i64::from(value as i32) as u64,
-        PrimitiveType::I64 => value,
-        _ => value,
-    }
-}
-
-/// Render an integer bit pattern as decimal text, signed when the prim
-/// is signed.
-#[must_use]
-pub(crate) fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
-    if is_signed_int(prim) {
-        (value as i64).to_string()
-    } else {
-        value.to_string()
-    }
-}
-
-/// Render a `char` as a Wado-friendly literal repr (`'A'`, `'\n'`,
-/// `'\u{1F600}'`, …). Used when re-emitting a folded `char` value as a
-/// `ExprKind::CharLiteral`.
-#[must_use]
-pub(crate) fn format_char_repr(c: char) -> String {
-    match c {
-        '\\' => "'\\\\'".to_string(),
-        '\'' => "'\\''".to_string(),
-        '\n' => "'\\n'".to_string(),
-        '\r' => "'\\r'".to_string(),
-        '\t' => "'\\t'".to_string(),
-        '\0' => "'\\0'".to_string(),
-        c if c.is_ascii_graphic() || c == ' ' => format!("'{c}'"),
-        c => format!("'\\u{{{:X}}}'", c as u32),
-    }
-}
-
-/// Render a float as a Wado-friendly literal repr (`3.25`, `0.0`,
-/// `Infinity`, `-Infinity`, …). Trailing `.0` is appended to integral
-/// values so the result parses back as a float literal.
-#[must_use]
-pub(crate) fn format_float_repr(value: f64) -> String {
-    if value.is_infinite() {
-        return if value.is_sign_positive() {
-            "Infinity".to_string()
-        } else {
-            "-Infinity".to_string()
-        };
-    }
-    let s = value.to_string();
-    if s.contains('.') || s.contains('e') || s.contains('E') {
-        s
-    } else {
-        format!("{s}.0")
-    }
-}
