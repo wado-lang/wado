@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781221690971,
+  "lastUpdate": 1781273918028,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32241,6 +32241,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 432497,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9c66cbecbb2be52f2c7b50ddbc76cd11e0875e23",
+          "message": "Merge pull request #1356 from wado-lang/claude/wizardly-fermat-xkbx1r\n\nperf(optimizer): flow-sensitive const-folding and field forwarding via the ValueGraph",
+          "timestamp": "2026-06-12T23:08:06+09:00",
+          "tree_id": "4f488b02d7dbcdc4c8c0e16360e3d463f38c7109",
+          "url": "https://github.com/wado-lang/wado/commit/9c66cbecbb2be52f2c7b50ddbc76cd11e0875e23"
+        },
+        "date": 1781273917478,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432251,
             "unit": "bytes"
           }
         ]
