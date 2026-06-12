@@ -464,8 +464,8 @@ mod tests {
                 .map(|(l, _)| l)
                 .collect();
             assert!(
-                param_labels.contains(&"a:".to_string())
-                    && param_labels.contains(&"b:".to_string()),
+                param_labels.contains(&"a: ".to_string())
+                    && param_labels.contains(&"b: ".to_string()),
                 "expected `a:` and `b:` parameter hints at `add(1, 2)`; got {param_labels:?}",
             );
         });
@@ -489,8 +489,8 @@ mod tests {
                 .map(|(l, _)| l)
                 .collect();
             assert!(
-                param_labels.contains(&"a:".to_string())
-                    && param_labels.contains(&"b:".to_string()),
+                param_labels.contains(&"a: ".to_string())
+                    && param_labels.contains(&"b: ".to_string()),
                 "expected `a:`/`b:` parameter hints at `add(a, b)`; got {param_labels:?}",
             );
         });
@@ -560,7 +560,7 @@ mod tests {
                 .map(|(l, _)| l)
                 .collect();
             assert!(
-                param_labels.contains(&"v:".to_string()),
+                param_labels.contains(&"v: ".to_string()),
                 "expected `v:` parameter hint at `b.set_to(42)`; got {param_labels:?}",
             );
         });
@@ -588,8 +588,8 @@ mod tests {
                 .map(|(l, _)| l)
                 .collect();
             assert!(
-                param_labels.contains(&"x:".to_string())
-                    && param_labels.contains(&"y:".to_string()),
+                param_labels.contains(&"x: ".to_string())
+                    && param_labels.contains(&"y: ".to_string()),
                 "expected `x:` and `y:` parameter hints at `Point::at(3, 4)`; got {param_labels:?}",
             );
         });
@@ -738,7 +738,7 @@ mod tests {
                 .map(|(l, _)| l)
                 .collect();
             assert!(
-                param_labels.contains(&"_:".to_string()),
+                param_labels.contains(&"_: ".to_string()),
                 "underscore param should still produce a `_:` hint; got {param_labels:?}",
             );
         });
@@ -866,8 +866,8 @@ mod tests {
                 .map(|(l, _)| l)
                 .collect();
             assert!(
-                param_labels.contains(&"a:".to_string())
-                    && param_labels.contains(&"b:".to_string()),
+                param_labels.contains(&"a: ".to_string())
+                    && param_labels.contains(&"b: ".to_string()),
                 "cross-module `add(1, 2)` should still surface `a:`/`b:`; got {param_labels:?}",
             );
         });

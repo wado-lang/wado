@@ -57,7 +57,7 @@ fn engine_returns_parameter_hints_for_free_function() {
             .map(|h| h.label.clone())
             .collect();
         assert!(
-            labels.contains(&"a:".to_string()) && labels.contains(&"b:".to_string()),
+            labels.contains(&"a: ".to_string()) && labels.contains(&"b: ".to_string()),
             "expected `a:` and `b:` hints; got {labels:?}",
         );
     });
@@ -83,7 +83,7 @@ fn engine_returns_parameter_hints_for_method_call() {
             .map(|h| h.label.clone())
             .collect();
         assert!(
-            labels.contains(&"by:".to_string()),
+            labels.contains(&"by: ".to_string()),
             "expected `by:` hint at `c.bump(5)`; got {labels:?}",
         );
     });
