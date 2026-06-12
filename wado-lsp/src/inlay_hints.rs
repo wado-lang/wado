@@ -130,7 +130,7 @@ impl HintCollector<'_> {
     fn push_param_hint(&mut self, param_name: &str, arg_span: Span) {
         self.hints.push(InlayHint {
             position: self.position_before(arg_span),
-            label: format!("{param_name}:"),
+            label: format!("{param_name}: "),
             kind: InlayHintKind::Parameter,
             padding_left: None,
             padding_right: Some(true),

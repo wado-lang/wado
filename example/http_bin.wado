@@ -44,8 +44,8 @@ struct RequestInfo {
     args: TreeMap<String, String>,
     headers: TreeMap<String, String>,
     origin: String,
-    url: String,
-    data: Option<String>,
+    url: Url,
+    body: Option<String>,
 }
 impl Serialize for RequestInfo;
 
@@ -180,7 +180,7 @@ fn parse_status_code(s: String) -> Option<u16> {
     return null;
 }
 
-fn build_request_json(method: Method, url: &Url, headers: &Headers, body: Option<String>) -> List<u8> {
+fn build_request_json(method: Method, url: Url, headers: &Headers, body: Option<String>) -> List<u8> {
     let origin = match get_header(headers, "x-forwarded-for") {
         Some(s) => s,
         None => "",
@@ -191,8 +191,8 @@ fn build_request_json(method: Method, url: &Url, headers: &Headers, body: Option
         args: url.query_params(),
         headers: headers_to_map(headers),
         origin,
-        url: url.to_string(),
-        data: body,
+        url,
+        body,
     });
 }
 
@@ -223,7 +223,7 @@ fn echo(request: Request, read_body: bool) -> RouteResponse {
     let method = request.get_method();
     let h = request.get_headers();
     let body = if read_body { Option::Some(read_body_from_request(request)) } else { null };
-    return json_response(200, build_request_json(method, &url, &h, body));
+    return json_response(200, build_request_json(method, url, &h, body));
 }
 
 fn respond_home() -> RouteResponse {
@@ -288,7 +288,7 @@ fn respond_anything(request: Request) -> RouteResponse {
     let method = request.get_method();
     let h = request.get_headers();
     let body = if method matches { Post | Put | Patch } { Option::Some(read_body_from_request(request)) } else { null };
-    return json_response(200, build_request_json(method, &url, &h, body));
+    return json_response(200, build_request_json(method, url, &h, body));
 }
 
 fn format_allow(methods: &List<Method>) -> String {
