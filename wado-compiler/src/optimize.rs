@@ -678,7 +678,7 @@ fn run_optimization_passes(
         "nir/store_load_forward_post_scalarize",
         project,
         profiler,
-        |p| forward_stores_to_loads_all(p),
+        forward_stores_to_loads_all,
     );
     // Final cleanup: flatten any `__tmpl:` labeled blocks the fixpoint
     // preserved as anchors for `tmpl_hoist`. `tmpl_hoist` has finished

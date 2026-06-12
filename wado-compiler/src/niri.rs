@@ -97,7 +97,10 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::const_eval::*;
+use crate::const_eval::{
+    eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, is_signed_int, prim_of,
+    value_to_arena_kind,
+};
 // Re-export the const-eval `Value` under `niri` for the public API / tests that
 // historically imported `niri::Value` (it now lives in `const_eval`).
 pub use crate::const_eval::Value;
@@ -598,7 +601,7 @@ mod field_snapshot_tests {
 /// CTFE scratch bodies, where coherence with an engine's parent map / use
 /// index is moot — while the optimize layer's `EngineSink` routes every edit
 /// through `Engine::*` so the real body's maps stay coherent (the Stage 6
-/// env-bound const_folding migration).
+/// env-bound `const_folding` migration).
 pub(crate) trait EditSink {
     fn body(&self) -> &Body;
     /// Replace `e`'s kind. The new kind's children must already be parented to
