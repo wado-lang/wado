@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781277277482,
+  "lastUpdate": 1781298858082,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32353,6 +32353,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a12da69e1428f9088118f9a85d76feecddcc1b55"
         },
         "date": 1781277277015,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432251,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a12da69e1428f9088118f9a85d76feecddcc1b55",
+          "message": "Merge pull request #1357 from wado-lang/gfx/fix_inly_hint_params\n\nfix: inlay hint params",
+          "timestamp": "2026-06-13T00:05:32+09:00",
+          "tree_id": "59da20cc4ef3c11cb9ceed7c8db2dfd42b16c617",
+          "url": "https://github.com/wado-lang/wado/commit/a12da69e1428f9088118f9a85d76feecddcc1b55"
+        },
+        "date": 1781298857529,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
