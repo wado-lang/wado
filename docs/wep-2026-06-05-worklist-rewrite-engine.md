@@ -286,108 +286,52 @@ Builder prerequisites (landed):
 
 Migrations:
 
-- [ ] Env-free `const_folding` as algebraic rules over Value kinds.
-      Landed slice: `store_load_forward` substitutes any read whose VN
-      is a literal (including seeded field reads). Remaining: the
-      ValuePool's smart constructors (`binary` / `unary` / `cast`) fold
-      literal operands into a literal `ValueId`. Correctness needs the
-      operand width and signedness, so `ValueKind::Int` carries a numeric
-      type (or the constructor takes the result `TypeId`); `i32 + i32`
-      then wraps at 32 bits exactly as `niri` does. This is the last
-      capability the builder lacks before `field_env` is deletable: a
-      forwarded `max.low → -1` is only useful if the enclosing
-      `-1 == -1` folds too. (Measured: with field forwarding complete,
-      the only fixtures that still need the visitor's field path are the
-      six whose asserts hinge on such a comparison fold — int128,
-      static_1/2, coerce_int_3, match_literal_i128.)
-- [x] Env-bound `const_folding` — niri commits via the engine. The
-      const-fold visitor drives its bottom-up flow-sensitive walk over an
-      `Engine` session and commits every niri rewrite through an `EditSink`
-      (`replace_kind` / `become_expr` / `alloc_*` / `set_block_stmts`) instead
-      of mutating `Body` in place, so the parent map / use index stay coherent
-      through the walk. niri's rewrites are sink-generic (`reduce_local_via`,
-      `reduce_local_block_via`, the short-circuit / if / match collapses); a
-      `BodySink` backs the in-place CTFE scratch path, an `EngineSink` (in
-      `optimize::const_folding`) backs the real walk. Goldens byte-identical;
-      full e2e green.
-- [x] ValueGraph reference look-through (the value-typed half of D). A
-      `let r = &v` reference now forwards `r.f` from `v`'s field slot in the
-      builder (`ref_targets`, cleared on reassignment; the pointee's live slot
-      state is used as-is, so a stale forward is impossible). This closed the
-      ValueGraph's reference-aliasing blind spot — `Ref(v) ≠ v` by receiver VN
-      — that the WEP had kept Skel-side. Nine goldens improve (the
-      `opt_licm_immut_ref*` cluster now const-folds immutable-ref fields).
-- [x] ValueGraph call-survival for immutable-only locals (`mut_escaped`). The
-      builder used to invalidate every reference-aliased local's fields on
-      every call (`bump_call_effects` over the whole `aliased` set), so a field
-      read never forwarded across a call once the local's address was taken —
-      even when the only handle was an immutable `&v`. `optimize::alias` now
-      derives a `mut_escaped` set _subtractively_ from the proven-conservative
-      `aliased` set: a local is dropped only when it is provably immutable
-      across calls — its type is transitively free of shared mutable state
-      (`CallImmutability`: no `&mut`, `Box`/`List`, array, resource, reactive,
-      or variant/generic/unknown shape) _and_ it has no syntactic mutable
-      escape (`&mut v`, a mut-ref argument, a `&mut self` receiver read from the
-      callee's declared first-param type à la `copy_prop`, or a `stores`
-      stash). The result is closed over the reference alias groups so a `&mut`
-      to a shared pointee still clobbers every alias. `bump_call_effects` bumps
-      only `mut_escaped`; field-_write_ granularity still uses the full
-      `aliased`. Effect: POD value structs whose only escape is an immutable
-      `&self` receiver (e.g. `i128`/`u128`) keep their forwarded fields across
-      the formatter calls, so the `high < 0` branch in the inlined `abs_u128`
-      folds away — a CTFE-cluster fold the IR-level ValueGraph passes now do
-      _without_ niri's evaluator. Five goldens improve; full e2e green. (A
-      first attempt built `mut_escaped` additively from syntactic `&mut` sites
-      and miscompiled `ref_2` — boxing erases the `&mut`, and a Box/List value
-      passed by value is itself a mutable handle; the subtractive,
-      type-driven model above is the fix.)
-- [x] HFS shadow-init forwarding via a post-`field_scalarize` store→load
-      forward. `field_scalarize` runs once after the fixed-point loop and emits
-      scalarization shadow inits (`__hfs_x = obj.f`); previously the only
-      post-scalarize fold was `field_env`-based `const_fold_post_global`. An
-      ungated `forward_stores_to_loads_all` (factored from the gated pass via a
-      shared `forward_one`) now runs once after `field_scalarize`, before
-      `const_object_globalization`. It folds a shadow read whose field the
-      ValueGraph still knows, and lets DCE drop a wholly-constant scalar chain.
-      This closed the entire HFS cluster: disabling `field_env` now regresses 5
-      fixtures, down from 26. (`hfs_break_from_scalar_state_commits` was
-      rewritten to keep its scalar non-constant — `self.base + k` through an
-      `#[inline(never)]` method — so the commit-on-break machinery it guards
-      survives the improved optimizer instead of folding to one constant store.)
-- [x] ValueGraph constant folding of pure arithmetic (the WEP's long-noted
-      "last capability"). The `ValuePool` `Binary` / `Unary` nodes now fold
-      literal operands by reusing niri's exact CTFE (`eval_binary` /
-      `eval_unary`), reading each operand's `PrimitiveType` from its NIR type
-      (`type_table` threaded through the engine); `store_load_forward`
-      synthesizes the forwarded literal from the value-graph kind
-      (`value_to_arena_kind`) when a folded value has no source literal. This
-      lets a `Box` / `&mut` field-accumulation chain (`n.value = n.value + 1`,
-      ×N) collapse to constants without `field_env` — verified field-env-off on
-      the reference-copy probe (`add1(&mut n)` ×4 → `1,2,3,4`), including with
-      an intervening immutable `&n` read. Full e2e green; two goldens improve
-      (a freed temp, a DCE'd dead iterator type).
-- [ ] `field_env` not yet deletable: disabling it still regresses 5 fixtures.
-      The arithmetic-folding capability above was necessary but, for these
-      specific fixtures, not sufficient — they carry residual structural
-      quirks the general pattern (which now folds) does not:
+- [x] Env-free `const_folding` over Value kinds. The `ValuePool` `Binary` /
+      `Unary` nodes fold literal operands by reusing niri's exact CTFE
+      (`eval_binary` / `eval_unary`, operand `PrimitiveType` from the NIR type
+      so integer wrapping matches; `type_table` threaded via the engine);
+      `store_load_forward` substitutes any read whose VN is a literal and
+      synthesizes the literal `ExprKind` (`value_to_arena_kind`) for a folded
+      value with no source. A `Box` / `&mut` field-accumulation chain
+      (`n.value = n.value + 1` ×N) now collapses without `field_env`.
+- [x] Env-bound `const_folding` — niri commits via the engine through an
+      `EditSink` (`BodySink` for CTFE scratch, `EngineSink` for the real walk)
+      instead of mutating `Body` in place; rewrites are sink-generic. Goldens
+      byte-identical.
+- [x] ValueGraph reference look-through — `let r = &v` forwards `r.f` from
+      `v`'s field slot (`ref_targets`, cleared on reassignment; the pointee's
+      live slot state is used, so a stale forward is impossible).
+- [x] ValueGraph call-survival for immutable-only locals (`mut_escaped`).
+      `bump_call_effects` now bumps a `mut_escaped` set derived _subtractively_
+      from `aliased`: a local is dropped only when its type is transitively
+      free of shared mutable state (`CallImmutability`) _and_ it has no
+      syntactic mutable escape (`&mut`, mut-ref arg, `&mut self` receiver via
+      the callee first-param type, `stores`), closed over alias groups. So a
+      POD value struct escaping only by `&self` keeps its forwarded fields
+      across calls (int128 `abs_u128` folds IR-side). Field-_write_ granularity
+      still uses the full `aliased`. (An additive-from-`&mut` first attempt
+      miscompiled `ref_2` — boxing erases `&mut` and a by-value `Box` is itself
+      a mutable handle; the subtractive type-driven model is the fix.)
+- [x] HFS shadow-init forwarding — an ungated `forward_stores_to_loads_all`
+      (shared `forward_one`) runs once after `field_scalarize`, before
+      globalization, folding `__hfs_x = obj.f` shadow inits the ValueGraph
+      still knows and letting DCE drop wholly-constant scalar chains. Closed
+      the whole HFS cluster. (`hfs_break_from_scalar_state_commits` rewritten to
+      `self.base + k` via `#[inline(never)]` so its commit-on-break machinery
+      stays non-constant under the improved optimizer.)
+- [ ] `field_env` not yet deletable: disabling it regresses 5 residual
+      fixtures (gap 29 → 5 across `mut_escaped` + HFS + arithmetic folding).
+      The store→load duplication the WEP set out to remove is gone and the HFS
+      / CTFE-cluster folds happen IR-side; what remains is two narrow gaps:
   - int128 const-object dedup (`coerce_int_3`, `int128_cast_to_primitives`):
-    `field_env` lets `const_object_globalization` recognise a repeated
-    `u128 { 1000, 0 }` and hoist it into one shared global; without it each
-    site re-emits the struct. Closing this means the globalization recogniser
-    matching repeated constant structs via the ValueGraph rather than
-    `field_env`'s global field map. Code-size only; runtime identical.
+    make `const_object_globalization` match repeated constant structs via the
+    ValueGraph, not `field_env`'s global field map. Code-size only.
   - Mutable-reference field forwarding (`mut_param`, `mut_param_merged`,
-    `ref_1`): `field_env` folds `q.x == 0` (eliding an assert) and the
-    `n.value = n.value + 1` accumulation where `q` / `n` are `&mut` / `Box`.
-    The general reference-copy chain now folds in the ValueGraph (probe
-    above), but these fixtures' nested-inline shape (`add_four → add_two →
-    add_one`, plus the extra `&n` / `&mut q` handles) still leaves the chain
-    un-forwarded — a residual per-fixture field-forwarding gap to diagnose
-    hands-on against the value-graph state, not a missing capability.
-    Deletion path: reproduce the const-object dedup and the mutable-reference
-    field reads in the ValueGraph, then delete `field_env`. The store→load
-    duplication the WEP set out to remove is gone, and the larger HFS and
-    CTFE-cluster folds now happen IR-side; these 5 are the remainder.
+    `ref_1`): the general reference-copy chain folds (probe above), but these
+    fixtures' nested-inline shape (`add_four → add_two → add_one`, extra
+    `&n` / `&mut q` handles) still leaves the chain un-forwarded — a per-fixture
+    field-forwarding gap to diagnose against value-graph state. Then delete
+    `field_env`.
 - [x] `condition_implication`: all guard kinds (loop, dominating,
       early-exit, short-circuit, bitmask) unified into one
       `GuardFact { var_vn, max_offset, bound_vn, is_strict }` with
