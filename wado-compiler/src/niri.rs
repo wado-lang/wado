@@ -2081,7 +2081,7 @@ fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
 // Value <-> ExprKind bridge
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn value_to_arena_kind(v: Value) -> ExprKind {
+pub(crate) fn value_to_arena_kind(v: Value) -> ExprKind {
     match v {
         Value::Int { value, prim } => ExprKind::IntLiteral {
             repr: format_int_repr(value, prim),
@@ -2218,7 +2218,7 @@ impl EnumEqReplacement {}
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Evaluate a binary op on two compile-time values.
-fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<Value> {
+pub(crate) fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<Value> {
     match (left, right) {
         (Value::Bool(l), Value::Bool(r)) => eval_bool_binary(l, op, r),
         (Value::Char(l), Value::Char(r)) => eval_char_binary(l, op, r),
@@ -2233,7 +2233,7 @@ fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<Value> {
 }
 
 /// Evaluate a unary op on a compile-time value.
-fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
+pub(crate) fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
     match op {
         NirUnaryOp::Neg => match operand {
             Value::Int { value, prim } => {
@@ -2730,7 +2730,7 @@ fn is_f32_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// where the target may be int / float / bool / char (i128/u128/v128
 /// are returned but [`eval_cast`] declines to fold them) and by
 /// `IntLiteral` lattice resolution after a [`is_int_prim`] filter.
-fn prim_of(type_id: TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
+pub(crate) fn prim_of(type_id: TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
     match type_table.get(type_id) {
         ResolvedType::Primitive(p) => Some(*p),
         _ => None,

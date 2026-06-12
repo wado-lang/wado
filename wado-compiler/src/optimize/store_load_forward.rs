@@ -25,7 +25,7 @@ use crate::nir::NirFunction;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::ValueKind;
+use crate::nir_value_graph::{ValueId, ValueKind};
 
 use cranelift_entity::EntityRef;
 
@@ -113,6 +113,7 @@ fn forward_one(
     );
     let mut engine = Engine::new(body, buffers, locals);
     engine.set_alias_sets(aliased, untrackable, mut_escaped);
+    engine.set_value_graph_type_table(type_table);
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
     let rule = StoreLoadForwardRule {
         applied: Cell::new(false),
@@ -168,20 +169,50 @@ fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
         ) {
             continue;
         }
-        let Some(src) = engine.literal_source(vid) else {
+        // Prefer an existing source literal (preserves its `repr` / span).
+        // When distinct literal exprs hash-cons to one `ValueId` (e.g. `0` vs
+        // `0x0`), `literal_source` returns the first one — the others' reprs
+        // are lost on substitution. Sound (VN equality ⇒ semantic equality),
+        // but visible in NIR dumps and diagnostic spans for these edge-case
+        // literals. A *folded* value (`1 + 1 → 2` with no literal `2` in the
+        // function) has no source, so synthesize the literal from the value
+        // graph kind, using the read's own type for the integer width / repr.
+        let new_kind = if let Some(src) = engine.literal_source(vid) {
+            engine.body.exprs[src].kind.clone()
+        } else if let Some(kind) = synth_literal_kind(engine, vid, expr) {
+            kind
+        } else {
             continue;
         };
-        // Cloning the source `ExprKind` keeps the substituted node's
-        // `repr` and span. When distinct literal exprs hash-cons to one
-        // `ValueId` (e.g. `0` vs `0x0`), `literal_source` returns the
-        // first one — the others' reprs are lost on substitution. Sound
-        // (VN equality ⇒ semantic equality), but visible in NIR dumps and
-        // diagnostic spans for these edge-case literals.
-        let new_kind = engine.body.exprs[src].kind.clone();
         engine.replace_expr_kind(expr, new_kind);
         changed = true;
     }
     changed
+}
+
+/// Build a literal `ExprKind` for a folded value-graph constant that has no
+/// source literal in the body (e.g. `2` produced by folding `1 + 1` when no
+/// literal `2` exists), using `expr`'s own NIR type for the integer width and
+/// `repr`. Returns `None` for non-literal kinds or when no type table was
+/// supplied (folding disabled). Reuses niri's [`crate::niri::value_to_arena_kind`]
+/// so the synthesized literal is byte-identical to what the CTFE path emits.
+fn synth_literal_kind(engine: &mut Engine, vid: ValueId, expr: ExprId) -> Option<ExprKind> {
+    let vk = engine.value_kind(vid).clone();
+    let type_id = engine.body.exprs[expr].type_id;
+    let prim = engine
+        .value_graph_type_table()
+        .and_then(|tt| crate::niri::prim_of(type_id, tt));
+    let value = match vk {
+        ValueKind::Int(value) => crate::niri::Value::Int { value, prim: prim? },
+        ValueKind::Float(bits) => crate::niri::Value::Float {
+            value: f64::from_bits(bits),
+            prim: prim?,
+        },
+        ValueKind::Bool(b) => crate::niri::Value::Bool(b),
+        ValueKind::Char(c) => crate::niri::Value::Char(c),
+        _ => return None,
+    };
+    Some(crate::niri::value_to_arena_kind(value))
 }
 
 /// Collect value-position `Local` and `FieldAccess` read expressions. A

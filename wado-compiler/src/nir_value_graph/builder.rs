@@ -35,7 +35,7 @@ use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
 };
 
-use super::{HeapVersion, ValueId, ValuePool};
+use super::{HeapVersion, ValueId, ValueKind, ValuePool};
 
 /// Per-function heap-version tracker. The builder threads one `HeapState`
 /// through the walk; on every Skel node that may write the heap, the
@@ -213,8 +213,9 @@ pub fn build(
     aliased: &crate::hashmap::IndexSet<u32>,
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
+    type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
-    let mut b = Builder::new(body, aliased, untrackable, mut_escaped);
+    let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table);
     b.seed_params(param_locals);
     b.walk_block(body.root);
     ValueGraphBuild {
@@ -254,6 +255,10 @@ struct Builder<'a> {
     /// from `v`'s field slot (reference look-through). Cleared when `r` or the
     /// pointee is reassigned. See [`Builder::update_ref_target`].
     ref_targets: IndexMap<u32, u32>,
+    /// Type table for constant folding of pure arithmetic on literal operands
+    /// (`Binary` / `Unary`). `None` disables folding (the value graph still
+    /// builds structural nodes). See [`Builder::fold_binary_const`].
+    type_table: Option<&'a crate::tir::TypeTable>,
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
@@ -265,6 +270,7 @@ impl<'a> Builder<'a> {
         aliased: &crate::hashmap::IndexSet<u32>,
         untrackable: &crate::hashmap::IndexSet<u32>,
         mut_escaped: &crate::hashmap::IndexSet<u32>,
+        type_table: Option<&'a crate::tir::TypeTable>,
     ) -> Self {
         Self {
             body,
@@ -278,7 +284,84 @@ impl<'a> Builder<'a> {
             untrackable: untrackable.clone(),
             mut_escaped: mut_escaped.clone(),
             ref_targets: IndexMap::default(),
+            type_table,
             loop_entry_values: IndexMap::default(),
+        }
+    }
+
+    /// If both operands are constant literals and `op` is a const-foldable
+    /// pure arithmetic / comparison / bitwise op, fold it exactly as niri's
+    /// CTFE would ([`crate::niri::eval_binary`]) and intern the resulting
+    /// literal `ValueId`. Each operand's `PrimitiveType` is read from its own
+    /// NIR type, so integer wrapping matches the runtime width and a
+    /// mixed-prim op (which niri refuses) is not folded. Returns `None` when an
+    /// operand is non-constant, a type is unavailable, or the op is not
+    /// foldable — the caller then builds the structural `Binary` node.
+    fn fold_binary_const(
+        &mut self,
+        op: NirBinaryOp,
+        lhs: ValueId,
+        rhs: ValueId,
+        left: ExprId,
+        right: ExprId,
+    ) -> Option<ValueId> {
+        let tt = self.type_table?;
+        let lv = self.value_to_const(lhs, left, tt)?;
+        let rv = self.value_to_const(rhs, right, tt)?;
+        let result = crate::niri::eval_binary(lv, op, rv)?;
+        Some(self.const_to_value(result))
+    }
+
+    /// Const-fold a `Unary` (`Neg` / `Not` / `BitNot`) on a literal operand.
+    fn fold_unary_const(
+        &mut self,
+        op: NirUnaryOp,
+        operand: ValueId,
+        inner: ExprId,
+    ) -> Option<ValueId> {
+        let tt = self.type_table?;
+        let v = self.value_to_const(operand, inner, tt)?;
+        let result = crate::niri::eval_unary(op, v)?;
+        Some(self.const_to_value(result))
+    }
+
+    /// Bridge a literal `ValueId` to niri's [`crate::niri::Value`], reading the
+    /// operand's `PrimitiveType` from `expr`'s NIR type (needed for the integer
+    /// width / float precision). `None` for non-literal kinds or a missing prim.
+    fn value_to_const(
+        &self,
+        vn: ValueId,
+        expr: ExprId,
+        tt: &crate::tir::TypeTable,
+    ) -> Option<crate::niri::Value> {
+        match self.pool.kind(vn) {
+            ValueKind::Int(value) => {
+                let prim = crate::niri::prim_of(self.body.exprs[expr].type_id, tt)?;
+                Some(crate::niri::Value::Int {
+                    value: *value,
+                    prim,
+                })
+            }
+            ValueKind::Float(bits) => {
+                let prim = crate::niri::prim_of(self.body.exprs[expr].type_id, tt)?;
+                Some(crate::niri::Value::Float {
+                    value: f64::from_bits(*bits),
+                    prim,
+                })
+            }
+            ValueKind::Bool(b) => Some(crate::niri::Value::Bool(*b)),
+            ValueKind::Char(c) => Some(crate::niri::Value::Char(*c)),
+            _ => None,
+        }
+    }
+
+    /// Intern niri's folded [`crate::niri::Value`] back as a literal `ValueId`.
+    fn const_to_value(&mut self, v: crate::niri::Value) -> ValueId {
+        match v {
+            crate::niri::Value::Int { value, .. } => self.pool.int(value),
+            crate::niri::Value::Float { value, .. } => self.pool.float(value),
+            crate::niri::Value::Bool(b) => self.pool.bool(b),
+            crate::niri::Value::Char(c) => self.pool.char(c),
         }
     }
 
@@ -533,6 +616,9 @@ impl<'a> Builder<'a> {
                 };
                 let lhs = lhs?;
                 let rhs = rhs?;
+                if let Some(folded) = self.fold_binary_const(op, lhs, rhs, left, right) {
+                    return Some(folded);
+                }
                 Some(self.pool.binary(op, lhs, rhs))
             }
             ExprKind::Unary { op, expr: inner } => {
@@ -545,6 +631,9 @@ impl<'a> Builder<'a> {
                     None
                 } else {
                     let operand = self.walk_expr(inner)?;
+                    if let Some(folded) = self.fold_unary_const(op, operand, inner) {
+                        return Some(folded);
+                    }
                     Some(self.pool.unary(op, operand))
                 }
             }
@@ -1496,7 +1585,7 @@ mod tests {
     fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
-        build(body, &param_locals, &empty, &empty, &empty)
+        build(body, &param_locals, &empty, &empty, &empty, None)
     }
 
     /// `build` with an explicit reference-aliased set (no `untrackable`). The
@@ -1509,7 +1598,7 @@ mod tests {
     ) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
-        build(body, &param_locals, aliased, &empty, aliased)
+        build(body, &param_locals, aliased, &empty, aliased, None)
     }
 
     fn empty_body() -> Body {

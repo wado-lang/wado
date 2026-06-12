@@ -122,6 +122,10 @@ pub struct Engine<'a> {
     /// passes consuming [`Engine::loop_entry_value`] must call
     /// [`Engine::set_param_locals`] first.
     param_locals: Vec<u32>,
+    /// Type table for the `ValueGraph` builder's constant folding of pure
+    /// arithmetic. `None` (the default) disables folding. Set via
+    /// [`Engine::set_value_graph_type_table`] before the first value query.
+    vg_type_table: Option<&'a crate::tir::TypeTable>,
 }
 
 impl<'a> Engine<'a> {
@@ -146,6 +150,7 @@ impl<'a> Engine<'a> {
             untrackable_locals: IndexSet::default(),
             mut_escaped_locals: IndexSet::default(),
             param_locals: Vec::new(),
+            vg_type_table: None,
         };
         engine.build_parents();
         engine.build_uses();
@@ -266,6 +271,23 @@ impl<'a> Engine<'a> {
         }
     }
 
+    /// Provide the type table so the lazily-built `ValueGraph` folds pure
+    /// arithmetic on literal operands (`2 + 3 → 5`). Must be called before the
+    /// first value query; a later change forces a rebuild on next query.
+    pub fn set_value_graph_type_table(&mut self, type_table: &'a crate::tir::TypeTable) {
+        if self.vg_type_table.map(std::ptr::from_ref) != Some(std::ptr::from_ref(type_table)) {
+            self.vg_type_table = Some(type_table);
+            self.value_graph = None;
+        }
+    }
+
+    /// The type table supplied for value-graph folding, if any. Used by
+    /// `store_load_forward` to synthesize a literal `ExprKind` for a folded
+    /// value that has no pre-existing source literal.
+    pub fn value_graph_type_table(&self) -> Option<&'a crate::tir::TypeTable> {
+        self.vg_type_table
+    }
+
     fn ensure_value_graph(&mut self) {
         if self.value_graph.is_some() {
             return;
@@ -276,6 +298,7 @@ impl<'a> Engine<'a> {
             &self.aliased_locals,
             &self.untrackable_locals,
             &self.mut_escaped_locals,
+            self.vg_type_table,
         );
         self.value_graph = Some(build);
     }

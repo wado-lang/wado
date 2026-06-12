@@ -77,6 +77,7 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut Functio
         );
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_value_graph_type_table(&type_table);
         engine.run(&[&rule])
     })
 }
