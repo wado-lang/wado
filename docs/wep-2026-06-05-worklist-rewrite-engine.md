@@ -341,25 +341,39 @@ Migrations:
       and miscompiled `ref_2` — boxing erases the `&mut`, and a Box/List value
       passed by value is itself a mutable handle; the subtractive,
       type-driven model above is the fix.)
-- [ ] `field_env` not yet deletable, but its irreducible role is now narrower
-      than previously thought. With `mut_escaped` landed, disabling `field_env`
-      regresses 26 fixtures (down from 29), and the regressions are IR-level
-      forwarding gaps, not CTFE-evaluator gaps:
-  - HFS shadow-init forwarding (~16, `hfs_*` / `opt_hfs_*`): `field_scalarize`
-    runs once after the fixpoint loop and emits `__hfs_x = c.x`; the only
-    post-scalarize fold is `const_fold_post_global`, which uses `field_env` to
-    fold `c.x → 0`. No ValueGraph forwarding (`store_load_forward`) runs after
-    `field_scalarize`, so the shadow init stays a load without `field_env`.
+- [x] HFS shadow-init forwarding via a post-`field_scalarize` store→load
+      forward. `field_scalarize` runs once after the fixed-point loop and emits
+      scalarization shadow inits (`__hfs_x = obj.f`); previously the only
+      post-scalarize fold was `field_env`-based `const_fold_post_global`. An
+      ungated `forward_stores_to_loads_all` (factored from the gated pass via a
+      shared `forward_one`) now runs once after `field_scalarize`, before
+      `const_object_globalization`. It folds a shadow read whose field the
+      ValueGraph still knows, and lets DCE drop a wholly-constant scalar chain.
+      This closed the entire HFS cluster: disabling `field_env` now regresses 5
+      fixtures, down from 26. (`hfs_break_from_scalar_state_commits` was
+      rewritten to keep its scalar non-constant — `self.base + k` through an
+      `#[inline(never)]` method — so the commit-on-break machinery it guards
+      survives the improved optimizer instead of folding to one constant store.)
+- [ ] `field_env` not yet deletable: disabling it regresses 5 remaining
+      fixtures, in two harder clusters that the ValueGraph passes do not yet
+      reproduce:
   - int128 const-object dedup (`coerce_int_3`, `int128_cast_to_primitives`):
-    `field_env` lets globalization recognise a repeated `u128 { 1000, 0 }` and
-    hoist it into one shared global; without it each site re-emits the struct.
-  - `mut_param` / `mut_param_merged` / `ref_1`: mutable-reference field reads
-    the ValueGraph still drops conservatively.
-    Deletion path: run a ValueGraph store→load forward in the post-scalarize
-    cleanup (closes the HFS cluster), reproduce the const-object dedup and the
-    mut-ref reads, then delete `field_env`. The store→load duplication the WEP
-    set out to remove is already gone; what remains is reproducing these three
-    IR-level folds before the evaluator's field map can be retired.
+    `field_env` lets `const_object_globalization` recognise a repeated
+    `u128 { 1000, 0 }` and hoist it into one shared global; without it each
+    site re-emits the struct. Closing this means the globalization recogniser
+    matching repeated constant structs via the ValueGraph rather than
+    `field_env`'s global field map. Code-size only; runtime identical.
+  - Mutable-reference field forwarding (`mut_param`, `mut_param_merged`,
+    `ref_1`): `field_env` folds `q.x == 0` (eliding an assert) and the
+    `n.value = 1; n.value + 1 → 2` accumulation where `q` / `n` are `&mut` /
+    `Box`. The ValueGraph keeps these conservative — `mut_escaped` deliberately
+    excludes mutable-reference types — so closing this is the soundness-
+    sensitive step: forward a `Box` / `&mut` field read only across
+    straight-line code with no intervening mutation of that slot.
+    Deletion path: reproduce the const-object dedup and the mutable-reference
+    field reads in the ValueGraph, then delete `field_env`. The store→load
+    duplication the WEP set out to remove is gone, and the larger HFS and
+    CTFE-cluster folds now happen IR-side; these 5 are the remainder.
 - [x] `condition_implication`: all guard kinds (loop, dominating,
       early-exit, short-circuit, bitmask) unified into one
       `GuardFact { var_vn, max_offset, bound_vn, is_strict }` with

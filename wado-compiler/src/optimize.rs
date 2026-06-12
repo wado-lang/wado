@@ -674,9 +674,12 @@ fn run_optimization_passes(
     // constant literal upstream) into the literal, before globalization. Runs
     // before `const_object_globalization` so it never sees the nullable
     // `GlobalVarGet`s globalization emits.
-    run_pass("nir/store_load_forward_post_scalarize", project, profiler, |p| {
-        forward_stores_to_loads_all(p)
-    });
+    run_pass(
+        "nir/store_load_forward_post_scalarize",
+        project,
+        profiler,
+        |p| forward_stores_to_loads_all(p),
+    );
     // Final cleanup: flatten any `__tmpl:` labeled blocks the fixpoint
     // preserved as anchors for `tmpl_hoist`. `tmpl_hoist` has finished
     // by now (it runs inside the fixpoint loop), so the wrappers are
