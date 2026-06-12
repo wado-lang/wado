@@ -354,9 +354,22 @@ Migrations:
       rewritten to keep its scalar non-constant — `self.base + k` through an
       `#[inline(never)]` method — so the commit-on-break machinery it guards
       survives the improved optimizer instead of folding to one constant store.)
-- [ ] `field_env` not yet deletable: disabling it regresses 5 remaining
-      fixtures, in two harder clusters that the ValueGraph passes do not yet
-      reproduce:
+- [x] ValueGraph constant folding of pure arithmetic (the WEP's long-noted
+      "last capability"). The `ValuePool` `Binary` / `Unary` nodes now fold
+      literal operands by reusing niri's exact CTFE (`eval_binary` /
+      `eval_unary`), reading each operand's `PrimitiveType` from its NIR type
+      (`type_table` threaded through the engine); `store_load_forward`
+      synthesizes the forwarded literal from the value-graph kind
+      (`value_to_arena_kind`) when a folded value has no source literal. This
+      lets a `Box` / `&mut` field-accumulation chain (`n.value = n.value + 1`,
+      ×N) collapse to constants without `field_env` — verified field-env-off on
+      the reference-copy probe (`add1(&mut n)` ×4 → `1,2,3,4`), including with
+      an intervening immutable `&n` read. Full e2e green; two goldens improve
+      (a freed temp, a DCE'd dead iterator type).
+- [ ] `field_env` not yet deletable: disabling it still regresses 5 fixtures.
+      The arithmetic-folding capability above was necessary but, for these
+      specific fixtures, not sufficient — they carry residual structural
+      quirks the general pattern (which now folds) does not:
   - int128 const-object dedup (`coerce_int_3`, `int128_cast_to_primitives`):
     `field_env` lets `const_object_globalization` recognise a repeated
     `u128 { 1000, 0 }` and hoist it into one shared global; without it each
@@ -365,11 +378,12 @@ Migrations:
     `field_env`'s global field map. Code-size only; runtime identical.
   - Mutable-reference field forwarding (`mut_param`, `mut_param_merged`,
     `ref_1`): `field_env` folds `q.x == 0` (eliding an assert) and the
-    `n.value = 1; n.value + 1 → 2` accumulation where `q` / `n` are `&mut` /
-    `Box`. The ValueGraph keeps these conservative — `mut_escaped` deliberately
-    excludes mutable-reference types — so closing this is the soundness-
-    sensitive step: forward a `Box` / `&mut` field read only across
-    straight-line code with no intervening mutation of that slot.
+    `n.value = n.value + 1` accumulation where `q` / `n` are `&mut` / `Box`.
+    The general reference-copy chain now folds in the ValueGraph (probe
+    above), but these fixtures' nested-inline shape (`add_four → add_two →
+    add_one`, plus the extra `&n` / `&mut q` handles) still leaves the chain
+    un-forwarded — a residual per-fixture field-forwarding gap to diagnose
+    hands-on against the value-graph state, not a missing capability.
     Deletion path: reproduce the const-object dedup and the mutable-reference
     field reads in the ValueGraph, then delete `field_env`. The store→load
     duplication the WEP set out to remove is gone, and the larger HFS and
