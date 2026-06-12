@@ -26,6 +26,22 @@ pub(super) fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
     }
 }
 
+/// The root local of an *escape* expression, looking through every projection
+/// plus `&`/`&mut`/`Cast`: `&mut a.b.f`, `(a.b as T)`, and `a.b[i]` all root at
+/// `a`. Distinct from [`place_root_local`], which looks through `Deref` only (a
+/// true place walk) — here `&v` is "about" `v`, so reference and cast wrappers
+/// are transparent. Used by the mutable-escape analyses (`alias`, `copy_prop`).
+pub(super) fn projection_root_local(body: &Body, expr: ExprId) -> Option<u32> {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Unary { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. } => projection_root_local(body, *inner),
+        _ => None,
+    }
+}
+
 /// Whether the subtree at `node` contains a `Break` targeting `label`. A full
 /// subtree search, so nested blocks that rebind the same label are still
 /// searched — the conservative behaviour the sync-placement passes rely on.

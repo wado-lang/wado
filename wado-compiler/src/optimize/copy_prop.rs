@@ -24,7 +24,7 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use super::arena_query::place_root_local;
+use super::arena_query::{place_root_local, projection_root_local};
 use super::gate::{FunctionGate, GatedPass};
 
 #[derive(Debug, Clone)]
@@ -334,13 +334,11 @@ fn analyze_expr(
             ..
         } => {
             let receiver = *receiver;
-            let func_key = (func.module_source.clone(), func.name.clone());
             let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
-            let receiver_is_mut_ref = may_mutate_caller_state(body, receiver, type_table);
-            let func_first_param_is_mut_ref = fpt
-                .get(&func_key)
-                .is_some_and(|&tp| matches!(type_table.get(tp), ResolvedType::MutRef(_)));
-            if receiver_is_mut_ref || func_first_param_is_mut_ref {
+            // Copy propagation: a callee absent from `fpt` is assumed *not* to
+            // mutate the receiver (`conservative_on_unknown = false`); the
+            // receiver-type guard below still protects value receivers.
+            if super::alias::method_mutates_receiver(body, receiver, func, fpt, type_table, false) {
                 mark_potentially_mutated_local(body, receiver, result);
             }
             analyze_expr(body, receiver, result, type_table, fpt);
@@ -366,25 +364,9 @@ fn analyze_expr(
 }
 
 fn mark_potentially_mutated_local(body: &Body, expr: ExprId, result: &mut AnalysisResult) {
-    match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } => {
-            result.usage.entry(*index).or_default().has_field_mutation = true;
-        }
-        ExprKind::Unary { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. } => {
-            mark_potentially_mutated_local(body, *inner, result);
-        }
-        _ => {}
+    if let Some(root) = projection_root_local(body, expr) {
+        result.usage.entry(root).or_default().has_field_mutation = true;
     }
-}
-
-fn may_mutate_caller_state(body: &Body, expr: ExprId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(body.exprs[expr].type_id),
-        ResolvedType::MutRef(_)
-    )
 }
 
 fn may_mutate_through_arg(body: &Body, expr: ExprId, type_table: &TypeTable) -> bool {
@@ -662,14 +644,7 @@ impl Rule for CopyPropRule<'_> {
 
 pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
-    let mut first_param_types: FirstParamTypes = IndexMap::default();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        if let Some(first_param) = func.params.first() {
-            let key = (func.module_source.clone(), func.name.clone());
-            first_param_types.insert(key, first_param.type_id);
-        }
-    }
+    let first_param_types: FirstParamTypes = super::alias::first_param_types(project);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::CopyProp, len, |fid| {

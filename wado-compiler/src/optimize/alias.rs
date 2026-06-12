@@ -190,6 +190,7 @@ pub(super) fn builder_alias_sets(
         type_table,
         first_param_types,
         call_immutability,
+        &info.alias_groups,
     );
     (aliased, info.untrackable.iter().collect(), mut_escaped)
 }
@@ -202,9 +203,10 @@ pub(super) fn builder_alias_sets(
 /// 2. Keep every `aliased` local whose type is not provably call-immutable
 ///    *or* that has a syntactic mutable escape; drop the rest (provably
 ///    immutable: no callee can mutate them).
-/// 3. Close the result over the reference alias groups, so that mutating one
-///    member of an alias group (a `let dst = src` reference copy, or two
-///    same-pointee reference params) clobbers the whole group's fields.
+/// 3. Close the result over `alias_groups` (the union-find
+///    [`build_alias_info`] already computed), so that mutating one member of an
+///    alias group (a `let dst = src` reference copy, or two same-pointee
+///    reference params) clobbers the whole group's fields.
 fn build_mut_escaped(
     body: &Body,
     locals: &[crate::nir::NirLocal],
@@ -213,6 +215,7 @@ fn build_mut_escaped(
     type_table: &TypeTable,
     first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
     call_immutability: &CallImmutability,
+    alias_groups: &IndexMap<u32, IndexSet<u32>>,
 ) -> IndexSet<u32> {
     let mut syntactic_mut: IndexSet<u32> = stores_aliased_locals.iter().copied().collect();
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
@@ -225,25 +228,22 @@ fn build_mut_escaped(
         );
     });
     let local_type = |idx: u32| locals.get(idx as usize).map(|l| l.type_id);
+    // Keep a local in `mut_escaped` unless it is provably immutable across
+    // calls — no syntactic mutable escape AND a transitively-immutable type.
     let mut esc: IndexSet<u32> = aliased
         .iter()
         .copied()
         .filter(|&v| {
-            // Provably immutable across calls ⇒ drop from `mut_escaped`.
-            // Anything we cannot prove immutable stays (conservative).
-            let provably_immutable = !syntactic_mut.contains(&v)
-                && local_type(v).is_some_and(|t| call_immutability.is_call_immutable(t));
-            !provably_immutable
+            syntactic_mut.contains(&v)
+                || local_type(v).is_none_or(|t| !call_immutability.is_call_immutable(t))
         })
         .collect();
-    // Close over reference alias groups: if any group member is mutably
+    // Close over the reference alias groups: if any group member is mutably
     // escaped, every member's pointee may be mutated through it.
-    let same_pointee_edges = same_pointee_reference_edges(locals, type_table);
-    let groups = collect_alias_groups(body, type_table, &same_pointee_edges);
-    if !groups.is_empty() {
+    if !alias_groups.is_empty() {
         let seed: Vec<u32> = esc.iter().copied().collect();
         for v in seed {
-            if let Some(group) = groups.get(&v) {
+            if let Some(group) = alias_groups.get(&v) {
                 for &member in group {
                     esc.insert(member);
                 }
@@ -346,7 +346,7 @@ impl<'a> CallImmutability<'a> {
                     false
                 } else {
                     let key = (name.clone(), module_source.clone());
-                    match self.struct_fields.get(&key).cloned() {
+                    match self.struct_fields.get(&key) {
                         Some(fields) => fields.iter().all(|&f| self.walk(f, stack)),
                         // Unknown layout (not in the registry) — conservative.
                         None => false,
@@ -364,19 +364,33 @@ impl<'a> CallImmutability<'a> {
     }
 }
 
-/// The bare-`Local` root of a place expression, looking through `Unary`
-/// (`&`/`&mut`/deref), `Cast`, `FieldAccess`, and `Index`. `&mut a.b.f` and
-/// `a.b.f` both root at `a`. `None` when the place is not rooted in a local
-/// (a call result, a literal, …).
-fn root_local_of(body: &Body, id: crate::nir_arena::ExprId) -> Option<u32> {
-    match &body.exprs[id].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::Unary { expr, .. }
-        | ExprKind::Cast { expr, .. }
-        | ExprKind::FieldAccess { expr, .. }
-        | ExprKind::Index { expr, .. } => root_local_of(body, *expr),
-        _ => None,
-    }
+use super::arena_query::projection_root_local;
+
+/// Whether a `recv.m(...)` call may mutate its receiver's pointee: the receiver
+/// expression is itself a `&mut`, or the callee's declared first param is
+/// `&mut self`. `conservative_on_unknown` decides a callee absent from
+/// `first_param_types` — `alias`'s mutable-escape scan passes `true` (assume it
+/// mutates), while `copy_prop`'s copy-propagation guard passes `false` (it has
+/// its own receiver-type guards). Shared so the two analyses agree on the
+/// known-callee verdict.
+pub(super) fn method_mutates_receiver(
+    body: &Body,
+    receiver: crate::nir_arena::ExprId,
+    func: &crate::nir::FunctionRef,
+    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    type_table: &TypeTable,
+    conservative_on_unknown: bool,
+) -> bool {
+    let receiver_is_mut_ref = matches!(
+        type_table.get(body.exprs[receiver].type_id),
+        ResolvedType::MutRef(_)
+    );
+    let callee_mutates =
+        match first_param_types.get(&(func.module_source.clone(), func.name.clone())) {
+            Some(&tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+            None => conservative_on_unknown,
+        };
+    receiver_is_mut_ref || callee_mutates
 }
 
 /// Flag the roots of mutable-escape sites in a single node:
@@ -407,14 +421,14 @@ fn collect_mut_escaped_node(
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let Some(r) = root_local_of(body, *inner) {
+            if let Some(r) = projection_root_local(body, *inner) {
                 out.insert(r);
             }
         }
         ExprKind::Call { args, .. } => {
             for arg in args {
                 if arg.is_mut
-                    && let Some(r) = root_local_of(body, arg.expr)
+                    && let Some(r) = projection_root_local(body, arg.expr)
                 {
                     out.insert(r);
                 }
@@ -426,25 +440,16 @@ fn collect_mut_escaped_node(
             args,
             ..
         } => {
-            let key = (func.module_source.clone(), func.name.clone());
-            let callee_mutates_receiver = match first_param_types.get(&key) {
-                Some(&tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
-                // Unknown callee (builtin / extern not in the project): be
-                // conservative and assume it may mutate its receiver.
-                None => true,
-            };
-            let receiver_is_mut_ref = matches!(
-                type_table.get(body.exprs[*receiver].type_id),
-                ResolvedType::MutRef(_)
-            );
-            if (callee_mutates_receiver || receiver_is_mut_ref)
-                && let Some(r) = root_local_of(body, *receiver)
+            // Unknown callee (builtin / extern not in the project) → assume it
+            // may mutate the receiver (`conservative_on_unknown = true`).
+            if method_mutates_receiver(body, *receiver, func, first_param_types, type_table, true)
+                && let Some(r) = projection_root_local(body, *receiver)
             {
                 out.insert(r);
             }
             for arg in args {
                 if arg.is_mut
-                    && let Some(r) = root_local_of(body, arg.expr)
+                    && let Some(r) = projection_root_local(body, arg.expr)
                 {
                     out.insert(r);
                 }
@@ -498,6 +503,14 @@ fn reference_pointee_struct_key(
     match type_table.get(type_id) {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             reference_pointee_struct_key(*inner, type_table)
+        }
+        // Look through a `type T = U` newtype to its base, so two references to
+        // the same object whose pointee surfaces as a newtype still share a key
+        // (and thus an alias group). Otherwise `&Newtype` / `&mut Newtype` to
+        // one object would not be grouped, and `mut_escaped`'s group closure
+        // could leave an immutable handle's fields stale across a mutating call.
+        ResolvedType::Newtype { base_type, .. } => {
+            reference_pointee_struct_key(*base_type, type_table)
         }
         ResolvedType::Struct {
             name,

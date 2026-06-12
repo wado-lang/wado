@@ -194,25 +194,16 @@ fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
 /// source literal in the body (e.g. `2` produced by folding `1 + 1` when no
 /// literal `2` exists), using `expr`'s own NIR type for the integer width and
 /// `repr`. Returns `None` for non-literal kinds or when no type table was
-/// supplied (folding disabled). Reuses niri's [`crate::niri::value_to_arena_kind`]
+/// supplied (folding disabled). Reuses niri's [`crate::const_eval::value_to_arena_kind`]
 /// so the synthesized literal is byte-identical to what the CTFE path emits.
 fn synth_literal_kind(engine: &mut Engine, vid: ValueId, expr: ExprId) -> Option<ExprKind> {
     let vk = engine.value_kind(vid).clone();
     let type_id = engine.body.exprs[expr].type_id;
     let prim = engine
         .value_graph_type_table()
-        .and_then(|tt| crate::niri::prim_of(type_id, tt));
-    let value = match vk {
-        ValueKind::Int(value) => crate::niri::Value::Int { value, prim: prim? },
-        ValueKind::Float(bits) => crate::niri::Value::Float {
-            value: f64::from_bits(bits),
-            prim: prim?,
-        },
-        ValueKind::Bool(b) => crate::niri::Value::Bool(b),
-        ValueKind::Char(c) => crate::niri::Value::Char(c),
-        _ => return None,
-    };
-    Some(crate::niri::value_to_arena_kind(value))
+        .and_then(|tt| crate::const_eval::prim_of(type_id, tt));
+    let value = crate::nir_value_graph::value_kind_to_const(&vk, prim)?;
+    Some(crate::const_eval::value_to_arena_kind(value))
 }
 
 /// Collect value-position `Local` and `FieldAccess` read expressions. A

@@ -36,6 +36,7 @@ use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, FunctionId, GatedPass};
 use crate::compiler_item::SeqField;
+use crate::const_eval::Value;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -48,7 +49,7 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
     Arm, CalleeMap, EditSink, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter,
-    Lattice, Value, is_ctfe_eligible,
+    Lattice, is_ctfe_eligible,
 };
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 

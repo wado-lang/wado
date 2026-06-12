@@ -35,7 +35,7 @@ use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
 };
 
-use super::{HeapVersion, ValueId, ValueKind, ValuePool};
+use super::{HeapVersion, ValueId, ValuePool};
 
 /// Per-function heap-version tracker. The builder threads one `HeapState`
 /// through the walk; on every Skel node that may write the heap, the
@@ -291,7 +291,7 @@ impl<'a> Builder<'a> {
 
     /// If both operands are constant literals and `op` is a const-foldable
     /// pure arithmetic / comparison / bitwise op, fold it exactly as niri's
-    /// CTFE would ([`crate::niri::eval_binary`]) and intern the resulting
+    /// CTFE would ([`crate::const_eval::eval_binary`]) and intern the resulting
     /// literal `ValueId`. Each operand's `PrimitiveType` is read from its own
     /// NIR type, so integer wrapping matches the runtime width and a
     /// mixed-prim op (which niri refuses) is not folded. Returns `None` when an
@@ -308,7 +308,7 @@ impl<'a> Builder<'a> {
         let tt = self.type_table?;
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;
-        let result = crate::niri::eval_binary(lv, op, rv)?;
+        let result = crate::const_eval::eval_binary(lv, op, rv)?;
         Some(self.const_to_value(result))
     }
 
@@ -321,11 +321,11 @@ impl<'a> Builder<'a> {
     ) -> Option<ValueId> {
         let tt = self.type_table?;
         let v = self.value_to_const(operand, inner, tt)?;
-        let result = crate::niri::eval_unary(op, v)?;
+        let result = crate::const_eval::eval_unary(op, v)?;
         Some(self.const_to_value(result))
     }
 
-    /// Bridge a literal `ValueId` to niri's [`crate::niri::Value`], reading the
+    /// Bridge a literal `ValueId` to niri's [`crate::const_eval::Value`], reading the
     /// operand's `PrimitiveType` from `expr`'s NIR type (needed for the integer
     /// width / float precision). `None` for non-literal kinds or a missing prim.
     fn value_to_const(
@@ -333,35 +333,18 @@ impl<'a> Builder<'a> {
         vn: ValueId,
         expr: ExprId,
         tt: &crate::tir::TypeTable,
-    ) -> Option<crate::niri::Value> {
-        match self.pool.kind(vn) {
-            ValueKind::Int(value) => {
-                let prim = crate::niri::prim_of(self.body.exprs[expr].type_id, tt)?;
-                Some(crate::niri::Value::Int {
-                    value: *value,
-                    prim,
-                })
-            }
-            ValueKind::Float(bits) => {
-                let prim = crate::niri::prim_of(self.body.exprs[expr].type_id, tt)?;
-                Some(crate::niri::Value::Float {
-                    value: f64::from_bits(*bits),
-                    prim,
-                })
-            }
-            ValueKind::Bool(b) => Some(crate::niri::Value::Bool(*b)),
-            ValueKind::Char(c) => Some(crate::niri::Value::Char(*c)),
-            _ => None,
-        }
+    ) -> Option<crate::const_eval::Value> {
+        let prim = crate::const_eval::prim_of(self.body.exprs[expr].type_id, tt);
+        super::value_kind_to_const(self.pool.kind(vn), prim)
     }
 
-    /// Intern niri's folded [`crate::niri::Value`] back as a literal `ValueId`.
-    fn const_to_value(&mut self, v: crate::niri::Value) -> ValueId {
+    /// Intern niri's folded [`crate::const_eval::Value`] back as a literal `ValueId`.
+    fn const_to_value(&mut self, v: crate::const_eval::Value) -> ValueId {
         match v {
-            crate::niri::Value::Int { value, .. } => self.pool.int(value),
-            crate::niri::Value::Float { value, .. } => self.pool.float(value),
-            crate::niri::Value::Bool(b) => self.pool.bool(b),
-            crate::niri::Value::Char(c) => self.pool.char(c),
+            crate::const_eval::Value::Int { value, .. } => self.pool.int(value),
+            crate::const_eval::Value::Float { value, .. } => self.pool.float(value),
+            crate::const_eval::Value::Bool(b) => self.pool.bool(b),
+            crate::const_eval::Value::Char(c) => self.pool.char(c),
         }
     }
 
