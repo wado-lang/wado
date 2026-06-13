@@ -54,7 +54,6 @@ pub fn link(package: Package) -> FlatPackage {
         &package.export_binding_names,
         package.world_registry,
         package.cm_interface_registry,
-        has_http_handler_export,
     );
 
     // Flatten all per-module TIR into flat lists.

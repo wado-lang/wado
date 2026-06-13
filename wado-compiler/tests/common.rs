@@ -953,11 +953,18 @@ pub fn run_wasm_with_full_options(
         let deadline_ticks = (DEFAULT_TIMEOUT_MS / EPOCH_INTERVAL_MS).max(1);
         store.set_epoch_deadline(deadline_ticks);
 
-        let instance = linker.instantiate_async(&mut store, &component).await?;
-        let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
-
-        let (trapped, trap_msg) = match run_func.call_async(&mut store, ()).await {
-            Ok((result,)) => (result.is_err(), String::new()),
+        // `run` is exported through the `wasi:cli/run` instance; bind via
+        // `Command` and drive the async export with `run_concurrent`.
+        let command = wasmtime_wasi::p3::bindings::Command::instantiate_async(
+            &mut store, &component, &linker,
+        )
+        .await?;
+        let (trapped, trap_msg) = match store
+            .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
+            .await
+        {
+            Ok(Ok(result)) => (result.is_err(), String::new()),
+            Ok(Err(e)) => (true, format!("{e:#}")),
             Err(e) => (true, format!("{e:#}")),
         };
 

@@ -320,7 +320,6 @@ mod tests {
 [package]
 name = "{name}"
 version = "{version}"
-lib = "src/lib.wado"
 "#,
         )
         .parse()

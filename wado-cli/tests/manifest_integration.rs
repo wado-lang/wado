@@ -19,7 +19,8 @@ fn test_init_creates_manifest() {
     let content = fs::read_to_string(tmp.path().join("wado.toml")).unwrap();
     assert!(content.contains("name = \"my-app\""));
     assert!(content.contains("version = \"0.1.0\""));
-    assert!(content.contains("command = \"src/main.wado\""));
+    assert!(content.contains("[world]"));
+    assert!(content.contains("\"wasi:cli/command\" = \"src/main.wado\""));
 }
 
 #[test]
@@ -105,7 +106,9 @@ fn test_compile_with_manifest() {
     let toml = r#"[package]
 name = "test-app"
 version = "0.1.0"
-command = "src/main.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 "#;
     fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
@@ -137,7 +140,9 @@ fn test_compile_file_arg_overrides_manifest() {
     let toml = r#"[package]
 name = "test-app"
 version = "0.1.0"
-command = "nonexistent.wado"
+
+[world]
+"wasi:cli/command" = "nonexistent.wado"
 "#;
     fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
@@ -177,7 +182,9 @@ fn test_run_with_manifest() {
     let toml = r#"[package]
 name = "test-app"
 version = "0.1.0"
-command = "src/main.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 "#;
     fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
@@ -212,11 +219,10 @@ fn test_compile_no_manifest_no_file() {
 fn test_compile_manifest_missing_command() {
     let tmp = tempfile::tempdir().unwrap();
 
-    // Manifest with lib but no command
+    // Manifest with no `[world]` entry for wasi:cli/command.
     let toml = r#"[package]
 name = "lib-only"
 version = "0.1.0"
-lib = "src/lib.wado"
 "#;
     fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
@@ -224,7 +230,9 @@ lib = "src/lib.wado"
         .arg("compile")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("[package].command is not set"));
+        .stderr(predicate::str::contains(
+            "[world].\"wasi:cli/command\" is not set",
+        ));
 }
 
 #[test]
@@ -234,7 +242,9 @@ fn test_serve_manifest_missing_service() {
     let toml = r#"[package]
 name = "cli-only"
 version = "0.1.0"
-command = "src/main.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 "#;
     fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
@@ -242,7 +252,9 @@ command = "src/main.wado"
         .arg("serve")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("[package].service is not set"));
+        .stderr(predicate::str::contains(
+            "[world].\"wasi:http/service\" is not set",
+        ));
 }
 
 #[test]
@@ -255,7 +267,9 @@ fn test_compile_from_subdirectory() {
     let toml = r#"[package]
 name = "test-app"
 version = "0.1.0"
-command = "src/main.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 "#;
     fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 

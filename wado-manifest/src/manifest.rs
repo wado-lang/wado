@@ -11,6 +11,11 @@ use crate::version::VersionSpecifier;
 #[derive(Debug, Clone)]
 pub struct Manifest {
     pub package: Option<Package>,
+    /// The `[world]` table: CM world FQ name (e.g. `"wasi:cli/command"`,
+    /// `"core:kiln/generator"`) → entry-point path. Replaces the former
+    /// `[package].{command,service,generator}` fields; the world-less `lib`
+    /// entry is abolished.
+    pub world: IndexMap<String, String>,
     pub registries: IndexMap<String, String>,
     pub dependencies: IndexMap<String, Dependency>,
     pub dev_dependencies: IndexMap<String, Dependency>,
@@ -18,6 +23,15 @@ pub struct Manifest {
     pub workspace: Option<Workspace>,
     pub test: TestSettings,
     pub format: FormatSettings,
+}
+
+impl Manifest {
+    /// Entry-point source path for the given CM world FQ name, if declared in
+    /// the `[world]` table.
+    #[must_use]
+    pub fn world_entry(&self, world_fq: &str) -> Option<&str> {
+        self.world.get(world_fq).map(String::as_str)
+    }
 }
 
 /// The `[format]` section of `wado.toml`.
@@ -59,13 +73,6 @@ pub struct Package {
     pub namespace: Option<String>,
     pub name: String,
     pub version: String,
-    pub command: Option<String>,
-    pub service: Option<String>,
-    pub lib: Option<String>,
-    /// `generator = "<path>"` — entry file that exports the
-    /// `core:kiln/generator` world. Presence marks the package as a Kiln
-    /// generator; see WEP 2026-04-12.
-    pub generator: Option<String>,
 }
 
 /// The `[workspace]` section of `wado.toml`.
@@ -208,6 +215,7 @@ impl std::error::Error for ManifestError {}
 #[derive(Deserialize)]
 struct RawManifest {
     package: Option<RawPackage>,
+    world: Option<IndexMap<String, String>>,
     registries: Option<IndexMap<String, String>>,
     dependencies: Option<IndexMap<String, RawDependency>>,
     #[serde(rename = "dev-dependencies")]
@@ -236,10 +244,6 @@ struct RawPackage {
     namespace: Option<String>,
     name: Option<String>,
     version: Option<String>,
-    command: Option<String>,
-    service: Option<String>,
-    lib: Option<String>,
-    generator: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -264,6 +268,7 @@ struct RawDependency {
 
 fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
     let package = raw.package.map(convert_package).transpose()?;
+    let world = raw.world.unwrap_or_default();
     let registries = raw.registries.unwrap_or_default();
     let dependencies = convert_deps(raw.dependencies.unwrap_or_default())?;
     let dev_dependencies = convert_deps(raw.dev_dependencies.unwrap_or_default())?;
@@ -274,6 +279,7 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
 
     Ok(Manifest {
         package,
+        world,
         registries,
         dependencies,
         dev_dependencies,
@@ -311,10 +317,6 @@ fn convert_package(raw: RawPackage) -> Result<Package, ManifestError> {
         namespace: raw.namespace,
         name,
         version,
-        command: raw.command,
-        service: raw.service,
-        lib: raw.lib,
-        generator: raw.generator,
     })
 }
 
@@ -471,13 +473,15 @@ mod tests {
 [package]
 name = "my-app"
 version = "0.1.0"
-command = "src/main.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        let pkg = m.package.unwrap();
+        let pkg = m.package.as_ref().unwrap();
         assert_eq!(pkg.name, "my-app");
         assert_eq!(pkg.version, "0.1.0");
-        assert_eq!(pkg.command.as_deref(), Some("src/main.wado"));
+        assert_eq!(m.world_entry("wasi:cli/command"), Some("src/main.wado"));
         assert!(pkg.namespace.is_none());
     }
 
@@ -487,7 +491,9 @@ command = "src/main.wado"
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 
 [dependencies]
 router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
@@ -509,7 +515,9 @@ router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 
 [dependencies]
 router = { git = "https://github.com/user/router.git", ref = "main" }
@@ -531,7 +539,9 @@ router = { git = "https://github.com/user/router.git", ref = "main" }
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 
 [dependencies]
 router = { git = "https://example.com/r.git", version = "^1.0.0", ref = "main" }
@@ -546,7 +556,9 @@ router = { git = "https://example.com/r.git", version = "^1.0.0", ref = "main" }
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 
 [dependencies]
 regex = { package = "docs:regex", version = "1.0.0" }
@@ -564,7 +576,9 @@ regex = { package = "docs:regex", version = "1.0.0" }
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 
 [dependencies]
 shared = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
@@ -593,7 +607,9 @@ shared = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 
 [test]
 exclude = ["wado-compiler/tests/**", "vendor/**"]
@@ -608,7 +624,9 @@ exclude = ["wado-compiler/tests/**", "vendor/**"]
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         assert!(m.test.exclude.is_empty());
@@ -621,7 +639,9 @@ command = "main.wado"
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 
 [test]
 exclude = ["lib/core/prelude/**"]
@@ -638,7 +658,9 @@ include = ["lib/**/*_test.wado"]
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 
 [format]
 exclude = ["wado-compiler/tests/fixtures/**"]
@@ -658,7 +680,9 @@ include = ["wado-compiler/tests/fixtures/keepme.wado"]
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         assert!(m.format.exclude.is_empty());

@@ -172,7 +172,6 @@ mod tests {
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
 
 [dependencies]
 regex = { package = "docs:regex", version = "^0.1.0" }
@@ -190,7 +189,6 @@ regex = { package = "docs:regex", version = "^0.1.0" }
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
 
 [registries]
 default = "https://wa.dev"
@@ -207,7 +205,6 @@ regex = { package = "docs:regex", version = "^0.1.0" }
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
 
 [registries]
 custom = "https://registry.example.com"
@@ -224,7 +221,6 @@ lib = { registry = "custom", package = "ns:lib", version = "^1.0.0" }
 [package]
 name = "my app"
 version = "0.1.0"
-command = "main.wado"
 "#;
         let err = toml.parse::<crate::Manifest>().unwrap_err();
         assert!(matches!(err, ManifestError::InvalidName { .. }));
@@ -236,7 +232,6 @@ command = "main.wado"
 [package]
 name = "app"
 version = "not-a-version"
-command = "main.wado"
 "#;
         let err = toml.parse::<crate::Manifest>().unwrap_err();
         assert!(matches!(err, ManifestError::InvalidVersion { .. }));
