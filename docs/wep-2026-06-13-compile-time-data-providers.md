@@ -240,4 +240,7 @@ Remaining:
       codec) and the slicing the provider does within an entry (markers ×
       locales).
 - [ ] Build the provider's marker-recording drift test against ICU constructors.
-- [ ] Measure infra-code duplication across the three prebuilt components.
+- [x] Measure infra-code duplication across the three prebuilt components: the
+      shared infra floor is ~10 KB/component (component glue + `BlobDataProvider`
+      core), so the three-way split duplicates only ~20 KB total — negligible
+      against the data. See `wado-bundled-icu/bdp-spike/infra-baseline/`.

@@ -177,6 +177,30 @@ collator→normalizer (37 KB) — not for conceptual relatedness. Bundling
 unrelated features behind one blob saves nothing; slicing per used feature is
 what controls size.
 
+## Shared-infra duplication across split components
+
+Splitting into separate components re-links the shared infrastructure into each
+(CM has no cross-component code sharing). `infra-baseline/` measures how much
+that costs by building two components with no ICU algorithm:
+
+| component                                    |    size |
+| -------------------------------------------- | ------: |
+| `infra-bare` (dlmalloc + wit-bindgen glue)   |  8.2 KB |
+| `infra-bdp` (+ `BlobDataProvider` construct) | 10.1 KB |
+| `casemap-feature` (for reference)            | 45.5 KB |
+| `normalizer-feature`                         |   64 KB |
+| `collator-feature`                           |  136 KB |
+
+So the infrastructure every data-free feature carries is ~10 KB (component
+floor + the postcard/zerovec/`icu_provider` core that `BlobDataProvider` pulls);
+everything above that is feature-specific (algorithm + per-marker
+deserialization). Duplicating ~10 KB across the three-way text/collation/
+segmentation split costs ~20 KB total — negligible against the multi-MB data and
+small even against the feature code. Component splitting is not constrained by
+infra duplication. (The figure is a floor: the generic marker-_load_ path is
+also shared but is entangled with per-marker code, so true shared infra is
+somewhat higher — still well under the feature deltas.)
+
 ### Caveat
 
 `BlobDataProvider` deserializes (zero-copy via `Yoke`) from the blob held in the
