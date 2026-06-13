@@ -32,6 +32,21 @@ use super::types::{
     variant_test,
 };
 
+/// Join two CM flat slot types per the Canonical ABI rule, mirroring
+/// `component_model::join_val_types`: equal kinds are kept, a width/kind
+/// mismatch widens to `i64`, a one-sided slot keeps its type. `cm_flat_types`
+/// uses this same rule to compute the core import's flat signature, so a lowered
+/// flat arg must agree with it (a naive `i32` fallback would mismatch an `i64`
+/// slot and produce invalid core Wasm).
+fn join_flat_slot(a: Option<TypeId>, b: Option<TypeId>) -> TypeId {
+    match (a, b) {
+        (Some(a), Some(b)) if a == b => a,
+        (Some(_), Some(_)) => TypeTable::I64,
+        (Some(t), None) | (None, Some(t)) => t,
+        (None, None) => TypeTable::I32,
+    }
+}
+
 /// Zero constant matching a CM flat slot type (i32/i64/f32/f64).
 fn flat_slot_zero(tid: TypeId) -> TirExpr {
     if tid == TypeTable::I64 {
@@ -1128,15 +1143,12 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
         return;
     }
 
-    // Allocate mutable payload locals, zero-init, joining each slot's type.
+    // Allocate mutable payload locals, zero-init, joining each slot's type with
+    // the canonical CM rule (see `join_flat_slot`) so the lowered flat arg types
+    // match the core import's declared flat signature.
     let mut payload_locals: Vec<(u32, TypeId)> = Vec::new();
     for i in 0..max_len {
-        let slot_ty = match (ok_flat.get(i).copied(), err_flat.get(i).copied()) {
-            (Some(a), Some(b)) if a == b => a,
-            (Some(a), None) => a,
-            (None, Some(b)) => b,
-            _ => TypeTable::I32,
-        };
+        let slot_ty = join_flat_slot(ok_flat.get(i).copied(), err_flat.get(i).copied());
         let local = alloc_local(next_local, locals, slot_ty);
         stmts.push(let_mut_stmt(
             &format!("{prefix}_p{i}"),

@@ -1003,27 +1003,36 @@ pub(super) fn synthesize_adapter(
                     );
                 }
             }
-            // Result<T, E>: for async, pass GC ref (lowered in Step 3 indirect
-            // params); for sync, flatten to discriminant + payload flat args.
+            // Result<T, E>: flatten to discriminant + payload flat args.
             Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
-                if func_info.is_async {
-                    let result_type_id = params[start_idx].type_id;
-                    flat_args.push(local_ref(param_local, param_name, result_type_id));
-                } else {
-                    synthesize_flatten_result_to_flat_args(
-                        &g.args[0],
-                        &g.args[1],
-                        local_ref(param_local, param_name, params[start_idx].type_id),
-                        &format!("__{param_name}"),
-                        &mut next_local,
-                        &mut body_stmts,
-                        &mut locals,
-                        &mut flat_args,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
-                    );
-                }
+                // The async path would have to lower the `Result` GC ref into the
+                // indirect params-to-memory buffer (Step 3), mirroring the
+                // variant/Option handlers (`has_variant_params` gate +
+                // `synthesize_lower_*_to_memory`). No async CM import takes a
+                // `Result` parameter today, so that path is unbuilt — fail loud
+                // here rather than silently passing a GC ref where the import
+                // expects flat values. When such an import appears, implement
+                // `synthesize_lower_result_to_memory`, add it to the Step-3
+                // dispatch and `has_variant_params`, and add a covering fixture.
+                assert!(
+                    !func_info.is_async,
+                    "CM import '{}#{}' takes a `Result` parameter on an async \
+                     function; async Result-param lowering is not yet implemented",
+                    func_info.interface_name, func_info.method_name
+                );
+                synthesize_flatten_result_to_flat_args(
+                    &g.args[0],
+                    &g.args[1],
+                    local_ref(param_local, param_name, params[start_idx].type_id),
+                    &format!("__{param_name}"),
+                    &mut next_local,
+                    &mut body_stmts,
+                    &mut locals,
+                    &mut flat_args,
+                    cm_interface_registry,
+                    &func_info.package,
+                    type_table,
+                );
             }
             // All other types: flat params passed through directly
             _ => {
