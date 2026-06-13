@@ -166,7 +166,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let ultimate = tt.get_ultimate_base_type(*base_type);
                 matches!(
                     tt.get(ultimate),
-                    ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
+                    ResolvedType::Struct { .. }
+                        | ResolvedType::GenericInstance { .. }
+                        // SIMD aliases (`type f32x4 = v128`) — see the
+                        // `Primitive(V128)` arm below.
+                        | ResolvedType::Primitive(PrimitiveType::V128)
                 )
             }
             // Types with no native Wasm binary-op support and no prelude
@@ -177,6 +181,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::GenericResource { .. }
             | ResolvedType::Reactive(_)
             | ResolvedType::AssocTypeProjection { .. } => true,
+            // `v128` (and its SIMD type aliases) is a 128-bit vector with no
+            // scalar binary-op semantics: Wasm has no `v128`-to-bool `==`, and
+            // a fall-through to `i32.eq` produces invalid core Wasm
+            // ("type mismatch: expected i32, found v128"). SIMD comparison is
+            // lane-wise via the `core:simd` builtins / methods, so reject the
+            // scalar operator and route to the requires-trait diagnostic
+            // (there is no `Eq`/`Ord`/`Add`/… impl for `v128`).
+            ResolvedType::Primitive(PrimitiveType::V128) => true,
             _ => false,
         }
     }
