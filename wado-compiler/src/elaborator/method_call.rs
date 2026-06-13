@@ -955,6 +955,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Flags { .. } => {
                         current_type = TypeTable::U32;
                     }
+                    ResolvedType::BuiltinArray(_) => {
+                        break Some((
+                            ModuleSource::array(),
+                            TypeTable::ARRAY_TYPE_NAME.to_string(),
+                        ));
+                    }
                     _ => break None,
                 }
             }
@@ -1308,6 +1314,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Primitive(prim) => {
                     let name = prim.as_str().to_string();
                     (name.clone(), ModuleSource::primitive(), name, vec![])
+                }
+                ResolvedType::BuiltinArray(elem) => {
+                    let elem = *elem;
+                    let arg_name = self.tysys.type_table.borrow().mangle_type_name(elem);
+                    let mangled = crate::name::mangle_builtin_array_type(&arg_name);
+                    (
+                        TypeTable::ARRAY_TYPE_NAME.to_string(),
+                        ModuleSource::array(),
+                        mangled,
+                        vec![elem],
+                    )
                 }
                 ResolvedType::Enum {
                     name,

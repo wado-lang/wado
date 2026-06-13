@@ -1,0 +1,34 @@
+// Turbofish on `Array<T>` static methods must resolve like the
+// inference-driven form. `Array::<i32>::new(3)` is parsed as a
+// StaticMethodCall whose receiver type is the compiler-item `Array`
+// (`ResolvedType::BuiltinArray`); it must route through static-method
+// resolution and type as `Array<i32>`, not the `error` type.
+// Regression for issue #1296.
+use { println, Stdout } from "core:cli";
+
+type IntArr = Array<i32>;
+
+export fn run() with Stdout {
+    // (a) Turbofish on Array::new
+    let a: Array<i32> = Array::<i32>::new(3);
+    a[0] = 1;
+    a[1] = 2;
+    a[2] = 3;
+    assert a.len() == 3;
+    assert a[0] + a[1] + a[2] == 6;
+
+    // Turbofish on Array::filled
+    let b: Array<i32> = Array::<i32>::filled(4, 7);
+    assert b.len() == 4;
+    assert b[0] == 7;
+    assert b[3] == 7;
+
+    // (b) The turbofish value cast to a newtype must type-check, not ICE.
+    let c: IntArr = Array::<i32>::new(2) as IntArr;
+    assert c.len() == 2;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
