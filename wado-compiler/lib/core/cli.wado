@@ -98,11 +98,9 @@ pub fn cwd() -> Option<String> with Environment {
     return Environment::get_initial_cwd();
 }
 
-// The CM lowering of `Exit::exit` takes a `Result<(), ()>` whose canonical ABI
-// is a bare discriminant. The constructors are written in qualified form
-// (`Result::<(), ()>::Ok(())`) like the rest of the stdlib: a bare `Ok(())` in
-// expression position is resolved as a call rather than a variant constructor,
-// which mis-types the argument as `()` and corrupts the shared CM binding.
+// Constructors are qualified (`Result::<(), ()>::Ok(())`): a bare `Ok(())` in
+// expression position resolves as a call, not a variant constructor, mis-typing
+// the argument as `()` and corrupting the shared CM binding.
 
 /// Exits with success (code 0).
 pub fn exit_success() -> ! with Exit {

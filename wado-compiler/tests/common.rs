@@ -614,10 +614,9 @@ pub type CliWasiState = WasiState;
 /// Set up a linker for all test worlds (WASI + HTTP + TLS)
 pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
-    // `wasi:cli/exit#exit-with-code` is `@unstable(feature =
-    // cli-exit-with-code)` upstream, so the default `LinkOptions` omit it and a
-    // guest calling `core:cli`'s `exit(code)` fails to instantiate. Enable it so
-    // the e2e exit fixtures can link, mirroring `wado-cli`'s `create_linker`.
+    // `wasi:cli/exit#exit-with-code` is `@unstable(feature = cli-exit-with-code)`
+    // upstream, omitted by the default LinkOptions; enable it so the exit
+    // fixtures can link (mirrors `wado-cli`'s `create_linker`).
     let mut options = wasmtime_wasi::p3::bindings::LinkOptions::default();
     options.cli_exit_with_code(true);
     wasmtime_wasi::p3::add_to_linker_with_options(&mut linker, &options)?;
@@ -879,11 +878,8 @@ pub struct WasmRunResult {
     pub stderr: String,
     /// Whether the component trapped (e.g., from unreachable)
     pub trapped: bool,
-    /// Process exit code, when the guest terminated via `wasi:cli/exit`
-    /// (`exit` / `exit-with-code`). `None` when the guest returned normally
-    /// or trapped. A clean exit is reported here rather than as a trap: per
-    /// the WASI spec, exit is "analogous to a trap, but without the
-    /// connotation that something bad has happened".
+    /// Exit code when the guest terminated via `wasi:cli/exit`; `None` if it
+    /// returned normally or trapped. A clean exit is recorded here, not as a trap.
     pub exit_code: Option<i32>,
 }
 
@@ -916,14 +912,9 @@ pub fn run_wasm_with_options(
     )
 }
 
-/// Classify an error returned by a guest `run` invocation into either a clean
-/// `wasi:cli/exit` (carrying the requested status code) or a genuine trap.
-///
-/// `wasi:cli/exit#exit` and `#exit-with-code` are implemented by wasmtime as a
-/// host call that returns `Err(I32Exit(code))`, which propagates up as a
-/// wasmtime error rather than terminating the host process. We unwrap it here
-/// so tests can assert on the exit code instead of pattern-matching the trap
-/// message.
+/// Classify a guest `run` error as either a clean `wasi:cli/exit` or a real trap.
+/// wasmtime implements exit as a host call returning `Err(I32Exit(code))` (not a
+/// process exit), so we downcast to recover the code rather than treat it as a trap.
 fn classify_run_error(e: wasmtime::Error) -> (bool, Option<i32>, String) {
     if let Some(wasmtime_wasi::I32Exit(code)) = e.downcast_ref::<wasmtime_wasi::I32Exit>() {
         (false, Some(*code), String::new())

@@ -151,9 +151,8 @@ struct TestSpec {
     #[serde(default)]
     trapped: bool,
 
-    /// Expected process exit code — CLI world. Set when the program is expected
-    /// to terminate via `wasi:cli/exit` (`exit` / `exit-with-code`). A clean
-    /// exit is reported here, not as a trap, so `trapped` stays `false`.
+    /// Expected `wasi:cli/exit` status code (CLI world). A clean exit is recorded
+    /// here, not as a trap, so `trapped` stays `false`.
     #[serde(default)]
     exit_code: Option<i32>,
 

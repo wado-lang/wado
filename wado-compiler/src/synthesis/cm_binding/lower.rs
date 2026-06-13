@@ -32,12 +32,9 @@ use super::types::{
     variant_test,
 };
 
-/// Join two CM flat slot types per the Canonical ABI rule, mirroring
-/// `component_model::join_val_types`: equal kinds are kept, a width/kind
-/// mismatch widens to `i64`, a one-sided slot keeps its type. `cm_flat_types`
-/// uses this same rule to compute the core import's flat signature, so a lowered
-/// flat arg must agree with it (a naive `i32` fallback would mismatch an `i64`
-/// slot and produce invalid core Wasm).
+/// Join two CM flat slot types, mirroring `component_model::join_val_types` so a
+/// lowered flat arg matches the core import's flat signature (an `i32` fallback
+/// for the mismatch case would clash with that signature's `i64`).
 fn join_flat_slot(a: Option<TypeId>, b: Option<TypeId>) -> TypeId {
     match (a, b) {
         (Some(a), Some(b)) if a == b => a,
@@ -838,10 +835,8 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 type_table,
             );
         }
-        // Result<T, E> → discriminant i32 + join of the Ok/Err payload flats.
         // The core `Result` is not a CM-registry variant, so it never matches
-        // the variant arm above; it gets its own flattener. `Result<(), ()>`
-        // is the `wasi:cli/exit` argument shape (discriminant only).
+        // the variant arm above and needs its own flattener.
         Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
             synthesize_flatten_result_to_flat_args(
                 &g.args[0],
@@ -1092,14 +1087,9 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     }
 }
 
-/// Flatten a `Result<T, E>` GC value to flat CM ABI args for sync function calls.
-///
-/// Produces: `[discriminant (0=Ok, 1=Err), ...join(flatten(T), flatten(E))]`.
-/// The discriminant is read with `variant_tag` (a `Result` is always a boxed
-/// variant carrying a discriminant field — unlike `Option`, neither case is a
-/// null ref, so `struct.get` is safe). Payload locals are mutable, zero-init,
-/// and populated per-case via a `Match`. `Result<(), ()>` carries no payload,
-/// so only the discriminant slot is emitted — this is the `wasi:cli/exit` shape.
+/// Flatten a `Result<T, E>` GC value to flat CM ABI args:
+/// `[disc, ...join(flatten(T), flatten(E))]`. Unlike `Option`, the discriminant
+/// is read with `variant_tag` (`struct.get`): a `Result` is never a null ref.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn synthesize_flatten_result_to_flat_args(
     ok_type: &Type,
@@ -1120,7 +1110,7 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
     let val_local = alloc_local(next_local, locals, vt);
     stmts.push(let_stmt(&format!("{prefix}_resval"), val_local, vt, value));
 
-    // Discriminant: 0 = Ok, 1 = Err (matches `ResultOk`/`ResultErr` indices).
+    // Discriminant: 0 = Ok, 1 = Err.
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
         &format!("{prefix}_disc"),
@@ -1134,8 +1124,6 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
         TypeTable::I32,
     ));
 
-    // Joined payload flat types = per-slot union of the Ok/Err payload flats
-    // (CM spec join). `Result<(), ()>` yields none and stops at the discriminant.
     let ok_flat = flatten_param_type(ok_type, cm_interface_registry, &names);
     let err_flat = flatten_param_type(err_type, cm_interface_registry, &names);
     let max_len = ok_flat.len().max(err_flat.len());
@@ -1143,9 +1131,6 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
         return;
     }
 
-    // Allocate mutable payload locals, zero-init, joining each slot's type with
-    // the canonical CM rule (see `join_flat_slot`) so the lowered flat arg types
-    // match the core import's declared flat signature.
     let mut payload_locals: Vec<(u32, TypeId)> = Vec::new();
     for i in 0..max_len {
         let slot_ty = join_flat_slot(ok_flat.get(i).copied(), err_flat.get(i).copied());
@@ -1199,9 +1184,8 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
     }
 }
 
-/// Build the `Match` arm for one `Result` case (`Ok` / `Err`), assigning the
-/// flattened payload values into the shared `payload_locals`. A unit payload
-/// produces a binding-free arm with an empty body.
+/// Build one `Result` case (`Ok` / `Err`) `Match` arm, writing its flattened
+/// payload into the shared `payload_locals`.
 #[allow(clippy::too_many_arguments)]
 fn flatten_result_case_arm(
     case_name: String,
@@ -1219,7 +1203,7 @@ fn flatten_result_case_arm(
     let names =
         super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
 
-    // Unit payload — no flat slots, so no binding and an empty body.
+    // Empty flat list ⇒ unit payload: a binding-free arm.
     if flatten_param_type(payload_type, cm_interface_registry, &names).is_empty() {
         return TirMatchArm {
             pattern: TirPattern::Variant {
@@ -1263,8 +1247,7 @@ fn flatten_result_case_arm(
     for (i, flat_val) in case_flat.into_iter().enumerate() {
         if i < payload_locals.len() {
             let (pl, pt) = payload_locals[i];
-            // A case may produce a narrower flat than the joined slot; cast to
-            // match (a no-op when the kinds already agree).
+            // Cast a narrower case flat into the (possibly wider) joined slot.
             let v = if flat_val.type_id == pt {
                 flat_val
             } else {

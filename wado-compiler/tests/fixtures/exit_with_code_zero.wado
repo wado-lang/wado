@@ -1,8 +1,4 @@
-// Test: `core:cli::exit(0)` terminates the program with status code 0.
-//
-// `exit` wraps `wasi:cli/exit#exit-with-code`, which wasmtime surfaces as a
-// clean process exit carrying the requested code. Output written before the
-// call is flushed; the call does not return.
+// exit(0): stdout written before the call is flushed; the call does not return.
 use { println, exit, Exit } from "core:cli";
 
 export fn run() with Stdout, Exit {

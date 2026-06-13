@@ -413,11 +413,8 @@ pub fn create_store(
 /// Returns an error if WASI bindings cannot be added to the linker.
 pub fn create_linker(engine: &Engine) -> Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
-    // `wasi:cli/exit#exit-with-code` is `@unstable(feature =
-    // cli-exit-with-code)` upstream, so the default LinkOptions omit it and
-    // a guest calling `core:cli`'s `exit(code)` fails to link. Enable it.
-    // The stable `wasi:cli/exit#exit` path (`exit_success` / `exit_error`,
-    // taking a `Result<(), ()>`) is covered by the `exit_*` e2e fixtures.
+    // `wasi:cli/exit#exit-with-code` is `@unstable(feature = cli-exit-with-code)`
+    // upstream, so the default LinkOptions omit it; enable it explicitly.
     let mut options = wasmtime_wasi::p3::bindings::LinkOptions::default();
     options.cli_exit_with_code(true);
     wasmtime_wasi::p3::add_to_linker_with_options(&mut linker, &options)?;

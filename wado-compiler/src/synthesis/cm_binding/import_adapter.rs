@@ -577,10 +577,7 @@ pub(super) fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
-            // Result<T, E>: single GC ref param (binding body lowers to
-            // discriminant + payload). Without this it would fall to the flat
-            // arm below and the caller would be asked to pass a bare i32 where
-            // it holds a GC `Result`, tripping an un-lowered ref→i32 cast.
+            // Result<T, E>: single GC ref param (binding body lowers it).
             Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
                 let result_type_id = {
                     let mut tt = type_table.borrow_mut();
@@ -1005,15 +1002,9 @@ pub(super) fn synthesize_adapter(
             }
             // Result<T, E>: flatten to discriminant + payload flat args.
             Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
-                // The async path would have to lower the `Result` GC ref into the
-                // indirect params-to-memory buffer (Step 3), mirroring the
-                // variant/Option handlers (`has_variant_params` gate +
-                // `synthesize_lower_*_to_memory`). No async CM import takes a
-                // `Result` parameter today, so that path is unbuilt — fail loud
-                // here rather than silently passing a GC ref where the import
-                // expects flat values. When such an import appears, implement
-                // `synthesize_lower_result_to_memory`, add it to the Step-3
-                // dispatch and `has_variant_params`, and add a covering fixture.
+                // No async CM import takes a `Result` today, so the async
+                // params-to-memory lowering is unbuilt: fail loud rather than
+                // pass a GC ref where the import expects flat values.
                 assert!(
                     !func_info.is_async,
                     "CM import '{}#{}' takes a `Result` parameter on an async \
