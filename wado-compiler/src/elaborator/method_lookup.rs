@@ -1660,7 +1660,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(param) = blanket_param {
                     let bounds_ok = param.bounds.iter().all(|bound| {
                         receiver_type_id
-                            .is_some_and(|rt| self.type_implements_trait(rt, &bound.name))
+                            .is_some_and(|rt| self.type_implements_trait(&self.annotate_ctx, rt, &bound.name))
                     });
                     if !bounds_ok {
                         continue;
@@ -2580,7 +2580,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 continue;
                             }
                             for bound in bounds {
-                                if !self.type_implements_trait(type_arg, bound) {
+                                if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
                                     bounds_satisfied = false;
                                     break;
                                 }

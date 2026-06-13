@@ -474,7 +474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 if bound.fn_signature.is_some() {
                                     continue;
                                 }
-                                if self.type_implements_trait(type_arg, &bound.name) {
+                                if self.type_implements_trait(&self.annotate_ctx, type_arg, &bound.name) {
                                     self.register_assoc_types_for_concrete_type_and_trait(
                                         type_arg,
                                         &bound.name.clone(),

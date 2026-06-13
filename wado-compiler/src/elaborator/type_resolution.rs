@@ -401,7 +401,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for (i, (param_name, bounds)) in info.type_param_bounds.iter().enumerate() {
                             if let Some(&type_arg) = type_args.get(i) {
                                 for bound in bounds {
-                                    if !self.type_implements_trait(type_arg, bound) {
+                                    if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
                                         // Get the type name for the error message
                                         let type_name = self.tysys.type_id_to_string(type_arg);
                                         let reason =

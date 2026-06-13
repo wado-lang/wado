@@ -3215,7 +3215,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {
-                            if !self.type_implements_trait(type_arg, bound) {
+                            if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
                                 let type_name = self.tysys.type_id_to_string(type_arg);
                                 let reason = self.trait_unimpl_reason_chain(type_arg, bound);
                                 let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
@@ -3946,7 +3946,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_name(crate::compiler_item::CompilerItem::Ord)
             .to_string();
         if element_type != TypeTable::ERROR
-            && !self.type_implements_trait(element_type, &ord_trait_name)
+            && !self.type_implements_trait(&self.annotate_ctx, element_type, &ord_trait_name)
         {
             let type_name = self.tysys.type_id_to_string(element_type);
             let reason = self.trait_unimpl_reason_chain(element_type, &ord_trait_name);

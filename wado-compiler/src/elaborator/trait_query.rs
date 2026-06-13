@@ -12,6 +12,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
+use super::trait_env::AnnotateCtx;
 use super::tysys::TypeSystem;
 use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError};
 
@@ -273,7 +274,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Check if a type implements a specific trait (for trait bound checking)
-    pub(super) fn type_implements_trait(&self, type_id: TypeId, trait_name: &str) -> bool {
+    pub(super) fn type_implements_trait(
+        &self,
+        ctx: &AnnotateCtx,
+        type_id: TypeId,
+        trait_name: &str,
+    ) -> bool {
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
 
         // Recursion guard: if we're already checking this (type, trait) pair,
@@ -283,18 +289,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If any non-recursive field fails the trait check, it will be caught on that path.
         {
             let key = (type_id, trait_name.to_string());
-            let stack = self.annotate_ctx.trait_check_stack.borrow();
+            let stack = ctx.trait_check_stack.borrow();
             if stack.contains(&key) {
                 return true;
             }
         }
-        self.annotate_ctx.trait_check_stack
+        ctx.trait_check_stack
             .borrow_mut()
             .push((type_id, trait_name.to_string()));
 
-        let result = self.type_implements_trait_inner(&resolved, trait_name);
+        let result = self.type_implements_trait_inner(ctx, &resolved, trait_name);
 
-        self.annotate_ctx.trait_check_stack.borrow_mut().pop();
+        ctx.trait_check_stack.borrow_mut().pop();
 
         result
     }
@@ -390,7 +396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Report the first member that breaks the trait, then recurse to
         // explain that member in turn.
         for (label, member_tid) in members {
-            if !self.type_implements_trait(member_tid, trait_name) {
+            if !self.type_implements_trait(&self.annotate_ctx, member_tid, trait_name) {
                 let owner = self.tysys.type_id_to_string(type_id);
                 let member_ty = self.tysys.type_id_to_string(member_tid);
                 chain.push(format!(
@@ -402,12 +408,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn type_implements_trait_inner(&self, resolved: &ResolvedType, trait_name: &str) -> bool {
+    fn type_implements_trait_inner(
+        &self,
+        ctx: &AnnotateCtx,
+        resolved: &ResolvedType,
+        trait_name: &str,
+    ) -> bool {
         // Type parameters satisfy bounds declared on them (e.g., T: Describable
         // means T implements Describable within the scope of that declaration)
         if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
         {
-            if let Some(bounds) = self.annotate_ctx.trait_ctx.type_param_bounds.get(name) {
+            if let Some(bounds) = ctx.trait_ctx.type_param_bounds.get(name) {
                 return bounds.iter().any(|b| b.name == trait_name);
             }
             return false;
@@ -458,7 +469,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(info) = self.lookup_variant_case(name)
         {
             let all_impl = info.cases.iter().all(|c| {
-                c.payload == TypeTable::UNIT || self.type_implements_trait(c.payload, trait_name)
+                c.payload == TypeTable::UNIT || self.type_implements_trait(ctx, c.payload, trait_name)
             });
             if all_impl {
                 return true;
@@ -473,7 +484,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let field_types: Vec<TypeId> = info.fields.iter().map(|(_, tid, _)| *tid).collect();
             let all_impl = field_types
                 .iter()
-                .all(|tid| self.type_implements_trait(*tid, trait_name));
+                .all(|tid| self.type_implements_trait(ctx, *tid, trait_name));
             if all_impl {
                 return true;
             }
@@ -507,7 +518,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
             let all_impl = info.fields.iter().all(|(_, field_tid, _)| {
                 let concrete_tid = param_map.get(field_tid).copied().unwrap_or(*field_tid);
-                self.type_implements_trait(concrete_tid, trait_name)
+                self.type_implements_trait(ctx, concrete_tid, trait_name)
             });
             if all_impl {
                 return true;
@@ -533,7 +544,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return true;
                 }
                 let concrete_tid = param_map.get(&c.payload).copied().unwrap_or(c.payload);
-                self.type_implements_trait(concrete_tid, trait_name)
+                self.type_implements_trait(ctx, concrete_tid, trait_name)
             });
             if all_impl {
                 return true;
@@ -561,7 +572,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let elems = type_args.clone();
                     return elems
                         .iter()
-                        .all(|e| self.type_implements_trait(*e, trait_name));
+                        .all(|e| self.type_implements_trait(ctx, *e, trait_name));
                 }
                 (
                     name.clone(),
@@ -582,7 +593,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.find_trait_impl_for_type_with_args("&", trait_name, Some(&[inner_id])) {
                     return true;
                 }
-                return self.type_implements_trait(inner_id, trait_name);
+                return self.type_implements_trait(ctx, inner_id, trait_name);
             }
             ResolvedType::MutRef(inner) => {
                 // Mutable references always implement Eq via ref.eq (identity comparison)
@@ -593,7 +604,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.find_trait_impl_for_type_with_args("&mut", trait_name, Some(&[inner_id])) {
                     return true;
                 }
-                return self.type_implements_trait(inner_id, trait_name);
+                return self.type_implements_trait(ctx, inner_id, trait_name);
             }
             ResolvedType::AssocTypeProjection { bounds, .. } => {
                 // An associated type projection T::Assoc implements a trait if
@@ -610,7 +621,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // Fall back to base type's trait implementation
                 let base_id = *base_type;
-                return self.type_implements_trait(base_id, trait_name);
+                return self.type_implements_trait(ctx, base_id, trait_name);
             }
             ResolvedType::Flags { name, .. } => {
                 // Check for a direct impl on the flags type first (e.g., impl Serialize for Perms)
@@ -618,7 +629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return true;
                 }
                 // Fall back to u32's trait implementation
-                return self.type_implements_trait(TypeTable::U32, trait_name);
+                return self.type_implements_trait(ctx, TypeTable::U32, trait_name);
             }
             _ => return false,
         };
@@ -1025,7 +1036,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     }
                     for bound in bounds {
-                        if !self.type_implements_trait(type_arg, bound) {
+                        if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
                             return false;
                         }
                     }
@@ -1042,7 +1053,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             {
                 for bound in bounds {
-                    if !self.type_implements_trait(type_arg, bound) {
+                    if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
                         return false;
                     }
                 }
@@ -1073,7 +1084,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if bound.fn_signature.is_some() {
                         continue;
                     }
-                    if self.type_implements_trait(type_arg, &bound.name) {
+                    if self.type_implements_trait(&self.annotate_ctx, type_arg, &bound.name) {
                         // Register associated type resolutions so the monomorphizer can
                         // substitute e.g. I::Iter → ListIter<u8> when I = List<u8>.
                         self.register_assoc_types_for_concrete_type_and_trait(
@@ -1253,7 +1264,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let bounds_ok = blanket_param
                             .bounds
                             .iter()
-                            .all(|bound| self.type_implements_trait(concrete_type_id, &bound.name));
+                            .all(|bound| self.type_implements_trait(&self.annotate_ctx, concrete_type_id, &bound.name));
                         if bounds_ok {
                             result.push(BlanketImplInfo {
                                 blanket_param_name: blanket_param.name.clone(),
@@ -1367,7 +1378,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
             (info.trait_name, info.self_kind, param_types, return_type)
-        } else if (is_eq || is_ord) && self.type_implements_trait(lookup_type_id, trait_name) {
+        } else if (is_eq || is_ord) && self.type_implements_trait(&self.annotate_ctx, lookup_type_id, trait_name) {
             let ref_self_ty = self
                 .tysys
                 .type_table
@@ -1461,7 +1472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.tysys.auto_derive_eligible_kind(base_type_id) {
             return None;
         }
-        if !self.type_implements_trait(base_type_id, &trait_name) {
+        if !self.type_implements_trait(&self.annotate_ctx, base_type_id, &trait_name) {
             return None;
         }
         let ref_self_ty = self
