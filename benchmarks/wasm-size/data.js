@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781298858082,
+  "lastUpdate": 1781321038036,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32397,6 +32397,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a12da69e1428f9088118f9a85d76feecddcc1b55"
         },
         "date": 1781298857529,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432251,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0ec71d2188552669c2dc83806f3894db76ff652d",
+          "message": "Merge pull request #1360 from wado-lang/claude/wizardly-ptolemy-7889wo\n\nfix(vscode): show core:/wasi: scheme in stdlib editor tab labels",
+          "timestamp": "2026-06-13T12:14:49+09:00",
+          "tree_id": "6399d112665a73922d0605f1790d7921f232533d",
+          "url": "https://github.com/wado-lang/wado/commit/0ec71d2188552669c2dc83806f3894db76ff652d"
+        },
+        "date": 1781321037776,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
