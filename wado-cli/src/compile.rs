@@ -2,6 +2,8 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
+use wado_manifest::DependencySource;
+
 use lexopt::Arg::Value;
 use lexopt::Parser;
 use wado_compiler::LogLevel;
@@ -343,17 +345,27 @@ pub async fn try_compile(
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let host = FilesystemCompilerHost::with_log_level(base_path, flags.log_level);
+    // Load the nearest manifest once: it seeds both the host's `[dependencies]`
+    // index and the Kiln pipeline's `[build-dependencies]` resolution.
+    let manifest_pair = load_nearest_manifest(path);
+    let dep_index = manifest_pair
+        .as_ref()
+        .map(|(manifest, root)| wado_lsp::host::dependency_index_from(manifest, root, &base_path));
+    let mut host = FilesystemCompilerHost::with_log_level(base_path, flags.log_level);
+    if let Some(index) = dep_index {
+        host = host.with_dependency_index(index);
+    }
 
-    let pipeline_outcome = match maybe_run_pipeline(path, &host, flags.no_cache).await {
-        Ok(outcome) => outcome,
-        Err(e) => {
-            eprintln!("{e}");
-            return Err(wado_compiler::CompileFailure {
-                is_todo_module: false,
-            });
-        }
-    };
+    let pipeline_outcome =
+        match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {
+            Ok(outcome) => outcome,
+            Err(e) => {
+                eprintln!("{e}");
+                return Err(wado_compiler::CompileFailure {
+                    is_todo_module: false,
+                });
+            }
+        };
 
     let options = wado_compiler::CompilerOptions {
         opt_level: to_compiler_opt_level(flags.opt_level),
@@ -394,9 +406,8 @@ async fn maybe_run_pipeline(
     entry_file: &Path,
     host: &FilesystemCompilerHost,
     no_cache: bool,
+    manifest_pair: Option<(wado_manifest::Manifest, std::path::PathBuf)>,
 ) -> Result<PipelineOutcome, PipelineError> {
-    let manifest_pair = load_nearest_manifest(entry_file);
-
     let manifest_root_for_inline = manifest_pair.as_ref().map(|(_, root)| root.clone());
     let probe_manifest_root = manifest_root_for_inline.clone().unwrap_or_else(|| {
         entry_file
@@ -415,9 +426,56 @@ async fn maybe_run_pipeline(
     if inline.is_empty() {
         return Ok(PipelineOutcome::default());
     }
+    let mut inline = inline;
+    rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
     let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
     crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline, no_cache)
         .await
+}
+
+/// Rewrite each inline invocation whose `module` is a bare
+/// `[build-dependencies]` name (`module: "gale"`) into a concrete
+/// `LocalPath` pointing at the dependency package's
+/// `[world]."core:kiln/generator"` entry. This resolves build-dep
+/// generators once, off the already-loaded manifest, so the rest of the
+/// pipeline (cache key, generator identity, provider) sees a path-addressed
+/// module. Unresolvable names are left as `BuildDep` for the provider to
+/// report.
+pub(crate) fn rewrite_build_dep_modules(
+    inline: &mut [wado_compiler::kiln::Invocation],
+    manifest: &wado_manifest::Manifest,
+    manifest_root: &Path,
+) {
+    use wado_compiler::kiln::GeneratorModule;
+    for inv in inline.iter_mut() {
+        let GeneratorModule::BuildDep(name) = &inv.module else {
+            continue;
+        };
+        if let Some(local) = build_dep_generator_local_path(name, manifest, manifest_root) {
+            inv.module = GeneratorModule::LocalPath(local);
+        }
+    }
+}
+
+/// The generator entry of a path `[build-dependencies]` package, as a
+/// manifest-root-relative [`InvocationPath`]: `<dep-path>/<generator world
+/// entry>`. `None` when the dependency is absent, not a path dep, or declares
+/// no `core:kiln/generator` world.
+fn build_dep_generator_local_path(
+    name: &str,
+    manifest: &wado_manifest::Manifest,
+    manifest_root: &Path,
+) -> Option<wado_compiler::kiln::InvocationPath> {
+    let dep = manifest.build_dependencies.get(name)?;
+    let DependencySource::Path { path, .. } = &dep.source else {
+        return None;
+    };
+    let dep_manifest_text = fs::read_to_string(manifest_root.join(path).join("wado.toml")).ok()?;
+    let dep_manifest: wado_manifest::Manifest = dep_manifest_text.parse().ok()?;
+    let entry = dep_manifest.world_entry("core:kiln/generator")?;
+    Some(wado_compiler::kiln::InvocationPath::normalize(&format!(
+        "{path}/{entry}"
+    )))
 }
 
 /// Empty in-memory `wado.toml` manifest used as a fallback when the

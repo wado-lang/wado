@@ -949,6 +949,7 @@ pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
     matches!(
         ms,
         ModuleSource::Local { .. }
+            | ModuleSource::Dependency { .. }
             | ModuleSource::EntryPoint { .. }
             | ModuleSource::Redirected { .. }
     )

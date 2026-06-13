@@ -322,6 +322,7 @@ pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
     match source {
         ModuleSource::EntryPoint { .. }
         | ModuleSource::Remote { .. }
+        | ModuleSource::Dependency { .. }
         | ModuleSource::Redirected { .. } => true,
         ModuleSource::Local { path } => {
             let path = path.as_str();

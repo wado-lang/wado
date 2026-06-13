@@ -303,6 +303,7 @@ pub fn generator_identity(module: &GeneratorModule) -> String {
     match module {
         GeneratorModule::Spec(s) => s.clone(),
         GeneratorModule::LocalPath(p) => format!("local:{}", p.as_str()),
+        GeneratorModule::BuildDep(s) => format!("builddep:{s}"),
     }
 }
 

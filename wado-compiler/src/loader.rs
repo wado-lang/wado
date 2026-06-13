@@ -53,6 +53,10 @@ pub enum LoadError {
     UnknownNamespace { namespace: String },
     /// Invalid module path format (e.g., "foo.wado" without "./" prefix)
     InvalidModulePath { path: String },
+    /// A bare name matched a declared `[dependencies]` entry, but the
+    /// dependency could not be resolved to an entry module (e.g. its package
+    /// declares no `[package].lib`). `reason` explains why.
+    DependencyUnresolved { name: String, reason: String },
     /// Wasm-asset import (`with { type: "wat"|"wasm" }`) failed validation.
     WasmImport {
         module_source: ModuleSource,
@@ -130,6 +134,9 @@ impl std::fmt::Display for LoadError {
                     f,
                     "invalid module path '{path}'; use './' for local modules or 'namespace:' for library modules"
                 )
+            }
+            LoadError::DependencyUnresolved { name, reason } => {
+                write!(f, "cannot resolve dependency '{name}': {reason}")
             }
             LoadError::WasmImport {
                 module_source,
@@ -387,7 +394,9 @@ pub fn resolve_wasm_asset_path(
             "wasi:{}",
             join_namespace_relative_path(interface, import_source)
         )),
-        ModuleSource::Local { path } => Ok(resolve_module_path(path, import_source)),
+        ModuleSource::Local { path } | ModuleSource::Dependency { path } => {
+            Ok(resolve_module_path(path, import_source))
+        }
         ModuleSource::Remote { url } => Ok(resolve_module_path(url, import_source)),
         ModuleSource::EntryPoint { .. } => Ok(normalize_module_path(import_source)),
         ModuleSource::Redirected { uri } => Ok(resolve_module_path(uri, import_source)),
@@ -952,11 +961,13 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// Create a new module loader with the given host and log level
     pub fn new(host: &'a H, log_level: LogLevel) -> Self {
+        let mut interner = ModuleSourceInterner::new();
+        interner.set_dependencies(host.dependency_index());
         Self {
             host,
             log_level,
             logger: Logger::new(host, log_level),
-            interner: ModuleSourceInterner::new(),
+            interner,
             loaded: IndexMap::default(),
             loading: IndexSet::default(),
             implicit_modules: IndexSet::default(),
@@ -1365,7 +1376,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = match from_module_source {
-            ModuleSource::Local { path } => path.to_string(),
+            ModuleSource::Local { path } | ModuleSource::Dependency { path } => path.to_string(),
             ModuleSource::EntryPoint { filename } => filename.to_string(),
             ModuleSource::Redirected { uri } => uri.to_string(),
             _ => String::new(),
@@ -1398,7 +1409,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // base-path joining or relative-path normalization happens.
         if !self.invocations.is_empty() {
             let decl_file = match from_module_source {
-                ModuleSource::Local { path } => path.as_str(),
+                ModuleSource::Local { path } | ModuleSource::Dependency { path } => path.as_str(),
                 ModuleSource::EntryPoint { filename } => filename.as_str(),
                 ModuleSource::Redirected { uri } => uri.as_str(),
                 _ => "",
@@ -1444,9 +1455,32 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 let resolved = resolve_module_path(from_url, import_source);
                 return Ok(self.interner.remote(&resolved));
             }
+            // Relative import from within a dependency module stays inside
+            // that dependency package.
+            if let ModuleSource::Dependency { path } = from_module_source {
+                let resolved = resolve_module_path(path, import_source);
+                return Ok(self.interner.dependency(&resolved));
+            }
             // Entry point or stdlib: treat as relative to project root
             let canonical = normalize_module_path(import_source);
             return Ok(self.interner.local(&canonical));
+        }
+
+        // Bare dependency name: resolve against `[dependencies]`. Only the
+        // consuming project resolves its own deps; a bare import from within
+        // a dependency must not bind to the consumer's deps.
+        if !matches!(from_module_source, ModuleSource::Dependency { .. }) {
+            if let Some(dep) = self.interner.resolve_dependency(import_source) {
+                return Ok(dep);
+            }
+            // Declared but unresolvable (e.g. missing `[package].lib`): report
+            // why, instead of a generic "invalid module path".
+            if let Some(reason) = self.interner.unresolved_dependency(import_source) {
+                return Err(LoadError::DependencyUnresolved {
+                    name: import_source.to_string(),
+                    reason: reason.to_string(),
+                });
+            }
         }
 
         // Check for unknown namespace pattern (xxx:yyy)
@@ -1477,7 +1511,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         _from_module_source: &ModuleSource,
     ) -> Result<String, LoadError> {
         match module_source {
-            ModuleSource::Local { path } => {
+            ModuleSource::Local { path } | ModuleSource::Dependency { path } => {
                 let bytes = self.host.load_source(path).await.map_err(LoadError::from)?;
                 String::from_utf8(bytes).map_err(|_| LoadError::IoError {
                     path: path.to_string(),

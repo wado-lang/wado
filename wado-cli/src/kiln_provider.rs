@@ -2,11 +2,12 @@
 //!
 //! Resolves a [`GeneratorModule`] into a [`ResolvedGenerator`] (wasm
 //! bytes + options descriptor + source-closure hash) for the Kiln
-//! driver. v1 supports [`GeneratorModule::LocalPath`] (`module = { path
-//! = "..." }`) resolution. Spec-form generators (`module =
-//! "ns:name@ver"`) surface [`ProviderError::Unsupported`] with a clear
-//! message, matching WEP open-q #4 — registry/git module sources are
-//! deferred to a follow-up.
+//! driver. Supports [`GeneratorModule::LocalPath`] (`module:
+//! "./generator.wado"`) and [`GeneratorModule::BuildDep`] (`module:
+//! "gale"`, resolved against `[build-dependencies]` to the package's
+//! `core:kiln/generator` world entry). Spec-form generators (`module =
+//! "ns:name@ver"`) surface [`ProviderError::Unsupported`] — registry/git
+//! module sources are deferred to a follow-up.
 //!
 //! For `LocalPath`, `resolve` reads the generator source, consults the
 //! on-disk cache at `build/kiln/{generators,metadata}/<stable-id>.*`
@@ -28,7 +29,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use wado_compiler::kiln::{GeneratorModule, OptionsDescriptor};
+use wado_compiler::kiln::{GeneratorModule, InvocationPath, OptionsDescriptor};
 use wado_compiler::lexer::lex;
 use wado_compiler::token::canonical_token_bytes;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
@@ -549,6 +550,31 @@ fn hex32(bytes: &[u8; 32]) -> String {
     out
 }
 
+impl CliGeneratorProvider {
+    /// Compile (or read from cache) a generator at a manifest-root-relative
+    /// path. Shared by `LocalPath` and `BuildDep` resolution.
+    async fn resolve_local(
+        &self,
+        path: &InvocationPath,
+    ) -> Result<ResolvedGenerator, ProviderError> {
+        let (abs, _source, source_str, stable_id) = self.read_local_source(path)?;
+        let base = abs.parent().map(Path::to_path_buf).unwrap_or_default();
+        if !self.no_cache
+            && let Some(resolved) = self.try_read_cache(&stable_id, &base)
+        {
+            return Ok(resolved);
+        }
+        let artifacts = self
+            .compile_local(path.as_str().to_string(), abs, source_str, stable_id)
+            .await?;
+        Ok(ResolvedGenerator {
+            wasm: artifacts.wasm,
+            descriptor: artifacts.descriptor,
+            source_hash: artifacts.source_hash,
+        })
+    }
+}
+
 impl GeneratorProvider for CliGeneratorProvider {
     async fn resolve(&self, module: &GeneratorModule) -> Result<ResolvedGenerator, ProviderError> {
         match module {
@@ -559,23 +585,18 @@ impl GeneratorProvider for CliGeneratorProvider {
                      Use `module = {{ path = \"...\" }}` to point at a local generator package."
                 ),
             }),
-            GeneratorModule::LocalPath(path) => {
-                let (abs, _source, source_str, stable_id) = self.read_local_source(path)?;
-                let base = abs.parent().map(Path::to_path_buf).unwrap_or_default();
-                if !self.no_cache
-                    && let Some(resolved) = self.try_read_cache(&stable_id, &base)
-                {
-                    return Ok(resolved);
-                }
-                let artifacts = self
-                    .compile_local(path.as_str().to_string(), abs, source_str, stable_id)
-                    .await?;
-                Ok(ResolvedGenerator {
-                    wasm: artifacts.wasm,
-                    descriptor: artifacts.descriptor,
-                    source_hash: artifacts.source_hash,
-                })
-            }
+            GeneratorModule::LocalPath(path) => self.resolve_local(path).await,
+            // `BuildDep` is rewritten to `LocalPath` by the CLI before the
+            // pipeline runs (see `compile::rewrite_build_dep_modules`); an
+            // unresolved one means the `[build-dependencies]` entry was
+            // missing or declared no `core:kiln/generator` world.
+            GeneratorModule::BuildDep(name) => Err(ProviderError::Internal {
+                message: format!(
+                    "kiln: generator module `{name}` could not be resolved against \
+                     [build-dependencies]: no such path dependency, or it declares no \
+                     [world].\"core:kiln/generator\" entry"
+                ),
+            }),
         }
     }
 }

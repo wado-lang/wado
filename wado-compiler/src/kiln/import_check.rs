@@ -319,6 +319,7 @@ fn should_check(source: &ModuleSource) -> bool {
     match source {
         ModuleSource::EntryPoint { .. }
         | ModuleSource::Local { .. }
+        | ModuleSource::Dependency { .. }
         | ModuleSource::Remote { .. }
         | ModuleSource::Redirected { .. } => true,
         ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. } => false,

@@ -63,10 +63,10 @@ pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use codegen_flags::CodegenFlags;
 pub use compiler_host::{
-    Code, CompilerHost, Diagnostic, DiagnosticSpan, GeneratorDiagnostic, GeneratorDiagnosticLevel,
-    GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
-    GeneratorResponse, GeneratorRunnerError, GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel,
-    Severity, SourceError,
+    Code, CompilerHost, DependencyIndex, Diagnostic, DiagnosticSpan, GeneratorDiagnostic,
+    GeneratorDiagnosticLevel, GeneratorError, GeneratorInputFile, GeneratorOutputFile,
+    GeneratorReadRecord, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
+    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
 pub use remarks::{Remark, collect_value_copy_remarks};

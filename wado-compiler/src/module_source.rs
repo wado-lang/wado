@@ -147,13 +147,41 @@ static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
 #[derive(Debug)]
 pub struct ModuleSourceInterner {
     strings: StringInterner,
+    /// Resolved `[dependencies]`, consulted for bare-name `use` clauses, plus
+    /// declared-but-unresolved entries (with reasons) for precise errors.
+    /// Empty for single-file compilation.
+    dependencies: crate::compiler_host::DependencyIndex,
 }
 
 impl ModuleSourceInterner {
     pub fn new() -> Self {
         Self {
             strings: StringInterner::with_well_known_arcs(well_known_arcs()),
+            dependencies: crate::compiler_host::DependencyIndex::default(),
         }
+    }
+
+    pub fn set_dependencies(&mut self, dependencies: crate::compiler_host::DependencyIndex) {
+        self.dependencies = dependencies;
+    }
+
+    pub fn dependency(&mut self, path: &str) -> ModuleSource {
+        ModuleSource::Dependency {
+            path: self.intern(path),
+        }
+    }
+
+    /// Resolve a bare dependency name to its entry module `ModuleSource`, if
+    /// declared in `[dependencies]` and successfully resolved.
+    pub fn resolve_dependency(&mut self, name: &str) -> Option<ModuleSource> {
+        let path = self.dependencies.resolved.get(name)?.clone();
+        Some(self.dependency(&path))
+    }
+
+    /// The reason a *declared* dependency could not be resolved, if any.
+    #[must_use]
+    pub fn unresolved_dependency(&self, name: &str) -> Option<&str> {
+        self.dependencies.unresolved.get(name).map(String::as_str)
     }
 
     pub fn intern(&mut self, s: &str) -> InternedStr {
@@ -205,6 +233,7 @@ impl ModuleSourceInterner {
             [first] if first.starts_with("./") || first.starts_with("../") => self.local(first),
             [first, rest @ ..] if first == "core" => self.core(&rest.join("/")),
             [first, rest @ ..] if first == "wasi" => self.wasi(&rest.join("/")),
+            [first, rest @ ..] if first == "dep" => self.dependency(&rest.join("/")),
             segments => self.local(&segments.join("/")),
         }
     }
@@ -286,6 +315,20 @@ pub enum ModuleSource {
         /// Relative path (e.g., "./geometry.wado", "./utils/helper.wado")
         path: InternedStr,
     },
+    /// A module belonging to a dependency package, resolved from a bare-name
+    /// `use { … } from "<dep>"` clause against `[dependencies]`.
+    ///
+    /// Identity is the resolved entry-module `path` — within a compilation
+    /// the same resolved path is the same file, hence the same package, so
+    /// two `[dependencies]` aliases that point at the same package unify.
+    /// The variant is distinct from [`ModuleSource::Local`] to carry the
+    /// package boundary (only `export` items are visible across it) and to
+    /// keep dependency modules from resolving the consumer's `[dependencies]`.
+    /// `path` is loaded by the host exactly like `Local` — wado-to-wado
+    /// source dependencies compile into the same component (the CM boundary
+    /// is skipped), so dependency modules are ordinary Wado source once
+    /// loaded.
+    Dependency { path: InternedStr },
     /// Remote module loaded via HTTP/HTTPS
     Remote {
         /// Full URL (e.g., "<https://example.com/lib.wado>")
@@ -340,6 +383,7 @@ impl PartialEq for ModuleSource {
             (Self::Core { name: a }, Self::Core { name: b }) => a == b,
             (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
+            (Self::Dependency { path: a }, Self::Dependency { path: b }) => a == b,
             (Self::Remote { url: a }, Self::Remote { url: b }) => a == b,
             (Self::Redirected { uri: a }, Self::Redirected { uri: b }) => a == b,
             (
@@ -369,6 +413,7 @@ impl std::hash::Hash for ModuleSource {
             Self::Core { name } => name.hash(state),
             Self::Wasi { interface } => interface.hash(state),
             Self::Local { path } => path.hash(state),
+            Self::Dependency { path } => path.hash(state),
             Self::Remote { url } => url.hash(state),
             Self::Redirected { uri } => uri.hash(state),
             Self::Wasm { path, kind } => {
@@ -469,6 +514,7 @@ impl ModuleSource {
             Self::Core { name } => vec!["core".to_string(), name.to_string()],
             Self::Wasi { interface } => vec!["wasi".to_string(), interface.to_string()],
             Self::Local { path } => vec![path.to_string()],
+            Self::Dependency { path } => vec!["dep".to_string(), path.to_string()],
             Self::Remote { url } => vec![url.to_string()],
             Self::EntryPoint { filename } => vec![filename.to_string()],
             Self::Redirected { uri } => vec![uri.to_string()],
@@ -622,6 +668,7 @@ impl fmt::Display for ModuleSource {
             Self::Core { name } => write!(f, "core:{name}"),
             Self::Wasi { interface } => write!(f, "wasi:{interface}"),
             Self::Local { path } => write!(f, "{path}"),
+            Self::Dependency { path } => write!(f, "dep:{path}"),
             Self::Remote { url } => write!(f, "{url}"),
             Self::EntryPoint { filename } => {
                 write!(f, "{filename}")
@@ -635,6 +682,48 @@ impl fmt::Display for ModuleSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dependency_identity_is_the_resolved_path() {
+        let mut interner = ModuleSourceInterner::new();
+        let a = interner.dependency("../greet/src/lib.wado");
+        let b = interner.dependency("../greet/src/lib.wado");
+        let other = interner.dependency("../other/src/lib.wado");
+        // Same resolved path = same package, regardless of the alias used to
+        // reach it, so two aliases for one package unify.
+        assert_eq!(a, b);
+        assert_ne!(a, other);
+        // Still distinct from a `Local` at the same path: the variant carries
+        // the package boundary.
+        let local = interner.local("../greet/src/lib.wado");
+        assert_ne!(a, local);
+        assert_eq!(a.qualify_name("hello"), "dep:../greet/src/lib.wado//hello");
+    }
+
+    #[test]
+    fn resolve_dependency_uses_registered_path() {
+        let mut interner = ModuleSourceInterner::new();
+        let mut index = crate::compiler_host::DependencyIndex::default();
+        index
+            .resolved
+            .insert("greet".to_string(), "../greet/src/lib.wado".to_string());
+        index.unresolved.insert(
+            "broken".to_string(),
+            "declares no [package].lib".to_string(),
+        );
+        interner.set_dependencies(index);
+        assert_eq!(
+            interner.resolve_dependency("greet"),
+            Some(interner.dependency("../greet/src/lib.wado"))
+        );
+        assert_eq!(interner.resolve_dependency("missing"), None);
+        // Declared-but-unresolved entries surface their reason instead.
+        assert_eq!(interner.resolve_dependency("broken"), None);
+        assert_eq!(
+            interner.unresolved_dependency("broken"),
+            Some("declares no [package].lib")
+        );
+    }
 
     #[test]
     fn test_module_source_from_path_core() {

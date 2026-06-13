@@ -395,6 +395,25 @@ pub trait CompilerHost: Send + Sync {
     ) -> impl Future<Output = Result<GeneratorResponse, GeneratorRunnerError>> + Send {
         async move { Err(GeneratorRunnerError::Unsupported) }
     }
+
+    /// Resolve `[dependencies]` for bare-name `use { … } from "<name>"`.
+    /// Consulted once when the module loader is created; empty by default
+    /// (single-file and in-memory hosts have no manifest).
+    fn dependency_index(&self) -> DependencyIndex {
+        DependencyIndex::default()
+    }
+}
+
+/// The project's `[dependencies]`, resolved for bare-name imports.
+#[derive(Debug, Clone, Default)]
+pub struct DependencyIndex {
+    /// name → entry-module path (the dependency's `[package].lib`), relative
+    /// to the host base.
+    pub resolved: std::collections::HashMap<String, String>,
+    /// name → human-readable reason a *declared* dependency could not be
+    /// resolved (e.g. its package declares no `[package].lib`). Surfaced at
+    /// the `use` site instead of a generic "invalid module path".
+    pub unresolved: std::collections::HashMap<String, String>,
 }
 
 /// Request handed to a Kiln generator by the compiler.

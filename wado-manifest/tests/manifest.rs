@@ -1,6 +1,29 @@
 use wado_manifest::{DependencySource, GitPin, Manifest, ManifestError};
 
 #[test]
+fn package_lib_entry_parsed() {
+    let toml = r#"
+[package]
+name = "greet"
+version = "0.1.0"
+lib = "src/lib.wado"
+"#;
+    let m: Manifest = toml.parse().unwrap();
+    assert_eq!(m.package.unwrap().lib.as_deref(), Some("src/lib.wado"));
+}
+
+#[test]
+fn package_lib_absent_is_none() {
+    let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+"#;
+    let m: Manifest = toml.parse().unwrap();
+    assert!(m.package.unwrap().lib.is_none());
+}
+
+#[test]
 fn full_manifest_from_wep() {
     let toml = r#"
 [package]

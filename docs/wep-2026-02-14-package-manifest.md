@@ -23,8 +23,10 @@ The project manifest is `wado.toml`, placed at the project root.
 namespace = "myorg"
 name = "my-app"
 version = "0.1.0"
-command = "src/main.wado"
 lib = "src/lib.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 
 [registries]
 default = "https://wa.dev"
@@ -45,9 +47,7 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
 | `namespace` | `string` | No       | Organization or user namespace (e.g., `"myorg"`) |
 | `name`      | `string` | Yes      | Package name (e.g., `"my-app"`)                  |
 | `version`   | `string` | Yes      | Semver version (e.g., `"0.1.0"`)                 |
-| `command`   | `string` | No       | Entry point for `wasi:cli/command` world         |
-| `service`   | `string` | No       | Entry point for `wasi:http/service` world        |
-| `lib`       | `string` | No       | Library interface file                           |
+| `lib`       | `string` | No       | Entry module of the package's library world      |
 
 `namespace` and `name` together form the registry identity (`namespace:name`, e.g., `myorg:my-app`). Without `namespace`, the package cannot be published to a registry — this is the natural state for closed-source applications and internal tools.
 
@@ -57,38 +57,38 @@ Both `namespace` and `name` must match `[a-zA-Z0-9_-]+` (minimum 1 character, ma
 
 Dependency keys in `[dependencies]` follow the same rules. This ensures they are valid TOML bare keys and unambiguous in import paths.
 
-At least one of `command`, `service`, or `lib` should be specified. A package can have multiple entry points (e.g., both `command` and `lib`).
+A package must declare at least one world: a `[world]` entry, `[package].lib`, or both.
 
 ### Entry Points and Worlds
 
-Each entry point field corresponds to a hosted world or a library world:
+A package targets one or more Component Model worlds. Hosted worlds are declared in the `[world]` table, keyed by the fully-qualified world name; the library world is declared by `[package].lib`.
 
-| Field     | Category      | WASI World          | CLI Command  | Required Export                           |
-| --------- | ------------- | ------------------- | ------------ | ----------------------------------------- |
-| `command` | hosted world  | `wasi:cli/command`  | `wado run`   | `export fn run()`                         |
-| `service` | hosted world  | `wasi:http/service` | `wado serve` | `export fn handle(request: Request) -> …` |
-| `lib`     | library world | (none — interface)  | (none)       | `export` items become the public API      |
+| Declaration                     | World                 | Driver       | Required export                           |
+| ------------------------------- | --------------------- | ------------ | ----------------------------------------- |
+| `[world]."wasi:cli/command"`    | `wasi:cli/command`    | `wado run`   | `export fn run()`                         |
+| `[world]."wasi:http/service"`   | `wasi:http/service`   | `wado serve` | `export fn handle(request: Request) -> …` |
+| `[world]."core:kiln/generator"` | `core:kiln/generator` | Kiln         | `export fn generate(...)`                 |
+| `[package].lib`                 | the library world     | (none)       | `export` items become the public API      |
+
+The library world's name is the package name. It is the contract other packages compose against, but it is not observable in a wado-to-wado source dependency: the CM boundary is skipped and the dependency's modules compile into the consumer's component (see "Wado-to-Wado Optimization"). The world materializes only when the package is built as a standalone `.wasm` component.
 
 ```toml
-# CLI tool with library
+# CLI tool with a library world
 [package]
 name = "markdown"
-command = "src/cli.wado"
 lib = "src/lib.wado"
+
+[world]
+"wasi:cli/command" = "src/cli.wado"
 
 # HTTP service only
 [package]
 name = "my-api"
-service = "src/server.wado"
 
-# Development tool with CLI + Web UI
-[package]
-name = "devtool"
-command = "src/cli.wado"
-service = "src/dashboard.wado"
-lib = "src/lib.wado"
+[world]
+"wasi:http/service" = "src/server.wado"
 
-# Library only
+# Library only (world name = "json")
 [package]
 name = "json"
 lib = "src/lib.wado"
@@ -121,6 +121,8 @@ use { parse } from "markdown";        // OK: exported from lib
 ```
 
 When published as a `.wasm` component (e.g., to wa.dev), only `export` items appear in the component's interface.
+
+Crossing the package boundary requires `export`: a consumer may import only the `export` items of a dependency's `lib`, never its `pub` or private items. This is a settled rule; enforcing it for wado-to-wado source dependencies (rejecting `use` of a non-`export` item) is not yet implemented.
 
 ### Wado-to-Wado Optimization
 
@@ -234,6 +236,8 @@ use { helper } from "./utils.wado";         // relative → local file
 use { Router } from "router";              // bare → wado.toml dependency
 ```
 
+A bare name binds to the dependency's library world — its `[package].lib` entry module — and resolves the imported symbols against that module's `export` items. Only the consuming project resolves its own `[dependencies]`: a bare import from within a dependency module does not bind to the consumer's dependencies.
+
 Dependency keys must not contain `:` (TOML bare keys naturally enforce this). This makes scheme-based and bare name resolution structurally unambiguous.
 
 `core` and `wasi` are **not reserved**. `"core:cli"` (with `:`) resolves via scheme; `"core"` (bare) resolves via `wado.toml`. These are different resolution paths.
@@ -247,8 +251,11 @@ pub enum ModuleSource {
     Local { path: String },
     Remote { url: String },
     EntryPoint { filename: Option<String> },
-    // New:
-    Dependency { id: String },  // resolved package id (e.g., "registry+https://wa.dev/docs:regex@0.1.2")
+    // A dependency's library-world module. Identified by its resolved entry
+    // module so that two aliases for the same package unify: the resolved
+    // path for a path dependency; the resolved package id for a
+    // registry/git dependency.
+    Dependency { path: String },
 }
 ```
 
@@ -404,7 +411,7 @@ id = "git+https://gitlab.com/user/bench.git/bench-tool"
 version = "0.1.0"
 resolved-ref = "def5678901234567890abcdef12345678abc1234d"
 dev = true
-command = "src/main.wado"
+world = { "wasi:cli/command" = "src/main.wado" }
 deps = []
 
 [[package]]
@@ -461,12 +468,11 @@ Each `[[package]]` entry is uniquely identified by `(id, version)`. The `id` fie
 | `resolved-ref` | git only      | Exact commit SHA (40 hex chars)                                                                  |
 | `integrity`    | registry only | Content hash with algorithm prefix (see below)                                                   |
 | `dev`          | dev-deps only | `true` for dev-only packages (excluded from production)                                          |
-| `command`      | optional      | Entry point for `wasi:cli/command` (from dependency's `wado.toml`)                               |
-| `service`      | optional      | Entry point for `wasi:http/service` (from dependency's `wado.toml`)                              |
-| `lib`          | optional      | Library entry point (from dependency's `wado.toml`)                                              |
+| `world`        | optional      | CM world FQ name → entry path, mirroring the dependency's `[world]` table (inline table)         |
+| `lib`          | optional      | Library-world entry module (from the dependency's `[package].lib`)                               |
 | `deps`         | all           | List of `id@version` strings referencing other entries                                           |
 
-Entry point fields (`command`, `service`, `lib`) are copied from the dependency's `wado.toml` at resolution time. This makes the lock file self-sufficient — the `CompilerHost` can resolve all imports and locate all source files using only the root `wado.toml` and `wado.lock`.
+The `world` table and `lib` are copied from the dependency's `wado.toml` at resolution time. This makes the lock file self-sufficient — the `CompilerHost` can resolve all imports and locate all source files using only the root `wado.toml` and `wado.lock`.
 
 `path` dependencies are not locked (always resolved fresh).
 
@@ -565,7 +571,9 @@ lib = "src/lib.wado"
 [package]
 name = "my-tool"
 version = "0.1.0"
-command = "src/main.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 
 [dependencies]
 core = { path = "../core" }
@@ -670,7 +678,7 @@ This enables seamless local development while ensuring published packages are se
 - Lock file with `integrity` ensures reproducible and tamper-evident builds for registry deps
 - Auto re-resolve keeps lock file fresh; `--locked` ensures CI reproducibility
 - Compiler remains agnostic to dependency resolution — `CompilerHost` handles all mapping
-- Entry point fields (`command`, `service`, `lib`) map directly to WASI worlds and CLI commands
+- The `[world]` table and `[package].lib` map directly to CM worlds; `wado run` / `wado serve` select a hosted world by its FQ name
 - `export` as CM boundary gives clear, consistent public API semantics across all consumption modes
 - Wado-to-Wado optimization eliminates CM overhead for same-language dependencies without changing semantics
 - `namespace` absence naturally indicates non-publishable packages — no extra `publish = false` flag needed
@@ -694,7 +702,7 @@ This enables seamless local development while ensuring published packages are se
 - **Bare name resolution**: requires `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
 - **Self-sufficient lock file**: duplicates entry points and dependency edges from each package's `wado.toml`. This makes the lock file larger and introduces a potential staleness risk (if a dependency's `wado.toml` changes entry points without version bump). The trade-off is worth it — builds skip all transitive manifest I/O, and staleness is caught by `wado update` or integrity mismatch.
 - **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
-- **`command` over `bin`/`cli`**: `command` matches the WASI world name (`wasi:cli/command`) directly, making the mapping explicit. `bin` (Cargo's term) describes artifact format, which is less meaningful in the Wasm world. `cli` describes the interface but doesn't match the world name.
+- **`[world]` table keyed by FQ world name**: hosted worlds are declared by their Component Model world name (`"wasi:cli/command"`) rather than a short alias (`command`/`bin`/`cli`). The key is the world the entry conforms to, so new worlds need no new manifest field and the mapping to the CM world is explicit. The library world is the one exception — it has no externally-fixed FQ name, so it is named after the package and declared by `[package].lib`.
 - **`[package]` over `[project]`**: `[package]` aligns with CM's "package" concept (`package ns:name@version` in WIT). The file itself represents the project; `[package]` describes the distributable unit within it. `[workspace]` > `[package]` hierarchy is natural, whereas `[workspace]` > `[project]` would be confusing.
 - **`path` + `registry` dual source**: adds complexity to the dependency spec but eliminates the "path deps can't be published" problem. The alternative (Cargo's separate `[patch]` section) is more complex and harder to maintain.
 

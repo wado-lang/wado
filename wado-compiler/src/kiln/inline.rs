@@ -371,12 +371,22 @@ fn lower_module_specifier(
     {
         return Some(GeneratorModule::Spec(spec.to_string()));
     }
+    // Bare `[build-dependencies]` key (`module: "gale"`). Resolved by the
+    // host against the manifest's build-dependency graph.
+    if !spec.is_empty()
+        && spec
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Some(GeneratorModule::BuildDep(spec.to_string()));
+    }
     errors.push(Diagnostic {
         severity: Severity::Error,
         code: Code::GeneratorOptionsInvalid,
         message: format!(
-            "kiln: `generator.module` must be a relative path (\"./generator.wado\") \
-             or a namespaced spec (\"ns:name@ver\"), got `{spec}`"
+            "kiln: `generator.module` must be a relative path (\"./generator.wado\"), \
+             a `[build-dependencies]` name (\"gale\"), or a namespaced spec \
+             (\"ns:name@ver\"), got `{spec}`"
         ),
         span: Some(span_of(module_path, use_decl)),
     });
@@ -445,6 +455,7 @@ fn module_key(module: &GeneratorModule) -> String {
     match module {
         GeneratorModule::Spec(s) => format!("spec:{s}"),
         GeneratorModule::LocalPath(p) => format!("path:{}", p.as_str()),
+        GeneratorModule::BuildDep(s) => format!("builddep:{s}"),
     }
 }
 
