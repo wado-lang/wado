@@ -1242,13 +1242,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// The method's non-effect type parameters (cloned, in declaration
-    /// order), or `None` when there are none. Shared by the method
-    /// type-parameter lookups used by `infer_method_type_args`.
-    fn non_effect_type_params(method: &ast::Function) -> Option<Vec<ast::GenericParam>> {
-        Self::non_effect_generic_params(&method.type_params)
-    }
-
     /// The non-effect subset of a type-parameter list (cloned, in declaration
     /// order), or `None` when empty. Operates on the bare parameter slice so
     /// digested headers ([`super::trait_env::ImplMethodHeader`]) can reuse it
@@ -1290,65 +1283,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_module_source: Option<&ModuleSource>,
         method_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
-        let extract_names = Self::non_effect_type_params;
-
-        let impl_matches_struct = |impl_block: &ast::ImplBlock, include_trait: bool| -> bool {
-            if !include_trait && impl_block.trait_type.is_some() {
-                return false;
-            }
-            let impl_type_name = self.get_type_name(&impl_block.ty);
-            let impl_base_name = impl_type_name.split('<').next().unwrap_or(&impl_type_name);
-            impl_type_name == struct_name || impl_base_name == struct_name
-        };
-
-        let search_items =
-            |items: &[Item], include_trait: bool| -> Option<Vec<ast::GenericParam>> {
-                for item in items {
-                    if let Item::Impl(impl_block) = item
-                        && impl_matches_struct(impl_block, include_trait)
-                    {
-                        for method in &impl_block.methods {
-                            if method.name == method_name
-                                && let Some(names) = extract_names(method)
-                            {
-                                return Some(names);
-                            }
-                        }
-                    }
-                }
-                None
-            };
-
+        // Impl-method passes read the digested impl headers (which cover every
+        // loaded module including the current one, so the prior separate
+        // current-module scans are redundant). Inherent impls are tried first
+        // (include_trait = false), preferring the receiver's home module.
         if let Some(module_source) = struct_module_source
-            && let Some(module) = self.loaded_modules.get(module_source)
-            && let Some(names) = search_items(&module.items, false)
+            && let Some(names) =
+                self.search_impl_headers_method_tps(struct_name, method_name, false, Some(module_source))
+        {
+            return Some(names);
+        }
+        if let Some(names) = self.search_impl_headers_method_tps(struct_name, method_name, false, None)
         {
             return Some(names);
         }
 
-        for module in self.loaded_modules.values() {
-            if let Some(names) = search_items(&module.items, false) {
-                return Some(names);
-            }
-        }
-
-        if let Some(names) = search_items(self.current_module_items, false) {
-            return Some(names);
-        }
-
-        // Fallback: trait default methods. These have no enclosing impl, so
-        // their "impl type params" are empty.
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Trait(trait_decl) = item {
-                    for default_method in &trait_decl.methods {
-                        if default_method.name == method_name
-                            && default_method.body.is_some()
-                            && let Some(names) = extract_names(default_method)
-                        {
-                            return Some(names);
-                        }
-                    }
+        // Fallback: trait default methods (those with a body).
+        for header in self.tysys.trait_env.trait_decl_headers.values() {
+            for m in &header.methods {
+                if m.name == method_name
+                    && m.has_body
+                    && let Some(names) = Self::non_effect_generic_params(&m.type_params)
+                {
+                    return Some(names);
                 }
             }
         }
@@ -1358,38 +1315,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (e.g. `fn put<T: Display>(&mut self, v: &T)`), which the inference
         // solver needs to materialise.
         if let Some(module_source) = struct_module_source
-            && let Some(module) = self.loaded_modules.get(module_source)
-            && let Some(names) = search_items(&module.items, true)
+            && let Some(names) =
+                self.search_impl_headers_method_tps(struct_name, method_name, true, Some(module_source))
+        {
+            return Some(names);
+        }
+        if let Some(names) = self.search_impl_headers_method_tps(struct_name, method_name, true, None)
         {
             return Some(names);
         }
 
-        for module in self.loaded_modules.values() {
-            if let Some(names) = search_items(&module.items, true) {
-                return Some(names);
-            }
-        }
-
-        if let Some(names) = search_items(self.current_module_items, true) {
-            return Some(names);
-        }
-
-        // Fallback: trait method declarations without default body. These can
-        // be called through a trait impl that reuses the declared type params.
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Trait(trait_decl) = item {
-                    for trait_method in &trait_decl.methods {
-                        if trait_method.name == method_name
-                            && let Some(names) = extract_names(trait_method)
-                        {
-                            return Some(names);
-                        }
-                    }
+        // Fallback: trait method declarations (any body). These can be called
+        // through a trait impl that reuses the declared type params.
+        for header in self.tysys.trait_env.trait_decl_headers.values() {
+            for m in &header.methods {
+                if m.name == method_name
+                    && let Some(names) = Self::non_effect_generic_params(&m.type_params)
+                {
+                    return Some(names);
                 }
             }
         }
 
+        None
+    }
+
+    /// Scan the digested impl headers for a method named `method_name` on
+    /// `struct_name` (by exact name or generic base name) and return its
+    /// non-effect type parameters. `include_trait` controls whether trait
+    /// impls participate (inherent-only when false); `only_module` restricts
+    /// the scan to a single module's impls when set.
+    fn search_impl_headers_method_tps(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        include_trait: bool,
+        only_module: Option<&ModuleSource>,
+    ) -> Option<Vec<ast::GenericParam>> {
+        for (key, header) in &self.tysys.trait_env.impl_headers {
+            if let Some(m) = only_module
+                && &key.0 != m
+            {
+                continue;
+            }
+            if !include_trait && header.trait_name.is_some() {
+                continue;
+            }
+            let impl_type_name = self.get_type_name(&header.ty);
+            let impl_base_name = impl_type_name.split('<').next().unwrap_or(&impl_type_name);
+            if impl_type_name == struct_name || impl_base_name == struct_name {
+                for method in &header.methods {
+                    if method.name == method_name
+                        && let Some(names) = Self::non_effect_generic_params(&method.type_params)
+                    {
+                        return Some(names);
+                    }
+                }
+            }
+        }
         None
     }
 

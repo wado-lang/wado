@@ -95,6 +95,10 @@ pub(super) struct ImplHeader {
 pub(super) struct ImplMethodHeader {
     pub(super) name: String,
     pub(super) type_params: Vec<ast::GenericParam>,
+    /// Whether the method has a body. Always true for impl methods; for trait
+    /// declarations it distinguishes default methods from bare signatures,
+    /// which method-lookup's fallback ordering depends on.
+    pub(super) has_body: bool,
 }
 
 /// Digested header of a `trait` declaration: its name plus per-method
@@ -507,6 +511,7 @@ impl TraitEnv {
                                 .map(|m| ImplMethodHeader {
                                     name: m.name.clone(),
                                     type_params: m.type_params.clone(),
+                                    has_body: m.body.is_some(),
                                 })
                                 .collect(),
                         },
@@ -532,6 +537,7 @@ impl TraitEnv {
                             .map(|m| ImplMethodHeader {
                                 name: m.name.clone(),
                                 type_params: m.type_params.clone(),
+                                has_body: m.body.is_some(),
                             })
                             .collect(),
                         associated_types: impl_block.associated_types.clone(),
