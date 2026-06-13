@@ -1778,7 +1778,7 @@ fn generate_cm_imports(
             enc.instance(&instance_type);
         }
 
-        ctx.register_instance("types");
+        ctx.register_instance("cli-types");
         let types_import_path = format!("wasi:cli/types@{cli_version}");
         builder.import(
             &types_import_path,
@@ -1787,7 +1787,7 @@ fn generate_cm_imports(
 
         ctx.register_type("error-code");
         builder.alias_export(
-            ctx.instance_idx("types"),
+            ctx.instance_idx("cli-types"),
             error_code_cm_name,
             ComponentExportKind::Type,
         );
@@ -2263,7 +2263,7 @@ fn generate_cm_imports(
             enc.instance(&instance_type);
         }
 
-        ctx.register_instance(&interface_info.interface);
+        ctx.register_instance(&format!("{}-{}", interface_info.package, interface_info.interface));
         builder.import(
             &interface_info.path,
             wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
@@ -2284,7 +2284,7 @@ fn generate_cm_imports(
                 if !ctx.has_type(&resource_type_name) {
                     ctx.register_type(&resource_type_name);
                     builder.alias_export(
-                        ctx.instance_idx(&interface_info.interface),
+                        ctx.instance_idx(&format!("{}-{}", interface_info.package, interface_info.interface)),
                         cm_name,
                         ComponentExportKind::Type,
                     );
@@ -2307,7 +2307,7 @@ fn generate_cm_imports(
             if !ctx.has_type(&error_code_key) {
                 ctx.register_type(&error_code_key);
                 builder.alias_export(
-                    ctx.instance_idx(&interface_info.interface),
+                    ctx.instance_idx(&format!("{}-{}", interface_info.package, interface_info.interface)),
                     "error-code",
                     ComponentExportKind::Type,
                 );
@@ -2323,7 +2323,7 @@ fn generate_cm_imports(
 
             ctx.register_comp_func(&local_name);
             builder.alias_export(
-                ctx.instance_idx(&interface_info.interface),
+                ctx.instance_idx(&format!("{}-{}", interface_info.package, interface_info.interface)),
                 &func.wasi_func_name,
                 ComponentExportKind::Func,
             );
@@ -2844,7 +2844,7 @@ fn import_interface_with_resource(
         enc.instance(&instance_type);
     }
 
-    ctx.register_instance(&interface_info.interface);
+    ctx.register_instance(&format!("{}-{}", interface_info.package, interface_info.interface));
     builder.import(
         &interface_info.path,
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
@@ -2857,7 +2857,7 @@ fn import_interface_with_resource(
         let resource_type_name = format!("resource:{resource_cm_name}");
         ctx.register_type(&resource_type_name);
         builder.alias_export(
-            ctx.instance_idx(&interface_info.interface),
+            ctx.instance_idx(&format!("{}-{}", interface_info.package, interface_info.interface)),
             resource_cm_name,
             ComponentExportKind::Type,
         );
@@ -2865,7 +2865,7 @@ fn import_interface_with_resource(
 
     ctx.register_comp_func(&local_name);
     builder.alias_export(
-        ctx.instance_idx(&interface_info.interface),
+        ctx.instance_idx(&format!("{}-{}", interface_info.package, interface_info.interface)),
         &func.wasi_func_name,
         ComponentExportKind::Func,
     );
@@ -3070,7 +3070,7 @@ fn import_interfaces_with_resources(
             if !ctx.has_type(&error_code_key) {
                 ctx.register_type(&error_code_key);
                 builder.alias_export(
-                    ctx.instance_idx(&interface_info.interface),
+                    ctx.instance_idx(&format!("{}-{}", interface_info.package, interface_info.interface)),
                     "error-code",
                     ComponentExportKind::Type,
                 );
@@ -3368,7 +3368,7 @@ fn import_resource_using_interfaces(
             enc.instance(&instance_type);
         }
 
-        ctx.register_instance(&interface_info.interface);
+        ctx.register_instance(&format!("{}-{}", interface_info.package, interface_info.interface));
         builder.import(
             &interface_info.path,
             wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
@@ -3383,7 +3383,7 @@ fn import_resource_using_interfaces(
 
             ctx.register_comp_func(&local_name);
             builder.alias_export(
-                ctx.instance_idx(&interface_info.interface),
+                ctx.instance_idx(&format!("{}-{}", interface_info.package, interface_info.interface)),
                 &func.wasi_func_name,
                 ComponentExportKind::Func,
             );

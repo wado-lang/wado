@@ -1646,6 +1646,12 @@ impl CmInterfaceRegistry {
     /// `wasi:` namespace — non-WASI structs are never considered — and
     /// returns `Some` only when exactly one wasi interface declares the
     /// struct under that CM name (or a matching Wado name).
+    ///
+    /// The returned key is the package-qualified component-instance key
+    /// `"{package}-{interface}"` (e.g. `"http-types"`), matching how codegen
+    /// registers imported interface instances. A bare interface name would
+    /// collide across packages (`wasi:cli/types` vs `wasi:http/types`, both
+    /// interface `types`).
     pub fn find_interface_for_struct_cm_name(&self, cm_name: &str) -> Option<String> {
         let mut found: Option<String> = None;
         for ((source_path, wado_name), (struct_cm_name, _, _)) in &self.structs {
@@ -1656,10 +1662,11 @@ impl CmInterfaceRegistry {
                 continue;
             }
             let wasi = CmImport::parse(source_path)?;
-            if found.as_ref().is_some_and(|prev| prev != &wasi.interface) {
+            let key = format!("{}-{}", wasi.package, wasi.interface);
+            if found.as_ref().is_some_and(|prev| prev != &key) {
                 return None; // ambiguous across interfaces — refuse to guess.
             }
-            found = Some(wasi.interface);
+            found = Some(key);
         }
         found
     }
