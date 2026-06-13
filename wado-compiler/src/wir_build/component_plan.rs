@@ -316,7 +316,8 @@ fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry
                     named.name,
                 )
             });
-        let resource_cm = cm_interface_registry.get_resource_cm_name_by_source(&interface_fq, &named.name);
+        let resource_cm =
+            cm_interface_registry.get_resource_cm_name_by_source(&interface_fq, &named.name);
         let is_resource = resource_cm.is_some();
         let cm_name = resource_cm
             .or_else(|| cm_interface_registry.get_variant_cm_name_by_source(&interface_fq, &named.name))

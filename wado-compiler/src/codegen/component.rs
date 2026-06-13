@@ -2421,7 +2421,6 @@ fn import_http_types_for_service(
             .map(|(wado, _)| wado.as_str())
             .collect();
 
-
         // Emit constructor/static functions from registry metadata.
         // Processing their parameter and return types triggers on-demand emission of
         // all dependent types (error-code variant and its payload record types).
@@ -2628,8 +2627,7 @@ fn import_http_types_for_service(
                     return false;
                 }
                 // Fields::new and Response::new are aliased separately above.
-                if f.wasi_func_name == constructor_fields
-                    || f.wasi_func_name == static_response_new
+                if f.wasi_func_name == constructor_fields || f.wasi_func_name == static_response_new
                 {
                     return false;
                 }
