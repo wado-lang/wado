@@ -220,9 +220,15 @@ struct SllReturn {
     pos: i32,
 }
 
+/// Sentinel `pos` marking an *opaque* config — one produced by an
+/// unexpanded multi-token rule-ref, where the element position carries
+/// no usable lookahead. Distinct from any real element index (≥ 0).
+global SLL_POS_OPAQUE: i32 = -1;
+
 struct SllConfig {
     alt_index: i32,
     elements: List<Element>,
+    /// Element index into `elements`, or `SLL_POS_OPAQUE` for an opaque config.
     pos: i32,
     return_stack: List<SllReturn>,
 }
@@ -252,7 +258,7 @@ fn pop_return(c: &SllConfig) -> SllConfig {
 
 /// True when the config has fully consumed its elements and has no return
 /// frame to pop into — i.e. the alt's body is finished and any further token
-/// belongs to the calling context. Opaque configs (`pos < 0`) are not at-end.
+/// belongs to the calling context. Opaque configs (`pos == SLL_POS_OPAQUE`) are not at-end.
 ///
 /// The check walks `return_stack` from the most-recently-pushed frame back
 /// to the oldest, mirroring what a sequence of `pop_return` calls would
@@ -260,7 +266,7 @@ fn pop_return(c: &SllConfig) -> SllConfig {
 /// implementation was O(n^2) because each `pop_return` rebuilt the entire
 /// surviving prefix of `return_stack` into a fresh `List`.
 fn config_is_at_end(c: &SllConfig) -> bool {
-    if c.pos < 0 {
+    if c.pos == SLL_POS_OPAQUE {
         return false;
     }
     if c.pos < c.elements.len() {
@@ -282,7 +288,7 @@ fn config_is_at_end(c: &SllConfig) -> bool {
 /// Includes tokens from nullable elements that were skipped by closure.
 /// When at end of elements with a return stack, pops and continues from caller.
 fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<String> {
-    if c.pos < 0 {
+    if c.pos == SLL_POS_OPAQUE {
         return [];
     }
     if c.pos >= c.elements.len() {
@@ -302,7 +308,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
     if inline_depth > 2 {
         return [];
     }
-    if c.pos < 0 {
+    if c.pos == SLL_POS_OPAQUE {
         return [];
     }
     // End of current elements: pop return stack if available.
@@ -416,7 +422,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
                         results.push(SllConfig {
                             alt_index: c.alt_index,
                             elements: c.elements,
-                            pos: -1,
+                            pos: SLL_POS_OPAQUE,
                             return_stack: c.return_stack,
                         });
                     }
@@ -488,7 +494,12 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         // Multi-token rule: token matches FIRST but we can't advance past it.
         // Return config with pos = -1 as a sentinel meaning "opaque match".
         return [
-            SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: c.return_stack },
+            SllConfig {
+                alt_index: c.alt_index,
+                elements: c.elements,
+                pos: SLL_POS_OPAQUE,
+                return_stack: c.return_stack,
+            },
         ];
     }
 

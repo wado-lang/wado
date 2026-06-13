@@ -1332,15 +1332,15 @@ fn gen_char_mismatch(access: &String, c: char, ci: bool) -> String {
 fn emit_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
     let kw_chars: List<char> = kw.lowercase_text.chars().collect();
     w.write(&"if ");
-    for let mut ci = 0; ci < kw_chars.len(); ci += 1 {
-        if ci > 0 {
+    for let mut kc = 0; kc < kw_chars.len(); kc += 1 {
+        if kc > 0 {
             w.write(&" && ");
         }
-        let lower = kw_chars[ci];
-        if kw.char_ci[ci] {
-            w.write(&`chars[start + {ci}].eq_ignore_ascii_case(&{escape_char(lower)})`);
+        let lower = kw_chars[kc];
+        if kw.char_ci[kc] {
+            w.write(&`chars[start + {kc}].eq_ignore_ascii_case(&{escape_char(lower)})`);
         } else {
-            w.write(&`chars[start + {ci}] == {escape_char(lower)}`);
+            w.write(&`chars[start + {kc}] == {escape_char(lower)}`);
         }
     }
     w.write(&` \{ return TK_{kw.rule_name}; \}\n`);
@@ -1714,8 +1714,8 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
                 for let g of &mut groups {
                     if g.guard == guard {
                         let mut already = false;
-                        for let ci of &g.calls {
-                            if *ci == i {
+                        for let call_idx of &g.calls {
+                            if *call_idx == i {
                                 already = true;
                                 break;
                             }
@@ -1810,8 +1810,8 @@ fn emit_group_calls(
     needs_extras: bool,
     is_wildcard_group: bool,
 ) {
-    for let ci of indices {
-        let call = &calls[*ci];
+    for let call_idx of indices {
+        let call = &calls[*call_idx];
         // In specific dispatch branches, single-char literals are guaranteed to match
         // (the dispatch already confirmed the character). Inline the result
         // instead of calling the try_* function.

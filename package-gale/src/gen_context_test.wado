@@ -678,7 +678,7 @@ test "warn dedupes diagnostics with the same rule and message" {
     ctx.warn(&label, DiagnosticKind::OverlapTournament, msg);
     ctx.warn(&label, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
     ctx.warn(&label, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
-    let diags = ctx.take_diagnostics();
+    let diags = ctx.copy_diagnostics();
     assert diags.len() == 1, `expected 1 deduped diagnostic, got {diags.len()}`;
     assert diags[0].rule == "rule 'r'";
 }
@@ -696,6 +696,6 @@ test "warn keeps distinct diagnostics" {
     ctx.warn(&String::from("rule 'a'"), DiagnosticKind::OverlapTournament, String::from(
         "alts 0, 2 share lookahead {TK_X}",
     ));
-    let diags = ctx.take_diagnostics();
+    let diags = ctx.copy_diagnostics();
     assert diags.len() == 3, `expected 3 distinct diagnostics, got {diags.len()}`;
 }

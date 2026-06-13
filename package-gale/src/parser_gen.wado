@@ -1311,7 +1311,7 @@ fn gen_scan_op_element(
     if let RuleCall(rc) = se {
         // Single scan callee + runtime FOLLOW arg.
         let fn_name = `scan_{rc.target_snake}`;
-        let follow_sep = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
+        let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
         // `min_prec_arg`, when set, is the baked precedence for a
         // self-recursive call inside an LR suffix (stamped by
         // `stamp_lr_self_ref_min_prec`). Otherwise fall back to
@@ -1332,10 +1332,10 @@ fn gen_scan_op_element(
         let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
         if push_ret >= 0 {
             w.line(&`GALE_SCAN_STACK.push({push_ret});`);
-            w.line(&`pos = {fn_name}(tokens, pos{follow_sep}, {min_prec});`);
+            w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
             w.line(&"GALE_SCAN_STACK.pop();");
         } else {
-            w.line(&`pos = {fn_name}(tokens, pos{follow_sep}, {min_prec});`);
+            w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
         }
         w.line(&`if pos < 0 \{ {*fail_stmt} \}`);
         return;
@@ -1386,7 +1386,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
     }
     if let RuleCall(rc) = se {
         let fn_name = `scan_{rc.target_snake}`;
-        let follow_sep = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
+        let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
         // `_assign` only fires inside Repeat bodies — never reachable
         // from bt-scan's trailing-self-ref site, so `min_prec` here
         // is always the rule's default `0` (or whatever
@@ -1396,7 +1396,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         } else {
             0;
         };
-        w.line(&`pos = {fn_name}(tokens, pos{follow_sep}, {min_prec});`);
+        w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
         return;
     }
     if let Wildcard = se {
@@ -1862,7 +1862,7 @@ fn gen_rule_entry_wrapper(
     takes_min_prec: bool,
     emit_follow: bool,
     trace: bool,
-    atn_needs: bool,
+    needs_atn: bool,
 ) {
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
@@ -1893,7 +1893,7 @@ fn gen_rule_entry_wrapper(
     // unstamped call / the start rule); consume it here, reset it, and push
     // it. Popped on every exit (success and failure) below. Only emitted for
     // grammars that need the ATN.
-    if atn_needs {
+    if needs_atn {
         w.line(&"let _atn_ret = p.atn_ret_pending;");
         w.line(&"p.atn_ret_pending = -1;");
         w.line(&"p.atn_stack.push(_atn_ret);");
@@ -1906,7 +1906,7 @@ fn gen_rule_entry_wrapper(
     } else {
         w.line(&`let r = {*inner_name}(p{fsep});`);
     }
-    if atn_needs {
+    if needs_atn {
         w.line(&"p.atn_stack.pop();");
     }
     if trace {
@@ -2620,7 +2620,7 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
             // threaded at runtime via `follow_arg` rather than selecting a
             // cloned `__follow_<id>`.
             let fn_name = `_parse_{r.target_snake}`;
-            let follow_sep = follow_arg_sep(ctx.emit_follow(), &r.follow_arg);
+            let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &r.follow_arg);
             // `RuleCallOp.min_prec_arg` carries the resolved precedence
             // for every self-recursive call that needs one — `lower_lr_alt_suffix`
             // stamps internal LR-suffix self-refs via
@@ -2629,9 +2629,9 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
             // reads a single source.
             emit_atn_ret_pending(w, ctx, r.atn_call_site);
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`let {r.field} = {fn_name}(p{follow_sep}, {min_prec})?;`);
+                w.line(&`let {r.field} = {fn_name}(p{follow_arg_str}, {min_prec})?;`);
             } else {
-                w.line(&`let {r.field} = {fn_name}(p{follow_sep})?;`);
+                w.line(&`let {r.field} = {fn_name}(p{follow_arg_str})?;`);
             }
         },
         Wildcard(wop) => w.line(&`let {wop.field} = p.match_any()?;`),
@@ -3744,19 +3744,19 @@ fn gen_op_repeat_non_greedy_storable(
     } else {
         false;
     };
-    let iter_follow_unused = [] as List<String>;
+    let empty_iter_follow = [] as List<String>;
     let inner_field = op_field(&rep_op.body);
     let inner_type = op_field_type(&rep_op.body);
     let list_field = rep_op.field;
     let _ = dedup_name(&list_field, name_counts);
     if is_plus {
         let mut nc: List<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow_unused);
+        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
         w.line(&`let mut {list_field}: List<{inner_type}> = [{inner_field}];`);
         if *while_cond != "false" {
             w.begin(&`while {*while_cond}`);
             let mut nc2: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc2, &iter_follow_unused);
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc2, &empty_iter_follow);
             w.line(&`{list_field}.push({inner_field});`);
             w.end();
         }
@@ -3765,7 +3765,7 @@ fn gen_op_repeat_non_greedy_storable(
         if *while_cond != "false" {
             w.begin(&`while {*while_cond}`);
             let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow_unused);
+            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
             w.line(&`{list_field}.push({inner_field});`);
             w.end();
         }
@@ -4117,11 +4117,11 @@ fn rep_recovery_call(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
     if let LeafRuleCall = rep_op.body_shape {
         if let RuleCall(r) = &rep_op.body {
             let fn_name = `_parse_{r.target_snake}`;
-            let follow_sep = follow_arg_sep(emit_follow, &r.follow_arg);
+            let follow_arg_str = follow_arg_sep(emit_follow, &r.follow_arg);
             let call = if let Some(min_prec) = r.min_prec_arg {
-                `{fn_name}(p{follow_sep}, {min_prec})`;
+                `{fn_name}(p{follow_arg_str}, {min_prec})`;
             } else {
-                `{fn_name}(p{follow_sep})`;
+                `{fn_name}(p{follow_arg_str})`;
             };
             return Option::<String>::Some(call);
         }
@@ -4548,13 +4548,13 @@ fn gen_rule_ref_group_scan_dispatch(
         // `RuleRef` carries only the source-level name.
         if let RuleCall(rc) = &g_op_alts[alt_idx].ops[0] {
             let fn_name = `_parse_{rc.target_snake}`;
-            let follow_sep = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
+            let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
             let case_name = group_case_name(&alts[alt_idx]);
             let local_var = rc.target_snake;
             let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                `p{follow_sep}, {min_prec}`;
+                `p{follow_arg_str}, {min_prec}`;
             } else {
-                `p{follow_sep}`;
+                `p{follow_arg_str}`;
             };
 
             if k == 0 && !is_last {
