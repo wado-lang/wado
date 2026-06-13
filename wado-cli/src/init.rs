@@ -122,7 +122,8 @@ fn generate_manifest(name: &str, namespace: Option<&str>) -> String {
     }
     writeln!(buf, "name = \"{name}\"").unwrap();
     writeln!(buf, "version = \"0.1.0\"").unwrap();
-    writeln!(buf, "command = \"src/main.wado\"").unwrap();
+    buf.push_str("\n[world]\n");
+    writeln!(buf, "\"wasi:cli/command\" = \"src/main.wado\"").unwrap();
     buf
 }
 
@@ -135,7 +136,8 @@ mod tests {
         let result = generate_manifest("my-app", None);
         assert!(result.contains("name = \"my-app\""));
         assert!(result.contains("version = \"0.1.0\""));
-        assert!(result.contains("command = \"src/main.wado\""));
+        assert!(result.contains("[world]"));
+        assert!(result.contains("\"wasi:cli/command\" = \"src/main.wado\""));
         assert!(!result.contains("namespace"));
     }
 

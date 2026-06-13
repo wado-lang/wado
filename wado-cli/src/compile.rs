@@ -426,6 +426,7 @@ async fn maybe_run_pipeline(
 pub fn empty_manifest() -> wado_manifest::Manifest {
     wado_manifest::Manifest {
         package: None,
+        world: indexmap::IndexMap::new(),
         registries: indexmap::IndexMap::new(),
         dependencies: indexmap::IndexMap::new(),
         dev_dependencies: indexmap::IndexMap::new(),

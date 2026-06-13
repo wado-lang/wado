@@ -7,8 +7,9 @@ fn full_manifest_from_wep() {
 namespace = "myorg"
 name = "my-app"
 version = "0.1.0"
-command = "src/main.wado"
-lib = "src/lib.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 
 [registries]
 default = "https://wa.dev"
@@ -26,9 +27,8 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
     assert_eq!(pkg.namespace.as_deref(), Some("myorg"));
     assert_eq!(pkg.name, "my-app");
     assert_eq!(pkg.version, "0.1.0");
-    assert_eq!(pkg.command.as_deref(), Some("src/main.wado"));
-    assert_eq!(pkg.lib.as_deref(), Some("src/lib.wado"));
-    assert!(pkg.service.is_none());
+    assert_eq!(m.world_entry("wasi:cli/command"), Some("src/main.wado"));
+    assert!(m.world_entry("wasi:http/service").is_none());
 
     assert_eq!(m.registries["default"], "https://wa.dev");
 
@@ -102,7 +102,6 @@ members = ["packages/*"]
 [package]
 name = "monorepo-root"
 version = "0.1.0"
-lib = "src/lib.wado"
 
 [registries]
 default = "https://wa.dev"
@@ -113,28 +112,33 @@ default = "https://wa.dev"
 }
 
 #[test]
-fn generator_field_absent_default() {
+fn generator_world_absent_default() {
     let toml = r#"
 [package]
 name = "app"
 version = "0.1.0"
-command = "main.wado"
+
+[world]
+"wasi:cli/command" = "main.wado"
 "#;
     let m: Manifest = toml.parse().unwrap();
-    assert!(m.package.as_ref().unwrap().generator.is_none());
+    assert!(!m.is_kiln_generator());
 }
 
 #[test]
-fn generator_field_accepted() {
+fn generator_world_accepted() {
     let toml = r#"
 [package]
 name = "gen"
 version = "0.1.0"
-generator = "src/generator.wado"
+
+[world]
+"core:kiln/generator" = "src/generator.wado"
 "#;
     let m: Manifest = toml.parse().unwrap();
+    assert!(m.is_kiln_generator());
     assert_eq!(
-        m.package.as_ref().unwrap().generator.as_deref(),
+        m.world_entry("core:kiln/generator"),
         Some("src/generator.wado")
     );
 }
@@ -145,13 +149,17 @@ fn generator_and_command_coexist() {
 [package]
 name = "dual"
 version = "0.1.0"
-command = "src/main.wado"
-generator = "src/generator.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+"core:kiln/generator" = "src/generator.wado"
 "#;
     let m = toml.parse::<Manifest>().unwrap();
-    let pkg = m.package.as_ref().unwrap();
-    assert_eq!(pkg.command.as_deref(), Some("src/main.wado"));
-    assert_eq!(pkg.generator.as_deref(), Some("src/generator.wado"));
+    assert_eq!(m.world_entry("wasi:cli/command"), Some("src/main.wado"));
+    assert_eq!(
+        m.world_entry("core:kiln/generator"),
+        Some("src/generator.wado")
+    );
 }
 
 #[test]
@@ -347,15 +355,17 @@ fn multiple_entry_points() {
 [package]
 name = "devtool"
 version = "0.1.0"
-command = "src/cli.wado"
-service = "src/dashboard.wado"
-lib = "src/lib.wado"
+
+[world]
+"wasi:cli/command" = "src/cli.wado"
+"wasi:http/service" = "src/dashboard.wado"
 "#;
     let m: Manifest = toml.parse().unwrap();
-    let pkg = m.package.as_ref().unwrap();
-    assert_eq!(pkg.command.as_deref(), Some("src/cli.wado"));
-    assert_eq!(pkg.service.as_deref(), Some("src/dashboard.wado"));
-    assert_eq!(pkg.lib.as_deref(), Some("src/lib.wado"));
+    assert_eq!(m.world_entry("wasi:cli/command"), Some("src/cli.wado"));
+    assert_eq!(
+        m.world_entry("wasi:http/service"),
+        Some("src/dashboard.wado")
+    );
 }
 
 #[test]

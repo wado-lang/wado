@@ -291,8 +291,14 @@ fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry
             return CmExportType::Unit;
         }
         return CmExportType::HandlerResult {
-            ok: Box::new(resolve_cm_export_type(&generic.args[0], cm_interface_registry)),
-            err: Box::new(resolve_cm_export_type(&generic.args[1], cm_interface_registry)),
+            ok: Box::new(resolve_cm_export_type(
+                &generic.args[0],
+                cm_interface_registry,
+            )),
+            err: Box::new(resolve_cm_export_type(
+                &generic.args[1],
+                cm_interface_registry,
+            )),
         };
     }
     if let Type::Named(named) = ty {
@@ -477,7 +483,9 @@ mod tests {
         let http = result_of(named("Response"), named("ErrorCode"));
         match resolve_cm_export_type(&http, registry) {
             CmExportType::HandlerResult { ok, err } => {
-                assert!(matches!(*ok, CmExportType::Named { ref cm_name, .. } if cm_name == "response"));
+                assert!(
+                    matches!(*ok, CmExportType::Named { ref cm_name, .. } if cm_name == "response")
+                );
                 assert!(
                     matches!(*err, CmExportType::Named { ref cm_name, .. } if cm_name == "error-code")
                 );

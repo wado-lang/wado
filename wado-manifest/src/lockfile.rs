@@ -1,6 +1,7 @@
 use std::fmt::{self, Write as _};
 use std::str::FromStr;
 
+use indexmap::IndexMap;
 use serde::Deserialize;
 
 /// A parsed `wado.lock` file.
@@ -37,12 +38,11 @@ pub struct LockedPackage {
     pub integrity: Option<String>,
     /// Whether this is a dev-only dependency.
     pub dev: bool,
-    /// Entry point for `wasi:cli/command`.
-    pub command: Option<String>,
-    /// Entry point for `wasi:http/service`.
-    pub service: Option<String>,
-    /// Library entry point.
-    pub lib: Option<String>,
+    /// Target CM world FQ name → entry-point source path, mirroring the
+    /// package manifest's `[world]` table (e.g. `"wasi:cli/command"`,
+    /// `"wasi:http/service"`, `"core:kiln/generator"`). Serialized as a
+    /// `world = { ... }` inline table.
+    pub world: IndexMap<String, String>,
     /// Dependencies as `"id@version"` references.
     pub deps: Vec<String>,
 }
@@ -142,14 +142,15 @@ fn write_locked_package(out: &mut String, pkg: &LockedPackage, header: &str) {
     if pkg.dev {
         out.push_str("dev = true\n");
     }
-    if let Some(command) = &pkg.command {
-        let _ = writeln!(out, "command = {command:?}");
-    }
-    if let Some(service) = &pkg.service {
-        let _ = writeln!(out, "service = {service:?}");
-    }
-    if let Some(lib) = &pkg.lib {
-        let _ = writeln!(out, "lib = {lib:?}");
+    if !pkg.world.is_empty() {
+        out.push_str("world = { ");
+        for (i, (fq, path)) in pkg.world.iter().enumerate() {
+            if i > 0 {
+                out.push_str(", ");
+            }
+            let _ = write!(out, "{fq:?} = {path:?}");
+        }
+        out.push_str(" }\n");
     }
     if pkg.deps.is_empty() {
         out.push_str("deps = []\n");
@@ -220,9 +221,7 @@ struct RawLockedPackage {
     resolved_ref: Option<String>,
     integrity: Option<String>,
     dev: Option<bool>,
-    command: Option<String>,
-    service: Option<String>,
-    lib: Option<String>,
+    world: Option<IndexMap<String, String>>,
     deps: Option<Vec<String>>,
 }
 
@@ -241,9 +240,7 @@ fn convert_locked_package(raw: RawLockedPackage) -> Result<LockedPackage, LockFi
         resolved_ref: raw.resolved_ref,
         integrity: raw.integrity,
         dev: raw.dev.unwrap_or(false),
-        command: raw.command,
-        service: raw.service,
-        lib: raw.lib,
+        world: raw.world.unwrap_or_default(),
         deps: raw.deps.unwrap_or_default(),
     })
 }
@@ -261,21 +258,19 @@ deps-hash = "sha256:9f8e7d6c5b4a"
 id = "registry+https://wa.dev/docs:regex"
 version = "0.1.2"
 integrity = "sha256:a1b2c3d4e5f6"
-lib = "src/lib.wado"
+world = { "wasi:cli/command" = "src/main.wado" }
 deps = ["registry+https://wa.dev/docs:regex-utils@0.3.0"]
 
 [[package]]
 id = "registry+https://wa.dev/docs:regex-utils"
 version = "0.3.0"
 integrity = "sha256:f6e5d4c3b2a1"
-lib = "src/lib.wado"
 deps = []
 
 [[package]]
 id = "git+https://github.com/user/router.git/user:router"
 version = "1.0.2"
 resolved-ref = "abc1234def5678901234567890abcdef12345678"
-lib = "src/lib.wado"
 deps = ["registry+https://wa.dev/tools:utils@0.5.1"]
 "#;
 
@@ -292,10 +287,15 @@ deps = ["registry+https://wa.dev/tools:utils@0.5.1"]
         assert_eq!(regex.integrity.as_deref(), Some("sha256:a1b2c3d4e5f6"));
         assert!(!regex.dev);
         assert_eq!(regex.deps.len(), 1);
+        assert_eq!(
+            regex.world.get("wasi:cli/command").map(String::as_str),
+            Some("src/main.wado")
+        );
 
         let router = &lock.packages[2];
         assert!(router.resolved_ref.is_some());
         assert!(router.integrity.is_none());
+        assert!(router.world.is_empty());
     }
 
     #[test]
@@ -306,6 +306,17 @@ deps = ["registry+https://wa.dev/tools:utils@0.5.1"]
         assert_eq!(reparsed.version, lock.version);
         assert_eq!(reparsed.deps_hash, lock.deps_hash);
         assert_eq!(reparsed.packages.len(), lock.packages.len());
+        // The `[world]` inline table survives the round trip. Packages are
+        // re-sorted by id on serialize, so match by id rather than position.
+        let regex = reparsed
+            .packages
+            .iter()
+            .find(|p| p.id == "registry+https://wa.dev/docs:regex")
+            .unwrap();
+        assert_eq!(
+            regex.world.get("wasi:cli/command").map(String::as_str),
+            Some("src/main.wado")
+        );
     }
 
     #[test]
@@ -335,12 +346,18 @@ id = "git+https://gitlab.com/user/bench.git/bench-tool"
 version = "0.1.0"
 resolved-ref = "def5678901234567890abcdef12345678abc1234d"
 dev = true
-command = "src/main.wado"
+world = { "wasi:cli/command" = "src/main.wado" }
 deps = []
 "#;
         let lock: LockFile = toml.parse().unwrap();
         assert!(lock.packages[0].dev);
-        assert_eq!(lock.packages[0].command.as_deref(), Some("src/main.wado"));
+        assert_eq!(
+            lock.packages[0]
+                .world
+                .get("wasi:cli/command")
+                .map(String::as_str),
+            Some("src/main.wado")
+        );
     }
 
     #[test]
@@ -355,9 +372,7 @@ deps = []
                     resolved_ref: None,
                     integrity: Some("sha256:zzz".to_string()),
                     dev: false,
-                    command: None,
-                    service: None,
-                    lib: Some("src/lib.wado".to_string()),
+                    world: IndexMap::new(),
                     deps: vec![],
                 },
                 LockedPackage {
@@ -366,9 +381,7 @@ deps = []
                     resolved_ref: None,
                     integrity: Some("sha256:aaa".to_string()),
                     dev: false,
-                    command: None,
-                    service: None,
-                    lib: Some("src/lib.wado".to_string()),
+                    world: IndexMap::new(),
                     deps: vec![],
                 },
             ],
@@ -388,21 +401,18 @@ deps-hash = "sha256:9f8e7d6c5b4a"
 id = "registry+https://wa.dev/docs:regex"
 version = "0.1.2"
 integrity = "sha256:aaa"
-lib = "src/lib.wado"
 deps = []
 
 [[build-dependency]]
 id = "registry+https://wa.dev/tools:protoc-gen"
 version = "2.3.0"
 integrity = "sha256:bbb"
-lib = "src/lib.wado"
 deps = []
 
 [[build-dependency]]
 id = "registry+https://wa.dev/tools:antlr-gen"
 version = "1.0.0"
 integrity = "sha256:ccc"
-lib = "src/lib.wado"
 deps = []
 
 [[generator-cache]]
@@ -475,9 +485,7 @@ outputs = [
                     resolved_ref: None,
                     integrity: Some("sha256:zzz".to_string()),
                     dev: false,
-                    command: None,
-                    service: None,
-                    lib: Some("src/lib.wado".to_string()),
+                    world: IndexMap::new(),
                     deps: vec![],
                 },
                 LockedPackage {
@@ -486,9 +494,7 @@ outputs = [
                     resolved_ref: None,
                     integrity: Some("sha256:aaa".to_string()),
                     dev: false,
-                    command: None,
-                    service: None,
-                    lib: Some("src/lib.wado".to_string()),
+                    world: IndexMap::new(),
                     deps: vec![],
                 },
             ],

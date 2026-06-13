@@ -1,4 +1,13 @@
+use indexmap::IndexMap;
 use wado_manifest::{LockFile, LockFileError, LockedPackage};
+
+/// Build a `[world]` map from `(fq, path)` pairs for `LockedPackage` fixtures.
+fn world(entries: &[(&str, &str)]) -> IndexMap<String, String> {
+    entries
+        .iter()
+        .map(|(fq, path)| ((*fq).to_string(), (*path).to_string()))
+        .collect()
+}
 
 #[test]
 fn full_lock_file_from_wep() {
@@ -12,42 +21,37 @@ id = "git+https://gitlab.com/user/bench.git/bench-tool"
 version = "0.1.0"
 resolved-ref = "def5678901234567890abcdef12345678abc1234d"
 dev = true
-command = "src/main.wado"
+world = { "wasi:cli/command" = "src/main.wado" }
 deps = []
 
 [[package]]
 id = "registry+https://wa.dev/docs:regex"
 version = "0.1.2"
 integrity = "sha256:a1b2c3d4e5f6"
-lib = "src/lib.wado"
 deps = ["registry+https://wa.dev/docs:regex-utils@0.3.0"]
 
 [[package]]
 id = "registry+https://wa.dev/docs:regex-utils"
 version = "0.3.0"
 integrity = "sha256:f6e5d4c3b2a1"
-lib = "src/lib.wado"
 deps = []
 
 [[package]]
 id = "registry+https://wa.dev/std:json"
 version = "1.2.0"
 integrity = "sha256:c3d4e5f6a1b2"
-lib = "src/lib.wado"
 deps = []
 
 [[package]]
 id = "registry+https://wa.dev/tools:utils"
 version = "0.5.1"
 integrity = "sha256:b2c3d4e5f6a1"
-lib = "src/lib.wado"
 deps = []
 
 [[package]]
 id = "git+https://github.com/user/router.git/user:router"
 version = "1.0.2"
 resolved-ref = "abc1234def5678901234567890abcdef12345678"
-lib = "src/lib.wado"
 deps = ["registry+https://wa.dev/tools:utils@0.5.1", "registry+https://wa.dev/std:json@1.2.0"]
 "#;
     let lock: LockFile = toml.parse().unwrap();
@@ -58,7 +62,10 @@ deps = ["registry+https://wa.dev/tools:utils@0.5.1", "registry+https://wa.dev/st
     // Dev dependency
     let bench = &lock.packages[0];
     assert!(bench.dev);
-    assert_eq!(bench.command.as_deref(), Some("src/main.wado"));
+    assert_eq!(
+        bench.world.get("wasi:cli/command").map(String::as_str),
+        Some("src/main.wado")
+    );
     assert!(bench.resolved_ref.is_some());
     assert!(bench.integrity.is_none());
 
@@ -66,7 +73,7 @@ deps = ["registry+https://wa.dev/tools:utils@0.5.1", "registry+https://wa.dev/st
     let regex = &lock.packages[1];
     assert!(!regex.dev);
     assert_eq!(regex.integrity.as_deref(), Some("sha256:a1b2c3d4e5f6"));
-    assert_eq!(regex.lib.as_deref(), Some("src/lib.wado"));
+    assert!(regex.world.is_empty());
     assert_eq!(regex.deps.len(), 1);
     assert_eq!(
         regex.deps[0],
@@ -90,9 +97,7 @@ fn roundtrip_preserves_data() {
                 resolved_ref: None,
                 integrity: Some("sha256:def456".to_string()),
                 dev: false,
-                command: None,
-                service: Some("src/server.wado".to_string()),
-                lib: None,
+                world: world(&[("wasi:http/service", "src/server.wado")]),
                 deps: vec!["registry+https://wa.dev/ns:dep@0.1.0".to_string()],
             },
             LockedPackage {
@@ -101,9 +106,7 @@ fn roundtrip_preserves_data() {
                 resolved_ref: Some("abcdef1234567890".to_string()),
                 integrity: None,
                 dev: true,
-                command: Some("src/main.wado".to_string()),
-                service: None,
-                lib: None,
+                world: world(&[("wasi:cli/command", "src/main.wado")]),
                 deps: vec![],
             },
         ],
@@ -125,7 +128,10 @@ fn roundtrip_preserves_data() {
         .unwrap();
     assert!(git_pkg.dev);
     assert_eq!(git_pkg.resolved_ref.as_deref(), Some("abcdef1234567890"));
-    assert_eq!(git_pkg.command.as_deref(), Some("src/main.wado"));
+    assert_eq!(
+        git_pkg.world.get("wasi:cli/command").map(String::as_str),
+        Some("src/main.wado")
+    );
 
     let reg_pkg = reparsed
         .packages
@@ -134,7 +140,10 @@ fn roundtrip_preserves_data() {
         .unwrap();
     assert!(!reg_pkg.dev);
     assert_eq!(reg_pkg.integrity.as_deref(), Some("sha256:def456"));
-    assert_eq!(reg_pkg.service.as_deref(), Some("src/server.wado"));
+    assert_eq!(
+        reg_pkg.world.get("wasi:http/service").map(String::as_str),
+        Some("src/server.wado")
+    );
     assert_eq!(reg_pkg.deps.len(), 1);
 }
 

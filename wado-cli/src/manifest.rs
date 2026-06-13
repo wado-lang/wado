@@ -60,27 +60,23 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
     }
 }
 
-/// The kind of entry point to resolve.
+/// The kind of entry point to resolve, identified by the CM world it targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryPointKind {
-    /// `[package].command` — for `wado run` and `wado compile` (default).
+    /// `wasi:cli/command` — for `wado run` and `wado compile` (default).
     Command,
-    /// `[package].service` — for `wado serve`.
+    /// `wasi:http/service` — for `wado serve`.
     Service,
-    /// `[package].lib` — library entry. Pending: the `--lib` compile path is
-    /// abolished until a world model that fits libraries lands (a library has
-    /// no command entry, so it does not map onto `wasi:cli/command`). The
-    /// manifest field and this resolution are retained as the data model.
-    Lib,
 }
 
 impl EntryPointKind {
+    /// The fully-qualified CM world name this entry point targets, used to look
+    /// it up in the manifest's `[world]` table.
     #[must_use]
-    pub const fn field_name(self) -> &'static str {
+    pub const fn world_fq(self) -> &'static str {
         match self {
-            EntryPointKind::Command => "command",
-            EntryPointKind::Service => "service",
-            EntryPointKind::Lib => "lib",
+            EntryPointKind::Command => "wasi:cli/command",
+            EntryPointKind::Service => "wasi:http/service",
         }
     }
 }
@@ -88,15 +84,10 @@ impl EntryPointKind {
 /// Resolve an entry point path from a manifest.
 ///
 /// Returns the absolute path to the entry point source file, or `None` if the
-/// manifest has no `[package]` section or the requested field is not set.
+/// manifest's `[world]` table has no entry for the targeted world.
 #[must_use]
 pub fn resolve_entry_point(project: &ProjectManifest, kind: EntryPointKind) -> Option<PathBuf> {
-    let pkg = project.manifest.package.as_ref()?;
-    let relative = match kind {
-        EntryPointKind::Command => pkg.command.as_deref(),
-        EntryPointKind::Service => pkg.service.as_deref(),
-        EntryPointKind::Lib => pkg.lib.as_deref(),
-    }?;
+    let relative = project.manifest.world_entry(kind.world_fq())?;
     Some(project.root.join(relative))
 }
 
@@ -121,8 +112,8 @@ fn entry_point_or_error(
 ) -> Result<PathBuf, CliExit> {
     resolve_entry_point(project, kind).ok_or_else(|| {
         CliExit::error(format!(
-            "wado.toml found but [package].{} is not set",
-            kind.field_name()
+            "wado.toml found but [world].\"{}\" is not set",
+            kind.world_fq()
         ))
     })
 }
@@ -132,7 +123,7 @@ fn entry_point_or_error(
 ///
 /// When `explicit_input` points to a directory, load `<dir>/wado.toml` and
 /// resolve the entry point for `kind` (e.g. `wado run package-gale` →
-/// `package-gale/src/main.wado` via `[package].command`).
+/// `package-gale/src/main.wado` via `[world]."wasi:cli/command"`).
 ///
 /// # Errors
 ///
@@ -252,9 +243,10 @@ command = "src/main.wado"
 [package]
 name = "app"
 version = "0.1.0"
-command = "src/main.wado"
-service = "src/server.wado"
-lib = "src/lib.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+"wasi:http/service" = "src/server.wado"
 "#;
         fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
@@ -267,10 +259,6 @@ lib = "src/lib.wado"
             resolve_entry_point(&project, EntryPointKind::Service),
             Some(tmp.path().join("src/server.wado"))
         );
-        assert_eq!(
-            resolve_entry_point(&project, EntryPointKind::Lib),
-            Some(tmp.path().join("src/lib.wado"))
-        );
     }
 
     #[test]
@@ -280,7 +268,9 @@ lib = "src/lib.wado"
 [package]
 name = "app"
 version = "0.1.0"
-command = "src/main.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 "#;
         fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
@@ -317,7 +307,9 @@ command = "src/main.wado"
 [package]
 name = "app"
 version = "0.1.0"
-command = "src/main.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 "#;
         fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
@@ -327,7 +319,10 @@ command = "src/main.wado"
             "usage",
         )
         .unwrap_err();
-        assert!(err.message.contains("[package].service is not set"));
+        assert!(
+            err.message
+                .contains("[world].\"wasi:http/service\" is not set")
+        );
     }
 
     #[test]
@@ -349,12 +344,13 @@ command = "src/main.wado"
 [package]
 name = "app"
 version = "0.1.0"
-command = "src/main.wado"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
 "#;
         fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
         let project = discover(tmp.path()).unwrap().unwrap();
         assert!(resolve_entry_point(&project, EntryPointKind::Service).is_none());
-        assert!(resolve_entry_point(&project, EntryPointKind::Lib).is_none());
     }
 }
