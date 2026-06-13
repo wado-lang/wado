@@ -10,9 +10,6 @@ is a findings document grounded in two measured spikes under
 - `wado-bundled-icu/bdp-spike/` — data-free feature components that load data at
   runtime, plus a shared data component (reproduce with `bdp-spike/build.sh`).
 
-It deliberately stops short of prescribing a concrete partition for ICU; that is
-a separate design discussion.
-
 ## The two things you split: code and data
 
 A large library's footprint has two very different parts:
@@ -113,12 +110,3 @@ exercised all three levers; the load-bearing results:
   property of baked data, and the provider/deserialization code adds a fixed
   per-feature overhead — so for a *single* feature, separation is roughly size-
   neutral. It pays off across multiple features and via slicing.
-
-## Open questions (deferred)
-
-- The concrete partition for ICU on Wado: which capabilities become components,
-  how coarse, and where the import edges go. (Left for design discussion.)
-- How datagen plugs into the Wado build pipeline (when/where blobs are produced
-  and sliced for a given program).
-- Whether to expose one shared data component or per-feature data, and how that
-  interacts with marker-level dedup between dependent features.
