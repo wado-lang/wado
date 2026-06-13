@@ -180,6 +180,9 @@ impl fmt::Display for FreeFunctionName {
             ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
             ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
             ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
+            ModuleSource::Dependency { package, path } => {
+                write!(f, "{}/{}/{}", package, path, self.name)
+            }
             ModuleSource::Remote { url } => write!(f, "{}/{}", url, self.name),
             ModuleSource::Redirected { uri } => write!(f, "{}/{}", uri, self.name),
             ModuleSource::Wasm { path, .. } => write!(f, "{}/{}", path, self.name),
@@ -899,11 +902,21 @@ pub fn resolve_import_with_entry(
         return interner.remote(import_source);
     }
 
+    // Relative import from within a dependency module stays inside that
+    // dependency package (same `package`, resolved file path).
+    if let ModuleSource::Dependency { package, path } = from_module
+        && (import_source.starts_with("./") || import_source.starts_with("../"))
+    {
+        let resolved = resolve_module_path(path, import_source);
+        let package = package.to_string();
+        return interner.dependency(&package, &resolved);
+    }
+
     // Bare dependency name (`use { … } from "router"`): resolve against
     // `[dependencies]` before treating it as a relative sibling file.
     if !import_source.starts_with("./")
         && !import_source.starts_with("../")
-        && let Some(dep) = interner.dependency(import_source)
+        && let Some(dep) = interner.resolve_dependency(import_source)
     {
         return dep;
     }

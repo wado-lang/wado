@@ -82,3 +82,75 @@ export fn run() with Stdout {
         .success()
         .stdout(predicate::str::contains("hello from greet"));
 }
+
+/// The dependency's own modules resolve relative imports inside the
+/// dependency package: `greet`'s lib `use`s a sibling helper.
+#[test]
+fn dependency_internal_relative_import_resolves() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+
+    let greet = root.join("greet");
+    fs::create_dir_all(greet.join("src")).unwrap();
+    fs::write(
+        greet.join("wado.toml"),
+        r#"[package]
+name = "greet"
+version = "0.1.0"
+lib = "src/lib.wado"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        greet.join("src/lib.wado"),
+        r#"use { subject } from "./helper.wado";
+
+export fn hello() -> String {
+    return `hello {subject()}`;
+}
+"#,
+    )
+    .unwrap();
+    fs::write(
+        greet.join("src/helper.wado"),
+        r#"pub fn subject() -> String {
+    return "world";
+}
+"#,
+    )
+    .unwrap();
+
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        r#"[package]
+name = "app"
+version = "0.1.0"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+
+[dependencies]
+greet = { path = "../greet" }
+"#,
+    )
+    .unwrap();
+    fs::write(
+        app.join("src/main.wado"),
+        r#"use { println, Stdout } from "core:cli";
+use { hello } from "greet";
+
+export fn run() with Stdout {
+    println(hello());
+}
+"#,
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hello world"));
+}

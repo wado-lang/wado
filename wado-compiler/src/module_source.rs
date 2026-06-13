@@ -166,11 +166,18 @@ impl ModuleSourceInterner {
         self.dependencies = dependencies;
     }
 
+    pub fn dependency(&mut self, package: &str, path: &str) -> ModuleSource {
+        ModuleSource::Dependency {
+            package: self.intern(package),
+            path: self.intern(path),
+        }
+    }
+
     /// Resolve a bare dependency name to its entry module `ModuleSource`, if
     /// declared in `[dependencies]`.
-    pub fn dependency(&mut self, name: &str) -> Option<ModuleSource> {
+    pub fn resolve_dependency(&mut self, name: &str) -> Option<ModuleSource> {
         let path = self.dependencies.get(name)?.clone();
-        Some(self.local(&path))
+        Some(self.dependency(name, &path))
     }
 
     pub fn intern(&mut self, s: &str) -> InternedStr {
@@ -303,6 +310,21 @@ pub enum ModuleSource {
         /// Relative path (e.g., "./geometry.wado", "./utils/helper.wado")
         path: InternedStr,
     },
+    /// A module belonging to a dependency package, resolved from a bare-name
+    /// `use { … } from "<dep>"` clause against `[dependencies]`.
+    ///
+    /// `package` is the dependency's identity (the `[dependencies]` key for
+    /// path deps; a resolved package id once registry/git land). It keeps
+    /// type identity from crossing the package boundary even when two
+    /// packages have a file at the same `path`. `path` is the module file,
+    /// loaded by the host exactly like [`ModuleSource::Local`] — wado-to-wado
+    /// source dependencies compile into the same component (the CM boundary
+    /// is skipped), so dependency modules are ordinary Wado source once
+    /// loaded.
+    Dependency {
+        package: InternedStr,
+        path: InternedStr,
+    },
     /// Remote module loaded via HTTP/HTTPS
     Remote {
         /// Full URL (e.g., "<https://example.com/lib.wado>")
@@ -357,6 +379,16 @@ impl PartialEq for ModuleSource {
             (Self::Core { name: a }, Self::Core { name: b }) => a == b,
             (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
+            (
+                Self::Dependency {
+                    package: pa,
+                    path: a,
+                },
+                Self::Dependency {
+                    package: pb,
+                    path: b,
+                },
+            ) => pa == pb && a == b,
             (Self::Remote { url: a }, Self::Remote { url: b }) => a == b,
             (Self::Redirected { uri: a }, Self::Redirected { uri: b }) => a == b,
             (
@@ -386,6 +418,10 @@ impl std::hash::Hash for ModuleSource {
             Self::Core { name } => name.hash(state),
             Self::Wasi { interface } => interface.hash(state),
             Self::Local { path } => path.hash(state),
+            Self::Dependency { package, path } => {
+                package.hash(state);
+                path.hash(state);
+            }
             Self::Remote { url } => url.hash(state),
             Self::Redirected { uri } => uri.hash(state),
             Self::Wasm { path, kind } => {
@@ -486,6 +522,7 @@ impl ModuleSource {
             Self::Core { name } => vec!["core".to_string(), name.to_string()],
             Self::Wasi { interface } => vec!["wasi".to_string(), interface.to_string()],
             Self::Local { path } => vec![path.to_string()],
+            Self::Dependency { package, path } => vec![package.to_string(), path.to_string()],
             Self::Remote { url } => vec![url.to_string()],
             Self::EntryPoint { filename } => vec![filename.to_string()],
             Self::Redirected { uri } => vec![uri.to_string()],
@@ -639,6 +676,7 @@ impl fmt::Display for ModuleSource {
             Self::Core { name } => write!(f, "core:{name}"),
             Self::Wasi { interface } => write!(f, "wasi:{interface}"),
             Self::Local { path } => write!(f, "{path}"),
+            Self::Dependency { package, path } => write!(f, "dep:{package}:{path}"),
             Self::Remote { url } => write!(f, "{url}"),
             Self::EntryPoint { filename } => {
                 write!(f, "{filename}")
@@ -652,6 +690,36 @@ impl fmt::Display for ModuleSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dependency_identity_includes_package() {
+        let mut interner = ModuleSourceInterner::new();
+        let a = interner.dependency("greet", "../greet/src/lib.wado");
+        let b = interner.dependency("greet", "../greet/src/lib.wado");
+        let other_pkg = interner.dependency("other", "../greet/src/lib.wado");
+        assert_eq!(a, b);
+        assert_ne!(a, other_pkg);
+        // Distinct from a Local at the same path: identity must not cross the
+        // package boundary.
+        let local = interner.local("../greet/src/lib.wado");
+        assert_ne!(a, local);
+        assert_eq!(a.qualify_name("hello"), "dep:greet:../greet/src/lib.wado//hello");
+    }
+
+    #[test]
+    fn resolve_dependency_uses_registered_path() {
+        let mut interner = ModuleSourceInterner::new();
+        interner.set_dependencies(
+            [("greet".to_string(), "../greet/src/lib.wado".to_string())]
+                .into_iter()
+                .collect(),
+        );
+        assert_eq!(
+            interner.resolve_dependency("greet"),
+            Some(interner.dependency("greet", "../greet/src/lib.wado"))
+        );
+        assert_eq!(interner.resolve_dependency("missing"), None);
+    }
 
     #[test]
     fn test_module_source_from_path_core() {

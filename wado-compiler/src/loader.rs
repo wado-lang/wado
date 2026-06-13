@@ -387,7 +387,9 @@ pub fn resolve_wasm_asset_path(
             "wasi:{}",
             join_namespace_relative_path(interface, import_source)
         )),
-        ModuleSource::Local { path } => Ok(resolve_module_path(path, import_source)),
+        ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+            Ok(resolve_module_path(path, import_source))
+        }
         ModuleSource::Remote { url } => Ok(resolve_module_path(url, import_source)),
         ModuleSource::EntryPoint { .. } => Ok(normalize_module_path(import_source)),
         ModuleSource::Redirected { uri } => Ok(resolve_module_path(uri, import_source)),
@@ -1455,13 +1457,20 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 let resolved = resolve_module_path(from_url, import_source);
                 return Ok(self.interner.remote(&resolved));
             }
+            // Relative import from within a dependency module stays inside
+            // that dependency package.
+            if let ModuleSource::Dependency { package, path } = from_module_source {
+                let resolved = resolve_module_path(path, import_source);
+                let package = package.to_string();
+                return Ok(self.interner.dependency(&package, &resolved));
+            }
             // Entry point or stdlib: treat as relative to project root
             let canonical = normalize_module_path(import_source);
             return Ok(self.interner.local(&canonical));
         }
 
         // Bare dependency name: resolve against `[dependencies]`.
-        if let Some(dep) = self.interner.dependency(import_source) {
+        if let Some(dep) = self.interner.resolve_dependency(import_source) {
             return Ok(dep);
         }
 
@@ -1493,7 +1502,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         _from_module_source: &ModuleSource,
     ) -> Result<String, LoadError> {
         match module_source {
-            ModuleSource::Local { path } => {
+            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
                 let bytes = self.host.load_source(path).await.map_err(LoadError::from)?;
                 String::from_utf8(bytes).map_err(|_| LoadError::IoError {
                     path: path.to_string(),
