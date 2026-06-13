@@ -593,21 +593,21 @@ test "pipeline: parse followed by check_references without merge accepts a combi
 test "parse ll_basic.g4" {
     let input = #include_str("../../tests/grammars/ll_basic.g4");
     let g = parse(input).unwrap();
-    assert g.name == "LLBasic";
+    assert g.name == "LlBasic";
     assert g.parser_rules.len() == 3;
 }
 
 test "parse ll_nullable_suffix.g4" {
     let input = #include_str("../../tests/grammars/ll_nullable_suffix.g4");
     let g = parse(input).unwrap();
-    assert g.name == "LLNullableSuffix";
+    assert g.name == "LlNullableSuffix";
     assert g.parser_rules.len() == 3;
 }
 
 test "parse ll_multi_alt.g4" {
     let input = #include_str("../../tests/grammars/ll_multi_alt.g4");
     let g = parse(input).unwrap();
-    assert g.name == "LLMultiAlt";
+    assert g.name == "LlMultiAlt";
     assert g.parser_rules.len() == 3;
     // `a` is the multi-alt callee — two alternatives.
     assert g.parser_rules[1].name == "a";
@@ -617,7 +617,7 @@ test "parse ll_multi_alt.g4" {
 test "parse ll_lr_atom.g4" {
     let input = #include_str("../../tests/grammars/ll_lr_atom.g4");
     let g = parse(input).unwrap();
-    assert g.name == "LLLRAtom";
+    assert g.name == "LlLrAtom";
     assert g.parser_rules.len() == 3;
     // `a` is the LR callee — alt 0 is the atom, alt 1 is `a '+' a`.
     assert g.parser_rules[1].name == "a";
@@ -627,7 +627,7 @@ test "parse ll_lr_atom.g4" {
 test "parse ll_ctx_follow.g4" {
     let input = #include_str("../../tests/grammars/ll_ctx_follow.g4");
     let g = parse(input).unwrap();
-    assert g.name == "LLCtxFollow";
+    assert g.name == "LlCtxFollow";
     // r, wrapper, a, b
     assert g.parser_rules.len() == 4;
 }
