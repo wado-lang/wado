@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781342297175,
+  "lastUpdate": 1781346317999,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32529,6 +32529,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2262a2e8eca5896aed429d3cdb240ff19681e350"
         },
         "date": 1781342296609,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432251,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bba026a673bb4bb5f0c5d71b5de06f1114d831fe",
+          "message": "Merge pull request #1365 from wado-lang/claude/pr-create-conventions-hook\n\nchore(claude): SKILL-driven PR-conventions hook; deny AskUserQuestion",
+          "timestamp": "2026-06-13T19:16:06+09:00",
+          "tree_id": "d1bde9e1eba34570e4f93e983094416b7e2f9ab0",
+          "url": "https://github.com/wado-lang/wado/commit/bba026a673bb4bb5f0c5d71b5de06f1114d831fe"
+        },
+        "date": 1781346317554,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
