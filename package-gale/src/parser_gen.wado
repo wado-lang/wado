@@ -541,10 +541,10 @@ fn gen_scan_function_named(
         for let alt of &l.atom.alts {
             non_lr_indices.push(alt.alt_index);
         }
-        // ATN-class LR rule: route the scan loop through the simulator and
-        // route the scan loop through `atn_lr_loop_decision`. The decision
-        // number is the rule's ATN loop-entry; every scan rule call brackets
-        // with the scan caller stack via `gen_scan_op_element`.
+        // ATN-class LR rule: route the scan loop through
+        // `atn_lr_loop_decision` (the rule's ATN loop-entry); every scan
+        // rule call brackets with the scan caller stack via
+        // `gen_scan_op_element`.
         let atn_loop_dec = if l.atn_class && ctx.needs_atn() {
             ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name));
         } else {

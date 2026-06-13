@@ -86,8 +86,9 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
     // Char index where each line begins (line 1 at 0, then one entry per
-    // newline). Built once so `line_col_at` is a binary search per token
-    // instead of an O(pos) rescan — the whole dump is O(n log n), not O(n²).
+    // newline). Built once so each token's position is a binary search
+    // (`line_col_from_starts`) instead of an O(pos) rescan, making the
+    // whole dump O(n log n) rather than O(n²).
     let mut line_starts: List<i32> = [0];
     for let mut i = 0; i < chars.len(); i += 1 {
         if chars[i] == '\n' {
@@ -149,9 +150,8 @@ fn emit_lexer_token(out: &mut String, tok: &Token, line_starts: &List<i32>, inde
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
 /// 1-based line and 0-based column to match ANTLR4's `Token` getters.
-/// Used by the parser's error path, which reports at most one position
-/// per parse, so the linear scan is fine. The per-token dump uses
-/// `line_col_from_starts` to avoid the O(n²) rescan.
+/// The parser's error path reports at most one position per parse, so the
+/// linear scan is fine; the per-token dump uses `line_col_from_starts`.
 fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
@@ -170,8 +170,7 @@ fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
 /// Compute (line, column) from the precomputed `line_starts` table (char
 /// index where each line begins). Binary search for the greatest
 /// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
-/// offset past its start. O(log lines) per call, so a full token dump is
-/// O(n log n) rather than the O(n²) of rescanning from 0 per token.
+/// offset past its start. O(log lines) per call.
 fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     let mut lo = 0;
     let mut hi = line_starts.len() - 1;

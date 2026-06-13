@@ -16,25 +16,20 @@
 //!
 //! ## What lower handles
 //!
-//! `lower` handles every shape the surface IR produces — single-alt and
-//! multi-alt rules, left-recursive rules (atom + lr_alts), every Group
-//! classifier (`Transparent`, `SingleAlt`, `TokenOnly`, `SimpleCst`,
-//! `General`), every Repeat kind (`Star` / `Plus` / `Optional`) with both
-//! greedy and non-greedy semantics, `Not` complements (single token or
-//! multi-token Group), and scalar / list (`+=`) Labels. Dispatch falls
-//! into `Direct` for disjoint first-sets or `Tournament` for overlapping
-//! fully-scannable alts. The tail-position caller-FOLLOW repair is
-//! threaded at runtime (a `FollowArg` per `RuleRef` call site and a
-//! `gate_caller_follow` flag per tail Repeat), so greedy Repeats stay
-//! `Plain` and yield to the caller via `follow_yields` at run time.
-//! Repeats over General-Group inners coordinate the per-rule
-//! `group_counter` so the outer field name and the inner variant share
-//! the same id.
+//! `lower` covers every surface-IR shape — single- and multi-alt rules,
+//! left-recursive rules (atom + lr_alts), every Group classifier
+//! (`Transparent`, `SingleAlt`, `TokenOnly`, `SimpleCst`, `General`),
+//! every Repeat kind (`Star` / `Plus` / `Optional`, greedy and
+//! non-greedy), `Not` complements, and scalar / list (`+=`) Labels.
+//! Multi-alt dispatch is `Direct` for disjoint first-sets or `Tournament`
+//! for overlapping fully-scannable alts.
 //!
-//! Optional `?` Repeats resolve to `OptionalLookahead` when the inner is a
-//! single-alt Group of ≥ 2 fixed tokens, or to `OptionalScanGuard` when
-//! the inner is a scannable Group / RuleRef without a usable fixed-token
-//! prefix; otherwise `Plain`.
+//! The tail-position caller-FOLLOW repair is threaded at runtime (a
+//! `FollowArg` per `RuleRef` call site, a `gate_caller_follow` flag per
+//! tail Repeat), so greedy Repeats stay `Plain` and yield via
+//! `follow_yields` at run time. Repeats over General-Group inners share
+//! the per-rule `group_counter` between the outer field name and the
+//! inner variant.
 //!
 //! `codegen::generate` calls `lower` and feeds the result through the emit
 //! layer (`parser_gen.wado` / `codegen.wado`).
@@ -125,6 +120,20 @@ use {
     DiagnosticKind,
 } from "./gir.wado";
 
+/// True when an element threads a `FollowArg` into a callee: a `RuleRef`,
+/// or a `Label` wrapping one. Other shapes discard it in `lower_op`, so
+/// computing a mask there interns a dead `FOLLOW_MASK` and perturbs mask
+/// ids.
+fn element_consumes_follow_arg(elem: &Element) -> bool {
+    if let RuleRef(_) = elem {
+        return true;
+    }
+    if let Label(lab) = elem {
+        return element_consumes_follow_arg(&lab.element);
+    }
+    return false;
+}
+
 /// Compute the runtime FOLLOW argument a `RuleRef` call at index `i`
 /// in `elements` must supply to its callee. Instead of cloning the
 /// callee per mask (the retired `__follow_<id>` variant mechanism),
@@ -140,27 +149,6 @@ use {
 ///       · empty local prefix (callee strictly at this rule's tail)
 ///         → `Forward`;
 ///       · non-empty local prefix → `Combined(id)` (runtime prepend).
-///
-/// The continuation is computed once per call site here, against the
-/// single rule body — there are no variant clones, so nothing is
-/// threaded into the callee beyond the runtime `follow` argument.
-/// True when the element at a call site actually threads the computed
-/// `FollowArg` into a callee: a `RuleRef`, or a `Label` that (after
-/// unwrapping nested labels) wraps one. `lower_op` discards `follow_arg`
-/// for every other shape — `Group` takes only `outer_follow`, `Repeat`
-/// takes `gate_caller_follow`, and the leaves ignore it — so computing a
-/// mask there only interns a dead `FOLLOW_MASK` global and perturbs mask
-/// ids. Mirrors `lower_op`'s / `lower_label_op`'s follow_arg routing.
-fn element_consumes_follow_arg(elem: &Element) -> bool {
-    if let RuleRef(_) = elem {
-        return true;
-    }
-    if let Label(lab) = elem {
-        return element_consumes_follow_arg(&lab.element);
-    }
-    return false;
-}
-
 fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> FollowArg {
     if !element_consumes_follow_arg(&elements[i]) {
         return FollowArg::NoFollow;
@@ -3032,42 +3020,14 @@ fn lower_general_group(
     });
 }
 
-/// Lower a `Repeat` element (`e?` / `e*` / `e+`). Phase 2.x.partial
-/// only handles greedy `Star` / `Plus` whose inner is a leaf
-/// element (no nested `Repeat` / `Group` / `Label`). The remaining
-/// shapes panic with their own `TODO` markers so a half-lowered
-/// `Repeat` cannot quietly reach codegen.
-///
-/// Default strategy is `Plain`: emit produces `while peek_kind ∈
-/// first_of_inner { … push body }` for `Star` and `Plus` (with `+`'s
-/// mandatory-first guard handled at emit time, not in the strategy
-/// enum). For greedy `Optional` inners, `pick_optional_specialised`
-/// may upgrade `Plain` to `OptionalLookahead` / `OptionalShapeLookahead`
-/// / `OptionalScanGuard`. The tail-position caller-FOLLOW repair is
-/// threaded at runtime via `gate_caller_follow`, not baked into the
-/// strategy.
-///
-/// The inner Op uses a fresh `name_counts` because the binding name
-/// inside a loop body is a local to that iteration — it does not
-/// shadow or dedup against the surrounding alt's bindings (the
-/// outer alt's list-typed field comes from `FieldDecl` in Phase 2.9,
-/// independent of the inner binding).
 /// Outer struct field name for the alt that contains a Repeat. For
 /// `Star` / `Plus` it's `<inner_base>_list` (the struct holds a
-/// `List<...>`); for `Optional` it's just the inner base name (the
-/// struct holds an `Option<...>`). Deduped against the surrounding
-/// alt's name table — the inner body op's field lives in a fresh scope
-/// and does not collide.
+/// `List<...>`); for `Optional` it's the inner base name (an
+/// `Option<...>`). Deduped against the surrounding alt's name table.
 ///
-/// Special case: `(name+=expr)*` — when the Repeat's inner is a
-/// list-label (`+=`), the label name IS the array, with no `_list`
-/// suffix. Mirrors `parser_gen::gen_repeat_body`'s `is_list_label(inner)`
-/// branch.
-///
-/// `group_counter` is the speculative value the inner lowering will see:
-/// a General-Group inner uses this id for its `group_<idx>` field name,
-/// and the increment happens during the inner-Op lowering so the outer
-/// name and inner shape stay in lockstep.
+/// Special case `(name+=expr)*`: when the inner is a list-label (`+=`,
+/// detected by `repeat_inner_is_list_label`) the label name IS the
+/// list, with no `_list` suffix.
 fn compute_repeat_outer_field(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, group_counter: i32) -> String {
     if repeat_inner_is_list_label(&rep.element) {
         if let Label(lab) = rep.element {
@@ -3079,6 +3039,16 @@ fn compute_repeat_outer_field(rep: &RepeatElement, name_counts: &mut List<[Strin
     return dedup_name(&outer_base, name_counts);
 }
 
+/// Lower a `Repeat` element (`e?` / `e*` / `e+`). Phase 2.x.partial
+/// only handles greedy `Star` / `Plus` whose inner is a leaf element
+/// (no nested `Repeat` / `Group` / `Label`); the remaining shapes panic
+/// with their own `TODO` markers so a half-lowered `Repeat` cannot
+/// quietly reach codegen. The strategy (`Plain` vs. the specialised
+/// Optional shapes) is chosen inline below.
+///
+/// The inner Op uses a fresh `name_counts`: a binding name inside a
+/// loop body is local to that iteration and does not dedup against the
+/// surrounding alt's bindings.
 fn lower_repeat_op(
     rep: &RepeatElement,
     name_counts: &mut List<[String, i32]>,
