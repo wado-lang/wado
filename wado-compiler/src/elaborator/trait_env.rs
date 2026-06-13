@@ -63,6 +63,24 @@ pub(crate) type DeclKey = (ModuleSource, String);
 /// without ambiguity.
 pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
 
+/// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
+/// time so trait and method queries can read the trait name, target type,
+/// and type parameters without re-fetching the impl block from
+/// `loaded_modules`. This is the data-modelling half of the WEP 2026-05-26
+/// goal of keeping resolution queries off the raw AST: every index entry's
+/// `(ModuleSource, item_idx)` has a matching header in
+/// [`TraitEnv::impl_headers`].
+#[derive(Clone, Debug)]
+pub(super) struct ImplHeader {
+    /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
+    /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
+    pub(super) trait_name: Option<String>,
+    /// The impl target type (`impl_block.ty`).
+    pub(super) ty: Type,
+    /// The impl block's type parameters.
+    pub(super) type_params: Vec<ast::GenericParam>,
+}
+
 /// Pre-built index: `(declaring module, trait name)` → (`ModuleSource`, item index)
 /// for trait declarations.
 pub(super) type TraitDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
@@ -160,6 +178,10 @@ pub struct TraitEnv {
     pub(super) resource_decl_index: ResourceDeclIndex,
     /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
     pub(super) blanket_impl_index: BlanketTraitImplIndex,
+    /// Digested headers for every indexed impl block, keyed by
+    /// `(ModuleSource, item_idx)`. Trait/method queries read this instead of
+    /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
+    pub(super) impl_headers: IndexMap<(ModuleSource, usize), ImplHeader>,
     /// `trait_name` → modules that host a blanket impl of that trait
     /// (`impl<T: Bound> Trait for T`). Used by the monomorphizer to find
     /// the home module of a generic dispatch when the receiver type
@@ -287,6 +309,7 @@ impl TraitEnv {
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
+        let mut impl_headers: IndexMap<(ModuleSource, usize), ImplHeader> = IndexMap::default();
         let mut blanket_trait_impl_modules: IndexMap<String, Vec<ModuleSource>> =
             IndexMap::default();
         let mut trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
@@ -443,6 +466,17 @@ impl TraitEnv {
                     continue;
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
+                impl_headers.insert(
+                    (module_source.clone(), item_idx),
+                    ImplHeader {
+                        trait_name: impl_block
+                            .trait_type
+                            .as_ref()
+                            .map(get_type_name_static),
+                        ty: impl_block.ty.clone(),
+                        type_params: impl_block.type_params.clone(),
+                    },
+                );
                 if let Some(trait_type) = &impl_block.trait_type {
                     let trait_name = get_type_name_static(trait_type);
                     let is_blanket = impl_block
@@ -543,6 +577,7 @@ impl TraitEnv {
                 effect_decl_index,
                 resource_decl_index,
                 blanket_impl_index,
+                impl_headers,
                 blanket_trait_impl_modules,
                 static_method_index,
                 resource_static_method_index,

@@ -639,25 +639,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_name: &str,
         type_args: Option<&[TypeId]>,
     ) -> bool {
-        // Use pre-built index for O(1) lookup by type name.
-        if let Some(entries) = self.tysys.trait_env.impl_index.get(type_name) {
-            for (module_src, item_idx) in entries {
-                let module = &self.loaded_modules[module_src];
-                if let Item::Impl(impl_block) = &module.items[*item_idx]
-                    && let Some(trait_type) = &impl_block.trait_type
+        // Use pre-built index for O(1) lookup by type name; read each impl's
+        // digested header (trait name, target type, type params) rather than
+        // re-fetching the impl block from `loaded_modules`.
+        let trait_env = self.tysys.trait_env.clone();
+        if let Some(entries) = trait_env.impl_index.get(type_name) {
+            for entry in entries {
+                let (module_src, _) = entry;
+                let Some(header) = trait_env.impl_headers.get(entry) else {
+                    continue;
+                };
+                let Some(impl_trait_name) = &header.trait_name else {
+                    continue;
+                };
+                if impl_trait_name == trait_name
+                    && self.tysys.inherent_impl_type_args_match(
+                        &header.ty,
+                        &header.type_params,
+                        type_args,
+                        module_src,
+                    )
+                    && self.check_impl_block_bounds(&header.type_params, &header.ty, type_args)
                 {
-                    let impl_trait_name = self.get_type_name(trait_type);
-                    if impl_trait_name == trait_name
-                        && self.tysys.inherent_impl_type_args_match(
-                            &impl_block.ty,
-                            &impl_block.type_params,
-                            type_args,
-                            module_src,
-                        )
-                        && self.check_impl_block_bounds(impl_block, type_args)
-                    {
-                        return true;
-                    }
+                    return true;
                 }
             }
         }
@@ -668,26 +672,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the
         // concrete type satisfies the bound.
-        for (module_src, item_idx) in &self.tysys.trait_env.blanket_impl_index {
-            let module = &self.loaded_modules[module_src];
-            if let Item::Impl(impl_block) = &module.items[*item_idx]
-                && let Some(trait_type) = &impl_block.trait_type
-            {
-                let impl_trait_name = self.get_type_name(trait_type);
-                if impl_trait_name == trait_name {
-                    let impl_type_name = Self::get_type_name_static(&impl_block.ty);
-                    let matching_param = impl_block
-                        .type_params
+        for entry in &trait_env.blanket_impl_index {
+            let Some(header) = trait_env.impl_headers.get(entry) else {
+                continue;
+            };
+            let Some(impl_trait_name) = &header.trait_name else {
+                continue;
+            };
+            if impl_trait_name == trait_name {
+                let impl_type_name = Self::get_type_name_static(&header.ty);
+                let matching_param = header
+                    .type_params
+                    .iter()
+                    .find(|tp| tp.name == impl_type_name);
+                if let Some(param) = matching_param {
+                    let bounds_satisfied = param
+                        .bounds
                         .iter()
-                        .find(|tp| tp.name == impl_type_name);
-                    if let Some(param) = matching_param {
-                        let bounds_satisfied = param
-                            .bounds
-                            .iter()
-                            .all(|bound| self.find_trait_impl_for_type(type_name, &bound.name));
-                        if bounds_satisfied {
-                            return true;
-                        }
+                        .all(|bound| self.find_trait_impl_for_type(type_name, &bound.name));
+                    if bounds_satisfied {
+                        return true;
                     }
                 }
             }
@@ -967,11 +971,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// For `impl<T: Ord> List<T>`, checks that the concrete type substituted for T implements Ord.
     pub(super) fn check_impl_block_bounds(
         &self,
-        impl_block: &ast::ImplBlock,
+        type_params: &[ast::GenericParam],
+        impl_ty: &ast::Type,
         type_args: Option<&[TypeId]>,
     ) -> bool {
         // No type params with bounds → always OK
-        if impl_block.type_params.iter().all(|p| p.bounds.is_empty()) {
+        if type_params.iter().all(|p| p.bounds.is_empty()) {
             return true;
         }
 
@@ -981,8 +986,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Build name → bounds map from impl block type params (trait names only)
-        let bounds_map: IndexMap<&str, Vec<String>> = impl_block
-            .type_params
+        let bounds_map: IndexMap<&str, Vec<String>> = type_params
             .iter()
             .filter(|p| !p.bounds.is_empty())
             .map(|p| {
@@ -995,7 +999,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Match type params to receiver type args via generic type arg positions
         let inner_type_name: Option<&str> =
-            if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = &impl_block.ty {
+            if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_ty {
                 if let ast::Type::Named(inner) = boxed.as_ref() {
                     Some(&inner.name)
                 } else {
@@ -1005,7 +1009,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None
             };
 
-        if let ast::Type::Generic(generic) = &impl_block.ty {
+        if let ast::Type::Generic(generic) = impl_ty {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg
                     && let Some(bounds) = bounds_map.get(named.name.as_str())

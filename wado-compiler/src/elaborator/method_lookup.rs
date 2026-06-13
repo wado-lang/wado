@@ -608,7 +608,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &impl_block.type_params,
                     receiver_type_args.as_deref(),
                     impl_module,
-                ) && self.check_impl_block_bounds(impl_block, receiver_type_args.as_deref()))
+                ) && self.check_impl_block_bounds(&impl_block.type_params, &impl_block.ty, receiver_type_args.as_deref()))
                 {
                     continue;
                 }
@@ -798,7 +798,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         receiver_type_args.as_deref(),
                         search_module_source,
                     )
-                    && self.check_impl_block_bounds(impl_block, receiver_type_args.as_deref())
+                    && self.check_impl_block_bounds(&impl_block.type_params, &impl_block.ty, receiver_type_args.as_deref())
                 {
                     for method in &impl_block.methods {
                         if method.name == method_name {
