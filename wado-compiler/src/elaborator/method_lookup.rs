@@ -161,12 +161,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn collect_trait_impl_refs(&self, type_name: &str) -> Vec<ImplBlockRef> {
         let mut refs = Vec::new();
         if let Some(entries) = self.tysys.trait_env.impl_index.get(type_name) {
-            for (module_src, item_idx) in entries {
-                let module = &self.loaded_modules[module_src];
-                if let Item::Impl(impl_block) = &module.items[*item_idx]
-                    && impl_block.trait_type.is_some()
+            for entry in entries {
+                if self
+                    .tysys
+                    .trait_env
+                    .impl_headers
+                    .get(entry)
+                    .is_some_and(|h| h.trait_name.is_some())
                 {
-                    refs.push(ImplBlockRef(module_src.clone(), *item_idx));
+                    refs.push(ImplBlockRef(entry.0.clone(), entry.1));
                 }
             }
         }
@@ -178,12 +181,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut refs = Vec::new();
         for name in type_names {
             if let Some(entries) = self.tysys.trait_env.impl_index.get(name.as_str()) {
-                for (module_src, item_idx) in entries {
-                    let module = &self.loaded_modules[module_src];
-                    if let Item::Impl(impl_block) = &module.items[*item_idx]
-                        && impl_block.trait_type.is_some()
+                for entry in entries {
+                    if self
+                        .tysys
+                        .trait_env
+                        .impl_headers
+                        .get(entry)
+                        .is_some_and(|h| h.trait_name.is_some())
                     {
-                        refs.push(ImplBlockRef(module_src.clone(), *item_idx));
+                        refs.push(ImplBlockRef(entry.0.clone(), entry.1));
                     }
                 }
             }
@@ -2736,33 +2742,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Look up the type parameters of a static method from its AST definition.
-    /// Searches impl blocks in loaded modules for `impl StructName { fn method_name<...> }`.
+    /// Look up the type parameters of a static method from its impl header.
+    /// Scans the pre-digested impl headers for `impl StructName { fn method_name<...> }`;
+    /// `impl_headers` already covers every loaded module (including the current one).
     pub(super) fn lookup_static_method_type_params(
         &self,
         struct_name: &str,
         method_name: &str,
     ) -> Vec<ast::GenericParam> {
-        // Search loaded modules
-        for (_, module) in self.loaded_modules {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && Self::get_type_name_static(&impl_block.ty) == struct_name
-                {
-                    for method in &impl_block.methods {
-                        if method.name == method_name && !method.type_params.is_empty() {
-                            return method.type_params.clone();
-                        }
-                    }
-                }
-            }
-        }
-        // Search current module items
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
-            {
-                for method in &impl_block.methods {
+        for header in self.tysys.trait_env.impl_headers.values() {
+            if Self::get_type_name_static(&header.ty) == struct_name {
+                for method in &header.methods {
                     if method.name == method_name && !method.type_params.is_empty() {
                         return method.type_params.clone();
                     }

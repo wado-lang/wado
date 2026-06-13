@@ -79,6 +79,19 @@ pub(super) struct ImplHeader {
     pub(super) ty: Type,
     /// The impl block's type parameters.
     pub(super) type_params: Vec<ast::GenericParam>,
+    /// Digested signatures of the block's methods, in source order. Carries
+    /// only what method-lookup queries read off the AST today; extended as
+    /// further consumers move onto the digest.
+    pub(super) methods: Vec<ImplMethodHeader>,
+}
+
+/// Digested signature of a single method inside an [`ImplHeader`]. Holds the
+/// name and type parameters method-lookup queries need without the method
+/// body; grows field-by-field as consumers migrate off the impl-block AST.
+#[derive(Clone, Debug)]
+pub(super) struct ImplMethodHeader {
+    pub(super) name: String,
+    pub(super) type_params: Vec<ast::GenericParam>,
 }
 
 /// Pre-built index: `(declaring module, trait name)` → (`ModuleSource`, item index)
@@ -475,6 +488,14 @@ impl TraitEnv {
                             .map(get_type_name_static),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
+                        methods: impl_block
+                            .methods
+                            .iter()
+                            .map(|m| ImplMethodHeader {
+                                name: m.name.clone(),
+                                type_params: m.type_params.clone(),
+                            })
+                            .collect(),
                     },
                 );
                 if let Some(trait_type) = &impl_block.trait_type {
