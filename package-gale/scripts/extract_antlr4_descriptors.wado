@@ -618,8 +618,8 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
                 continue;
             },
             Todo(reason) => {
-                w.line(&"#[TODO]");
                 w.line(&`// triage: {escape_for_wado_str(reason)}`);
+                w.line(&"#[TODO]");
             },
             Pass => {
             },
@@ -687,8 +687,8 @@ fn emit_stage_b_test_file(
     w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_b: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -743,8 +743,8 @@ fn emit_stage_sub_b_test_file(
     w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_b_sub: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -798,8 +798,8 @@ fn emit_stage_a_parse_test_file(
     w.line(&"    };");
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_a_parse: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -943,8 +943,8 @@ fn emit_stage_a_err_test_file(
     }
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_a_err: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -1006,8 +1006,8 @@ fn emit_stage_a_tokens_test_file(
     w.line(&`use \{ TK_EOF \} from "../../grammars/{*category}/{*name}.g4";`);
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_a_tokens: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -1032,7 +1032,7 @@ struct CliArgs {
     finalize_stage_b_oracle: bool,
 }
 
-fn parse_cli_args(arguments: List<String>) -> CliArgs {
+fn parse_cli_args(arguments: List<String>) -> Result<CliArgs, String> {
     let mut want_all = false;
     let mut categories: List<String> = [];
     let mut finalize_stage_b_oracle = false;
@@ -1045,20 +1045,34 @@ fn parse_cli_args(arguments: List<String>) -> CliArgs {
                 finalize_stage_b_oracle = true;
             },
             _ => {
-                if !a.starts_with("-") {
-                    categories.push(a);
+                // A leading `-` marks an option, not a category. Reject
+                // unknown flags loudly: silently dropping a typo'd flag
+                // (e.g. `--finalize-stage-b-oracl`) would otherwise run a
+                // full extract with the intended behaviour disabled.
+                if a.starts_with("-") {
+                    return Result::<CliArgs, String>::Err(`extract: unknown flag '{a}'`);
                 }
+                categories.push(a);
             },
         }
     }
     if !want_all && categories.is_empty() {
         categories = default_categories();
     }
-    return CliArgs { want_all, categories, finalize_stage_b_oracle };
+    return Result::<CliArgs, String>::Ok(CliArgs { want_all, categories, finalize_stage_b_oracle });
 }
 
 export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
-    let cli = parse_cli_args(args());
+    let cli = match parse_cli_args(args()) {
+        Ok(c) => c,
+        Err(msg) => {
+            eprintln(msg);
+            eprintln(
+                "extract: usage: extract_antlr4_descriptors.wado [all | <Category> ...] [--finalize-stage-b-oracle]",
+            );
+            exit(2);
+        },
+    };
     let want_all = cli.want_all;
     let mut categories = cli.categories;
 
@@ -1936,8 +1950,8 @@ fn emit_stage_b_oracle_test_file(
     w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_b_oracle: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -2412,4 +2426,37 @@ test "strip_eof_marker: does not strip ' <EOF>' that is not at the end" {
     // rather than the closing ')') stays untouched.
     let r = strip_eof_marker(&"(start <EOF> x)");
     assert r == "(start <EOF> x)", `got '{r}'`;
+}
+
+test "parse_cli_args: unknown -- flag is rejected" {
+    // A typo'd flag must not silently run a default extract: it should
+    // be reported as an error so the caller (`run`) can exit non-zero.
+    let r = parse_cli_args(["--finalize-stage-b-oracl"]);
+    assert r matches { Err(_) }, `expected Err for typo'd flag`;
+    let r2 = parse_cli_args(["-x"]);
+    assert r2 matches { Err(_) }, `expected Err for short unknown flag`;
+}
+
+test "parse_cli_args: known flags parse without error" {
+    let all = parse_cli_args(["all"]).unwrap();
+    assert all.want_all == true;
+    assert all.finalize_stage_b_oracle == false;
+
+    let fin = parse_cli_args(["--finalize-stage-b-oracle"]).unwrap();
+    assert fin.finalize_stage_b_oracle == true;
+    assert fin.want_all == false;
+}
+
+test "parse_cli_args: positional categories are collected" {
+    let r = parse_cli_args(["LexerExec", "ParserExec"]).unwrap();
+    assert r.want_all == false;
+    assert r.categories.len() == 2;
+    assert r.categories[0] == "LexerExec";
+    assert r.categories[1] == "ParserExec";
+}
+
+test "parse_cli_args: empty args fall back to default categories" {
+    let r = parse_cli_args([]).unwrap();
+    assert r.want_all == false;
+    assert !r.categories.is_empty();
 }
