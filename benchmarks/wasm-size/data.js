@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781321038036,
+  "lastUpdate": 1781331309894,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32441,6 +32441,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0ec71d2188552669c2dc83806f3894db76ff652d"
         },
         "date": 1781321037776,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432251,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "83ab9e5dbbe7e838c0c60f571ff74425fc97f99c",
+          "message": "Merge pull request #1361 from wado-lang/claude/json-schema-package-y6t3q9\n\ndocs: Jade (JSON Schema) and Reflect-derivation WEPs (+ CI docs-only fast-pass)",
+          "timestamp": "2026-06-13T15:06:01+09:00",
+          "tree_id": "ddfc97e953402527b46fc2352d4acd77ae3edc66",
+          "url": "https://github.com/wado-lang/wado/commit/83ab9e5dbbe7e838c0c60f571ff74425fc97f99c"
+        },
+        "date": 1781331309352,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
