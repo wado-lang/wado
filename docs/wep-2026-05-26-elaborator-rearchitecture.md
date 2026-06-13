@@ -463,313 +463,169 @@ The change touches every file under `elaborator/` and lands incrementally,
 with the suite (E2E, WIR golden, LSP query) green at every step, in
 dependency order. Stages are guidelines, not PR boundaries.
 
-Stages 1–5 and 7a are DONE:
+Phase 1 (Stages 1–5, 7a, 7-A, 7-B) is DONE: `TypeSystem` / `ModuleSemantics` /
+per-`AstId` `TypeAnnotations` extracted from the God Object; `reify` split out
+as the sole TIR producer reading recorded facts; the combined `annotate` walk
+builds no TIR (every `resolve_*` returns a `TypeId`), so LSP runs `annotate`
+alone. The premise the WEP existed to fix — LSP building and discarding TIR —
+is resolved. Detail in the Status section below and in git.
 
-- **Stages 1–4** — extract `TypeSystem`, `ModuleSemantics`, and per-`AstId`
-  `TypeAnnotations` from the `Elaborator` God Object.
-- **Stage 5** — split `reify` out as a second walk reading
-  `ModuleSemantics.types`; it is the sole TIR source for every module. It
-  landed still re-deriving some decisions (types, mangled names); Stage 7
-  cleans that.
-- **Stage 7a** — routing removed (`module_uses_reify`, the snapshot bypass,
-  the combined walk's TIR-output branch).
+Remaining in Phase 1:
 
-Remaining:
+**Stage 6 — Liveness and DCE.** `liveness::compute(&Semantics)` and the
+`Liveness` field on `Semantics` have landed (computed in WEP phase order; the
+`DeadFunction` / `DeadGlobal` diagnostics consume `dead_items`). The reify
+gate on `live_items` is wired but **disabled** (`None` live set) pending two
+prerequisites: (1) every semantic diagnostic that can fire on dead code is
+produced from `Semantics` rather than the emitted TIR (the "diagnostics from
+`Semantics`" move — see the Prerequisite section above and
+`wep-2026-05-16-unused-diagnostics.md` Phase 3b), and (2) cross-module graph
+completeness. Until both land, reify passes `None` (gating off) while
+`liveness` still feeds the dead-code diagnostics. Independent of Phase 2.
 
-**Stage 6 — Liveness and DCE.** `liveness::compute(&Semantics)` is
-added (see the DCE / Liveness section above), its result stored on
-`Semantics` as a non-optional `Liveness`, and reify gates item emission
-on `live_items`. A single reachability result feeds both the reify gate
-and the user-facing unused diagnostics (per the unused-diagnostics
-WEP); `optimize/dce.rs` retires from the diagnostic role but stays as
-silent post-monomorphization cleanup. The pass is fail-loud: a
-dropped-live item ICEs downstream and is fixed as a graph bug, never
-masked by over-approximation. Not started. Independent of Stage 7 —
-either may land first.
+Each stage keeps `mise run test`, the WIR golden fixtures, and the LSP query
+tests green. Performance is not tracked during migration; see Trade-offs.
 
-**Stage 7 — Make reify mechanical, then `annotate` TIR-free.** This is
-the structural completion of the annotate/reify split, in two sub-steps
-gated only on Stage 5 (now done). The premise the whole WEP exists to
-fix — that LSP builds and discards TIR just to obtain `Semantics` — is
-satisfied at the end of 7-B.
+### Stage 7-B execution plan (done)
 
-- **7-A — Reify becomes mechanical (incremental, low-risk).** Close the
-  completeness-rule gap one decision at a time: have `annotate` record
-  what reify re-derives (resolved types per `AstId`, impl identity /
-  mangled name) and switch reify from re-computation to a fact read.
-  Each step keeps E2E green; reify's output is unchanged, only its
-  source. When reify re-derives nothing decision-bearing it depends on
-  `&Semantics` alone — the two-walk parity-bug class is gone.
-- **7-B — `annotate` stops building TIR.** Strip TIR construction from
-  the combined walk (`resolve_*` returns resolved types + records facts,
-  no `TirExpr`), file by file (`expr.rs` → `stmt.rs` → `item.rs` → …),
-  keeping every `record_*`. After 7-A the contract is pinned (the facts
-  reify reads), so the target is exact: record the contract, drop the
-  TIR. LSP then runs `annotate` only — no TIR built or discarded. The
-  old `Elaborator` / `AnnotateState` TIR-emission halves and the
-  duplicate TIR construction are deleted; the pipeline diagrams in
-  `CLAUDE.md` / `docs/compiler.md` and the `elaborator/` file layout are
-  updated to match.
-
-Order is 7-A → 7-B: 7-A is incremental and de-risks 7-B, and while 7-A
-runs the combined walk's TIR stays live as reify's reference. The E2E
-suite and WIR golden fixtures carry the equivalence guarantee at every
-step.
-
-Each stage keeps `mise run test`, the WIR golden fixtures, and the LSP
-query tests green. Performance is not tracked during migration; see
-Trade-offs.
-
-### Stage 7-B execution plan
-
-7-B is not a single mechanical edit. The combined walk's TIR is already
-dead (reify is the sole producer since Stage 5/7a), so an arm's only
-reason to still build a real `TirExpr` is that some _analysis or
-diagnostic inside the combined walk_ reads the structure (`.kind`) of
-the resolved value. Those readers must move to the AST + recorded facts
-before the arm that feeds them can return a placeholder. Hence two
-phases:
-
-Phase 1 — port each structural reader off combined-walk TIR. Each is a
-behaviour-preserving refactor (the recorded values are unchanged, so
-reify's output is byte-identical) verified green on its own. Precedent:
-`control_flow.rs` (Stage 5 moved missing-return off the body TIR).
-
-Phase 2 — once no analysis reads resolved TIR structure, convert every
-`resolve_*` arm to a placeholder, then change signatures
-(`resolve_expr -> TypeId`, `resolve_stmt` records only) file by file,
-make `build_tir_from_state` TIR-free, and run LSP through `annotate`
-alone. Reify is the only TIR.
-
-The Phase 1 readers, grouped by the analysis to port (the arm each
-unblocks in parentheses):
-
-- [x] **assign l-value + ref validity** — `assign_to_target`'s l-value
-      match on `target.kind` and `resolve_unary`'s `&mut`-on-primitive-field
-      check ported to the AST target shape + recorded dispatch facts
-      (`operator_dispatch` / `expression_types`); `Local` and the
-      `&mut`-captured-ident deref still read `target.kind` (their resolvers
-      are not placeholders yet). (`resolve_field_access`, `resolve_index`,
-      and the assign side of `resolve_unary` are now placeholders)
-- [x] **null / unknown inference** — `patch_unresolved_null` /
-      `NullBreakPatcher` replaced by AST walks
-      (`control_flow::collect_unresolved_null_tails` /
-      `collect_unresolved_null_breaks`); the TIR-mutating machinery is
-      deleted. Required the `expression_types` UNKNOWN-faithfulness change
-      (see the note below) so the AST walk sees an unresolved-null branch.
-- [x] **block result type** — `crate::tir::block_result_type` callers in the
-      `Block` / `If` (no-expected-type inference and post-null checks) arms,
-      `with … do`, for-of, and the trailing-match path ported to
-      `control_flow::block_result_type` over `expression_types`. The
-      if-let-chain / let-chain lowerings still call the TIR version on their
-      _synthetic_ blocks (no 1:1 AST block); those readers remain.
-- [x] **unary constant folding** — the `-literal` fold and native `Unary`
-      construction are deleted; reify owns the fold (it reads
-      `expression_types[unary.id]` + the AST). (`resolve_unary` is a
-      placeholder)
-- [x] **tuple spread** — `resolve_tuple_literal` resolves the elements,
-      collects their types (incl. the concrete-tuple-spread inline
-      expansion), keeps the spread diagnostic, and returns a placeholder;
-      reify's `reify_tuple_literal` owns the actual node / temporary
-      construction.
-- [x] **struct-literal deferred coercion** — the `value.kind == TupleLiteral`
-      gate is read from the AST (a spread-free tuple-literal field), so the
-      deferred second pass still records the coercion via
-      `try_coerce_tuple_to_sequence`.
-- [x] **pattern variant const literals** — the const body AST is classified
-      directly (`Number`/`Bool`/`Char` → `Literal` pattern, else
-      `ConstantValue`), unblocking `resolve_literal` and `resolve_cast`
-      placeholders.
-- [x] **for-of `TupleZip`** — `resolve_for_of` no longer reads the resolved
-      `iterable.kind == TupleZip`. `TupleZip` is produced only by the tuple
-      `.zip()` arm, so an AST shape check (a `.zip()` call) plus the existing
-      `type_contains_pack` on the result type is equivalent.
-- [x] **if-let-chain / let-chain result type** — ported to the AST. The
-      `resolve_if_expr` LetChain arm computes its result type as
-      `agree_branch_types(ast_block_result_type(then_block), else_type)
-      .unwrap_or(UNIT)`, which is byte-identical to `block_result_type` over the
-      synthetic chain block (the per-level `unwrap_or(UNIT)` recursion collapses
-      to exactly this for single- and multi-element chains).
-      `resolve_let_chain_stmts` is records-only and no longer builds the chain
-      `Match` / `If` TIR; the `block_result_type(&TirBlock)` helper is deleted.
-- [x] **assign target ident classification** — `resolve_ident` records an
-      `AssignPlace` fact (`Local` / `DerefCapture { through_mut_ref }` /
-      `Global { name, mutable }`) keyed by the ident's `AstId`;
-      `assign_to_target` reads it to validate the l-value and global
-      mutability from the AST + fact instead of the resolved `target.kind`.
-      The address-taken-local marking the unary / method-call readers did is
-      owned by reify (it marks `TirFunction::address_taken_locals` on the TIR
-      it emits), so the combined-walk marking was deleted as dead; the
-      `&mut`-on-immutable-local diagnostic moved to a read-only `ctx.lookup`
-      over the AST target. This unblocked the `resolve_ident` placeholder.
-
-Arms now returning placeholders: range, field-access, index, unary, cast,
-tuple-literal, literal, ident, match, struct-literal, anonymous-struct, `?`
-(option + result), if-expr (both arms), block, labeled-block, with-handler,
-resume (joining binary / call / method-call / operators / coercion / assert /
-matches / template / item / module from earlier stages). Still building TIR:
-`resolve_block` / `resolve_stmt` with the stmt-level builders (the Phase 2
-signature sweep). The combined walk no longer builds any `TirExpr` outside the
-statement-level scaffolding.
-
-`adjust_receiver_for_self_kind` (method-call receiver wrapping) reads
-`ResolvedType`, not a TIR `kind`, and reify does its own adjustment, so
-it needs no port.
-
-Foundational note (discovered porting "block result type"):
-`record_expression_type` deliberately drops `ERROR` and
-UNKNOWN-containing types, but the combined walk's TIR carries them in
-`expr.type_id` (a bare `null` is `Option<UNKNOWN>`). An AST analysis
-reading `expression_types` therefore cannot see an unresolved-null
-branch and mistypes the block as `Unit`. So the null/unknown handling is
-a prerequisite for the block-result-type port: either `expression_types`
-must faithfully carry the combined walk's types (including UNKNOWN), or
-the null inference must be recorded as an explicit fact. This reorders
-Phase 1 so the null/unknown reader is handled before (or with) the
-block-result-type reader.
+7-B landed in two phases. Phase 1 ported every combined-walk analysis that read
+resolved-TIR structure onto the AST + recorded facts (assign l-value / ref
+validity, null-unknown inference, block result type, unary constant folding,
+tuple spread, struct-literal deferred coercion, pattern-variant const literals,
+for-of `TupleZip`, if-let-chain result type, assign-target ident classification)
+— each behaviour-preserving and green on its own. Phase 2 then converted every
+`resolve_*` arm to return a `TypeId`, made `build_tir_from_state` TIR-free, and
+routed LSP through `annotate` alone. One foundational ordering constraint
+surfaced: `record_expression_type` drops `ERROR`/UNKNOWN types, so the
+null/unknown reader had to be ported before the block-result-type reader.
 
 ## Status
 
 - [x] **Stages 1–4** — God Object decomposed; `TypeAnnotations` is the
-      per-`AstId` fact store, `SymbolKey`-keyed.
-- [x] **Stage 5** — reify is the sole TIR source for every module (user /
-      stdlib / snapshot), 2692/2692 E2E. It still re-derived some types /
-      mangled names; Stage 7 cleans that. The trait default-method
-      synthesis path (the combined walk pushing pre-built `TirFunction`s
-      onto `pending_default_methods` for reify to drain) was the last
-      hold-out and was resolved by a follow-up: combined walk records a
-      per-impl `ModuleSemantics` snapshot on `default_method_semantics`,
-      and reify's `reify_impl_default_methods` synthesises the
-      `TirFunction` from those snapshots — reify is now the sole producer
-      of every `TirFunction`, including default methods.
+      per-`AstId` fact store (bare `AstId`-keyed since the identity rework).
+- [x] **Stage 5** — reify is the sole TIR source for every module (incl. trait
+      default-method synthesis, via per-impl `ModuleSemantics` snapshots on
+      `default_method_semantics`).
 - [x] **Stage 7a** — routing removed; the combined walk survives only as the
-      (still TIR-building) `annotate` fact-recorder.
-- [~] **Stage 6** — Liveness / DCE. Landed: `elaborator/liveness.rs`
-  and the `Liveness` field on `Semantics`, computed in the WEP phase
-  order (`build_tir_from_state` runs all `annotate_bodies` →
-  `liveness::compute` → all `reify`); the `DeadFunction` /
-  `DeadGlobal` diagnostics consume `dead_items`. Reify gating is
-  wired but disabled (`None` live set) pending the
-  diagnostics-from-`Semantics` move (see "Prerequisite" above) and
-  cross-module graph completeness. Independent of Stage 7.
-- [x] **Stage 7-A** — reify is mechanical. Every decision-bearing read goes
-      through a recorded fact:
-  - [x] Function / method signatures — params, return, type params, impl
-        type-param scheme, self type, mangled / display names — read from
-        recorded facts.
-  - [x] Effect / resource op signatures — read from `effect_ops`.
-  - [x] Struct / variant type-param defaults — read from `decl_type_params`.
-  - [x] Struct field types (including `pub use` re-export recovery) — read
-        from `struct_field_types`.
-  - [x] Fixed a latent bug the reads exposed: a method generic on an impl that
-        binds a concrete trait arg started at the wrong type-param index and
-        reached codegen unsubstituted (`trait_method_generic_concrete_trait_arg`).
-  - [x] Method-call type args — `MethodDispatch.method_type_args` carries
-        the resolved vector verbatim (covers the IndexMut rewrite too).
-  - [x] Const types — `sem.decls.associated_constants` stores the resolved
-        `TypeId` directly; reify and the combined walk both read it.
-  - [x] Let-statement annotated types — `let_annotated_types` carries the
-        resolved whole-pattern type for destructuring bindings.
-  - [x] Closure param types — read from `local_types` via the binding's
-        `AstId`; the expected-fn-type peel survives only for the body's
-        return-type forwarding.
-  - [x] Cast target types — read from `expression_types[cast.id]`.
-  - [x] Free-function call type args — `generic_instantiations.type_args`
-        is the single source for both turbofish and inferred forms; reify
-        no longer branches on `call.type_args.is_empty()`.
-  - [x] Mangled-name class — `ImplFacts.struct_name`,
-        `GenericInstantiation.mangled_name` (struct literal / range / anon),
-        per-method `MethodNames`, `SequenceCoercionFacts` / `KeyValueCoercionFacts`
-        method names, and `FromCallFacts` (?-op + static `T::from`) all
-        carry the elaborator-computed strings; reify is a pure read.
-  - [x] From-conversion shapes — `DesugarKind::NewtypeFromCollapse` /
-        `NewtypeFromUnwrap` / `NewtypeFromWrap` tag the three "no explicit
-        impl" `from` paths; the bodyless `impl From<X> for T;` synthesis is
-        detected via `from_call_facts[call.id]`. Reify no longer compares
-        `type_name(arg)` against the prefix to recognise them.
-  - [x] Namespace static methods — `ns::Type::method(x)` records
-        `static_method_dispatch` like every other static call; reify's
-        ns-arm in-line reconstruction is gone.
-  - [x] Static-call / Type::method recovery paths in reify deleted (every
-        non-variant static call is dispatched via the recorded
-        `static_method_dispatch` early return).
-- [x] **Stage 5 completion — trait default-method synthesis moved to
-      reify.** Originally, the combined walk's `resolve_module` synthesised
-      per-impl `TirFunction`s for trait default methods and pushed them
-      onto `pending_default_methods` for reify to drain — making combined-
-      walk TIR for those bodies live, not dead. Stage 7-B leaves dropping
-      TIR construction in the body walk would corrupt the synthesised
-      default-method TIR (proven by an aborted `template.rs` slice that
-      trapped Wasm validation on `trait_default` fixtures).
-      Resolution: the body walk now snapshots each
-      `(impl_block.id, default_method.id)` synthesis as a full
-      `ModuleSemantics` on `default_method_semantics`, and reify's
-      `reify_impl_default_methods` swaps `self.sem` to that snapshot to
-      synthesise the `TirFunction` the same way it processes explicit impl
-      methods. Per-impl snapshots avoid the `(trait_module, ast_id)`
-      overwrite that happens when the same trait body is synthesised
-      across many impls. `pending_default_methods` + the
-      `record_pending_default_method` helper are gone. Reify is now the
-      sole producer of every `TirFunction` in every emitted `TirModule`.
-- [x] **Stage 5 completion — missing-return analysis moved off the
-      combined walk's body TIR.** `validate_missing_return`,
-      `block_always_exits`, and `find_return_type_in_*` previously
-      walked the combined walk's `TirBlock` from `resolve_function` /
-      `resolve_method` / `resolve_closure`, which forced Stage 7-B
-      leaves to keep producing `TirStmtKind::Return` /
-      `TirExprKind::Block` / `LabeledBlock` / `If` / `Match` /
-      `Resume` / `WithHandler` shapes the analysis could read.
-      Resolution: `elaborator/control_flow.rs` ports the eight walkers
-      to operate on the parsed AST, reading
-      `expression_types[(module, expr.id)]` for the `type_id == NEVER`
-      check the TIR version did on `TirExpr::type_id`. Both phases
-      consult it via a small `CtrlFlowCtx { expression_types, module }`
-      view — the combined walk through `Elaborator::ctrl_flow_ctx`,
-      reify through a direct construction over `self.sem.types`. The
-      TIR walkers (~330 lines in `expr.rs`) and the
-      `validate_missing_return(TirBlock)` helper are deleted.
-- [x] **Stage 7-B — `annotate` builds no TIR; LSP runs `annotate` only.**
-  - [x] Every expression arm returns a placeholder — literal / ident / binary
-        / unary / call / method-call / static-call / field / index / cast /
-        range / tuple-literal / struct + anonymous-struct literal / `match` /
-        `?` (option + result) / if-expr (both arms) / block / labeled-block /
-        `with` / `resume` / template / matches / assert-capture / closure. The
-        `ident` arm was unblocked by the `AssignPlace` fact (`assign_to_target`
-        classifies l-values from it + the AST instead of the resolved kind).
-  - [x] Every statement is records-only: `resolve_block` / `resolve_stmt` and
-        all helpers (let, return, task-return, if, while, C-style for, for-of
-        + tuple/variadic/iterator, loop, break, continue, assert,
-        labeled-block, let-chain) record facts (types, dispatch, desugar tags,
-        `ForOfIteratorInfo`, `tuple_overlays`, local symbols) and build no
-        `TirStmt` / `TirBlock`. The if-let-chain result type is computed on the
-        AST (`agree_branch_types(ast_block_result_type(then), else)`).
-  - [x] `resolve_module` is records-only (returns `Result<(), Bail>`); it
-        walks every item for its facts and assembles no `TirModule`. Synthesis
-        requests flow through `pending_synthesis_requests`, anon structs
-        through `pending_anonymous_structs` — both read by reify.
-  - [x] `build_tir_from_state` gates reify (and stdlib-snapshot `TirModule`
-        rehydration) on a `build_tir` flag. The LSP engine
-        (`wado-lsp::build_semantics` → `semantics_of(.., false)`) runs only the
-        body fact-walk and never builds or reads TIR; the batch path, the
-        general `semantics()` entry, and kiln options extraction pass `true`.
-  - [x] **`resolve_expr -> TypeId`.** Every body-walk resolver returns the
-        resolved `TypeId` (the `placeholder` `TirExpr` sentinels are gone).
-        The TIR builders that reify shares (`build_tir_method_call`,
-        `adjust_receiver_for_self_kind`, `resolve_from_call`, …) keep returning
-        `TirExpr` — they are reify's real producers — and the few combined-walk
-        sites that still call them read `.type_id` (wrapping `placeholder` only
-        where a shared builder needs a `TirExpr` operand). reify (`reify.rs`) is
-        untouched and remains the sole TIR producer.
+      `annotate` fact-recorder.
+- [~] **Stage 6** — Liveness / DCE: landed but the reify gate is disabled (see
+  the Migration Plan "Remaining in Phase 1" above for the two prerequisites).
+- [x] **Stage 7-A — reify is mechanical.** Every decision-bearing read goes
+      through a recorded fact (signatures, effect/resource ops, decl type-param
+      defaults, struct field types, method-call/free-call type args, const and
+      let-annotated types, closure param types, cast targets, the mangled-name
+      class, from-conversion shapes, namespace/static-method dispatch). Per-fact
+      detail in git.
+- [x] **Stage 5 completions.** Trait default-method synthesis moved to reify
+      (the body walk snapshots a per-impl `ModuleSemantics` on
+      `default_method_semantics`; `reify_impl_default_methods` consumes it —
+      reify is the sole `TirFunction` producer). Missing-return analysis ported
+      off the combined walk's body TIR onto the parsed AST
+      (`elaborator/control_flow.rs` via `CtrlFlowCtx`).
+- [x] **Stage 7-B — `annotate` builds no TIR; LSP runs `annotate` only.** Every
+      expression resolver returns a `TypeId` and every statement is records-only;
+      `resolve_module` assembles no `TirModule`; `build_tir_from_state` gates
+      reify on a `build_tir` flag (LSP passes `false`). Reify is the sole TIR
+      producer; the duplicate combined-walk TIR construction is deleted.
 
 ### Landing log
 
-The per-map detail and the gap-by-gap parity history (user 1765 → 2692, then
-stdlib) live in git. The one load-bearing rule that remains:
+The per-map detail and the gap-by-gap parity history live in git. The identity
+model has since moved to globally-unique `AstId` (`SymbolKey` retired — see the
+header note); every per-`AstId` fact map keys by bare `AstId`.
 
-Annotation maps are keyed by `SymbolKey` (`(ModuleSource, AstId)`). Inlined
-foreign AST (assoc-const bodies, callee-module default args, trait
-default-method bodies) is keyed to its _owning_ module, so a colliding dense
-`AstId` in the consumer never overwrites its facts.
+## Phase 2 — God Object operation decomposition (2026-06)
+
+Phase 1 (above) split the **data** out of the `Elaborator` God Object
+(`TypeSystem`, `ModuleSemantics`, `reify`). Phase 2 moves the **operations**:
+the trait/method-resolution queries still live as `impl Elaborator` methods and
+still read the borrowed `loaded_modules` AST map and the per-function
+`trait_ctx` scope, so none of them can move to `TypeSystem`. Phase 2 removes
+those two couplings so the queries become `impl TypeSystem` operations taking
+only type IDs, names, pre-digested decl facts, and an explicit scope.
+
+Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
+
+### Done
+
+- [x] **Pure type-system ops → `impl TypeSystem`.** Operations answerable from
+      the type table alone moved off `impl Elaborator`: impl-type matching
+      (`build_type_param_mapping`, `verify_impl_type_compatibility`,
+      `impl_type_matches_concrete`), the type-shape helpers
+      (`struct_name_for_type`, `get_base_type`, `get_ultimate_base_struct_name`,
+      `newtype_base_lookup`, `substitute_newtype_in_type`, `type_id_to_string`,
+      `build_declared_type_params`, `auto_derive_eligible_kind`), and
+      `inherent_impl_type_args_match` / `concrete_arg_mangled`. They read
+      `self.type_table` directly; both the body walk and reify reach them via
+      `self.tysys`.
+- [x] **`TraitEnv` build-time decl digests (the "read facts, not ASTs" track).**
+      So resolution queries stop scanning `loaded_modules`, `TraitEnv::build`
+      now pre-computes, keyed by `(ModuleSource, item_idx)` or type/fn name:
+      `ImplHeader` (trait_name / ty / type_params / methods / associated_types),
+      `TraitDeclHeader` (name / type_params / methods{name,type_params,has_body}),
+      `function_type_params`, `struct_like_decl_modules` + `newtype_decl_modules`,
+      and `module_import_scopes` (the per-module `use`-derived
+      `imported_type_sources` / `import_original_names`, lifted to the free fn
+      `trait_env::module_import_scope`). Queries converted to read the digests:
+      `find_trait_impl_for_type_with_args` (+ blanket loop),
+      `register_assoc_types_for_concrete_type_and_trait`,
+      `find_method_type_params_in_trait_bounds`, `find_method_type_param_names`,
+      `find_struct_module_source`, `lookup_function_type_params`,
+      `find_trait_decl_type_params`, `collect_trait_impl_refs(_multi)`,
+      `lookup_static_method_type_params`, the `find_trait_method_for_type_uncached`
+      blanket loop, and the **nine dispatch-core import-context sites**
+      (`lookup_method_info_uncached`, `method_call`, `call`, `expr`) now read
+      `trait_env.import_scope(module)`. `check_impl_block_bounds` takes the
+      digest fields (`&type_params`, `&impl_ty`) rather than `&ImplBlock`.
+- [x] **Track B Stage A — bundle the per-function scope.**
+      `trait_env::AnnotateCtx { trait_ctx, trait_check_stack }` replaces the two
+      Elaborator fields with a single `annotate_ctx`; the `TypeParamScope` guard
+      saves/restores `annotate_ctx.trait_ctx`.
+- [x] **Track B Stage B — thread the scope through the recursion guard.**
+      `type_implements_trait` / `type_implements_trait_inner` take an explicit
+      `ctx: &AnnotateCtx` (recursion guard = `ctx.trait_check_stack`, type-param
+      bound check = `ctx.trait_ctx.type_param_bounds`); the inner fn forwards
+      `ctx` through its nine recursive calls; every external caller passes
+      `&self.annotate_ctx` (identical behaviour, since `ctx` _is_
+      `&self.annotate_ctx` until Stage D).
+
+### Remaining (next to pick up, in order)
+
+- [ ] **Track B Stage C — thread `&AnnotateCtx` through the resolution
+      subgraph.** Convert the connected query graph
+      (`find_trait_impl_for_type_with_args` → `check_impl_block_bounds` →
+      `type_implements_trait`, plus the `self.annotate_ctx.trait_ctx` readers:
+      `self_type`, `type_params`, `assoc_type_bindings`, `type_param_bounds` —
+      ~50 methods / ~120 read sites across `method_lookup` / `method_call` /
+      `item` / `module` / `call` / `type_resolution` / `operators` / `expr`) to
+      take `ctx: &AnnotateCtx` instead of reading `self.annotate_ctx`. Leaf-first,
+      one file per commit, green at each step. Scope **mutation**
+      (`enter_inherited_type_param_scope`, `register_generic_params`,
+      `bind_trait_type_params_from_impl`) stays on `Elaborator` and owns/produces
+      the scope.
+- [ ] **Track B Stage D — move the now-Elaborator-free queries to
+      `impl TypeSystem`.** Once they read only `self.tysys.*` + the passed `ctx`:
+      `type_implements_trait(_inner)`, `find_trait_impl_for_type(_with_args)`,
+      `check_impl_block_bounds`, the type-param-bound resolver in
+      `type_resolution.rs`, and the operator-trait bound lookups in
+      `operators.rs`. Signature `fn …(&self /* TypeSystem */, ctx: &AnnotateCtx, …)`.
+- [ ] **Track B Stage E — fold the manual scope save/restores into the guard.**
+      Replace the hand-rolled `trait_ctx` clone/restore in `resolve_module`'s
+      `Item::Impl` arm (`elaborator.rs`) and the `self_type`-only save/restore in
+      `method_lookup.rs` with `enter_inherited_type_param_scope` (clearing the
+      relevant fields after entry), for one panic-safe restore path.
+- [ ] **Remaining `loaded_modules` consumers needing a method/body digest.**
+      `lookup_method_info_uncached` and the `call.rs` / `method_call.rs` dispatch
+      paths still fetch the impl block + method-signature AST to `resolve_type`
+      it — they need a method-signature digest on `ImplHeader` (params / return /
+      self_kind) plus Stage C's scope. `get_impl_block` is the lazy-fetch
+      accessor that disappears once its callers are converted.
+      `find_trait_decl_methods_with_module` and `find_method_in_trait_bounds`
+      clone full method ASTs (bodies included) and need a heavier digest; defer.
+      `reify`'s `loaded_modules` reads are legitimate (it emits TIR) and are out
+      of scope. Progress metric: Elaborator `self.loaded_modules` sites (was ~57
+      across `method_lookup`/`method_call`/`call`/`trait_query`/…; the dispatch
+      core + the heavy trait-decl readers remain).
 
 ## Consequences
 

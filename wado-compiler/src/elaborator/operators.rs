@@ -287,7 +287,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
                             drop(tt);
-                            self.struct_name_for_type(*base_type)
+                            self.tysys.struct_name_for_type(*base_type)
                         }
                         _ => None,
                     }
@@ -399,7 +399,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             };
             if let Some(name) = type_param_name
-                && let Some(bounds) = self.trait_ctx.type_param_bounds.get(&name).cloned()
+                && let Some(bounds) = self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .get(&name)
+                    .cloned()
             {
                 let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
@@ -511,7 +516,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // For newtypes, resolve base type for trait impl fallback
                 let (lookup_name, lookup_type_id) =
-                    self.newtype_base_lookup(&struct_name, left.type_id);
+                    self.tysys.newtype_base_lookup(&struct_name, left.type_id);
 
                 // Find the arithmetic trait implementation
                 let (trait_info_opt, impl_name) = self
@@ -544,7 +549,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // TypeParam with trait bounds: resolve arithmetic operators via trait bound methods
             if let ResolvedType::TypeParam { name, .. } = &left_type
-                && let Some(bounds) = self.trait_ctx.type_param_bounds.get(name).cloned()
+                && let Some(bounds) = self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .get(name)
+                    .cloned()
             {
                 let operand_type_id = left.type_id;
                 let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
@@ -607,7 +617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // For newtypes, resolve base type for trait impl fallback
                 let (lookup_name, lookup_type_id) =
-                    self.newtype_base_lookup(&struct_name, left.type_id);
+                    self.tysys.newtype_base_lookup(&struct_name, left.type_id);
 
                 // Find the shift trait implementation
                 let (trait_info_opt, impl_name) = self
@@ -927,7 +937,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if let Some(struct_name) = struct_name {
                 let (lookup_name, lookup_type_id) =
-                    self.newtype_base_lookup(&struct_name, expr_type);
+                    self.tysys.newtype_base_lookup(&struct_name, expr_type);
                 let resolved = self
                     .resolve_trait_method_for_op(
                         &struct_name,
@@ -1141,7 +1151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // For newtypes, resolve the base type name for trait impl lookup
                 let (lookup_name, lookup_type_id) =
-                    self.newtype_base_lookup(&struct_name, base_type_id);
+                    self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
                 if !struct_name.is_empty() {
                     let index_type = self.resolve_expr(&index_expr.index, ctx, None);
