@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781347823379,
+  "lastUpdate": 1781350911668,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32661,6 +32661,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3ba91c1efd1282deb53eba456dbfaee2c9eddf58"
         },
         "date": 1781347822967,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432292,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "81c314c6fc5dae00183d510552e62e533514b190",
+          "message": "Merge pull request #1366 from wado-lang/claude/sweet-mendel-jp5ytu\n\nrefactor(gale): code-health pass over package-gale",
+          "timestamp": "2026-06-13T20:32:53+09:00",
+          "tree_id": "5b0d59acfe868583455ff518e7f0c051497e7c04",
+          "url": "https://github.com/wado-lang/wado/commit/81c314c6fc5dae00183d510552e62e533514b190"
+        },
+        "date": 1781350911115,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
