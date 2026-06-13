@@ -89,10 +89,7 @@
 //! Integer division/modulo by zero and signed `MIN / -1` are left
 //! unfolded so the runtime trap is preserved.
 //!
-//! See `docs/wep-2026-04-27-tir-interpreter.md` for the planned trajectory
-//! (local-variable environment, `if` / `match` reduction, bounded loop
-//! unrolling, pure function inlining, and a complementary wasm-CTFE
-//! backend).
+//! See `docs/wep-2026-04-27-nir-interpreter.md` for the design.
 
 use std::cell::RefCell;
 use std::rc::Rc;

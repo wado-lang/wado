@@ -51,7 +51,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx,
             expected_type,
         );
-        // Stage 5 (Gap 11): pin the binary's source AstId on the
+        // Pin the binary's source AstId on the
         // side-channel so the operator-trait dispatch path can record
         // the decision under it. Cleared by
         // `build_trait_op_method_call_on_resolved` on success; we
@@ -239,7 +239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                     }
                 }
-                // Stage 7-B: reify rebuilds the reference `==` / `!=`
+                // Reify rebuilds the reference `==` / `!=`
                 // (`RefEq` / `RefNotEq`) from the AST; project only the type.
                 return TypeTable::BOOL;
             } else if both_refs {
@@ -846,7 +846,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => left.type_id, // Arithmetic ops preserve the type
         };
 
-        // Stage 7-B: reify rebuilds the native `Binary` from the AST +
+        // Reify rebuilds the native `Binary` from the AST +
         // recorded operand `expression_types`; the combined walk projects
         // only the result type. `left` / `right` were resolved by the
         // caller and typechecked above for their side effects.
@@ -902,10 +902,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // creates a disconnected Box — mutations don't propagate back to the struct.
         // For GC reference types (struct, String, List, etc.), struct.get returns
         // the shared reference, so &mut field works correctly.
-        // Detect the field-access shape from the AST (Stage 7-B:
-        // `resolve_field_access` returns a placeholder, so its resolved
-        // `kind` is no longer `FieldAccess`); the operand's `type_id` still
-        // carries the field type via the placeholder.
+        // Detect the field-access shape from the AST: `resolve_field_access`
+        // returns a placeholder, so its resolved `kind` is no longer
+        // `FieldAccess`; the operand's `type_id` still carries the field type
+        // via the placeholder.
         if unary.op == UnaryOp::MutRef && matches!(&unary.expr, ast::Expr::FieldAccess(_)) {
             let field_type = self.tysys.type_table.borrow().get(expr_type).clone();
             let base_type = self
@@ -1018,7 +1018,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => expr_type,
         };
 
-        // Stage 7-B: reify rebuilds the `Unary` (`*ptr` / `&x` / `&mut x` /
+        // Reify rebuilds the `Unary` (`*ptr` / `&x` / `&mut x` /
         // `!b`) and folds `-literal` from the AST; the `&mut`-field
         // diagnostic and the deref/ref type computation above are the
         // record-only work. `assign_to_target`'s deref l-value check now
@@ -1038,12 +1038,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether an `Index` assignment target reaching `assign_to_target`'s
     /// general path is an assignable place. The `IndexAssign` path above
-    /// already returned for index-assignable receivers, so AST + recorded
-    /// facts replace reading the resolved `target.kind`:
+    /// already returned for index-assignable receivers, so the remaining
+    /// shapes are classified from the AST + recorded facts:
     ///   - a read-only `Index` trait access (recorded `operator_dispatch`
     ///     with `needs_deref`) lowers to `*recv.index(i)` over `&Output`, so
-    ///     a write would go through an immutable reference (diagnosed here,
-    ///     mirroring the old `Unary { Deref, expr: Ref(_) }` arm);
+    ///     a write would go through an immutable reference (diagnosed here);
     ///   - an `IndexValue` access is a by-value method call — not a place;
     ///   - with no recorded read dispatch the only assignable shape is a
     ///     tuple index (`t[0]`, lowered to a `FieldAccess`); an unindexable
@@ -1088,13 +1087,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `*operand = v` is a valid l-value: it is, unless `operand`
-    /// is an immutable reference (`&T`), in which case the write is through
-    /// an immutable reference and is diagnosed here. AST + recorded-fact
-    /// replacement for reading the resolved `Unary { Deref, expr }` kind
-    /// (Stage 7-B made `resolve_unary` a placeholder): `operand`'s type
-    /// rides on `expression_types`. Mirrors the old check, which inspected
-    /// the *operand* type, so `*5 = v` (operand `5: i32`, already diagnosed
-    /// by `resolve_unary`) is not re-flagged here.
+    /// is an immutable reference (`&T`), where the write through it is
+    /// diagnosed here. `operand`'s type is read from `expression_types`
+    /// (`resolve_unary` leaves a placeholder). Inspecting the *operand*
+    /// type means `*5 = v` (operand `5: i32`, already diagnosed by
+    /// `resolve_unary`) is not re-flagged here.
     fn deref_target_assignable(&mut self, unary: &ast::UnaryExpr, span: Span) -> bool {
         let Some(operand_type) = self
             .sem
@@ -1217,7 +1214,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             )),
                         };
 
-                        // Stage 5 (WEP 2026-05-26): record the
+                        // Record the
                         // resolved `IndexAssign` dispatch keyed by
                         // the inner `IndexExpr`'s `AstId` so reify
                         // can replay the same `arr.index_assign(idx,
@@ -1234,7 +1231,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             },
                         );
 
-                        // Stage 7-B: reify rebuilds `arr.index_assign(idx,
+                        // Reify rebuilds `arr.index_assign(idx,
                         // value)` from the recorded `index_assign_dispatch` +
                         // AST; project only the (unit) result type. `index_type`
                         // / `value_type` were resolved above for their
@@ -1258,7 +1255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reject &T assigned where non-ref T expected
         self.typecheck(value_type, target_type, value_span);
 
-        // Handle assignment to global variables. Stage 7-B: the target is a
+        // Handle assignment to global variables. The target is a
         // placeholder, so the global is recognised from the recorded
         // `AssignPlace::Global` on the target ident (which carries the
         // resolved mutability) rather than the resolved `GlobalVarGet` kind.
@@ -1285,7 +1282,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNIT;
         }
 
-        // Validate that the target is a valid l-value. Stage 7-B: every
+        // Validate that the target is a valid l-value. Every
         // resolver returns a placeholder, so each target shape is classified
         // from the AST + recorded facts.
         let is_valid_lvalue = match target_ast {
@@ -1339,7 +1336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Stage 7-B: reify rebuilds the `Assign` from the AST + recorded
+        // Reify rebuilds the `Assign` from the AST + recorded
         // target / value types; project only the (unit) result type. The
         // target + value were resolved above for their side effects, and the
         // l-value validation / global-mutability checks already ran.
@@ -1383,7 +1380,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let rhs_type = self.resolve_expr(&compound.value, ctx, Some(read_type));
         let read = placeholder(read_type, compound.target.span());
         let rhs = placeholder(rhs_type, compound.value.span());
-        // Stage 5 (Gap 11 / WEP 2026-05-26): when the operands are
+        // When the operands are
         // operator-overloaded (non-primitive, e.g. `u128 /= u128`),
         // `build_binary_op_tir` dispatches the combined value through the
         // trait method (`Div::div` → `div_rem`). Tag the record with the
@@ -1432,7 +1429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx,
                 None,
             );
-            // Stage 5 (Gap 11 / WEP 2026-05-26): when the comparison
+            // When the comparison
             // takes the operator-trait dispatch path inside
             // `build_binary_op_tir` (non-primitive operands → Eq /
             // Ord trait methods), tag the recording with the chain's
@@ -1495,7 +1492,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         ctx.exit_scope();
 
-        // Stage 7-B: reify rebuilds the `(a<b) && (b<c) …` Block (with the
+        // Reify rebuilds the `(a<b) && (b<c) …` Block (with the
         // `__mK` middle bindings) from the recorded `ComparisonChain`
         // desugar + the AST; the combined walk projects only the boolean
         // result type. The operand resolutions, middle-binding local
@@ -1627,7 +1624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info: Some(method_info),
         };
 
-        // Stage 5 (Gap 11 of WEP 2026-05-26): when the operator-dispatch
+        // When the operator-dispatch
         // request carries a source AST id on the
         // [`Self::pending_operator_ast_id`] side-channel, record the
         // dispatch decision so reify can re-emit the same `MethodCall`
@@ -1648,7 +1645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // Stage 7-B: reify rebuilds the overloaded operator's `MethodCall`
+        // Reify rebuilds the overloaded operator's `MethodCall`
         // from the recorded `operator_dispatch` (receiver adjustment via
         // `self_kind`, arg `&`-wrapping via `arg_ref_wraps`) + the AST; the
         // combined walk projects only the result type. `receiver` and
