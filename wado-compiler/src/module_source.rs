@@ -165,9 +165,8 @@ impl ModuleSourceInterner {
         self.dependencies = dependencies;
     }
 
-    pub fn dependency(&mut self, package: &str, path: &str) -> ModuleSource {
+    pub fn dependency(&mut self, path: &str) -> ModuleSource {
         ModuleSource::Dependency {
-            package: self.intern(package),
             path: self.intern(path),
         }
     }
@@ -176,7 +175,7 @@ impl ModuleSourceInterner {
     /// declared in `[dependencies]` and successfully resolved.
     pub fn resolve_dependency(&mut self, name: &str) -> Option<ModuleSource> {
         let path = self.dependencies.resolved.get(name)?.clone();
-        Some(self.dependency(name, &path))
+        Some(self.dependency(&path))
     }
 
     /// The reason a *declared* dependency could not be resolved, if any.
@@ -234,9 +233,7 @@ impl ModuleSourceInterner {
             [first] if first.starts_with("./") || first.starts_with("../") => self.local(first),
             [first, rest @ ..] if first == "core" => self.core(&rest.join("/")),
             [first, rest @ ..] if first == "wasi" => self.wasi(&rest.join("/")),
-            [first, package, rest @ ..] if first == "dep" => {
-                self.dependency(package, &rest.join("/"))
-            }
+            [first, rest @ ..] if first == "dep" => self.dependency(&rest.join("/")),
             segments => self.local(&segments.join("/")),
         }
     }
@@ -321,16 +318,17 @@ pub enum ModuleSource {
     /// A module belonging to a dependency package, resolved from a bare-name
     /// `use { … } from "<dep>"` clause against `[dependencies]`.
     ///
-    /// `package` is the dependency's identity (the `[dependencies]` key for
-    /// path deps; a resolved package id once registry/git land). It keeps
-    /// type identity from crossing the package boundary even when two
-    /// packages have a file at the same `path`. `path` is the module file,
-    /// loaded by the host exactly like [`ModuleSource::Local`] — wado-to-wado
+    /// Identity is the resolved entry-module `path` — within a compilation
+    /// the same resolved path is the same file, hence the same package, so
+    /// two `[dependencies]` aliases that point at the same package unify.
+    /// The variant is distinct from [`ModuleSource::Local`] to carry the
+    /// package boundary (only `export` items are visible across it) and to
+    /// keep dependency modules from resolving the consumer's `[dependencies]`.
+    /// `path` is loaded by the host exactly like `Local` — wado-to-wado
     /// source dependencies compile into the same component (the CM boundary
     /// is skipped), so dependency modules are ordinary Wado source once
     /// loaded.
     Dependency {
-        package: InternedStr,
         path: InternedStr,
     },
     /// Remote module loaded via HTTP/HTTPS
@@ -387,16 +385,7 @@ impl PartialEq for ModuleSource {
             (Self::Core { name: a }, Self::Core { name: b }) => a == b,
             (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
-            (
-                Self::Dependency {
-                    package: pa,
-                    path: a,
-                },
-                Self::Dependency {
-                    package: pb,
-                    path: b,
-                },
-            ) => pa == pb && a == b,
+            (Self::Dependency { path: a }, Self::Dependency { path: b }) => a == b,
             (Self::Remote { url: a }, Self::Remote { url: b }) => a == b,
             (Self::Redirected { uri: a }, Self::Redirected { uri: b }) => a == b,
             (
@@ -426,10 +415,7 @@ impl std::hash::Hash for ModuleSource {
             Self::Core { name } => name.hash(state),
             Self::Wasi { interface } => interface.hash(state),
             Self::Local { path } => path.hash(state),
-            Self::Dependency { package, path } => {
-                package.hash(state);
-                path.hash(state);
-            }
+            Self::Dependency { path } => path.hash(state),
             Self::Remote { url } => url.hash(state),
             Self::Redirected { uri } => uri.hash(state),
             Self::Wasm { path, kind } => {
@@ -530,9 +516,7 @@ impl ModuleSource {
             Self::Core { name } => vec!["core".to_string(), name.to_string()],
             Self::Wasi { interface } => vec!["wasi".to_string(), interface.to_string()],
             Self::Local { path } => vec![path.to_string()],
-            Self::Dependency { package, path } => {
-                vec!["dep".to_string(), package.to_string(), path.to_string()]
-            }
+            Self::Dependency { path } => vec!["dep".to_string(), path.to_string()],
             Self::Remote { url } => vec![url.to_string()],
             Self::EntryPoint { filename } => vec![filename.to_string()],
             Self::Redirected { uri } => vec![uri.to_string()],
@@ -686,7 +670,7 @@ impl fmt::Display for ModuleSource {
             Self::Core { name } => write!(f, "core:{name}"),
             Self::Wasi { interface } => write!(f, "wasi:{interface}"),
             Self::Local { path } => write!(f, "{path}"),
-            Self::Dependency { package, path } => write!(f, "dep:{package}:{path}"),
+            Self::Dependency { path } => write!(f, "dep:{path}"),
             Self::Remote { url } => write!(f, "{url}"),
             Self::EntryPoint { filename } => {
                 write!(f, "{filename}")
@@ -702,18 +686,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dependency_identity_includes_package() {
+    fn dependency_identity_is_the_resolved_path() {
         let mut interner = ModuleSourceInterner::new();
-        let a = interner.dependency("greet", "../greet/src/lib.wado");
-        let b = interner.dependency("greet", "../greet/src/lib.wado");
-        let other_pkg = interner.dependency("other", "../greet/src/lib.wado");
+        let a = interner.dependency("../greet/src/lib.wado");
+        let b = interner.dependency("../greet/src/lib.wado");
+        let other = interner.dependency("../other/src/lib.wado");
+        // Same resolved path = same package, regardless of the alias used to
+        // reach it, so two aliases for one package unify.
         assert_eq!(a, b);
-        assert_ne!(a, other_pkg);
-        // Distinct from a Local at the same path: identity must not cross the
-        // package boundary.
+        assert_ne!(a, other);
+        // Still distinct from a `Local` at the same path: the variant carries
+        // the package boundary.
         let local = interner.local("../greet/src/lib.wado");
         assert_ne!(a, local);
-        assert_eq!(a.qualify_name("hello"), "dep:greet:../greet/src/lib.wado//hello");
+        assert_eq!(a.qualify_name("hello"), "dep:../greet/src/lib.wado//hello");
     }
 
     #[test]
@@ -729,7 +715,7 @@ mod tests {
         interner.set_dependencies(index);
         assert_eq!(
             interner.resolve_dependency("greet"),
-            Some(interner.dependency("greet", "../greet/src/lib.wado"))
+            Some(interner.dependency("../greet/src/lib.wado"))
         );
         assert_eq!(interner.resolve_dependency("missing"), None);
         // Declared-but-unresolved entries surface their reason instead.

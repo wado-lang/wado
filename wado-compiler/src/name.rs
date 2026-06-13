@@ -873,7 +873,7 @@ pub fn resolve_import_with_invocations(
 ) -> ModuleSource {
     if !invocations.is_empty() {
         let decl_file = match from_module {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
+            ModuleSource::Local { path } | ModuleSource::Dependency { path } => path.as_str(),
             ModuleSource::EntryPoint { filename } => filename.as_str(),
             ModuleSource::Redirected { uri } => uri.as_str(),
             _ => "",
@@ -903,13 +903,12 @@ pub fn resolve_import_with_entry(
     }
 
     // Relative import from within a dependency module stays inside that
-    // dependency package (same `package`, resolved file path).
-    if let ModuleSource::Dependency { package, path } = from_module
+    // dependency package (resolved against the importing dependency file).
+    if let ModuleSource::Dependency { path } = from_module
         && (import_source.starts_with("./") || import_source.starts_with("../"))
     {
         let resolved = resolve_module_path(path, import_source);
-        let package = package.to_string();
-        return interner.dependency(&package, &resolved);
+        return interner.dependency(&resolved);
     }
 
     // Bare dependency name (`use { … } from "router"`): resolve against
@@ -1270,11 +1269,10 @@ mod tests {
         assert!(matches!(from_entry, ModuleSource::Dependency { .. }));
         // From inside a dependency, the same bare name must NOT bind to the
         // consumer's deps — it falls through to the local fallback.
-        let from_dep = interner.dependency("greet", "../greet/src/lib.wado");
+        let from_dep = interner.dependency("../greet/src/lib.wado");
         let resolved = resolve_import_with_entry(&mut interner, &from_dep, "logger", None);
-        assert!(
-            !matches!(resolved, ModuleSource::Dependency { ref package, .. } if package == "logger")
-        );
+        let logger_dep = interner.dependency("../logger/src/lib.wado");
+        assert_ne!(resolved, logger_dep);
     }
 
     #[test]

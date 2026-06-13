@@ -289,3 +289,75 @@ export fn run() with Stdout {
             .stdout(predicate::str::contains(expected));
     }
 }
+
+/// Two different aliases pointing at the SAME package resolve to one module
+/// identity, so a type defined in that package unifies across both import
+/// paths (no duplicate compilation / mismatched types).
+#[test]
+fn two_aliases_for_one_package_share_type_identity() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+
+    let shared = root.join("shared");
+    fs::create_dir_all(shared.join("src")).unwrap();
+    fs::write(
+        shared.join("wado.toml"),
+        "[package]\nname = \"shared\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        shared.join("src/lib.wado"),
+        r#"pub struct Point {
+    pub x: i32,
+}
+
+export fn origin() -> Point {
+    return Point { x: 42 };
+}
+
+export fn get_x(p: Point) -> i32 {
+    return p.x;
+}
+"#,
+    )
+    .unwrap();
+
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        r#"[package]
+name = "app"
+version = "0.1.0"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+
+[dependencies]
+a = { path = "../shared" }
+b = { path = "../shared" }
+"#,
+    )
+    .unwrap();
+    // `origin` comes via alias `a`, `get_x` via alias `b`; the `Point` value
+    // flows from one to the other and must be the same type.
+    fs::write(
+        app.join("src/main.wado"),
+        r#"use { println, Stdout } from "core:cli";
+use { origin } from "a";
+use { get_x } from "b";
+
+export fn run() with Stdout {
+    let p = origin();
+    println(`{get_x(p)}`);
+}
+"#,
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("42"));
+}

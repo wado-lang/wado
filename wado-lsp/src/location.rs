@@ -28,7 +28,7 @@ pub(crate) fn module_uri(
     }
     match module {
         ModuleSource::EntryPoint { filename } => Some(filename_to_uri(filename)),
-        ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+        ModuleSource::Local { path } | ModuleSource::Dependency { path } => {
             Some(resolve_local_uri(path, request_uri))
         }
         ModuleSource::Core { name } => Some(format!("core:{name}")),

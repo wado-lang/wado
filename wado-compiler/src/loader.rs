@@ -394,7 +394,7 @@ pub fn resolve_wasm_asset_path(
             "wasi:{}",
             join_namespace_relative_path(interface, import_source)
         )),
-        ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+        ModuleSource::Local { path } | ModuleSource::Dependency { path } => {
             Ok(resolve_module_path(path, import_source))
         }
         ModuleSource::Remote { url } => Ok(resolve_module_path(url, import_source)),
@@ -1376,7 +1376,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = match from_module_source {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.to_string(),
+            ModuleSource::Local { path } | ModuleSource::Dependency { path } => path.to_string(),
             ModuleSource::EntryPoint { filename } => filename.to_string(),
             ModuleSource::Redirected { uri } => uri.to_string(),
             _ => String::new(),
@@ -1409,7 +1409,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // base-path joining or relative-path normalization happens.
         if !self.invocations.is_empty() {
             let decl_file = match from_module_source {
-                ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+                ModuleSource::Local { path } | ModuleSource::Dependency { path } => {
                     path.as_str()
                 }
                 ModuleSource::EntryPoint { filename } => filename.as_str(),
@@ -1459,10 +1459,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             }
             // Relative import from within a dependency module stays inside
             // that dependency package.
-            if let ModuleSource::Dependency { package, path } = from_module_source {
+            if let ModuleSource::Dependency { path } = from_module_source {
                 let resolved = resolve_module_path(path, import_source);
-                let package = package.to_string();
-                return Ok(self.interner.dependency(&package, &resolved));
+                return Ok(self.interner.dependency(&resolved));
             }
             // Entry point or stdlib: treat as relative to project root
             let canonical = normalize_module_path(import_source);
@@ -1514,7 +1513,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         _from_module_source: &ModuleSource,
     ) -> Result<String, LoadError> {
         match module_source {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+            ModuleSource::Local { path } | ModuleSource::Dependency { path } => {
                 let bytes = self.host.load_source(path).await.map_err(LoadError::from)?;
                 String::from_utf8(bytes).map_err(|_| LoadError::IoError {
                     path: path.to_string(),
