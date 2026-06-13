@@ -1,0 +1,34 @@
+// Technical-validation WIT surface for bundling ICU4X as a Wasm Component
+// Model component. This is a representative cross-section chosen to exercise
+// every marshalling shape Wado will need across the boundary:
+//   - string in / string out          (casemap)
+//   - opaque handles via `resource`    (locale)
+//   - `borrow<resource>` parameters    (casemap uses locale)
+//   - `result<_, string>` errors       (locale.parse)
+// It is deliberately small for the first end-to-end pipeline check; the
+// surface grows once the toolchain is proven.
+package wado:icu@0.1.0;
+
+interface locale {
+  /// A parsed BCP-47 locale (opaque handle).
+  resource locale {
+    /// Parse a BCP-47 language tag (e.g. "en-US", "ja", "tr-TR").
+    parse: static func(tag: string) -> result<locale, string>;
+    /// Canonical string form.
+    to-string: func() -> string;
+  }
+}
+
+interface casemap {
+  use locale.{locale};
+
+  /// Locale-aware full uppercase mapping.
+  uppercase: func(text: string, loc: borrow<locale>) -> string;
+  /// Locale-aware full lowercase mapping.
+  lowercase: func(text: string, loc: borrow<locale>) -> string;
+}
+
+world icu {
+  export locale;
+  export casemap;
+}

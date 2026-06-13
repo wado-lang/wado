@@ -1,0 +1,32 @@
+# Standalone crate: this is its own workspace root so its heavy dependency
+# tree (icu + wit-bindgen) is resolved in an isolated lockfile and never
+# perturbs the main workspace's pinned wasm-tools generation (`check-deps`).
+# Built independently; the resulting Wasm component is the deliverable, just
+# like `wado-bundled-libm` ships a prebuilt module.
+[workspace]
+
+[package]
+name = "wado-bundled-icu"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Full ICU4X meta-crate with default features: this pulls in every component
+# (locale, casemap, collator, segmenter, plurals, decimal, datetime, ...) and
+# `compiled_data` (all CLDR locales baked in). We intentionally do NOT split or
+# slice here — Wado tree-shakes the final artifact, so the bundle stays whole.
+icu = "2.2"
+wit-bindgen = "0.58"
+
+# Size-optimized build: this is a bundled asset, not a dev-loop artifact.
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
