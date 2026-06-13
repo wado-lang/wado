@@ -310,7 +310,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Newtype declarations (fallback; no current-module preference).
         if let Some(modules) = self.tysys.trait_env.newtype_decl_modules.get(struct_name)
             && let Some(first) = modules.first()
         {
@@ -2744,7 +2743,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return tps.clone();
         }
-        // Then the callee's own module.
         if let Some(tps) = fn_type_params.get(&(callee_module.clone(), func_name.to_string())) {
             return tps.clone();
         }
