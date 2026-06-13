@@ -83,4 +83,26 @@ suite('Wado LSP (stdlib editor label)', () => {
             `Expected the editor tab label to include the scheme, got: ${tab.label}`,
         );
     });
+
+    // Submodules carry a path with a `/` (e.g. `core:prelude/types.wado`).
+    // VS Code derives the tab name from the basename of the formatted label,
+    // so the directory and scheme are stripped down to the file name. We
+    // deliberately keep this native behaviour (the formatter uses a real `/`
+    // separator) rather than swapping in a look-alike glyph: the full
+    // `core:prelude/types.wado` still shows in the breadcrumb / quick-open
+    // path, while the tab stays a clean ASCII basename.
+    test('labels a core: submodule document with its basename', async function () {
+        this.timeout(120_000);
+
+        const uri = vscode.Uri.parse('core:prelude/types.wado');
+        const doc = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(doc);
+
+        const tab = await waitForTab(uri, 90_000);
+        assert.strictEqual(
+            tab.label,
+            'types.wado',
+            `Expected the submodule tab label to be the basename, got: ${tab.label}`,
+        );
+    });
 });
