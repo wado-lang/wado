@@ -12,9 +12,9 @@ use crate::version::VersionSpecifier;
 pub struct Manifest {
     pub package: Option<Package>,
     /// The `[world]` table: CM world FQ name (e.g. `"wasi:cli/command"`,
-    /// `"core:kiln/generator"`) → entry-point path. Replaces the former
-    /// `[package].{command,service,generator}` fields; the world-less `lib`
-    /// entry is abolished.
+    /// `"core:kiln/generator"`) → entry-point path, one entry per hosted
+    /// world the package targets. The library world is declared separately by
+    /// `[package].lib` (its world name is the package name).
     pub world: IndexMap<String, String>,
     pub registries: IndexMap<String, String>,
     pub dependencies: IndexMap<String, Dependency>,
