@@ -790,26 +790,52 @@ kiln (`emit_kiln_world_types`) both fall out of the same generic mechanism.
 Scope is the stdlib-derived registry path only; external `.wasm` consumption is
 a separate item.
 
-- [ ] P1 — World-driven handler detection. Replace `has_http_handler_export` /
-      `returns_http_response` / `namespace_prefix == "wasi:http/"` with
-      `WorldExportInfo::from_interface_fq`-driven dispatch. Output bytes
-      unchanged.
-- [ ] P2 — Generic instance-export emission. Fold `append_http_handler_export`
-      into `emit_world_exports`; an export with `from_interface_fq = Some(fq)`
-      is wrapped in an `fq`-named instance export (so CLI `run` becomes
-      `wasi:cli/run@<v>`), bare otherwise.
-- [ ] P2.5 — Structural CM type interner in `ComponentModelContext`: dedupe
-      composite boundary types (`result`/`option`/`tuple`/`list`/`own`) by
-      resolved structure key, shared across the handler export lift and the
-      `Client` import.
-- [ ] P3 — Drop the `{pkg}-handler-result` named convention; resolve
-      `CmExportType::HandlerResult` through the interner. Absorb
-      `emit_kiln_world_types` and the `KilnHost`-import gate.
-- [ ] P4 — Seed the import-resource closure with exported-interface signature
-      types; collapse `ImportKind::{HttpTypes,HttpClient}` into the generic
-      `ResourceSource` / `ResourceUsingInterface` variants; delete
-      `import_http_types_for_service` / `import_http_client` and the
-      `package == "http"` skips.
+- [x] P1 — World-driven handler detection. Replaced `returns_http_response` /
+      `namespace_prefix == "wasi:http/"` with the structural
+      `WorldExportInfo::is_handler_instance_export` (`from_interface_fq.is_some()`
+      and a non-unit `Result` return). Output bytes unchanged.
+- [x] P2 — Generic instance-export emission. `append_http_handler_export` is
+      replaced by `append_interface_instance_exports`: every export with
+      `from_interface_fq = Some(fq)` is wrapped in an `fq`-named instance export
+      (CLI `run` is now `wasi:cli/run@<v>`, dropping the bare top-level export),
+      bare otherwise. `CmExportType::HandlerResult` carries resolved `ok`/`err`
+      so the re-export set derives from the signature. Runtime drivers bind
+      `wasi:cli/run` via the generated `Command` bindings.
+
+The export side is done. The remaining phases are the import side — the WEP's
+"largest world-specific block". The machinery map showed `wasi:http/types` is a
+resource-defining _and_ function-bearing interface, a shape no current generic
+import path handles (the function-interface loop skips `resource_type.is_some()`
+_and_ `package == "http"`; `import_resource_source` is methods-less; the getter
+and resource-using paths cover other shapes). The bespoke `http-handler-result`
+(`result<own<response>, error-code>`) is a composite transport type absent from
+every function signature, consumed by ~6 sites by hardcoded name
+(`ctx.type_idx("http-handler-result")`, `"http-request"`, `"http-response"`,
+`"http-error-code"`) — the export lift, `import_http_client`, the transmission
+futures, and a `debug_assert`. These phases are mutually entangled and carry
+high regression risk across the HTTP fixtures, so they land as one carefully
+tested unit:
+
+- [ ] P2.5 — Structural CM type interner in `ComponentModelContext`: a
+      `CmTypeKey → type-index` map keyed by resolved structure
+      (`result`/`option`/`own`/leaf-index), emitted via a recursive
+      `intern_cm_type(builder, ctx, key)` helper. Replaces the per-name
+      `{pkg}-handler-result` registration; the same key from the export lift and
+      the `Client` import resolves to one index.
+- [ ] P3 — Resolve `CmExportType::HandlerResult` and the `Client` return type
+      through the interner (byte-preserving: same structure, same index).
+      Absorb `emit_kiln_world_types`'s `kiln-handler-result` and the
+      `KilnHost`-import gate so kiln and HTTP share the path.
+- [ ] P4 — A generic "resource-defining function interface" import path that
+      subsumes `import_http_types_for_service` (resource types + their used
+      constructors/methods/statics in one instance, on-demand payload types via
+      the already-generic `CmInstanceTypeGen`) and folds `import_http_client`
+      into the resource-using path (reading registry signatures instead of the
+      hardcoded `(request) -> handler-result`). Seed the import-resource closure
+      with exported-interface signature types; collapse
+      `ImportKind::{HttpTypes,HttpClient}` into the generic variants; delete the
+      `package == "http"` skips and the `http-fields-constructor` /
+      `http-response-new` core-func aliasing special case.
 - [ ] P5 — Remove the remaining `get_package_version("http")` and FQ string
       literals; descriptors carry version/FQ. `tests/wit_import_plan.rs` keeps
       the plan faithful to the emitted bytes.
