@@ -1168,7 +1168,6 @@ fn lower_lr_alt_suffix(
     // Same per-element follow logic as `lower_alt_body`, but the
     // suffix starts at index 1 (index 0 is the stripped leading
     // self-ref).
-    let outer_follow: List<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
         let elem_follow = ctx.compute_call_site_follow(&alt.elements, i);
         let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, i);
@@ -2260,12 +2259,6 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
 
     let mut name_counts: List<[String, i32]> = [];
     let mut ops: List<Op> = [];
-    // Per-element follow within the alt: tokens that can appear
-    // immediately after this element in the alt. For the last
-    // element, the follow is empty (the rule's own follow is the
-    // surrounding caller's concern, threaded via Phase 2.6 variant
-    // masks rather than this local computation).
-    let outer_follow: List<String> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
         let elem_follow = ctx.compute_call_site_follow(&alt.elements, i);
@@ -2457,7 +2450,6 @@ fn lower_group_op(
             rule_name,
             ctx,
             group_counter,
-            outer_follow,
         );
     }
     if is_token_only_group(alts) {
@@ -2473,7 +2465,6 @@ fn lower_group_op(
             rule_name,
             ctx,
             group_counter,
-            outer_follow,
         );
     }
     panic("Group shape unrecognised by classifier — should be impossible");
@@ -2558,7 +2549,6 @@ fn lower_single_alt_group(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
-    outer_follow: &List<String>,
 ) -> Op {
     // Nested elements are allowed: `(a (b c))` / `(a*)` /
     // `(name=a b)`. Each elem is lowered through the standard
@@ -2900,7 +2890,6 @@ fn lower_general_group(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
-    outer_follow: &List<String>,
 ) -> Op {
     let group_index = *group_counter;
     *group_counter += 1;

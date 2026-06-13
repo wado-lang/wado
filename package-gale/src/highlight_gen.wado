@@ -138,12 +138,9 @@ fn classify_lexer_rule(rule: &LexerRule) -> String {
             return "";
         }
     }
-    if contains_upper(&name, &"COMMENT")
-        || contains_upper(&name, &"LINE_COMMENT")
-        || contains_upper(&name, &"BLOCK_COMMENT") {
-        return "comment";
-    }
-    if contains_upper(&name, &"DOC_COMMENT") {
+    // `contains_upper` is a substring test, so `COMMENT` already covers
+    // `LINE_COMMENT` / `BLOCK_COMMENT` / `DOC_COMMENT`.
+    if contains_upper(&name, &"COMMENT") {
         return "comment";
     }
     if name == "STRING" || name == "STRING_LITERAL" || name == "QUOTED_STRING" || contains_upper(&name, &"STRING") {
