@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781331309894,
+  "lastUpdate": 1781342297175,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32485,6 +32485,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/83ab9e5dbbe7e838c0c60f571ff74425fc97f99c"
         },
         "date": 1781331309352,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1840,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8775,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15755,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432251,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2262a2e8eca5896aed429d3cdb240ff19681e350",
+          "message": "Merge pull request #1362 from wado-lang/claude/elegant-galileo-86y1k0\n\nResearch: splitting large libraries (ICU) into Wasm components + compile-time data providers WEP",
+          "timestamp": "2026-06-13T18:09:18+09:00",
+          "tree_id": "1028e20d5b2a0dc01aacb6b5ec48be1935f58c59",
+          "url": "https://github.com/wado-lang/wado/commit/2262a2e8eca5896aed429d3cdb240ff19681e350"
+        },
+        "date": 1781342296609,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
