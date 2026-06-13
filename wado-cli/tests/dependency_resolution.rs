@@ -222,3 +222,70 @@ export fn run() {
                 .or(predicate::str::contains("declares no")),
         ));
 }
+
+/// Two separate consumer projects may use the SAME dependency alias
+/// (`greet`) for DIFFERENT packages. The dependency index is built per
+/// project (per compile, on a fresh interner), so each resolves to its own
+/// package with no cross-contamination.
+#[test]
+fn same_alias_different_package_resolves_per_project() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+
+    for (pkg, msg) in [("greet_a", "from A"), ("greet_b", "from B")] {
+        let dir = root.join(pkg);
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::write(
+            dir.join("wado.toml"),
+            format!("[package]\nname = \"{pkg}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("src/lib.wado"),
+            format!("export fn greeting() -> String {{ return \"{msg}\"; }}\n"),
+        )
+        .unwrap();
+    }
+
+    // Both apps alias the dependency as `greet`, pointing at different packages.
+    for (app, dep, expected) in [
+        ("app_a", "greet_a", "from A"),
+        ("app_b", "greet_b", "from B"),
+    ] {
+        let dir = root.join(app);
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::write(
+            dir.join("wado.toml"),
+            format!(
+                r#"[package]
+name = "{app}"
+version = "0.1.0"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+
+[dependencies]
+greet = {{ path = "../{dep}" }}
+"#
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("src/main.wado"),
+            r#"use { println, Stdout } from "core:cli";
+use { greeting } from "greet";
+
+export fn run() with Stdout {
+    println(greeting());
+}
+"#,
+        )
+        .unwrap();
+
+        wado_in(&dir)
+            .args(["run", "src/main.wado"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(expected));
+    }
+}
