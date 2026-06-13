@@ -62,23 +62,25 @@ fn run_component(stdin: &[u8]) -> String {
         let mut store = Store::new(engine, state);
         store.set_epoch_deadline(30);
 
-        let instance = linker
-            .instantiate_async(&mut store, component)
+        // `wasi:cli/command` exports `run` via the `wasi:cli/run` interface
+        // instance; bind through the generated `Command` bindings and drive the
+        // async export with `run_concurrent`.
+        let command =
+            wasmtime_wasi::p3::bindings::Command::instantiate_async(&mut store, component, &linker)
+                .await
+                .expect("failed to instantiate");
+        match store
+            .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
             .await
-            .expect("failed to instantiate");
-        let run_func = instance
-            .get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")
-            .expect("failed to get run func");
-
-        match run_func.call_async(&mut store, ()).await {
-            Ok((result,)) => {
+        {
+            Ok(Ok(result)) => {
                 if result.is_err() {
                     let stderr =
                         String::from_utf8(stderr_clone.contents().to_vec()).unwrap_or_default();
                     panic!("Wasm component returned error. stderr: {stderr}");
                 }
             }
-            Err(e) => {
+            Ok(Err(e)) | Err(e) => {
                 let stderr =
                     String::from_utf8(stderr_clone.contents().to_vec()).unwrap_or_default();
                 panic!("Wasm component trapped: {e:#}\nstderr: {stderr}");

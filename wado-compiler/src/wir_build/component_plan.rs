@@ -52,6 +52,15 @@ pub struct WorldExportPlan {
     pub cm_params: Vec<(String, CmExportType)>,
     /// CM-resolved return type at the component boundary.
     pub cm_result: CmExportType,
+    /// Fully-qualified CM interface name this export was synthesized from
+    /// (`WorldExportInfo::from_interface_fq`), e.g.
+    /// `"wasi:http/handler@0.3.0-rc-2026-03-15"` or
+    /// `"wasi:cli/run@0.3.0-rc-2026-03-15"`. `Some` marks the export as an
+    /// interface-instance export: codegen wraps it (and the named CM types its
+    /// signature references) in an instance export under this FQ. `None` is a
+    /// freestanding world function export (the kiln generator's `generate`,
+    /// test exports) emitted as a bare top-level function.
+    pub from_interface_fq: Option<String>,
 }
 
 /// CM-level type at the world export boundary.
@@ -84,7 +93,16 @@ pub enum CmExportType {
     /// one non-unit component. Codegen registers a per-world named alias
     /// (e.g. `http-handler-result`, `kiln-handler-result`) and resolves this
     /// variant to `ctx.type_idx(&format!("{world_package}-handler-result"))`.
-    HandlerResult,
+    ///
+    /// The resolved `ok`/`err` boundary types are carried so codegen can
+    /// enumerate the named CM types to re-export in an interface-instance
+    /// export (e.g. `response`, `error-code`) without re-deriving them from
+    /// hardcoded type names. Either arm may be [`Self::Unit`] (e.g.
+    /// `Result<(), Error>`); such arms contribute no re-exported type.
+    HandlerResult {
+        ok: Box<CmExportType>,
+        err: Box<CmExportType>,
+    },
 }
 
 /// A test function to export from the component.
@@ -235,6 +253,7 @@ fn build_world_export_plans(
                 .unwrap_or(CmExportType::Unit);
 
             WorldExportPlan {
+                from_interface_fq: export.from_interface_fq.clone(),
                 name: export.name,
                 core_func_name,
                 is_async: export.is_async,
@@ -271,7 +290,10 @@ fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry
         if is_unit_type(&generic.args[0]) && is_unit_type(&generic.args[1]) {
             return CmExportType::Unit;
         }
-        return CmExportType::HandlerResult;
+        return CmExportType::HandlerResult {
+            ok: Box::new(resolve_cm_export_type(&generic.args[0], cm_interface_registry)),
+            err: Box::new(resolve_cm_export_type(&generic.args[1], cm_interface_registry)),
+        };
     }
     if let Type::Named(named) = ty {
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)
@@ -449,18 +471,25 @@ mod tests {
         use resolver_helpers::*;
         let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
-        // wasi:http handler shape: Result<Response, ErrorCode>
+        // wasi:http handler shape: Result<Response, ErrorCode>. The resolved
+        // `ok`/`err` arms are carried so codegen can enumerate the re-exported
+        // CM types (here `response` and `error-code`).
         let http = result_of(named("Response"), named("ErrorCode"));
-        assert!(matches!(
-            resolve_cm_export_type(&http, registry),
-            CmExportType::HandlerResult
-        ));
+        match resolve_cm_export_type(&http, registry) {
+            CmExportType::HandlerResult { ok, err } => {
+                assert!(matches!(*ok, CmExportType::Named { ref cm_name, .. } if cm_name == "response"));
+                assert!(
+                    matches!(*err, CmExportType::Named { ref cm_name, .. } if cm_name == "error-code")
+                );
+            }
+            other => panic!("expected HandlerResult, got {other:?}"),
+        }
 
         // core:kiln generator shape: Result<Response, Error>
         let kiln = result_of(named("Response"), named("Error"));
         assert!(matches!(
             resolve_cm_export_type(&kiln, registry),
-            CmExportType::HandlerResult
+            CmExportType::HandlerResult { .. }
         ));
     }
 

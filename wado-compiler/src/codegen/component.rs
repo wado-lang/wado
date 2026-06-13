@@ -395,9 +395,13 @@ pub fn build_component(
 
     let mut component_bytes = builder.finish();
 
-    if component_plan.has_http_handler_export {
-        append_http_handler_export(&mut component_bytes, &ctx, project);
-    }
+    // Wrap every interface export (`from_interface_fq` populated — CLI `run`,
+    // HTTP `handle`) in a CM instance export named by its interface FQ. The
+    // lifted funcs were created by `emit_world_exports`; this appends the
+    // instances that re-export them alongside the named CM types their
+    // signatures reference. Freestanding world functions are already exported
+    // bare and are skipped here.
+    append_interface_instance_exports(&mut component_bytes, &ctx, component_plan);
 
     component_bytes
 }
@@ -1587,9 +1591,12 @@ fn cm_export_type_to_idx(
             let key = format!("{pkg}-{cm_name}");
             ctx.type_idx(&key)
         }
-        CmExportType::HandlerResult => {
+        CmExportType::HandlerResult { .. } => {
             // The plan only emits `HandlerResult` for worlds with a known
             // package — `world_package` is guaranteed `Some` at this point.
+            // The `ok`/`err` arms drive re-export enumeration in
+            // `append_interface_instance_exports`, not the lift signature, which
+            // resolves through the per-world `{pkg}-handler-result` alias.
             let pkg = world_package.expect(
                 "HandlerResult emitted for a world with no package: stdlib bootstrap regression",
             );
@@ -1666,13 +1673,21 @@ fn emit_world_exports(
             lift_opts,
         );
 
-        builder.export(
-            &export.name,
-            ComponentExportKind::Func,
-            ctx.comp_func_idx(&export.name),
-            None,
-        );
-        ctx.skip_comp_func_idx();
+        // Interface exports (`from_interface_fq` populated) are emitted only as
+        // instance exports (`wasi:cli/run`, `wasi:http/handler`) by
+        // `append_interface_instance_exports`; the lifted func is referenced
+        // from that instance, so no bare top-level func export is created here.
+        // Freestanding world function exports (kiln `generate`, with no parent
+        // interface) keep their bare export.
+        if export.from_interface_fq.is_none() {
+            builder.export(
+                &export.name,
+                ComponentExportKind::Func,
+                ctx.comp_func_idx(&export.name),
+                None,
+            );
+            ctx.skip_comp_func_idx();
+        }
     }
 
     // Test exports
@@ -3409,70 +3424,103 @@ fn lower_wasi_functions(
     }
 }
 
-fn append_http_handler_export(
+/// Append a CM instance export for every interface export in the plan.
+///
+/// Each world export whose `from_interface_fq` is populated (CLI `run`, HTTP
+/// `handle`) is emitted as an instance export named by that interface FQ. The
+/// instance re-exports the named CM types the export's boundary signature
+/// references — resources and variants such as `request`, `response`,
+/// `error-code` — followed by the lifted boundary function. Freestanding world
+/// function exports (no parent interface, e.g. the kiln generator's `generate`)
+/// carry no instance and are skipped; `emit_world_exports` already emitted them
+/// bare.
+///
+/// Runs after `builder.finish()`, so it appends raw CM sections; the instance
+/// index space continues from `ctx.instance_count()`. The re-export set and the
+/// instance name are derived entirely from the plan and the registered CM type
+/// names — there is no per-world or HTTP-specific branching.
+fn append_interface_instance_exports(
     component_bytes: &mut Vec<u8>,
     ctx: &ComponentModelContext,
-    project: &NirPackage,
+    component_plan: &crate::wir_build::component_plan::ComponentPlan,
 ) {
+    use crate::wir_build::component_plan::CmExportType;
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
 
-    let handle_func_idx = ctx.comp_func_idx("handle");
+    // Collect the named CM types a boundary type references as
+    // `(cm_name, component-type-index)` re-export items, in signature order and
+    // de-duplicated by name. A resource resolves to the registered
+    // `{pkg}-{cm_name}-resource` own type; any other named type (a variant /
+    // enum / record such as `error-code`) to `{pkg}-{cm_name}`.
+    fn collect_type_items(
+        ty: &CmExportType,
+        ctx: &ComponentModelContext,
+        out: &mut Vec<(String, u32)>,
+    ) {
+        match ty {
+            CmExportType::Unit => {}
+            CmExportType::Named {
+                interface_fq,
+                cm_name,
+            } => {
+                if out.iter().any(|(name, _)| name == cm_name) {
+                    return;
+                }
+                let pkg = crate::world_registry::fq_name_package(interface_fq);
+                let resource_key = format!("{pkg}-{cm_name}-resource");
+                let idx = if ctx.has_type(&resource_key) {
+                    ctx.type_idx(&resource_key)
+                } else {
+                    ctx.type_idx(&format!("{pkg}-{cm_name}"))
+                };
+                out.push((cm_name.clone(), idx));
+            }
+            CmExportType::HandlerResult { ok, err } => {
+                collect_type_items(ok, ctx, out);
+                collect_type_items(err, ctx, out);
+            }
+        }
+    }
 
-    let request_cm = project
-        .cm_interface_registry
-        .get_resource_cm_name("Request")
-        .unwrap();
-    let response_cm = project
-        .cm_interface_registry
-        .get_resource_cm_name("Response")
-        .unwrap();
-    // Pin `ErrorCode` to wasi:http/types — same disambiguation as the
-    // import side a few hundred lines up.
-    let http_version_for_error = project
-        .cm_interface_registry
-        .get_package_version("http")
-        .expect("WASI HTTP version not found in registry");
-    let http_types_iface = format!("wasi:http/types@{http_version_for_error}");
-    let error_code_cm = project
-        .cm_interface_registry
-        .get_variant_cm_name_by_interface(&http_types_iface, "ErrorCode")
-        .or_else(|| {
-            project
-                .cm_interface_registry
-                .get_enum_cm_name_by_interface(&http_types_iface, "ErrorCode")
-        })
-        .unwrap();
-
-    let request_type_idx = ctx.type_idx(&format!("http-{request_cm}-resource"));
-    let response_type_idx = ctx.type_idx(&format!("http-{response_cm}-resource"));
-    let error_code_type_idx = ctx.type_idx("http-error-code");
+    let interface_exports: Vec<_> = component_plan
+        .world_exports
+        .iter()
+        .filter(|e| e.from_interface_fq.is_some())
+        .collect();
+    if interface_exports.is_empty() {
+        return;
+    }
 
     let mut instances = ComponentInstanceSection::new();
-    instances.export_items([
-        (request_cm, ComponentExportKind::Type, request_type_idx),
-        (response_cm, ComponentExportKind::Type, response_type_idx),
-        (
-            error_code_cm,
-            ComponentExportKind::Type,
-            error_code_type_idx,
-        ),
-        ("handle", ComponentExportKind::Func, handle_func_idx),
-    ]);
-
-    let instance_idx = ctx.instance_count();
-
     let mut exports = ComponentExportSection::new();
-    let http_version = project
-        .cm_interface_registry
-        .get_package_version("http")
-        .expect("WASI HTTP version not found in registry");
-    let handler_path = format!("wasi:http/handler@{http_version}");
-    exports.export(
-        &handler_path,
-        ComponentExportKind::Instance,
-        instance_idx,
-        None,
-    );
+    let mut instance_idx = ctx.instance_count();
+
+    for export in interface_exports {
+        let fq = export
+            .from_interface_fq
+            .as_deref()
+            .expect("filtered to interface exports above");
+
+        let mut type_items: Vec<(String, u32)> = Vec::new();
+        for (_, cm_ty) in &export.cm_params {
+            collect_type_items(cm_ty, ctx, &mut type_items);
+        }
+        collect_type_items(&export.cm_result, ctx, &mut type_items);
+
+        let mut items: Vec<(&str, ComponentExportKind, u32)> = type_items
+            .iter()
+            .map(|(name, idx)| (name.as_str(), ComponentExportKind::Type, *idx))
+            .collect();
+        items.push((
+            export.name.as_str(),
+            ComponentExportKind::Func,
+            ctx.comp_func_idx(&export.name),
+        ));
+
+        instances.export_items(items);
+        exports.export(fq, ComponentExportKind::Instance, instance_idx, None);
+        instance_idx += 1;
+    }
 
     instances.append_to_component(component_bytes);
     exports.append_to_component(component_bytes);

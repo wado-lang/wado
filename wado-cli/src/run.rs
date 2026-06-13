@@ -312,10 +312,16 @@ async fn run_cli_component(
         None
     };
 
-    let instance = linker.instantiate_async(&mut store, &component).await?;
-    let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
-
-    let (result,) = run_func.call_async(&mut store, ()).await?;
+    // The `wasi:cli/command` world exports `run` through the `wasi:cli/run`
+    // interface instance, so bind it via the generated `Command` bindings
+    // rather than a bare top-level `run` func. Async exports take an `Accessor`,
+    // so the call is driven through `run_concurrent`.
+    let command =
+        wasmtime_wasi::p3::bindings::Command::instantiate_async(&mut store, &component, &linker)
+            .await?;
+    let result = store
+        .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
+        .await??;
 
     if let Some((profiler_arc, stop)) = profiler {
         stop.store(true, Ordering::Relaxed);
