@@ -191,7 +191,7 @@ pub struct SimpleRule {
 
 /// Multi-alternative rule (no left recursion). Each alt is emitted
 /// either inline (when the alt is the only one in its overlap
-/// group) or as a `parse_<snake>_bt_<idx>` helper plus a
+/// group) or as a `parse_<snake>_alt_<idx>` helper plus a
 /// dispatch entry.
 pub struct MultiAltRule {
     pub header: RuleHeader,
@@ -368,7 +368,7 @@ pub struct DispatchBranch {
 pub struct TournamentDispatch {
     /// Original alt indices in dispatch order
     /// (`sort_group_by_element_count`). The longest-match scan
-    /// winner triggers the corresponding `parse_<rule>_bt_<idx>`.
+    /// winner triggers the corresponding `parse_<rule>_alt_<idx>`.
     pub alts: List<i32>,
 }
 
@@ -881,7 +881,7 @@ pub struct ScanRuleCallElem {
     /// `stamp_lr_self_ref_min_prec` for self-recursive RuleCalls
     /// inside an LR suffix. `None` means "use the caller-supplied
     /// override" — `gen_scan_op_element` reads its `min_prec_override`
-    /// parameter, which `gen_bt_scan_op_elements` raises to `i32::MAX`
+    /// parameter, which `gen_alt_scan_op_elements` raises to `i32::MAX`
     /// for the trailing self-ref and every other call site leaves at
     /// the default `0`.
     pub min_prec_arg: Option<i32>,

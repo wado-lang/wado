@@ -910,7 +910,7 @@ fn scan_b(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_s__inner_bt_0(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s__inner_alt_0(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
     let a = _parse_a(p)?;
     return Result::<SNode, ParseError>::Ok(SNode::Alt0(SAlt0 {
@@ -926,7 +926,7 @@ fn _parse_s__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_s__inner_bt_1(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s__inner_alt_1(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
     let b = _parse_b(p)?;
     return Result::<SNode, ParseError>::Ok(SNode::Alt1(SAlt1 {
@@ -948,9 +948,9 @@ fn _parse_s__inner(p: &mut Parser) -> Result<SNode, ParseError> {
     if kind == TK_ID {
         if p.peek_kind() == TK_ID {
             if p.peek_at(1) == TK_INT {
-                return _parse_s__inner_bt_0(p);
+                return _parse_s__inner_alt_0(p);
             } else if p.peek_at(1) == TK_ID {
-                return _parse_s__inner_bt_1(p);
+                return _parse_s__inner_alt_1(p);
             }
         }
     }
@@ -970,7 +970,7 @@ fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     return r;
 }
 
-fn _parse_a__inner_bt_0(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a__inner_alt_0(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let int = p.expect(TK_INT)?;
@@ -990,7 +990,7 @@ fn _parse_a__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_a__inner_bt_1(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a__inner_alt_1(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let int = p.expect(TK_INT)?;
@@ -1029,12 +1029,12 @@ fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return _parse_a__inner_bt_0(p);
+            return _parse_a__inner_alt_0(p);
         }
         if _sd_best_i == 1 {
-            return _parse_a__inner_bt_1(p);
+            return _parse_a__inner_alt_1(p);
         }
-        return _parse_a__inner_bt_1(p);
+        return _parse_a__inner_alt_1(p);
     }
     return Result::<ANode, ParseError>::Err(p.error(
         "expected a",

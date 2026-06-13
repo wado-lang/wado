@@ -1067,7 +1067,7 @@ fn _parse_entry(p: &mut Parser) -> Result<EntryNode, ParseError> {
     return r;
 }
 
-fn _parse_typespec__inner_bt_1(p: &mut Parser) -> Result<TypespecNode, ParseError> {
+fn _parse_typespec__inner_alt_1(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
@@ -1091,7 +1091,7 @@ fn _parse_typespec__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_typespec__inner_bt_0(p: &mut Parser) -> Result<TypespecNode, ParseError> {
+fn _parse_typespec__inner_alt_0(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     return Result::<TypespecNode, ParseError>::Ok(TypespecNode::Alt0(TypespecAlt0 {
@@ -1126,12 +1126,12 @@ fn _parse_typespec__inner(p: &mut Parser) -> Result<TypespecNode, ParseError> {
             _sd_best_i = 0;
         }
         if _sd_best_i == 1 {
-            return _parse_typespec__inner_bt_1(p);
+            return _parse_typespec__inner_alt_1(p);
         }
         if _sd_best_i == 0 {
-            return _parse_typespec__inner_bt_0(p);
+            return _parse_typespec__inner_alt_0(p);
         }
-        return _parse_typespec__inner_bt_0(p);
+        return _parse_typespec__inner_alt_0(p);
     }
     return Result::<TypespecNode, ParseError>::Err(p.error(
         "expected typespec",

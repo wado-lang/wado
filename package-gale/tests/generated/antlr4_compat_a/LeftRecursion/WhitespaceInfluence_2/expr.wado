@@ -2198,7 +2198,7 @@ fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     return r;
 }
 
-fn _parse_expression__inner_bt_0(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
@@ -2270,7 +2270,7 @@ fn _parse_expression__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expression__inner_bt_25(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression__inner_alt_25(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::newIdentifier(ExpressionnewIdentifier {
@@ -2305,12 +2305,12 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
             _sd_best_i = 25;
         }
         if _sd_best_i == 0 {
-            return _parse_expression__inner_bt_0(p);
+            return _parse_expression__inner_alt_0(p);
         }
         if _sd_best_i == 25 {
-            return _parse_expression__inner_bt_25(p);
+            return _parse_expression__inner_alt_25(p);
         }
-        return _parse_expression__inner_bt_25(p);
+        return _parse_expression__inner_alt_25(p);
     }
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;

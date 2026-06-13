@@ -939,7 +939,7 @@ fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     return r;
 }
 
-fn _parse_e__inner_bt_0(p: &mut Parser) -> Result<ENode, ParseError> {
+fn _parse_e__inner_alt_0(p: &mut Parser) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let eq = p.expect(TK_LIT_EQ)?;
@@ -963,7 +963,7 @@ fn _parse_e__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_e__inner_bt_1(p: &mut Parser) -> Result<ENode, ParseError> {
+fn _parse_e__inner_alt_1(p: &mut Parser) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt1(EAlt1 {
@@ -998,12 +998,12 @@ fn _parse_e__inner_atom(p: &mut Parser) -> Result<ENode, ParseError> {
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return _parse_e__inner_bt_0(p);
+            return _parse_e__inner_alt_0(p);
         }
         if _sd_best_i == 1 {
-            return _parse_e__inner_bt_1(p);
+            return _parse_e__inner_alt_1(p);
         }
-        return _parse_e__inner_bt_1(p);
+        return _parse_e__inner_alt_1(p);
     }
     return Result::<ENode, ParseError>::Err(p.error(
         "expected e",

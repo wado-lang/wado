@@ -966,7 +966,7 @@ fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     return r;
 }
 
-fn _parse_expr__inner_bt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let literal = _parse_literal(p)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt0(ExprAlt0 {
@@ -982,7 +982,7 @@ fn _parse_expr__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expr__inner_bt_1(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_1(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let op = _parse_op(p)?;
     let expr = _parse_expr(p, 2)?;
@@ -1022,16 +1022,16 @@ fn _parse_expr__inner_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_expr__inner_bt_0(p);
+                return _parse_expr__inner_alt_0(p);
             }
             if _sd_best_i == 1 {
-                return _parse_expr__inner_bt_1(p);
+                return _parse_expr__inner_alt_1(p);
             }
-            return _parse_expr__inner_bt_1(p);
+            return _parse_expr__inner_alt_1(p);
         } else if p.peek_kind() == TK_Integer {
-            return _parse_expr__inner_bt_0(p);
+            return _parse_expr__inner_alt_0(p);
         } else if p.peek_kind() == TK_LIT_PLUS {
-            return _parse_expr__inner_bt_1(p);
+            return _parse_expr__inner_alt_1(p);
         }
     }
     return Result::<ExprNode, ParseError>::Err(p.error(

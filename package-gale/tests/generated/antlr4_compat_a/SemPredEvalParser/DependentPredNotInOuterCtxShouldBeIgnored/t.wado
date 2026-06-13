@@ -896,7 +896,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return -1;
 }
 
-fn _parse_s__inner_bt_0(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s__inner_alt_0(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
     let b = _parse_b(p)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
@@ -916,7 +916,7 @@ fn _parse_s__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_s__inner_bt_1(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s__inner_alt_1(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
     let b = _parse_b(p)?;
     let dot = p.expect(TK_LIT_DOT)?;
@@ -942,9 +942,9 @@ fn _parse_s__inner(p: &mut Parser) -> Result<SNode, ParseError> {
     if kind == TK_ID {
         if p.peek_kind() == TK_ID {
             if p.peek_at(1) == TK_LIT_SEMI {
-                return _parse_s__inner_bt_0(p);
+                return _parse_s__inner_alt_0(p);
             } else if p.peek_at(1) == TK_LIT_DOT {
-                return _parse_s__inner_bt_1(p);
+                return _parse_s__inner_alt_1(p);
             }
         }
     }

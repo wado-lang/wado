@@ -15248,7 +15248,7 @@ fn _parse_conflict_clause(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     return r;
 }
 
-fn _parse_expr__inner_bt_15(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_15(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let k_cast = p.expect(TK_K_CAST)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
@@ -15284,7 +15284,7 @@ fn _parse_expr__inner_scan_15(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn _parse_expr__inner_bt_22(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_22(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let k_case = p.expect(TK_K_CASE)?;
     let expr: Option<ExprNode> = if _gale_kind_set_34(p.peek_kind()) {
@@ -15416,7 +15416,7 @@ fn _parse_expr__inner_scan_22(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn _parse_expr__inner_bt_21(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_21(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let item_k_exists: Option<ItemOptKExistsItem> = if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_EXISTS {
         if p.peek_kind() == TK_K_NOT {
@@ -15472,7 +15472,7 @@ fn _parse_expr__inner_scan_21(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn _parse_expr__inner_bt_14(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_14(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let expr = _parse_expr(p, &FOLLOW_MASK_13)?;
@@ -15496,7 +15496,7 @@ fn _parse_expr__inner_scan_14(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn _parse_expr__inner_bt_23(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_23(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let raise_function = _parse_raise_function(p, follow)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt23(ExprAlt23 {
@@ -15512,7 +15512,7 @@ fn _parse_expr__inner_scan_23(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn _parse_expr__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let literal_value = _parse_literal_value(p, follow)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt0(ExprAlt0 {
@@ -15528,7 +15528,7 @@ fn _parse_expr__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn _parse_expr__inner_bt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let function_name = _parse_function_name(p, &FOLLOW_MASK_5)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
@@ -15688,7 +15688,7 @@ fn _parse_expr__inner_scan_13(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn _parse_expr__inner_bt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let unary_operator = _parse_unary_operator(p, &FOLLOW_MASK_18)?;
     let expr = _parse_expr(p, follow, 15)?;
@@ -15708,7 +15708,7 @@ fn _parse_expr__inner_scan_3(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn _parse_expr__inner_bt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let item_table_name_dot: Option<ItemOptTableNameDotItem> = if _gale_kind_set_8(p.peek_kind()) && p.peek_at(1) == TK_LIT_DOT && _gale_kind_set_8(p.peek_at(2)) && p.peek_at(3) == TK_LIT_DOT {
         let mut opt_scan_pos: i32 = -1;
@@ -15817,18 +15817,18 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 _sd_best_i = 2;
             }
             if _sd_best_i == 21 {
-                return _parse_expr__inner_bt_21(p, follow);
+                return _parse_expr__inner_alt_21(p, follow);
             }
             if _sd_best_i == 14 {
-                return _parse_expr__inner_bt_14(p, follow);
+                return _parse_expr__inner_alt_14(p, follow);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_bt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_expr__inner_bt_2(p, follow);
+                return _parse_expr__inner_alt_2(p, follow);
             }
-            return _parse_expr__inner_bt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow);
         } else if p.peek_kind() == TK_K_CAST {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -15850,15 +15850,15 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 _sd_best_i = 2;
             }
             if _sd_best_i == 15 {
-                return _parse_expr__inner_bt_15(p, follow);
+                return _parse_expr__inner_alt_15(p, follow);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_bt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_expr__inner_bt_2(p, follow);
+                return _parse_expr__inner_alt_2(p, follow);
             }
-            return _parse_expr__inner_bt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow);
         } else if p.peek_kind() == TK_K_CASE {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -15880,15 +15880,15 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 _sd_best_i = 2;
             }
             if _sd_best_i == 22 {
-                return _parse_expr__inner_bt_22(p, follow);
+                return _parse_expr__inner_alt_22(p, follow);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_bt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_expr__inner_bt_2(p, follow);
+                return _parse_expr__inner_alt_2(p, follow);
             }
-            return _parse_expr__inner_bt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow);
         } else if p.peek_kind() == TK_K_RAISE {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -15910,15 +15910,15 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 _sd_best_i = 2;
             }
             if _sd_best_i == 23 {
-                return _parse_expr__inner_bt_23(p, follow);
+                return _parse_expr__inner_alt_23(p, follow);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_bt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_expr__inner_bt_2(p, follow);
+                return _parse_expr__inner_alt_2(p, follow);
             }
-            return _parse_expr__inner_bt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow);
         } else if p.peek_kind() == TK_K_NOT {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -15945,18 +15945,18 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 _sd_best_i = 3;
             }
             if _sd_best_i == 21 {
-                return _parse_expr__inner_bt_21(p, follow);
+                return _parse_expr__inner_alt_21(p, follow);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_bt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_expr__inner_bt_2(p, follow);
+                return _parse_expr__inner_alt_2(p, follow);
             }
             if _sd_best_i == 3 {
-                return _parse_expr__inner_bt_3(p, follow);
+                return _parse_expr__inner_alt_3(p, follow);
             }
-            return _parse_expr__inner_bt_3(p, follow);
+            return _parse_expr__inner_alt_3(p, follow);
         } else if p.peek_kind() == TK_K_EXISTS {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -15978,19 +15978,19 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 _sd_best_i = 2;
             }
             if _sd_best_i == 21 {
-                return _parse_expr__inner_bt_21(p, follow);
+                return _parse_expr__inner_alt_21(p, follow);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_bt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_expr__inner_bt_2(p, follow);
+                return _parse_expr__inner_alt_2(p, follow);
             }
-            return _parse_expr__inner_bt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow);
         } else if _gale_kind_set_57(p.peek_kind()) {
-            return _parse_expr__inner_bt_3(p, follow);
+            return _parse_expr__inner_alt_3(p, follow);
         } else if _gale_kind_set_54(p.peek_kind()) {
-            return _parse_expr__inner_bt_0(p, follow);
+            return _parse_expr__inner_alt_0(p, follow);
         } else if _gale_kind_set_55(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -16012,15 +16012,15 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 _sd_best_i = 2;
             }
             if _sd_best_i == 0 {
-                return _parse_expr__inner_bt_0(p, follow);
+                return _parse_expr__inner_alt_0(p, follow);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_bt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_expr__inner_bt_2(p, follow);
+                return _parse_expr__inner_alt_2(p, follow);
             }
-            return _parse_expr__inner_bt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow);
         } else if _gale_kind_set_56(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -16037,12 +16037,12 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 _sd_best_i = 2;
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_bt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_expr__inner_bt_2(p, follow);
+                return _parse_expr__inner_alt_2(p, follow);
             }
-            return _parse_expr__inner_bt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow);
         }
     }
     if kind == TK_BIND_PARAMETER {
@@ -17559,7 +17559,7 @@ fn _parse_ordering_term(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     return r;
 }
 
-fn _parse_pragma_value__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PragmaValueNode, ParseError> {
+fn _parse_pragma_value__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PragmaValueNode, ParseError> {
     let start = p.peek().span.start;
     let name = _parse_name(p, follow)?;
     return Result::<PragmaValueNode, ParseError>::Ok(PragmaValueNode::Alt1(PragmaValueAlt1 {
@@ -17575,7 +17575,7 @@ fn _parse_pragma_value__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &Li
     return pos;
 }
 
-fn _parse_pragma_value__inner_bt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PragmaValueNode, ParseError> {
+fn _parse_pragma_value__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PragmaValueNode, ParseError> {
     let start = p.peek().span.start;
     let string_literal = p.expect(TK_STRING_LITERAL)?;
     return Result::<PragmaValueNode, ParseError>::Ok(PragmaValueNode::Alt2(PragmaValueAlt2 {
@@ -17618,14 +17618,14 @@ fn _parse_pragma_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 _sd_best_i = 2;
             }
             if _sd_best_i == 1 {
-                return _parse_pragma_value__inner_bt_1(p, follow);
+                return _parse_pragma_value__inner_alt_1(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_pragma_value__inner_bt_2(p, follow);
+                return _parse_pragma_value__inner_alt_2(p, follow);
             }
-            return _parse_pragma_value__inner_bt_2(p, follow);
+            return _parse_pragma_value__inner_alt_2(p, follow);
         } else if _gale_kind_set_64(p.peek_kind()) {
-            return _parse_pragma_value__inner_bt_1(p, follow);
+            return _parse_pragma_value__inner_alt_1(p, follow);
         }
     }
     return Result::<PragmaValueNode, ParseError>::Err(p.error(
@@ -17713,7 +17713,7 @@ fn _parse_common_table_expression(p: &mut Parser, follow: &List<List<i32>> = &EM
     return r;
 }
 
-fn _parse_result_column__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ResultColumnNode, ParseError> {
+fn _parse_result_column__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ResultColumnNode, ParseError> {
     let start = p.peek().span.start;
     let table_name = _parse_table_name(p, &FOLLOW_MASK_21)?;
     let dot = p.expect(TK_LIT_DOT)?;
@@ -17737,7 +17737,7 @@ fn _parse_result_column__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &L
     return pos;
 }
 
-fn _parse_result_column__inner_bt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ResultColumnNode, ParseError> {
+fn _parse_result_column__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ResultColumnNode, ParseError> {
     let start = p.peek().span.start;
     let expr = _parse_expr(p, follow)?;
     let k_as_column_alias: Option<KAsOptColumnAliasItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_AS && _gale_kind_set_45(p.peek_at(1))) {
@@ -17818,14 +17818,14 @@ fn _parse_result_column__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 _sd_best_i = 2;
             }
             if _sd_best_i == 1 {
-                return _parse_result_column__inner_bt_1(p, follow);
+                return _parse_result_column__inner_alt_1(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_result_column__inner_bt_2(p, follow);
+                return _parse_result_column__inner_alt_2(p, follow);
             }
-            return _parse_result_column__inner_bt_2(p, follow);
+            return _parse_result_column__inner_alt_2(p, follow);
         } else if _gale_kind_set_65(p.peek_kind()) {
-            return _parse_result_column__inner_bt_2(p, follow);
+            return _parse_result_column__inner_alt_2(p, follow);
         }
     }
     return Result::<ResultColumnNode, ParseError>::Err(p.error(
@@ -17844,7 +17844,7 @@ fn _parse_result_column(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     return r;
 }
 
-fn _parse_table_or_subquery__inner_bt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TableOrSubqueryNode, ParseError> {
+fn _parse_table_or_subquery__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let select_stmt = _parse_select_stmt(p, &FOLLOW_MASK_13)?;
@@ -17906,7 +17906,7 @@ fn _parse_table_or_subquery__inner_scan_3(tokens: &List<Token>, pos: i32, follow
     return pos;
 }
 
-fn _parse_table_or_subquery__inner_bt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TableOrSubqueryNode, ParseError> {
+fn _parse_table_or_subquery__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let mut group_1_inner: Option<TableOrSubqueryGroup1> = null;
@@ -18020,7 +18020,7 @@ fn _parse_table_or_subquery__inner_scan_2(tokens: &List<Token>, pos: i32, follow
     return pos;
 }
 
-fn _parse_table_or_subquery__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TableOrSubqueryNode, ParseError> {
+fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -18208,7 +18208,7 @@ fn _parse_table_or_subquery__inner_scan_1(tokens: &List<Token>, pos: i32, follow
     return pos;
 }
 
-fn _parse_table_or_subquery__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TableOrSubqueryNode, ParseError> {
+fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -18405,18 +18405,18 @@ fn _parse_table_or_subquery__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 _sd_best_i = 0;
             }
             if _sd_best_i == 3 {
-                return _parse_table_or_subquery__inner_bt_3(p, follow);
+                return _parse_table_or_subquery__inner_alt_3(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_table_or_subquery__inner_bt_2(p, follow);
+                return _parse_table_or_subquery__inner_alt_2(p, follow);
             }
             if _sd_best_i == 1 {
-                return _parse_table_or_subquery__inner_bt_1(p, follow);
+                return _parse_table_or_subquery__inner_alt_1(p, follow);
             }
             if _sd_best_i == 0 {
-                return _parse_table_or_subquery__inner_bt_0(p, follow);
+                return _parse_table_or_subquery__inner_alt_0(p, follow);
             }
-            return _parse_table_or_subquery__inner_bt_0(p, follow);
+            return _parse_table_or_subquery__inner_alt_0(p, follow);
         } else if _gale_kind_set_66(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
@@ -18433,12 +18433,12 @@ fn _parse_table_or_subquery__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 _sd_best_i = 0;
             }
             if _sd_best_i == 1 {
-                return _parse_table_or_subquery__inner_bt_1(p, follow);
+                return _parse_table_or_subquery__inner_alt_1(p, follow);
             }
             if _sd_best_i == 0 {
-                return _parse_table_or_subquery__inner_bt_0(p, follow);
+                return _parse_table_or_subquery__inner_alt_0(p, follow);
             }
-            return _parse_table_or_subquery__inner_bt_0(p, follow);
+            return _parse_table_or_subquery__inner_alt_0(p, follow);
         }
     }
     return Result::<TableOrSubqueryNode, ParseError>::Err(p.error(
@@ -19075,7 +19075,7 @@ fn _parse_select_core(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     return r;
 }
 
-fn _parse_compound_operator__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<CompoundOperatorNode, ParseError> {
+fn _parse_compound_operator__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<CompoundOperatorNode, ParseError> {
     let start = p.peek().span.start;
     let k_union = p.expect(TK_K_UNION)?;
     let k_all = p.expect(TK_K_ALL)?;
@@ -19095,7 +19095,7 @@ fn _parse_compound_operator__inner_scan_1(tokens: &List<Token>, pos: i32, follow
     return pos;
 }
 
-fn _parse_compound_operator__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<CompoundOperatorNode, ParseError> {
+fn _parse_compound_operator__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<CompoundOperatorNode, ParseError> {
     let start = p.peek().span.start;
     let k_union = p.expect(TK_K_UNION)?;
     return Result::<CompoundOperatorNode, ParseError>::Ok(CompoundOperatorNode::Alt0(CompoundOperatorAlt0 {
@@ -19130,12 +19130,12 @@ fn _parse_compound_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             _sd_best_i = 0;
         }
         if _sd_best_i == 1 {
-            return _parse_compound_operator__inner_bt_1(p, follow);
+            return _parse_compound_operator__inner_alt_1(p, follow);
         }
         if _sd_best_i == 0 {
-            return _parse_compound_operator__inner_bt_0(p, follow);
+            return _parse_compound_operator__inner_alt_0(p, follow);
         }
-        return _parse_compound_operator__inner_bt_0(p, follow);
+        return _parse_compound_operator__inner_alt_0(p, follow);
     }
     if kind == TK_K_INTERSECT {
         let k_intersect = p.expect(TK_K_INTERSECT)?;
@@ -19284,7 +19284,7 @@ fn _parse_error_message(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     return r;
 }
 
-fn _parse_module_argument__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ModuleArgumentNode, ParseError> {
+fn _parse_module_argument__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ModuleArgumentNode, ParseError> {
     let start = p.peek().span.start;
     let column_def = _parse_column_def(p, follow)?;
     return Result::<ModuleArgumentNode, ParseError>::Ok(ModuleArgumentNode::Alt1(ModuleArgumentAlt1 {
@@ -19300,7 +19300,7 @@ fn _parse_module_argument__inner_scan_1(tokens: &List<Token>, pos: i32, follow: 
     return pos;
 }
 
-fn _parse_module_argument__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ModuleArgumentNode, ParseError> {
+fn _parse_module_argument__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ModuleArgumentNode, ParseError> {
     let start = p.peek().span.start;
     let expr = _parse_expr(p, follow)?;
     return Result::<ModuleArgumentNode, ParseError>::Ok(ModuleArgumentNode::Alt0(ModuleArgumentAlt0 {
@@ -19336,14 +19336,14 @@ fn _parse_module_argument__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_module_argument__inner_bt_0(p, follow);
+                return _parse_module_argument__inner_alt_0(p, follow);
             }
             if _sd_best_i == 1 {
-                return _parse_module_argument__inner_bt_1(p, follow);
+                return _parse_module_argument__inner_alt_1(p, follow);
             }
-            return _parse_module_argument__inner_bt_1(p, follow);
+            return _parse_module_argument__inner_alt_1(p, follow);
         } else if _gale_kind_set_65(p.peek_kind()) {
-            return _parse_module_argument__inner_bt_0(p, follow);
+            return _parse_module_argument__inner_alt_0(p, follow);
         }
     }
     return Result::<ModuleArgumentNode, ParseError>::Err(p.error(

@@ -1193,7 +1193,7 @@ fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     return r;
 }
 
-fn _parse_stat__inner_bt_1(p: &mut Parser) -> Result<StatNode, ParseError> {
+fn _parse_stat__inner_alt_1(p: &mut Parser) -> Result<StatNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let eq = p.expect(TK_LIT_EQ)?;
@@ -1221,7 +1221,7 @@ fn _parse_stat__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_stat__inner_bt_0(p: &mut Parser) -> Result<StatNode, ParseError> {
+fn _parse_stat__inner_alt_0(p: &mut Parser) -> Result<StatNode, ParseError> {
     let start = p.peek().span.start;
     let expr = _parse_expr(p)?;
     let newline = p.expect(TK_NEWLINE)?;
@@ -1261,14 +1261,14 @@ fn _parse_stat__inner(p: &mut Parser) -> Result<StatNode, ParseError> {
                 _sd_best_i = 0;
             }
             if _sd_best_i == 1 {
-                return _parse_stat__inner_bt_1(p);
+                return _parse_stat__inner_alt_1(p);
             }
             if _sd_best_i == 0 {
-                return _parse_stat__inner_bt_0(p);
+                return _parse_stat__inner_alt_0(p);
             }
-            return _parse_stat__inner_bt_0(p);
+            return _parse_stat__inner_alt_0(p);
         } else if _gale_kind_set_0(p.peek_kind()) {
-            return _parse_stat__inner_bt_0(p);
+            return _parse_stat__inner_alt_0(p);
         }
     }
     if kind == TK_NEWLINE {

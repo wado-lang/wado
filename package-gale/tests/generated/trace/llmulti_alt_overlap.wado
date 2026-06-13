@@ -1059,7 +1059,7 @@ fn _parse_r(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
     return r;
 }
 
-fn _parse_a__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+fn _parse_a__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let x = p.expect(TK_X)?;
     let a = _parse_a(p, &follow_prepend(&FOLLOW_MASK_0, follow))?;
@@ -1093,7 +1093,7 @@ fn _parse_a__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn _parse_a__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+fn _parse_a__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let x = p.expect(TK_X)?;
     return Result::<ANode, ParseError>::Ok(ANode::Alt1(AAlt1 {
@@ -1131,12 +1131,12 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
         }
         trace_pick(p, &"a", _sd_best_i);
         if _sd_best_i == 0 {
-            return _parse_a__inner_bt_0(p, follow);
+            return _parse_a__inner_alt_0(p, follow);
         }
         if _sd_best_i == 1 {
-            return _parse_a__inner_bt_1(p, follow);
+            return _parse_a__inner_alt_1(p, follow);
         }
-        return _parse_a__inner_bt_1(p, follow);
+        return _parse_a__inner_alt_1(p, follow);
     }
     return Result::<ANode, ParseError>::Err(p.error(
         "expected a",

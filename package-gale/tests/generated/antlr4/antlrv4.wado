@@ -6101,7 +6101,7 @@ fn _parse_delegate_grammars(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     return r;
 }
 
-fn _parse_delegate_grammar__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarNode, ParseError> {
+fn _parse_delegate_grammar__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = _parse_identifier(p, follow)?;
     return Result::<DelegateGrammarNode, ParseError>::Ok(DelegateGrammarNode::Alt1(DelegateGrammarAlt1 {
@@ -6117,7 +6117,7 @@ fn _parse_delegate_grammar__inner_scan_1(tokens: &List<Token>, pos: i32, follow:
     return pos;
 }
 
-fn _parse_delegate_grammar__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarNode, ParseError> {
+fn _parse_delegate_grammar__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = _parse_identifier(p, &FOLLOW_MASK_4)?;
     let assign = p.expect(TK_ASSIGN)?;
@@ -6161,12 +6161,12 @@ fn _parse_delegate_grammar__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 _sd_best_i = 0;
             }
             if _sd_best_i == 1 {
-                return _parse_delegate_grammar__inner_bt_1(p, follow);
+                return _parse_delegate_grammar__inner_alt_1(p, follow);
             }
             if _sd_best_i == 0 {
-                return _parse_delegate_grammar__inner_bt_0(p, follow);
+                return _parse_delegate_grammar__inner_alt_0(p, follow);
             }
-            return _parse_delegate_grammar__inner_bt_0(p, follow);
+            return _parse_delegate_grammar__inner_alt_0(p, follow);
         }
     }
     return Result::<DelegateGrammarNode, ParseError>::Err(p.error(
@@ -6510,7 +6510,7 @@ fn _parse_rules(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Res
     return r;
 }
 
-fn _parse_rule_spec__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleSpecNode, ParseError> {
+fn _parse_rule_spec__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleSpecNode, ParseError> {
     let start = p.peek().span.start;
     let lexer_rule_spec = _parse_lexer_rule_spec(p, follow)?;
     return Result::<RuleSpecNode, ParseError>::Ok(RuleSpecNode::Alt1(RuleSpecAlt1 {
@@ -6526,7 +6526,7 @@ fn _parse_rule_spec__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<
     return pos;
 }
 
-fn _parse_rule_spec__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleSpecNode, ParseError> {
+fn _parse_rule_spec__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleSpecNode, ParseError> {
     let start = p.peek().span.start;
     let parser_rule_spec = _parse_parser_rule_spec(p, follow)?;
     return Result::<RuleSpecNode, ParseError>::Ok(RuleSpecNode::Alt0(RuleSpecAlt0 {
@@ -6548,14 +6548,14 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if _gale_kind_set_4(kind) {
         if p.peek_kind() == TK_FRAGMENT {
             if p.peek_at(1) == TK_TOKEN_REF {
-                return _parse_rule_spec__inner_bt_1(p, follow);
+                return _parse_rule_spec__inner_alt_1(p, follow);
             } else if p.peek_at(1) == TK_RULE_REF {
-                return _parse_rule_spec__inner_bt_0(p, follow);
+                return _parse_rule_spec__inner_alt_0(p, follow);
             }
         } else if p.peek_kind() == TK_TOKEN_REF {
-            return _parse_rule_spec__inner_bt_1(p, follow);
+            return _parse_rule_spec__inner_alt_1(p, follow);
         } else if _gale_kind_set_18(p.peek_kind()) {
-            return _parse_rule_spec__inner_bt_0(p, follow);
+            return _parse_rule_spec__inner_alt_0(p, follow);
         }
     }
     return Result::<RuleSpecNode, ParseError>::Err(p.error(
@@ -7400,7 +7400,7 @@ fn _parse_lexer_commands(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     return r;
 }
 
-fn _parse_lexer_command__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandNode, ParseError> {
+fn _parse_lexer_command__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandNode, ParseError> {
     let start = p.peek().span.start;
     let lexer_command_name = _parse_lexer_command_name(p, follow)?;
     return Result::<LexerCommandNode, ParseError>::Ok(LexerCommandNode::Alt1(LexerCommandAlt1 {
@@ -7416,7 +7416,7 @@ fn _parse_lexer_command__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &L
     return pos;
 }
 
-fn _parse_lexer_command__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandNode, ParseError> {
+fn _parse_lexer_command__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandNode, ParseError> {
     let start = p.peek().span.start;
     let lexer_command_name = _parse_lexer_command_name(p, &FOLLOW_MASK_10)?;
     let lparen = p.expect(TK_LPAREN)?;
@@ -7464,12 +7464,12 @@ fn _parse_lexer_command__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 _sd_best_i = 0;
             }
             if _sd_best_i == 1 {
-                return _parse_lexer_command__inner_bt_1(p, follow);
+                return _parse_lexer_command__inner_alt_1(p, follow);
             }
             if _sd_best_i == 0 {
-                return _parse_lexer_command__inner_bt_0(p, follow);
+                return _parse_lexer_command__inner_alt_0(p, follow);
             }
-            return _parse_lexer_command__inner_bt_0(p, follow);
+            return _parse_lexer_command__inner_alt_0(p, follow);
         }
     }
     return Result::<LexerCommandNode, ParseError>::Err(p.error(
@@ -7666,7 +7666,7 @@ fn _parse_alternative(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     return r;
 }
 
-fn _parse_element__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementNode, ParseError> {
+fn _parse_element__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementNode, ParseError> {
     let start = p.peek().span.start;
     let labeled_element = _parse_labeled_element(p, follow)?;
     let mut opt_scan_pos: i32 = -1;
@@ -7698,7 +7698,7 @@ fn _parse_element__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn _parse_element__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementNode, ParseError> {
+fn _parse_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementNode, ParseError> {
     let start = p.peek().span.start;
     let atom = _parse_atom(p, follow)?;
     let mut opt_scan_pos: i32 = -1;
@@ -7750,14 +7750,14 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_element__inner_bt_0(p, follow);
+                return _parse_element__inner_alt_0(p, follow);
             }
             if _sd_best_i == 1 {
-                return _parse_element__inner_bt_1(p, follow);
+                return _parse_element__inner_alt_1(p, follow);
             }
-            return _parse_element__inner_bt_1(p, follow);
+            return _parse_element__inner_alt_1(p, follow);
         } else if _gale_kind_set_20(p.peek_kind()) {
-            return _parse_element__inner_bt_1(p, follow);
+            return _parse_element__inner_alt_1(p, follow);
         }
     }
     if kind == TK_LPAREN {
@@ -7859,7 +7859,7 @@ fn _parse_predicate_options(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     return r;
 }
 
-fn _parse_predicate_option__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionNode, ParseError> {
+fn _parse_predicate_option__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionNode, ParseError> {
     let start = p.peek().span.start;
     let element_option = _parse_element_option(p, follow)?;
     return Result::<PredicateOptionNode, ParseError>::Ok(PredicateOptionNode::Alt0(PredicateOptionAlt0 {
@@ -7875,7 +7875,7 @@ fn _parse_predicate_option__inner_scan_0(tokens: &List<Token>, pos: i32, follow:
     return pos;
 }
 
-fn _parse_predicate_option__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionNode, ParseError> {
+fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = _parse_identifier(p, &FOLLOW_MASK_4)?;
     let assign = p.expect(TK_ASSIGN)?;
@@ -7960,12 +7960,12 @@ fn _parse_predicate_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_predicate_option__inner_bt_0(p, follow);
+                return _parse_predicate_option__inner_alt_0(p, follow);
             }
             if _sd_best_i == 1 {
-                return _parse_predicate_option__inner_bt_1(p, follow);
+                return _parse_predicate_option__inner_alt_1(p, follow);
             }
-            return _parse_predicate_option__inner_bt_1(p, follow);
+            return _parse_predicate_option__inner_alt_1(p, follow);
         }
     }
     return Result::<PredicateOptionNode, ParseError>::Err(p.error(
@@ -8127,7 +8127,7 @@ fn _parse_ebnf_suffix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     return r;
 }
 
-fn _parse_lexer_atom__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerAtomNode, ParseError> {
+fn _parse_lexer_atom__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerAtomNode, ParseError> {
     let start = p.peek().span.start;
     let character_range = _parse_character_range(p, follow)?;
     return Result::<LexerAtomNode, ParseError>::Ok(LexerAtomNode::Alt0(LexerAtomAlt0 {
@@ -8143,7 +8143,7 @@ fn _parse_lexer_atom__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List
     return pos;
 }
 
-fn _parse_lexer_atom__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerAtomNode, ParseError> {
+fn _parse_lexer_atom__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerAtomNode, ParseError> {
     let start = p.peek().span.start;
     let terminal_def = _parse_terminal_def(p, follow)?;
     return Result::<LexerAtomNode, ParseError>::Ok(LexerAtomNode::Alt1(LexerAtomAlt1 {
@@ -8165,12 +8165,12 @@ fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     if _gale_kind_set_15(kind) {
         if p.peek_kind() == TK_STRING_LITERAL {
             if p.peek_at(1) == TK_RANGE {
-                return _parse_lexer_atom__inner_bt_0(p, follow);
+                return _parse_lexer_atom__inner_alt_0(p, follow);
             } else if p.peek_at(1) == TK_LT {
-                return _parse_lexer_atom__inner_bt_1(p, follow);
+                return _parse_lexer_atom__inner_alt_1(p, follow);
             }
         } else if p.peek_kind() == TK_TOKEN_REF {
-            return _parse_lexer_atom__inner_bt_1(p, follow);
+            return _parse_lexer_atom__inner_alt_1(p, follow);
         }
     }
     if kind == TK_NOT {
@@ -8284,7 +8284,7 @@ fn _parse_wildcard(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     return r;
 }
 
-fn _parse_not_set__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<NotSetNode, ParseError> {
+fn _parse_not_set__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<NotSetNode, ParseError> {
     let start = p.peek().span.start;
     let not = p.expect(TK_NOT)?;
     let set_element = _parse_set_element(p, follow)?;
@@ -8304,7 +8304,7 @@ fn _parse_not_set__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn _parse_not_set__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<NotSetNode, ParseError> {
+fn _parse_not_set__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<NotSetNode, ParseError> {
     let start = p.peek().span.start;
     let not = p.expect(TK_NOT)?;
     let block_set = _parse_block_set(p, follow)?;
@@ -8412,7 +8412,7 @@ fn _parse_block_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
     return r;
 }
 
-fn _parse_set_element__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SetElementNode, ParseError> {
+fn _parse_set_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SetElementNode, ParseError> {
     let start = p.peek().span.start;
     let string_literal = p.expect(TK_STRING_LITERAL)?;
     let element_options: Option<ElementOptionsNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
@@ -8442,7 +8442,7 @@ fn _parse_set_element__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &Lis
     return pos;
 }
 
-fn _parse_set_element__inner_bt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SetElementNode, ParseError> {
+fn _parse_set_element__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SetElementNode, ParseError> {
     let start = p.peek().span.start;
     let character_range = _parse_character_range(p, follow)?;
     return Result::<SetElementNode, ParseError>::Ok(SetElementNode::Alt2(SetElementAlt2 {
@@ -8494,12 +8494,12 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 _sd_best_i = 2;
             }
             if _sd_best_i == 1 {
-                return _parse_set_element__inner_bt_1(p, follow);
+                return _parse_set_element__inner_alt_1(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_set_element__inner_bt_2(p, follow);
+                return _parse_set_element__inner_alt_2(p, follow);
             }
-            return _parse_set_element__inner_bt_2(p, follow);
+            return _parse_set_element__inner_alt_2(p, follow);
         }
     }
     if kind == TK_LEXER_CHAR_SET {
@@ -8766,7 +8766,7 @@ fn _parse_element_options(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     return r;
 }
 
-fn _parse_element_option__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionNode, ParseError> {
+fn _parse_element_option__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionNode, ParseError> {
     let start = p.peek().span.start;
     let qualified_identifier = _parse_qualified_identifier(p, follow)?;
     return Result::<ElementOptionNode, ParseError>::Ok(ElementOptionNode::Alt0(ElementOptionAlt0 {
@@ -8782,7 +8782,7 @@ fn _parse_element_option__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &
     return pos;
 }
 
-fn _parse_element_option__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionNode, ParseError> {
+fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = _parse_identifier(p, &FOLLOW_MASK_4)?;
     let assign = p.expect(TK_ASSIGN)?;
@@ -8867,12 +8867,12 @@ fn _parse_element_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_element_option__inner_bt_0(p, follow);
+                return _parse_element_option__inner_alt_0(p, follow);
             }
             if _sd_best_i == 1 {
-                return _parse_element_option__inner_bt_1(p, follow);
+                return _parse_element_option__inner_alt_1(p, follow);
             }
-            return _parse_element_option__inner_bt_1(p, follow);
+            return _parse_element_option__inner_alt_1(p, follow);
         }
     }
     return Result::<ElementOptionNode, ParseError>::Err(p.error(

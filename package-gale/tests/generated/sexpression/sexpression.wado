@@ -1317,7 +1317,7 @@ fn _parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     return r;
 }
 
-fn _parse_item__inner_bt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
+fn _parse_item__inner_alt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
     let item = _parse_item(p)?;
@@ -1349,7 +1349,7 @@ fn _parse_item__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_item__inner_bt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
+fn _parse_item__inner_alt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let list_ = _parse_list_(p)?;
     return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt1(ItemAlt1 {
@@ -1392,12 +1392,12 @@ fn _parse_item__inner(p: &mut Parser) -> Result<ItemNode, ParseError> {
                 _sd_best_i = 1;
             }
             if _sd_best_i == 2 {
-                return _parse_item__inner_bt_2(p);
+                return _parse_item__inner_alt_2(p);
             }
             if _sd_best_i == 1 {
-                return _parse_item__inner_bt_1(p);
+                return _parse_item__inner_alt_1(p);
             }
-            return _parse_item__inner_bt_1(p);
+            return _parse_item__inner_alt_1(p);
         }
     }
     return Result::<ItemNode, ParseError>::Err(p.error(

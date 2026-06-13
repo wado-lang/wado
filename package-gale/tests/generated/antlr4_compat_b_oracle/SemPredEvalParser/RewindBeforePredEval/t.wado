@@ -887,7 +887,7 @@ fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     return r;
 }
 
-fn _parse_a__inner_bt_0(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a__inner_alt_0(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let int = p.expect(TK_INT)?;
@@ -907,7 +907,7 @@ fn _parse_a__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_a__inner_bt_1(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a__inner_alt_1(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let int = p.expect(TK_INT)?;
@@ -946,12 +946,12 @@ fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return _parse_a__inner_bt_0(p);
+            return _parse_a__inner_alt_0(p);
         }
         if _sd_best_i == 1 {
-            return _parse_a__inner_bt_1(p);
+            return _parse_a__inner_alt_1(p);
         }
-        return _parse_a__inner_bt_1(p);
+        return _parse_a__inner_alt_1(p);
     }
     return Result::<ANode, ParseError>::Err(p.error(
         "expected a",
