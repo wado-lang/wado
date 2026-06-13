@@ -151,6 +151,12 @@ struct TestSpec {
     #[serde(default)]
     trapped: bool,
 
+    /// Expected process exit code — CLI world. Set when the program is expected
+    /// to terminate via `wasi:cli/exit` (`exit` / `exit-with-code`). A clean
+    /// exit is reported here, not as a trap, so `trapped` stays `false`.
+    #[serde(default)]
+    exit_code: Option<i32>,
+
     /// Expected compile error message (substring match).
     /// If set, the test expects compilation to fail with this message.
     #[serde(default)]
@@ -268,6 +274,18 @@ fn verify_result(result: &common::WasmRunResult, spec: &TestSpec, fixture_name: 
         "[{fixture_name}] trapped mismatch: expected {}, got {}\n  stderr: {:?}\n  stdout: {:?}",
         spec.trapped, result.trapped, result.stderr, result.stdout
     );
+
+    // Check process exit code if specified
+    if let Some(expected_code) = spec.exit_code {
+        assert_eq!(
+            result.exit_code,
+            Some(expected_code),
+            "[{fixture_name}] exit code mismatch: expected {expected_code}, got {:?}\n  stderr: {:?}\n  stdout: {:?}",
+            result.exit_code,
+            result.stderr,
+            result.stdout
+        );
+    }
 
     // Check stdout exact match if specified
     if let Some(expected_stdout) = &spec.stdout {
@@ -650,6 +668,7 @@ fn run_test_world(
             stdout: all_stdout,
             stderr: all_stderr,
             trapped: false,
+            exit_code: None,
         })
     })
 }

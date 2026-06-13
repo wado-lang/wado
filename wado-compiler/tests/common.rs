@@ -614,7 +614,13 @@ pub type CliWasiState = WasiState;
 /// Set up a linker for all test worlds (WASI + HTTP + TLS)
 pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
-    wasmtime_wasi::p3::add_to_linker(&mut linker)?;
+    // `wasi:cli/exit#exit-with-code` is `@unstable(feature =
+    // cli-exit-with-code)` upstream, so the default `LinkOptions` omit it and a
+    // guest calling `core:cli`'s `exit(code)` fails to instantiate. Enable it so
+    // the e2e exit fixtures can link, mirroring `wado-cli`'s `create_linker`.
+    let mut options = wasmtime_wasi::p3::bindings::LinkOptions::default();
+    options.cli_exit_with_code(true);
+    wasmtime_wasi::p3::add_to_linker_with_options(&mut linker, &options)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     timezone_host::add_to_linker(&mut linker)?;
@@ -873,6 +879,12 @@ pub struct WasmRunResult {
     pub stderr: String,
     /// Whether the component trapped (e.g., from unreachable)
     pub trapped: bool,
+    /// Process exit code, when the guest terminated via `wasi:cli/exit`
+    /// (`exit` / `exit-with-code`). `None` when the guest returned normally
+    /// or trapped. A clean exit is reported here rather than as a trap: per
+    /// the WASI spec, exit is "analogous to a trap, but without the
+    /// connotation that something bad has happened".
+    pub exit_code: Option<i32>,
 }
 
 /// Run a compiled Wasm component and capture its output
@@ -902,6 +914,22 @@ pub fn run_wasm_with_options(
         indexmap::IndexMap::new(),
         indexmap::IndexMap::new(),
     )
+}
+
+/// Classify an error returned by a guest `run` invocation into either a clean
+/// `wasi:cli/exit` (carrying the requested status code) or a genuine trap.
+///
+/// `wasi:cli/exit#exit` and `#exit-with-code` are implemented by wasmtime as a
+/// host call that returns `Err(I32Exit(code))`, which propagates up as a
+/// wasmtime error rather than terminating the host process. We unwrap it here
+/// so tests can assert on the exit code instead of pattern-matching the trap
+/// message.
+fn classify_run_error(e: wasmtime::Error) -> (bool, Option<i32>, String) {
+    if let Some(wasmtime_wasi::I32Exit(code)) = e.downcast_ref::<wasmtime_wasi::I32Exit>() {
+        (false, Some(*code), String::new())
+    } else {
+        (true, None, format!("{e:#}"))
+    }
 }
 
 /// Run a compiled Wasm component with full options including outgoing HTTP and TLS mocks.
@@ -959,13 +987,12 @@ pub fn run_wasm_with_full_options(
             &mut store, &component, &linker,
         )
         .await?;
-        let (trapped, trap_msg) = match store
+        let (trapped, exit_code, trap_msg) = match store
             .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
             .await
         {
-            Ok(Ok(result)) => (result.is_err(), String::new()),
-            Ok(Err(e)) => (true, format!("{e:#}")),
-            Err(e) => (true, format!("{e:#}")),
+            Ok(Ok(result)) => (result.is_err(), None, String::new()),
+            Ok(Err(e)) | Err(e) => classify_run_error(e),
         };
 
         let stdout = String::from_utf8(stdout_clone.contents().to_vec())?;
@@ -981,6 +1008,7 @@ pub fn run_wasm_with_full_options(
             stdout,
             stderr,
             trapped,
+            exit_code,
         })
     })
 }
