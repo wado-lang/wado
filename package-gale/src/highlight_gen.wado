@@ -101,7 +101,13 @@ fn gen_highlight_run(w: &mut CodeWriter) {
     w.line(&"use { args, print, eprintln, Stdout, Stderr, Environment } from \"core:cli\";");
     w.line(&"use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from \"wasi:filesystem\";");
     w.blank();
-    w.begin(&"export fn run() with Stdout, Stderr, Environment, Preopens");
+    let mut run_fn = FnSpec::new("run");
+    run_fn.set_export();
+    run_fn.add_effect(&"Stdout");
+    run_fn.add_effect(&"Stderr");
+    run_fn.add_effect(&"Environment");
+    run_fn.add_effect(&"Preopens");
+    run_fn.emit_begin(w);
     w.line(&"let arguments = args();");
     w.begin(&"if arguments.len() < 1");
     w.line(&"eprintln(\"Usage: <highlighter> <input-file>\");");

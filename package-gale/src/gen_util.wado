@@ -254,7 +254,12 @@ pub fn group_case_name(alt: &Alternative) -> String {
     if let RuleRef(r) = &alt.elements[0] {
         return to_pascal_case(&r.name);
     }
-    return "Unknown";
+    // Only ever called on SimpleCst-group alts, whose first element is a
+    // RuleRef by construction. Emitting a placeholder case name here would
+    // generate wrong code, so fail loudly instead.
+    panic(
+        "group_case_name: SimpleCst-group alt's first element is not a RuleRef — classifier/caller invariant violated",
+    );
 }
 
 
@@ -723,9 +728,15 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
                 "element_field_info: general Group reached the surface helper — route through `gen_op_group`/`gen_general_group_store*` instead",
             );
         }
-        // Non-storable group falls through with the placeholder return.
     }
-    return ["_", "Token"];
+    // Every storable shape returns above. Reaching here means a
+    // non-storable (e.g. transparent) group or an unhandled element shape
+    // was routed into the field-info helper; a placeholder
+    // `["_", "Token"]` would generate a wrongly-named/typed field, so fail
+    // loudly instead.
+    panic(
+        "element_field_info: element has no storable field shape — caller routed a non-storable element into the field-info helper",
+    );
 }
 
 /// Replay name counting for an element without emitting code.

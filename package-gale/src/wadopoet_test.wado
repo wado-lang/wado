@@ -267,6 +267,40 @@ test "FnSpec signature string" {
     assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String", `got: {sig}`;
 }
 
+test "FnSpec export with effects" {
+    let mut f = FnSpec::new("run");
+    f.set_export();
+    f.add_effect(&"Stdout");
+    f.add_effect(&"Stderr");
+    f.add_effect(&"Environment");
+
+    let sig = f.signature();
+    assert sig == "export fn run() with Stdout, Stderr, Environment", `got: {sig}`;
+}
+
+test "FnSpec generic type parameter" {
+    let mut f = FnSpec::new("walk_stmt");
+    f.set_pub();
+    f.add_generic(&"V: Visitor");
+    f.add_param(&"v", &"&mut V");
+    f.add_param(&"node", &"&StmtNode");
+
+    let sig = f.signature();
+    assert sig == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)", `got: {sig}`;
+}
+
+test "FnSpec multiple generics" {
+    let mut f = FnSpec::new("zip");
+    f.add_generic(&"A");
+    f.add_generic(&"B");
+    f.add_param(&"a", &"A");
+    f.add_param(&"b", &"B");
+    f.set_return_type(&"[A, B]");
+
+    let sig = f.signature();
+    assert sig == "fn zip<A, B>(a: A, b: B) -> [A, B]", `got: {sig}`;
+}
+
 
 test "GlobalSpec basic" {
     let g = GlobalSpec::new("TK_EOF", "i32", "0");

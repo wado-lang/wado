@@ -3000,6 +3000,33 @@ fn lower_general_group(
 /// shadow or dedup against the surrounding alt's bindings (the
 /// outer alt's list-typed field comes from `FieldDecl` in Phase 2.9,
 /// independent of the inner binding).
+/// Outer struct field name for the alt that contains a Repeat. For
+/// `Star` / `Plus` it's `<inner_base>_list` (the struct holds a
+/// `List<...>`); for `Optional` it's just the inner base name (the
+/// struct holds an `Option<...>`). Deduped against the surrounding
+/// alt's name table — the inner body op's field lives in a fresh scope
+/// and does not collide.
+///
+/// Special case: `(name+=expr)*` — when the Repeat's inner is a
+/// list-label (`+=`), the label name IS the array, with no `_list`
+/// suffix. Mirrors `parser_gen::gen_repeat_body`'s `is_list_label(inner)`
+/// branch.
+///
+/// `group_counter` is the speculative value the inner lowering will see:
+/// a General-Group inner uses this id for its `group_<idx>` field name,
+/// and the increment happens during the inner-Op lowering so the outer
+/// name and inner shape stay in lockstep.
+fn compute_repeat_outer_field(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, group_counter: i32) -> String {
+    if repeat_inner_is_list_label(&rep.element) {
+        if let Label(lab) = rep.element {
+            return dedup_name(&lab.field_name, name_counts);
+        }
+        panic("repeat_inner_is_list_label returned true for non-Label");
+    }
+    let outer_base = repeat_outer_base_name(&rep.element, rep.kind, group_counter);
+    return dedup_name(&outer_base, name_counts);
+}
+
 fn lower_repeat_op(
     rep: &RepeatElement,
     name_counts: &mut List<[String, i32]>,
@@ -3009,33 +3036,7 @@ fn lower_repeat_op(
     outer_follow: &List<String>,
     gate_caller_follow: bool,
 ) -> Op {
-    // Outer struct field name for the alt that contains this
-    // Repeat. For `Star` / `Plus` it's `<inner_base>_list` (the
-    // struct holds an `List<...>`); for `Optional` it's just the
-    // inner base name (the struct holds an `Option<...>`). Dedup
-    // against the surrounding alt's name table — the inner body
-    // op's field lives in a fresh scope and does not collide.
-    //
-    // Special case: `(name+=expr)*` — when the Repeat's inner is a
-    // list-label (`+=`), the label name IS the array, with no
-    // `_list` suffix. Mirrors `parser_gen::gen_repeat_body`'s
-    // `is_list_label(inner)` branch at line 3113.
-    let outer_field = if repeat_inner_is_list_label(&rep.element) {
-        if let Label(lab) = rep.element {
-            dedup_name(&lab.field_name, name_counts);
-        } else {
-            panic("repeat_inner_is_list_label returned true for non-Label");
-        }
-    } else {
-        // Speculative `group_counter` value the inner lowering
-        // will see: pass the current value verbatim. A General-
-        // Group inner uses this id for its `group_<idx>` field
-        // name; the increment happens during the inner-Op
-        // lowering below so the outer name and inner shape stay
-        // in lockstep.
-        let outer_base = repeat_outer_base_name(&rep.element, rep.kind, *group_counter);
-        dedup_name(&outer_base, name_counts);
-    };
+    let outer_field = compute_repeat_outer_field(rep, name_counts, *group_counter);
 
     // Pre-compute the inner's first set; used both by the strategy
     // decision (mask subtraction / suppression) and by the

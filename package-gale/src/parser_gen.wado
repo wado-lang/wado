@@ -1373,6 +1373,7 @@ fn gen_scan_op_element(
         gen_scan_op_optional_lookahead(w, ole, ctx);
         return;
     }
+    panic("gen_scan_op_element: unreachable ScanElement shape — every variant is handled");
 }
 
 /// Op-driven scan emitter where failure sets `pos = -1` rather than
@@ -1430,6 +1431,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         gen_scan_op_element(w, se, ctx, &"pos = -1;");
         return;
     }
+    panic("gen_scan_op_element_assign: unreachable ScanElement shape — every variant is handled");
 }
 
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenContext, fail_stmt: &String) {
@@ -3644,6 +3646,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         w.line(&`let {lab_name} = {predicted_inner};`);
         return;
     }
+    panic("gen_element: unhandled Element shape — every variant is handled");
 }
 
 /// Op-driven top-level Repeat dispatcher. Walkers reach this with

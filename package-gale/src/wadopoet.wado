@@ -311,6 +311,13 @@ pub struct FnSpec {
     params: List<ParamSpec>,
     return_type: Option<String>,
     is_pub: bool,
+    is_export: bool,
+    /// Generic type parameters, each rendered verbatim between the name
+    /// and the parameter list (e.g. `"V: Visitor"` → `fn walk<V: Visitor>(`).
+    generics: List<String>,
+    /// Effect names for the `with …` clause, rendered after the return
+    /// type (e.g. `["Stdout", "Stderr"]` → ` with Stdout, Stderr`).
+    effects: List<String>,
     receiver: Option<String>,
 }
 
@@ -321,12 +328,32 @@ impl FnSpec {
             params: [],
             return_type: null,
             is_pub: false,
+            is_export: false,
+            generics: [],
+            effects: [],
             receiver: null,
         };
     }
 
     pub fn set_pub(&mut self) -> &mut FnSpec with stores[self] {
         self.is_pub = true;
+        return self;
+    }
+
+    /// Mark the function `export` (component-model export). Mutually
+    /// exclusive with `pub`; `export` wins if both are set.
+    pub fn set_export(&mut self) -> &mut FnSpec with stores[self] {
+        self.is_export = true;
+        return self;
+    }
+
+    pub fn add_generic(&mut self, generic: &String) -> &mut FnSpec with stores[self] {
+        self.generics.push(*generic);
+        return self;
+    }
+
+    pub fn add_effect(&mut self, effect_name: &String) -> &mut FnSpec with stores[self] {
+        self.effects.push(*effect_name);
         return self;
     }
 
@@ -359,10 +386,23 @@ impl FnSpec {
     /// Build the full signature string.
     pub fn signature(&self) -> String {
         let mut sig = String::with_capacity(64);
-        if self.is_pub {
+        if self.is_export {
+            sig.push_str(&"export ");
+        } else if self.is_pub {
             sig.push_str(&"pub ");
         }
-        sig.push_str(&`fn {self.name}(`);
+        sig.push_str(&`fn {self.name}`);
+        if self.generics.len() > 0 {
+            sig.push_str(&"<");
+            for let mut i = 0; i < self.generics.len(); i += 1 {
+                if i > 0 {
+                    sig.push_str(&", ");
+                }
+                sig.push_str(&self.generics[i]);
+            }
+            sig.push_str(&">");
+        }
+        sig.push_str(&"(");
         let mut first = true;
         if let Some(recv) = &self.receiver {
             sig.push_str(recv);
@@ -384,6 +424,15 @@ impl FnSpec {
         sig.push_str(&")");
         if let Some(ret) = &self.return_type {
             sig.push_str(&` -> {*ret}`);
+        }
+        if self.effects.len() > 0 {
+            sig.push_str(&" with ");
+            for let mut i = 0; i < self.effects.len(); i += 1 {
+                if i > 0 {
+                    sig.push_str(&", ");
+                }
+                sig.push_str(&self.effects[i]);
+            }
         }
         return sig;
     }
