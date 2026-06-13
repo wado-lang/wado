@@ -91,6 +91,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 // request, so VS Code can open them as read-only virtual documents. The
 // `wado` language is forced on documents we served because opaque URIs
 // (e.g. `core:cli`) carry no extension for VS Code's language detector.
+//
+// The editor tab/breadcrumb label for these URIs is set by the
+// `resourceLabelFormatters` contribution in `package.json`: without it VS Code
+// shows only the basename (`json`), whereas the formatter renders the full
+// `core:json` / `wasi:io` so the scheme is visible.
 function registerStdlibContentProvider(context: vscode.ExtensionContext): void {
     // Track URIs our provider has actually served, so we only override the
     // language on documents we own — other extensions could conceivably
