@@ -199,6 +199,10 @@ pub struct CompilerOptions {
     /// that have run the Kiln pipeline (wado-cli, wado-lsp) populate this;
     /// everyone else leaves it empty.
     pub invocations: kiln::InvocationIndex,
+    /// Bare dependency name → entry-module path (the dependency's
+    /// `[package].lib`), relative to the entry directory. Populated by the
+    /// CLI from `[dependencies]`; empty for single-file compilation.
+    pub dependencies: std::collections::HashMap<String, String>,
     /// `--test-name` substring filters for the test world. When non-empty,
     /// only `test "name"` blocks whose name contains one of these strings are
     /// exported; the rest become dead code and are removed by early DCE, so
@@ -227,6 +231,7 @@ impl Default for CompilerOptions {
             log_level: None,
             allocator: None,
             invocations: kiln::InvocationIndex::default(),
+            dependencies: std::collections::HashMap::new(),
             test_name_filters: Vec::new(),
             codegen_flags: Vec::new(),
             unused_diagnostics: true,
@@ -356,7 +361,8 @@ pub async fn compile_with_options<H: CompilerHost>(
     // the entry AST for tooling that takes it by value.
     let load_result = {
         let module_loader = loader::ModuleLoader::new(host, log_level)
-            .with_invocations(options.invocations.clone());
+            .with_invocations(options.invocations.clone())
+            .with_dependencies(options.dependencies.clone());
         module_loader
             .load_all(source, filename.as_deref())
             .await

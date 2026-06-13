@@ -147,13 +147,30 @@ static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
 #[derive(Debug)]
 pub struct ModuleSourceInterner {
     strings: StringInterner,
+    /// Bare dependency name → entry module path, relative to the consuming
+    /// project's entry directory. Populated from `[dependencies]` so that a
+    /// `use { … } from "<name>"` clause resolves to the dependency's
+    /// `[package].lib`. Empty for single-file compilation.
+    dependencies: std::collections::HashMap<String, String>,
 }
 
 impl ModuleSourceInterner {
     pub fn new() -> Self {
         Self {
             strings: StringInterner::with_well_known_arcs(well_known_arcs()),
+            dependencies: std::collections::HashMap::new(),
         }
+    }
+
+    pub fn set_dependencies(&mut self, dependencies: std::collections::HashMap<String, String>) {
+        self.dependencies = dependencies;
+    }
+
+    /// Resolve a bare dependency name to its entry module `ModuleSource`, if
+    /// declared in `[dependencies]`.
+    pub fn dependency(&mut self, name: &str) -> Option<ModuleSource> {
+        let path = self.dependencies.get(name)?.clone();
+        Some(self.local(&path))
     }
 
     pub fn intern(&mut self, s: &str) -> InternedStr {

@@ -985,6 +985,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self
     }
 
+    /// Seed `[dependencies]` resolution: bare-name → entry-module path. Must
+    /// be called before [`Self::load_all`].
+    #[must_use]
+    pub fn with_dependencies(
+        mut self,
+        dependencies: std::collections::HashMap<String, String>,
+    ) -> Self {
+        self.interner.set_dependencies(dependencies);
+        self
+    }
+
     /// Load all modules starting from the entry source
     ///
     /// This loads the entry module and all its transitive dependencies.
@@ -1447,6 +1458,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             // Entry point or stdlib: treat as relative to project root
             let canonical = normalize_module_path(import_source);
             return Ok(self.interner.local(&canonical));
+        }
+
+        // Bare dependency name: resolve against `[dependencies]`.
+        if let Some(dep) = self.interner.dependency(import_source) {
+            return Ok(dep);
         }
 
         // Check for unknown namespace pattern (xxx:yyy)

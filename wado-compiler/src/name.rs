@@ -899,6 +899,15 @@ pub fn resolve_import_with_entry(
         return interner.remote(import_source);
     }
 
+    // Bare dependency name (`use { … } from "router"`): resolve against
+    // `[dependencies]` before treating it as a relative sibling file.
+    if !import_source.starts_with("./")
+        && !import_source.starts_with("../")
+        && let Some(dep) = interner.dependency(import_source)
+    {
+        return dep;
+    }
+
     // Handle relative imports from local modules
     // For entry points, we don't resolve against the filename - just use the import directly
     if let ModuleSource::Local { path: from_path } = from_module

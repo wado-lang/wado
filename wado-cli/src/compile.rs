@@ -1,6 +1,9 @@
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
+
+use wado_manifest::DependencySource;
 
 use lexopt::Arg::Value;
 use lexopt::Parser;
@@ -364,6 +367,7 @@ pub async fn try_compile(
         log_level: Some(flags.log_level),
         allocator: flags.allocator.clone(),
         invocations: pipeline_outcome.invocations,
+        dependencies: build_dependency_index(path),
         test_name_filters: flags.test_name_filters.clone(),
         codegen_flags: flags.codegen_flags.clone(),
         ..Default::default()
@@ -418,6 +422,87 @@ async fn maybe_run_pipeline(
     let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
     crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline, no_cache)
         .await
+}
+
+/// Build the bare-name → entry-path dependency index from the nearest
+/// manifest's `[dependencies]`. Each dependency's entry module (its
+/// `[package].lib`, or the file itself for a single-`.wado` path dependency)
+/// is recorded relative to `entry_file`'s directory — the compiler host's
+/// base path — so `use { … } from "<name>"` resolves to it.
+///
+/// Only `path` dependencies are supported for now; registry/git resolution
+/// is a later step.
+fn build_dependency_index(entry_file: &Path) -> HashMap<String, String> {
+    let mut index = HashMap::new();
+    let Some((manifest, root)) = load_nearest_manifest(entry_file) else {
+        return index;
+    };
+    let base_abs = absolutize(entry_file.parent().unwrap_or_else(|| Path::new(".")));
+    for (name, dep) in &manifest.dependencies {
+        let DependencySource::Path { path, .. } = &dep.source else {
+            continue;
+        };
+        let Some(entry) = dependency_entry_path(&root.join(path)) else {
+            continue;
+        };
+        index.insert(name.clone(), relative_path(&base_abs, &absolutize(&entry)));
+    }
+    index
+}
+
+/// The entry module file of a path dependency: the file itself when the path
+/// points at a `.wado` file, otherwise the directory's `[package].lib`.
+fn dependency_entry_path(dep_path: &Path) -> Option<PathBuf> {
+    if dep_path.extension().is_some_and(|e| e == "wado") {
+        return Some(dep_path.to_path_buf());
+    }
+    let text = fs::read_to_string(dep_path.join("wado.toml")).ok()?;
+    let manifest: wado_manifest::Manifest = text.parse().ok()?;
+    Some(dep_path.join(manifest.package?.lib?))
+}
+
+fn absolutize(p: &Path) -> PathBuf {
+    if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(p))
+            .unwrap_or_else(|_| p.to_path_buf())
+    }
+}
+
+/// Lexical relative path from directory `from_dir` to file `to_file`. Both
+/// must be absolute; symlinks are not resolved.
+fn relative_path(from_dir: &Path, to_file: &Path) -> String {
+    let from = normalized_components(from_dir);
+    let to = normalized_components(to_file);
+    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let mut parts: Vec<String> = vec!["..".to_string(); from.len() - common];
+    parts.extend(to[common..].iter().cloned());
+    if parts.is_empty() {
+        ".".to_string()
+    } else {
+        parts.join("/")
+    }
+}
+
+fn normalized_components(p: &Path) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for comp in p.components() {
+        match comp {
+            Component::CurDir | Component::Prefix(_) => {}
+            Component::RootDir => out.push(String::new()),
+            Component::ParentDir => {
+                if matches!(out.last().map(String::as_str), None | Some("..")) {
+                    out.push("..".to_string());
+                } else {
+                    out.pop();
+                }
+            }
+            Component::Normal(s) => out.push(s.to_string_lossy().into_owned()),
+        }
+    }
+    out
 }
 
 /// Empty in-memory `wado.toml` manifest used as a fallback when the

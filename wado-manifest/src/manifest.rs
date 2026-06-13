@@ -73,6 +73,10 @@ pub struct Package {
     pub namespace: Option<String>,
     pub name: String,
     pub version: String,
+    /// Entry-point module exposed when the package is consumed as a
+    /// dependency (`use { … } from "<dep-name>"`). Only `export` items are
+    /// visible to consumers.
+    pub lib: Option<String>,
 }
 
 /// The `[workspace]` section of `wado.toml`.
@@ -244,6 +248,7 @@ struct RawPackage {
     namespace: Option<String>,
     name: Option<String>,
     version: Option<String>,
+    lib: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -317,6 +322,7 @@ fn convert_package(raw: RawPackage) -> Result<Package, ManifestError> {
         namespace: raw.namespace,
         name,
         version,
+        lib: raw.lib,
     })
 }
 
