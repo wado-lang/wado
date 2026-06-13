@@ -1,10 +1,10 @@
-// Raw Exit::exit(Err(())); the host maps Err(()) to 1.
+// Raw Exit::exit(Err(())); the host maps Err(()) to 1 (ctor type args inferred).
 use { println, Stdout } from "core:cli";
 use { Exit } from "wasi:cli";
 
 export fn run() with Stdout, Exit {
     println("before");
-    Exit::exit(Result::<(), ()>::Err(()));
+    Exit::exit(Result::Err(()));
 }
 
 __DATA__

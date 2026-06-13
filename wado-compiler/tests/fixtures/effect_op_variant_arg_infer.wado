@@ -1,0 +1,26 @@
+// An effect operation's argument gets the operation's declared parameter type,
+// so a variant constructor passed without a turbofish infers its type args.
+interface Sink {
+    fn put(v: Result<i32, ()>) -> i32;
+}
+
+struct H {}
+impl Sink for H {
+    fn put(&self, v: Result<i32, ()>) -> i32 {
+        match v {
+            Ok(n) => { resume n }
+            Err(_) => { resume 0 }
+        }
+    }
+}
+
+test "no-turbofish variant argument to an effect operation" {
+    let h = H {};
+    with Sink => &h do {
+        assert Sink::put(Result::Ok(7)) == 7;
+        assert Sink::put(Result::Err(())) == 0;
+    }
+}
+
+__DATA__
+{"test": {}}

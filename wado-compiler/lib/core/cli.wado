@@ -98,18 +98,18 @@ pub fn cwd() -> Option<String> with Environment {
     return Environment::get_initial_cwd();
 }
 
-// Constructors are qualified (`Result::<(), ()>::Ok(())`): a bare `Ok(())` in
-// expression position resolves as a call, not a variant constructor, mis-typing
-// the argument as `()` and corrupting the shared CM binding.
+// Qualified `Result::Ok(())` / `Result::Err(())` (type args inferred from the
+// `Exit::exit` parameter): a bare `Ok(())` would resolve as a call, not a variant
+// constructor, mis-typing the argument and corrupting the shared CM binding.
 
 /// Exits with success (code 0).
 pub fn exit_success() -> ! with Exit {
-    Exit::exit(Result::<(), ()>::Ok(()));
+    Exit::exit(Result::Ok(()));
 }
 
 /// Exits with an error.
 pub fn exit_error() -> ! with Exit {
-    Exit::exit(Result::<(), ()>::Err(()));
+    Exit::exit(Result::Err(()));
 }
 
 /// Exits with a specific status code.

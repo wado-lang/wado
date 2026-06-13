@@ -1,10 +1,11 @@
-// Raw Exit::exit(Ok(())): Result<(), ()> lowers to a bare CM discriminant.
+// Raw Exit::exit(Ok(())): Result<(), ()> lowers to a bare CM discriminant; the
+// ctor type args are inferred from the parameter (no turbofish).
 use { println, Stdout } from "core:cli";
 use { Exit } from "wasi:cli";
 
 export fn run() with Stdout, Exit {
     println("before");
-    Exit::exit(Result::<(), ()>::Ok(()));
+    Exit::exit(Result::Ok(()));
 }
 
 __DATA__

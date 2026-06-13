@@ -1424,6 +1424,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Parameter types of an effect operation, read from its Wado interface
+    /// declaration (mirrors `get_user_effect_return_type`). Covers both WASI and
+    /// user-defined effects — every `interface` is indexed in `effect_decl_index`
+    /// — and yields surface types, so argument inference works without a turbofish.
+    pub(super) fn get_effect_op_param_types(
+        &mut self,
+        effect: &str,
+        operation: &str,
+    ) -> Option<Vec<TypeId>> {
+        let canonical_key = self.canonical_decl_key(effect);
+        let (module_source, item_idx) = self
+            .tysys
+            .trait_env
+            .effect_decl_index
+            .get(&canonical_key)?
+            .clone();
+        let module = self.loaded_modules.get(&module_source)?;
+        let crate::ast::Item::Interface(decl) = module.items.get(item_idx)? else {
+            return None;
+        };
+        let method = decl.methods.iter().find(|m| m.name == operation)?;
+        let params: Vec<Type> = method.params.iter().map(|p| p.ty.clone()).collect();
+        let saved = std::mem::replace(&mut self.current_module_source, module_source);
+        let resolved = params.iter().map(|ty| self.resolve_type(ty)).collect();
+        self.current_module_source = saved;
+        Some(resolved)
+    }
+
     /// Resolve a WASI AST type to a `TypeId`
     /// Resolve a WASI AST type to a `TypeId`, with optional WASI package scope.
     pub(super) fn resolve_wasi_type_scoped(
@@ -1736,7 +1764,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            return Vec::new(); // Effect operations handled separately
+            // Effect operations (WASI and user-defined): surface the operation's
+            // declared parameter types so argument inference sees the expected
+            // type (e.g. a variant constructor written without a turbofish).
+            // Read them from the Wado interface declaration, which carries the
+            // surface types (`Mark`, `Result<(), ()>`) — not the CM registry,
+            // whose flattened types (`u64`) would reject a newtype/alias argument.
+            if let Some(params) = self.get_effect_op_param_types(prefix, suffix) {
+                return params;
+            }
+            return Vec::new();
         }
 
         // Check if it's a local function (defined in this module)
