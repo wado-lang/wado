@@ -23,6 +23,11 @@ crate-type = ["cdylib"]
 # the meta-crate, so they all remain available — we do NOT slice here; Wado
 # tree-shakes the final artifact, so the bundle stays whole.
 icu = { version = "2.2", default-features = false, features = ["compiled_data"] }
+# Same icu_segmenter instance the `icu` meta-crate re-exports, but with the
+# `auto` feature so WordSegmenter/LineSegmenter::new_auto are available (this is
+# what pulls in the LSTM + dictionary data for CJK / SE-Asian scripts). Cargo
+# unifies it with icu's copy; features are additive.
+icu_segmenter = { version = "2.2", default-features = false, features = ["compiled_data", "auto"] }
 # default-features = false drops the `std` feature (keeps generated bindings
 # no_std on core + alloc); re-enable the proc-macro and realloc export we need.
 wit-bindgen = { version = "0.58", default-features = false, features = ["macros", "realloc"] }

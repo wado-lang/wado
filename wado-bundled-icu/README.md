@@ -10,11 +10,38 @@ wit-bindgen) never perturbs the main workspace's pinned wasm-tools generation.
 
 ## What it exposes
 
-See [`wit/world.wit`](wit/world.wit). The surface is a deliberately small
-cross-section chosen to exercise every marshalling shape (string in/out,
-`resource` handles, `borrow<resource>`, `result<_, string>`): `locale` parsing
-and `casemap` (locale-aware upper/lower casing). It grows once the surface is
-agreed.
+See [`wit/world.wit`](wit/world.wit). The current surface is the
+**string-oriented** slice of ICU4X plus character properties:
+
+| interface | operations |
+|---|---|
+| `locale` | parse BCP-47, canonical string (opaque `resource`) |
+| `casemap` | upper / lower / title casing, case folding |
+| `collator` | locale-aware string comparison (opaque `resource`) |
+| `normalizer` | NFC / NFD / NFKC / NFKD, is-nfc |
+| `segmenter` | grapheme / word / sentence / line boundaries |
+| `properties` | General_Category, Script, Alphabetic, White_Space, Uppercase, Lowercase, Emoji |
+
+It exercises every marshalling shape Wado needs: `string` in/out, `list<u32>`,
+`char`, `enum`, `result<_, string>`, opaque `resource` handles, and
+`borrow<resource>` params.
+
+## Size
+
+Import-free component, **~3.7 MB** with all six interfaces. Because Rust LTO
+slices ICU by reachability, the WIT surface is the size knob. Per-interface
+attribution (measured by building with interfaces removed):
+
+| interface | added size | notes |
+|---|---:|---|
+| segmenter (`auto`) | ~2.35 MB | LSTM + CJK/SE-Asian **dictionary** data — by far the largest |
+| collator | ~1.12 MB | root UCA collation table |
+| normalizer | ~125 KB | NFC/NFD/NFKC/NFKD tables |
+| locale + casemap | ~92 KB | baseline |
+| properties | ~44 KB | the gc/script tries + binary sets are cheap |
+
+So segmenter+collator are ~93% of the bytes; dropping word/line segmentation
+(the `auto` dictionary) or collation shrinks the bundle dramatically.
 
 ## Build (no_std, zero-import, self-contained — the libm model)
 
@@ -37,7 +64,7 @@ wasm-tools validate target/wado_bundled_icu.component.wasm
 wasm-tools component wit target/wado_bundled_icu.component.wasm
 ```
 
-Result: a ~72 KB component whose `world` has only exports, no imports.
+Result: a component whose `world` has only exports, no imports (see Size above).
 
 ### Alternative: wasm32-wasip2
 
@@ -49,8 +76,10 @@ bundled asset.
 ## Runtime check
 
 [`runtime-check/`](runtime-check/) instantiates the built component under
-wasmtime and calls into it, proving the baked CLDR data is live across the
-component boundary (e.g. Turkish `istanbul` → `İSTANBUL`, not ASCII toupper).
+wasmtime and calls into it, proving the baked Unicode/CLDR data is live across
+the component boundary — including the locale `resource` path (Turkish
+`istanbul` → `İSTANBUL`, not ASCII toupper), NFC/NFD round-trips, grapheme
+segmentation of a ZWJ family-emoji cluster, and character properties.
 
 ```sh
 cd runtime-check && cargo run --release
@@ -61,6 +90,6 @@ cd runtime-check && cargo run --release
 - Full `icu` (all components, `compiled_data`) compiles to wasm cleanly.
 - `wit-bindgen` marshals strings, resources, borrows and results across CM WIT.
 - Rust LTO tree-shakes ICU by reachability: only what the WIT surface uses
-  survives (locale + casemap ⇒ ~72 KB). Exposing more in WIT pulls in more data.
+  survives, so the WIT surface is the size knob (see Size above).
 - no_std + wasm32-unknown-unknown yields a zero-import, fully self-contained
   component — the same self-contained model as `wado-bundled-libm`.
