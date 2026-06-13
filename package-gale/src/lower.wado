@@ -507,7 +507,9 @@ fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
 }
 
 fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext) -> SimpleRule {
-    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx);
+    let case_names = case_names_for_rule(&rule.alternatives);
+    let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
+    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx, &case_names, &alt_gc_starts);
     let scan_body = lower_scan_body(&rule.alternatives[0], ctx);
     return SimpleRule {
         header: lower_header(rule),
@@ -531,11 +533,13 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
 
+    let case_names = case_names_for_rule(&rule.alternatives);
+    let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
     let mut alts: List<AltBody> = [];
     let mut scan_alts: List<ScanBody> = [];
     let mut all_indices: List<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx));
+        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx, &case_names, &alt_gc_starts));
         scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx));
         all_indices.push(i);
     }
@@ -1068,10 +1072,12 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
         first_sets.push(ctx.first_of_alt(&rule.alternatives[*idx], &mut visiting));
     }
 
+    let case_names = case_names_for_rule(&rule.alternatives);
+    let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
     let mut alts: List<AltBody> = [];
     let mut scan_alts: List<ScanBody> = [];
     for let idx of non_lr_indices {
-        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx));
+        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts));
         scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx));
     }
 
@@ -2233,12 +2239,22 @@ fn compute_alt_gc_starts(alternatives: &List<Alternative>) -> List<i32> {
 /// `case_names_for_rule` and the convention `<RuleBase><CaseName>`
 /// (`<RuleBase>` being `rule_type_name(rule.name)` with the trailing
 /// `Node` stripped — same as `parser_gen::gen_alt_body` callers).
-fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenContext) -> AltBody {
+/// `case_names` (`case_names_for_rule`) and `alt_gc_starts`
+/// (`compute_alt_gc_starts`) are per-rule and identical across every alt,
+/// so the caller computes them once and threads them in rather than
+/// re-deriving them on each alt.
+fn lower_alt_body(
+    alt: &Alternative,
+    idx: i32,
+    rule: &ParserRule,
+    ctx: &mut GenContext,
+    case_names: &List<String>,
+    alt_gc_starts: &List<i32>,
+) -> AltBody {
     let type_name = rule.type_name;
     let mut case_name: String = "";
     let mut struct_name: String = type_name;
     if rule.alternatives.len() != 1 {
-        let case_names = case_names_for_rule(&rule.alternatives);
         let base = strip_suffix(&type_name, &"Node");
         case_name = case_names[idx];
         struct_name = `{base}{case_names[idx]}`;
@@ -2250,7 +2266,6 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
     // by 1; the final value is consumed by `lower_general_group` to
     // assign `GeneralShape.group_index`, which emit reads directly
     // off the lowered IR.
-    let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
     let mut group_counter: i32 = alt_gc_starts[idx];
 
     let mut name_counts: List<[String, i32]> = [];
