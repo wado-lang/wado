@@ -1616,28 +1616,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the receiver
         // type satisfies the bound.  e.g., `impl<I: Iterator> IntoIterator for I` matches
         // any concrete type that implements Iterator.
-        for (module_src, item_idx) in &self.tysys.trait_env.blanket_impl_index {
-            let module = &self.loaded_modules[module_src];
-            if let Item::Impl(impl_block) = &module.items[*item_idx]
-                && impl_block.trait_type.is_some()
-            {
-                // Find the type param that is the impl target
-                let impl_type_name = Self::get_type_name_static(&impl_block.ty);
-                let matching_param = impl_block
-                    .type_params
-                    .iter()
-                    .find(|tp| tp.name == impl_type_name);
-                if let Some(param) = matching_param {
-                    // Check if the receiver type satisfies ALL trait bounds
-                    let bounds_satisfied = param.bounds.iter().all(|bound| {
-                        let bound_trait_name = &bound.name;
-                        names_to_check
-                            .iter()
-                            .any(|name| self.find_trait_impl_for_type(name, bound_trait_name))
-                    });
-                    if bounds_satisfied {
-                        impl_refs.push(ImplBlockRef(module_src.clone(), *item_idx));
-                    }
+        let blanket_entries = self.tysys.trait_env.blanket_impl_index.clone();
+        for entry in &blanket_entries {
+            let Some(header) = self.tysys.trait_env.impl_headers.get(entry) else {
+                continue;
+            };
+            if header.trait_name.is_none() {
+                continue;
+            }
+            // Find the type param that is the impl target
+            let impl_type_name = Self::get_type_name_static(&header.ty);
+            let matching_param = header
+                .type_params
+                .iter()
+                .find(|tp| tp.name == impl_type_name)
+                .cloned();
+            if let Some(param) = matching_param {
+                // Check if the receiver type satisfies ALL trait bounds
+                let bounds_satisfied = param.bounds.iter().all(|bound| {
+                    let bound_trait_name = &bound.name;
+                    names_to_check
+                        .iter()
+                        .any(|name| self.find_trait_impl_for_type(name, bound_trait_name))
+                });
+                if bounds_satisfied {
+                    impl_refs.push(ImplBlockRef(entry.0.clone(), entry.1));
                 }
             }
         }

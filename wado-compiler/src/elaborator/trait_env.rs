@@ -83,6 +83,9 @@ pub(super) struct ImplHeader {
     /// only what method-lookup queries read off the AST today; extended as
     /// further consumers move onto the digest.
     pub(super) methods: Vec<ImplMethodHeader>,
+    /// The block's `type X = …;` associated-type bindings, cloned so
+    /// associated-type resolution reads them without the impl-block AST.
+    pub(super) associated_types: Vec<ast::AssociatedTypeBinding>,
 }
 
 /// Digested signature of a single method inside an [`ImplHeader`]. Holds the
@@ -496,6 +499,7 @@ impl TraitEnv {
                                 type_params: m.type_params.clone(),
                             })
                             .collect(),
+                        associated_types: impl_block.associated_types.clone(),
                     },
                 );
                 if let Some(trait_type) = &impl_block.trait_type {

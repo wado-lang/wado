@@ -1140,18 +1140,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_ty_param_names: Vec<String>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
         }
+        let trait_env = self.tysys.trait_env.clone();
         let impl_infos: Vec<ImplInfo> = {
             let mut result = vec![];
-            if let Some(entries) = self.tysys.trait_env.impl_index.get(&type_name) {
-                let entries = entries.clone();
-                for (module_src, item_idx) in entries {
-                    let module = &self.loaded_modules[&module_src];
-                    if let Item::Impl(impl_block) = &module.items[item_idx]
-                        && let Some(trait_type) = &impl_block.trait_type
-                        && self.get_type_name(trait_type) == trait_name
-                        && !impl_block.associated_types.is_empty()
+            if let Some(entries) = trait_env.impl_index.get(&type_name) {
+                for entry in entries {
+                    let Some(header) = trait_env.impl_headers.get(entry) else {
+                        continue;
+                    };
+                    if header.trait_name.as_deref() == Some(trait_name)
+                        && !header.associated_types.is_empty()
                     {
-                        let impl_ty_param_names: Vec<String> = match &impl_block.ty {
+                        let impl_ty_param_names: Vec<String> = match &header.ty {
                             ast::Type::Generic(g) => g
                                 .args
                                 .iter()
@@ -1166,9 +1166,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             _ => vec![],
                         };
                         result.push(ImplInfo {
-                            type_params: impl_block.type_params.clone(),
+                            type_params: header.type_params.clone(),
                             impl_ty_param_names,
-                            assoc_types: impl_block.associated_types.clone(),
+                            assoc_types: header.associated_types.clone(),
                         });
                     }
                 }
@@ -1236,15 +1236,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
-            for (module_src, item_idx) in &self.tysys.trait_env.blanket_impl_index {
-                let module = &self.loaded_modules[module_src];
-                if let Item::Impl(impl_block) = &module.items[*item_idx]
-                    && let Some(trait_type) = &impl_block.trait_type
-                    && self.get_type_name(trait_type) == trait_name
-                    && !impl_block.associated_types.is_empty()
+            for entry in &trait_env.blanket_impl_index {
+                let Some(header) = trait_env.impl_headers.get(entry) else {
+                    continue;
+                };
+                if header.trait_name.as_deref() == Some(trait_name)
+                    && !header.associated_types.is_empty()
                 {
-                    let impl_type_name = Self::get_type_name_static(&impl_block.ty);
-                    if let Some(blanket_param) = impl_block
+                    let impl_type_name = Self::get_type_name_static(&header.ty);
+                    if let Some(blanket_param) = header
                         .type_params
                         .iter()
                         .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
@@ -1258,7 +1258,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             result.push(BlanketImplInfo {
                                 blanket_param_name: blanket_param.name.clone(),
                                 blanket_param_bounds: blanket_param.bounds.clone(),
-                                assoc_types: impl_block.associated_types.clone(),
+                                assoc_types: header.associated_types.clone(),
                             });
                         }
                     }
