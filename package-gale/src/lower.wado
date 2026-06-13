@@ -632,13 +632,15 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // metadata. `own_prec` follows ANTLR4's convention: first LR
     // alt in source order gets the highest precedence (`total_lr`),
     // last gets `1`.
+    let case_names = case_names_for_rule(&rule.alternatives);
+    let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
     let mut lr_alts: List<LrAlt> = [];
     let mut lr_position: i32 = 0;
     for let lr_idx of &lr_indices {
         let alt = &rule.alternatives[*lr_idx];
         let own_prec = total_lr - lr_position;
         let conflict_min = compute_lr_conflict_min_prec(alt, own_prec, &lr_indices, rule, ctx, total_lr);
-        lr_alts.push(lower_lr_alt(rule, *lr_idx, own_prec, conflict_min, ctx));
+        lr_alts.push(lower_lr_alt(rule, *lr_idx, own_prec, conflict_min, ctx, &case_names, &alt_gc_starts));
         lr_position += 1;
     }
 
@@ -1128,7 +1130,15 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
 /// lowers everything after it as the alt's suffix body. The
 /// precedence (`own_prec`) and conflict floor (`conflict_min`) are
 /// computed by the caller and stored verbatim.
-fn lower_lr_alt(rule: &ParserRule, alt_index: i32, own_prec: i32, conflict_min: i32, ctx: &mut GenContext) -> LrAlt {
+fn lower_lr_alt(
+    rule: &ParserRule,
+    alt_index: i32,
+    own_prec: i32,
+    conflict_min: i32,
+    ctx: &mut GenContext,
+    case_names: &List<String>,
+    alt_gc_starts: &List<i32>,
+) -> LrAlt {
     let alt = &rule.alternatives[alt_index];
     assert !alt.elements.is_empty(), `LR alt {alt_index} of '{rule.name}' is empty — should not be classified LR`;
 
@@ -1137,8 +1147,9 @@ fn lower_lr_alt(rule: &ParserRule, alt_index: i32, own_prec: i32, conflict_min: 
     // `<RuleBase><CaseName>` convention the rest of `lower_alt_body`
     // uses. We don't reuse `lower_alt_body` directly because we need
     // the suffix elements (skipping the leading self-ref), not the
-    // whole alt.
-    let case_names = case_names_for_rule(&rule.alternatives);
+    // whole alt. `case_names` / `alt_gc_starts` are per-rule and
+    // threaded in by `lower_lr_rule` so they are computed once, not
+    // once per LR alt.
     let type_name = rule.type_name;
     let base = strip_suffix(&type_name, &"Node");
     let case_name = case_names[alt_index];
@@ -1155,7 +1166,7 @@ fn lower_lr_alt(rule: &ParserRule, alt_index: i32, own_prec: i32, conflict_min: 
     let suffix_first = ctx.first_of_elements_from(&alt.elements, 1);
 
     // Lower the suffix (elements[1..]) as an AltBody / ScanBody.
-    let suffix = lower_lr_alt_suffix(rule, alt_index, &case_name, &struct_name, ctx);
+    let suffix = lower_lr_alt_suffix(rule, alt_index, &case_name, &struct_name, ctx, alt_gc_starts);
     let scan_suffix = lower_lr_alt_scan_suffix(rule, alt_index, ctx);
 
     return LrAlt {
@@ -1179,13 +1190,14 @@ fn lower_lr_alt_suffix(
     case_name: &String,
     struct_name: &String,
     ctx: &mut GenContext,
+    alt_gc_starts: &List<i32>,
 ) -> AltBody {
     let alt = &rule.alternatives[alt_index];
 
     // Per-alt counter starts at this alt's position in the rule's
-    // alt_gc_starts table — same as `lower_alt_body` does for the
-    // full-alt case. The suffix walk continues from there.
-    let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
+    // `alt_gc_starts` table (threaded in by `lower_lr_rule`, computed
+    // once) — same as `lower_alt_body` does for the full-alt case. The
+    // suffix walk continues from there.
     let mut group_counter: i32 = alt_gc_starts[alt_index];
 
     // Seed the dedup counter with the prefix self-ref's field name so

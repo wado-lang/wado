@@ -181,12 +181,13 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
     // unit test), fall back to `{name}.g4` so existing tests still see a
     // sensible provenance entry.
     let mut sources: List<String> = [];
-    if grammar.source_files.is_empty() {
-        sources.push(`{grammar.name}.g4`);
-    } else {
-        for let sf of &grammar.source_files {
-            sources.push(*sf);
-        }
+    // `source_files` is set by both entry points (the Kiln generator from
+    // `req.primary.path`, the CLI from the loaded file paths). When it is
+    // genuinely unknown, emit an empty list rather than fabricating
+    // `<GrammarName>.g4` — a plausible-looking name for a file that does
+    // not exist.
+    for let sf of &grammar.source_files {
+        sources.push(*sf);
     }
     let mut parts = String::with_capacity(32);
     parts.push_str(&"#![generated(by = \"gale\", sources = [");

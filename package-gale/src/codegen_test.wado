@@ -42,9 +42,9 @@ test "generate header" {
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert output.len() > 0;
-    // Grammar was constructed with no source_files, so gen_header falls back
-    // to `{name}.g4`.
-    let header = `#![generated(by = "gale", sources = ["Test.g4"])]`;
+    // Grammar was constructed with no source_files, so gen_header emits an
+    // empty sources list rather than fabricating a nonexistent `{name}.g4`.
+    let header = `#![generated(by = "gale", sources = [])]`;
     for let mut i = 0; i < header.len(); i += 1 {
         assert output.get_byte_unchecked(i) == header.get_byte_unchecked(i);
     }

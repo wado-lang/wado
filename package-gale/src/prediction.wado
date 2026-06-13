@@ -90,10 +90,15 @@ fn find_merge_branch(branches: &List<PredictionBranch>, child: &PredictionNode) 
     return -1;
 }
 
-/// Static branch-depth ceiling for SLL prediction. Each `Dispatch`
+/// The shared lookahead horizon `k` for static prediction. In
+/// `build_prediction` it is the branch-depth ceiling — each `Dispatch`
 /// level counts against it (shared-terminal `Consume` nodes do not), so
-/// it bounds the number of *branching* lookahead decisions, not raw
-/// tokens. Hitting it yields `AmbiguityReason::MaxDepth`.
+/// there it bounds the number of *branching* lookahead decisions, not
+/// raw tokens; hitting it yields `AmbiguityReason::MaxDepth`. The
+/// scan-side tournament builders (`gen_scan_multi_alt`, the LR-atom scan
+/// dispatch) and `find_needed_depth` use the same `k` as their
+/// position-first-set / probe depth, so all lookahead-bounded passes move
+/// together.
 pub global MAX_LOOKAHEAD_DEPTH: i32 = 5;
 
 /// Config-set explosion guard: above this many live SLL configs the

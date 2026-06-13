@@ -1026,7 +1026,7 @@ fn gen_scan_lr_overlap_dispatch(
 /// unconditionally as fallbacks.
 fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &List<ScanBody>, ctx: &mut GenContext) {
     let n = alts.len();
-    let max_k = 5;
+    let max_k = MAX_LOOKAHEAD_DEPTH;
     let mut all_pos_sets: List<List<List<String>>> = [];
     for let alt of alts {
         all_pos_sets.push(ctx.alt_position_first_sets(alt, max_k));
@@ -2351,7 +2351,7 @@ fn gen_multi_alt_body(
     non_lr_indices: &List<i32>,
 ) {
 
-    let max_k = 5;
+    let max_k = MAX_LOOKAHEAD_DEPTH;
     let mut all_pos_sets: List<List<List<String>>> = [];
     for let idx of non_lr_indices {
         all_pos_sets.push(ctx.alt_position_first_sets(&rule.alternatives[*idx], max_k));
@@ -2756,7 +2756,7 @@ fn gen_op_storable_group_inner(
 
 /// Op-driven single-element dispatch. Routes a single `Op` + matching
 /// surface `Element` to the right `gen_op_*` helper based on op kind.
-/// Used by `emit_op_optional_with_shape_lookahead_*` so each shape's
+/// Used by `gen_op_optional_with_shape_lookahead_*` so each shape's
 /// per-element parse routes through op-driven helpers instead of the
 /// surface `gen_element` graph.
 fn gen_op_dispatch_element(
@@ -6308,7 +6308,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
 }
 
 fn find_needed_depth(all_position_sets: &List<List<List<String>>>) -> i32 {
-    let max_k = 5;
+    let max_k = MAX_LOOKAHEAD_DEPTH;
     for let mut depth = 1; depth <= max_k; depth += 1 {
         let mut all_ok = true;
         for let mut i = 0; i < all_position_sets.len(); i += 1 {

@@ -306,6 +306,19 @@ impl ParamSpec {
     }
 }
 
+/// Join strings with ", " — the separator every spec list (generics,
+/// effects, …) renders with.
+fn join_comma(items: &List<String>) -> String {
+    let mut out = String::with_capacity(items.len() * 8);
+    for let mut i = 0; i < items.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&", ");
+        }
+        out.push_str(&items[i]);
+    }
+    return out;
+}
+
 pub struct FnSpec {
     pub name: String,
     params: List<ParamSpec>,
@@ -393,14 +406,7 @@ impl FnSpec {
         }
         sig.push_str(&`fn {self.name}`);
         if self.generics.len() > 0 {
-            sig.push_str(&"<");
-            for let mut i = 0; i < self.generics.len(); i += 1 {
-                if i > 0 {
-                    sig.push_str(&", ");
-                }
-                sig.push_str(&self.generics[i]);
-            }
-            sig.push_str(&">");
+            sig.push_str(&`<{join_comma(&self.generics)}>`);
         }
         sig.push_str(&"(");
         let mut first = true;
@@ -426,13 +432,7 @@ impl FnSpec {
             sig.push_str(&` -> {*ret}`);
         }
         if self.effects.len() > 0 {
-            sig.push_str(&" with ");
-            for let mut i = 0; i < self.effects.len(); i += 1 {
-                if i > 0 {
-                    sig.push_str(&", ");
-                }
-                sig.push_str(&self.effects[i]);
-            }
+            sig.push_str(&` with {join_comma(&self.effects)}`);
         }
         return sig;
     }
