@@ -118,8 +118,6 @@ fn collect_and_validate(
     let type_table = project.type_table.borrow();
     let single_field = build_single_field_index(project);
 
-    // Candidacy is callee-local: call sites are rewritten unconditionally in
-    // apply, never consulted here.
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
         let func = project.functions[fid.index()].borrow();

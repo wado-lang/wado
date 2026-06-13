@@ -29,11 +29,11 @@
 //! call site appearing or vanishing changes a callee's dead-argument analysis).
 //!
 //! Every fixed-point loop pass is gate-aware, so every change is reported at
-//! function granularity. The intra-procedural passes skip functions unchanged
-//! since they last ran (via [`FunctionGate::run_gated`]); the interprocedural
-//! passes (`inline` / `dae` / `drve` / `sroa_param` / `value_copy_demote`) gate
-//! their candidate scan on the dirty set and report the functions they touched
-//! (via [`FunctionGate::mark_changed`]).
+//! function granularity: a per-function pass skips functions it has already
+//! processed at their current revision (via [`FunctionGate::run_gated`]); an
+//! interprocedural pass pulls its candidate worklist from the dirty set (via
+//! [`FunctionGate::dirty_funcs`]) and reports exactly the ones it touched (via
+//! [`FunctionGate::mark_changed`]).
 //!
 //! # Safety
 //!
@@ -57,13 +57,6 @@ cranelift_entity::entity_impl!(FunctionId, "func");
 
 /// The gated passes. Each owns a column of per-function watermarks. Add a
 /// variant when a pass becomes gate-aware; `COUNT` sizes the watermark table.
-///
-/// Interprocedural passes gate on the function their candidate scan reads —
-/// caller-driven `inline` on the caller it walks; callee-driven `dae` / `drve`
-/// / `sroa_param` on the candidate callee; `value_copy_demote` on the function
-/// it rewrites. Both-direction 1-hop propagation makes a clean function one
-/// whose body and every call-graph neighbour are unchanged, so skipping its
-/// scan reproduces the previous no-op verdict — byte-output-identical.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GatedPass {
     Peephole,
@@ -202,10 +195,7 @@ impl FunctionGate {
         self.watermarks[pass as usize][func.index()] = self.revision[func.index()];
     }
 
-    /// The functions `pass` must (re)examine this round, each marked seen. The
-    /// interprocedural passes pull this as their candidate worklist; a function
-    /// a later apply re-dirties (via [`Self::mark_changed`]) reappears next
-    /// round.
+    /// The functions `pass` must (re)examine this round, each marked seen.
     pub fn dirty_funcs(&mut self, pass: GatedPass, len: usize) -> Vec<FunctionId> {
         (0..len)
             .map(FunctionId::new)
@@ -220,10 +210,7 @@ impl FunctionGate {
     }
 
     /// Record that `func`'s body changed: bump its revision and, conservatively,
-    /// its 1-hop call-graph neighbours (callers and callees). The graph is built
-    /// once and not refreshed, so this over-approximation also absorbs the edges
-    /// a call-restructuring pass (e.g. `inline` copying a callee body in) adds
-    /// after the build — narrowing it to directed edges would miss those.
+    /// its 1-hop call-graph neighbours (callers and callees).
     pub fn mark_changed(&mut self, func: FunctionId) {
         self.ensure(func.index() + 1);
         let i = func.index();

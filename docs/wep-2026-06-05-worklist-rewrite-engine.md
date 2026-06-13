@@ -232,20 +232,15 @@ WIR output stays byte-identical.
     construction — a mutation changes the operand's `ValueId`); `licm` hoists by
     pre-header `ValueId` stability.
 - [x] **Stage 9 — interprocedural worklist.** `inline` / `dae` / `drve` /
-      `sroa_param` / `value_copy_demote` pull their candidate set from the
-      per-function gate's dirty set (`FunctionGate::dirty_funcs`) instead of
-      scanning every function each round; `mark_changed` re-runs affected callers
-      when a callee shrinks, and the fixed-point loop terminates at quiescence
-      with `OptConfig::iterations` as the bound. Terminal stages
+      `sroa_param` / `value_copy_demote` pull their candidates from the gate's
+      dirty set (`FunctionGate::dirty_funcs`) instead of scanning every function;
+      `mark_changed` re-runs affected callers when a callee shrinks, with
+      `OptConfig::iterations` the quiescence bound. Terminal stages
       (`multi_value_return`, `field_scalarize`, `const_object_globalization`,
-      `dce`) stay explicit. Propagation stays at the conservative both-direction
-      form: the call graph is built once and not refreshed, so an `inline`-added
-      edge is invisible to a directed (callee-shrink → callers) narrowing, which
-      would silently drop the dependent rewrite. A directed rule is net-neutral
-      until the graph is kept fresh (per-iteration rebuild costs roughly what the
-      narrowing saves), so it waits on that — the remaining loop cost is the
-      per-function dataflow the standalone walkers still rebuild, which is the
-      Layer-2 ValueGraph's domain, not the worklist's.
+      `dce`) stay explicit. Propagation stays both-direction: a directed
+      (callee-shrink → callers) narrowing would miss the edges `inline` adds to
+      the build-once call graph, and is net-neutral until the graph is kept
+      fresh.
 
 ### Open
 

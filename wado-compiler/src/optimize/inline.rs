@@ -660,8 +660,7 @@ pub fn inline_functions(
 
     let mut changed = false;
 
-    // Inline at call sites. The candidate set spans every eligible callee, so a
-    // dirty caller still inlines clean callees.
+    // Inline at call sites.
     for fid in gate.dirty_funcs(GatedPass::Inline, project.functions.len()) {
         let caller_idx = fid.index();
         let func_rc = project.functions[caller_idx].clone();

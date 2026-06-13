@@ -68,8 +68,7 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
     let pinned = collect_pinned(project);
     let closure_call_keys = collect_closure_call_keys(project);
 
-    // Phase 1: identify candidate (function, dead positions) pairs. Validation
-    // below still scans every body, so a dirty candidate sees all its call sites.
+    // Phase 1: identify candidate (function, dead positions) pairs.
     let mut candidates: IndexMap<FnKey, Vec<bool>> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::Dae, project.functions.len()) {
         let func = project.functions[fid.index()].borrow();
