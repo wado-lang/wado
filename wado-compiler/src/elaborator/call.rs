@@ -1424,10 +1424,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Parameter types of an effect operation, read from its Wado interface
-    /// declaration (mirrors `get_user_effect_return_type`). Covers both WASI and
-    /// user-defined effects — every `interface` is indexed in `effect_decl_index`
-    /// — and yields surface types, so argument inference works without a turbofish.
+    /// Parameter types of an effect operation, from its Wado `interface`
+    /// declaration (`effect_decl_index` covers WASI and user effects alike).
+    /// Uses surface types, not the CM registry whose flattened `u64` would reject
+    /// a `Mark`-like alias argument.
     pub(super) fn get_effect_op_param_types(
         &mut self,
         effect: &str,
@@ -1764,12 +1764,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // Effect operations (WASI and user-defined): surface the operation's
-            // declared parameter types so argument inference sees the expected
-            // type (e.g. a variant constructor written without a turbofish).
-            // Read them from the Wado interface declaration, which carries the
-            // surface types (`Mark`, `Result<(), ()>`) — not the CM registry,
-            // whose flattened types (`u64`) would reject a newtype/alias argument.
             if let Some(params) = self.get_effect_op_param_types(prefix, suffix) {
                 return params;
             }

@@ -274,7 +274,6 @@ fn verify_result(result: &common::WasmRunResult, spec: &TestSpec, fixture_name: 
         spec.trapped, result.trapped, result.stderr, result.stdout
     );
 
-    // Check process exit code if specified
     if let Some(expected_code) = spec.exit_code {
         assert_eq!(
             result.exit_code,

@@ -577,7 +577,6 @@ pub(super) fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
-            // Result<T, E>: single GC ref param (binding body lowers it).
             Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
                 let result_type_id = {
                     let mut tt = type_table.borrow_mut();
@@ -1000,11 +999,9 @@ pub(super) fn synthesize_adapter(
                     );
                 }
             }
-            // Result<T, E>: flatten to discriminant + payload flat args.
             Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
-                // No async CM import takes a `Result` today, so the async
-                // params-to-memory lowering is unbuilt: fail loud rather than
-                // pass a GC ref where the import expects flat values.
+                // The async params-to-memory lowering for `Result` is unbuilt
+                // (no async CM import needs it yet); fail loud instead.
                 assert!(
                     !func_info.is_async,
                     "CM import '{}#{}' takes a `Result` parameter on an async \

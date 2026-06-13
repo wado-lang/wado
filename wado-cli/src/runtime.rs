@@ -414,7 +414,7 @@ pub fn create_store(
 pub fn create_linker(engine: &Engine) -> Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
     // `wasi:cli/exit#exit-with-code` is `@unstable(feature = cli-exit-with-code)`
-    // upstream, so the default LinkOptions omit it; enable it explicitly.
+    // upstream, so the default LinkOptions omit it.
     let mut options = wasmtime_wasi::p3::bindings::LinkOptions::default();
     options.cli_exit_with_code(true);
     wasmtime_wasi::p3::add_to_linker_with_options(&mut linker, &options)?;

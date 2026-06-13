@@ -32,9 +32,8 @@ use super::types::{
     variant_test,
 };
 
-/// Join two CM flat slot types, mirroring `component_model::join_val_types` so a
-/// lowered flat arg matches the core import's flat signature (an `i32` fallback
-/// for the mismatch case would clash with that signature's `i64`).
+/// Join two CM flat slot types like `component_model::join_val_types` (mismatch
+/// widens to `i64`), so a lowered flat arg matches the core import's signature.
 fn join_flat_slot(a: Option<TypeId>, b: Option<TypeId>) -> TypeId {
     match (a, b) {
         (Some(a), Some(b)) if a == b => a,
@@ -1087,9 +1086,8 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     }
 }
 
-/// Flatten a `Result<T, E>` GC value to flat CM ABI args:
-/// `[disc, ...join(flatten(T), flatten(E))]`. Unlike `Option`, the discriminant
-/// is read with `variant_tag` (`struct.get`): a `Result` is never a null ref.
+/// Flatten a `Result<T, E>` GC value to flat CM ABI args. Unlike `Option`, reads
+/// the discriminant with `variant_tag` (`struct.get`) — a `Result` is never null.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn synthesize_flatten_result_to_flat_args(
     ok_type: &Type,
@@ -1184,8 +1182,6 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
     }
 }
 
-/// Build one `Result` case (`Ok` / `Err`) `Match` arm, writing its flattened
-/// payload into the shared `payload_locals`.
 #[allow(clippy::too_many_arguments)]
 fn flatten_result_case_arm(
     case_name: String,
