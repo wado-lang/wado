@@ -282,7 +282,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             };
             if let Some(name) = type_param_name
-                && let Some(bounds) = self.trait_ctx.type_param_bounds.get(&name).cloned()
+                && let Some(bounds) = self.annotate_ctx.trait_ctx.type_param_bounds.get(&name).cloned()
                 && let Some((found_trait, info)) = {
                     let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
                     self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id)
@@ -1038,11 +1038,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Temporarily map type param names directly to concrete types
                     // (inherited scope; only `type_params` is replaced).
                     let mut scope = self.enter_inherited_type_param_scope();
-                    scope.trait_ctx.type_params.clear();
+                    scope.annotate_ctx.trait_ctx.type_params.clear();
                     for (i, name) in impl_type_param_names.iter().enumerate() {
                         if let Some(&concrete) = call_site_impl_args.get(i) {
                             scope
-                                .trait_ctx
+                                .annotate_ctx.trait_ctx
                                 .type_params
                                 .insert(name.clone(), (i as u32, concrete));
                         }
@@ -1051,7 +1051,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     for (i, tp) in method_def.type_params.iter().enumerate() {
                         if let Some(&concrete) = method_type_args.get(i) {
                             scope
-                                .trait_ctx
+                                .annotate_ctx.trait_ctx
                                 .type_params
                                 .insert(tp.name.clone(), ((impl_offset + i) as u32, concrete));
                         }
@@ -1696,21 +1696,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 // Set up type parameters from impl block before resolving.
                                 // Inherited scope; only `type_params` is replaced.
                                 let mut scope = self.enter_inherited_type_param_scope();
-                                scope.trait_ctx.type_params.clear();
+                                scope.annotate_ctx.trait_ctx.type_params.clear();
 
                                 // Extract type params from impl block type (e.g., impl List<T>)
                                 if let ast::Type::Generic(generic) = &impl_block.ty {
                                     for (i, arg) in generic.args.iter().enumerate() {
                                         if let ast::Type::Named(named) = arg {
                                             let name = &named.name;
-                                            if !scope.trait_ctx.type_params.contains_key(name) {
+                                            if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
                                                 let type_id = scope
                                                     .tysys
                                                     .type_table
                                                     .borrow_mut()
                                                     .make_type_param(name.clone(), i as u32);
                                                 scope
-                                                    .trait_ctx
+                                                    .annotate_ctx.trait_ctx
                                                     .type_params
                                                     .insert(name.clone(), (i as u32, type_id));
                                             }
@@ -1719,14 +1719,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 }
 
                                 // Method-level type params (e.g. fn make<T>(...) -> T)
-                                let m_offset = scope.trait_ctx.type_params.len();
+                                let m_offset = scope.annotate_ctx.trait_ctx.type_params.len();
                                 for (i, tp) in method
                                     .type_params
                                     .iter()
                                     .filter(|p| !p.is_effect)
                                     .enumerate()
                                 {
-                                    if scope.trait_ctx.type_params.contains_key(&tp.name) {
+                                    if scope.annotate_ctx.trait_ctx.type_params.contains_key(&tp.name) {
                                         continue;
                                     }
                                     let idx = (m_offset + i) as u32;
@@ -1744,7 +1744,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                             .make_type_param(tp.name.clone(), idx)
                                     };
                                     scope
-                                        .trait_ctx
+                                        .annotate_ctx.trait_ctx
                                         .type_params
                                         .insert(tp.name.clone(), (idx, type_id));
                                 }
@@ -1760,7 +1760,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .as_ref()
                                     .is_some_and(|t| Self::ast_type_mentions_self(t))
                                 {
-                                    scope.trait_ctx.self_type =
+                                    scope.annotate_ctx.trait_ctx.self_type =
                                         Some(scope.resolve_return_type_in_module(
                                             struct_module,
                                             Some(&impl_block.ty),
@@ -1794,18 +1794,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             // Set up type parameters from resource declaration before resolving.
                             // Inherited scope; only `type_params` is replaced.
                             let mut scope = self.enter_inherited_type_param_scope();
-                            scope.trait_ctx.type_params.clear();
+                            scope.annotate_ctx.trait_ctx.type_params.clear();
 
                             for (i, param) in resource.type_params.iter().enumerate() {
                                 let name = &param.name;
-                                if !scope.trait_ctx.type_params.contains_key(name) {
+                                if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
                                     let type_id = scope
                                         .tysys
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
                                     scope
-                                        .trait_ctx
+                                        .annotate_ctx.trait_ctx
                                         .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
@@ -1854,20 +1854,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some((ms, impl_ty, method)) = indexed {
             // Inherited scope; only `type_params` is replaced.
             let mut scope = self.enter_inherited_type_param_scope();
-            scope.trait_ctx.type_params.clear();
+            scope.annotate_ctx.trait_ctx.type_params.clear();
 
             if let ast::Type::Generic(generic) = &impl_ty {
                 for (i, arg) in generic.args.iter().enumerate() {
                     if let ast::Type::Named(named) = arg {
                         let name = &named.name;
-                        if !scope.trait_ctx.type_params.contains_key(name) {
+                        if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
                             let type_id = scope
                                 .tysys
                                 .type_table
                                 .borrow_mut()
                                 .make_type_param(name.clone(), i as u32);
                             scope
-                                .trait_ctx
+                                .annotate_ctx.trait_ctx
                                 .type_params
                                 .insert(name.clone(), (i as u32, type_id));
                         }
@@ -1876,14 +1876,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Method-level type params (e.g. fn make<T>(...) -> T)
-            let m_offset = scope.trait_ctx.type_params.len();
+            let m_offset = scope.annotate_ctx.trait_ctx.type_params.len();
             for (i, tp) in method
                 .type_params
                 .iter()
                 .filter(|p| !p.is_effect)
                 .enumerate()
             {
-                if scope.trait_ctx.type_params.contains_key(&tp.name) {
+                if scope.annotate_ctx.trait_ctx.type_params.contains_key(&tp.name) {
                     continue;
                 }
                 let idx = (m_offset + i) as u32;
@@ -1901,7 +1901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .make_type_param(tp.name.clone(), idx)
                 };
                 scope
-                    .trait_ctx
+                    .annotate_ctx.trait_ctx
                     .type_params
                     .insert(tp.name.clone(), (idx, type_id));
             }
@@ -1919,7 +1919,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_ref()
                 .is_some_and(|t| Self::ast_type_mentions_self(t))
             {
-                scope.trait_ctx.self_type =
+                scope.annotate_ctx.trait_ctx.self_type =
                     Some(scope.resolve_return_type_in_module(&ms, Some(&impl_ty)));
             }
             let result = scope.resolve_return_type_in_module(&ms, method.return_type.as_ref());
@@ -1945,18 +1945,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Inherited scope; only `type_params` is replaced.
                     let mut scope = self.enter_inherited_type_param_scope();
-                    scope.trait_ctx.type_params.clear();
+                    scope.annotate_ctx.trait_ctx.type_params.clear();
 
                     for (i, param) in resource.type_params.iter().enumerate() {
                         let name = &param.name;
-                        if !scope.trait_ctx.type_params.contains_key(name) {
+                        if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
                             let type_id = scope
                                 .tysys
                                 .type_table
                                 .borrow_mut()
                                 .make_type_param(name.clone(), i as u32);
                             scope
-                                .trait_ctx
+                                .annotate_ctx.trait_ctx
                                 .type_params
                                 .insert(name.clone(), (i as u32, type_id));
                         }
@@ -2003,8 +2003,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 let mut scope = self.enter_inherited_type_param_scope();
-                scope.trait_ctx.type_params.clear();
-                scope.trait_ctx.assoc_type_bindings.clear();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
+                scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
                 // Bind `Self::AssocName` projections that may appear in the
                 // trait default body's return type (e.g. FromStr's
                 // `Result<Self, Self::Err>`). Pull the bindings from the
@@ -2013,7 +2013,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for binding in &impl_assoc_types {
                     let type_id = scope.resolve_type(&binding.ty);
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .assoc_type_bindings
                         .insert(binding.name.clone(), type_id);
                 }
@@ -2021,14 +2021,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `resolve_named_type` maps primitives to their canonical
                 // TypeTable id rather than a struct wrapper.
                 let self_type_id = scope.resolve_named_type(struct_name, Span::default());
-                let old_self = scope.trait_ctx.self_type;
-                scope.trait_ctx.self_type = Some(self_type_id);
+                let old_self = scope.annotate_ctx.trait_ctx.self_type;
+                scope.annotate_ctx.trait_ctx.self_type = Some(self_type_id);
                 let result = default_method
                     .return_type
                     .as_ref()
                     .map(|t| scope.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
-                scope.trait_ctx.self_type = old_self;
+                scope.annotate_ctx.trait_ctx.self_type = old_self;
                 drop(scope);
                 return result;
             }
@@ -2182,13 +2182,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (imports, originals) = self.tysys.trait_env.import_scope(impl_module);
         // Inherited scope; only `type_params` is replaced.
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
 
         // Impl-level type params (e.g. `impl Box<T>` -> register T)
         if let ast::Type::Generic(generic) = impl_ty {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg
-                    && !scope.trait_ctx.type_params.contains_key(&named.name)
+                    && !scope.annotate_ctx.trait_ctx.type_params.contains_key(&named.name)
                 {
                     let type_id = scope
                         .tysys
@@ -2196,7 +2196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_type_param(named.name.clone(), i as u32);
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .type_params
                         .insert(named.name.clone(), (i as u32, type_id));
                 }
@@ -2204,14 +2204,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Method-level type params (e.g. `fn make<T>(x: T)` -> register T)
-        let offset = scope.trait_ctx.type_params.len();
+        let offset = scope.annotate_ctx.trait_ctx.type_params.len();
         for (i, tp) in method
             .type_params
             .iter()
             .filter(|p| !p.is_effect)
             .enumerate()
         {
-            if scope.trait_ctx.type_params.contains_key(&tp.name) {
+            if scope.annotate_ctx.trait_ctx.type_params.contains_key(&tp.name) {
                 continue;
             }
             let idx = (offset + i) as u32;
@@ -2229,7 +2229,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_type_param(tp.name.clone(), idx)
             };
             scope
-                .trait_ctx
+                .annotate_ctx.trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, type_id));
         }

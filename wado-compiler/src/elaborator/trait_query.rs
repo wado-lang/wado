@@ -283,18 +283,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If any non-recursive field fails the trait check, it will be caught on that path.
         {
             let key = (type_id, trait_name.to_string());
-            let stack = self.trait_check_stack.borrow();
+            let stack = self.annotate_ctx.trait_check_stack.borrow();
             if stack.contains(&key) {
                 return true;
             }
         }
-        self.trait_check_stack
+        self.annotate_ctx.trait_check_stack
             .borrow_mut()
             .push((type_id, trait_name.to_string()));
 
         let result = self.type_implements_trait_inner(&resolved, trait_name);
 
-        self.trait_check_stack.borrow_mut().pop();
+        self.annotate_ctx.trait_check_stack.borrow_mut().pop();
 
         result
     }
@@ -407,7 +407,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // means T implements Describable within the scope of that declaration)
         if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
         {
-            if let Some(bounds) = self.trait_ctx.type_param_bounds.get(name) {
+            if let Some(bounds) = self.annotate_ctx.trait_ctx.type_param_bounds.get(name) {
                 return bounds.iter().any(|b| b.name == trait_name);
             }
             return false;
@@ -737,7 +737,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Self::ns.name → type_param_name::ns.name
                     // Look in current_type_param_bounds[type_param_name] for direct binding
                     if let Some(param_bounds) = self
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .type_param_bounds
                         .get(type_param_name)
                         .cloned()
@@ -822,8 +822,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Save the entire trait context; we'll modify self_type, assoc_type_bindings,
                 // type_params, and type_param_bounds during this resolution scope.
                 let mut scope = self.enter_inherited_type_param_scope();
-                scope.trait_ctx.self_type = Some(self_type_id);
-                scope.trait_ctx.assoc_type_bindings.clear();
+                scope.annotate_ctx.trait_ctx.self_type = Some(self_type_id);
+                scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
                 // Set up associated type bindings as projections so that
                 // Self::AssocType resolves to AssocTypeProjection(self_type_id, "AssocType").
@@ -879,7 +879,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             )
                     });
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .assoc_type_bindings
                         .insert(assoc_decl.name.clone(), projection);
                 }
@@ -898,12 +898,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_type_param(param.name.clone(), index as u32);
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .type_params
                         .insert(param.name.clone(), (index as u32, type_id));
                     if !param.bounds.is_empty() {
                         scope
-                            .trait_ctx
+                            .annotate_ctx.trait_ctx
                             .type_param_bounds
                             .insert(param.name.clone(), param.bounds.clone());
                     }
@@ -1186,7 +1186,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {
                 if let Some(&concrete_arg) = concrete_type_args.get(i) {
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .type_params
                         .insert(tp_name.clone(), (i as u32, concrete_arg));
                 }
@@ -1195,7 +1195,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for param in &info.type_params {
                 if !param.bounds.is_empty() {
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .type_param_bounds
                         .entry(param.name.clone())
                         .or_default()
@@ -1274,11 +1274,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
             // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
             scope
-                .trait_ctx
+                .annotate_ctx.trait_ctx
                 .type_params
                 .insert(info.blanket_param_name.clone(), (0, concrete_type_id));
             scope
-                .trait_ctx
+                .annotate_ctx.trait_ctx
                 .type_param_bounds
                 .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
 

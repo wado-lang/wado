@@ -1362,8 +1362,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 current_module_items: &[], // Set in Elaborator::resolve_module
                 current_effect_params: IndexSet::default(),
                 current_effect_param_decls: IndexMap::default(),
-                trait_ctx: super::trait_env::TraitContext::default(),
-                trait_check_stack: RefCell::new(Vec::new()),
+                annotate_ctx: super::trait_env::AnnotateCtx::default(),
                 default_scope_module: None,
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),

@@ -707,7 +707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if needs_param_scope {
                 let mut scope = s.enter_inherited_type_param_scope();
-                scope.trait_ctx.type_params.clear();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
                 scope.register_generic_params(&type_params_for_scope, 0);
                 inner(&mut scope)
             } else {
@@ -966,10 +966,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_return_type = func.return_type.clone();
         let resolve = move |s: &mut Self| -> (Vec<TypeId>, TypeId, Vec<TypeId>) {
             let mut scope = s.enter_inherited_type_param_scope();
-            scope.trait_ctx.type_params.clear();
+            scope.annotate_ctx.trait_ctx.type_params.clear();
             scope.register_generic_params(&type_params_for_scope, 0);
             let type_param_ids: Vec<TypeId> = scope
-                .trait_ctx
+                .annotate_ctx.trait_ctx
                 .type_params
                 .iter()
                 .map(|(_, &(_, id))| id)

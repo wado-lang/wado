@@ -584,7 +584,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // params, so its method type params start at index 0 — matching
                 // the monomorphizer's substitution map.
                 let mut scope = self.enter_inherited_type_param_scope();
-                scope.trait_ctx.type_params.clear();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
                 let from_concrete_impl =
                     scope.impl_is_concrete_instantiation(impl_block, impl_module);
                 let mut impl_offset = 0u32;
@@ -598,7 +598,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             && i < type_args.len()
                         {
                             scope
-                                .trait_ctx
+                                .annotate_ctx.trait_ctx
                                 .type_params
                                 .insert(named.name.clone(), (i as u32, type_args[i]));
                         }
@@ -642,7 +642,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                         let mut idx = impl_offset;
                         for tp in method.type_params.iter().filter(|p| !p.is_effect) {
-                            if s.trait_ctx.type_params.contains_key(&tp.name) {
+                            if s.annotate_ctx.trait_ctx.type_params.contains_key(&tp.name) {
                                 continue;
                             }
                             let fn_bound_sig = if tp.is_pack {
@@ -669,7 +669,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     true,
                                 )
                             };
-                            s.trait_ctx
+                            s.annotate_ctx.trait_ctx
                                 .type_params
                                 .insert(tp.name.clone(), (idx, type_id));
                             if consumed_index {
@@ -770,7 +770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             // Set up type params for generic impls (e.g., impl List<T>).
                             // Inherited scope; only `type_params` is replaced.
                             let mut scope = self.enter_inherited_type_param_scope();
-                            scope.trait_ctx.type_params.clear();
+                            scope.annotate_ctx.trait_ctx.type_params.clear();
                             let mut impl_offset = 0u32;
                             if let Some(ref type_args) = receiver_type_args
                                 && let Type::Generic(generic) = &impl_block.ty
@@ -781,7 +781,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         && i < type_args.len()
                                     {
                                         scope
-                                            .trait_ctx
+                                            .annotate_ctx.trait_ctx
                                             .type_params
                                             .insert(named.name.clone(), (i as u32, type_args[i]));
                                     }
@@ -799,7 +799,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     },
                                 );
                                 scope
-                                    .trait_ctx
+                                    .annotate_ctx.trait_ctx
                                     .type_params
                                     .insert(type_param.name.clone(), (index, type_param_id));
                             }
@@ -938,12 +938,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Set up type params for generic resources (e.g., resource Stream<T>).
             // Inherited scope; only `type_params` is replaced.
             let mut scope = self.enter_inherited_type_param_scope();
-            scope.trait_ctx.type_params.clear();
+            scope.annotate_ctx.trait_ctx.type_params.clear();
             if let Some(type_args) = receiver_type_args {
                 for (i, param) in resource.type_params.iter().enumerate() {
                     if i < type_args.len() {
                         scope
-                            .trait_ctx
+                            .annotate_ctx.trait_ctx
                             .type_params
                             .insert(param.name.clone(), (i as u32, type_args[i]));
                     }
@@ -1067,7 +1067,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ..
             } => self.find_method_type_param_names(name, Some(module_source), method_name),
             ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => self
-                .trait_ctx
+                .annotate_ctx.trait_ctx
                 .type_param_bounds
                 .get(name)
                 .cloned()
@@ -1116,7 +1116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // knows about — would leave a dangling id at the call site, so
         // drop the inference and let the caller fall back to `vec![]`.
         let scope_params: Vec<TypeId> = self
-            .trait_ctx
+            .annotate_ctx.trait_ctx
             .type_params
             .values()
             .map(|&(_, tid)| tid)
@@ -1844,8 +1844,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // just type_params and assoc_type_bindings — other parts (bounds,
             // self_type, …) are kept from the parent for this lookup.
             let mut scope = self.enter_inherited_type_param_scope();
-            scope.trait_ctx.type_params.clear();
-            scope.trait_ctx.assoc_type_bindings.clear();
+            scope.annotate_ctx.trait_ctx.type_params.clear();
+            scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
             // Set up type parameters for resolving generic associated types
             if let Some(type_args) = receiver_type_args {
@@ -1853,7 +1853,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let i = *idx as usize;
                     if i < type_args.len() {
                         scope
-                            .trait_ctx
+                            .annotate_ctx.trait_ctx
                             .type_params
                             .insert(name.clone(), (*idx, type_args[i]));
                     }
@@ -1867,7 +1867,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_tuple(type_args.to_vec());
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .type_params
                         .insert(pack_name.clone(), (*pack_idx, pack_type));
                 }
@@ -1875,12 +1875,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // For blanket impls where impl_ty is a free type parameter
             if let Some(ref name) = blanket_name
-                && !scope.trait_ctx.type_params.contains_key(name)
+                && !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
                 && !scope.tysys.is_known_type_name(name)
             {
                 if let Some(recv_id) = receiver_type_id {
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .type_params
                         .insert(name.clone(), (0, recv_id));
                 } else {
@@ -1890,7 +1890,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_type_param(name.clone(), 0);
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .type_params
                         .insert(name.clone(), (0, type_id));
                 }
@@ -1900,7 +1900,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (name, ty) in &assoc_bindings {
                 let type_id = scope.resolve_type(ty);
                 scope
-                    .trait_ctx
+                    .annotate_ctx.trait_ctx
                     .assoc_type_bindings
                     .insert(name.clone(), type_id);
             }
@@ -1960,7 +1960,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let trait_name = scope.get_type_name_full(&trait_type_for_name);
 
                 // Set up method-level type params (e.g., V in deserialize_any<V: Visitor>)
-                let impl_offset = scope.trait_ctx.type_params.len() as u32;
+                let impl_offset = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
                 for (i, type_param) in method_type_params.iter().enumerate() {
                     let index = impl_offset + i as u32;
                     let type_param_id =
@@ -1973,12 +1973,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 index,
                             });
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .type_params
                         .insert(type_param.name.clone(), (index, type_param_id));
                     if !type_param.bounds.is_empty() {
                         scope
-                            .trait_ctx
+                            .annotate_ctx.trait_ctx
                             .type_param_bounds
                             .insert(type_param.name.clone(), type_param.bounds.clone());
                     }
@@ -1990,9 +1990,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Without this, `resolve_type("Self")` falls through to
                 // UNKNOWN and the caller's argument typecheck silently
                 // accepts anything, surfacing as an ICE at codegen.
-                let old_self_type = scope.trait_ctx.self_type;
+                let old_self_type = scope.annotate_ctx.trait_ctx.self_type;
                 if let Some(recv_id) = receiver_type_id {
-                    scope.trait_ctx.self_type = Some(recv_id);
+                    scope.annotate_ctx.trait_ctx.self_type = Some(recv_id);
                 }
 
                 let return_type = return_type_ast
@@ -2005,13 +2005,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // the proper `TypeParam` id that inference expects.
                 let param_types = scope.extract_param_types(&params);
 
-                scope.trait_ctx.self_type = old_self_type;
+                scope.annotate_ctx.trait_ctx.self_type = old_self_type;
 
                 // Remove method-level type params from scope
                 for type_param in &method_type_params {
-                    scope.trait_ctx.type_params.shift_remove(&type_param.name);
+                    scope.annotate_ctx.trait_ctx.type_params.shift_remove(&type_param.name);
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .type_param_bounds
                         .shift_remove(&type_param.name);
                 }
@@ -2083,9 +2083,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if default_method.name == method_name && default_method.body.is_some() {
                             // Set up Self type so that `Self` in the default method's
                             // return type resolves to the concrete receiver type
-                            let old_self_type = scope.trait_ctx.self_type;
+                            let old_self_type = scope.annotate_ctx.trait_ctx.self_type;
                             if let Some(recv_id) = receiver_type_id {
-                                scope.trait_ctx.self_type = Some(recv_id);
+                                scope.annotate_ctx.trait_ctx.self_type = Some(recv_id);
                             }
 
                             // Bind the trait's own type parameters to the impl's
@@ -2097,7 +2097,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             scope.bind_trait_type_params_from_impl(&trait_type_for_name);
 
                             // Set up method-level type params (e.g., U in map<U>)
-                            let impl_offset = scope.trait_ctx.type_params.len() as u32;
+                            let impl_offset = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
                             for (i, type_param) in default_method.type_params.iter().enumerate() {
                                 let index = impl_offset + i as u32;
                                 let type_param_id = scope.tysys.type_table.borrow_mut().intern(
@@ -2107,12 +2107,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     },
                                 );
                                 scope
-                                    .trait_ctx
+                                    .annotate_ctx.trait_ctx
                                     .type_params
                                     .insert(type_param.name.clone(), (index, type_param_id));
                                 if !type_param.bounds.is_empty() {
                                     scope
-                                        .trait_ctx
+                                        .annotate_ctx.trait_ctx
                                         .type_param_bounds
                                         .insert(type_param.name.clone(), type_param.bounds.clone());
                                 }
@@ -2150,13 +2150,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                             // Remove method-level type params from scope
                             for type_param in &default_method.type_params {
-                                scope.trait_ctx.type_params.shift_remove(&type_param.name);
+                                scope.annotate_ctx.trait_ctx.type_params.shift_remove(&type_param.name);
                                 scope
-                                    .trait_ctx
+                                    .annotate_ctx.trait_ctx
                                     .type_param_bounds
                                     .shift_remove(&type_param.name);
                             }
-                            scope.trait_ctx.self_type = old_self_type;
+                            scope.annotate_ctx.trait_ctx.self_type = old_self_type;
 
                             found_traits.push(TraitMethodMatch {
                                 trait_name: trait_name_str.clone(),
@@ -2636,8 +2636,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // single-source-of-truth for `Self` substitution is
             // `trait_ctx.self_type` (consulted by both `resolve_type` and
             // the `resolve_type_with_param_mapping` fallback above).
-            let saved_self_type = self.trait_ctx.self_type;
-            self.trait_ctx.self_type = Some(base_type_id);
+            let saved_self_type = self.annotate_ctx.trait_ctx.self_type;
+            self.annotate_ctx.trait_ctx.self_type = Some(base_type_id);
 
             // Process associated types (e.g., `type Output = Self`)
             let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
@@ -2657,7 +2657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_ref()
                 .map(|ty| self.resolve_type_with_param_mapping(ty, &type_param_mapping));
 
-            self.trait_ctx.self_type = saved_self_type;
+            self.annotate_ctx.trait_ctx.self_type = saved_self_type;
 
             return Some(ArithmeticTraitInfo {
                 output_type,
@@ -2811,18 +2811,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Set up associated type bindings (auto-restored on scope drop)
                 let mut scope = self.enter_inherited_type_param_scope();
-                scope.trait_ctx.assoc_type_bindings.clear();
+                scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
                 for (name, ty) in &assoc_bindings {
                     let type_id = scope.resolve_type_with_param_mapping(ty, &type_param_mapping);
                     scope
-                        .trait_ctx
+                        .annotate_ctx.trait_ctx
                         .assoc_type_bindings
                         .insert(name.clone(), type_id);
                 }
 
                 // Get the associated type (Output or Input)
                 let assoc_type = scope
-                    .trait_ctx
+                    .annotate_ctx.trait_ctx
                     .assoc_type_bindings
                     .get(assoc_type_name)
                     .copied()
@@ -2859,7 +2859,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // that could drift.  Channeling Self through `trait_ctx`
                 // here closes that gap.
                 if n.name == "Self"
-                    && let Some(self_type) = self.trait_ctx.self_type
+                    && let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
                 {
                     return self_type;
                 }

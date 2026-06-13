@@ -4,6 +4,7 @@
 //! It provides O(1) lookup of trait implementations by type name and trait name,
 //! replacing linear scans across all modules.
 
+use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -1186,6 +1187,21 @@ pub(super) struct TraitContext {
     pub(super) self_type: Option<TypeId>,
 }
 
+/// Per-function annotate-time scope: the trait-resolution context
+/// ([`TraitContext`]) plus the `type_implements_trait` recursion guard.
+/// Bundled so the two pieces of per-call state live and move as a unit; a
+/// later step threads `&AnnotateCtx` explicitly into the resolution queries
+/// (WEP 2026-05-26, the trait_ctx scoping work) so they can leave the
+/// `Elaborator` God Object. Neither piece may move onto the shared
+/// `TypeSystem`: `trait_ctx` is per-function and `trait_check_stack` is a
+/// per-call frame stack (empty at quiescence) whose sharing would leak
+/// frames across module walks.
+#[derive(Default)]
+pub(super) struct AnnotateCtx {
+    pub(super) trait_ctx: TraitContext,
+    pub(super) trait_check_stack: RefCell<Vec<(TypeId, String)>>,
+}
+
 /// RAII guard that restores `Elaborator::trait_ctx` to its saved value on drop.
 ///
 /// Implements `Deref<Target = Elaborator>` so it can be used as a transparent
@@ -1196,7 +1212,7 @@ pub(super) struct TraitContext {
 /// It preserves the current `trait_ctx` so the child scope can register new
 /// entries on top of the parent's. Callers that want a clean slate for a
 /// specific field (matching the legacy `mem::take` pattern) should clear that
-/// field on `scope.trait_ctx` after entering.
+/// field on `scope.annotate_ctx.trait_ctx` after entering.
 pub(super) struct TypeParamScope<'r, 'a, H: CompilerHost> {
     elaborator: &'r mut Elaborator<'a, H>,
     saved: TraitContext,
@@ -1226,7 +1242,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
 impl<H: CompilerHost> Drop for TypeParamScope<'_, '_, H> {
     fn drop(&mut self) {
-        self.elaborator.trait_ctx = std::mem::take(&mut self.saved);
+        self.elaborator.annotate_ctx.trait_ctx = std::mem::take(&mut self.saved);
     }
 }
 
@@ -1237,12 +1253,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// original context is restored when the returned guard is dropped.
     ///
     /// Callers that want a clean slate (matching the legacy
-    /// `mem::take(&mut self.trait_ctx.type_params)` pattern) should clear the
-    /// specific fields they want to reset on `scope.trait_ctx` after entering
+    /// `mem::take(&mut self.annotate_ctx.trait_ctx.type_params)` pattern) should clear the
+    /// specific fields they want to reset on `scope.annotate_ctx.trait_ctx` after entering
     /// the scope — only the fields they touch need to be cleared, all others
     /// are inherited from the parent scope.
     pub(super) fn enter_inherited_type_param_scope(&mut self) -> TypeParamScope<'_, 'a, H> {
-        let saved = self.trait_ctx.clone();
+        let saved = self.annotate_ctx.trait_ctx.clone();
         TypeParamScope {
             elaborator: self,
             saved,
@@ -1299,10 +1315,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     true,
                 )
             };
-            self.trait_ctx
+            self.annotate_ctx.trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, type_id));
-            self.trait_ctx
+            self.annotate_ctx.trait_ctx
                 .type_param_decls
                 .insert(tp.name.clone(), tp.id);
             // Filter out `fn`/`fn mut` bounds before recording (they're already
@@ -1315,7 +1331,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .cloned()
                 .collect();
             if !real_bounds.is_empty() {
-                self.trait_ctx
+                self.annotate_ctx.trait_ctx
                     .type_param_bounds
                     .insert(tp.name.clone(), real_bounds);
             }
@@ -1351,19 +1367,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .filter(|p| !p.is_effect)
             .enumerate()
         {
-            if self.trait_ctx.type_params.contains_key(&tp.name) {
+            if self.annotate_ctx.trait_ctx.type_params.contains_key(&tp.name) {
                 continue;
             }
             let Some(arg_ast) = trait_args.get(i) else {
                 continue;
             };
             let resolved_arg = self.resolve_type(arg_ast);
-            let idx = self.trait_ctx.type_params.len() as u32;
-            self.trait_ctx
+            let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
+            self.annotate_ctx.trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, resolved_arg));
             if !tp.bounds.is_empty() {
-                self.trait_ctx
+                self.annotate_ctx.trait_ctx
                     .type_param_bounds
                     .entry(tp.name.clone())
                     .or_default()

@@ -86,8 +86,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // visible — only `type_params` and `type_param_bounds` are
                     // replaced, matching the original `mem::take` semantics.
                     let mut scope = self.enter_inherited_type_param_scope();
-                    scope.trait_ctx.type_params.clear();
-                    scope.trait_ctx.type_param_bounds.clear();
+                    scope.annotate_ctx.trait_ctx.type_params.clear();
+                    scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
                     scope.register_generic_params(&struct_decl.type_params, 0);
 
                     let mut fields = Vec::new();
@@ -174,14 +174,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Set up type parameters in scope for resolving field types.
                     // Use an inherited scope so caller-provided context stays
                     // visible — only `type_params` is replaced, matching the
-                    // original `mem::take(&mut self.trait_ctx.type_params)`.
+                    // original `mem::take(&mut self.annotate_ctx.trait_ctx.type_params)`.
                     let mut scope = self.enter_inherited_type_param_scope();
-                    scope.trait_ctx.type_params.clear();
+                    scope.annotate_ctx.trait_ctx.type_params.clear();
                     scope.register_generic_params(&variant_decl.type_params, 0);
                     let type_param_type_ids: Vec<TypeId> = variant_decl
                         .type_params
                         .iter()
-                        .filter_map(|p| scope.trait_ctx.type_params.get(&p.name).map(|&(_, id)| id))
+                        .filter_map(|p| scope.annotate_ctx.trait_ctx.type_params.get(&p.name).map(|&(_, id)| id))
                         .collect();
 
                     // Collect type parameters
@@ -350,8 +350,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // only `type_params` and `type_param_bounds` are replaced
                     // (matching the original `mem::take` semantics).
                     let mut scope = self.enter_inherited_type_param_scope();
-                    scope.trait_ctx.type_params.clear();
-                    scope.trait_ctx.type_param_bounds.clear();
+                    scope.annotate_ctx.trait_ctx.type_params.clear();
+                    scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
                     scope.register_generic_params(&func.type_params, 0);
                     let return_type = func
                         .return_type
@@ -371,9 +371,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `assoc_type_bindings` are replaced (matching the
                     // original `mem::take` semantics for those fields).
                     let mut scope = self.enter_inherited_type_param_scope();
-                    scope.trait_ctx.type_params.clear();
-                    scope.trait_ctx.type_param_bounds.clear();
-                    scope.trait_ctx.assoc_type_bindings.clear();
+                    scope.annotate_ctx.trait_ctx.type_params.clear();
+                    scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+                    scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
                     // First, collect explicit type params from impl<T>, skipping concrete types
                     // (e.g., `impl<i32, T> IndexValue<i32> for Triple<T>` — skip "i32").
@@ -399,16 +399,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .make_type_param(param.name.clone(), actual_idx)
                         };
                         scope
-                            .trait_ctx
+                            .annotate_ctx.trait_ctx
                             .type_params
                             .insert(param.name.clone(), (actual_idx, type_id));
                         scope
-                            .trait_ctx
+                            .annotate_ctx.trait_ctx
                             .type_param_decls
                             .insert(param.name.clone(), param.id);
                         if !param.bounds.is_empty() {
                             scope
-                                .trait_ctx
+                                .annotate_ctx.trait_ctx
                                 .type_param_bounds
                                 .insert(param.name.clone(), param.bounds.clone());
                         }
@@ -429,7 +429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for (i, arg) in generic.args.iter().enumerate() {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;
-                                if !scope.trait_ctx.type_params.contains_key(name)
+                                if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
                                     && !scope
                                         .tysys
                                         .is_known_type_name_in(&scope.current_module_source, name)
@@ -441,7 +441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         .borrow_mut()
                                         .make_type_param(name.clone(), index);
                                     scope
-                                        .trait_ctx
+                                        .annotate_ctx.trait_ctx
                                         .type_params
                                         .insert(name.clone(), (index, type_id));
                                 }
@@ -454,7 +454,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for binding in &impl_block.associated_types {
                             let type_id = scope.resolve_type(&binding.ty);
                             scope
-                                .trait_ctx
+                                .annotate_ctx.trait_ctx
                                 .assoc_type_bindings
                                 .insert(binding.name.clone(), type_id);
                         }
@@ -501,7 +501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // Set up method-level type parameters so that `V::Output`-style
                         // associated type projections can be resolved in the return type.
                         let mut method_type_param_names: Vec<String> = Vec::new();
-                        let offset = scope.trait_ctx.type_params.len();
+                        let offset = scope.annotate_ctx.trait_ctx.type_params.len();
                         for (i, param) in method.type_params.iter().enumerate() {
                             let idx = (offset + i) as u32;
                             let type_id = scope
@@ -510,16 +510,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), idx);
                             scope
-                                .trait_ctx
+                                .annotate_ctx.trait_ctx
                                 .type_params
                                 .insert(param.name.clone(), (idx, type_id));
                             scope
-                                .trait_ctx
+                                .annotate_ctx.trait_ctx
                                 .type_param_decls
                                 .insert(param.name.clone(), param.id);
                             if !param.bounds.is_empty() {
                                 scope
-                                    .trait_ctx
+                                    .annotate_ctx.trait_ctx
                                     .type_param_bounds
                                     .insert(param.name.clone(), param.bounds.clone());
                             }
@@ -534,8 +534,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                         // Remove method-level type params from scope
                         for name in &method_type_param_names {
-                            scope.trait_ctx.type_params.shift_remove(name);
-                            scope.trait_ctx.type_param_bounds.shift_remove(name);
+                            scope.annotate_ctx.trait_ctx.type_params.shift_remove(name);
+                            scope.annotate_ctx.trait_ctx.type_param_bounds.shift_remove(name);
                         }
 
                         let mangled_name = MethodName::format_local(
