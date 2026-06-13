@@ -56,13 +56,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::ast::{BinaryOp, Expr, Literal, UnaryOp};
+use crate::ast::{BinaryOp, Expr, ImplBlock, Literal, Type, UnaryOp};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::trait_env::TraitEnv;
 use super::types::{
@@ -258,6 +258,216 @@ impl TypeSystem {
             )),
             // Logical `&&` / `||` short-circuit on `bool`; no trait dispatch.
             BinaryOp::And | BinaryOp::Or => None,
+        }
+    }
+}
+
+/// Pure type-shape helpers — queries answerable from the type table alone
+/// (peeling references, extracting a declared type's name, newtype-base
+/// resolution, type stringification). Relocated off `impl Elaborator` as
+/// part of the WEP 2026-05-26 God-Object decomposition (Stage A): they
+/// touch only `self.type_table`, so they belong on the type system, and
+/// both the body walk and reify reach them through `self.tysys`.
+impl TypeSystem {
+    /// Build declared type params for an impl block, filtering out known type names.
+    pub(crate) fn build_declared_type_params(&self, impl_block: &ImplBlock) -> IndexSet<String> {
+        let mut declared: IndexSet<String> = impl_block
+            .type_params
+            .iter()
+            .map(|p| p.name.clone())
+            .filter(|name| !self.is_known_type_name(name))
+            .collect();
+        if let Type::Generic(g) = &impl_block.ty {
+            for arg in &g.args {
+                if let Type::Named(n) = arg
+                    && !self.is_known_type_name(&n.name)
+                {
+                    declared.insert(n.name.clone());
+                }
+            }
+        }
+        declared
+    }
+
+    /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
+    pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
+        match self.type_table.borrow().get(type_id) {
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::GenericInstance { name, .. }
+            | ResolvedType::Newtype { name, .. }
+            | ResolvedType::Flags { name, .. } => Some(name.clone()),
+            _ => None,
+        }
+    }
+
+    /// For newtypes, get the base type name and ID for trait impl lookup fallback.
+    /// Returns (`base_name`, `base_type_id`) if the type is a newtype; otherwise returns the same name/id.
+    pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
+        let tt = self.type_table.borrow();
+        if let Some(base_id) = tt.get_newtype_base(type_id) {
+            drop(tt);
+            if let Some(base_name) = self.struct_name_for_type(base_id) {
+                return (base_name, base_id);
+            }
+        }
+        (name.to_string(), type_id)
+    }
+
+    /// Peel a chain of trailing newtypes / generic instances down to the
+    /// ultimate base struct (or builtin) name that owns its methods.
+    pub(crate) fn get_ultimate_base_struct_name(&self, type_id: TypeId) -> String {
+        let mut current = type_id;
+        loop {
+            match self.type_table.borrow().get(current).clone() {
+                ResolvedType::Struct { name, .. } => return name,
+                ResolvedType::GenericInstance { name, .. } => return name,
+                ResolvedType::Newtype { base_type, .. } => current = base_type,
+                ResolvedType::Flags { .. } => return "u32".to_string(),
+                // The raw GC array's base method-owner name is "Array"
+                // (its type args are carried separately), not the full
+                // `type_name` spelling `Array<T>`.
+                ResolvedType::BuiltinArray(_) => return TypeTable::ARRAY_TYPE_NAME.to_string(),
+                _ => return self.type_table.borrow().type_name(current),
+            }
+        }
+    }
+
+    /// Peel reference / mutable-reference wrappers to reach the underlying type.
+    pub(crate) fn get_base_type(&self, type_id: TypeId) -> TypeId {
+        let mut current = type_id;
+        loop {
+            match self.type_table.borrow().get(current).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    current = inner;
+                }
+                _ => return current,
+            }
+        }
+    }
+
+    /// Whether `type_id` is a kind that participates in `Eq`/`Ord` auto-derive.
+    pub(crate) fn auto_derive_eligible_kind(&self, type_id: TypeId) -> bool {
+        matches!(
+            self.type_table.borrow().get(type_id),
+            ResolvedType::Struct { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Enum { .. }
+                | ResolvedType::GenericInstance { .. }
+        )
+    }
+
+    /// Substitute every occurrence of `base_type` with `newtype` inside
+    /// `type_id`, recursing through references and generic-instance args.
+    /// Returns the original id unchanged when no occurrence is found.
+    pub(crate) fn substitute_newtype_in_type(
+        &self,
+        type_id: TypeId,
+        base_type: TypeId,
+        newtype: TypeId,
+    ) -> TypeId {
+        let ty = self.type_table.borrow().get(type_id).clone();
+        match ty {
+            // Direct match: base type -> newtype
+            _ if type_id == base_type => newtype,
+
+            // Reference: substitute the inner type
+            ResolvedType::Ref(inner) => {
+                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(new_inner))
+                }
+            }
+            ResolvedType::MutRef(inner) => {
+                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::MutRef(new_inner))
+                }
+            }
+
+            // Generic instance (e.g., Option<T>, List<T>): substitute in type args
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&arg| self.substitute_newtype_in_type(arg, base_type, newtype))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    self.type_table.borrow_mut().intern(ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        type_args: new_args,
+                    })
+                }
+            }
+
+            // Other types: no substitution
+            _ => type_id,
+        }
+    }
+
+    /// Render a type as a user-facing Wado type string (used in diagnostics
+    /// and synthesized names). Recurses through references, generic args,
+    /// tuples, and function types.
+    pub(crate) fn type_id_to_string(&self, type_id: TypeId) -> String {
+        let resolved = self.type_table.borrow().get(type_id).clone();
+        match resolved {
+            ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
+            ResolvedType::Struct { name, .. } => name,
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                if TypeTable::is_tuple_type(&name, &module_source) {
+                    let parts: Vec<String> = type_args
+                        .iter()
+                        .map(|&t| self.type_id_to_string(t))
+                        .collect();
+                    format!("[{}]", parts.join(", "))
+                } else if type_args.is_empty() {
+                    name
+                } else {
+                    let args: Vec<String> = type_args
+                        .iter()
+                        .map(|&t| self.type_id_to_string(t))
+                        .collect();
+                    format!("{}<{}>", name, args.join(", "))
+                }
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                format!("Array<{}>", self.type_id_to_string(elem))
+            }
+            ResolvedType::Ref(inner) => format!("&{}", self.type_id_to_string(inner)),
+            ResolvedType::MutRef(inner) => format!("&mut {}", self.type_id_to_string(inner)),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                let param_strs: Vec<String> =
+                    params.iter().map(|&t| self.type_id_to_string(t)).collect();
+                let ret_str = self.type_id_to_string(return_type);
+                format!("fn({}) -> {}", param_strs.join(", "), ret_str)
+            }
+            ResolvedType::TypeParam { name, .. } => name,
+            ResolvedType::Unit => "()".to_string(),
+            ResolvedType::Never => "!".to_string(),
+            ResolvedType::Unknown => "<unknown>".to_string(),
+            ResolvedType::Error => "<error>".to_string(),
+            _ => format!("{resolved:?}"),
         }
     }
 }

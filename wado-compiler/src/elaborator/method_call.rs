@@ -118,7 +118,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // using the method's parameter types as expected types.
 
         // Get the base (non-ref) type for method lookup and struct name extraction
-        let base_type_id = self.get_base_type(receiver.type_id);
+        let base_type_id = self.tysys.get_base_type(receiver.type_id);
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
@@ -487,11 +487,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If method was inherited from a newtype's base type, substitute base->newtype in params
         let expected_param_types: Vec<TypeId> = if let Some(base_type_id) = inherited_from_base {
             // Get the newtype that the method is being called on
-            let newtype_id = self.get_base_type(receiver.type_id);
+            let newtype_id = self.tysys.get_base_type(receiver.type_id);
             // Substitute base type with newtype in all parameter types
             param_types
                 .iter()
-                .map(|&ty| self.substitute_newtype_in_type(ty, base_type_id, newtype_id))
+                .map(|&ty| self.tysys.substitute_newtype_in_type(ty, base_type_id, newtype_id))
                 .collect()
         } else {
             param_types
@@ -544,8 +544,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Substitute return type for inherited newtype methods
         // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
         if let Some(base_type_id) = inherited_from_base {
-            let newtype_id = self.get_base_type(receiver.type_id);
-            return_type = self.substitute_newtype_in_type(return_type, base_type_id, newtype_id);
+            let newtype_id = self.tysys.get_base_type(receiver.type_id);
+            return_type = self.tysys.substitute_newtype_in_type(return_type, base_type_id, newtype_id);
         }
 
         // Address-taken tracking for an implicit `&mut self` borrow on a
@@ -2777,7 +2777,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     let base_name = match self.tysys.type_table.borrow().get(newtype_id).clone() {
                         ResolvedType::Newtype { base_type, .. } => {
-                            Some(self.get_ultimate_base_struct_name(base_type))
+                            Some(self.tysys.get_ultimate_base_struct_name(base_type))
                         }
                         ResolvedType::Flags { .. } => Some("u32".to_string()),
                         _ => None,

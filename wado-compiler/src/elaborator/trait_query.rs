@@ -391,8 +391,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // explain that member in turn.
         for (label, member_tid) in members {
             if !self.type_implements_trait(member_tid, trait_name) {
-                let owner = self.type_id_to_string(type_id);
-                let member_ty = self.type_id_to_string(member_tid);
+                let owner = self.tysys.type_id_to_string(type_id);
+                let member_ty = self.tysys.type_id_to_string(member_tid);
                 chain.push(format!(
                     "`{owner}` does not implement `{trait_name}` because {label} of type `{member_ty}` does not implement `{trait_name}`"
                 ));
@@ -1077,7 +1077,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &bound.name.clone(),
                         );
                     } else {
-                        let type_name = self.type_id_to_string(type_arg);
+                        let type_name = self.tysys.type_id_to_string(type_arg);
                         let reason = self.trait_unimpl_reason_chain(type_arg, &bound.name);
                         let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                             type_name,
@@ -1453,8 +1453,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "cmp" => ord_name,
             _ => return None,
         };
-        let base_type_id = self.get_base_type(receiver_type_id);
-        if !self.auto_derive_eligible_kind(base_type_id) {
+        let base_type_id = self.tysys.get_base_type(receiver_type_id);
+        if !self.tysys.auto_derive_eligible_kind(base_type_id) {
             return None;
         }
         if !self.type_implements_trait(base_type_id, &trait_name) {
@@ -1499,18 +1499,4 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Whether the given type is a kind for which `synthesis::traits` emits
-    /// auto-derived `Eq` / `Ord` method bodies: named structs, variants, and
-    /// enums (including generic instances thereof). Primitives and reference
-    /// types are excluded because their equality lowers to Wasm instructions
-    /// rather than a callable method.
-    fn auto_derive_eligible_kind(&self, type_id: TypeId) -> bool {
-        matches!(
-            self.tysys.type_table.borrow().get(type_id),
-            ResolvedType::Struct { .. }
-                | ResolvedType::Variant { .. }
-                | ResolvedType::Enum { .. }
-                | ResolvedType::GenericInstance { .. }
-        )
-    }
 }

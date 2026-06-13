@@ -113,50 +113,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         refs
     }
 
-    /// Build declared type params for an impl block, filtering out known type names.
-    fn build_declared_type_params(&self, impl_block: &ast::ImplBlock) -> IndexSet<String> {
-        let mut declared: IndexSet<String> = impl_block
-            .type_params
-            .iter()
-            .map(|p| p.name.clone())
-            .filter(|name| !self.tysys.is_known_type_name(name))
-            .collect();
-        if let Type::Generic(g) = &impl_block.ty {
-            for arg in &g.args {
-                if let Type::Named(n) = arg
-                    && !self.tysys.is_known_type_name(&n.name)
-                {
-                    declared.insert(n.name.clone());
-                }
-            }
-        }
-        declared
-    }
-
-    /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
-    pub(super) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
-        match self.tysys.type_table.borrow().get(type_id) {
-            ResolvedType::Struct { name, .. }
-            | ResolvedType::GenericInstance { name, .. }
-            | ResolvedType::Newtype { name, .. }
-            | ResolvedType::Flags { name, .. } => Some(name.clone()),
-            _ => None,
-        }
-    }
-
-    /// For newtypes, get the base type name and ID for trait impl lookup fallback.
-    /// Returns (`base_name`, `base_type_id`) if the type is a newtype; otherwise returns the same name/id.
-    pub(super) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
-        let tt = self.tysys.type_table.borrow();
-        if let Some(base_id) = tt.get_newtype_base(type_id) {
-            drop(tt);
-            if let Some(base_name) = self.struct_name_for_type(base_id) {
-                return (base_name, base_id);
-            }
-        }
-        (name.to_string(), type_id)
-    }
-
     /// Find the rhs parameter type for an operator trait on a struct type.
     /// Used to determine what type a literal rhs should be coerced to.
     pub(super) fn find_operator_rhs_type(
@@ -164,7 +120,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_type_id: TypeId,
         op: &BinaryOp,
     ) -> Option<TypeId> {
-        let struct_name = self.struct_name_for_type(self_type_id)?;
+        let struct_name = self.tysys.struct_name_for_type(self_type_id)?;
         let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
         let trait_info =
             self.find_arithmetic_trait_impl(&struct_name, self_type_id, &trait_name, method_name)?;
@@ -186,30 +142,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs_type_id: TypeId,
         op: &BinaryOp,
     ) -> Option<TypeId> {
-        let struct_name = self.struct_name_for_type(rhs_type_id)?;
+        let struct_name = self.tysys.struct_name_for_type(rhs_type_id)?;
         let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
         // Verify the trait impl exists; the self type is the struct type itself
         self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, &trait_name, method_name)?;
         Some(rhs_type_id)
     }
 
-    /// Check if a qualified name `struct_name::method_name` is a static method
-    pub(super) fn get_ultimate_base_struct_name(&self, type_id: TypeId) -> String {
-        let mut current = type_id;
-        loop {
-            match self.tysys.type_table.borrow().get(current).clone() {
-                ResolvedType::Struct { name, .. } => return name,
-                ResolvedType::GenericInstance { name, .. } => return name,
-                ResolvedType::Newtype { base_type, .. } => current = base_type,
-                ResolvedType::Flags { .. } => return "u32".to_string(),
-                // The raw GC array's base method-owner name is "Array"
-                // (its type args are carried separately), not the full
-                // `type_name` spelling `Array<T>`.
-                ResolvedType::BuiltinArray(_) => return TypeTable::ARRAY_TYPE_NAME.to_string(),
-                _ => return self.tysys.type_table.borrow().type_name(current),
-            }
-        }
-    }
 
     /// Return `Some(struct_type)` when `struct_name` is a non-generic struct
     /// whose fields all carry a declared default expression, making it
@@ -349,7 +288,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Option<MethodInfo> {
         // First, get the base (non-reference) type for method lookup
-        let base_type_id = self.get_base_type(receiver_type);
+        let base_type_id = self.tysys.get_base_type(receiver_type);
         // Resolving the method's signature here walks a (possibly foreign)
         // declaration's parameter / return type AST. Those nodes are owned by
         // the declaring module and already have their use→def edges recorded
@@ -1104,74 +1043,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// Substitute a base type with a newtype in a type (handles references)
-    /// For example: if `base_type` is Point and newtype is Location:
-    ///   - Point -> Location
-    ///   - &Point -> &Location
-    ///   - &mut Point -> &mut Location
-    pub(super) fn substitute_newtype_in_type(
-        &mut self,
-        type_id: TypeId,
-        base_type: TypeId,
-        newtype: TypeId,
-    ) -> TypeId {
-        let ty = self.tysys.type_table.borrow().get(type_id).clone();
-        match ty {
-            // Direct match: base type -> newtype
-            _ if type_id == base_type => newtype,
-
-            // Reference: substitute the inner type
-            ResolvedType::Ref(inner) => {
-                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
-                if new_inner == inner {
-                    type_id
-                } else {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Ref(new_inner))
-                }
-            }
-            ResolvedType::MutRef(inner) => {
-                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
-                if new_inner == inner {
-                    type_id
-                } else {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::MutRef(new_inner))
-                }
-            }
-
-            // Generic instance (e.g., Option<T>, List<T>): substitute in type args
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
-                let new_args: Vec<TypeId> = type_args
-                    .iter()
-                    .map(|&arg| self.substitute_newtype_in_type(arg, base_type, newtype))
-                    .collect();
-                if new_args == type_args {
-                    type_id
-                } else {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::GenericInstance {
-                            name,
-                            module_source,
-                            type_args: new_args,
-                        })
-                }
-            }
-
-            // Other types: no substitution
-            _ => type_id,
-        }
-    }
 
     /// Infer method-level type arguments for an instance method call using
     /// the method's already-resolved parameter and return types.
@@ -1209,7 +1080,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
         } = input;
 
-        let base_type_id = self.get_base_type(receiver_type);
+        let base_type_id = self.tysys.get_base_type(receiver_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
         // Locate the method's AST just to recover the list of type parameter
@@ -1518,18 +1389,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Get the base (non-reference) type by stripping all Ref/MutRef wrappers
-    pub(super) fn get_base_type(&self, type_id: TypeId) -> TypeId {
-        let mut current = type_id;
-        loop {
-            match self.tysys.type_table.borrow().get(current).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    current = inner;
-                }
-                _ => return current,
-            }
-        }
-    }
     /// Adjust the receiver expression to match what the method's self parameter expects.
     ///
     /// When `is_ref_impl` is true, the method was found on a reference type impl
@@ -2490,7 +2349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "KeyValueLiteral",
             "Builder",
         )?;
-        let builder_name = self.struct_name_for_type(builder_type)?;
+        let builder_name = self.tysys.struct_name_for_type(builder_type)?;
         if let Some((value_type, self_kind, trait_name, _)) = self.find_indexing_trait_impl(
             &builder_name,
             builder_type,
@@ -2545,7 +2404,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(b) => b.ty.clone(),
                 None => continue,
             };
-            let declared_type_params = self.build_declared_type_params(impl_block);
+            let declared_type_params = self.tysys.build_declared_type_params(impl_block);
             let type_param_mapping = TypeSystem::build_type_param_mapping(
                 &impl_block.ty,
                 &concrete_type_args,
@@ -2609,7 +2468,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "SequenceLiteral",
             "Builder",
         )?;
-        let builder_name = self.struct_name_for_type(builder_type)?;
+        let builder_name = self.tysys.struct_name_for_type(builder_type)?;
         if let Some((element_type, self_kind, trait_name, impl_source)) = self
             .find_indexing_trait_impl(
                 &builder_name,
@@ -2942,56 +2801,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Vec::new()
     }
 
-    /// Convert a `TypeId` to a human-readable string for error messages
-    pub(super) fn type_id_to_string(&self, type_id: TypeId) -> String {
-        let resolved = self.tysys.type_table.borrow().get(type_id).clone();
-        match resolved {
-            ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
-            ResolvedType::Struct { name, .. } => name,
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } => {
-                if TypeTable::is_tuple_type(&name, &module_source) {
-                    let parts: Vec<String> = type_args
-                        .iter()
-                        .map(|&t| self.type_id_to_string(t))
-                        .collect();
-                    format!("[{}]", parts.join(", "))
-                } else if type_args.is_empty() {
-                    name
-                } else {
-                    let args: Vec<String> = type_args
-                        .iter()
-                        .map(|&t| self.type_id_to_string(t))
-                        .collect();
-                    format!("{}<{}>", name, args.join(", "))
-                }
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                format!("Array<{}>", self.type_id_to_string(elem))
-            }
-            ResolvedType::Ref(inner) => format!("&{}", self.type_id_to_string(inner)),
-            ResolvedType::MutRef(inner) => format!("&mut {}", self.type_id_to_string(inner)),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                let param_strs: Vec<String> =
-                    params.iter().map(|&t| self.type_id_to_string(t)).collect();
-                let ret_str = self.type_id_to_string(return_type);
-                format!("fn({}) -> {}", param_strs.join(", "), ret_str)
-            }
-            ResolvedType::TypeParam { name, .. } => name,
-            ResolvedType::Unit => "()".to_string(),
-            ResolvedType::Never => "!".to_string(),
-            ResolvedType::Unknown => "<unknown>".to_string(),
-            ResolvedType::Error => "<error>".to_string(),
-            _ => format!("{resolved:?}"),
-        }
-    }
 
     /// Helper to find indexing trait implementations (Index, `IndexMut`, or `IndexAssign`)
     pub(super) fn find_indexing_trait_impl(
@@ -3032,7 +2841,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let trait_name = self.get_type_name_full(impl_block.trait_type.as_ref().unwrap());
 
             let impl_block = self.get_impl_block(impl_ref);
-            let declared_type_params = self.build_declared_type_params(impl_block);
+            let declared_type_params = self.tysys.build_declared_type_params(impl_block);
 
             let impl_block = self.get_impl_block(impl_ref);
             let type_param_mapping = TypeSystem::build_type_param_mapping(
@@ -3213,7 +3022,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let struct_name = self.struct_name_for_type(type_id)?;
+        let struct_name = self.tysys.struct_name_for_type(type_id)?;
         let concrete_type_args: Vec<TypeId> =
             if let ResolvedType::GenericInstance { type_args, .. } =
                 self.tysys.type_table.borrow().get(type_id).clone()
@@ -3236,7 +3045,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => continue,
             };
 
-            let declared_type_params = self.build_declared_type_params(impl_block);
+            let declared_type_params = self.tysys.build_declared_type_params(impl_block);
             let type_param_mapping = TypeSystem::build_type_param_mapping(
                 &impl_block.ty,
                 &concrete_type_args,

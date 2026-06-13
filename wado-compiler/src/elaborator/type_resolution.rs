@@ -403,7 +403,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 for bound in bounds {
                                     if !self.type_implements_trait(type_arg, bound) {
                                         // Get the type name for the error message
-                                        let type_name = self.type_id_to_string(type_arg);
+                                        let type_name = self.tysys.type_id_to_string(type_arg);
                                         let reason =
                                             self.trait_unimpl_reason_chain(type_arg, bound);
                                         let _ =
@@ -450,7 +450,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         args.iter().map(|t| self.resolve_type(t)).collect();
                     let arg_names: Vec<String> = resolved_args
                         .iter()
-                        .map(|&tid| self.type_id_to_string(tid))
+                        .map(|&tid| self.tysys.type_id_to_string(tid))
                         .collect();
                     let display_name = format!("{}<{}>", name, arg_names.join(", "));
                     self.tysys.type_table.borrow_mut().make_newtype(

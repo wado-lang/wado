@@ -1380,7 +1380,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // For newtypes, also resolve the base type name for trait impl lookup
-        let (lookup_name, lookup_type_id) = self.newtype_base_lookup(&struct_name, base_type_id);
+        let (lookup_name, lookup_type_id) = self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
             let index_type = self.resolve_expr(&index.index, ctx, None);
@@ -3238,7 +3238,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {
                             if !self.type_implements_trait(type_arg, bound) {
-                                let type_name = self.type_id_to_string(type_arg);
+                                let type_name = self.tysys.type_id_to_string(type_arg);
                                 let reason = self.trait_unimpl_reason_chain(type_arg, bound);
                                 let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                                     type_name,
@@ -3970,7 +3970,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if element_type != TypeTable::ERROR
             && !self.type_implements_trait(element_type, &ord_trait_name)
         {
-            let type_name = self.type_id_to_string(element_type);
+            let type_name = self.tysys.type_id_to_string(element_type);
             let reason = self.trait_unimpl_reason_chain(element_type, &ord_trait_name);
             let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                 type_name,

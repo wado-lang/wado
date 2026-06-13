@@ -480,7 +480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         &bound.name.clone(),
                                     );
                                 } else {
-                                    let type_name = self.type_id_to_string(type_arg);
+                                    let type_name = self.tysys.type_id_to_string(type_arg);
                                     let reason =
                                         self.trait_unimpl_reason_chain(type_arg, &bound.name);
                                     let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
