@@ -8,11 +8,10 @@
 //! `reduce_local_a` across function bodies and feeds the interpreter's
 //! local-variable env from `Let` / `Assign` statements.
 //!
-//! Per-local *field*-value tracking (the old `field_env`) has been retired:
-//! reaching-def of `obj.f` is now the engine [`ValueGraph`]'s job (store-load
-//! forwarding + hash-cons CSE), so this walker only tracks scalar local
-//! lattices. The local env needs no branch fork because mutable locals are
-//! recorded [`Lattice::NonConst`] up front.
+//! This walker tracks only scalar local lattices; reaching-def of a struct
+//! field `obj.f` is the engine [`ValueGraph`]'s job (store-load forwarding +
+//! hash-cons CSE). The local env needs no branch fork because mutable locals
+//! are recorded [`Lattice::NonConst`] up front.
 //!
 //! The visitor mutates the arena `Body` directly: the per-node rewrites
 //! (`reduce_local_a`) and the block-level branch splice
@@ -454,9 +453,8 @@ impl ConstFoldVisitor<'_> {
                 // borrow is dropped to `NonConst` before and after the body
                 // walk (`apply_loop_invalidations`), a conservative fixpoint
                 // approximation — only facts unaffected by the body hold at
-                // entry and post-loop. (Field-level loop invalidation is gone
-                // with `field_env`; the engine `ValueGraph` models loop heap
-                // effects itself.)
+                // entry and post-loop. Struct-field heap effects across the
+                // loop are the engine `ValueGraph`'s concern, not niri's.
                 let lb = *lb;
                 let writes = collect_loop_write_effects(engine.body, lb);
                 self.apply_loop_invalidations(&writes);
@@ -500,11 +498,9 @@ impl ConstFoldVisitor<'_> {
         }
 
         // Branch / scope expressions: walk the condition / scrutinee and each
-        // arm, then reduce at this node. Field-knowledge forking across arms is
-        // gone — the per-local field map (`field_env`) has been retired in
-        // favour of the engine `ValueGraph` (see WEP 2026-06-05); the local
-        // env needs no fork because mutable locals are recorded `NonConst`
-        // up front.
+        // arm, then reduce at this node. The local env needs no per-arm fork —
+        // mutable locals are recorded `NonConst` up front — and field
+        // reaching-def across arms is the engine `ValueGraph`'s concern.
         match expr_shape(engine.body, e) {
             ExprShape::If(condition, then_branch, else_branch) => {
                 let mut changed = self.visit_expr(engine, condition);
@@ -612,8 +608,8 @@ impl ConstFoldVisitor<'_> {
             changed |= self.visit_expr(engine, inner);
         }
         // A bare `local = …` reassignment drops the local's lattice to
-        // unknown; field-level and aliased-field invalidation is gone with
-        // `field_env` (the engine `ValueGraph` models heap writes itself).
+        // unknown. A field / deref / index store needs nothing here — the
+        // engine `ValueGraph` models those heap writes.
         if let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind {
             self.interpreter.invalidate_local(*index);
         }
@@ -653,9 +649,7 @@ impl ConstFoldVisitor<'_> {
     /// Apply a [`LoopWriteEffects`] summary to the interpreter,
     /// dropping every local the body could reassign or mutably borrow to
     /// `NonConst`, so the pre-body and post-body local env is a sound
-    /// abstraction of any iteration count. (Field-level loop invalidation
-    /// retired with `field_env`; the engine `ValueGraph` models loop heap
-    /// effects itself.)
+    /// abstraction of any iteration count.
     fn apply_loop_invalidations(&mut self, writes: &LoopWriteEffects) {
         for idx in &writes.reassigned_locals {
             self.interpreter.invalidate_local(*idx);
@@ -714,8 +708,7 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
         }
         // `&mut local` escapes a mutable reference the callee can store and
         // write through. (`&mut local.field` mutates only the field, not the
-        // local's binding, so it needs no local-lattice invalidation now that
-        // field tracking is gone.)
+        // local's binding, so it needs no local-lattice invalidation.)
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
