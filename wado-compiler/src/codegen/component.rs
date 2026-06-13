@@ -1744,7 +1744,6 @@ fn generate_cm_imports(
     use crate::wir::ImportKind;
     let has_kind = |kind: ImportKind| import_plan.iter().any(|e| e.kind == kind);
     let needs_cli_types = has_kind(ImportKind::SharedTypes);
-    let needs_http_types = has_kind(ImportKind::HttpTypes);
     let cli_version = project
         .cm_interface_registry
         .get_cli_version()
@@ -2334,26 +2333,36 @@ fn generate_cm_imports(
     // Import interfaces with resource types
     import_interfaces_with_resources(builder, ctx, project, import_plan);
 
-    // Import wasi:http/types when the plan calls for it (the world exports an
-    // HTTP handler, or the code uses the HTTP Client effect). The decision lives
-    // in the WIR-level plan; codegen reads it.
-    if needs_http_types {
-        import_http_types_for_service(project, builder, ctx);
+    // Import the resource-defining HTTP types interface when the plan calls for
+    // it (the world exports an HTTP handler, or the code uses the HTTP Client
+    // effect). The plan entry carries the versioned FQ; the import code derives
+    // package and type names from it rather than hardcoding `wasi:http/types`.
+    let http_types_fq = import_plan
+        .iter()
+        .find(|e| e.kind == ImportKind::HttpTypes)
+        .map(|e| e.fq.clone());
+    if let Some(types_fq) = &http_types_fq {
+        import_http_types_for_service(project, builder, ctx, types_fq);
     }
 
-    // Import wasi:http/client when the plan lists it (the program uses the HTTP
-    // Client effect). The plan guarantees `HttpClient` implies `HttpTypes`, and
-    // the types phase above registers `http-handler-result` / `http-request`,
-    // which `import_http_client` looks up unconditionally. Assert that invariant
-    // rather than re-deriving membership: a plan that lists `HttpClient` without
-    // `HttpTypes` is a bug, and this turns the resulting `type_idx` panic into a
-    // named diagnostic.
-    if has_kind(ImportKind::HttpClient) {
+    // Import the HTTP client interface when the plan lists it (the program uses
+    // the HTTP Client effect). The plan guarantees `HttpClient` implies
+    // `HttpTypes`, and the types phase above registered the package's
+    // handler-result / request types, which the client import aliases. Assert
+    // that invariant rather than re-deriving membership.
+    if let Some(client_entry) = import_plan
+        .iter()
+        .find(|e| e.kind == ImportKind::HttpClient)
+    {
+        let types_fq = http_types_fq
+            .as_deref()
+            .expect("HttpClient in import plan without HttpTypes: types must be imported first");
+        let pkg = crate::world_registry::fq_name_package(types_fq);
         debug_assert!(
-            ctx.has_type("http-handler-result"),
-            "HttpClient in import plan without HttpTypes: wasi:http/types must be imported first",
+            ctx.has_type(&format!("{pkg}-handler-result")),
+            "HttpClient in import plan without HttpTypes: types interface must be imported first",
         );
-        import_http_client(builder, ctx, project);
+        import_http_client(builder, ctx, project, &client_entry.fq, types_fq);
     }
 }
 
@@ -2361,17 +2370,24 @@ fn import_http_types_for_service(
     project: &NirPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
+    types_fq: &str,
 ) {
-    // Collect HTTP resources from the registry
+    // The package segment (`"http"`) and instance/type name prefixes derive from
+    // the interface FQ — no `"http"` / `wasi:http/types` string literals.
+    let pkg = crate::world_registry::fq_name_package(types_fq).to_string();
+    let types_prefix = types_fq.split('@').next().unwrap_or(types_fq).to_string();
+
+    // Collect resources from the registry
     let http_resources: Vec<(String, String)> = project
         .cm_interface_registry
-        .resources_for_interface("wasi:http/types")
+        .resources_for_interface(&types_prefix)
         .map(|(wado, cm)| (wado.to_string(), cm.to_string()))
         .collect();
 
-    let http_types_instance_type = ctx.register_type("http-types-instance-type");
+    let instance_type_name = format!("{pkg}-types-instance-type");
+    let http_types_instance_type = ctx.register_type(&instance_type_name);
     {
-        let (_, enc) = builder.ty(Some("http-types-instance-type"));
+        let (_, enc) = builder.ty(Some(&instance_type_name));
         let mut instance_type = InstanceType::new();
 
         for (_, cm_name) in &http_resources {
@@ -2387,13 +2403,7 @@ fn import_http_types_for_service(
         // Use interface hint to disambiguate types shared across packages
         // (e.g., ErrorCode exists in http, filesystem, sockets).
         let resource_count = http_resources.len() as u32;
-        let http_version = project
-            .cm_interface_registry
-            .get_package_version("http")
-            .expect("WASI HTTP version not found in registry");
-        let http_types_interface = format!("wasi:http/types@{http_version}");
-        let mut type_gen =
-            CmInstanceTypeGen::with_interface_hint(resource_count, &http_types_interface);
+        let mut type_gen = CmInstanceTypeGen::with_interface_hint(resource_count, types_fq);
         let resource_exports: IndexMap<&str, u32> = http_resources
             .iter()
             .enumerate()
@@ -2408,7 +2418,7 @@ fn import_http_types_for_service(
         let all_funcs: Vec<CmFunctionInfo> = project
             .cm_interface_registry
             .interfaces()
-            .find(|i| i.package == "http" && i.interface == "types")
+            .find(|i| i.path == types_fq)
             .map(|i| i.functions)
             .unwrap_or_default();
 
@@ -2545,42 +2555,37 @@ fn import_http_types_for_service(
         enc.instance(&instance_type);
     }
 
-    ctx.register_instance("http-types");
-    let http_version = project
-        .cm_interface_registry
-        .get_package_version("http")
-        .expect("WASI HTTP version not found in registry");
-    let http_types_import_path = format!("wasi:http/types@{http_version}");
+    let types_instance = format!("{pkg}-types");
+    ctx.register_instance(&types_instance);
     builder.import(
-        &http_types_import_path,
+        types_fq,
         wasm_encoder::ComponentTypeRef::Instance(http_types_instance_type),
     );
 
     for (_, cm_name) in &http_resources {
-        let local_name = format!("http-{cm_name}-resource");
+        let local_name = format!("{pkg}-{cm_name}-resource");
         ctx.register_type(&local_name);
         builder.alias_export(
-            ctx.instance_idx("http-types"),
+            ctx.instance_idx(&types_instance),
             cm_name,
             ComponentExportKind::Type,
         );
     }
     // `ErrorCode` is defined in multiple wasi interfaces (filesystem, http,
     // sockets, sockets/ip-name-lookup) — bare-name lookup would shadow.
-    // The HTTP error type is unambiguous: pin it to wasi:http/types via the
-    // source-disambiguated lookup.
+    // Pin it to the imported types interface via the source-disambiguated lookup.
     let http_error_code_cm = project
         .cm_interface_registry
-        .get_variant_cm_name_by_interface(&http_types_import_path, "ErrorCode")
+        .get_variant_cm_name_by_interface(types_fq, "ErrorCode")
         .or_else(|| {
             project
                 .cm_interface_registry
-                .get_enum_cm_name_by_interface(&http_types_import_path, "ErrorCode")
+                .get_enum_cm_name_by_interface(types_fq, "ErrorCode")
         })
-        .expect("ErrorCode CM name not found for HTTP");
-    ctx.register_type("http-error-code");
+        .expect("ErrorCode CM name not found for the types interface");
+    ctx.register_type(&format!("{pkg}-error-code"));
     builder.alias_export(
-        ctx.instance_idx("http-types"),
+        ctx.instance_idx(&types_instance),
         http_error_code_cm,
         ComponentExportKind::Type,
     );
@@ -2599,19 +2604,19 @@ fn import_http_types_for_service(
 
     ctx.register_comp_func("http-fields-constructor");
     builder.alias_export(
-        ctx.instance_idx("http-types"),
+        ctx.instance_idx(&types_instance),
         &constructor_fields,
         ComponentExportKind::Func,
     );
     ctx.register_comp_func("http-response-new");
     builder.alias_export(
-        ctx.instance_idx("http-types"),
+        ctx.instance_idx(&types_instance),
         &static_response_new,
         ComponentExportKind::Func,
     );
     ctx.alias_comp_func("http-fields-constructor", "wasi:http/Fields::new");
 
-    // Alias resource constructor/method/static functions for HTTP resources
+    // Alias resource constructor/method/static functions for the resources
     {
         let http_resource_names: IndexSet<&str> = http_resources
             .iter()
@@ -2620,7 +2625,7 @@ fn import_http_types_for_service(
         let resource_funcs: Vec<(String, String)> = project
             .cm_interface_registry
             .interfaces()
-            .find(|i| i.package == "http" && i.interface == "types")
+            .find(|i| i.path == types_fq)
             .map(|i| {
                 i.functions
                     .iter()
@@ -2651,29 +2656,30 @@ fn import_http_types_for_service(
         for (cm_name, local_name) in &resource_funcs {
             ctx.register_comp_func(local_name);
             builder.alias_export(
-                ctx.instance_idx("http-types"),
+                ctx.instance_idx(&types_instance),
                 cm_name,
                 ComponentExportKind::Func,
             );
         }
     }
 
-    // Define own<resource> types for each HTTP resource
+    // Define own<resource> types for each resource.
     for (_, cm_name) in &http_resources {
-        let resource_local = format!("http-{cm_name}-resource");
-        let own_local = format!("http-{cm_name}");
+        let resource_local = format!("{pkg}-{cm_name}-resource");
+        let own_local = format!("{pkg}-{cm_name}");
         let resource_idx = ctx.type_idx(&resource_local);
         ctx.register_type(&own_local);
         let (_, enc) = builder.ty(Some(&own_local));
         enc.defined_type().own(resource_idx);
     }
 
-    // Define result<own<response>, error-code>
-    let response_type_idx = ctx.type_idx("http-response");
-    let error_code_type_idx = ctx.type_idx("http-error-code");
-    ctx.register_type("http-handler-result");
+    // Define the handler-result transport type `result<own<response>, error-code>`.
+    let response_type_idx = ctx.type_idx(&format!("{pkg}-response"));
+    let error_code_type_idx = ctx.type_idx(&format!("{pkg}-error-code"));
+    let handler_result_name = format!("{pkg}-handler-result");
+    ctx.register_type(&handler_result_name);
     {
-        let (_, enc) = builder.ty(Some("http-handler-result"));
+        let (_, enc) = builder.ty(Some(&handler_result_name));
         enc.defined_type().result(
             Some(ComponentValType::Type(response_type_idx)),
             Some(ComponentValType::Type(error_code_type_idx)),
@@ -2685,23 +2691,27 @@ fn import_http_client(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
+    client_fq: &str,
+    types_fq: &str,
 ) {
-    // Build the instance type for wasi:http/client from registry metadata.
-    // The client interface references types defined in wasi:http/types (request, handler-result),
-    // which are aliased from the outer scope.
-    let request_type_idx = ctx.type_idx("http-request");
-    let handler_result_type_idx = ctx.type_idx("http-handler-result");
+    // Build the client instance type from registry metadata. The client
+    // references types defined by the types interface (request, handler-result),
+    // aliased from the outer scope. Package and names derive from the FQs.
+    let pkg = crate::world_registry::fq_name_package(types_fq).to_string();
+    let request_type_idx = ctx.type_idx(&format!("{pkg}-request"));
+    let handler_result_type_idx = ctx.type_idx(&format!("{pkg}-handler-result"));
 
     let client_iface = project
         .cm_interface_registry
         .interfaces()
-        .find(|i| i.package == "http" && i.interface == "client")
-        .expect("wasi:http/client interface not found in registry");
+        .find(|i| i.path == client_fq)
+        .expect("client interface not found in registry");
     let client_funcs = client_iface.functions;
 
-    let instance_type_idx = ctx.register_type("http-client-instance-type");
+    let client_instance_type_name = format!("{pkg}-client-instance-type");
+    let instance_type_idx = ctx.register_type(&client_instance_type_name);
     {
-        let (_, enc) = builder.ty(Some("http-client-instance-type"));
+        let (_, enc) = builder.ty(Some(&client_instance_type_name));
         let mut instance_type = InstanceType::new();
 
         // Alias outer types needed by client functions.
@@ -2743,14 +2753,10 @@ fn import_http_client(
         enc.instance(&instance_type);
     }
 
-    ctx.register_instance("http-client");
-    let http_version = project
-        .cm_interface_registry
-        .get_package_version("http")
-        .expect("WASI HTTP version not found in registry");
-    let client_import_path = format!("wasi:http/client@{http_version}");
+    let client_instance = format!("{pkg}-client");
+    ctx.register_instance(&client_instance);
     builder.import(
-        &client_import_path,
+        client_fq,
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
     );
 
@@ -2758,12 +2764,12 @@ fn import_http_client(
     for func in &client_funcs {
         let local_name = project
             .cm_interface_registry
-            .get_local_name(&client_import_path, &func.wasi_func_name)
+            .get_local_name(client_fq, &func.wasi_func_name)
             .cloned()
             .unwrap_or_else(|| format!("wasi:http/Client::{}", func.method_name));
         ctx.register_comp_func(&local_name);
         builder.alias_export(
-            ctx.instance_idx("http-client"),
+            ctx.instance_idx(&client_instance),
             &func.wasi_func_name,
             ComponentExportKind::Func,
         );
