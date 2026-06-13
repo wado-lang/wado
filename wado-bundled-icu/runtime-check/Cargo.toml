@@ -1,0 +1,19 @@
+# Standalone runtime check (own workspace root). Instantiates the built
+# wado-bundled-icu component with wasmtime + wasi p2 and calls into it to prove
+# the baked ICU4X data actually works across the Component Model boundary.
+#
+# Path-deps the vendored wasmtime so the host API matches exactly what the main
+# workspace targets. Not part of the bundled deliverable; a verification tool.
+[workspace]
+
+[package]
+name = "icu-runtime-check"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+anyhow = "1"
+wasmtime = { path = "../../vendor/wasmtime/crates/wasmtime", features = ["component-model"] }
+wasmtime-wasi = { path = "../../vendor/wasmtime/crates/wasi", features = ["p2"] }

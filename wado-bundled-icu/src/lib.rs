@@ -51,6 +51,12 @@ impl CasemapGuest for Component {
         cm.lowercase_to_string(&text, &loc.get::<LocaleRes>().inner.id)
             .into_owned()
     }
+
+    fn uppercase_in(text: String, tag: String) -> Result<String, String> {
+        let locale: IcuLocale = tag.parse().map_err(|e: icu::locale::ParseError| e.to_string())?;
+        let cm = CaseMapper::new();
+        Ok(cm.uppercase_to_string(&text, &locale.id).into_owned())
+    }
 }
 
 export!(Component);

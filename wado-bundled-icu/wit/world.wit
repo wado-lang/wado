@@ -26,6 +26,10 @@ interface casemap {
   uppercase: func(text: string, loc: borrow<locale>) -> string;
   /// Locale-aware full lowercase mapping.
   lowercase: func(text: string, loc: borrow<locale>) -> string;
+
+  /// Convenience entry point that parses the BCP-47 tag internally. Used by
+  /// the runtime check so the host need not juggle resource handles.
+  uppercase-in: func(text: string, tag: string) -> result<string, string>;
 }
 
 world icu {
