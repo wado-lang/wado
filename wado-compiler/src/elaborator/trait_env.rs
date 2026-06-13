@@ -97,6 +97,17 @@ pub(super) struct ImplMethodHeader {
     pub(super) type_params: Vec<ast::GenericParam>,
 }
 
+/// Digested header of a `trait` declaration: its name plus per-method
+/// signatures method-lookup queries read off the AST. Built in
+/// [`TraitEnv::build`] and keyed by `(ModuleSource, item_idx)` in
+/// [`TraitEnv::trait_decl_headers`]. Reuses [`ImplMethodHeader`] for the
+/// per-method digest (name + type parameters).
+#[derive(Clone, Debug)]
+pub(super) struct TraitDeclHeader {
+    pub(super) name: String,
+    pub(super) methods: Vec<ImplMethodHeader>,
+}
+
 /// Pre-built index: `(declaring module, trait name)` → (`ModuleSource`, item index)
 /// for trait declarations.
 pub(super) type TraitDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
@@ -198,6 +209,11 @@ pub struct TraitEnv {
     /// `(ModuleSource, item_idx)`. Trait/method queries read this instead of
     /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
     pub(super) impl_headers: IndexMap<(ModuleSource, usize), ImplHeader>,
+    /// Digested headers for every `trait` declaration, keyed by
+    /// `(ModuleSource, item_idx)`. Lets method-lookup queries read trait
+    /// method signatures without re-fetching the trait AST. See
+    /// [`TraitDeclHeader`].
+    pub(super) trait_decl_headers: IndexMap<(ModuleSource, usize), TraitDeclHeader>,
     /// `trait_name` → modules that host a blanket impl of that trait
     /// (`impl<T: Bound> Trait for T`). Used by the monomorphizer to find
     /// the home module of a generic dispatch when the receiver type
@@ -326,6 +342,8 @@ impl TraitEnv {
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
         let mut impl_headers: IndexMap<(ModuleSource, usize), ImplHeader> = IndexMap::default();
+        let mut trait_decl_headers: IndexMap<(ModuleSource, usize), TraitDeclHeader> =
+            IndexMap::default();
         let mut blanket_trait_impl_modules: IndexMap<String, Vec<ModuleSource>> =
             IndexMap::default();
         let mut trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
@@ -478,6 +496,23 @@ impl TraitEnv {
         // every PascalCase reference to its declaring module.
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {
+                if let Item::Trait(trait_decl) = item {
+                    trait_decl_headers.insert(
+                        (module_source.clone(), item_idx),
+                        TraitDeclHeader {
+                            name: trait_decl.name.clone(),
+                            methods: trait_decl
+                                .methods
+                                .iter()
+                                .map(|m| ImplMethodHeader {
+                                    name: m.name.clone(),
+                                    type_params: m.type_params.clone(),
+                                })
+                                .collect(),
+                        },
+                    );
+                    continue;
+                }
                 let Item::Impl(impl_block) = item else {
                     continue;
                 };
@@ -603,6 +638,7 @@ impl TraitEnv {
                 resource_decl_index,
                 blanket_impl_index,
                 impl_headers,
+                trait_decl_headers,
                 blanket_trait_impl_modules,
                 static_method_index,
                 resource_static_method_index,

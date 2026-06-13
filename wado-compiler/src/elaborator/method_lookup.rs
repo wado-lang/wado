@@ -1225,28 +1225,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_names: &[String],
         method_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Trait(trait_decl) = item
-                    && trait_names.iter().any(|n| n == &trait_decl.name)
-                {
-                    for trait_method in &trait_decl.methods {
-                        if trait_method.name == method_name
-                            && let Some(params) = Self::non_effect_type_params(trait_method)
-                        {
-                            return Some(params);
-                        }
-                    }
-                }
-            }
-        }
-        for item in self.current_module_items {
-            if let Item::Trait(trait_decl) = item
-                && trait_names.iter().any(|n| n == &trait_decl.name)
-            {
-                for trait_method in &trait_decl.methods {
+        // `trait_decl_headers` already covers every loaded module (including
+        // the current one), so a single pass over the digested headers
+        // replaces the previous loaded-modules + current-module scans.
+        for header in self.tysys.trait_env.trait_decl_headers.values() {
+            if trait_names.iter().any(|n| n == &header.name) {
+                for trait_method in &header.methods {
                     if trait_method.name == method_name
-                        && let Some(params) = Self::non_effect_type_params(trait_method)
+                        && let Some(params) = Self::non_effect_generic_params(&trait_method.type_params)
                     {
                         return Some(params);
                     }
@@ -1260,8 +1246,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// order), or `None` when there are none. Shared by the method
     /// type-parameter lookups used by `infer_method_type_args`.
     fn non_effect_type_params(method: &ast::Function) -> Option<Vec<ast::GenericParam>> {
-        let params: Vec<ast::GenericParam> = method
-            .type_params
+        Self::non_effect_generic_params(&method.type_params)
+    }
+
+    /// The non-effect subset of a type-parameter list (cloned, in declaration
+    /// order), or `None` when empty. Operates on the bare parameter slice so
+    /// digested headers ([`super::trait_env::ImplMethodHeader`]) can reuse it
+    /// without the method AST.
+    fn non_effect_generic_params(
+        type_params: &[ast::GenericParam],
+    ) -> Option<Vec<ast::GenericParam>> {
+        let params: Vec<ast::GenericParam> = type_params
             .iter()
             .filter(|p| !p.is_effect)
             .cloned()
