@@ -1,14 +1,13 @@
 // Test: the raw `wasi:cli/exit#exit(Err(()))` interface call exits with code 1.
 //
-// Bypasses the `core:cli::exit_error` helper to call the interface directly
-// with an explicit `Err(())`. Exercises the unit-payload `Result<(), ()>`
-// CM-lowering path.
+// Bypasses the `core:cli::exit_error` helper to call the interface directly.
+// The host maps `Err(())` to status code 1.
 use { println, Stdout } from "core:cli";
 use { Exit } from "wasi:cli";
 
 export fn run() with Stdout, Exit {
     println("before");
-    Exit::exit(Err(()));
+    Exit::exit(Result::<(), ()>::Err(()));
 }
 
 __DATA__

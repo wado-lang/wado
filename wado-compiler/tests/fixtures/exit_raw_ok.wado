@@ -1,14 +1,14 @@
 // Test: the raw `wasi:cli/exit#exit(Ok(()))` interface call exits with code 0.
 //
-// Bypasses the `core:cli::exit_success` helper to call the interface directly
-// with an explicit `Ok(())`. Exercises the unit-payload `Result<(), ()>`
-// CM-lowering path.
+// Bypasses the `core:cli::exit_success` helper to call the interface directly.
+// `Result<(), ()>`'s canonical ABI is a bare discriminant, so this exercises
+// the CM-lowering of a unit-payload Result argument.
 use { println, Stdout } from "core:cli";
 use { Exit } from "wasi:cli";
 
 export fn run() with Stdout, Exit {
     println("before");
-    Exit::exit(Ok(()));
+    Exit::exit(Result::<(), ()>::Ok(()));
 }
 
 __DATA__

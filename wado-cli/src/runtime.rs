@@ -415,17 +415,9 @@ pub fn create_linker(engine: &Engine) -> Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
     // `wasi:cli/exit#exit-with-code` is `@unstable(feature =
     // cli-exit-with-code)` upstream, so the default LinkOptions omit it and
-    // a guest calling `core:cli`'s `exit(code)` fails to link. Enable it —
-    // it is the only working non-zero-exit path today.
-    // TODO(compiler): the stable `wasi:cli/exit#exit` (and therefore
-    // `core:cli`'s `exit_success` / `exit_error`) ICEs the compiler — the
-    // CM lowering of a unit-payload `Result<(), ()>` argument is missing
-    // ("[WIR] unresolved Call: name=\"Err\"" via `Exit::exit(Err(()))`, or
-    // "cast crosses Wasm representations" with an explicit
-    // `Result::<(),()>::Err(())`). Minimal repro:
-    //   use { exit_error, Exit } from "core:cli";
-    //   export fn run() with Exit { exit_error(); }
-    // Once fixed, add an e2e test covering both exit paths.
+    // a guest calling `core:cli`'s `exit(code)` fails to link. Enable it.
+    // The stable `wasi:cli/exit#exit` path (`exit_success` / `exit_error`,
+    // taking a `Result<(), ()>`) is covered by the `exit_*` e2e fixtures.
     let mut options = wasmtime_wasi::p3::bindings::LinkOptions::default();
     options.cli_exit_with_code(true);
     wasmtime_wasi::p3::add_to_linker_with_options(&mut linker, &options)?;
