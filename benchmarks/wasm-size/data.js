@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781358359942,
+  "lastUpdate": 1781390546616,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32793,6 +32793,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/24e7d49a6c617017c51c67faefe3a41ada86f33b"
         },
         "date": 1781358359386,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "20ce9a8f19f72803a811f7ce0aa416309af88321",
+          "message": "Merge pull request #1369 from wado-lang/claude/kiln-wep-generator-world-b7ma7y\n\nfeat(deps): bare-name dependency resolution and Kiln build-dependency generators",
+          "timestamp": "2026-06-14T07:33:01+09:00",
+          "tree_id": "ee7c0444b90657e213d5759cc1b0c5dd23ef2d79",
+          "url": "https://github.com/wado-lang/wado/commit/20ce9a8f19f72803a811f7ce0aa416309af88321"
+        },
+        "date": 1781390546061,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
