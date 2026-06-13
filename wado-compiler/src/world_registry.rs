@@ -148,10 +148,23 @@ impl WorldInfo {
     /// `Handler` export from the kiln generator's freestanding
     /// `generate -> Result<Response, Error>`, so no namespace prefix or
     /// `Response` type-name match is needed.
+    /// Check if this world exports the WASI HTTP handler.
+    ///
+    /// This gates HTTP-specific behavior (importing `wasi:http/types`, the
+    /// free-list allocator default), so it is deliberately precise about HTTP:
+    /// a handler-instance export (an interface export returning a non-unit
+    /// `Result`, see [`WorldExportInfo::is_handler_instance_export`]) whose
+    /// parent interface is in the `http` package. The generic
+    /// instance-export wrapping for *all* interface exports (CLI `run`,
+    /// third-party handlers) is handled separately by
+    /// `append_interface_instance_exports`; only the HTTP-types import decision
+    /// keys on this. A non-HTTP handler-shaped export (e.g. a future
+    /// `acme:widget/handler`) is therefore not misrouted into the HTTP path.
     pub fn has_http_handler_export(&self) -> bool {
-        self.exports
-            .iter()
-            .any(WorldExportInfo::is_handler_instance_export)
+        self.exports.iter().any(|e| {
+            e.is_handler_instance_export()
+                && e.from_interface_fq.as_deref().map(fq_name_package) == Some("http")
+        })
     }
 
     /// The CM package segment of this world's fully-qualified name.
@@ -558,49 +571,67 @@ mod tests {
     }
 
     #[test]
-    fn test_handler_detection_is_namespace_independent() {
-        // A third-party world that exports a handler-shaped interface (an
-        // interface export — `from_interface_fq` populated — returning a
-        // non-unit `Result`) is detected with no dependence on the
-        // `wasi:http/` namespace or the `Response` type name.
-        let widget_handler = WorldExportInfo {
+    fn test_http_handler_detection_is_package_precise() {
+        // `is_handler_instance_export` is the generic shape predicate (an
+        // interface export returning a non-unit `Result`), detected with no
+        // dependence on the `wasi:http/` namespace or the `Response` type name.
+        // `has_http_handler_export` additionally requires the parent interface
+        // to be in the `http` package, so it gates HTTP-specific behavior
+        // precisely and does not misfire for a non-HTTP handler-shaped export.
+        let http_handler = WorldExportInfo {
+            name: "handle".to_string(),
+            is_async: true,
+            params: vec![],
+            return_type: Some(result_return("Response", "ErrorCode")),
+            from_interface_fq: Some("wasi:http/handler@0.3.0".to_string()),
+        };
+        let mut http_world = world_info("wasi:http/service");
+        http_world.exports.push(http_handler);
+        assert!(http_world.exports[0].is_handler_instance_export());
+        assert!(
+            http_world.has_http_handler_export(),
+            "an http-package handler export gates the HTTP path"
+        );
+
+        // A third-party handler-shaped export has the same generic shape but is
+        // NOT an HTTP handler — it must not be routed into the HTTP-types import
+        // path.
+        let mut widget_world = world_info("acme:widget/service");
+        widget_world.exports.push(WorldExportInfo {
             name: "handle".to_string(),
             is_async: true,
             params: vec![],
             return_type: Some(result_return("Widget", "WidgetError")),
             from_interface_fq: Some("acme:widget/handler@1.0.0".to_string()),
-        };
-        let mut world = world_info("acme:widget/service");
-        world.exports.push(widget_handler);
+        });
         assert!(
-            world.has_http_handler_export(),
-            "an interface export returning a non-unit Result is a handler instance \
-             regardless of namespace"
+            widget_world.exports[0].is_handler_instance_export(),
+            "the generic shape predicate is namespace-independent"
+        );
+        assert!(
+            !widget_world.has_http_handler_export(),
+            "a non-HTTP handler-shaped export is not an HTTP handler"
         );
 
         // The same return shape on a freestanding export (no parent interface)
-        // is the kiln pattern — not a handler instance export.
-        let mut freestanding = world.clone();
+        // is the kiln pattern — not a handler instance export at all.
+        let mut freestanding = http_world.clone();
         freestanding.exports[0].from_interface_fq = None;
-        assert!(
-            !freestanding.has_http_handler_export(),
-            "a freestanding export is never wrapped in a handler instance"
-        );
+        assert!(!freestanding.exports[0].is_handler_instance_export());
+        assert!(!freestanding.has_http_handler_export());
 
         // A unit `Result<(), ()>` interface export (the CLI Run shape) is not a
         // handler instance even with a parent interface FQ.
-        let mut unit_export = world_info("acme:widget/command");
+        let mut unit_export = world_info("wasi:http/command");
         unit_export.exports.push(WorldExportInfo {
             name: "run".to_string(),
             is_async: true,
             params: vec![],
             return_type: Some(result_return_unit()),
-            from_interface_fq: Some("acme:widget/run@1.0.0".to_string()),
+            from_interface_fq: Some("wasi:http/run@1.0.0".to_string()),
         });
-        assert!(
-            !unit_export.has_http_handler_export(),
-            "a unit-Result interface export is not a handler instance"
-        );
+        assert!(!unit_export.exports[0].is_handler_instance_export());
+        assert!(!unit_export.has_http_handler_export());
     }
 
     /// `Result<(), ()>` built from empty tuples.

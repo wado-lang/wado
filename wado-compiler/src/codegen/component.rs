@@ -1582,6 +1582,11 @@ fn cm_export_type_to_idx(
         CmExportType::Named {
             interface_fq,
             cm_name,
+            // A param/return position references the value type (`own<resource>`
+            // for a resource, registered as `{pkg}-{cm_name}`), not the resource
+            // type itself, so the resource/non-resource distinction does not
+            // change the lookup here.
+            is_resource: _,
         } => {
             let pkg = crate::world_registry::fq_name_package(interface_fq);
             assert!(
@@ -2393,6 +2398,20 @@ fn import_http_types_for_service(
         .map(|(wado, cm)| (wado.to_string(), cm.to_string()))
         .collect();
 
+    // The types interface's functions, fetched once (`interfaces()` deep-clones
+    // each interface's function list, so we avoid re-fetching for the
+    // resource-function alias pass below). The FQ comes from the import plan, so
+    // a miss means the plan and registry disagree on the version string — fail
+    // loudly rather than silently importing the instance with no functions.
+    let all_funcs: Vec<CmFunctionInfo> = project
+        .cm_interface_registry
+        .interfaces()
+        .find(|i| i.path == types_fq)
+        .unwrap_or_else(|| {
+            panic!("CM types interface `{types_fq}` from the import plan not found in registry")
+        })
+        .functions;
+
     let instance_type_name = format!("{pkg}-types-instance-type");
     let http_types_instance_type = ctx.register_type(&instance_type_name);
     {
@@ -2424,12 +2443,6 @@ fn import_http_types_for_service(
             .map(|(wado, _)| wado.as_str())
             .collect();
 
-        let all_funcs: Vec<CmFunctionInfo> = project
-            .cm_interface_registry
-            .interfaces()
-            .find(|i| i.path == types_fq)
-            .map(|i| i.functions)
-            .unwrap_or_default();
 
         // Emit constructor/static functions from registry metadata.
         // Processing their parameter and return types triggers on-demand emission of
@@ -2631,37 +2644,30 @@ fn import_http_types_for_service(
             .iter()
             .map(|(wado, _)| wado.as_str())
             .collect();
-        let resource_funcs: Vec<(String, String)> = project
-            .cm_interface_registry
-            .interfaces()
-            .find(|i| i.path == types_fq)
-            .map(|i| {
-                i.functions
-                    .iter()
-                    .filter(|f| {
-                        // Only include functions for known HTTP resources
-                        if !http_resource_names.contains(f.interface_name.as_str()) {
-                            return false;
-                        }
-                        // Skip Fields constructor and Response::new (handled above)
-                        if f.wasi_func_name == constructor_fields
-                            || f.wasi_func_name == static_response_new
-                        {
-                            return false;
-                        }
-                        // Only include constructor/method/static functions that are actually used
-                        let is_resource_func = f.wasi_func_name.starts_with("[constructor]")
-                            || f.wasi_func_name.starts_with("[method]")
-                            || f.wasi_func_name.starts_with("[static]");
-                        is_resource_func
-                            && project
-                                .used_wasi_functions
-                                .contains(&format!("{}::{}", f.interface_name, f.method_name))
-                    })
-                    .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
-                    .collect()
+        let resource_funcs: Vec<(String, String)> = all_funcs
+            .iter()
+            .filter(|f| {
+                // Only include functions for known HTTP resources
+                if !http_resource_names.contains(f.interface_name.as_str()) {
+                    return false;
+                }
+                // Skip Fields constructor and Response::new (handled above)
+                if f.wasi_func_name == constructor_fields
+                    || f.wasi_func_name == static_response_new
+                {
+                    return false;
+                }
+                // Only include constructor/method/static functions that are actually used
+                let is_resource_func = f.wasi_func_name.starts_with("[constructor]")
+                    || f.wasi_func_name.starts_with("[method]")
+                    || f.wasi_func_name.starts_with("[static]");
+                is_resource_func
+                    && project
+                        .used_wasi_functions
+                        .contains(&format!("{}::{}", f.interface_name, f.method_name))
             })
-            .unwrap_or_default();
+            .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
+            .collect();
         for (cm_name, local_name) in &resource_funcs {
             ctx.register_comp_func(local_name);
             builder.alias_export(
@@ -3072,7 +3078,7 @@ fn import_interfaces_with_resources(
     // Register per-package error-code aliases for resource-defining interfaces.
     // These are needed by Transmission future types (future<result<_, error-code>>).
     for interface_info in &interfaces_with_resources {
-        let instance_key = format!("{}-{}", interface_info.package, interface_info.interface);
+        let instance_key = interface_info.instance_key();
         // Only alias from interfaces whose instance was actually imported by one
         // of the generic phases above. An interface handled by a dedicated path
         // (e.g. `wasi:http/types`, imported later with its own error-code alias)
@@ -3494,14 +3500,18 @@ fn append_interface_instance_exports(
             CmExportType::Named {
                 interface_fq,
                 cm_name,
+                is_resource,
             } => {
                 if out.iter().any(|(name, _)| name == cm_name) {
                     return;
                 }
                 let pkg = crate::world_registry::fq_name_package(interface_fq);
-                let resource_key = format!("{pkg}-{cm_name}-resource");
-                let idx = if ctx.has_type(&resource_key) {
-                    ctx.type_idx(&resource_key)
+                // A resource re-exports its registered resource type
+                // (`{pkg}-{cm}-resource`); any other named type re-exports the
+                // plain named type (`{pkg}-{cm}`). The kind comes from the
+                // descriptor, not a type-registry name probe.
+                let idx = if *is_resource {
+                    ctx.type_idx(&format!("{pkg}-{cm_name}-resource"))
                 } else {
                     ctx.type_idx(&format!("{pkg}-{cm_name}"))
                 };
@@ -3514,12 +3524,19 @@ fn append_interface_instance_exports(
         }
     }
 
-    let interface_exports: Vec<_> = component_plan
-        .world_exports
-        .iter()
-        .filter(|e| e.from_interface_fq.is_some())
-        .collect();
-    if interface_exports.is_empty() {
+    // Group exports by their parent interface FQ. An `export Foo;` whose
+    // interface has several methods expands to one `WorldExportPlan` per method,
+    // all sharing `from_interface_fq`; they must land in a SINGLE instance export
+    // (one CM instance carrying every method plus the union of the named CM types
+    // their signatures reference), not one duplicate-named instance per method.
+    let mut groups: IndexMap<&str, Vec<&crate::wir_build::component_plan::WorldExportPlan>> =
+        IndexMap::default();
+    for export in &component_plan.world_exports {
+        if let Some(fq) = &export.from_interface_fq {
+            groups.entry(fq.as_str()).or_default().push(export);
+        }
+    }
+    if groups.is_empty() {
         return;
     }
 
@@ -3527,27 +3544,28 @@ fn append_interface_instance_exports(
     let mut exports = ComponentExportSection::new();
     let mut instance_idx = ctx.instance_count();
 
-    for export in interface_exports {
-        let fq = export
-            .from_interface_fq
-            .as_deref()
-            .expect("filtered to interface exports above");
-
+    for (&fq, group) in &groups {
+        // Re-exported named CM types: the union over every method's signature,
+        // de-duplicated by name (`collect_type_items` dedups within `type_items`).
         let mut type_items: Vec<(String, u32)> = Vec::new();
-        for (_, cm_ty) in &export.cm_params {
-            collect_type_items(cm_ty, ctx, &mut type_items);
+        for export in group {
+            for (_, cm_ty) in &export.cm_params {
+                collect_type_items(cm_ty, ctx, &mut type_items);
+            }
+            collect_type_items(&export.cm_result, ctx, &mut type_items);
         }
-        collect_type_items(&export.cm_result, ctx, &mut type_items);
 
         let mut items: Vec<(&str, ComponentExportKind, u32)> = type_items
             .iter()
             .map(|(name, idx)| (name.as_str(), ComponentExportKind::Type, *idx))
             .collect();
-        items.push((
-            export.name.as_str(),
-            ComponentExportKind::Func,
-            ctx.comp_func_idx(&export.name),
-        ));
+        for export in group {
+            items.push((
+                export.name.as_str(),
+                ComponentExportKind::Func,
+                ctx.comp_func_idx(&export.name),
+            ));
+        }
 
         instances.export_items(items);
         exports.export(fq, ComponentExportKind::Instance, instance_idx, None);
