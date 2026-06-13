@@ -74,7 +74,8 @@ use super::types::{
 /// `annotate_modules` time.
 ///
 /// See the module-level documentation for the membership rule and the
-/// migration plan around the deferred `Elaborator` caches.
+/// rationale for the `Elaborator` caches that were removed rather than
+/// migrated here.
 #[derive(Clone)]
 pub(crate) struct TypeSystem {
     /// Shared type arena. Anonymous structs synthesised from struct

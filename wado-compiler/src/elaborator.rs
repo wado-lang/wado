@@ -151,8 +151,8 @@ pub struct Elaborator<'a, H: CompilerHost> {
     //   `type_implements_trait` — a soundness bug) or require per-call
     //   save/restore plumbing that defeats the move. Belongs with
     //   `trait_ctx` in Stage 5's per-function walker argument bag, not on
-    //   `TypeSystem`. See `tysys.rs` module docs ("Deferred fields") for
-    //   the full rationale.
+    //   `TypeSystem`. See the `tysys.rs` module docs (the `trait_check_stack`
+    //   discussion) for the full rationale.
     trait_check_stack: RefCell<Vec<(TypeId, String)>>,
     /// When resolving a default-expression AST at a call site, fall back to
     /// looking up unresolved identifiers in this module's global scope. This
