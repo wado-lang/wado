@@ -13,14 +13,14 @@ sibling **data** component composed in via the Component Model.
 
 ## Pieces
 
-| dir | crate | role |
-|---|---|---|
-| `datagen/` | native tool | slices a chosen marker set into a postcard **blob** (`icu_provider_export` + `icu_provider_source`); `cargo run -- <set> <out>` |
-| `casemap/` | wasm component | **data-free** feature: `icu_casemap` with `default-features = false` (no `compiled_data`); imports `data`, exports `casemap` |
-| `data/` | wasm component | **shared data**: bakes the blob, exports `data` |
-| `runtime-check/` | native | instantiates under wasmtime and asserts correct Unicode output |
-| `collator/`, `normalizer/` | wasm components | data-free features for the dedup demo below (`cn-wit/`) |
-| `data-cn/`, `runtime-check-cn/` | wasm / native | shared data + check for the dedup demo |
+| dir                             | crate           | role                                                                                                                            |
+| ------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `datagen/`                      | native tool     | slices a chosen marker set into a postcard **blob** (`icu_provider_export` + `icu_provider_source`); `cargo run -- <set> <out>` |
+| `casemap/`                      | wasm component  | **data-free** feature: `icu_casemap` with `default-features = false` (no `compiled_data`); imports `data`, exports `casemap`    |
+| `data/`                         | wasm component  | **shared data**: bakes the blob, exports `data`                                                                                 |
+| `runtime-check/`                | native          | instantiates under wasmtime and asserts correct Unicode output                                                                  |
+| `collator/`, `normalizer/`      | wasm components | data-free features for the dedup demo below (`cn-wit/`)                                                                         |
+| `data-cn/`, `runtime-check-cn/` | wasm / native   | shared data + check for the dedup demo                                                                                          |
 
 WIT (`casemap/wit/world.wit`): the feature component
 `import`s `wado:icu-bdp/data` (`get-casemap-blob: func() -> list<u8>`) and
@@ -79,12 +79,12 @@ though the feature component bakes none of it.
 
 ## Sizes (casemap only, `-Os`, LTO, stripped)
 
-| artifact | size | contents |
-|---|---:|---|
-| `casemap.blob` | 23.4 KB | the sliced casemap data (`CaseMapV1` + `CaseMapUnfoldV1`) |
-| `casemap-feature.wasm` | 45 KB | algorithm + `BlobDataProvider`/postcard + langid parse + glue; **no data** |
-| `data-provider.wasm` | 32 KB | blob (23.4 KB) + component glue |
-| `composed.wasm` | 78 KB | feature + data, import-free |
+| artifact               |    size | contents                                                                   |
+| ---------------------- | ------: | -------------------------------------------------------------------------- |
+| `casemap.blob`         | 23.4 KB | the sliced casemap data (`CaseMapV1` + `CaseMapUnfoldV1`)                  |
+| `casemap-feature.wasm` |   45 KB | algorithm + `BlobDataProvider`/postcard + langid parse + glue; **no data** |
+| `data-provider.wasm`   |   32 KB | blob (23.4 KB) + component glue                                            |
+| `composed.wasm`        |   78 KB | feature + data, import-free                                                |
 
 For comparison, baking casemap data directly (`../`, the `compiled_data`
 model) lands the locale+casemap slice at ~92 KB.
@@ -106,7 +106,7 @@ model) lands the locale+casemap slice at ~92 KB.
 1. **Cross-feature data dedup — verified (see below).** ICU components share
    data markers; the data is shared at the data level (one blob, deduped
    markers) even though each feature keeps its own algorithm code — exactly the
-   dedup that exporting *interfaces* cannot achieve.
+   dedup that exporting _interfaces_ cannot achieve.
 2. **Per-deployment slicing.** datagen bakes only the markers an app's features
    actually use, so the shared blob never carries unused data.
 3. **Data/code separation.** Feature components become tiny, reusable, and
@@ -122,11 +122,11 @@ copy; with BDP both load from **one shared blob** that stores those markers once
 
 `datagen` emits three blobs to quantify it (collation sliced to root/`und`):
 
-| blob | markers | size |
-|---|---|---:|
-| `coll` | collator + the NFD markers it needs | 605 KB |
-| `norm` | all normalizer markers (NFC/NFD/NFKC/NFKD/UTS46) | 157 KB |
-| `shared` | collator + **all** normalizer markers | 725 KB |
+| blob     | markers                                          |   size |
+| -------- | ------------------------------------------------ | -----: |
+| `coll`   | collator + the NFD markers it needs              | 605 KB |
+| `norm`   | all normalizer markers (NFC/NFD/NFKC/NFKD/UTS46) | 157 KB |
+| `shared` | collator + **all** normalizer markers            | 725 KB |
 
 `size(coll) + size(norm) − size(shared)` = **37 KB** of NFD normalization data
 that `compiled_data` would duplicate across the two components but the shared
@@ -135,12 +135,12 @@ larger markers — e.g. anything pulling the full property tries — it is bigge
 
 Feature components (data-free) and the shared data component:
 
-| artifact | size |
-|---|---:|
-| `collator-feature.wasm` (collation + NFD algorithm, no data) | 136 KB |
-| `normalizer-feature.wasm` (no data) | 64 KB |
-| `cn-data.wasm` (the 725 KB shared blob + glue) | 751 KB |
-| `collator-composed.wasm` (collator-feature + shared data) | 887 KB |
+| artifact                                                      |   size |
+| ------------------------------------------------------------- | -----: |
+| `collator-feature.wasm` (collation + NFD algorithm, no data)  | 136 KB |
+| `normalizer-feature.wasm` (no data)                           |  64 KB |
+| `cn-data.wasm` (the 725 KB shared blob + glue)                | 751 KB |
+| `collator-composed.wasm` (collator-feature + shared data)     | 887 KB |
 | `normalizer-composed.wasm` (normalizer-feature + shared data) | 815 KB |
 
 `runtime-check-cn` proves both features run off the **one** shared blob, both
@@ -153,26 +153,26 @@ normalizer.
 
 A natural guess is that "related" string features share `icu_properties` data
 and would dedup even more. **Measured, they do not.** ICU4X bakes derived
-property data into each consumer's *own* markers: the segmenter carries its own
+property data into each consumer's _own_ markers: the segmenter carries its own
 break tables (`SegmenterBreak*V1`), casemap its own (`CaseMap*V1`), and the
 `properties` feature its own enum/binary markers (`PropertyEnum*`,
 `PropertyBinary*`). Their constructors confirm it — `GraphemeClusterSegmenter`'s
 buffer constructor requires only `SegmenterBreakGraphemeClusterV1`, and casemap
 requires no property markers at all. So the three marker sets are disjoint:
 
-| blob | size |
-|---|---:|
-| `casemap` | 23.9 KB |
-| `properties` (GC, Script, 5 binaries) | 58 KB |
-| `segmenter` (grapheme/word/line/sentence, `auto`) | 4.15 MB |
-| sum of the three | 4,234,052 B |
-| `csp` (union of all three) | 4,234,049 B |
+| blob                                              |        size |
+| ------------------------------------------------- | ----------: |
+| `casemap`                                         |     23.9 KB |
+| `properties` (GC, Script, 5 binaries)             |       58 KB |
+| `segmenter` (grapheme/word/line/sentence, `auto`) |     4.15 MB |
+| sum of the three                                  | 4,234,052 B |
+| `csp` (union of all three)                        | 4,234,049 B |
 
 `sum − union = 3 bytes` — i.e. zero real sharing (just blob-index rounding).
 (Segmenter's 4.15 MB also reaffirms that the dominant data is feature-specific.)
 
-**The lesson:** shared-blob dedup materializes only for a genuine *runtime data
-dependency* — one feature's constructor requesting another's markers, as with
+**The lesson:** shared-blob dedup materializes only for a genuine _runtime data
+dependency_ — one feature's constructor requesting another's markers, as with
 collator→normalizer (37 KB) — not for conceptual relatedness. Bundling
 unrelated features behind one blob saves nothing; slicing per used feature is
 what controls size.
@@ -182,5 +182,5 @@ what controls size.
 `BlobDataProvider` deserializes (zero-copy via `Yoke`) from the blob held in the
 feature component's own linear memory, so the data is materialized per feature
 instance at runtime rather than borrowed from a single static image. That is the
-cost of the CM boundary: components don't share memory, so a shared *data*
+cost of the CM boundary: components don't share memory, so a shared _data_
 component dedups the **stored** blob, not the per-instance working set.

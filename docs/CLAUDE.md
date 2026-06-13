@@ -123,3 +123,4 @@ It may include TODOs on WIP.
 - [CBOR Standard Library (`core:cbor`)](./wep-2026-06-05-core-cbor.md)
 - [NIR Skeleton Arena (Layer 1)](./wep-2026-06-05-nir-skeleton-arena.md)
 - [NIR Rewrite Engine — Detailed Design](./wep-2026-06-05-nir-rewrite-engine-design.md)
+- [Compile-Time Data Providers (bundled ICU)](./wep-2026-06-13-compile-time-data-providers.md)

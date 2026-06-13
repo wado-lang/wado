@@ -13,13 +13,13 @@ wit-bindgen) never perturbs the main workspace's pinned wasm-tools generation.
 See [`wit/world.wit`](wit/world.wit). The current surface is the
 **string-oriented** slice of ICU4X plus character properties:
 
-| interface | operations |
-|---|---|
-| `locale` | parse BCP-47, canonical string (opaque `resource`) |
-| `casemap` | upper / lower / title casing, case folding |
-| `collator` | locale-aware string comparison (opaque `resource`) |
-| `normalizer` | NFC / NFD / NFKC / NFKD, is-nfc |
-| `segmenter` | grapheme / word / sentence / line boundaries |
+| interface    | operations                                                                     |
+| ------------ | ------------------------------------------------------------------------------ |
+| `locale`     | parse BCP-47, canonical string (opaque `resource`)                             |
+| `casemap`    | upper / lower / title casing, case folding                                     |
+| `collator`   | locale-aware string comparison (opaque `resource`)                             |
+| `normalizer` | NFC / NFD / NFKC / NFKD, is-nfc                                                |
+| `segmenter`  | grapheme / word / sentence / line boundaries                                   |
 | `properties` | General_Category, Script, Alphabetic, White_Space, Uppercase, Lowercase, Emoji |
 
 It exercises every marshalling shape Wado needs: `string` in/out, `list<u32>`,
@@ -32,13 +32,13 @@ Import-free component, **~3.7 MB** with all six interfaces. Because Rust LTO
 slices ICU by reachability, the WIT surface is the size knob. Per-interface
 attribution (measured by building with interfaces removed):
 
-| interface | added size | notes |
-|---|---:|---|
-| segmenter (`auto`) | ~2.35 MB | LSTM + CJK/SE-Asian **dictionary** data — by far the largest |
-| collator | ~1.12 MB | root UCA collation table |
-| normalizer | ~125 KB | NFC/NFD/NFKC/NFKD tables |
-| locale + casemap | ~92 KB | baseline |
-| properties | ~44 KB | the gc/script tries + binary sets are cheap |
+| interface          | added size | notes                                                        |
+| ------------------ | ---------: | ------------------------------------------------------------ |
+| segmenter (`auto`) |   ~2.35 MB | LSTM + CJK/SE-Asian **dictionary** data — by far the largest |
+| collator           |   ~1.12 MB | root UCA collation table                                     |
+| normalizer         |    ~125 KB | NFC/NFD/NFKC/NFKD tables                                     |
+| locale + casemap   |     ~92 KB | baseline                                                     |
+| properties         |     ~44 KB | the gc/script tries + binary sets are cheap                  |
 
 So segmenter+collator are ~93% of the bytes; dropping word/line segmentation
 (the `auto` dictionary) or collation shrinks the bundle dramatically.
