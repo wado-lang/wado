@@ -1,0 +1,15 @@
+# Native host check for the BDP separation experiment. Instantiates the
+# data-free casemap component under wasmtime, hands it the external postcard
+# blob via `init`, and exercises fold/uppercase to prove the runtime-loaded
+# data works across the Component Model boundary.
+[workspace]
+
+[package]
+name = "bdp-runtime-check"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = "1"
+wasmtime = { path = "../../../vendor/wasmtime/crates/wasmtime", features = ["component-model"] }

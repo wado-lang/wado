@@ -1,0 +1,42 @@
+// Shared WIT for the collator+normalizer marker-dedup demo. Two data-free
+// feature components (collator, normalizer) import the same `data` interface
+// and load the SAME shared blob, which carries the normalization markers they
+// have in common only once.
+package wado:icu-cn@0.1.0;
+
+interface data {
+  /// Yields the shared ICU postcard blob (collator + normalizer markers).
+  get-blob: func() -> list<u8>;
+}
+
+interface collator {
+  enum ordering {
+    less,
+    equal,
+    greater,
+  }
+  /// Locale-aware comparison; `langid` is a BCP-47 tag ("und" = root UCA).
+  compare: func(left: string, right: string, langid: string) -> result<ordering, string>;
+}
+
+interface normalizer {
+  nfc: func(text: string) -> result<string, string>;
+  nfd: func(text: string) -> result<string, string>;
+}
+
+/// Data-free collator feature: imports data, exports collator.
+world collator-feature {
+  import data;
+  export collator;
+}
+
+/// Data-free normalizer feature: imports data, exports normalizer.
+world normalizer-feature {
+  import data;
+  export normalizer;
+}
+
+/// Shared data component: exports the blob.
+world cn-provider {
+  export data;
+}
