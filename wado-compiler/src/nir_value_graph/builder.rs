@@ -654,8 +654,7 @@ impl<'a> Builder<'a> {
                     // write — not a blanket `bump_all`. A pure rhs (a field
                     // comparison, say) writes nothing, so an unrelated
                     // aggregate's fields survive across the short-circuit.
-                    let mut eff = LoopHeapEffects::default();
-                    collect_loop_heap_node(self.body, NodeRef::Expr(right), &mut eff);
+                    let eff = collect_node_heap_effects(self.body, NodeRef::Expr(right));
                     self.apply_loop_heap_effects(&eff);
                     rhs
                 } else {
@@ -960,7 +959,7 @@ impl<'a> Builder<'a> {
                 // break value the reassigned local `p`, not the literal). Copy
                 // that local's live field slots to the new binding — value
                 // semantics deep-copy the struct, so the binding observes the
-                // same field constants. Mirrors niri's `copy_fields_from`.
+                // same field constants.
                 ExprKind::Local { index, .. } => {
                     let src = *index;
                     self.copy_local_field_slots(src, root, recv);
@@ -1039,6 +1038,11 @@ impl<'a> Builder<'a> {
             || self.untrackable.contains(&src)
             || self.untrackable.contains(&dst_root)
         {
+            return;
+        }
+        // The scan below is O(field_store); short-circuit the common case of a
+        // function that seeded no struct-literal fields at all.
+        if self.field_store.is_empty() {
             return;
         }
         let Some(&src_recv) = self.current_value.get(&src) else {
@@ -1571,8 +1575,7 @@ struct LoopHeapEffects {
 
 /// True when `func` is a builtin / monomorphized-builtin intrinsic that
 /// operates below the struct-field layer (`array_set`, `memory_grow`, …) and
-/// so never mutates a tracked `(root, field)` slot. Mirrors
-/// `const_folding::is_field_env_pure_call`.
+/// so never mutates a tracked `(root, field)` slot.
 fn is_builtin_pure_call(func: &FunctionRef) -> bool {
     func.builtin_name().is_some() || func.monomorphized_builtin_name().is_some()
 }
@@ -1588,8 +1591,16 @@ fn root_local_of(body: &Body, e: ExprId) -> Option<u32> {
 }
 
 fn collect_loop_heap_effects(body: &Body, block: BlockId) -> LoopHeapEffects {
+    collect_node_heap_effects(body, NodeRef::Block(block))
+}
+
+/// The heap-write effects of an arbitrary node's subtree. Used by `walk_loop`
+/// (on the loop body block) and by the short-circuit `&&` / `||` arm (on the
+/// conditionally-evaluated rhs expression), so both invalidate exactly the
+/// fields / locals their subtree may write rather than `bump_all`.
+fn collect_node_heap_effects(body: &Body, node: NodeRef) -> LoopHeapEffects {
     let mut eff = LoopHeapEffects::default();
-    collect_loop_heap_node(body, NodeRef::Block(block), &mut eff);
+    collect_loop_heap_node(body, node, &mut eff);
     eff
 }
 

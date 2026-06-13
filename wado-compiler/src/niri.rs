@@ -580,14 +580,12 @@ impl<'a> Interpreter<'a> {
     /// Mark a local as definitely non-constant from this point on. The
     /// driving visitor calls this when it sees an `x = expr` assignment.
     /// Conservative — we don't track flow-sensitive new values, just
-    /// invalidate the prior binding. Also drops every recorded field
-    /// of the local — the new value might not have those fields, or
-    /// might have different ones.
+    /// invalidate the prior binding.
     pub fn invalidate_local(&mut self, index: u32) {
         self.env.insert(index, Lattice::NonConst);
     }
 
-    /// Reads the bound env for locals/fields and takes the SCCP join over
+    /// Reads the bound env for locals and takes the SCCP join over
     /// `if` / `match` arms.
     pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];

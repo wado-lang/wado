@@ -120,10 +120,10 @@ fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionG
 /// Runs the [`Interpreter::const_fold_kind_a`] subset — literal arithmetic and
 /// pure CTFE — over the worklist rewrite engine, applying each fold through the
 /// engine's edit API so the parent map and use index stay coherent. The
-/// program-wide [`CalleeMap`] is installed; the per-function `env` / `field_env`
-/// stay empty, so the flow-sensitive folds (env-bound locals, forwarded fields,
-/// immutable globals, constant-branch collapse) remain with the standalone
-/// [`fold_constants`] walker that still runs once per fixed-point iteration.
+/// program-wide [`CalleeMap`] is installed; the per-function `env` stays empty,
+/// so the flow-sensitive folds (env-bound locals, immutable globals,
+/// constant-branch collapse) remain with the standalone [`fold_constants`]
+/// walker that still runs once per fixed-point iteration.
 ///
 /// `const_fold_kind_a` needs `&mut Interpreter` (CTFE advances the call stack
 /// and step budget), but [`Rule::apply_expr`] is `&self`, so the interpreter
@@ -381,9 +381,9 @@ struct ConstFoldVisitor<'a> {
     interpreter: Interpreter<'a>,
 }
 
-/// The control-flow / scope expression shapes that need branch-aware
-/// field-env handling. Extracting them up front (cloning the arm lists)
-/// releases the body borrow so the per-arm walk can mutate the arena.
+/// The control-flow / scope expression shapes walked per-arm. Extracting them
+/// up front (cloning the arm lists) releases the body borrow so the per-arm
+/// walk can mutate the arena.
 enum ExprShape {
     If(ExprId, BlockId, Option<BlockId>),
     Match(ExprId, Vec<ArmData>),
@@ -433,20 +433,16 @@ impl ConstFoldVisitor<'_> {
     }
 
     fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool {
-        // Control-flow stmts need branch-aware field-env handling so
-        // a `local.field = …` inside a branch doesn't leak as known
-        // field knowledge to code that runs only when the branch was
-        // skipped. Locals don't need this fork (the only mutation
-        // channel is `let mut`, recorded preemptively as `NonConst`),
-        // so the existing single-walk env handling stays intact.
+        // Control-flow stmts are walked per-arm. Locals need no branch fork:
+        // the only mutation channel is `let mut`, recorded preemptively as
+        // `NonConst`, so the single-walk env handling holds.
         let is_control = matches!(
             &engine.body.stmts[s].kind,
             StmtKind::Loop { .. } | StmtKind::LabeledBlock { .. } | StmtKind::If { .. }
         );
         if !is_control {
             // Bottom-up: walk children first so the RHS of `let x = …`
-            // is already folded by the time we record `x` in env /
-            // field_env.
+            // is already folded by the time we record `x` in env.
             let changed = self.walk_children(engine, NodeRef::Stmt(s));
             self.update_env_from_stmt(engine.body, s);
             return changed;
@@ -596,19 +592,10 @@ impl ConstFoldVisitor<'_> {
     }
 
     /// Walk an `Assign { target, value }` expression. The outer
-    /// `target` shape is left opaque (lvalue), only its inner
-    /// sub-expression is folded. After the walk, the field env is
-    /// updated from the assignment shape:
-    ///
-    /// - `local = expr`: invalidate `local` and the local-derived
-    ///   field knowledge for it.
-    /// - `local.field = lit`: invalidate `(local, field)` then re-bind
-    ///   if `lit` is a forwardable literal.
-    /// - `local.field = expr` where `expr` is non-literal: invalidate
-    ///   `(local, field)`.
-    /// - Any more complex target shape (`(*p).field = …`,
-    ///   `arr[i] = …`, etc.): conservatively invalidate every
-    ///   aliased local's fields.
+    /// `target` shape is left opaque (lvalue); only its inner
+    /// sub-expression is folded. After the walk, a bare `local = …`
+    /// reassignment drops `local`'s lattice to unknown (field / heap
+    /// writes are the engine `ValueGraph`'s concern, not niri's).
     fn visit_assign(&mut self, engine: &mut Engine, e: ExprId) -> bool {
         let (target, value) = match &engine.body.exprs[e].kind {
             ExprKind::Assign { target, value } => (*target, *value),
@@ -634,12 +621,6 @@ impl ConstFoldVisitor<'_> {
         changed
     }
 
-    /// After a non-Assign expression's children have been walked,
-    /// update the field env to reflect side-effects that may have
-    /// mutated aliased state. Calls drop every aliased local's
-    /// fields; `&mut local` escapes a mutable reference and drops
-    /// `local`'s entry; struct / tuple / variant constructors that
-    /// capture an aliased local invalidate aliased fields too.
     /// After a statement is walked, capture any introduced binding into
     /// the interpreter's env so subsequent uses can fold against it.
     fn update_env_from_stmt(&mut self, body: &Body, s: StmtId) {
@@ -687,10 +668,10 @@ impl ConstFoldVisitor<'_> {
     }
 }
 
-/// Summary of every entity a loop body could mutate. Used by
+/// Summary of every local a loop body could mutate. Used by
 /// [`ConstFoldVisitor::apply_loop_invalidations`] to drop just those
-/// `(local, field)` and `local` lattice entries before and after the
-/// body walk — facts about entities the body does not touch survive.
+/// `local` lattice entries before and after the body walk — facts about
+/// locals the body does not touch survive.
 #[derive(Default)]
 struct LoopWriteEffects {
     /// `local = expr` targets — fully reassigned, so the local's lattice
