@@ -841,17 +841,27 @@ tested unit:
         derive package and every instance/type name from it
         (`fq_name_package`), with no `"http"` / `wasi:http/*` /
         `get_package_version("http")` literals. Byte-identical for HTTP.
-  - [ ] The four codegen `package == "http"` skips remain. Removing them is
-        not byte-neutral: it routes a `types`-named resource-defining interface
-        through `import_interfaces_with_resources`, where the generic path
-        collides with the `wasi:cli/types` shared-`error-code` "types" instance
-        (panic `unknown component instance: types` on test-world fixtures). The
-        skips must be replaced by plan-kind dispatch only after the
-        `error-code` / cli-`types` instance sequencing is made order-independent.
-  - [ ] The plan layer (`wir_build/component_imports.rs` Phase 4 +
-        `package == "http"` skips, `ImportKind::{HttpTypes,HttpClient}`,
-        `get_package_version("http")`) and the `wir_build/functions.rs`
-        `package != "http"` support check are unchanged.
+  - [x] Fixed the latent instance-key collision that blocked removing the
+        codegen skips: every CM-import instance is now keyed by
+        `{package}-{interface}` (matching `import_resource_source` and the HTTP
+        dedicated path), not the bare interface name that collides across
+        packages (`wasi:cli/types` vs `wasi:http/types`). The
+        `error-code` alias loop guards on `ctx.has_instance(...)`.
+  - [x] Deleted all four codegen `package == "http"` skips. HTTP reaches its
+        dedicated import path through the plan (`ImportKind::HttpTypes` /
+        `HttpClient`), not a package check; the generic loops exclude it via
+        `resource_type.is_some()`, plan-kind gates, and the instance guard.
+        `codegen/component.rs` now has zero `package == "http"` checks.
+        Byte-identical, full E2E green.
+  - [ ] The plan layer remains HTTP-protocol-aware:
+        `wir_build/component_imports.rs` Phase 4 still classifies HTTP as
+        `ImportKind::{HttpTypes,HttpClient}` (the `package == "http"` skip there
+        is load-bearing for `wasi:http/client`, whose `send` returns the
+        handler-result composite), and `wir_build/functions.rs` exempts HTTP
+        resource-method params (`Fields::append`'s `&Resource`) from the general
+        `is_function_supported` check. Both hang on the handler-result composite
+        and resource-method type support; genericizing them needs the structural
+        interner (P2.5/P3) and general resource-method param support first.
 - [ ] P5 — Remove the remaining `get_package_version("http")` and FQ string
       literals; descriptors carry version/FQ. `tests/wit_import_plan.rs` keeps
       the plan faithful to the emitted bytes.
