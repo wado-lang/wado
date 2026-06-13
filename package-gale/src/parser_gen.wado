@@ -170,32 +170,23 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"List<Token>");
     s.add_field(&"pos", &"i32");
-    // Source characters, kept so error sites can resolve a byte/char offset
-    // (`span.start`) into a human-readable `line:col` via `line_col_at`.
+    // Source chars; error sites resolve `span.start` into `line:col` via `line_col_at`.
     s.add_field(&"chars", &"List<char>");
-    // Deepest speculative failure seen so far. A scan-gated repetition that
-    // exits on a malformed (but plausibly-starting) element re-parses it to
-    // harvest a precise inner error and records it here; the input-entry
-    // reports it instead of the shallower "expected <closer>" error when it
-    // is at least as far into the token stream (ties favour the malformed
-    // element). `null` until such a failure is seen.
+    // Deepest speculative failure seen (a scan-gated repetition re-parses a
+    // malformed element to harvest a precise inner error). The input-entry
+    // reports it over the shallow "expected <closer>" error when it reaches
+    // at least as far into the token stream.
     s.add_field(&"pending", &"Option<ParseError>");
     // Current recursive-descent depth, used only to indent trace output.
     if trace {
         s.add_field(&"trace_depth", &"i32");
     }
-    // Runtime ATN simulator state (only when a non-greedy / LR decision
-    // needs it). The decoded ATN itself lives in the module-level
-    // `GALE_ATN_SIM` global (decoded once, shared by both the parse and scan
-    // sides — see `gen_atn_data_global`), so the `Parser` carries only the
-    // per-parse mutable state. `atn_stack` is the live caller stack of ATN
-    // **return states** for full-context prediction — each rule call pushes
-    // its exact return state (so the simulator pops to the precise caller
-    // continuation). `atn_ret_pending` carries that return state from a call
-    // site to the callee's entry wrapper, which pushes it: a caller sets
-    // `p.atn_ret_pending = <state>` immediately before `_parse_X(...)`, the
-    // wrapper consumes it on entry and resets it to -1 (so an unstamped call
-    // pushes -1 = unknown caller, handled as SLL by the simulator).
+    // Runtime ATN simulator state (only when a non-greedy / LR decision needs
+    // it); the decoded ATN is shared via the module-level `GALE_ATN_SIM`.
+    // `atn_stack` is the caller stack of ATN return states for full-context
+    // prediction. `atn_ret_pending` passes a call site's return state to the
+    // callee's entry wrapper, which pushes it and resets to -1 (an unstamped
+    // call pushes -1 = unknown caller, handled as SLL).
     if needs_atn {
         s.add_field(&"atn_stack", &"List<i32>");
         s.add_field(&"atn_ret_pending", &"i32");
@@ -221,9 +212,8 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.blank();
 
-    // Build a ParseError at the current position, resolving `line:col` from
-    // the source so the diagnostic carries a location. `rule_stack` is left
-    // empty here; the rule-entry wrappers fill it as the error propagates.
+    // Build a ParseError at the current position, resolving `line:col` from the
+    // source. `rule_stack` is filled by the rule-entry wrappers as it propagates.
     let mut fe = FnSpec::new("error");
     fe.set_receiver(&"&self");
     fe.add_param(&"message", &"String");
@@ -236,9 +226,8 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.blank();
 
-    // Record a speculative failure as the "deepest" one if it sits further
-    // into the token stream than any previously recorded. Used by the
-    // repetition recovery path (see `gen_rep_break_with_recovery`).
+    // Record a speculative failure as the "deepest" if it sits further into the
+    // token stream than any prior (used by the repetition recovery path).
     let mut frd = FnSpec::new("record_deeper");
     frd.set_receiver(&"&mut self");
     frd.add_param(&"e", &"ParseError");
@@ -297,12 +286,10 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.blank();
 
-    // `p.expect(kind)` matches a single token of the requested kind. EOF
-    // is matched without advancing so that consecutive `EOF` references
-    // in a rule (`prog : ... EOF EOF ;`) all see the same sentinel — the
-    // token stream contains exactly one EOF and `advance` past it would
-    // read out of bounds. This mirrors ANTLR4's `matchedEOF` behaviour
-    // where a second `match(EOF)` observes the same end-of-input slot.
+    // `p.expect(kind)` matches a single token of the requested kind. EOF is
+    // matched without advancing so consecutive `EOF` references see the same
+    // sentinel (the stream holds one EOF; advancing past it reads out of
+    // bounds). Mirrors ANTLR4's `matchedEOF`.
     let mut f7 = FnSpec::new("expect");
     f7.set_receiver(&"&mut self");
     f7.add_param(&"kind", &"i32");
@@ -362,10 +349,8 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.blank();
 
-    // `p.match_not([TK_A, TK_B, ...])` — consumes one token whose kind is
-    // not in the exclusion set (for parser-side `~ X`). Fails at EOF or when
-    // the current token is in the exclusion set. The exclusion set is passed
-    // by value so the caller can use tuple-to-List coercion on a literal.
+    // `p.match_not([...])` — consumes one token whose kind is not in the
+    // exclusion set (parser-side `~ X`). Fails at EOF or on an excluded kind.
     let mut f10 = FnSpec::new("match_not");
     f10.set_receiver(&"&mut self");
     f10.add_param(&"excluded", &"List<i32>");
@@ -395,13 +380,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.blank();
 
-    // `p.match_set([TK_A, TK_B, ...])` — consumes one token whose kind is
-    // in the included set (for parser-side token-only groups like
-    // `('b' | 'c')`). Fails when the current token is outside the set
-    // (including EOF when EOF is not listed). EOF inside the set matches
-    // without advancing, mirroring `expect`'s `matchedEOF` behaviour so
-    // that a token-only group spelled `(X | EOF)` does not run the cursor
-    // past the sentinel.
+    // `p.match_set([...])` — consumes one token whose kind is in the included
+    // set (parser-side token-only groups like `('b' | 'c')`). Fails outside the
+    // set (EOF included unless listed); a listed EOF matches without advancing.
     let mut f11 = FnSpec::new("match_set");
     f11.set_receiver(&"&mut self");
     f11.add_param(&"included", &"List<i32>");

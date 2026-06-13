@@ -934,10 +934,10 @@ pub fn atn_predict_with_stack(
     let start = sim.state_tr_start[dstate];
     let cnt = sim.state_tr_count[dstate];
     let rs_init = rule_stack.len() - 1;
-    // Fresh context arena per prediction. (A persistent per-Parser arena was
-    // measured to hurt: it accumulates every prediction's contexts, growing
-    // the intern buckets; and full-context LR results are not memoizable
-    // since the context encodes the whole nesting depth — see git history.)
+    // Fresh context arena per prediction: a persistent per-Parser arena
+    // measured slower (it accumulates contexts, growing the intern buckets),
+    // and full-context LR results aren't memoizable (the context encodes the
+    // whole nesting depth).
     let mut arena = CtxArena::new();
     let mut seeds: List<AtnConfig> = [];
     for let mut j = 0; j < cnt; j += 1 {

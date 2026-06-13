@@ -2,22 +2,14 @@
 /// per-element name caches at construction time) and the codegen layer.
 /// This module deliberately has no IR dependencies — `ir.wado` imports it.
 ///
-/// Length-first dispatch: most non-reserved identifiers are either too
-/// short or too long to match any reserved word, so the outer length
-/// switch short-circuits without any string comparison. The inner
-/// `match *name` for each length only walks the (much smaller) set of
-/// reserved words sharing that length.
+/// Length-first dispatch: the outer switch on `name.len()` short-circuits
+/// most identifiers without any string comparison.
 ///
-/// Inclusion policy: this is a deliberate **superset** of the Wado lexer
-/// keyword set (`wado-compiler/src/syntax.rs`). It also lists builtin
-/// type names (`List`, `Option`, `Result`, `String`, the `i*`/`u*`/`f*`
-/// scalars) and builtin intrinsics (`panic`, `unreachable`) so a grammar
-/// rule/token named after one cannot shadow it in the generated module.
-/// Over-inclusion is intentional and harmless — a spurious `_` suffix on
-/// an identifier that did not strictly need it — whereas under-inclusion
-/// emits code that fails to compile. When in doubt, add the word: err
-/// toward escaping. (`move` / `scope` / `handler` are listed pre-emptively
-/// against future contextual use, though neither list reserves them today.)
+/// Inclusion policy: a deliberate **superset** of the Wado lexer keyword set
+/// (`wado-compiler/src/syntax.rs`), plus builtin type names and intrinsics
+/// (`panic` / `unreachable`), so a grammar rule/token cannot shadow them in
+/// the generated module. Over-inclusion is harmless (a spurious `_`);
+/// under-inclusion emits code that fails to compile — when in doubt, escape.
 fn is_wado_reserved(name: &String) -> bool {
     return match name.len() {
         2 => match *name {

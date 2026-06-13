@@ -108,7 +108,6 @@ pub fn build_prediction(
     max_depth: i32,
     ctx: &mut GenContext,
 ) -> PredictionNode {
-    // Build initial SLL configs: one per alternative, at element position 0.
     let mut configs: List<SllConfig> = [];
     for let mut i = 0; i < alt_indices.len(); i += 1 {
         configs.push(SllConfig {
@@ -302,8 +301,7 @@ fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<String> {
     return ctx.first_of_elements_from(&c.elements, c.pos);
 }
 
-/// Advance a config by one token. For terminals, advance pos.
-/// For RuleRef, expand into the rule's alternatives (entering the rule).
+/// Advance a config by one token, expanding RuleRefs into the rule's alternatives.
 fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth: i32 = 0) -> List<SllConfig> {
     // Limit inline expansion depth to prevent explosion from recursive rules.
     if inline_depth > 2 {
@@ -322,13 +320,11 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
     }
     let elem = &c.elements[c.pos];
 
-    // Nullable element (Optional, Star): either match its inner or skip it.
     if is_nullable(elem) {
         let mut results: List<SllConfig> = [];
         let mut visiting: List<String> = [];
         if first_contains(&ctx.first_of_element(elem, &mut visiting), token) {
-            // Check if the inner element is a multi-token RuleRef.
-            // If so, enter it via return stack instead of skipping to pos+1.
+            // A multi-token RuleRef inner is entered via the return stack rather than skipped to pos+1.
             let mut entered = false;
             if let Repeat(rep) = elem {
                 if let RuleRef(rr) = rep.element {
@@ -443,7 +439,6 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         return results;
     }
 
-    // Terminal: if token matches, advance past this element.
     if let TokenRef(t) = elem {
         if `TK_{t.name}` == *token {
             return [
@@ -504,7 +499,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         ];
     }
 
-    // Group: treat as consuming one token if the token is in FIRST(group).
+    // Group: consume one token if it is in FIRST(group).
     if let Group(g) = elem {
         let mut group_first = TreeSet::<String>::new();
         for let alt of g.alternatives {
@@ -525,7 +520,6 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         return [];
     }
 
-    // Repeat: treat as consuming the inner element.
     if let Repeat(rep) = elem {
         let mut inner_first: List<String> = [];
         let mut visiting: List<String> = [];
@@ -544,7 +538,6 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         return [];
     }
 
-    // Label: unwrap.
     if let Label(lab) = elem {
         let unwrapped = SllConfig {
             alt_index: c.alt_index,
@@ -570,7 +563,6 @@ fn replace_element_at(elements: &List<Element>, pos: i32, replacement: &Element)
     return result;
 }
 
-/// Collect unique alt indices from configs.
 fn sll_unique_alts(configs: &List<SllConfig>) -> List<i32> {
     let mut alts: List<i32> = [];
     for let c of configs {
@@ -638,7 +630,6 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
         return PredictionNode::Consume(ConsumeNode { element: elem, child });
     }
 
-    // Compute FIRST set for each config.
     let mut all_tokens: List<String> = [];
     let mut all_tokens_seen = TreeSet::<String>::new();
     let mut config_firsts: List<List<String>> = [];
@@ -653,13 +644,11 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
         config_firsts.push(first);
     }
 
-    // Build dispatch branches.
     let mut branches: List<PredictionBranch> = [];
 
     for let mut t = 0; t < all_tokens.len(); t += 1 {
         let tk = &all_tokens[t];
 
-        // Advance all configs that can match this token.
         let mut next_configs: List<SllConfig> = [];
         let mut opaque_alts: List<i32> = [];
         for let mut i = 0; i < closed.len(); i += 1 {
@@ -787,7 +776,6 @@ fn try_expand_opaque(
     if rule_refs.len() <= 1 {
         return null;
     }
-    // Expand opaque configs by entering their RuleRefs and advancing by token.
     let mut expanded_configs: List<SllConfig> = [];
     for let c of original_configs {
         if !array_contains_i32(&opaque_alts, c.alt_index) {
@@ -804,7 +792,6 @@ fn try_expand_opaque(
                 }
                 let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
                 for let alt of found_rule.alternatives {
-                    // Pre-filter: skip alternatives whose FIRST doesn't contain the token.
                     let mut v: List<String> = [];
                     if !first_contains(&ctx.first_of_alt(&alt, &mut v), token) {
                         continue;
@@ -838,7 +825,6 @@ fn try_expand_opaque(
     for let ec of expanded_configs {
         all_configs.push(ec);
     }
-    // Compute FIRST for each config at the decision point level.
     let mut all_tokens: List<String> = [];
     let mut all_tokens_seen = TreeSet::<String>::new();
     let mut config_firsts: List<List<String>> = [];
@@ -852,7 +838,6 @@ fn try_expand_opaque(
         }
         config_firsts.push(first);
     }
-    // Build flat Dispatch: for each token, find which alt_indices match.
     let mut branches: List<PredictionBranch> = [];
     let mut has_improvement = false;
     for let mut t = 0; t < all_tokens.len(); t += 1 {
@@ -969,7 +954,6 @@ fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
             }
             true;
         },
-        // Consume nodes: check same element kind and recurse on child.
         [Consume(ca), Consume(cb)] => element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child),
         _ => false,
     };

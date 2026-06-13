@@ -59,9 +59,8 @@ impl HighlightVisitor {
                     break;
                 }
             }
-            // Skip overrides whose rule_name doesn't match any known rule —
-            // they can never fire (no rule_id on the stack is ever < 0) and
-            // would otherwise waste a comparison on every classify() call.
+            // Skip overrides whose rule_name matches no rule: they can never
+            // fire and would waste a comparison on every classify() call.
             if id < 0 {
                 continue;
             }
