@@ -293,37 +293,6 @@ impl EnumSpec {
     }
 }
 
-pub struct FlagsSpec {
-    pub name: String,
-    members: List<String>,
-    is_pub: bool,
-}
-
-impl FlagsSpec {
-    pub fn new(name: &String) -> FlagsSpec {
-        return FlagsSpec { name: *name, members: [], is_pub: false };
-    }
-
-    pub fn set_pub(&mut self) -> &mut FlagsSpec with stores[self] {
-        self.is_pub = true;
-        return self;
-    }
-
-    pub fn add_member(&mut self, name: &String) -> &mut FlagsSpec with stores[self] {
-        self.members.push(*name);
-        return self;
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter) {
-        let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(&`{prefix}flags {self.name}`);
-        for let member of &self.members {
-            w.line(&`{*member},`);
-        }
-        w.end();
-    }
-}
-
 pub struct ParamSpec {
     pub name: String,
     pub type_str: String,
@@ -334,10 +303,6 @@ pub struct ParamSpec {
 impl ParamSpec {
     pub fn new(name: &String, type_str: &String) -> ParamSpec {
         return ParamSpec { name: *name, type_str: *type_str };
-    }
-
-    pub fn new_mut(name: &String, type_str: &String) -> ParamSpec {
-        return ParamSpec { name: *name, type_str: *type_str, is_mut: true };
     }
 }
 
@@ -372,11 +337,6 @@ impl FnSpec {
 
     pub fn add_param(&mut self, name: &String, type_str: &String) -> &mut FnSpec with stores[self] {
         self.params.push(ParamSpec::new(name, type_str));
-        return self;
-    }
-
-    pub fn add_mut_param(&mut self, name: &String, type_str: &String) -> &mut FnSpec with stores[self] {
-        self.params.push(ParamSpec::new_mut(name, type_str));
         return self;
     }
 
@@ -455,11 +415,6 @@ impl GlobalSpec {
         return self;
     }
 
-    pub fn set_mut(&mut self) -> &mut GlobalSpec with stores[self] {
-        self.is_mut = true;
-        return self;
-    }
-
     pub fn set_trailing_comment(&mut self, comment: &String) -> &mut GlobalSpec with stores[self] {
         self.trailing_comment = Option::<String>::Some(*comment);
         return self;
@@ -474,57 +429,6 @@ impl GlobalSpec {
             "";
         };
         w.line(&`{vis}global {mutability}{self.name}: {self.type_str} = {self.initializer};{trailer}`);
-    }
-}
-
-pub struct TraitSpec {
-    name: String,
-    associated_types: List<String>,
-    methods: List<FnSpec>,
-    is_pub: bool,
-}
-
-impl TraitSpec {
-    pub fn new(name: &String) -> TraitSpec {
-        return TraitSpec {
-            name: *name,
-            associated_types: [],
-            methods: [],
-            is_pub: false,
-        };
-    }
-
-    pub fn set_pub(&mut self) -> &mut TraitSpec with stores[self] {
-        self.is_pub = true;
-        return self;
-    }
-
-    pub fn add_associated_type(&mut self, name: &String) -> &mut TraitSpec with stores[self] {
-        self.associated_types.push(*name);
-        return self;
-    }
-
-    pub fn add_method(&mut self, method: FnSpec) -> &mut TraitSpec with stores[self] {
-        self.methods.push(method);
-        return self;
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter) {
-        let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(&`{prefix}trait {self.name}`);
-        for let assoc of &self.associated_types {
-            w.line(&`type {*assoc};`);
-        }
-        if self.associated_types.len() > 0 && self.methods.len() > 0 {
-            w.blank();
-        }
-        for let mut i = 0; i < self.methods.len(); i += 1 {
-            if i > 0 {
-                w.blank();
-            }
-            w.line(&`{self.methods[i].signature()};`);
-        }
-        w.end();
     }
 }
 

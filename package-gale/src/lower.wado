@@ -78,7 +78,6 @@ use { LitToken } from "./lexer_gen.wado";
 use { GenContext, is_nullable, union_kind_arrays, FOLLOW_MASK_MAX_K } from "./gen_context.wado";
 use { strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
-use { TreeMap } from "core:collections";
 use {
     LoweredGrammar,
     Rule,
@@ -99,7 +98,6 @@ use {
     ScanRuleCallElem,
     ScanExcludedElem,
     ScanRepeatElem,
-    ScanRepeatStrategy,
     ScanGroupElem,
     ScanOptionalLookaheadElem,
     Op,
@@ -965,7 +963,6 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
         Repeat(r) => ScanElement::Repeat(ScanRepeatElem {
             kind: r.kind,
             body: deep_stamp_inner_self_refs_scan(r.body, rule_snake, prec),
-            strategy: r.strategy,
             inner_first: r.inner_first,
             caller_follow_first: r.caller_follow_first,
             gate_caller_follow: r.gate_caller_follow,
@@ -1916,9 +1913,7 @@ fn lower_scan_repeat(
     // `NonGreedyStrategy` infrastructure on the parse side (carrying
     // `exit_second`) is the natural foundation to restore here.
     // The scan side has no mask-driven strategies (the caller-FOLLOW
-    // repair is the runtime `gate_caller_follow` gate), so the scan
-    // repeat strategy is always `Plain`.
-    let strategy = ScanRepeatStrategy::Plain;
+    // repair is the runtime `gate_caller_follow` gate).
 
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
@@ -1936,7 +1931,6 @@ fn lower_scan_repeat(
     return ScanElement::Repeat(ScanRepeatElem {
         kind: rep.kind,
         body,
-        strategy: strategy,
         inner_first: inner_first,
         caller_follow_first: *outer_follow,
         gate_caller_follow: effective_gate,
@@ -1954,7 +1948,6 @@ fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: List<S
         return ScanElement::Repeat(ScanRepeatElem {
             kind: re.kind,
             body: re.body,
-            strategy: re.strategy,
             inner_first: re.inner_first,
             caller_follow_first: caller_follow_first,
             gate_caller_follow: re.gate_caller_follow,

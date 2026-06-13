@@ -394,8 +394,11 @@ Implementation references:
   `emit_caller_follow_gate` (parse side; the scan side emits the same
   `follow_yields` gate inline), `follow_arg_expr`, `gen_follow_mask_globals`,
   the optional-gate hook in `gen_op_repeat_optional_{leaf,rulecall}`.
-- `package-gale/src/follow_env.wado` — pure analysis (`FollowEnv`'s
-  `tail_greedy` snapshot and the call-graph `rule_follow` fixed-point).
+- `package-gale/src/follow_env.wado` — **parked scaffolding, not wired
+  into the pipeline.** A complete, tested static analysis (`FollowEnv`'s
+  `tail_greedy` snapshot and the call-graph `rule_follow` fixed-point)
+  kept as a reference for a future static call-graph-FOLLOW pass; the
+  live repair is the runtime `gate_caller_follow` gate above.
 - `package-gale/src/gir.wado` — `FollowArg`, `RuleCallOp.follow_arg`,
   `RepeatOp.gate_caller_follow` (+ `ScanRuleCallElem`/`ScanRepeatElem`
   mirrors).

@@ -1,4 +1,4 @@
-use { Span, Token, ParseError } from "../runtime/lex.wado";
+use { Token, ParseError } from "../runtime/lex.wado";
 use {
     Grammar,
     GrammarKind,
@@ -34,7 +34,7 @@ use {
     check_references,
     synthesize_implicit_tokens,
 } from "../ir.wado";
-use { G4Token, make_token } from "./token.wado";
+use { G4Token } from "./token.wado";
 use { tokenize_chars } from "./lexer.wado";
 
 pub struct G4Parser {
@@ -797,7 +797,6 @@ impl G4Parser {
             }
             let name_tok = self.peek();
             let name = name_tok.text.to_string();
-            let name_span = name_tok.span;
             self.advance();
             if !self.is_kind(G4Token::Assign) {
                 while !self.at_eof() && !self.is_kind(G4Token::Comma) && !self.is_kind(G4Token::RAngle) {
@@ -835,7 +834,6 @@ impl G4Parser {
                     );
                 }
             }
-            let _ = name_span;
             out.push(GrammarOption { name, value });
             if self.is_kind(G4Token::Comma) {
                 self.advance();
@@ -1058,7 +1056,9 @@ impl G4Parser {
             if self.is_kind(G4Token::LAngle) {
                 options = self.parse_angle_options()?;
             }
-            if is_lexer_rule_name(&name) || name == "EOF" {
+            // `EOF` is upper-case-led, so `is_lexer_rule_name` already
+            // classifies it as a token reference.
+            if is_lexer_rule_name(&name) {
                 self.pending_refs.push(PendingRef {
                     kind: RefKind::TokenRef,
                     containing_rule: self.current_rule,

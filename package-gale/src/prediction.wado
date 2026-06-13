@@ -4,7 +4,7 @@
 //! takes a set of alternatives (with their FIRST sets and elements) and
 //! returns a `PredictionNode` describing how to dispatch on lookahead
 //! tokens. It contains an SLL-style ATN simulator (`SllConfig`,
-//! `sll_advance`, `sll_closure`, `build_sll_node`, `try_expand_opaque`)
+//! `sll_advance`, `build_sll_node`, `try_expand_opaque`)
 //! and the resulting `PredictionNode` tree that the codegen consumes.
 //!
 //! This module is concern-pure: it never touches `CodeWriter`. The
@@ -249,12 +249,6 @@ fn pop_return(c: &SllConfig) -> SllConfig {
     };
 }
 
-
-/// Identity closure — nullable handling is done in sll_config_first
-/// (first_of_elements_from) and sll_advance (explicit skip logic).
-fn sll_closure(configs: &List<SllConfig>) -> List<SllConfig> {
-    return *configs;
-}
 
 /// True when the config has fully consumed its elements and has no return
 /// frame to pop into — i.e. the alt's body is finished and any further token
@@ -591,7 +585,10 @@ fn sll_dedup_by_alt(configs: &List<SllConfig>) -> List<SllConfig> {
 }
 
 fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
-    let closed = sll_closure(configs);
+    // No explicit closure step: nullable handling is done in
+    // `sll_config_first` (`first_of_elements_from`) and `sll_advance`
+    // (explicit skip logic), so the config set is used as-is.
+    let closed = *configs;
 
     // Guard: if too many configs, fall back to Ambiguous (codegen scan-dispatches) to avoid explosion.
     if closed.len() > 200 {

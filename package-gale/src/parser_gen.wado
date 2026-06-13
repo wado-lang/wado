@@ -76,7 +76,6 @@ use {
     ScanRuleCallElem,
     ScanExcludedElem,
     ScanRepeatElem,
-    ScanRepeatStrategy,
     ScanGroupElem,
     ScanOptionalLookaheadElem,
     rule_header,
@@ -521,53 +520,48 @@ fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGr
 }
 
 fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
-    gen_scan_function_named(w, rule, lowered_rule, ctx, &`scan_{rule.snake_name}`, true);
+    gen_scan_function_named(w, rule, lowered_rule, ctx, &`scan_{rule.snake_name}`);
 }
 
-/// Body emitter shared by `gen_scan_function` and the follow-aware
-/// variant pass. `allow_lr_split` is `true` for the regular path (which
-/// dispatches to `gen_scan_lr_functions` for left-recursive rules) and
-/// `false` for variants — variants are only emitted for non-LR rules
-/// today, so callers ensure the rule is non-LR before dispatching.
+/// Body emitter for a rule's scan function. Left-recursive rules
+/// dispatch to `gen_scan_lr_functions`; every other shape emits a
+/// single `scan_<rule>` body below.
 fn gen_scan_function_named(
     w: &mut CodeWriter,
     rule: &ParserRule,
     lowered_rule: &Rule,
     ctx: &mut GenContext,
     fn_name: &String,
-    allow_lr_split: bool,
 ) {
     if let LeftRecursive(l) = lowered_rule {
-        if allow_lr_split {
-            // LR rule: project the atom's alt indices into the
-            // surface-rule numbering so `gen_scan_lr_functions` can
-            // walk surface alts for the atom-side scan body.
-            let mut non_lr_indices: List<i32> = [];
-            for let alt of &l.atom.alts {
-                non_lr_indices.push(alt.alt_index);
-            }
-            // ATN-class LR rule: route the scan loop through the simulator and
-            // route the scan loop through `atn_lr_loop_decision`. The decision
-            // number is the rule's ATN loop-entry; every scan rule call brackets
-            // with the scan caller stack via `gen_scan_op_element`.
-            let atn_loop_dec = if l.atn_class && ctx.needs_atn() {
-                ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name));
-            } else {
-                -1;
-            };
-            gen_scan_lr_functions(
-                w,
-                rule,
-                &l.lr_alts,
-                &l.lr_dispatch,
-                &non_lr_indices,
-                &l.atom.scan_alts,
-                ctx,
-                fn_name,
-                atn_loop_dec,
-            );
-            return;
+        // LR rule: project the atom's alt indices into the
+        // surface-rule numbering so `gen_scan_lr_functions` can
+        // walk surface alts for the atom-side scan body.
+        let mut non_lr_indices: List<i32> = [];
+        for let alt of &l.atom.alts {
+            non_lr_indices.push(alt.alt_index);
         }
+        // ATN-class LR rule: route the scan loop through the simulator and
+        // route the scan loop through `atn_lr_loop_decision`. The decision
+        // number is the rule's ATN loop-entry; every scan rule call brackets
+        // with the scan caller stack via `gen_scan_op_element`.
+        let atn_loop_dec = if l.atn_class && ctx.needs_atn() {
+            ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name));
+        } else {
+            -1;
+        };
+        gen_scan_lr_functions(
+            w,
+            rule,
+            &l.lr_alts,
+            &l.lr_dispatch,
+            &non_lr_indices,
+            &l.atom.scan_alts,
+            ctx,
+            fn_name,
+            atn_loop_dec,
+        );
+        return;
     }
 
     let mut f = FnSpec::new(fn_name);
@@ -631,7 +625,7 @@ fn gen_scan_function_named(
         // `gen_scan_op_elements_in_block`. Fetch the `scan_alts` from
         // the matching `Rule` variant — multi-alt non-LR rules go
         // through `MultiAlt`; LR rules dispatch earlier via the
-        // `allow_lr_split` branch.
+        // `LeftRecursive` branch above.
         let scan_alts = if let MultiAlt(m) = lowered_rule {
             &m.scan_alts;
         } else {
@@ -1750,7 +1744,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     let inner = `{canonical}__inner`;
     let scan_fn_name = `scan_{rule.snake_name}`;
     match *lowered_rule {
-        Simple(_) => gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, &inner, /*emit_visibility=*/ true),
+        Simple(_) => gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, &inner),
         MultiAlt(_) | LeftRecursive(_) => gen_parse_fn_named(
             w,
             rule,
@@ -1758,7 +1752,6 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
             ctx,
             &inner,
             &scan_fn_name,
-            true,
         ),
     }
     gen_rule_entry_wrapper(
@@ -1946,12 +1939,9 @@ fn gen_parse_fn_simple_named(
     lowered_rule: &Rule,
     ctx: &mut GenContext,
     fn_name: &String,
-    emit_visibility: bool,
 ) {
     let type_name = rule.type_name;
-    if emit_visibility {
-        gen_visibility_comment(w, &rule.visibility);
-    }
+    gen_visibility_comment(w, &rule.visibility);
 
     let mut f = FnSpec::new(fn_name);
     f.add_param(&"p", &"&mut Parser");
@@ -1973,17 +1963,9 @@ fn gen_parse_fn_simple_named(
 /// so parsing reduces to: confirm the lookahead is in the rule's first
 /// set, consume the one token, and build the struct. The no-match path is
 /// the shared `gen_error_fallback`, so the diagnostic matches the cascade's.
-fn gen_parse_fn_single_token(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    ctx: &mut GenContext,
-    fn_name: &String,
-    emit_visibility: bool,
-) {
+fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String) {
     let type_name = rule.type_name;
-    if emit_visibility {
-        gen_visibility_comment(w, &rule.visibility);
-    }
+    gen_visibility_comment(w, &rule.visibility);
     let mut f = FnSpec::new(fn_name);
     f.add_param(&"p", &"&mut Parser");
     if ctx.emit_follow() {
@@ -2021,11 +2003,6 @@ fn gen_parse_fn_single_token(
 /// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
 /// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
 /// path needs no per-(rule, mask) specialisation.
-///
-/// `emit_visibility` gates the `pub`/`export` doc comment on the
-/// emitted function. It is `true` for every live call site today;
-/// the parameter survives from the retired follow-variant pass, which
-/// emitted implementation-detail clones with it set `false`.
 fn gen_parse_fn_named(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -2033,14 +2010,12 @@ fn gen_parse_fn_named(
     ctx: &mut GenContext,
     fn_name: &String,
     scan_fn_name: &String,
-    emit_visibility: bool,
 ) {
-    // Variant emission and the shared dispatch path route through
-    // here. Single-alt rules are handled by the dedicated
+    // Single-alt rules are handled by the dedicated
     // \`gen_parse_fn_simple_named\` so the heavy multi-alt + LR setup
     // below doesn't run for the trivial shape.
     if rule.alternatives.len() == 1 {
-        gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, fn_name, emit_visibility);
+        gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, fn_name);
         return;
     }
 
@@ -2051,14 +2026,12 @@ fn gen_parse_fn_named(
     // side already collapses these (`gen_scan_function_named`); the result is
     // far smaller and no slower than the cascade.
     if all_alts_are_single_token(&rule.alternatives) {
-        gen_parse_fn_single_token(w, rule, ctx, fn_name, emit_visibility);
+        gen_parse_fn_single_token(w, rule, ctx, fn_name);
         return;
     }
 
     let type_name = rule.type_name;
-    if emit_visibility {
-        gen_visibility_comment(w, &rule.visibility);
-    }
+    gen_visibility_comment(w, &rule.visibility);
 
     // Project the lowered rule's alt partition into surface alt
     // indices. For LR rules, atom alts are non-LR; for `Simple` /
@@ -3591,7 +3564,6 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     }
     if let Literal(l) = elem {
         let const_name = literal_const_name(&l.text);
-        let display = `'{l.text}'`;
         let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
         w.line(&`let {field_name} = p.expect({const_name})?;`);
         return;

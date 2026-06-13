@@ -900,11 +900,9 @@ pub struct ScanExcludedElem {
 pub struct ScanRepeatElem {
     pub kind: RepeatKind,
     pub body: ScanElement,
-    pub strategy: ScanRepeatStrategy,
     /// First set of `body` cached at lower time. emit's scan-side
     /// repeat emitter uses this for `while peek_kind ∈ inner_first`
-    /// loop guards (Plain strategy) and for Plus's mandatory-first
-    /// iteration condition.
+    /// loop guards and for Plus's mandatory-first iteration condition.
     pub inner_first: List<String>,
     /// Scan-side mirror of `RepeatOp.caller_follow_first`. Default is
     /// the variant-aware `outer_follow` at construction time; alt-level
@@ -920,10 +918,6 @@ pub struct ScanRepeatElem {
     /// entry so the longest-match tournament yields to the caller in
     /// lockstep with the parse side.
     pub gate_caller_follow: bool,
-}
-
-pub variant ScanRepeatStrategy {
-    Plain,
 }
 
 pub struct ScanGroupElem {

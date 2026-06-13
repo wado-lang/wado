@@ -400,13 +400,6 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     return TriageMaps { category, stage_a, stage_b, stage_b_oracle };
 }
 
-/// Per-category convenience wrapper retained so the test blocks at the
-/// bottom of this file can keep using a single map without destructuring
-/// `TriageMaps`.
-fn load_triage_map(content: &Option<String>) -> TriageMap {
-    return load_triage_maps(content).category;
-}
-
 fn unquote(s: &String) -> String {
     if s.len() >= 2 && s.starts_with("\"") && s.ends_with("\"") {
         return s.substr_bytes(1, s.len() - 1);
