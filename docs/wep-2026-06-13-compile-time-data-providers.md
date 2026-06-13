@@ -142,6 +142,30 @@ be documented, since an application inherits locales it did not declare itself. 
 future extension may add an application-level _kill switch_ to forcibly cap or
 override the inherited locale/feature set; out of scope for v1.
 
+### Elaborator hook
+
+The reachable-op set is read from the elaborator's `liveness` pass
+([elaborator rearchitecture](./wep-2026-05-26-elaborator-rearchitecture.md)),
+which already computes `Liveness.live_items` — the closure of source items
+reachable from the export boundary — and already feeds both `reify` (input
+shrinking) and the unused-import diagnostics
+([unused diagnostics](./wep-2026-05-16-unused-diagnostics.md)). Data provisioning
+is a third consumer of the same result, sibling to those two:
+
+- For each provider-backed module, take the imported symbols present in
+  `live_items`, by their original Wado names (`upper`, `Collator`, ...), grouped
+  by module — these become the request's `symbols`.
+- A module with no live imported symbol is unreachable, so its prebuilt
+  component and data are never linked. The drop falls out of the same
+  reachability `reify` uses; no extra analysis is added.
+- The `with` options come from the `use` declarations (the `imports` resolution
+  context), unioned per module.
+
+Because `live_items` already backs the unused-import diagnostics, the LSP knows
+"imported but unused" for ICU ops with no extra work. Surfacing the _data cost_
+of a live import (e.g. that `words` pulls multi-MB) is an optional inlay hint
+built on the provider's size metadata, deferred past v1.
+
 ### The `use ... with` surface
 
 ```wado
@@ -250,8 +274,11 @@ Remaining:
       `core:kiln/kiln-host`: request `{module, symbols, options}` (canonical-JSON
       options), response `{data}`, diagnostics via host, `read-asset` a binary
       sibling to `read-file`, cache key includes recorded reads + provider hash.
-- [ ] Pin down the elaborator hook: how the reachable import-edge set is handed
-      to the provisioning step, and the LSP surface for it.
+- [x] Pin down the elaborator hook: provisioning is a third consumer of the
+      `liveness` pass's `live_items` (sibling to reify and unused diagnostics);
+      live provider-backed imports grouped by module form the request `symbols`,
+      and an unreachable module drops out for free. LSP "imported but unused"
+      comes free; a data-cost inlay hint is deferred.
 - [ ] Specify the option schema and its mergeability/canonical-encoding rules.
 - [ ] Define the archive layout (entry granularity, index format, compression
       codec) and the slicing the provider does within an entry (markers ×
