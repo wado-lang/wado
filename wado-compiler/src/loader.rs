@@ -53,6 +53,10 @@ pub enum LoadError {
     UnknownNamespace { namespace: String },
     /// Invalid module path format (e.g., "foo.wado" without "./" prefix)
     InvalidModulePath { path: String },
+    /// A bare name matched a declared `[dependencies]` entry, but the
+    /// dependency could not be resolved to an entry module (e.g. its package
+    /// declares no `[package].lib`). `reason` explains why.
+    DependencyUnresolved { name: String, reason: String },
     /// Wasm-asset import (`with { type: "wat"|"wasm" }`) failed validation.
     WasmImport {
         module_source: ModuleSource,
@@ -130,6 +134,9 @@ impl std::fmt::Display for LoadError {
                     f,
                     "invalid module path '{path}'; use './' for local modules or 'namespace:' for library modules"
                 )
+            }
+            LoadError::DependencyUnresolved { name, reason } => {
+                write!(f, "cannot resolve dependency '{name}': {reason}")
             }
             LoadError::WasmImport {
                 module_source,
@@ -1465,10 +1472,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Bare dependency name: resolve against `[dependencies]`. Only the
         // consuming project resolves its own deps; a bare import from within
         // a dependency must not bind to the consumer's deps.
-        if !matches!(from_module_source, ModuleSource::Dependency { .. })
-            && let Some(dep) = self.interner.resolve_dependency(import_source)
-        {
-            return Ok(dep);
+        if !matches!(from_module_source, ModuleSource::Dependency { .. }) {
+            if let Some(dep) = self.interner.resolve_dependency(import_source) {
+                return Ok(dep);
+            }
+            // Declared but unresolvable (e.g. missing `[package].lib`): report
+            // why, instead of a generic "invalid module path".
+            if let Some(reason) = self.interner.unresolved_dependency(import_source) {
+                return Err(LoadError::DependencyUnresolved {
+                    name: import_source.to_string(),
+                    reason: reason.to_string(),
+                });
+            }
         }
 
         // Check for unknown namespace pattern (xxx:yyy)

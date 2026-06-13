@@ -5,11 +5,10 @@
 //! want to decorate output (timestamps, log-level filtering, stderr printing)
 //! wrap this host.
 
-use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
-use wado_compiler::{CompilerHost, Diagnostic, Severity, SourceError};
+use wado_compiler::{CompilerHost, DependencyIndex, Diagnostic, Severity, SourceError};
 use wado_manifest::DependencySource;
 
 #[derive(Debug)]
@@ -66,9 +65,9 @@ impl CompilerHost for FilesystemCompilerHost {
         self.collect_diagnostic(diagnostic);
     }
 
-    fn dependency_index(&self) -> HashMap<String, String> {
+    fn dependency_index(&self) -> DependencyIndex {
         let Some((manifest, root)) = nearest_manifest(&self.base_path) else {
-            return HashMap::new();
+            return DependencyIndex::default();
         };
         dependency_index_from(&manifest, &root, &self.base_path)
     }
@@ -87,17 +86,23 @@ pub fn dependency_index_from(
     manifest: &wado_manifest::Manifest,
     manifest_dir: &Path,
     base: &Path,
-) -> HashMap<String, String> {
-    let mut index = HashMap::new();
+) -> DependencyIndex {
+    let mut index = DependencyIndex::default();
     let base_abs = absolutize(base);
     for (name, dep) in &manifest.dependencies {
         let DependencySource::Path { path, .. } = &dep.source else {
             continue;
         };
-        let Some(entry) = dependency_entry_path(&manifest_dir.join(path)) else {
-            continue;
-        };
-        index.insert(name.clone(), relative_path(&base_abs, &absolutize(&entry)));
+        match dependency_entry_path(&manifest_dir.join(path)) {
+            Ok(entry) => {
+                index
+                    .resolved
+                    .insert(name.clone(), relative_path(&base_abs, &absolutize(&entry)));
+            }
+            Err(reason) => {
+                index.unresolved.insert(name.clone(), reason);
+            }
+        }
     }
     index
 }
@@ -120,14 +125,23 @@ fn nearest_manifest(start: &Path) -> Option<(wado_manifest::Manifest, PathBuf)> 
 }
 
 /// The entry module file of a path dependency: the file itself when the path
-/// points at a `.wado` file, otherwise the directory's `[package].lib`.
-fn dependency_entry_path(dep_path: &Path) -> Option<PathBuf> {
+/// points at a `.wado` file, otherwise the directory's `[package].lib`. The
+/// `Err` describes why a declared dependency has no usable entry.
+fn dependency_entry_path(dep_path: &Path) -> Result<PathBuf, String> {
     if dep_path.extension().is_some_and(|e| e == "wado") {
-        return Some(dep_path.to_path_buf());
+        return Ok(dep_path.to_path_buf());
     }
-    let text = std::fs::read_to_string(dep_path.join("wado.toml")).ok()?;
-    let manifest: wado_manifest::Manifest = text.parse().ok()?;
-    Some(dep_path.join(manifest.package?.lib?))
+    let manifest_path = dep_path.join("wado.toml");
+    let text = std::fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("cannot read {}: {e}", manifest_path.display()))?;
+    let manifest: wado_manifest::Manifest = text
+        .parse()
+        .map_err(|e| format!("invalid {}: {e}", manifest_path.display()))?;
+    let lib = manifest
+        .package
+        .and_then(|p| p.lib)
+        .ok_or_else(|| format!("{} declares no [package].lib entry", manifest_path.display()))?;
+    Ok(dep_path.join(lib))
 }
 
 fn absolutize(p: &Path) -> PathBuf {

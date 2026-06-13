@@ -34,7 +34,7 @@ pub struct FilesystemCompilerHost {
     /// Precomputed `[dependencies]` index. When set, `dependency_index`
     /// returns it instead of having the inner host re-read the manifest —
     /// the caller already parsed it for the Kiln pipeline.
-    dep_index: Option<std::collections::HashMap<String, String>>,
+    dep_index: Option<wado_compiler::DependencyIndex>,
 }
 
 impl FilesystemCompilerHost {
@@ -83,10 +83,7 @@ impl FilesystemCompilerHost {
     /// Supply a precomputed `[dependencies]` index so the inner host does not
     /// re-read the manifest the caller already parsed for the Kiln pipeline.
     #[must_use]
-    pub fn with_dependency_index(
-        mut self,
-        index: std::collections::HashMap<String, String>,
-    ) -> Self {
+    pub fn with_dependency_index(mut self, index: wado_compiler::DependencyIndex) -> Self {
         self.dep_index = Some(index);
         self
     }
@@ -203,7 +200,7 @@ impl CompilerHost for FilesystemCompilerHost {
         self.inner.collect_diagnostic(diagnostic);
     }
 
-    fn dependency_index(&self) -> std::collections::HashMap<String, String> {
+    fn dependency_index(&self) -> wado_compiler::DependencyIndex {
         match &self.dep_index {
             Some(index) => index.clone(),
             None => self.inner.dependency_index(),

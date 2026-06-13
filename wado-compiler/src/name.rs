@@ -1259,11 +1259,11 @@ mod tests {
     #[test]
     fn bare_dep_resolves_only_for_consumer_not_inside_dependency() {
         let mut interner = ModuleSourceInterner::new();
-        interner.set_dependencies(
-            [("logger".to_string(), "../logger/src/lib.wado".to_string())]
-                .into_iter()
-                .collect(),
-        );
+        let mut index = crate::compiler_host::DependencyIndex::default();
+        index
+            .resolved
+            .insert("logger".to_string(), "../logger/src/lib.wado".to_string());
+        interner.set_dependencies(index);
         let entry = interner.entry_point("main.wado");
         // From the consuming project, a bare name binds to its dependency.
         let from_entry = resolve_import_with_entry(&mut interner, &entry, "logger", None);

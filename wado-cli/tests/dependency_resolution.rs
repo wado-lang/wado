@@ -161,3 +161,64 @@ export fn run() with Stdout {
         .success()
         .stdout(predicate::str::contains("hello world"));
 }
+
+/// A declared path dependency whose package has no `[package].lib` is
+/// reported precisely (not as a generic "invalid module path").
+#[test]
+fn dependency_without_lib_reports_precise_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+
+    // greet declares a package but no `lib` entry.
+    let greet = root.join("greet");
+    fs::create_dir_all(greet.join("src")).unwrap();
+    fs::write(
+        greet.join("wado.toml"),
+        r#"[package]
+name = "greet"
+version = "0.1.0"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        greet.join("src/lib.wado"),
+        "export fn hello() -> String { return \"hi\"; }\n",
+    )
+    .unwrap();
+
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        r#"[package]
+name = "app"
+version = "0.1.0"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+
+[dependencies]
+greet = { path = "../greet" }
+"#,
+    )
+    .unwrap();
+    fs::write(
+        app.join("src/main.wado"),
+        r#"use { hello } from "greet";
+
+export fn run() {
+    let _ = hello();
+}
+"#,
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["compile", "-o", "out.wasm", "src/main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("greet").and(
+            predicate::str::contains("[package].lib")
+                .or(predicate::str::contains("declares no")),
+        ));
+}

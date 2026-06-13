@@ -147,22 +147,21 @@ static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
 #[derive(Debug)]
 pub struct ModuleSourceInterner {
     strings: StringInterner,
-    /// Bare dependency name → entry module path, relative to the consuming
-    /// project's entry directory. Populated from `[dependencies]` so that a
-    /// `use { … } from "<name>"` clause resolves to the dependency's
-    /// `[package].lib`. Empty for single-file compilation.
-    dependencies: std::collections::HashMap<String, String>,
+    /// Resolved `[dependencies]`, consulted for bare-name `use` clauses, plus
+    /// declared-but-unresolved entries (with reasons) for precise errors.
+    /// Empty for single-file compilation.
+    dependencies: crate::compiler_host::DependencyIndex,
 }
 
 impl ModuleSourceInterner {
     pub fn new() -> Self {
         Self {
             strings: StringInterner::with_well_known_arcs(well_known_arcs()),
-            dependencies: std::collections::HashMap::new(),
+            dependencies: crate::compiler_host::DependencyIndex::default(),
         }
     }
 
-    pub fn set_dependencies(&mut self, dependencies: std::collections::HashMap<String, String>) {
+    pub fn set_dependencies(&mut self, dependencies: crate::compiler_host::DependencyIndex) {
         self.dependencies = dependencies;
     }
 
@@ -174,10 +173,16 @@ impl ModuleSourceInterner {
     }
 
     /// Resolve a bare dependency name to its entry module `ModuleSource`, if
-    /// declared in `[dependencies]`.
+    /// declared in `[dependencies]` and successfully resolved.
     pub fn resolve_dependency(&mut self, name: &str) -> Option<ModuleSource> {
-        let path = self.dependencies.get(name)?.clone();
+        let path = self.dependencies.resolved.get(name)?.clone();
         Some(self.dependency(name, &path))
+    }
+
+    /// The reason a *declared* dependency could not be resolved, if any.
+    #[must_use]
+    pub fn unresolved_dependency(&self, name: &str) -> Option<&str> {
+        self.dependencies.unresolved.get(name).map(String::as_str)
     }
 
     pub fn intern(&mut self, s: &str) -> InternedStr {
@@ -714,16 +719,25 @@ mod tests {
     #[test]
     fn resolve_dependency_uses_registered_path() {
         let mut interner = ModuleSourceInterner::new();
-        interner.set_dependencies(
-            [("greet".to_string(), "../greet/src/lib.wado".to_string())]
-                .into_iter()
-                .collect(),
-        );
+        let mut index = crate::compiler_host::DependencyIndex::default();
+        index
+            .resolved
+            .insert("greet".to_string(), "../greet/src/lib.wado".to_string());
+        index
+            .unresolved
+            .insert("broken".to_string(), "declares no [package].lib".to_string());
+        interner.set_dependencies(index);
         assert_eq!(
             interner.resolve_dependency("greet"),
             Some(interner.dependency("greet", "../greet/src/lib.wado"))
         );
         assert_eq!(interner.resolve_dependency("missing"), None);
+        // Declared-but-unresolved entries surface their reason instead.
+        assert_eq!(interner.resolve_dependency("broken"), None);
+        assert_eq!(
+            interner.unresolved_dependency("broken"),
+            Some("declares no [package].lib")
+        );
     }
 
     #[test]
