@@ -9,9 +9,11 @@ interprocedural driver replacing the global fixed-point loop.
 The engine substrate, the arena NIR, the routing of every intra-procedural
 pass through the engine edit API, and the ValueGraph foundation (kinds,
 hash-cons pool, per-function builder) have all landed, along with the
-Stage 3 (`cse`) and Stage 5 (`store_load_forward`) rule migrations onto
-the ValueGraph. The remaining required-path migrations and the
-interprocedural worklist are open. Full Layer-2 promotion (Skel
+Stage 3 – 6 rule migrations onto the ValueGraph — culminating in the
+retirement of niri's per-local `field_env` (the ValueGraph now owns all
+field reaching-def; one `int128_cast` reinterpret assert is a +36-byte
+code-size residual deferred to `mod_ref.rs`). The interprocedural worklist
+(Stage 9) is the remaining required-path item. Full Layer-2 promotion (Skel
 pure-`ExprKind` retirement and saturation-driven engine) stays in this
 WEP as the terminal ideal but is gated behind measurement — see "Why
 Layer 2 promotion is deferred" and the "Optional acceleration" entries
@@ -196,223 +198,73 @@ predecessor is deleted. If the optional acceleration ever activates,
 Stage 7 alters the NIR shape (pure `ExprKind` variants vanish) but the
 WIR output stays byte-identical.
 
-### Completed substrate
+### Done (required path)
 
-- [x] Engine substrate, edit API, `Rule` / `run`; arena-only NIR.
-- [x] Per-function dirty-set gate over the existing loop.
-- [x] `EngineBuffers` pooling, allocation-cost reduction.
-- [x] All ~15 intra-procedural rules routed through the engine edit API:
-      `ref_elim`, `elide_box_local`, `value_copy_elide`,
-      `labeled_block_fusion` (shared peephole session); `sroa`,
-      `container_sroa`, `store_load_forward`, `copy_prop`, `cse`, `licm`,
-      `condition_implication`, `tmpl_hoist` (per-function standalone
-      sessions); `match_to_switch`, `select_lowering`, env-free
-      `const_folding` (peephole session). Mutations all go through
-      `Engine::*`; parent map and use index invariants are upheld.
+- [x] **Substrate.** Engine (edit API, `Rule` / `run`, arena-only NIR),
+      per-function dirty-set gate, `EngineBuffers` pooling, and all ~15
+      intra-procedural passes routed through the engine edit API.
+- [x] **Stage 1 – 2 — ValueGraph + builder.** Hash-cons `ValuePool`
+      (`ValueId` / `ValueKind`); a per-function builder assigns a `ValueId` to
+      every pure `ExprId` (`current_value` threading, `Select` at merges,
+      `Opaque` for loop locals / params), exposed lazily as `engine.value(expr)`.
+- [x] **Stage 3 — CSE.** Equality is `engine.value(a) == engine.value(b)`; the
+      structural `CseKey` is gone.
+- [x] **Stage 5 — store_load_forward.** Per-field heap versions on
+      `FieldAccess`; the rule forwards a read whose VN is a literal.
+      (Address-taken / `stores`-aliased locals are excluded — the builder
+      models writes through neither.)
+- [x] **Stage 6 — const_folding / condition_implication / licm.**
+  - Env-free and env-bound `const_folding` fold via the ValueGraph (niri's
+    CTFE reused; niri commits through an `EditSink`).
+  - Reference look-through (`let r = &v` forwards `r.f`), call-survival for
+    immutable-only locals (`mut_escaped`, derived subtractively from `aliased`
+    so a POD value struct escaping only by `&self` keeps its forwarded fields),
+    and HFS shadow-init forwarding.
+  - `field_env` retired: niri's per-local field map and all its machinery are
+    deleted; the ValueGraph owns all field reaching-def. Three precision fixes
+    closed the gap — `copy_local_field_slots` (forward through a `Local`
+    producer), short-circuit precise heap invalidation, reflexive equality
+    (`x == x`). Residual: `int128_cast_to_primitives` is +36 bytes (one
+    reinterpret assert whose seed and consumer never coexist in one per-build
+    ValueGraph — needs the Phase-2 `mod_ref.rs` heap model).
+  - `condition_implication` unified into one `GuardFact` (facts go stale by
+    construction — a mutation changes the operand's `ValueId`); `licm` hoists by
+    pre-header `ValueId` stability.
 
-### Required path
+### Open
 
-#### Stage 1 — ValueGraph foundation
-
-- [x] `ValueId`, `ValueKind`, `ValuePool` with hash-cons; the full
-      `ValueKind` set above (heap-version-bearing kinds may be stubbed
-      until Stage 5). Standalone module, exhaustive unit tests, no engine
-      integration. SkelTree unchanged.
-
-#### Stage 2 — Per-function builder
-
-- [x] Walk the SkelTree assigning `ValueId` to every pure `ExprId`.
-      Maintain `current_value: HashMap<local_idx, ValueId>`; build
-      `Select` at If / Match / Switch endpoints; emit `Opaque` for loop
-      locals; seed parameters with `Opaque`.
-- [x] Side table `value_of: IndexMap<ExprId, ValueId>` populated per
-      function. Engine exposes `engine.value(expr) -> Option<ValueId>`,
-      built lazily on first call. Edits do not invalidate the cache;
-      rules snapshot results before editing, or call
-      `Engine::invalidate_value_graph` to force a rebuild.
-
-#### Stage 3 — CSE migration
-
-- [x] `CseRule` uses `engine.value(e1) == engine.value(e2)` for
-      equality. The structural `CseKey` and its supporting walks are
-      deleted after byte-identical confirmation. First end-to-end proof
-      that Stage 1 + 2 are correctly wired.
-
-#### Stage 4 — copy_prop migration _(deferred)_
-
-Skipped on the required path: `copy_prop`'s source-stability check is
-not subsumed by `ValueId` equality alone. A `let x = y` where the
-target `x` is later observed with the same `ValueId` as a literal does
-not imply the read is stable to substitute — write-once `x` whose
-reassigned source `y` invalidates can still see equal `ValueId`s at the
-two reads while being unsafe to fold. Revisit alongside Stage 6's
-algebraic rules over `Select` and `Opaque` provenance.
-
-#### Stage 5 — store_load_forward + heap-version activation
-
-- [x] Activate the `FieldAccess` ValueKind with per-field heap versions.
-      The builder bumps the appropriate field's version on each
-      heap-write Skel node. `FieldAccess(r, f, v)` reads at the same
-      `(r, f, v)` return the same `ValueId`, automatically forwarding
-      stored literals.
-- [x] `store_load_forward`'s `KnownValues` / `ModifiedLocalsCache`
-      walker collapsed into a thin rule: walks `Local` mentions, consults
-      `engine.value(read)`, replaces with the source literal when the
-      `ValueKind` is `Int`/`Float`/`Bool`/`Char`. Locals in
-      `NirFunction::address_taken_locals` or `stores_aliased_locals` are
-      excluded — the builder models writes through neither.
-
-#### Stage 6 — const_folding, condition_implication, licm
-
-Builder prerequisites (landed):
-
-- Reachability-aware heap joins: branch endpoints join field versions
-  per fall-through arm instead of `bump_all`, so a loop guard and a
-  later bounds check share field VNs. A labeled block whose `break`
-  targets its own label falls through (fixture
-  `labeled_block_self_break_field_write.wado`).
-- Field store→load seeding: `obj.f = v` and struct-literal `let`s seed
-  `(receiver, field, version) → value`, peering through block /
-  labeled-block constructor wrappers with a sole-producer check.
-  Seeding needs no alias exclusion: the heap version is global per
-  `field_index`, so any write to field `f` — through any receiver or
-  reference alias — bumps the `f` version and a read at the post-write
-  version misses every prior `f` seed (calls / deref / global writes
-  `bump_all`). Version monotonicity thus makes stale seeds unreachable
-  even for reference-aliased receivers, so they seed like any other.
-- Per-loop pre-header snapshots of `current_value`
-  (`Engine::loop_entry_value`); parameters must be seeded up front
-  (`Engine::set_param_locals`) to appear in them.
-
-Migrations:
-
-- [x] Env-free `const_folding` over Value kinds. The `ValuePool` `Binary` /
-      `Unary` nodes fold literal operands by reusing niri's exact CTFE
-      (`eval_binary` / `eval_unary`, operand `PrimitiveType` from the NIR type
-      so integer wrapping matches; `type_table` threaded via the engine);
-      `store_load_forward` substitutes any read whose VN is a literal and
-      synthesizes the literal `ExprKind` (`value_to_arena_kind`) for a folded
-      value with no source. A `Box` / `&mut` field-accumulation chain
-      (`n.value = n.value + 1` ×N) now collapses without `field_env`.
-- [x] Env-bound `const_folding` — niri commits via the engine through an
-      `EditSink` (`BodySink` for CTFE scratch, `EngineSink` for the real walk)
-      instead of mutating `Body` in place; rewrites are sink-generic. Goldens
-      byte-identical.
-- [x] ValueGraph reference look-through — `let r = &v` forwards `r.f` from
-      `v`'s field slot (`ref_targets`, cleared on reassignment; the pointee's
-      live slot state is used, so a stale forward is impossible).
-- [x] ValueGraph call-survival for immutable-only locals (`mut_escaped`).
-      `bump_call_effects` now bumps a `mut_escaped` set derived _subtractively_
-      from `aliased`: a local is dropped only when its type is transitively
-      free of shared mutable state (`CallImmutability`) _and_ it has no
-      syntactic mutable escape (`&mut`, mut-ref arg, `&mut self` receiver via
-      the callee first-param type, `stores`), closed over alias groups. So a
-      POD value struct escaping only by `&self` keeps its forwarded fields
-      across calls (int128 `abs_u128` folds IR-side). Field-_write_ granularity
-      still uses the full `aliased`. (An additive-from-`&mut` first attempt
-      miscompiled `ref_2` — boxing erases `&mut` and a by-value `Box` is itself
-      a mutable handle; the subtractive type-driven model is the fix.)
-- [x] HFS shadow-init forwarding — an ungated `forward_stores_to_loads_all`
-      (shared `forward_one`) runs once after `field_scalarize`, before
-      globalization, folding `__hfs_x = obj.f` shadow inits the ValueGraph
-      still knows and letting DCE drop wholly-constant scalar chains. Closed
-      the whole HFS cluster. (`hfs_break_from_scalar_state_commits` rewritten to
-      `self.base + k` via `#[inline(never)]` so its commit-on-break machinery
-      stays non-constant under the improved optimizer.)
-- [ ] `field_env` not yet deletable: disabling it regresses 5 residual
-      fixtures (gap 29 → 5 across `mut_escaped` + HFS + arithmetic folding).
-      The store→load duplication the WEP set out to remove is gone and the HFS
-      / CTFE-cluster folds happen IR-side; what remains is two narrow gaps:
-  - int128 const-object dedup (`coerce_int_3`, `int128_cast_to_primitives`):
-    make `const_object_globalization` match repeated constant structs via the
-    ValueGraph, not `field_env`'s global field map. Code-size only.
-  - Mutable-reference field forwarding (`mut_param`, `mut_param_merged`,
-    `ref_1`): the general reference-copy chain folds (probe above), but these
-    fixtures' nested-inline shape (`add_four → add_two → add_one`, extra
-    `&n` / `&mut q` handles) still leaves the chain un-forwarded — a per-fixture
-    field-forwarding gap to diagnose against value-graph state. Then delete
-    `field_env`.
-- [x] `condition_implication`: all guard kinds (loop, dominating,
-      early-exit, short-circuit, bitmask) unified into one
-      `GuardFact { var_vn, max_offset, bound_vn, is_strict }` with
-      multi-hop `Add` decomposition. The `DefMap` / taint / kill
-      machinery is deleted (1,940 → ~730 lines) — a mutation between
-      guard and check changes the check operand's `ValueId`, so facts
-      go stale by construction (fixtures
-      `array_bounds_elim_oob_guard_var_mutated.wado`,
-      `array_bounds_elim_oob_bound_shrunk.wado`; the migration fixed a
-      position-blindness miscompile in the syntactic predecessor).
-- [x] `licm` arithmetic hoisting. Design refinement: clone-to-pre-header
-      hoisting needs _pre-header stability_ — each `Local` leaf's
-      use-site `ValueId` equals the loop-entry snapshot value — not
-      cross-iteration invariance (`loop { x = 5; … x+n … }` has an
-      invariant use value that differs from the pre-header `x`). An
-      invariance predicate built first on that wrong premise was
-      deleted unconsumed. Dedup is by `ValueId` (copies share one
-      temp); the field-hoist half keeps `ModifiedVars` until
-      per-`(receiver-root, field)` heap precision lands via
-      `mod_ref.rs`. `&x` look-through stays Skel-side — `Ref` /
-      `MutRef` are deliberately not pure values.
-- [ ] Simple induction-variable recognition (`Opaque` tagged with
-      `{ base, step }` in a side table). Not needed by the landed
-      consumers — post-increment reads already appear as
-      `Add(opaque_i, step)` — so this lands when a rule first wants it.
-
-#### Stage 9 — Interprocedural worklist
-
-Stages 7 – 8 belong to the optional acceleration path below; the required
-path jumps from Stage 6 directly to Stage 9.
-
-- [ ] Old per-pass walkers (stub-only after Stages 3 – 6) are deleted in
-      bulk.
-- [ ] `inline` / `dae` / `drve` / `sroa_param` / `value_copy_demote` move
-      to a call-graph worklist driver that re-runs the per-function
-      engine session for affected callers when a callee's signature or
-      body shrinks. `OptConfig::iterations` shrinks to the convergence
-      bound of the worklist, not a fixed-pass count.
-- [ ] Terminal / once-only stages stay explicit pre- or post-saturation,
-      not loop members: `multi_value_return`, `field_scalarize`,
-      `const_object_globalization`, `dce`.
+- [ ] **Stage 4 — copy_prop (deferred).** Source-stability is not subsumed by
+      `ValueId` equality (a write-once `x` whose source `y` is later reassigned
+      can read equal VNs yet be unsafe to fold). Revisit with Stage 6's
+      `Select` / `Opaque` provenance.
+- [ ] **Stage 6 — induction-variable recognition** (`Opaque` tagged
+      `{ base, step }`). Not needed yet — post-increment reads already appear
+      as `Add(opaque_i, step)` — so it lands when a rule first wants it.
+- [ ] **Stage 9 — interprocedural worklist.** Move `inline` / `dae` / `drve` /
+      `sroa_param` / `value_copy_demote` onto a call-graph worklist that re-runs
+      affected callers when a callee shrinks; `OptConfig::iterations` becomes the
+      worklist convergence bound. Terminal stages (`multi_value_return`,
+      `field_scalarize`, `const_object_globalization`, `dce`) stay explicit. The
+      stub per-pass walkers are then deleted in bulk.
 
 ### Optional acceleration (measured-deferred)
 
-Stages 7 – 8 promote the ValueGraph from a side-table to an IR-level
-substrate and replace destructive rule application with equality
-saturation. They unlock algebraic exploration (re-association,
-distributive law, strength-reduction-per-use, cost-based
-share-vs-duplicate) that the required path cannot. The current Wado
-target — Wasm output JITted by the host — recovers most of those gains
-through the JIT anyway, so the optional path is deferred until
-measurement shows it justifies its cost. See "Why Layer 2 promotion is
-deferred" above.
+Stages 7 – 8 promote the ValueGraph from a side-table to an IR-level substrate
+and replace destructive rules with equality saturation. They unlock algebraic
+exploration (re-association, strength-reduction-per-use, share-vs-duplicate)
+the required path can't — but Wasm output is re-JITted by the host, which
+recovers most of it, so they wait on measurement. See "Why Layer 2 promotion
+is deferred".
 
-#### Stage 7 — Skel pure-ExprKind retirement _(optional)_
-
-- [ ] Remove pure `ExprKind` variants (`IntLiteral`, `FloatLiteral`,
-      `BoolLiteral`, `CharLiteral`, `StringLiteral`, `Null`, `Unit`,
-      `Binary`, `Unary`, `Cast`) from the SkelTree. Skel child slots
-      that previously held an `ExprId` to a pure expression hold
-      `Operand::Value(ValueId)`.
-- [ ] `lower::translate` builds pure values directly in the ValueGraph
-      and stores `Operand::Value` on the parent's slot. `wir_build`'s
-      reads follow `Operand`; the WIR output shape is unchanged.
-- [ ] The `value_of: IndexMap<ExprId, ValueId>` side-table is removed.
-      Stage 3 – 6 rules that queried `engine.value(expr_id)` shift to
-      following `Operand` directly — rule logic unchanged, API surface
-      adjusted.
-
-#### Stage 8 — Saturation driver + cost-based extraction _(optional)_
-
-- [ ] Per-function session runs all rules together to saturation,
-      bounded by node count budget + per-ValueId rewrite count + outer
-      iteration limit (defaults loose, env-var overridable).
-- [ ] Extraction walks the SkelTree picking a cost-minimal Skel form for
-      each `Operand::Value`. Multi-use ValueIds are materialised via a
-      hoisted `let __t = ...` only when the cost model favours sharing.
-- [ ] The global fixed-point loop, per-rule `applied: Cell<bool>`
-      guards, `peephole.rs` (the rule list lives on the engine), and
-      the per-pass dirty-set in `gate.rs` are removed in favour of the
-      saturation driver.
+- [ ] **Stage 7 — retire pure `ExprKind` from the SkelTree.** Pure literals /
+      `Binary` / `Unary` / `Cast` slots become `Operand::Value(ValueId)`;
+      `lower::translate` builds the values directly and `wir_build` follows
+      `Operand` (WIR output unchanged). The `value_of` side-table is removed.
+- [ ] **Stage 8 — saturation driver + cost-based extraction.** Run all rules to
+      a budget-bounded saturation, then extract a cost-minimal Skel form per
+      `Operand::Value` (materialising a multi-use VN only when sharing wins).
+      The global fixed-point loop, per-rule `applied` guards, `peephole.rs`, and
+      the dirty-set gate go away.
 
 ## Soundness invariants
 

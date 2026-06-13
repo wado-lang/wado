@@ -1,0 +1,15 @@
+// `v128` (and its SIMD type aliases like `f32x4`) has no scalar `==`:
+// Wasm has no v128-to-bool equality, so a fall-through to `i32.eq` would
+// emit invalid core Wasm ("type mismatch: expected i32, found v128").
+// The elaborator must reject the scalar operator and point at the missing
+// `Eq` impl — SIMD comparisons are lane-wise via the `core:simd` builtins.
+
+use { f32x4 } from "core:simd";
+
+export fn run() {
+    let a: f32x4 = f32x4::splat(1.0);
+    let _eq = a == a;
+}
+
+__DATA__
+{"compile_error": "operator `==` cannot be applied to type `f32x4`"}

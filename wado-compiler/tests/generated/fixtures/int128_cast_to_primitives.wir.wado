@@ -450,6 +450,7 @@ fn "wado-compiler/tests/fixtures/int128_cast_to_primitives.wado/__test_10_i128_a
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
+    let self_25: ref "core:prelude/int128.wado//i128";
     neg = struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 };
     max = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 };
     __cond_3 = (if -1_i64 == -1_i64 -> i32 {
@@ -464,8 +465,9 @@ condition: neg as u128 == max
 "), used: 31 }); "core:prelude/string.wado/String::push"(__local_10, 109); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 120); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/int128.wado/u128^Inspect::inspect"(max, __local_11); "core:prelude/string.wado/String::push"(__local_10, 10); __local_10);
         unreachable;
     }
-    __cond_5 = (if -1_i64 == -1_i64 -> i32 {
-        -1_i64 == -1_i64;
+    self_25 = struct.new "core:prelude/int128.wado//i128" { low: max.low, high: max.high };
+    __cond_5 = (if self_25.low == neg.low -> i32 {
+        self_25.high == neg.high;
     } else {
         0;
     });

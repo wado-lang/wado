@@ -335,6 +335,26 @@ impl<'a> Builder<'a> {
         right: ExprId,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
+        // Reflexivity: operands sharing a `ValueId` are the same value, so
+        // `x == x` folds to `true` and `x != x` to `false` without a literal
+        // (e.g. an identity reinterpret `v as SameType == v`). Floats
+        // (`NaN != NaN`) and `v128` (no scalar `==`) are excluded; every other
+        // operand reaching here is reflexively equal.
+        if lhs == rhs
+            && matches!(op, NirBinaryOp::Eq | NirBinaryOp::NotEq)
+            && !matches!(
+                crate::const_eval::prim_of(self.body.exprs[left].type_id, tt),
+                Some(
+                    crate::tir::PrimitiveType::F32
+                        | crate::tir::PrimitiveType::F64
+                        | crate::tir::PrimitiveType::V128
+                )
+            )
+        {
+            return Some(
+                self.const_to_value(crate::const_eval::Value::Bool(op == NirBinaryOp::Eq)),
+            );
+        }
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;
         let result = crate::const_eval::eval_binary(lv, op, rv)?;
@@ -600,14 +620,11 @@ impl<'a> Builder<'a> {
                 // it).
                 let lhs = self.walk_expr(left);
                 let rhs = if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
-                    // Short-circuit logical ops: the rhs is conditionally
-                    // evaluated at runtime. Walk it inside a snapshot, then
-                    // model "may or may not have happened" by dirtying any
-                    // local the walk mutated and bumping the heap. Without
-                    // this, a write inside the rhs (e.g. `false && { x =
-                    // 2; true }`) would commit unconditionally to
-                    // `current_value` and let store-load forwarding
-                    // substitute later reads with the never-stored value.
+                    // Short-circuit `&&` / `||`: the rhs runs conditionally, so
+                    // its effects "may or may not have happened" — any local it
+                    // mutates goes Opaque and any field it writes is
+                    // invalidated (both below). Else `false && { x = 2; true }`
+                    // would commit `x = 2` and forward the never-stored value.
                     let saved_cur = self.current_value.clone();
                     let rhs = self.walk_expr(right);
                     let changed: crate::hashmap::IndexSet<u32> = self
@@ -624,7 +641,10 @@ impl<'a> Builder<'a> {
                     // A reference the conditionally-run rhs reassigned (or whose
                     // pointee it reassigned) no longer has a known target.
                     self.drop_ref_targets_for(&changed);
-                    self.heap_state.bump_all();
+                    // Invalidate only what the rhs writes, not a blanket
+                    // `bump_all`: a pure rhs leaves unrelated fields intact.
+                    let eff = collect_node_heap_effects(self.body, NodeRef::Expr(right));
+                    self.apply_loop_heap_effects(&eff);
                     rhs
                 } else {
                     self.walk_expr(right)
@@ -923,6 +943,17 @@ impl<'a> Builder<'a> {
         loop {
             match &self.body.exprs[producer].kind {
                 ExprKind::StructLiteral { .. } => break,
+                // The producing tail is a bare `Local` (e.g. inlining
+                // `fn f(mut p: S) -> S { p = S { … }; return p }` makes the
+                // break value the reassigned local `p`, not the literal). Copy
+                // that local's live field slots to the new binding — value
+                // semantics deep-copy the struct, so the binding observes the
+                // same field constants.
+                ExprKind::Local { index, .. } => {
+                    let src = *index;
+                    self.copy_local_field_slots(src, root, recv);
+                    return;
+                }
                 ExprKind::Block(b) => {
                     let Some(&last) = self.body.blocks[*b].stmts.last() else {
                         return;
@@ -976,6 +1007,45 @@ impl<'a> Builder<'a> {
                 let ver = self.heap_state.version_of(Some(root), field_index);
                 self.field_store.insert((recv, field_index, ver), fv);
             }
+        }
+    }
+
+    /// Copy `src`'s currently-live field slots onto the new binding
+    /// `(dst_root, dst_recv)` — for `let dst = …` whose producing tail is a
+    /// bare `Local src` (the inlined `mut`-param-return shape), where value
+    /// semantics make `dst` observe `src`'s field constants. Keyed by the
+    /// destination's own version, so a later write bumps the field version and
+    /// the stale copy becomes unreachable (the seeding monotonicity argument).
+    /// `untrackable` (`stores`-aliased) locals, which can't be versioned, are
+    /// excluded.
+    fn copy_local_field_slots(&mut self, src: u32, dst_root: u32, dst_recv: ValueId) {
+        if src == dst_root
+            || self.untrackable.contains(&src)
+            || self.untrackable.contains(&dst_root)
+        {
+            return;
+        }
+        // The scan below is O(field_store); short-circuit the common case of a
+        // function that seeded no struct-literal fields at all.
+        if self.field_store.is_empty() {
+            return;
+        }
+        let Some(&src_recv) = self.current_value.get(&src) else {
+            return;
+        };
+        // Collect the live (field, value) pairs first to release the borrow on
+        // `field_store` before inserting.
+        let live: Vec<(u32, ValueId)> = self
+            .field_store
+            .iter()
+            .filter_map(|(&(recv, field, ver), &stored)| {
+                (recv == src_recv && ver == self.heap_state.version_of(Some(src), field))
+                    .then_some((field, stored))
+            })
+            .collect();
+        for (field, stored) in live {
+            let dst_ver = self.heap_state.version_of(Some(dst_root), field);
+            self.field_store.insert((dst_recv, field, dst_ver), stored);
         }
     }
 
@@ -1490,8 +1560,7 @@ struct LoopHeapEffects {
 
 /// True when `func` is a builtin / monomorphized-builtin intrinsic that
 /// operates below the struct-field layer (`array_set`, `memory_grow`, …) and
-/// so never mutates a tracked `(root, field)` slot. Mirrors
-/// `const_folding::is_field_env_pure_call`.
+/// so never mutates a tracked `(root, field)` slot.
 fn is_builtin_pure_call(func: &FunctionRef) -> bool {
     func.builtin_name().is_some() || func.monomorphized_builtin_name().is_some()
 }
@@ -1507,8 +1576,15 @@ fn root_local_of(body: &Body, e: ExprId) -> Option<u32> {
 }
 
 fn collect_loop_heap_effects(body: &Body, block: BlockId) -> LoopHeapEffects {
+    collect_node_heap_effects(body, NodeRef::Block(block))
+}
+
+/// The heap-write effects of a node's subtree, so a caller can invalidate
+/// exactly what it writes rather than `bump_all`. Used by `walk_loop` (body
+/// block) and the short-circuit arm (conditional rhs).
+fn collect_node_heap_effects(body: &Body, node: NodeRef) -> LoopHeapEffects {
     let mut eff = LoopHeapEffects::default();
-    collect_loop_heap_node(body, NodeRef::Block(block), &mut eff);
+    collect_loop_heap_node(body, node, &mut eff);
     eff
 }
 
@@ -2379,9 +2455,9 @@ mod tests {
         //     if cond { break; }      // guard arm: no field write, does not fall through
         //     let b = obj.f;          // must share VN with `a`
         // }
-        // The previous unconditional `bump_all` after the `if` split the
-        // heap version, denying every desugared loop's guard/body field VN
-        // sharing. The reachability-aware join keeps it.
+        // A guard arm with no field write that does not fall through must not
+        // split the heap version: `b`'s read of `obj.f` must share `a`'s VN,
+        // so a desugared loop's guard and body see the same field version.
         let mut body = empty_body();
         let recv_a = local_ref(&mut body, 0);
         let read_a = field_access(&mut body, recv_a, 0);

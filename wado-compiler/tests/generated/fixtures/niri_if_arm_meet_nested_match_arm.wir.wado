@@ -127,8 +127,6 @@ fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/check_ma
 }
 
 fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/run"() with Stdout, MonotonicClock {
-    let now: u64;
-    let opaque_false: bool;
     let a: i32;
     let b: i32;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -141,8 +139,9 @@ fn "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/run"() w
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    a = "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(local.tee opaque_false(local.tee now("wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_binding__MonotonicClock_now"()) != now) == 0);
-    b = "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(opaque_false);
+    drop("wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/__cm_binding__MonotonicClock_now"());
+    a = "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(1);
+    b = "wado-compiler/tests/fixtures/niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(0);
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_9 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(a, f_9); "core:prelude/string.wado/String::push"(__local_4, 44); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_14 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(b, f_14); __local_4);
 }
 

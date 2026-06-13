@@ -89,10 +89,7 @@
 //! Integer division/modulo by zero and signed `MIN / -1` are left
 //! unfolded so the runtime trap is preserved.
 //!
-//! See `docs/wep-2026-04-27-tir-interpreter.md` for the planned trajectory
-//! (local-variable environment, `if` / `match` reduction, bounded loop
-//! unrolling, pure function inlining, and a complementary wasm-CTFE
-//! backend).
+//! See `docs/wep-2026-04-27-nir-interpreter.md` for the design.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -101,8 +98,8 @@ use crate::const_eval::{
     eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, is_signed_int, prim_of,
     value_to_arena_kind,
 };
-// Re-export the const-eval `Value` under `niri` for the public API / tests that
-// historically imported `niri::Value` (it now lives in `const_eval`).
+// `Value` lives in `const_eval`; re-export it so `niri::Value` resolves for
+// the public API and tests.
 pub use crate::const_eval::Value;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
@@ -241,7 +238,7 @@ pub type GlobalKey = (ModuleSource, String);
 pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 
 /// Known constant field values of module-scope globals, keyed by global then
-/// field name. The global analogue of [`Interpreter::field_env`]: it lets
+/// field name. It lets
 /// `FieldAccess(GlobalVarGet(X), f)` fold to a constant when `X` is an
 /// immutable global whose `f` field is statically known — e.g. the
 /// [`SeqField::Len`](crate::compiler_item::SeqField) length of an immutable
@@ -320,264 +317,29 @@ impl LocalSet {
     }
 }
 
-/// Per-function alias / aliasing-trackability annotations consumed by
-/// the interpreter's field-knowledge bookkeeping.
+/// Per-function alias / aliasing-trackability annotations.
 ///
-/// These three sets are computed once per function by the driving
-/// visitor (typically from the function's stable
-/// `address_taken_locals` / `stores_aliased_locals` plus a body walk
-/// that catches transient inlined-in copies), then handed to the
-/// interpreter via [`Interpreter::set_alias_info`].
+/// Computed once per function by [`crate::optimize::alias::build_alias_info`]
+/// (from the function's stable `address_taken_locals` /
+/// `stores_aliased_locals` plus a body walk that catches transient inlined-in
+/// copies) and consumed by the engine [`ValueGraph`] builder
+/// ([`crate::optimize::alias::builder_alias_sets`]) to bound heap-write
+/// invalidation at the right granularity.
 ///
 /// - `aliased`: locals reachable through some other handle (`&x`,
 ///   `&mut x`, captured by a closure, struct-field-stored, etc.).
-///   Field knowledge IS recorded for these locals; the flow-sensitive
-///   walk drops their entries at every side-effect boundary (call,
-///   dereferenced write, …) where an unseen alias could have mutated
-///   the storage.
-/// - `untrackable`: locals whose aliasing escapes our analysis (e.g.
-///   stashed across a `stores`-annotated callee). Field knowledge is
-///   **never** recorded for these; that matches the conservatism the
-///   OLD WIR-level `const_forward` had for stores-passed args.
+/// - `untrackable`: locals whose aliasing escapes the analysis (e.g.
+///   stashed across a `stores`-annotated callee).
 /// - `alias_groups`: union-find groups of locals connected by
 ///   reference-typed `let dst = src` copies (`Box<T>`, `List<T>`,
-///   `&T`, `&mut T`). Used to widen field-assignment invalidation:
-///   writing `dst.field = …` must drop the same field on every
-///   alias.
+///   `&T`, `&mut T`).
+///
+/// [`ValueGraph`]: crate::nir_value_graph
 #[derive(Default, Clone, Debug)]
 pub struct AliasInfo {
     pub aliased: LocalSet,
     pub untrackable: LocalSet,
     pub alias_groups: IndexMap<u32, IndexSet<u32>>,
-}
-
-/// Snapshot of [`Interpreter::field_env`] returned by
-/// [`Interpreter::snapshot_fields`]. Restored verbatim by
-/// [`Interpreter::restore_fields`]; used by the driving visitor to
-/// fork field knowledge at branch boundaries (`if`, `match`, `if let`)
-/// so each arm walks against the entry state.
-#[derive(Clone, Debug)]
-pub struct FieldSnapshot {
-    fields: IndexMap<u32, IndexMap<String, Value>>,
-}
-
-impl FieldSnapshot {
-    /// Empty snapshot — no bindings. Conceptually the bottom element
-    /// of the field-env lattice; meeting with anything else discards
-    /// every binding.
-    #[must_use]
-    pub fn empty() -> Self {
-        Self {
-            fields: IndexMap::default(),
-        }
-    }
-
-    /// Lattice meet: keep only `(local, field) → value` entries that
-    /// appear in **both** snapshots bound to the **same** value.
-    /// Entries present in only one snapshot, or bound to different
-    /// values, are dropped.
-    ///
-    /// Used by the driving visitor at if-stmt / match / switch
-    /// boundaries to compute the post-branch state as the join of the
-    /// per-arm post-states. The semantics mirror the standard
-    /// dataflow lattice join: a fact holds after the branch iff it
-    /// holds on every reachable arm with the same value.
-    #[must_use]
-    pub fn meet(self, other: &Self) -> Self {
-        let mut out: IndexMap<u32, IndexMap<String, Value>> = IndexMap::default();
-        for (local, my_fields) in self.fields {
-            let Some(other_fields) = other.fields.get(&local) else {
-                continue;
-            };
-            let mut merged: IndexMap<String, Value> = IndexMap::default();
-            for (name, val) in my_fields {
-                if other_fields.get(&name) == Some(&val) {
-                    merged.insert(name, val);
-                }
-            }
-            if !merged.is_empty() {
-                out.insert(local, merged);
-            }
-        }
-        Self { fields: out }
-    }
-}
-
-/// One arm of a branch (`if` then / else, `match` arm, `switch`
-/// arm) joining into [`FieldSnapshot::join_arms`]. An arm with
-/// `reachable = false` terminates (`return` / `break` / `continue`
-/// / `panic(…)` / call returning `!`) and is excluded from the meet.
-#[derive(Clone, Debug)]
-pub struct Arm {
-    pub reachable: bool,
-    pub post_state: FieldSnapshot,
-}
-
-impl FieldSnapshot {
-    /// Lattice meet of every reachable arm's post-state.
-    /// Unreachable arms (`reachable = false`) are excluded — their
-    /// writes are not observed past the branch. If no arm is
-    /// reachable, the post-branch point is itself dead code and
-    /// `snap_pre` is returned as an arbitrary placeholder.
-    ///
-    /// Callers model an implicit no-`else` arm as a reachable arm
-    /// carrying `snap_pre`.
-    #[must_use]
-    pub fn join_arms(snap_pre: FieldSnapshot, arms: impl IntoIterator<Item = Arm>) -> Self {
-        let mut accumulator: Option<FieldSnapshot> = None;
-        for arm in arms {
-            if !arm.reachable {
-                continue;
-            }
-            accumulator = Some(match accumulator {
-                None => arm.post_state,
-                Some(acc) => acc.meet(&arm.post_state),
-            });
-        }
-        accumulator.unwrap_or(snap_pre)
-    }
-}
-
-#[cfg(test)]
-mod field_snapshot_tests {
-    use super::{FieldSnapshot, PrimitiveType, Value};
-    use crate::hashmap::IndexMap;
-
-    fn int(v: u64) -> Value {
-        Value::Int {
-            value: v,
-            prim: PrimitiveType::I32,
-        }
-    }
-
-    fn snap(entries: &[(u32, &[(&str, Value)])]) -> FieldSnapshot {
-        let mut fields: IndexMap<u32, IndexMap<String, Value>> = IndexMap::default();
-        for (local, kvs) in entries {
-            let mut m: IndexMap<String, Value> = IndexMap::default();
-            for (k, v) in *kvs {
-                m.insert((*k).to_string(), *v);
-            }
-            fields.insert(*local, m);
-        }
-        FieldSnapshot { fields }
-    }
-
-    fn extract(s: &FieldSnapshot) -> Vec<(u32, Vec<(String, Value)>)> {
-        s.fields
-            .iter()
-            .map(|(l, m)| {
-                let mut v: Vec<_> = m.iter().map(|(k, v)| (k.clone(), *v)).collect();
-                v.sort_by(|a, b| a.0.cmp(&b.0));
-                (*l, v)
-            })
-            .collect()
-    }
-
-    #[test]
-    fn meet_with_empty_is_empty() {
-        let a = snap(&[(0, &[("used", int(16))])]);
-        let empty = FieldSnapshot::empty();
-        assert_eq!(extract(&a.clone().meet(&empty)), vec![]);
-        assert_eq!(extract(&empty.meet(&a)), vec![]);
-    }
-
-    #[test]
-    fn meet_with_self_is_self() {
-        let a = snap(&[(0, &[("used", int(16)), ("cap", int(32))])]);
-        let result = a.clone().meet(&a);
-        assert_eq!(extract(&result), extract(&a));
-    }
-
-    #[test]
-    fn meet_keeps_matching_fields_drops_mismatched() {
-        let a = snap(&[(0, &[("used", int(16)), ("cap", int(32))])]);
-        let b = snap(&[(0, &[("used", int(16)), ("cap", int(64))])]);
-        // `used` agrees → kept; `cap` disagrees → dropped; local
-        // survives because at least one field agrees.
-        let result = a.meet(&b);
-        assert_eq!(
-            extract(&result),
-            vec![(0, vec![("used".to_string(), int(16))])]
-        );
-    }
-
-    #[test]
-    fn meet_drops_locals_only_present_in_one() {
-        let a = snap(&[(0, &[("used", int(16))]), (1, &[("size", int(8))])]);
-        let b = snap(&[(0, &[("used", int(16))])]);
-        // Local 1 is missing from `b` → dropped from meet.
-        let result = a.meet(&b);
-        assert_eq!(
-            extract(&result),
-            vec![(0, vec![("used".to_string(), int(16))])]
-        );
-    }
-
-    #[test]
-    fn meet_drops_local_when_no_field_agrees() {
-        let a = snap(&[(0, &[("used", int(16))])]);
-        let b = snap(&[(0, &[("used", int(32))])]);
-        // Single field disagrees → entire local dropped.
-        let result = a.meet(&b);
-        assert_eq!(extract(&result), vec![]);
-    }
-
-    fn arm(reachable: bool, post: FieldSnapshot) -> super::Arm {
-        super::Arm {
-            reachable,
-            post_state: post,
-        }
-    }
-
-    #[test]
-    fn join_arms_zero_reachable_returns_pre() {
-        let pre = snap(&[(0, &[("used", int(99))])]);
-        let result = FieldSnapshot::join_arms(
-            pre.clone(),
-            vec![
-                arm(false, FieldSnapshot::empty()),
-                arm(false, FieldSnapshot::empty()),
-            ],
-        );
-        assert_eq!(extract(&result), extract(&pre));
-    }
-
-    #[test]
-    fn join_arms_single_reachable_is_that_arms_post_state() {
-        let pre = snap(&[(0, &[("used", int(99))])]);
-        let then = snap(&[(0, &[("used", int(16))])]);
-        let result = FieldSnapshot::join_arms(
-            pre,
-            vec![arm(true, then.clone()), arm(false, FieldSnapshot::empty())],
-        );
-        assert_eq!(extract(&result), extract(&then));
-    }
-
-    #[test]
-    fn join_arms_multiple_reachable_meets_them() {
-        let pre = FieldSnapshot::empty();
-        let then = snap(&[(0, &[("used", int(16)), ("cap", int(32))])]);
-        let els = snap(&[(0, &[("used", int(16)), ("cap", int(64))])]);
-        let result = FieldSnapshot::join_arms(pre, vec![arm(true, then), arm(true, els)]);
-        // `used` agrees → kept; `cap` disagrees → dropped.
-        assert_eq!(
-            extract(&result),
-            vec![(0, vec![("used".to_string(), int(16))])]
-        );
-    }
-
-    #[test]
-    fn join_arms_implicit_else_is_pre_as_a_reachable_arm() {
-        // No-else if encoded as `[then, Arm { reachable: true, snap_pre }]`.
-        let pre = snap(&[(0, &[("used", int(16))])]);
-        let then = snap(&[(0, &[("used", int(16)), ("cap", int(99))])]);
-        let result = FieldSnapshot::join_arms(pre.clone(), vec![arm(true, then), arm(true, pre)]);
-        // Pre's lack-of-cap drops the then-arm's cap; `used = 16` agrees.
-        assert_eq!(
-            extract(&result),
-            vec![(0, vec![("used".to_string(), int(16))])]
-        );
-    }
 }
 
 /// Decide whether a function may be evaluated at compile time.
@@ -600,8 +362,7 @@ mod field_snapshot_tests {
 /// can share it: [`BodySink`] mutates a `Body` in place — used for throwaway
 /// CTFE scratch bodies, where coherence with an engine's parent map / use
 /// index is moot — while the optimize layer's `EngineSink` routes every edit
-/// through `Engine::*` so the real body's maps stay coherent (the Stage 6
-/// env-bound `const_folding` migration).
+/// through `Engine::*` so the real body's maps stay coherent.
 pub(crate) trait EditSink {
     fn body(&self) -> &Body;
     /// Replace `e`'s kind. The new kind's children must already be parented to
@@ -698,36 +459,6 @@ pub struct Interpreter<'a> {
     /// [`invalidate_local`]: Self::invalidate_local
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
-    /// Per-(local, field) constant values for the *current function*.
-    ///
-    /// Populated by the driving visitor when it sees a `let local =
-    /// StructLiteral { f: lit, … }`, a `local.field = lit` assignment,
-    /// or a recognized `$value_copy$T(src)` / Local→Local copy that
-    /// transfers field knowledge. Reads at `FieldAccess(Local(idx),
-    /// field_name)` sites consult this map and rewrite the read to the
-    /// recorded literal.
-    ///
-    /// Only the four primitive literal kinds (Int / Float / Bool /
-    /// Char) — exactly the values [`Value`] models — are forwardable;
-    /// `String` / `null` / aggregate fields stay un-recorded so their
-    /// reads always go through the runtime.
-    ///
-    /// Stored as a nested `IndexMap<local_index, IndexMap<field_name,
-    /// Value>>` so the lookup path (every `FieldAccess(Local, _)`
-    /// read in the program) can probe with a borrowed `&str` field
-    /// name — no `String` allocation per read. Per-local
-    /// invalidation (`invalidate_local`,
-    /// `invalidate_aliased_fields`) collapses to an `O(1)`
-    /// `swap_remove` on the outer map for each affected local
-    /// instead of an `O(n_fields)` `retain` over a flat key set.
-    field_env: IndexMap<u32, IndexMap<String, Value>>,
-    /// Per-function alias annotations driving [`field_env`]
-    /// invalidation. Empty by default; populated once per function by
-    /// the driving visitor via [`set_alias_info`].
-    ///
-    /// [`field_env`]: Self::field_env
-    /// [`set_alias_info`]: Self::set_alias_info
-    alias_info: AliasInfo,
     /// Pre-built map of CTFE-eligible callees. When `None`, `Call` nodes
     /// stay [`Lattice::Unevaluated`]. The visitor populates this once
     /// per pass via [`with_callees`].
@@ -766,8 +497,6 @@ impl<'a> Interpreter<'a> {
         Self {
             type_table,
             env: IndexMap::default(),
-            field_env: IndexMap::default(),
-            alias_info: AliasInfo::default(),
             callees: None,
             globals: None,
             global_fields: None,
@@ -829,32 +558,10 @@ impl<'a> Interpreter<'a> {
     /// pass, not per-function.
     pub fn enter_function(&mut self) {
         self.env.clear();
-        self.field_env.clear();
-        self.alias_info = AliasInfo::default();
         debug_assert!(
             self.call_stack.is_empty(),
             "niri call_stack leaked across function boundary",
         );
-    }
-
-    /// Install per-function alias annotations. The driving visitor
-    /// calls this after [`enter_function`] and before walking the
-    /// body. See [`AliasInfo`] for the meaning of each set.
-    ///
-    /// [`enter_function`]: Self::enter_function
-    pub fn set_alias_info(&mut self, info: AliasInfo) {
-        self.alias_info = info;
-    }
-
-    /// Read-only borrow of the currently-installed `aliased` set.
-    /// The const-fold visitor needs this to decide whether an
-    /// expression appearing as a struct / tuple / variant field
-    /// value captures access to an already-aliased local — a
-    /// condition that, after the constructor runs, has to invalidate
-    /// every aliased local's recorded fields.
-    #[must_use]
-    pub fn aliased_locals(&self) -> &LocalSet {
-        &self.alias_info.aliased
     }
 
     /// Record a lattice value for a `let`-bound local. The driving
@@ -869,155 +576,12 @@ impl<'a> Interpreter<'a> {
     /// Mark a local as definitely non-constant from this point on. The
     /// driving visitor calls this when it sees an `x = expr` assignment.
     /// Conservative — we don't track flow-sensitive new values, just
-    /// invalidate the prior binding. Also drops every recorded field
-    /// of the local — the new value might not have those fields, or
-    /// might have different ones.
+    /// invalidate the prior binding.
     pub fn invalidate_local(&mut self, index: u32) {
         self.env.insert(index, Lattice::NonConst);
-        self.field_env.swap_remove(&index);
     }
 
-    /// Record `value` as the known compile-time value of
-    /// `local_index.field_name`. The driving visitor calls this when
-    /// it sees a `let local = StructLiteral { field_name: lit, … }`,
-    /// a direct `local.field_name = lit` assignment, or a recognized
-    /// field-knowledge transfer (`$value_copy$T(src)` /
-    /// reference-typed `let dst = src`). Reads at `FieldAccess(Local,
-    /// field_name)` consult the recorded value through
-    /// [`expr_to_lattice`] / [`reduce_local`].
-    ///
-    /// Skipped silently when `local_index` is in the `untrackable`
-    /// set — those locals participate in aliasing the optimizer can
-    /// no longer see, so any later read may witness a mutation we
-    /// never recorded. (Same conservatism as the WIR-level
-    /// `const_forward` had for stores-passed args.)
-    ///
-    /// [`expr_to_lattice`]: Self::expr_to_lattice
-    /// [`reduce_local`]: Self::reduce_local
-    pub fn bind_field(&mut self, local_index: u32, field_name: &str, value: Value) {
-        if self.alias_info.untrackable.contains(local_index) {
-            return;
-        }
-        self.field_env
-            .entry(local_index)
-            .or_default()
-            .insert(field_name.to_string(), value);
-    }
-
-    /// Drop the recorded value (if any) for `local_index.field_name`.
-    /// The driving visitor calls this on `local.field = expr`
-    /// assignments before optionally re-recording with [`bind_field`]
-    /// when `expr` is a forwardable literal.
-    ///
-    /// Aliased locals in the same `alias_groups` entry are
-    /// invalidated for the same field, since they share the
-    /// underlying object's storage.
-    ///
-    /// [`bind_field`]: Self::bind_field
-    pub fn invalidate_field(&mut self, local_index: u32, field_name: &str) {
-        if let Some(m) = self.field_env.get_mut(&local_index) {
-            m.swap_remove(field_name);
-        }
-        // Disjoint-field borrow: `&self.alias_info.alias_groups` and
-        // `&mut self.field_env` access different fields of `Self`,
-        // so the borrow checker accepts holding the immutable group
-        // borrow across the mutable map probe.
-        if let Some(group) = self.alias_info.alias_groups.get(&local_index) {
-            for other in group {
-                if *other == local_index {
-                    continue;
-                }
-                if let Some(m) = self.field_env.get_mut(other) {
-                    m.swap_remove(field_name);
-                }
-            }
-        }
-    }
-
-    /// Drop every field entry whose owning local is in
-    /// `alias_info.aliased`. The driving visitor calls this at
-    /// side-effect boundaries (calls, dereferenced writes) where some
-    /// external code could have mutated the storage through an alias.
-    pub fn invalidate_aliased_fields(&mut self) {
-        // Walking the (typically small) `aliased` set and probing
-        // the (typically larger) `field_env` outer map by `swap_remove`
-        // is O(n_aliased) — strictly better than O(n_field_env)
-        // `retain` over the flat key set. When `field_env` is empty
-        // (the common case for functions that don't construct
-        // tracked structs) the loop body is a no-op anyway.
-        if self.alias_info.aliased.is_empty() || self.field_env.is_empty() {
-            return;
-        }
-        for idx in self.alias_info.aliased.iter() {
-            self.field_env.swap_remove(&idx);
-        }
-    }
-
-    /// Copy every recorded field of `src` to `dst`. Used by the
-    /// driving visitor to thread field knowledge through `let dst =
-    /// src` (reference-typed Local→Local copy, where both names alias
-    /// the same heap object) and `let dst = $value_copy$T(src)`
-    /// (the synthesized one-level shallow value-copy helper from
-    /// `lower::plan::value_copy::synthesize` — field-by-field projection
-    /// plus `array_clone` for raw arrays). Only primitive-literal
-    /// fields are recorded in `field_env`, so for the values we
-    /// actually transfer, src and dst observe the same constants
-    /// regardless of the helper's depth. Skipped when `dst` is
-    /// `untrackable`. Existing entries on `dst` for fields also
-    /// present on `src` are overwritten with `src`'s values (src
-    /// wins); fields present only on `dst` are preserved.
-    pub fn copy_fields_from(&mut self, src: u32, dst: u32) {
-        if src == dst || self.alias_info.untrackable.contains(dst) {
-            return;
-        }
-        // Collect from a *borrowed* `src` map into a flat Vec so the
-        // immutable borrow on `field_env` is released before we take
-        // the mutable `entry(dst)`. Cloning into a Vec is cheaper
-        // than cloning the whole inner `IndexMap` (no hash-table
-        // copy) and skips both the index-table clone and the temporary
-        // map's drop. Empty `src` short-circuits without an alloc.
-        let Some(src_map) = self.field_env.get(&src) else {
-            return;
-        };
-        if src_map.is_empty() {
-            return;
-        }
-        let copies: Vec<(String, Value)> =
-            src_map.iter().map(|(name, v)| (name.clone(), *v)).collect();
-        let dst_map = self.field_env.entry(dst).or_default();
-        for (name, v) in copies {
-            dst_map.insert(name, v);
-        }
-    }
-
-    /// Take a snapshot of the current field environment. Used by the
-    /// driving visitor to fork at branch boundaries: snapshot, walk
-    /// one arm, restore, walk the other. Locals don't need this fork
-    /// (the only mutation channel is `let mut`, recorded preemptively
-    /// as `NonConst`); fields do, because `local.field = …` inside a
-    /// branch is conditional on the branch firing.
-    #[must_use]
-    pub fn snapshot_fields(&self) -> FieldSnapshot {
-        FieldSnapshot {
-            fields: self.field_env.clone(),
-        }
-    }
-
-    /// Restore a [`FieldSnapshot`] taken via [`snapshot_fields`].
-    ///
-    /// [`snapshot_fields`]: Self::snapshot_fields
-    pub fn restore_fields(&mut self, snap: FieldSnapshot) {
-        self.field_env = snap.fields;
-    }
-
-    /// Drop every recorded field. Used at control-flow merges where
-    /// conservatively forgetting all fields is simpler than computing
-    /// the meet of per-branch knowledge.
-    pub fn clear_fields(&mut self) {
-        self.field_env.clear();
-    }
-
-    /// Reads the bound env for locals/fields and takes the SCCP join over
+    /// Reads the bound env for locals and takes the SCCP join over
     /// `if` / `match` arms.
     pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];
@@ -1053,12 +617,6 @@ impl<'a> Interpreter<'a> {
                 field_name,
                 ..
             } => match &body.exprs[*inner].kind {
-                ExprKind::Local { index, .. } => self
-                    .field_env
-                    .get(index)
-                    .and_then(|m| m.get(field_name.as_str()))
-                    .copied()
-                    .map_or(Lattice::Unevaluated, Lattice::Const),
                 ExprKind::GlobalVarGet {
                     module_source,
                     name,
@@ -1372,10 +930,10 @@ impl<'a> Interpreter<'a> {
     /// depends only on the node and its (already-folded) children plus the
     /// program-wide [`CalleeMap`]: literal `Binary` / `Unary` / `Cast`
     /// arithmetic and pure compile-time function evaluation. It deliberately
-    /// excludes the `env` / `field_env` / `globals` paths — local-bound
-    /// constants, forwarded struct fields, and immutable-global reads — which
-    /// require the driving visitor's per-function dataflow state and so stay
-    /// with [`crate::optimize`]'s flow-sensitive const-fold walker.
+    /// excludes the `env` / `globals` paths — local-bound constants and
+    /// immutable-global reads — which require the driving visitor's
+    /// per-function dataflow state and so stay with [`crate::optimize`]'s
+    /// flow-sensitive const-fold walker.
     ///
     /// Because the interpreter's `env` is empty here, `try_fold_a` and
     /// `try_call_fold_a` only succeed when every operand / argument is already
@@ -1399,9 +957,9 @@ impl<'a> Interpreter<'a> {
     /// that should replace it, or `None` when `e` does not fold to a constant.
     ///
     /// This is the value-substitution subset of
-    /// [`reduce_local_a`](Self::reduce_local_a) — `env`-bound locals, forwarded
-    /// `field_env` fields, immutable globals, literal arithmetic, and pure CTFE
-    /// — returning the new kind instead of mutating `body`. The structural
+    /// [`reduce_local_a`](Self::reduce_local_a) — `env`-bound locals,
+    /// immutable globals, literal arithmetic, and pure CTFE — returning the
+    /// new kind instead of mutating `body`. The structural
     /// rewrites (short-circuit / `if` / `match` collapse) are *not* included;
     /// they reshape more than one node and are committed separately through the
     /// engine edit API. The caller installs the returned kind via
@@ -1415,20 +973,6 @@ impl<'a> Interpreter<'a> {
             name,
         } = &body.exprs[e].kind
             && let Lattice::Const(v) = self.global_lattice(module_source, name)
-        {
-            return Some(value_to_arena_kind(v));
-        }
-        if let ExprKind::FieldAccess {
-            expr: inner,
-            field_name,
-            ..
-        } = &body.exprs[e].kind
-            && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
-            && let Some(v) = self
-                .field_env
-                .get(index)
-                .and_then(|m| m.get(field_name.as_str()))
-                .copied()
         {
             return Some(value_to_arena_kind(v));
         }

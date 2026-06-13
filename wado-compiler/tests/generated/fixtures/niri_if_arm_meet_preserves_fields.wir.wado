@@ -158,8 +158,6 @@ fn "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_ar
 }
 
 fn "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/run"() with Stdout, MonotonicClock {
-    let now: u64;
-    let flag: bool;
     let a: i32;
     let b: i32;
     let c: i32;
@@ -178,11 +176,12 @@ fn "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/run"() w
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    a = "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_two_arm_meet"(local.tee flag(local.tee now("wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/__cm_binding__MonotonicClock_now"()) != now) == 0);
-    b = "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_two_arm_meet"(flag);
-    c = "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_no_else_falling_through"(flag == 0);
-    d = "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_arm_writes_diverge"(flag == 0);
-    e = "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_arm_writes_diverge"(flag);
+    drop("wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/__cm_binding__MonotonicClock_now"());
+    a = "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_two_arm_meet"(1);
+    b = "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_two_arm_meet"(0);
+    c = "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_no_else_falling_through"(1);
+    d = "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_arm_writes_diverge"(1);
+    e = "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_arm_writes_diverge"(0);
     "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(84), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_12 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(a, f_12); "core:prelude/string.wado/String::push"(__local_7, 44); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_17 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(b, f_17); "core:prelude/string.wado/String::push"(__local_7, 44); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_22 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(c, f_22); "core:prelude/string.wado/String::push"(__local_7, 44); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_27 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(d, f_27); "core:prelude/string.wado/String::push"(__local_7, 44); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_32 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(e, f_32); __local_7);
 }
 

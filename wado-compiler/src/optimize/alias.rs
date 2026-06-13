@@ -1,33 +1,22 @@
-//! Per-function alias analysis used by const-fold's field-knowledge
-//! tracking.
+//! Per-function alias analysis feeding the engine [`ValueGraph`] builder.
 //!
-//! [`build_alias_info`] computes the [`crate::niri::AliasInfo`] that
-//! [`crate::niri::Interpreter`] consults whenever the const-fold
-//! visitor calls `bind_field` / `invalidate_field` /
-//! `invalidate_aliased_fields`. The structure of this module mirrors
-//! the original `field_forward` pass (issue #1009) — a flow-
-//! insensitive walk that seeds the `aliased` set from the function's
-//! stable annotations plus a body scan for transient inlined-in
-//! copies, builds the union-find of reference-typed `let dst = src`
-//! aliases, and lifts the `stores_aliased_locals` set verbatim into
-//! `untrackable`.
-//!
-//! [`build_value_copy_helpers`] bundles the synthesized
-//! `$value_copy$T<id>` helpers exposed by
-//! [`crate::nir::NirFunction::value_copy_type`] into the lookup the
-//! visitor uses to recognize `Call(helper, [arg])` shapes that
-//! transfer field knowledge across the one-level shallow value-copy
-//! helpers (see `lower::plan::value_copy::synthesize`).
-//!
-//! [`recognize_value_copy_a`] is the single-call recognizer.
+//! [`build_alias_info`] computes the [`crate::niri::AliasInfo`] (`aliased`,
+//! `untrackable`, `alias_groups`); [`builder_alias_sets`] wraps it with the
+//! mutable-escape analysis ([`build_mut_escaped`]) so every engine-driven pass
+//! feeds the [`ValueGraph`] the alias view it needs to bound heap-write
+//! invalidation. The walk seeds `aliased` from the function's stable
+//! `address_taken_locals` / `stores_aliased_locals` annotations plus a body
+//! scan for transient inlined-in copies, builds the union-find of
+//! reference-typed `let dst = src` aliases, and lifts `stores_aliased_locals`
+//! verbatim into `untrackable`.
 //!
 //! TODO(optimizer): plumb the callee's `stores` annotation into
 //! `AliasCollector` so a `Ref` / `MutRef` on a local that flows into a
 //! `stores`-free callee no longer marks the local aliased. The current
 //! unconditional mark over-approximates for the common
-//! `(&self).field` / `(&mut self).field = ...` single-call patterns
-//! and blocks const-fold's field-knowledge tracking across inlined
-//! `&self` shadows.
+//! `(&self).field` / `(&mut self).field = ...` single-call patterns.
+//!
+//! [`ValueGraph`]: crate::nir_value_graph
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -47,24 +36,6 @@ fn walk_all(body: &Body, node: NodeRef, f: &mut impl FnMut(&Body, NodeRef)) {
     for c in kids {
         walk_all(body, c, f);
     }
-}
-
-/// Build the `(module_source, func_name) → struct type id` map of
-/// synthesized `$value_copy$T<id>` helpers. The const-fold visitor
-/// uses the map to recognize `Call(helper, [arg])` shapes that
-/// transfer field knowledge from `arg` to the binding's target.
-pub(super) fn build_value_copy_helpers(
-    project: &NirPackage,
-) -> IndexMap<(ModuleSource, String), TypeId> {
-    project
-        .functions
-        .iter()
-        .filter_map(|f| {
-            let f = f.borrow();
-            f.value_copy_type()
-                .map(|t| ((f.module_source.clone(), f.name.clone()), t))
-        })
-        .collect()
 }
 
 /// Compute per-function alias annotations for a function body.
@@ -149,22 +120,14 @@ pub(super) fn first_param_types(project: &NirPackage) -> IndexMap<(ModuleSource,
 }
 
 /// The `aliased`, `untrackable`, and `mut_escaped` local sets the `ValueGraph`
-/// builder needs, as plain `IndexSet`s (the builder is below the `optimize`
-/// layer and does not depend on `niri`'s `LocalSet`). A thin wrapper over
-/// [`build_alias_info`] (for `aliased` / `untrackable`) plus the mutable-escape
-/// analysis (for `mut_escaped`), so every engine-driven pass feeds the builder
-/// the same alias view the const-fold visitor uses.
+/// builder needs, as plain `IndexSet`s. Wraps [`build_alias_info`] (for
+/// `aliased` / `untrackable`) with the mutable-escape analysis (`mut_escaped`).
 ///
-/// `mut_escaped` is the subset of `aliased` a call can actually mutate. It is
-/// derived *subtractively* from the proven-conservative `aliased` set: a local
-/// is dropped from `mut_escaped` only when it is **provably immutable across
-/// calls** — its type is transitively free of shared mutable state
-/// ([`CallImmutability::is_call_immutable`]) *and* it has no syntactic mutable
-/// escape ([`collect_mut_escaped_node`]: `&mut v`, a mut-ref argument, a
-/// `&mut self` receiver, or a `stores` stash). Everything else stays, so the
-/// set is always ⊆ `aliased` and never bumps fewer locals than soundness
-/// allows. The builder still uses the full `aliased` set for field-*write*
-/// granularity; only call effects consult `mut_escaped`.
+/// `mut_escaped` ⊆ `aliased` is the subset a call can actually mutate, derived
+/// subtractively: a local is dropped only when its type is transitively free of
+/// shared mutable state ([`CallImmutability::is_call_immutable`]) *and* it has
+/// no syntactic mutable escape ([`collect_mut_escaped_node`]). Field-*write*
+/// granularity uses the full `aliased`; only call effects consult `mut_escaped`.
 pub(super) fn builder_alias_sets(
     body: &Body,
     locals: &[crate::nir::NirLocal],
@@ -457,26 +420,6 @@ fn collect_mut_escaped_node(
         }
         _ => {}
     }
-}
-
-/// Recognize `Call(helper, [arg])` where `helper` is a synthesized
-/// `$value_copy$T<id>` registered in the helpers map, reading the arena
-/// body. Returns the argument expression id so the caller can copy
-/// `arg`'s field knowledge to the binding's target.
-pub(super) fn recognize_value_copy_a(
-    body: &crate::nir_arena::Body,
-    e: crate::nir_arena::ExprId,
-    helpers: &IndexMap<(ModuleSource, String), TypeId>,
-) -> Option<crate::nir_arena::ExprId> {
-    let crate::nir_arena::ExprKind::Call { func, args, .. } = &body.exprs[e].kind else {
-        return None;
-    };
-    if args.len() != 1 {
-        return None;
-    }
-    helpers
-        .get(&(func.module_source.clone(), func.name.clone()))
-        .map(|_| args[0].expr)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

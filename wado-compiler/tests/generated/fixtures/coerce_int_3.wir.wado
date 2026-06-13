@@ -136,6 +136,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global mut global:__modules_initialized: bool = 0;
 global global:__const_obj_0: ref null "core:prelude/int128.wado//u128" = struct.new "core:prelude/int128.wado//u128" { low: 1000_i64, high: 0_i64 };
+global global:__const_obj_1: ref null "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 };
 
 fn "wado-compiler/tests/fixtures/coerce_int_3.wado/coerce_int_literal_comparison_i128"() with Stdout {
     let cond_5: bool;
@@ -278,13 +279,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_3.wado/coerce_int_literal_comparison
         "core:internal/panic"(label_53);
         unreachable;
     }
-    cond_55 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }, struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: 0_i64 }) == 0;
+    cond_55 = "core:prelude/int128.wado/i128^Ord::cmp"(global:__const_obj_1, struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: 0_i64 }) == 0;
     label_56 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i128 < rhs"), used: 10 };
     if @unlikely(cond_55 == 0) {
         "core:internal/panic"(label_56);
         unreachable;
     }
-    cond_59 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: -501_i64, high: -1_i64 }, struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }) == 0;
+    cond_59 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: -501_i64, high: -1_i64 }, global:__const_obj_1) == 0;
     label_60 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs < i128"), used: 10 };
     if @unlikely(cond_59 == 0) {
         "core:internal/panic"(label_60);
@@ -302,13 +303,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_3.wado/coerce_int_literal_comparison
         "core:internal/panic"(label_67);
         unreachable;
     }
-    cond_69 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }, struct.new "core:prelude/int128.wado//i128" { low: -501_i64, high: -1_i64 }) == 2;
+    cond_69 = "core:prelude/int128.wado/i128^Ord::cmp"(global:__const_obj_1, struct.new "core:prelude/int128.wado//i128" { low: -501_i64, high: -1_i64 }) == 2;
     label_70 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i128 > rhs"), used: 10 };
     if @unlikely(cond_69 == 0) {
         "core:internal/panic"(label_70);
         unreachable;
     }
-    cond_73 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: 0_i64 }, struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }) == 2;
+    cond_73 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: 0_i64 }, global:__const_obj_1) == 2;
     label_74 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs > i128"), used: 10 };
     if @unlikely(cond_73 == 0) {
         "core:internal/panic"(label_74);
@@ -326,13 +327,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_3.wado/coerce_int_literal_comparison
         "core:internal/panic"(label_81);
         unreachable;
     }
-    cond_83 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }, struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }) != 2;
+    cond_83 = "core:prelude/int128.wado/i128^Ord::cmp"(global:__const_obj_1, struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }) != 2;
     label_84 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i128 <= rhs"), used: 11 };
     if @unlikely(cond_83 == 0) {
         "core:internal/panic"(label_84);
         unreachable;
     }
-    cond_87 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }, struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }) != 2;
+    cond_87 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }, global:__const_obj_1) != 2;
     label_88 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs <= i128"), used: 11 };
     if @unlikely(cond_87 == 0) {
         "core:internal/panic"(label_88);
@@ -350,13 +351,13 @@ fn "wado-compiler/tests/fixtures/coerce_int_3.wado/coerce_int_literal_comparison
         "core:internal/panic"(label_95);
         unreachable;
     }
-    cond_97 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }, struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }) != 0;
+    cond_97 = "core:prelude/int128.wado/i128^Ord::cmp"(global:__const_obj_1, struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }) != 0;
     label_98 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i128 >= rhs"), used: 11 };
     if @unlikely(cond_97 == 0) {
         "core:internal/panic"(label_98);
         unreachable;
     }
-    cond_101 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }, struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }) != 0;
+    cond_101 = "core:prelude/int128.wado/i128^Ord::cmp"(struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 }, global:__const_obj_1) != 0;
     label_102 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs >= i128"), used: 11 };
     if @unlikely(cond_101 == 0) {
         "core:internal/panic"(label_102);
