@@ -335,6 +335,22 @@ impl<'a> Builder<'a> {
         right: ExprId,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
+        // Reflexivity: `x == x` is `true` and `x != x` is `false` for any value
+        // that compares equal to itself — every type except floats, where
+        // `NaN != NaN`. Two operands sharing a `ValueId` are the same value by
+        // hash-cons, so this fires without knowing the literal (e.g. an
+        // identity reinterpret `v as SameType == v`, whose rebuilt field reads
+        // hash-cons to the original field's VN). Excludes floats by the
+        // operand's NIR primitive type.
+        if lhs == rhs
+            && matches!(op, NirBinaryOp::Eq | NirBinaryOp::NotEq)
+            && !matches!(
+                crate::const_eval::prim_of(self.body.exprs[left].type_id, tt),
+                Some(crate::tir::PrimitiveType::F32 | crate::tir::PrimitiveType::F64)
+            )
+        {
+            return Some(self.const_to_value(crate::const_eval::Value::Bool(op == NirBinaryOp::Eq)));
+        }
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;
         let result = crate::const_eval::eval_binary(lv, op, rv)?;
