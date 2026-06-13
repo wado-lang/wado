@@ -103,9 +103,16 @@ source hash)` — mirroring how Kiln records `read-file`.
 
 The op→marker mapping lives entirely in the provider — it is ICU-version-specific
 (e.g. that `collator.compare` also pulls `NormalizerNfd*`). The compiler passes
-only Wado symbol names and stays ICU-agnostic. The provider's correctness is
-guarded by a test that records the markers each op's constructor actually
-requests and asserts the map covers them, catching drift on ICU upgrades.
+only Wado symbol names and stays ICU-agnostic. Correctness is guarded by a
+recording test: a `BufferProvider` wrapper logs every marker each op's
+constructor requests, so the map is derived from real behaviour rather than from
+the crate-level `provider::MARKERS` lists (which omit transitive dependencies).
+A prototype (`wado-bundled-icu/bdp-spike/marker-recording/`) confirms this — the
+collator's constructor auto-records `NormalizerNfdDataV1` / `NormalizerNfdTablesV1`
+alongside the collation markers. The recorded set is request-specific (root
+collation pulls no `CollationTailoringV1`), so the map is the union over inputs
+chosen to exercise every path; the test asserts the provider's map covers that
+union and flags drift on ICU upgrades.
 
 ### Compiler aggregation phase
 
@@ -325,7 +332,11 @@ Remaining:
       avoids per-locale explosion), minimal central-directory index, per-entry
       zstd decompressed host-side (`read-asset` returns plaintext). The provider
       slices markers × locales within entries and re-exports via `BlobExporter`.
-- [ ] Build the provider's marker-recording drift test against ICU constructors.
+- [x] Marker-recording drift test mechanism validated: a `BufferProvider`
+      recorder captures exactly the markers each constructor requests, including
+      transitive ones (`collator → NormalizerNfd*`) the crate `MARKERS` lists
+      omit. Prototype in `wado-bundled-icu/bdp-spike/marker-recording/`; to be
+      ported into the provider crate (union over path-exercising inputs).
 - [x] Measure infra-code duplication across the three prebuilt components: the
       shared infra floor is ~10 KB/component (component glue + `BlobDataProvider`
       core), so the three-way split duplicates only ~20 KB total — negligible

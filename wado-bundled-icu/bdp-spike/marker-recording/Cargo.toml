@@ -1,0 +1,17 @@
+# Prototype of the provider's marker-recording drift test (WEP item): wrap a
+# BufferProvider in a recorder, construct each ICU op, and capture exactly the
+# markers its constructor requests — including TRANSITIVE ones the crate-level
+# MARKERS lists omit (collator -> normalizer NFD). This is what keeps the
+# provider's op->marker map honest across ICU upgrades.
+[workspace]
+[package]
+name = "marker-recording"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[dependencies]
+icu_collator = { version = "2.2", default-features = false, features = ["serde"] }
+icu_casemap = { version = "2.2", default-features = false, features = ["serde"] }
+icu_locale_core = { version = "2.2", default-features = false }
+icu_provider = "2.2"
+icu_provider_blob = { version = "2.2", features = ["alloc"] }

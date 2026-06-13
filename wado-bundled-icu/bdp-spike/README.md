@@ -208,3 +208,20 @@ feature component's own linear memory, so the data is materialized per feature
 instance at runtime rather than borrowed from a single static image. That is the
 cost of the CM boundary: components don't share memory, so a shared _data_
 component dedups the **stored** blob, not the per-instance working set.
+
+## Marker-recording drift test (`marker-recording/`)
+
+The data provider's op→marker map must include _transitive_ markers that the
+crate-level `provider::MARKERS` lists omit (the collator pulls the normalizer's
+NFD data). `marker-recording/` validates the mechanism that keeps that map
+honest: a `BufferProvider` wrapper records every marker a constructor requests.
+
+```sh
+cd marker-recording && cargo run
+```
+
+Constructing a root `Collator` records 7 markers — the 5 collation markers
+**plus** `NormalizerNfdDataV1` / `NormalizerNfdTablesV1`, auto-detecting the
+transitive dependency. (Root pulls no `CollationTailoringV1`, so a real drift
+test unions over inputs that exercise every path.) This is the basis for the
+provider's marker map and its ICU-upgrade regression guard.
