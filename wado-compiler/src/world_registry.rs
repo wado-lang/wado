@@ -139,15 +139,6 @@ impl WorldInfo {
         self.exports.iter().any(|e| e.is_async)
     }
 
-    /// Check if this world has an HTTP handler export.
-    ///
-    /// Detected structurally: the world has an interface export whose return
-    /// type is a non-unit `Result<_, _>` (see
-    /// [`WorldExportInfo::is_handler_instance_export`]). The
-    /// `from_interface_fq` gate in that check is what separates the HTTP
-    /// `Handler` export from the kiln generator's freestanding
-    /// `generate -> Result<Response, Error>`, so no namespace prefix or
-    /// `Response` type-name match is needed.
     /// Check if this world exports the WASI HTTP handler.
     ///
     /// This gates HTTP-specific behavior (importing `wasi:http/types`, the

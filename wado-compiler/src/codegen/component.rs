@@ -395,12 +395,9 @@ pub fn build_component(
 
     let mut component_bytes = builder.finish();
 
-    // Wrap every interface export (`from_interface_fq` populated — CLI `run`,
-    // HTTP `handle`) in a CM instance export named by its interface FQ. The
-    // lifted funcs were created by `emit_world_exports`; this appends the
-    // instances that re-export them alongside the named CM types their
-    // signatures reference. Freestanding world functions are already exported
-    // bare and are skipped here.
+    // Emit the per-interface CM instance exports (`wasi:cli/run`,
+    // `wasi:http/handler`) for the lifted funcs `emit_world_exports` created;
+    // freestanding world functions stay bare. See the function doc.
     append_interface_instance_exports(&mut component_bytes, &ctx, component_plan);
 
     component_bytes
@@ -3462,16 +3459,17 @@ fn lower_wasi_functions(
     }
 }
 
-/// Append a CM instance export for every interface export in the plan.
+/// Append one CM instance export per exported interface.
 ///
-/// Each world export whose `from_interface_fq` is populated (CLI `run`, HTTP
-/// `handle`) is emitted as an instance export named by that interface FQ. The
-/// instance re-exports the named CM types the export's boundary signature
-/// references — resources and variants such as `request`, `response`,
-/// `error-code` — followed by the lifted boundary function. Freestanding world
-/// function exports (no parent interface, e.g. the kiln generator's `generate`)
-/// carry no instance and are skipped; `emit_world_exports` already emitted them
-/// bare.
+/// World exports whose `from_interface_fq` is populated (CLI `run`, HTTP
+/// `handle`) are grouped by that FQ — an `export Foo;` with several methods
+/// expands to one world export per method, all sharing the FQ — and each group
+/// becomes a single instance export named by the FQ, carrying every method's
+/// lifted function plus the union of the named CM types their signatures
+/// reference (resources and variants such as `request`, `response`,
+/// `error-code`). Freestanding world function exports (no parent interface,
+/// e.g. the kiln generator's `generate`) carry no instance; `emit_world_exports`
+/// already emitted them bare.
 ///
 /// Runs after `builder.finish()`, so it appends raw CM sections; the instance
 /// index space continues from `ctx.instance_count()`. The re-export set and the
