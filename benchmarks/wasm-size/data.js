@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781354353993,
+  "lastUpdate": 1781358359942,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32749,6 +32749,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eea10d6ab20b3d7b86585abb07010f53e4696f23"
         },
         "date": 1781354353425,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "24e7d49a6c617017c51c67faefe3a41ada86f33b",
+          "message": "Merge pull request #1368 from wado-lang/claude/turbofish-array-static-methods-v84uiv\n\nfix(compiler): resolve turbofish on Array<T> static methods",
+          "timestamp": "2026-06-13T22:36:50+09:00",
+          "tree_id": "15fa6191db5d5010ce49208ebf531d41ea49ef8f",
+          "url": "https://github.com/wado-lang/wado/commit/24e7d49a6c617017c51c67faefe3a41ada86f33b"
+        },
+        "date": 1781358359386,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
