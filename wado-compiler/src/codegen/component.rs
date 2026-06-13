@@ -2338,10 +2338,8 @@ fn generate_cm_imports(
     // Import interfaces with resource types
     import_interfaces_with_resources(builder, ctx, project, import_plan);
 
-    // HTTP types/client imports, keyed off the plan's versioned FQ (the import
-    // code derives package and type names from it — no `wasi:http/types`
-    // literal). `HttpClient` implies `HttpTypes`; assert it rather than
-    // re-deriving.
+    // HTTP types/client imports, keyed off the plan's FQ. `HttpClient` implies
+    // `HttpTypes`, asserted below.
     let http_types_fq = import_plan
         .iter()
         .find(|e| e.kind == ImportKind::HttpTypes)
@@ -2372,11 +2370,9 @@ fn import_http_types_for_service(
     ctx: &mut ComponentModelContext,
     types_fq: &str,
 ) {
-    // Package and all instance/type name prefixes derive from `types_fq`.
     let pkg = crate::world_registry::fq_name_package(types_fq).to_string();
     let types_prefix = types_fq.split('@').next().unwrap_or(types_fq).to_string();
 
-    // Collect resources from the registry
     let http_resources: Vec<(String, String)> = project
         .cm_interface_registry
         .resources_for_interface(&types_prefix)
@@ -2620,7 +2616,6 @@ fn import_http_types_for_service(
     );
     ctx.alias_comp_func("http-fields-constructor", "wasi:http/Fields::new");
 
-    // Alias resource constructor/method/static functions for the resources
     {
         let http_resource_names: IndexSet<&str> = http_resources
             .iter()
@@ -2629,17 +2624,15 @@ fn import_http_types_for_service(
         let resource_funcs: Vec<(String, String)> = all_funcs
             .iter()
             .filter(|f| {
-                // Only include functions for known HTTP resources
                 if !http_resource_names.contains(f.interface_name.as_str()) {
                     return false;
                 }
-                // Skip Fields constructor and Response::new (handled above)
+                // Fields::new and Response::new are aliased separately above.
                 if f.wasi_func_name == constructor_fields
                     || f.wasi_func_name == static_response_new
                 {
                     return false;
                 }
-                // Only include constructor/method/static functions that are actually used
                 let is_resource_func = f.wasi_func_name.starts_with("[constructor]")
                     || f.wasi_func_name.starts_with("[method]")
                     || f.wasi_func_name.starts_with("[static]");
@@ -2660,7 +2653,6 @@ fn import_http_types_for_service(
         }
     }
 
-    // Define own<resource> types for each resource.
     for (_, cm_name) in &http_resources {
         let resource_local = format!("{pkg}-{cm_name}-resource");
         let own_local = format!("{pkg}-{cm_name}");
@@ -2670,7 +2662,6 @@ fn import_http_types_for_service(
         enc.defined_type().own(resource_idx);
     }
 
-    // Define the handler-result transport type `result<own<response>, error-code>`.
     let response_type_idx = ctx.type_idx(&format!("{pkg}-response"));
     let error_code_type_idx = ctx.type_idx(&format!("{pkg}-error-code"));
     let handler_result_name = format!("{pkg}-handler-result");
@@ -2691,8 +2682,8 @@ fn import_http_client(
     client_fq: &str,
     types_fq: &str,
 ) {
-    // The client references the types interface's request / handler-result,
-    // aliased from the outer scope. Package and names derive from the FQs.
+    // The client's funcs use request / handler-result, aliased from the outer
+    // (types) instance.
     let pkg = crate::world_registry::fq_name_package(types_fq).to_string();
     let request_type_idx = ctx.type_idx(&format!("{pkg}-request"));
     let handler_result_type_idx = ctx.type_idx(&format!("{pkg}-handler-result"));
@@ -3478,9 +3469,7 @@ fn append_interface_instance_exports(
                     return;
                 }
                 let pkg = crate::world_registry::fq_name_package(interface_fq);
-                // Resource → its resource type (`{pkg}-{cm}-resource`); any
-                // other named type → `{pkg}-{cm}`. Kind from the descriptor, not
-                // a name probe.
+                // Kind from the descriptor, not a type-registry name probe.
                 let idx = if *is_resource {
                     ctx.type_idx(&format!("{pkg}-{cm_name}-resource"))
                 } else {
@@ -3495,7 +3484,6 @@ fn append_interface_instance_exports(
         }
     }
 
-    // Group method-exports by their parent interface FQ (see fn doc).
     let mut groups: IndexMap<&str, Vec<&crate::wir_build::component_plan::WorldExportPlan>> =
         IndexMap::default();
     for export in &component_plan.world_exports {
@@ -3512,7 +3500,6 @@ fn append_interface_instance_exports(
     let mut instance_idx = ctx.instance_count();
 
     for (&fq, group) in &groups {
-        // Re-exported named types: union over every method's signature.
         let mut type_items: Vec<(String, u32)> = Vec::new();
         for export in group {
             for (_, cm_ty) in &export.cm_params {
