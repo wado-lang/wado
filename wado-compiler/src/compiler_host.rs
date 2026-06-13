@@ -395,6 +395,15 @@ pub trait CompilerHost: Send + Sync {
     ) -> impl Future<Output = Result<GeneratorResponse, GeneratorRunnerError>> + Send {
         async move { Err(GeneratorRunnerError::Unsupported) }
     }
+
+    /// Bare dependency name → entry-module path (the dependency's
+    /// `[package].lib`), relative to the host's base. Resolves
+    /// `use { … } from "<name>"` against `[dependencies]`. Consulted once
+    /// when the module loader is created; empty by default (single-file and
+    /// in-memory hosts have no manifest).
+    fn dependency_index(&self) -> std::collections::HashMap<String, String> {
+        std::collections::HashMap::new()
+    }
 }
 
 /// Request handed to a Kiln generator by the compiler.

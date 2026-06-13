@@ -185,6 +185,10 @@ impl CompilerHost for FilesystemCompilerHost {
         self.inner.collect_diagnostic(diagnostic);
     }
 
+    fn dependency_index(&self) -> std::collections::HashMap<String, String> {
+        self.inner.dependency_index()
+    }
+
     async fn run_generator(
         &self,
         component_wasm: &[u8],

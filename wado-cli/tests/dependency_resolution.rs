@@ -81,6 +81,13 @@ export fn run() with Stdout {
         .assert()
         .success()
         .stdout(predicate::str::contains("hello from greet"));
+
+    // `wado check` must resolve bare-name dependencies too (same host-provided
+    // dependency index as compile/run), not just `wado run`.
+    wado_in(&app)
+        .args(["check", "src/main.wado"])
+        .assert()
+        .success();
 }
 
 /// The dependency's own modules resolve relative imports inside the

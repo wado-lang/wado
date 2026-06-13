@@ -954,11 +954,13 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// Create a new module loader with the given host and log level
     pub fn new(host: &'a H, log_level: LogLevel) -> Self {
+        let mut interner = ModuleSourceInterner::new();
+        interner.set_dependencies(host.dependency_index());
         Self {
             host,
             log_level,
             logger: Logger::new(host, log_level),
-            interner: ModuleSourceInterner::new(),
+            interner,
             loaded: IndexMap::default(),
             loading: IndexSet::default(),
             implicit_modules: IndexSet::default(),
@@ -984,17 +986,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     #[must_use]
     pub fn with_invocations(mut self, invocations: crate::kiln::InvocationIndex) -> Self {
         self.invocations = invocations;
-        self
-    }
-
-    /// Seed `[dependencies]` resolution: bare-name → entry-module path. Must
-    /// be called before [`Self::load_all`].
-    #[must_use]
-    pub fn with_dependencies(
-        mut self,
-        dependencies: std::collections::HashMap<String, String>,
-    ) -> Self {
-        self.interner.set_dependencies(dependencies);
         self
     }
 
