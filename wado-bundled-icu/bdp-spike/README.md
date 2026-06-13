@@ -15,10 +15,12 @@ sibling **data** component composed in via the Component Model.
 
 | dir | crate | role |
 |---|---|---|
-| `datagen/` | native tool | slices the casemap data markers into a postcard **blob** (`icu_provider_export` + `icu_provider_source`) |
+| `datagen/` | native tool | slices a chosen marker set into a postcard **blob** (`icu_provider_export` + `icu_provider_source`); `cargo run -- <set> <out>` |
 | `casemap/` | wasm component | **data-free** feature: `icu_casemap` with `default-features = false` (no `compiled_data`); imports `data`, exports `casemap` |
 | `data/` | wasm component | **shared data**: bakes the blob, exports `data` |
 | `runtime-check/` | native | instantiates under wasmtime and asserts correct Unicode output |
+| `collator/`, `normalizer/` | wasm components | data-free features for the dedup demo below (`cn-wit/`) |
+| `data-cn/`, `runtime-check-cn/` | wasm / native | shared data + check for the dedup demo |
 
 WIT (`casemap/wit/world.wit`): the feature component
 `import`s `wado:icu-bdp/data` (`get-casemap-blob: func() -> list<u8>`) and
@@ -95,22 +97,53 @@ model) lands the locale+casemap slice at ~92 KB.
   the `BlobDataProvider` + postcard deserialization code in the feature roughly
   offsets what `compiled_data` would bake. The payoff is structural, below.
 
-### Where the real win is (next steps)
+### Where the real win is
 
-1. **Cross-feature data dedup.** ICU components share data markers — e.g. the
-   collator uses the **normalizer**'s data internally. With `compiled_data`,
-   collator and normalizer each bake their own copy. With BDP, both feature
-   components load from **one shared blob** where datagen stores each marker
-   once: `Collator::try_new_with_buffer_provider` pulls *both* collation and
-   normalization markers from the same provider. So the data is shared at the
-   data level (one blob, deduped markers) even though each feature keeps its own
-   algorithm code — which is exactly the dedup that exporting *interfaces*
-   cannot achieve. Proving this with a collator+normalizer pair is the logical
-   follow-up.
+1. **Cross-feature data dedup — verified (see below).** ICU components share
+   data markers; the data is shared at the data level (one blob, deduped
+   markers) even though each feature keeps its own algorithm code — exactly the
+   dedup that exporting *interfaces* cannot achieve.
 2. **Per-deployment slicing.** datagen bakes only the markers an app's features
    actually use, so the shared blob never carries unused data.
 3. **Data/code separation.** Feature components become tiny, reusable, and
    independent of the data version; the blob is portable and cacheable.
+
+## Marker dedup, verified: collator + normalizer
+
+The collator uses the normalizer's data internally — its
+`try_new_with_buffer_provider` requires `NormalizerNfdDataV1` +
+`NormalizerNfdTablesV1`. So a collator feature and a standalone normalizer
+feature overlap on the NFD markers. Under `compiled_data` each bakes its own
+copy; with BDP both load from **one shared blob** that stores those markers once.
+
+`datagen` emits three blobs to quantify it (collation sliced to root/`und`):
+
+| blob | markers | size |
+|---|---|---:|
+| `coll` | collator + the NFD markers it needs | 605 KB |
+| `norm` | all normalizer markers (NFC/NFD/NFKC/NFKD/UTS46) | 157 KB |
+| `shared` | collator + **all** normalizer markers | 725 KB |
+
+`size(coll) + size(norm) − size(shared)` = **37 KB** of NFD normalization data
+that `compiled_data` would duplicate across the two components but the shared
+blob stores once. (The dedup equals the marker overlap; for pairs that share
+larger markers — e.g. anything pulling the full property tries — it is bigger.)
+
+Feature components (data-free) and the shared data component:
+
+| artifact | size |
+|---|---:|
+| `collator-feature.wasm` (collation + NFD algorithm, no data) | 136 KB |
+| `normalizer-feature.wasm` (no data) | 64 KB |
+| `cn-data.wasm` (the 725 KB shared blob + glue) | 751 KB |
+| `collator-composed.wasm` (collator-feature + shared data) | 887 KB |
+| `normalizer-composed.wasm` (normalizer-feature + shared data) | 815 KB |
+
+`runtime-check-cn` proves both features run off the **one** shared blob, both
+host-supplied and composed. The clincher is the collator comparing decomposed
+`"e"+◌́` **equal** to precomposed `"é"`: that canonical equivalence only succeeds
+if the collator is reading the normalization markers the blob shares with the
+normalizer.
 
 ### Caveat
 

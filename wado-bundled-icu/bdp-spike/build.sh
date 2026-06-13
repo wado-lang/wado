@@ -38,3 +38,35 @@ ls -l casemap.blob casemap-feature.wasm data-provider.wasm composed.wasm
 
 echo "== [5/5] runtime check (both scenarios) =="
 ( cd runtime-check && cargo run --release )
+
+echo
+echo "###### collator + normalizer marker-dedup demo ######"
+
+echo "== generate blobs: coll (collator+NFD), norm (all), shared (collator+all) =="
+( cd datagen && cargo run --release -- coll ../coll.blob \
+              && cargo run --release -- norm ../norm.blob \
+              && cargo run --release -- shared ../shared.blob )
+
+echo "== dedup math =="
+A=$(stat -c%s coll.blob); B=$(stat -c%s norm.blob); AB=$(stat -c%s shared.blob)
+echo "  coll(A)=$A  norm(B)=$B  shared(AB)=$AB  ->  deduped NFD = A+B-AB = $((A+B-AB)) bytes"
+
+echo "== build data-free collator & normalizer feature components + shared data =="
+( cd collator && cargo build --release )
+( cd normalizer && cargo build --release )
+cp shared.blob data-cn/shared.blob
+( cd data-cn && cargo build --release )
+wasm-tools component new collator/target/wasm32-unknown-unknown/release/cn_collator.wasm -o collator-feature.wasm
+wasm-tools component new normalizer/target/wasm32-unknown-unknown/release/cn_normalizer.wasm -o normalizer-feature.wasm
+wasm-tools component new data-cn/target/wasm32-unknown-unknown/release/cn_data.wasm -o cn-data.wasm
+
+echo "== compose each feature with the ONE shared data component =="
+wasm-tools compose collator-feature.wasm -d cn-data.wasm -o collator-composed.wasm
+wasm-tools compose normalizer-feature.wasm -d cn-data.wasm -o normalizer-composed.wasm
+wasm-tools validate collator-composed.wasm && wasm-tools validate normalizer-composed.wasm
+
+echo "== sizes =="
+ls -l collator-feature.wasm normalizer-feature.wasm cn-data.wasm collator-composed.wasm normalizer-composed.wasm
+
+echo "== runtime check (both features off one shared blob) =="
+( cd runtime-check-cn && cargo run --release )
