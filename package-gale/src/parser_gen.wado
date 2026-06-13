@@ -72,12 +72,12 @@ use {
     FieldKind,
     ScanBody,
     ScanElement,
-    ScanTokenElem,
-    ScanRuleCallElem,
-    ScanExcludedElem,
-    ScanRepeatElem,
-    ScanGroupElem,
-    ScanOptionalLookaheadElem,
+    ScanTokenElement,
+    ScanRuleCallElement,
+    ScanExcludedElement,
+    ScanRepeatElement,
+    ScanGroupElement,
+    ScanOptionalLookaheadElement,
     rule_header,
     rule_alt_body,
     rule_alt_scan_body,
@@ -723,7 +723,7 @@ fn gen_scan_lr_functions(
 /// for each valid LR alternative, scanning its suffix (elements[1..]). Self-
 /// recursive calls compile to `scan_X(tokens, pos, prec)` with the same
 /// precedence value the parse side uses; the precedence is baked onto
-/// `ScanRuleCallElem.min_prec_arg` by `stamp_lr_self_ref_min_prec`.
+/// `ScanRuleCallElement.min_prec_arg` by `stamp_lr_self_ref_min_prec`.
 fn gen_scan_lr_suffix_helpers(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -1434,7 +1434,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
     panic("gen_scan_op_element_assign: unreachable ScanElement shape — every variant is handled");
 }
 
-fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenContext, fail_stmt: &String) {
+fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
     let loop_first = re.inner_first;
 
     // Caller-FOLLOW yield gate: when the caller's continuation matches at
@@ -1540,7 +1540,7 @@ fn is_wildcard_alt(indices: &List<i32>, alt_index: i32) -> bool {
     return false;
 }
 
-fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {
+fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {
     if ge.alts.len() == 1 {
         // Single alt: outer `done` wraps inner `body`.
         //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
@@ -1667,7 +1667,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
 
 /// Op-driven scan emitter for `ScanElement::OptionalLookahead` —
 /// emits per-shape if/elseif chain using baked `sigs` + `bodies`.
-fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookaheadElem, ctx: &mut GenContext) {
+fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookaheadElement, ctx: &mut GenContext) {
     let mut is_first = true;
     for let mut si = 0; si < ole.sigs.len(); si += 1 {
         let sig = &ole.sigs[si];
@@ -2842,7 +2842,7 @@ fn unwrap_optional_op(op: &Op) -> &Op with stores[op] {
 /// of the surface `gen_scan_elements_in_block` / `gen_scan_group`
 /// graph. `g_elem` is the surface `Group` matching `g_op`; it is
 /// consulted only to compute per-alt first sets for the multi-alt
-/// dispatch (lower bakes these on `ScanGroupElem.alt_first_sets` but
+/// dispatch (lower bakes these on `ScanGroupElement.alt_first_sets` but
 /// the `GroupOp` itself does not surface them — recomputing matches
 /// what `lower_scan_group` does).
 fn gen_op_opt_scan_guard_for_group(
@@ -2873,7 +2873,7 @@ fn gen_op_opt_scan_guard_for_group(
                 wildcard_indices.push(ai);
             }
         }
-        let scan_elem = ScanGroupElem {
+        let scan_elem = ScanGroupElement {
             alts: g_op.scan_alts,
             dispatch: g_op.scan_dispatch,
             lenient: false,

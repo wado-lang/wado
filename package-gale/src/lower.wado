@@ -92,12 +92,12 @@ use {
     TournamentDispatch,
     ScanBody,
     ScanElement,
-    ScanTokenElem,
-    ScanRuleCallElem,
-    ScanExcludedElem,
-    ScanRepeatElem,
-    ScanGroupElem,
-    ScanOptionalLookaheadElem,
+    ScanTokenElement,
+    ScanRuleCallElement,
+    ScanExcludedElement,
+    ScanRepeatElement,
+    ScanGroupElement,
+    ScanOptionalLookaheadElement,
     Op,
     TokenOp,
     LiteralOp,
@@ -649,7 +649,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // `compute_lr_self_ref_prec` decision, but resolved once at
     // lower time so emit consumes the suffix as a structural walk.
     // Stamps both `suffix.ops` (parse-side `RuleCallOp.min_prec_arg`)
-    // and `scan_suffix.elements` (scan-side `ScanRuleCallElem.min_prec_arg`).
+    // and `scan_suffix.elements` (scan-side `ScanRuleCallElement.min_prec_arg`).
     stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name);
 
     // ATN-class detection: the static suffix-first dispatch mis-commits when
@@ -720,7 +720,7 @@ fn fixed_token_const_name(elem: &Element) -> Option<String> {
 
 /// Walk every LR suffix and stamp `min_prec_arg` on self-recursive
 /// calls — both on the parse-side ops (`RuleCallOp.min_prec_arg`)
-/// and on the scan-side elements (`ScanRuleCallElem.min_prec_arg`).
+/// and on the scan-side elements (`ScanRuleCallElement.min_prec_arg`).
 /// The trailing self-ref (at original alt position
 /// `last_self_ref_idx`) uses the alt's `conflict_min`; non-trailing
 /// self-refs use 0 unless the immediately following op is a fixed
@@ -807,7 +807,7 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rul
 fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
     if let RuleCall(rc) = se {
         if rc.target_snake == *rule_snake {
-            return ScanElement::RuleCall(ScanRuleCallElem {
+            return ScanElement::RuleCall(ScanRuleCallElement {
                 target_snake: rc.target_snake,
                 follow_arg: rc.follow_arg,
                 min_prec_arg: Option::<i32>::Some(prec),
@@ -982,7 +982,7 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
     return match se {
         RuleCall(rc) => {
             if rc.target_snake == *rule_snake {
-                ScanElement::RuleCall(ScanRuleCallElem {
+                ScanElement::RuleCall(ScanRuleCallElement {
                     target_snake: rc.target_snake,
                     follow_arg: rc.follow_arg,
                     min_prec_arg: Option::<i32>::Some(prec),
@@ -992,7 +992,7 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                 ScanElement::RuleCall(rc);
             }
         },
-        Repeat(r) => ScanElement::Repeat(ScanRepeatElem {
+        Repeat(r) => ScanElement::Repeat(ScanRepeatElement {
             kind: r.kind,
             body: deep_stamp_inner_self_refs_scan(r.body, rule_snake, prec),
             inner_first: r.inner_first,
@@ -1008,7 +1008,7 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                 }
                 new_alts.push(ScanBody { elements: new_elements });
             }
-            ScanElement::Group(ScanGroupElem {
+            ScanElement::Group(ScanGroupElement {
                 alts: new_alts,
                 dispatch: g.dispatch,
                 lenient: g.lenient,
@@ -1025,7 +1025,7 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                 }
                 new_bodies.push(ScanBody { elements: new_elements });
             }
-            ScanElement::OptionalLookahead(ScanOptionalLookaheadElem {
+            ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
                 sigs: ole.sigs,
                 bodies: new_bodies,
             });
@@ -1740,18 +1740,18 @@ fn lower_scan_element(
     gate_caller_follow: bool,
 ) -> ScanElement {
     return match *elem {
-        TokenRef(t) => ScanElement::Token(ScanTokenElem { kind: `TK_{t.name}` }),
-        Literal(l) => ScanElement::Token(ScanTokenElem {
+        TokenRef(t) => ScanElement::Token(ScanTokenElement { kind: `TK_{t.name}` }),
+        Literal(l) => ScanElement::Token(ScanTokenElement {
             kind: literal_const_name(&l.text),
         }),
-        RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElem {
+        RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElement {
             target_snake: r.snake_name,
             follow_arg: follow_arg,
             min_prec_arg: null,
             atn_call_site: r.atn_call_site,
         }),
         Wildcard(_) => ScanElement::Wildcard,
-        Not(ne) => ScanElement::Excluded(ScanExcludedElem {
+        Not(ne) => ScanElement::Excluded(ScanExcludedElement {
             kinds: collect_excluded_kinds(&ne.element),
         }),
         Label(lab) => lower_scan_element(
@@ -1778,7 +1778,7 @@ fn lower_scan_element(
 /// Scan-side twin of `lower_group_op`. The scan side has no struct
 /// construction, so the shape distinction matters only for the
 /// dispatch step: single-alt groups have no dispatch (one body run
-/// unconditionally / wrapped in a one-alt `ScanGroupElem`), while
+/// unconditionally / wrapped in a one-alt `ScanGroupElement`), while
 /// multi-alt token-only groups dispatch on token kind.
 fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
     let alts = &g.alternatives;
@@ -1813,7 +1813,7 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
         if alt_is_wildcard_led(alt) {
             wildcard_indices.push(0);
         }
-        return ScanElement::Group(ScanGroupElem {
+        return ScanElement::Group(ScanGroupElement {
             alts: [
                 ScanBody { elements },
             ],
@@ -1841,7 +1841,7 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
             });
             first_sets.push([token_only_kind(elem)]);
         }
-        return ScanElement::Group(ScanGroupElem {
+        return ScanElement::Group(ScanGroupElement {
             alts: bodies,
             dispatch: build_direct_dispatch(&first_sets),
             lenient: false,
@@ -1884,7 +1884,7 @@ fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, oute
             wildcard_indices.push(ai);
         }
     }
-    return ScanElement::Group(ScanGroupElem {
+    return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         dispatch: dispatch,
         lenient: true,
@@ -1954,7 +1954,7 @@ fn lower_scan_repeat(
     if effective_gate {
         ctx.mark_caller_follow_gate();
     }
-    return ScanElement::Repeat(ScanRepeatElem {
+    return ScanElement::Repeat(ScanRepeatElement {
         kind: rep.kind,
         body,
         inner_first: inner_first,
@@ -1971,7 +1971,7 @@ fn lower_scan_repeat(
 /// `outer_follow`, matching the parse-side `RepeatOp` post-pass.
 fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: List<String>) -> ScanElement {
     if let Repeat(re) = se {
-        return ScanElement::Repeat(ScanRepeatElem {
+        return ScanElement::Repeat(ScanRepeatElement {
             kind: re.kind,
             body: re.body,
             inner_first: re.inner_first,
@@ -2099,7 +2099,7 @@ fn lower_scan_optional_lookahead_group(
         sigs.push(shape_lookahead_signature_for_alt(shape, &alt.elements, ctx));
         bodies.push(lower_scan_shape_body(shape, &alt.elements, ctx));
     }
-    return ScanElement::OptionalLookahead(ScanOptionalLookaheadElem {
+    return ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
         sigs: sigs,
         bodies: bodies,
     });
@@ -2871,7 +2871,7 @@ fn lower_simple_cst_scan_group(
         all_indices.push(i);
     }
     let dispatch = build_overlap_dispatch(&"SimpleCst group (scan)", alts, &all_indices, &first_sets, ctx);
-    return ScanElement::Group(ScanGroupElem {
+    return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         dispatch: dispatch,
         lenient: true,
@@ -3187,7 +3187,7 @@ fn lower_repeat_op(
     // (`gen_scan_op_element`) without falling back to the surface
     // `gen_scan_*` walker graph. Uses the same `iter_follow` as the
     // parse side so per-position context (`caller_follow_first`
-    // baked on nested `ScanRepeatElem`s) lines up.
+    // baked on nested `ScanRepeatElement`s) lines up.
     let scan_body = lower_scan_element(
         &rep.element,
         ctx,

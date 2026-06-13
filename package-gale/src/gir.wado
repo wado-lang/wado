@@ -854,25 +854,25 @@ pub struct ScanBody {
 }
 
 pub variant ScanElement {
-    Token(ScanTokenElem),
+    Token(ScanTokenElement),
     /// `RuleCall` mirror — resolved variant id and min-prec arg are
     /// already baked in.
-    RuleCall(ScanRuleCallElem),
+    RuleCall(ScanRuleCallElement),
     Wildcard,
-    Excluded(ScanExcludedElem),
-    Repeat(ScanRepeatElem),
-    Group(ScanGroupElem),
+    Excluded(ScanExcludedElement),
+    Repeat(ScanRepeatElement),
+    Group(ScanGroupElement),
     /// `?`-over-group lowered with the same shape signature as the
     /// parse-side `OptionalLookaheadStrategy`. Exists in scan IR
     /// because scan-side has its own `gen_scan_optional_with_lookahead`.
-    OptionalLookahead(ScanOptionalLookaheadElem),
+    OptionalLookahead(ScanOptionalLookaheadElement),
 }
 
-pub struct ScanTokenElem {
+pub struct ScanTokenElement {
     pub kind: String,
 }
 
-pub struct ScanRuleCallElem {
+pub struct ScanRuleCallElement {
     pub target_snake: String,
     /// Scan-side mirror of `RuleCallOp.follow_arg`. See `FollowArg`.
     pub follow_arg: FollowArg,
@@ -892,11 +892,11 @@ pub struct ScanRuleCallElem {
     pub atn_call_site: i32 = -1,
 }
 
-pub struct ScanExcludedElem {
+pub struct ScanExcludedElement {
     pub kinds: List<String>,
 }
 
-pub struct ScanRepeatElem {
+pub struct ScanRepeatElement {
     pub kind: RepeatKind,
     pub body: ScanElement,
     /// First set of `body` cached at lower time. emit's scan-side
@@ -919,7 +919,7 @@ pub struct ScanRepeatElem {
     pub gate_caller_follow: bool,
 }
 
-pub struct ScanGroupElem {
+pub struct ScanGroupElement {
     /// Multi-alt scan dispatch.
     pub alts: List<ScanBody>,
     pub dispatch: MultiAltDispatch,
@@ -944,7 +944,7 @@ pub struct ScanGroupElem {
     pub wildcard_alt_indices: List<i32>,
 }
 
-pub struct ScanOptionalLookaheadElem {
+pub struct ScanOptionalLookaheadElement {
     /// Per-shape lookahead signature: `sigs[s][position]` is the
     /// kind set for position `position` of shape `s`. emit emits
     /// `if peek_match(sigs[0]) { /* shape 0 body */ } else if ...`.

@@ -549,23 +549,6 @@ fn list_subdirs(dir: &Descriptor) -> List<String> {
 
 // ===== Test file emission =====
 
-fn category_to_snake(name: &String) -> String {
-    // CamelCase → snake_case
-    let mut out = String::with_capacity(name.len() + 4);
-    let mut first = true;
-    for let c of name.chars() {
-        if c.is_ascii_uppercase() {
-            if !first {
-                out.push('_');
-            }
-            out.push(c.to_ascii_lowercase());
-        } else {
-            out.push(c);
-        }
-        first = false;
-    }
-    return out;
-}
 
 /// Escape a string so it can sit between Wado `"..."` quotes.
 fn escape_for_wado_str(s: &String) -> String {
@@ -1627,7 +1610,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         // file in place: deleting it would silently hide the failure
         // behind an `empty:` line, and rewriting it as a header-only stub
         // would erase the last good run's coverage.
-        let test_filename = `{category_to_snake(category)}_test.wado`;
+        let test_filename = `{to_snake_case(category)}_test.wado`;
         if entries.is_empty() {
             if category_errors > 0 {
                 eprintln(

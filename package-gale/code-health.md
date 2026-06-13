@@ -73,10 +73,8 @@ The biggest single lever: most twin-path bugs above exist because the second cop
 
 Decide each convention once, record it here, then migrate mechanically.
 
-- [ ] One pipeline stage axis, three vocabularies: surface `Element`, parse-side GIR `Op`, scan-side GIR `ScanElement` with `...Elem` suffixes (`ScanRuleCallElem` vs `RuleRefElement`). Also `ruleref` (326) vs `rulecall` (174) spellings. (Note: the `Element`/`Op`/`ScanElement` three-vocabulary split is the intentional pipeline-stage boundary defended in `gir.wado`'s header — do not flatten it; the drift to address is the `...Elem` vs `...Element` suffix and the `ruleref`/`rulecall` spelling within a layer.)
-- [ ] `kind` is overloaded across token-kind constant strings, state kinds, transition kinds, `RepeatKind`, `FieldKind`, etc.; the string-typed token kind is a constant name and should be named like one. (The `SllConfig.pos` `-1` opaque sentinel is now named `SLL_POS_OPAQUE`.)
+- [ ] `kind` is overloaded across token-kind constant strings, state kinds, transition kinds, `RepeatKind`, `FieldKind`, etc.; the string-typed token kind is a constant name and should be named like one. (The `SllConfig.pos` `-1` opaque sentinel is now named `SLL_POS_OPAQUE`.) The `Element`/`Op`/`ScanElement` three-vocabulary split and the `ruleref`(surface)/`rulecall`(GIR) spelling are the intentional pipeline-stage boundary (defended in `gir.wado`'s header) — left as-is; the `Scan*Elem` suffix drift was unified to `Scan*Element`.
 - [ ] `tests/generated/` dir/module/grammar three-way mismatches (19 found): `ll_basic/llbasic.wado` (grammar `LLBasic` + acronym-collapsing `to_snake_case`), `overlap_tournament/` drops the `ll_` prefix its source has, `trace/` is named after the option not the grammar, `antlr4/antlrv4.wado/ANTLRv4Lexer.g4`, `error_recovery/err_rec.wado`, three dirs all containing `json.wado` while five sqlite tests share one dir. Fix by aligning declared grammar names with fixture file names and regenerating; `ll_basic.wado:2` also stamps `sources = ["LLBasic.g4"]`, a file that does not exist.
-- [ ] Two CamelCase→snake conventions coexist: `to_snake_case` (acronym-collapsing, `src/ident.wado`) vs `category_to_snake` (script-local).
 
 ## Code quality
 
