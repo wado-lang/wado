@@ -1,0 +1,11 @@
+// Defensive: casting an `error`-typed expression must surface the
+// original error rather than adopting the cast target type, which would
+// suppress the error and let an `error`-typed value reach codegen
+// (ICE in the WIR pipeline). Regression for issue #1296.
+export fn run() {
+    let x: i32 = totally_unknown_fn(3) as i32;
+    assert x == 3;
+}
+
+__DATA__
+{"compile_error": "totally_unknown_fn"}

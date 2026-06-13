@@ -2753,6 +2753,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Normal cast
         let source_type = self.resolve_expr(&cast.expr, ctx, None);
 
+        if source_type == TypeTable::ERROR {
+            return TypeTable::ERROR;
+        }
+
         // Casts *from* i128/u128 (including newtypes of them) support:
         // f64/f32 (correctly rounded), the integer widths (truncating),
         // and i128 ↔ u128 (bit reinterpret) — each modulo newtypes, which
