@@ -194,6 +194,28 @@ Locale option semantics:
 - Only locale-bearing modules consume it (today, collation; later datetime /
   number formatting). It is inert elsewhere.
 
+### Options: schema and merging
+
+A provider-backed module declares its `with { ... }` options as a typed Options
+record on its bundled surface, reusing Kiln's Options-descriptor mechanism
+([Kiln](./wep-2026-04-12-kiln.md)). The compiler type-checks the `with` block
+against it and encodes the value as the same canonical JSON the cache key hashes;
+a Rust provider decodes that JSON directly (serde), a Wado provider gets the
+typed `Options` sugar.
+
+Aggregation across use-sites (per the phase above) merges by type:
+
+- `list<T>` options merge by set-union (deduplicated, order-normalized) — e.g.
+  `locales`, `dictionaries`.
+- scalar options (bool / enum / number / string) must agree across use-sites; a
+  conflict is a diagnostic.
+
+This type-driven rule covers every ICU option (all are lists), so v1 adds no
+per-field merge annotations; introducing them (e.g. `max` / `or` for scalars) is
+a later extension only if a future provider needs it. Note that the runtime
+fallback mode (`strict`) is a property of the constructed object, not of data
+slicing, so it is an ordinary API argument, not a `with` option.
+
 ### ICU as the first consumer
 
 ICU is special-cased only in that it is a first-party bundled consumer of the
@@ -279,7 +301,10 @@ Remaining:
       live provider-backed imports grouped by module form the request `symbols`,
       and an unreachable module drops out for free. LSP "imported but unused"
       comes free; a data-cost inlay hint is deferred.
-- [ ] Specify the option schema and its mergeability/canonical-encoding rules.
+- [x] Specify the option schema and merge rules: typed Options on the bundled
+      surface (Kiln's descriptor mechanism, canonical-JSON wire); type-driven
+      merge (list → set-union, scalar → must-agree). All ICU options are lists;
+      `strict` is a runtime API arg, not a `with` option.
 - [ ] Define the archive layout (entry granularity, index format, compression
       codec) and the slicing the provider does within an entry (markers ×
       locales).
