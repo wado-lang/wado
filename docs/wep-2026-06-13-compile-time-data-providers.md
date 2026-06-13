@@ -64,27 +64,42 @@ package core:provider;
 
 interface types {
   record request {
-    module: string,          // "core:collation"
-    symbols: list<string>,   // union of imported names across all use-sites
-    options: list<u8>,       // canonical-encoded union of mergeable `with { ... }`
-    datasets: list<string>,  // names of bundled archive entries this provider may read
+    module: string,         // "core:collation"
+    symbols: list<string>,  // union of imported names across all use-sites
+    options: string,        // canonical-JSON union of mergeable `with { ... }`,
+                            // same encoding Kiln uses; provider decodes it
   }
-  record diagnostic { /* span, severity, message */ }
   record response {
-    data: list<u8>,          // the sliced per-program asset
-    diagnostics: list<diagnostic>,
+    data: list<u8>,         // the sliced per-program asset to embed
   }
 }
 
 world data-provider {
-  // Reuses Kiln's host. `read-file` is generalized to a name-keyed `read-asset`
-  // so a provider pulls bundled archive entries exactly the way a Kiln generator
-  // reads user files — no separate host interface is added.
-  import core:kiln/kiln-host;
+  import core:kiln/kiln-host;  // emit-diagnostic + read-asset (see below)
   use types.{request, response};
   export provide: func(req: request) -> response;
 }
 ```
+
+The provider reuses Kiln's host interface unchanged except for one added
+function. Kiln's `read-file` is UTF-8 text resolved relative to the user's
+declaration site; a data provider instead needs raw bytes from the toolchain's
+bundled asset namespace, so `core:kiln/kiln-host` gains a sibling read:
+
+```wit
+// added to core:kiln/kiln-host
+/// Read a bundled compiler asset (e.g. one entry of the ICU data archive) as
+/// raw bytes. Distinct from `read-file` (UTF-8 user files at the declaration
+/// site): `read-asset` resolves a name in the toolchain's bundled namespace.
+/// Calls are recorded and contribute to the cache key.
+read-asset: func(name: string) -> result<list<u8>, host-error>;
+```
+
+Diagnostics go through the host's existing `emit-diagnostic`, so the response
+carries only `data`. The request has no `datasets` field: the provider pulls the
+archive entries it needs via `read-asset`, and those recorded reads contribute to
+the cache key alongside `(module, sorted symbols, canonical options, provider
+source hash)` — mirroring how Kiln records `read-file`.
 
 The op→marker mapping lives entirely in the provider — it is ICU-version-specific
 (e.g. that `collator.compare` also pulls `NormalizerNfd*`). The compiler passes
@@ -108,7 +123,7 @@ provider is invoked once per (feature, program):
    (its prebuilt component and data are never linked).
 4. Embed the returned `data` and wire it to the prebuilt data-free component
    (the `bdp-spike` composition). Cache key: `(module, sorted symbols, canonical
-   options, dataset version, provider version)`.
+   options, provider source hash, recorded read-asset names)`.
 
 Reachability is computed by the existing elaborator pass, which already does
 reachability analysis and elimination. It is less exhaustive than a full DCE,
@@ -231,8 +246,10 @@ Decided (folded into the design above):
 
 Remaining:
 
-- [ ] Finalize the `data-provider` world WIT and the generalized `read-asset` on
-      `core:kiln/kiln-host`.
+- [x] Finalize the `data-provider` world WIT and the `read-asset` addition on
+      `core:kiln/kiln-host`: request `{module, symbols, options}` (canonical-JSON
+      options), response `{data}`, diagnostics via host, `read-asset` a binary
+      sibling to `read-file`, cache key includes recorded reads + provider hash.
 - [ ] Pin down the elaborator hook: how the reachable import-edge set is handed
       to the provisioning step, and the LSP surface for it.
 - [ ] Specify the option schema and its mergeability/canonical-encoding rules.
