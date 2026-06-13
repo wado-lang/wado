@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781347084987,
+  "lastUpdate": 1781347823379,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32617,6 +32617,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9e86da9768a649cb493086b0b77ed45e236f3e4b"
         },
         "date": 1781347084629,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432292,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3ba91c1efd1282deb53eba456dbfaee2c9eddf58",
+          "message": "Merge pull request #1364 from wado-lang/claude/elaborator-refactor-plan-2ed7y1\n\nrefactor(elaborator): decompose the God Object — TypeSystem ops, TraitEnv digests, AnnotateCtx",
+          "timestamp": "2026-06-13T19:25:38+09:00",
+          "tree_id": "19ae2d2fea1dfa701903e8c1b74b98b7e0d60f1c",
+          "url": "https://github.com/wado-lang/wado/commit/3ba91c1efd1282deb53eba456dbfaee2c9eddf58"
+        },
+        "date": 1781347822967,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
