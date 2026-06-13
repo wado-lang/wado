@@ -428,11 +428,20 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// `0..num_lexer_rules` range maps directly onto ANTLR4's
 /// `1..num_lexer_rules+1`.
 ///
-/// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
-/// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
-/// `\t` are escaped; backslashes and quotes pass through unchanged.
+/// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
+/// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
+/// escaped; backslashes and quotes pass through unchanged.
 pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
+    // Char index where each line begins (line 1 at 0, then one entry per
+    // newline). Built once so `line_col_at` is a binary search per token
+    // instead of an O(pos) rescan — the whole dump is O(n log n), not O(n²).
+    let mut line_starts: List<i32> = [0];
+    for let mut i = 0; i < chars.len(); i += 1 {
+        if chars[i] == '\n' {
+            line_starts.push(i + 1);
+        }
+    }
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
@@ -447,11 +456,11 @@ pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> S
         // `Lexer.skip()`).
         for let tr of &tok.leading_trivia {
             if tr.channel != 0 {
-                emit_lexer_token(&mut out, tr, &chars, index, eof_kind);
+                emit_lexer_token(&mut out, tr, &line_starts, index, eof_kind);
                 index += 1;
             }
         }
-        emit_lexer_token(&mut out, tok, &chars, index, eof_kind);
+        emit_lexer_token(&mut out, tok, &line_starts, index, eof_kind);
         index += 1;
     }
     return out;
@@ -461,7 +470,7 @@ pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> S
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i32, eof_kind: i32) {
+fn emit_lexer_token(out: &mut String, tok: &Token, line_starts: &List<i32>, index: i32, eof_kind: i32) {
     let is_eof = tok.kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
@@ -478,7 +487,7 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i3
         }
     }
     let type_id = if is_eof { -1 } else { tok.kind + 1 };
-    let line_col = line_col_at(chars, tok.span.start);
+    let line_col = line_col_from_starts(line_starts, tok.span.start);
     let line = line_col.0;
     let col = line_col.1;
     let end_inclusive = tok.span.end - 1;
@@ -488,6 +497,9 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i3
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
 /// 1-based line and 0-based column to match ANTLR4's `Token` getters.
+/// Used by the parser's error path, which reports at most one position
+/// per parse, so the linear scan is fine. The per-token dump uses
+/// `line_col_from_starts` to avoid the O(n²) rescan.
 fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
@@ -501,6 +513,25 @@ fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
         }
     }
     return [line, col];
+}
+
+/// Compute (line, column) from the precomputed `line_starts` table (char
+/// index where each line begins). Binary search for the greatest
+/// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
+/// offset past its start. O(log lines) per call, so a full token dump is
+/// O(n log n) rather than the O(n²) of rescanning from 0 per token.
+fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let mut lo = 0;
+    let mut hi = line_starts.len() - 1;
+    while lo < hi {
+        let mid = (lo + hi + 1) / 2;
+        if line_starts[mid] <= pos {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return [lo + 1, pos - line_starts[lo]];
 }
 //! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
 //! generated parser only when lowering constructed a caller-FOLLOW gate
@@ -3910,7 +3941,7 @@ fn scan_grammar_spec(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    pos = scan_rules(tokens, pos, &FOLLOW_MASK_2, 0);
+    pos = scan_rules(tokens, pos, &FOLLOW_MASK_1, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_MODE {
         let sp = pos;
@@ -3925,9 +3956,9 @@ fn scan_grammar_spec(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
 
 fn scan_grammar_decl(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_grammar_type(tokens, pos, &FOLLOW_MASK_4, 0);
+    pos = scan_grammar_type(tokens, pos, &FOLLOW_MASK_2, 0);
     if pos < 0 { return -1; }
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_5, 0);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
     pos += 1;
@@ -4034,7 +4065,7 @@ fn scan_options_spec(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                pos = scan_option(tokens, pos, &FOLLOW_MASK_5, 0);
+                pos = scan_option(tokens, pos, &FOLLOW_MASK_3, 0);
                 if pos < 0 { break sg_0; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { break sg_0; }
                 pos += 1;
@@ -4052,7 +4083,7 @@ fn scan_options_spec(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
 
 fn scan_option(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_9, 0);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { return -1; }
     pos += 1;
@@ -4124,7 +4155,7 @@ fn scan_delegate_grammars(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_IMPORT { return -1; }
     pos += 1;
-    pos = scan_delegate_grammar(tokens, pos, &FOLLOW_MASK_11, 0);
+    pos = scan_delegate_grammar(tokens, pos, &FOLLOW_MASK_5, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
@@ -4161,7 +4192,7 @@ fn scan_delegate_grammar(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
             }
             pos = start;
             try_0: {
-                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_9, 0);
+                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { break try_0; }
                 pos += 1;
@@ -4241,7 +4272,7 @@ fn scan_action_(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
         let sp = pos;
         sg_4_done: {
             sg_4: {
-                pos = scan_action_scope_name(tokens, pos, &FOLLOW_MASK_14, 0);
+                pos = scan_action_scope_name(tokens, pos, &FOLLOW_MASK_6, 0);
                 if pos < 0 { break sg_4; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_COLONCOLON { break sg_4; }
                 pos += 1;
@@ -4251,7 +4282,7 @@ fn scan_action_(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_15, 0);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
     pos = scan_action_block(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -4320,7 +4351,7 @@ fn scan_mode_spec(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_MODE { return -1; }
     pos += 1;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_5, 0);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
     pos += 1;
@@ -4425,7 +4456,7 @@ fn scan_parser_rule_spec(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
     pos += 1;
-    pos = scan_rule_block(tokens, pos, &FOLLOW_MASK_5, 0);
+    pos = scan_rule_block(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
     pos += 1;
@@ -4454,7 +4485,7 @@ fn scan_exception_handler(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_CATCH { return -1; }
     pos += 1;
-    pos = scan_arg_action_block(tokens, pos, &FOLLOW_MASK_15, 0);
+    pos = scan_arg_action_block(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
     pos = scan_action_block(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -4544,7 +4575,7 @@ fn scan_rule_action(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_AT { return -1; }
     pos += 1;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_15, 0);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
     pos = scan_action_block(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -4637,7 +4668,7 @@ fn scan_lexer_rule_spec(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
     pos += 1;
-    pos = scan_lexer_rule_block(tokens, pos, &FOLLOW_MASK_5, 0);
+    pos = scan_lexer_rule_block(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
     pos += 1;
@@ -4770,7 +4801,7 @@ fn scan_lexer_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
         } else if alt_kind == TK_ACTION {
             pos = start;
             try_2: {
-                pos = scan_action_block(tokens, pos, &follow_prepend(&FOLLOW_MASK_30, follow), 0);
+                pos = scan_action_block(tokens, pos, &follow_prepend(&FOLLOW_MASK_8, follow), 0);
                 if pos < 0 { break try_2; }
                 if pos < tokens.len() && tokens[pos].kind == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
@@ -4791,7 +4822,7 @@ fn scan_lexer_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_lexer_alt_list(tokens, pos, &FOLLOW_MASK_31, 0);
+    pos = scan_lexer_alt_list(tokens, pos, &FOLLOW_MASK_9, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
     pos += 1;
@@ -4837,11 +4868,11 @@ fn scan_lexer_command(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
             }
             pos = start;
             try_0: {
-                pos = scan_lexer_command_name(tokens, pos, &FOLLOW_MASK_33, 0);
+                pos = scan_lexer_command_name(tokens, pos, &FOLLOW_MASK_10, 0);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { break try_0; }
                 pos += 1;
-                pos = scan_lexer_command_expr(tokens, pos, &FOLLOW_MASK_31, 0);
+                pos = scan_lexer_command_expr(tokens, pos, &FOLLOW_MASK_9, 0);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { break try_0; }
                 pos += 1;
@@ -5056,7 +5087,7 @@ fn scan_predicate_options(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LT { return -1; }
     pos += 1;
-    pos = scan_predicate_option(tokens, pos, &FOLLOW_MASK_36, 0);
+    pos = scan_predicate_option(tokens, pos, &FOLLOW_MASK_11, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
@@ -5093,7 +5124,7 @@ fn scan_predicate_option(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
             }
             pos = start;
             try_1: {
-                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_9, 0);
+                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { break try_1; }
                 pos += 1;
@@ -5135,7 +5166,7 @@ fn scan_predicate_option(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
 
 fn scan_labeled_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_39, 0);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_12, 0);
     if pos < 0 { return -1; }
     let gp_13 = pos;
     sg_13: {
@@ -5397,7 +5428,7 @@ fn scan_block_set(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_set_element(tokens, pos, &FOLLOW_MASK_42, 0);
+    pos = scan_set_element(tokens, pos, &FOLLOW_MASK_13, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_OR {
         let sp = pos;
@@ -5500,7 +5531,7 @@ fn scan_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_alt_list(tokens, pos, &FOLLOW_MASK_31, 0);
+    pos = scan_alt_list(tokens, pos, &FOLLOW_MASK_9, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
     pos += 1;
@@ -5577,7 +5608,7 @@ fn scan_element_options(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LT { return -1; }
     pos += 1;
-    pos = scan_element_option(tokens, pos, &FOLLOW_MASK_36, 0);
+    pos = scan_element_option(tokens, pos, &FOLLOW_MASK_11, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
@@ -5614,7 +5645,7 @@ fn scan_element_option(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
             }
             pos = start;
             try_1: {
-                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_9, 0);
+                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { break try_1; }
                 pos += 1;
@@ -5708,7 +5739,7 @@ fn _parse_grammar_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         let prequel_construct = _parse_prequel_construct(p, &EMPTY_FOLLOW)?;
         prequel_construct_list.push(prequel_construct);
     }
-    let rules = _parse_rules(p, &FOLLOW_MASK_2)?;
+    let rules = _parse_rules(p, &FOLLOW_MASK_1)?;
     let mut mode_spec_list: List<ModeSpecNode> = [];
     loop {
         let mut rep_scan_pos_2: i32 = -1;
@@ -5753,8 +5784,8 @@ fn _parse_grammar_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_grammar_decl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<GrammarDeclNode, ParseError> {
     let start = p.peek().span.start;
-    let grammar_type = _parse_grammar_type(p, &FOLLOW_MASK_4)?;
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_5)?;
+    let grammar_type = _parse_grammar_type(p, &FOLLOW_MASK_2)?;
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_3)?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<GrammarDeclNode, ParseError>::Ok(GrammarDeclNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -5882,7 +5913,7 @@ fn _parse_options_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             let mut pos: i32 = p.pos;
             sg_20_done: {
                 sg_20: {
-                    pos = scan_option(tokens, pos, &FOLLOW_MASK_5, 0);
+                    pos = scan_option(tokens, pos, &FOLLOW_MASK_3, 0);
                     if pos < 0 { break sg_20; }
                     if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { break sg_20; }
                     pos += 1;
@@ -5894,7 +5925,7 @@ fn _parse_options_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let option = _parse_option(p, &FOLLOW_MASK_5)?;
+        let option = _parse_option(p, &FOLLOW_MASK_3)?;
         let semi = p.expect(TK_SEMI)?;
         let option_semi = OptionSemiItem {
             option,
@@ -5922,7 +5953,7 @@ fn _parse_options_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<OptionNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_9)?;
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_4)?;
     let assign = p.expect(TK_ASSIGN)?;
     let option_value = _parse_option_value(p, follow)?;
     return Result::<OptionNode, ParseError>::Ok(OptionNode {
@@ -6022,7 +6053,7 @@ fn _parse_option_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarsNode, ParseError> {
     let start = p.peek().span.start;
     let import_ = p.expect(TK_IMPORT)?;
-    let delegate_grammar = _parse_delegate_grammar(p, &FOLLOW_MASK_11)?;
+    let delegate_grammar = _parse_delegate_grammar(p, &FOLLOW_MASK_5)?;
     let mut comma_delegate_grammar_list: List<CommaDelegateGrammarItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -6088,7 +6119,7 @@ fn _parse_delegate_grammar__inner_scan_1(tokens: &List<Token>, pos: i32, follow:
 
 fn _parse_delegate_grammar__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_9)?;
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_4)?;
     let assign = p.expect(TK_ASSIGN)?;
     let identifier_2 = _parse_identifier(p, follow)?;
     return Result::<DelegateGrammarNode, ParseError>::Ok(DelegateGrammarNode::Alt0(DelegateGrammarAlt0 {
@@ -6101,7 +6132,7 @@ fn _parse_delegate_grammar__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> 
 
 fn _parse_delegate_grammar__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_9, 0);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { return -1; }
     pos += 1;
@@ -6272,14 +6303,14 @@ fn _parse_action___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        pos = scan_action_scope_name(tokens, pos, &FOLLOW_MASK_14, 0);
+        pos = scan_action_scope_name(tokens, pos, &FOLLOW_MASK_6, 0);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos].kind != TK_COLONCOLON { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     let action_scope_name_coloncolon: Option<ActionScopeNameColoncolonItem> = if opt_scan_pos >= 0 {
-        let action_scope_name = _parse_action_scope_name(p, &FOLLOW_MASK_14)?;
+        let action_scope_name = _parse_action_scope_name(p, &FOLLOW_MASK_6)?;
         let coloncolon = p.expect(TK_COLONCOLON)?;
         let action_scope_name_coloncolon = ActionScopeNameColoncolonItem {
             action_scope_name,
@@ -6289,7 +6320,7 @@ fn _parse_action___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     } else {
         null
     };
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_15)?;
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_7)?;
     let action_block = _parse_action_block(p, follow)?;
     return Result::<ActionNode, ParseError>::Ok(ActionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -6396,7 +6427,7 @@ fn _parse_arg_action_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 fn _parse_mode_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ModeSpecNode, ParseError> {
     let start = p.peek().span.start;
     let mode = p.expect(TK_MODE)?;
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_5)?;
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_3)?;
     let semi = p.expect(TK_SEMI)?;
     let mut lexer_rule_spec_list: List<LexerRuleSpecNode> = [];
     loop {
@@ -6599,7 +6630,7 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         rule_prequel_list.push(rule_prequel);
     }
     let colon = p.expect(TK_COLON)?;
-    let rule_block = _parse_rule_block(p, &FOLLOW_MASK_5)?;
+    let rule_block = _parse_rule_block(p, &FOLLOW_MASK_3)?;
     let semi = p.expect(TK_SEMI)?;
     let exception_group = _parse_exception_group(p, follow)?;
     return Result::<ParserRuleSpecNode, ParseError>::Ok(ParserRuleSpecNode {
@@ -6679,7 +6710,7 @@ fn _parse_exception_group(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 fn _parse_exception_handler__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExceptionHandlerNode, ParseError> {
     let start = p.peek().span.start;
     let catch = p.expect(TK_CATCH)?;
-    let arg_action_block = _parse_arg_action_block(p, &FOLLOW_MASK_15)?;
+    let arg_action_block = _parse_arg_action_block(p, &FOLLOW_MASK_7)?;
     let action_block = _parse_action_block(p, follow)?;
     return Result::<ExceptionHandlerNode, ParseError>::Ok(ExceptionHandlerNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -6844,7 +6875,7 @@ fn _parse_locals_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 fn _parse_rule_action__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleActionNode, ParseError> {
     let start = p.peek().span.start;
     let at = p.expect(TK_AT)?;
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_15)?;
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_7)?;
     let action_block = _parse_action_block(p, follow)?;
     return Result::<RuleActionNode, ParseError>::Ok(RuleActionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -7045,7 +7076,7 @@ fn _parse_lexer_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         null
     };
     let colon = p.expect(TK_COLON)?;
-    let lexer_rule_block = _parse_lexer_rule_block(p, &FOLLOW_MASK_5)?;
+    let lexer_rule_block = _parse_lexer_rule_block(p, &FOLLOW_MASK_3)?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<LexerRuleSpecNode, ParseError>::Ok(LexerRuleSpecNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -7266,7 +7297,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }));
     }
     if kind == TK_ACTION {
-        let action_block = _parse_action_block(p, &follow_prepend(&FOLLOW_MASK_30, follow))?;
+        let action_block = _parse_action_block(p, &follow_prepend(&FOLLOW_MASK_8, follow))?;
         let question: Option<Token> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
@@ -7300,7 +7331,7 @@ fn _parse_lexer_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 fn _parse_lexer_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerBlockNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
-    let lexer_alt_list = _parse_lexer_alt_list(p, &FOLLOW_MASK_31)?;
+    let lexer_alt_list = _parse_lexer_alt_list(p, &FOLLOW_MASK_9)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<LexerBlockNode, ParseError>::Ok(LexerBlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -7387,9 +7418,9 @@ fn _parse_lexer_command__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &L
 
 fn _parse_lexer_command__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandNode, ParseError> {
     let start = p.peek().span.start;
-    let lexer_command_name = _parse_lexer_command_name(p, &FOLLOW_MASK_33)?;
+    let lexer_command_name = _parse_lexer_command_name(p, &FOLLOW_MASK_10)?;
     let lparen = p.expect(TK_LPAREN)?;
-    let lexer_command_expr = _parse_lexer_command_expr(p, &FOLLOW_MASK_31)?;
+    let lexer_command_expr = _parse_lexer_command_expr(p, &FOLLOW_MASK_9)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<LexerCommandNode, ParseError>::Ok(LexerCommandNode::Alt0(LexerCommandAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -7402,11 +7433,11 @@ fn _parse_lexer_command__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &
 
 fn _parse_lexer_command__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_lexer_command_name(tokens, pos, &FOLLOW_MASK_33, 0);
+    pos = scan_lexer_command_name(tokens, pos, &FOLLOW_MASK_10, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_lexer_command_expr(tokens, pos, &FOLLOW_MASK_31, 0);
+    pos = scan_lexer_command_expr(tokens, pos, &FOLLOW_MASK_9, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
     pos += 1;
@@ -7780,7 +7811,7 @@ fn _parse_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> R
 fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionsNode, ParseError> {
     let start = p.peek().span.start;
     let lt = p.expect(TK_LT)?;
-    let predicate_option = _parse_predicate_option(p, &FOLLOW_MASK_36)?;
+    let predicate_option = _parse_predicate_option(p, &FOLLOW_MASK_11)?;
     let mut comma_predicate_option_list: List<CommaPredicateOptionItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -7846,7 +7877,7 @@ fn _parse_predicate_option__inner_scan_0(tokens: &List<Token>, pos: i32, follow:
 
 fn _parse_predicate_option__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_9)?;
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_4)?;
     let assign = p.expect(TK_ASSIGN)?;
     let mut group_0_inner: Option<PredicateOptionGroup0> = null;
     let grp_kind = p.peek_kind();
@@ -7877,7 +7908,7 @@ fn _parse_predicate_option__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> 
 
 fn _parse_predicate_option__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_9, 0);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { return -1; }
     pos += 1;
@@ -7955,7 +7986,7 @@ fn _parse_predicate_option(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_labeled_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LabeledElementNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_39)?;
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_12)?;
     let assign_or_plus_assign = p.match_set([TK_ASSIGN, TK_PLUS_ASSIGN])?;
     let mut atom_or_block_inner: Option<AtomOrBlockGroup> = null;
     let grp_kind = p.peek_kind();
@@ -8333,7 +8364,7 @@ fn _parse_not_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> R
 fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BlockSetNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
-    let set_element = _parse_set_element(p, &FOLLOW_MASK_42)?;
+    let set_element = _parse_set_element(p, &FOLLOW_MASK_13)?;
     let mut or_set_element_list: List<OrSetElementItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -8555,7 +8586,7 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     } else {
         null
     };
-    let alt_list = _parse_alt_list(p, &FOLLOW_MASK_31)?;
+    let alt_list = _parse_alt_list(p, &FOLLOW_MASK_9)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<BlockNode, ParseError>::Ok(BlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -8687,7 +8718,7 @@ fn _parse_terminal_def(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionsNode, ParseError> {
     let start = p.peek().span.start;
     let lt = p.expect(TK_LT)?;
-    let element_option = _parse_element_option(p, &FOLLOW_MASK_36)?;
+    let element_option = _parse_element_option(p, &FOLLOW_MASK_11)?;
     let mut comma_element_option_list: List<CommaElementOptionItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -8753,7 +8784,7 @@ fn _parse_element_option__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &
 
 fn _parse_element_option__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_9)?;
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_4)?;
     let assign = p.expect(TK_ASSIGN)?;
     let mut group_0_inner: Option<ElementOptionGroup0> = null;
     let grp_kind = p.peek_kind();
@@ -8784,7 +8815,7 @@ fn _parse_element_option__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = 
 
 fn _parse_element_option__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_9, 0);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { return -1; }
     pos += 1;
@@ -10620,51 +10651,17 @@ fn _gale_kind_set_21(k: i32) -> bool {
 }
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_AT, TK_CHANNELS, TK_FRAGMENT, TK_IMPORT, TK_OPTIONS, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_RULE_REF, TK_TOKENS, TK_TOKEN_REF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_FRAGMENT, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_2: List<List<i32>> = [[TK_EOF, TK_MODE]];
-global FOLLOW_MASK_3: List<List<i32>> = [[TK_EOF]];
-global FOLLOW_MASK_4: List<List<i32>> = [[TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_5: List<List<i32>> = [[TK_SEMI]];
-global FOLLOW_MASK_6: List<List<i32>> = [[TK_GRAMMAR]];
-global FOLLOW_MASK_7: List<List<i32>> = [[TK_RBRACE, TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_8: List<List<i32>> = [[TK_RBRACE]];
-global FOLLOW_MASK_9: List<List<i32>> = [[TK_ASSIGN]];
-global FOLLOW_MASK_10: List<List<i32>> = [[TK_ACTION, TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF]];
-global FOLLOW_MASK_11: List<List<i32>> = [[TK_COMMA, TK_SEMI]];
-global FOLLOW_MASK_12: List<List<i32>> = [[TK_COMMA]];
-global FOLLOW_MASK_13: List<List<i32>> = [[TK_LEXER, TK_PARSER, TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_14: List<List<i32>> = [[TK_COLONCOLON]];
-global FOLLOW_MASK_15: List<List<i32>> = [[TK_ACTION]];
-global FOLLOW_MASK_16: List<List<i32>> = [[TK_ARGUMENT_CONTENT, TK_END_ARGUMENT]];
-global FOLLOW_MASK_17: List<List<i32>> = [[TK_END_ARGUMENT]];
-global FOLLOW_MASK_18: List<List<i32>> = [[TK_RULE_REF]];
-global FOLLOW_MASK_19: List<List<i32>> = [[TK_AT, TK_BEGIN_ARGUMENT, TK_COLON, TK_LOCALS, TK_OPTIONS, TK_RETURNS, TK_THROWS]];
-global FOLLOW_MASK_20: List<List<i32>> = [[TK_AT, TK_COLON, TK_LOCALS, TK_OPTIONS, TK_RETURNS, TK_THROWS]];
-global FOLLOW_MASK_21: List<List<i32>> = [[TK_AT, TK_COLON, TK_LOCALS, TK_OPTIONS, TK_THROWS]];
-global FOLLOW_MASK_22: List<List<i32>> = [[TK_AT, TK_COLON, TK_LOCALS, TK_OPTIONS]];
-global FOLLOW_MASK_23: List<List<i32>> = [[TK_AT, TK_COLON, TK_OPTIONS]];
-global FOLLOW_MASK_24: List<List<i32>> = [[TK_COLON]];
-global FOLLOW_MASK_25: List<List<i32>> = [[TK_ACTION, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF]];
-global FOLLOW_MASK_26: List<List<i32>> = [[TK_BEGIN_ARGUMENT]];
-global FOLLOW_MASK_27: List<List<i32>> = [[TK_TOKEN_REF]];
-global FOLLOW_MASK_28: List<List<i32>> = [[TK_COLON, TK_OPTIONS]];
-global FOLLOW_MASK_29: List<List<i32>> = [[TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_STRING_LITERAL, TK_TOKEN_REF]];
-global FOLLOW_MASK_30: List<List<i32>> = [[TK_QUESTION]];
-global FOLLOW_MASK_31: List<List<i32>> = [[TK_RPAREN]];
-global FOLLOW_MASK_32: List<List<i32>> = [[TK_MODE, TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_33: List<List<i32>> = [[TK_LPAREN]];
-global FOLLOW_MASK_34: List<List<i32>> = [[TK_INT, TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_35: List<List<i32>> = [[TK_ACTION, TK_DOT, TK_LPAREN, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF]];
-global FOLLOW_MASK_36: List<List<i32>> = [[TK_COMMA, TK_GT]];
-global FOLLOW_MASK_37: List<List<i32>> = [[TK_GT]];
-global FOLLOW_MASK_38: List<List<i32>> = [[TK_ACTION, TK_INT, TK_STRING_LITERAL]];
-global FOLLOW_MASK_39: List<List<i32>> = [[TK_ASSIGN, TK_PLUS_ASSIGN]];
-global FOLLOW_MASK_40: List<List<i32>> = [[TK_DOT, TK_LPAREN, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF]];
-global FOLLOW_MASK_41: List<List<i32>> = [[TK_LEXER_CHAR_SET, TK_STRING_LITERAL, TK_TOKEN_REF]];
-global FOLLOW_MASK_42: List<List<i32>> = [[TK_OR, TK_RPAREN]];
-global FOLLOW_MASK_43: List<List<i32>> = [[TK_ACTION, TK_AT, TK_COLON, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_OPTIONS, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF]];
-global FOLLOW_MASK_44: List<List<i32>> = [[TK_AT, TK_COLON]];
-global FOLLOW_MASK_45: List<List<i32>> = [[TK_RANGE], [TK_STRING_LITERAL]];
-global FOLLOW_MASK_46: List<List<i32>> = [[TK_STRING_LITERAL]];
-global FOLLOW_MASK_47: List<List<i32>> = [[TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_EOF, TK_MODE]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_RULE_REF, TK_TOKEN_REF]];
+global FOLLOW_MASK_3: List<List<i32>> = [[TK_SEMI]];
+global FOLLOW_MASK_4: List<List<i32>> = [[TK_ASSIGN]];
+global FOLLOW_MASK_5: List<List<i32>> = [[TK_COMMA, TK_SEMI]];
+global FOLLOW_MASK_6: List<List<i32>> = [[TK_COLONCOLON]];
+global FOLLOW_MASK_7: List<List<i32>> = [[TK_ACTION]];
+global FOLLOW_MASK_8: List<List<i32>> = [[TK_QUESTION]];
+global FOLLOW_MASK_9: List<List<i32>> = [[TK_RPAREN]];
+global FOLLOW_MASK_10: List<List<i32>> = [[TK_LPAREN]];
+global FOLLOW_MASK_11: List<List<i32>> = [[TK_COMMA, TK_GT]];
+global FOLLOW_MASK_12: List<List<i32>> = [[TK_ASSIGN, TK_PLUS_ASSIGN]];
+global FOLLOW_MASK_13: List<List<i32>> = [[TK_OR, TK_RPAREN]];
 

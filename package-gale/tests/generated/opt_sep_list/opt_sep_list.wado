@@ -424,11 +424,20 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// `0..num_lexer_rules` range maps directly onto ANTLR4's
 /// `1..num_lexer_rules+1`.
 ///
-/// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
-/// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
-/// `\t` are escaped; backslashes and quotes pass through unchanged.
+/// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
+/// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
+/// escaped; backslashes and quotes pass through unchanged.
 pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
+    // Char index where each line begins (line 1 at 0, then one entry per
+    // newline). Built once so `line_col_at` is a binary search per token
+    // instead of an O(pos) rescan — the whole dump is O(n log n), not O(n²).
+    let mut line_starts: List<i32> = [0];
+    for let mut i = 0; i < chars.len(); i += 1 {
+        if chars[i] == '\n' {
+            line_starts.push(i + 1);
+        }
+    }
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
@@ -443,11 +452,11 @@ pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> S
         // `Lexer.skip()`).
         for let tr of &tok.leading_trivia {
             if tr.channel != 0 {
-                emit_lexer_token(&mut out, tr, &chars, index, eof_kind);
+                emit_lexer_token(&mut out, tr, &line_starts, index, eof_kind);
                 index += 1;
             }
         }
-        emit_lexer_token(&mut out, tok, &chars, index, eof_kind);
+        emit_lexer_token(&mut out, tok, &line_starts, index, eof_kind);
         index += 1;
     }
     return out;
@@ -457,7 +466,7 @@ pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> S
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i32, eof_kind: i32) {
+fn emit_lexer_token(out: &mut String, tok: &Token, line_starts: &List<i32>, index: i32, eof_kind: i32) {
     let is_eof = tok.kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
@@ -474,7 +483,7 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i3
         }
     }
     let type_id = if is_eof { -1 } else { tok.kind + 1 };
-    let line_col = line_col_at(chars, tok.span.start);
+    let line_col = line_col_from_starts(line_starts, tok.span.start);
     let line = line_col.0;
     let col = line_col.1;
     let end_inclusive = tok.span.end - 1;
@@ -484,6 +493,9 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i3
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
 /// 1-based line and 0-based column to match ANTLR4's `Token` getters.
+/// Used by the parser's error path, which reports at most one position
+/// per parse, so the linear scan is fine. The per-token dump uses
+/// `line_col_from_starts` to avoid the O(n²) rescan.
 fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
@@ -497,6 +509,25 @@ fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
         }
     }
     return [line, col];
+}
+
+/// Compute (line, column) from the precomputed `line_starts` table (char
+/// index where each line begins). Binary search for the greatest
+/// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
+/// offset past its start. O(log lines) per call, so a full token dump is
+/// O(n log n) rather than the O(n²) of rescanning from 0 per token.
+fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let mut lo = 0;
+    let mut hi = line_starts.len() - 1;
+    while lo < hi {
+        let mid = (lo + hi + 1) / 2;
+        if line_starts[mid] <= pos {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return [lo + 1, pos - line_starts[lo]];
 }
 //! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
 //! generated parser only when lowering constructed a caller-FOLLOW gate
@@ -1468,8 +1499,4 @@ pub fn to_tree(node: &ProgNode) -> CstNode {
 }
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_COMMA]];
-global FOLLOW_MASK_2: List<List<i32>> = [[TK_IDENT]];
-global FOLLOW_MASK_3: List<List<i32>> = [[TK_IDENT, TK_LIT_RBRACE]];
-global FOLLOW_MASK_4: List<List<i32>> = [[TK_LIT_RBRACE]];
 

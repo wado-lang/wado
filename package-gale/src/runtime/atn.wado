@@ -81,6 +81,11 @@ global ATN_CLOSURE_GUARD: i32 = 2000000;
 #[allow(dead_code)]
 global ATN_ARENA_CAP: i32 = 400000;
 
+/// Stride for `CtxArena::merge`'s pair-key packing (`lo * stride + hi`).
+/// Must exceed `ATN_ARENA_CAP` so two distinct arena ids can never alias
+/// onto the same key; kept comfortably above it.
+global ATN_MERGE_CACHE_STRIDE: i64 = 1000000;
+
 /// The decoded ATN, in struct-of-arrays form. Decoded once from the
 /// serialized blob (into the module-level `GALE_ATN_SIM` in a generated
 /// parser) and read (never mutated) during prediction.
@@ -232,7 +237,7 @@ impl CtxArena {
         }
         let lo = if a < b { a } else { b };
         let hi = if a < b { b } else { a };
-        let ck = lo as i64 * 1000000 + hi as i64;
+        let ck = lo as i64 * ATN_MERGE_CACHE_STRIDE + hi as i64;
         if let Some(id) = self.merge_cache.get(ck) {
             return id;
         }

@@ -144,7 +144,27 @@ use {
 /// The continuation is computed once per call site here, against the
 /// single rule body — there are no variant clones, so nothing is
 /// threaded into the callee beyond the runtime `follow` argument.
+/// True when the element at a call site actually threads the computed
+/// `FollowArg` into a callee: a `RuleRef`, or a `Label` that (after
+/// unwrapping nested labels) wraps one. `lower_op` discards `follow_arg`
+/// for every other shape — `Group` takes only `outer_follow`, `Repeat`
+/// takes `gate_caller_follow`, and the leaves ignore it — so computing a
+/// mask there only interns a dead `FOLLOW_MASK` global and perturbs mask
+/// ids. Mirrors `lower_op`'s / `lower_label_op`'s follow_arg routing.
+fn element_consumes_follow_arg(elem: &Element) -> bool {
+    if let RuleRef(_) = elem {
+        return true;
+    }
+    if let Label(lab) = elem {
+        return element_consumes_follow_arg(&lab.element);
+    }
+    return false;
+}
+
 fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> FollowArg {
+    if !element_consumes_follow_arg(&elements[i]) {
+        return FollowArg::NoFollow;
+    }
     let mut visiting: List<String> = [];
     let [deep, _consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_MASK_MAX_K, &mut visiting);
     // Effective caller-continuation mask. Prefer the multi-depth deep
@@ -472,12 +492,24 @@ fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
                 ctx.intern_kind_set(&e.kinds);
             }
         },
-        Repeat(r) => walk_op_for_kind_sets(&r.body, ctx),
+        Repeat(r) => {
+            walk_op_for_kind_sets(&r.body, ctx);
+            // Also walk the nested scan mirror: kind sets that surface
+            // only through `RepeatOp.scan_body` (e.g. an inner Repeat's
+            // `inner_first`) would otherwise be interned late by emit,
+            // shifting `_gale_kind_set_<id>` ids out of the anchor walk.
+            walk_scan_element_for_kind_sets(&r.scan_body, ctx);
+        },
         Group(go) => {
             walk_dispatch_for_kind_sets(&go.dispatch, ctx);
             walk_dispatch_for_kind_sets(&go.scan_dispatch, ctx);
             for let inner_alt of &go.alts {
                 walk_alt_body_for_kind_sets(inner_alt, ctx);
+            }
+            // Likewise anchor sets reachable only through the group's
+            // nested scan mirror (`GroupOp.scan_alts`).
+            for let sb of &go.scan_alts {
+                walk_scan_body_for_kind_sets(sb, ctx);
             }
         },
         ListLabel(ll) => walk_op_for_kind_sets(&ll.inner, ctx),

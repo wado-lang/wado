@@ -424,11 +424,20 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// `0..num_lexer_rules` range maps directly onto ANTLR4's
 /// `1..num_lexer_rules+1`.
 ///
-/// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
-/// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
-/// `\t` are escaped; backslashes and quotes pass through unchanged.
+/// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
+/// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
+/// escaped; backslashes and quotes pass through unchanged.
 pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
+    // Char index where each line begins (line 1 at 0, then one entry per
+    // newline). Built once so `line_col_at` is a binary search per token
+    // instead of an O(pos) rescan — the whole dump is O(n log n), not O(n²).
+    let mut line_starts: List<i32> = [0];
+    for let mut i = 0; i < chars.len(); i += 1 {
+        if chars[i] == '\n' {
+            line_starts.push(i + 1);
+        }
+    }
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
@@ -443,11 +452,11 @@ pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> S
         // `Lexer.skip()`).
         for let tr of &tok.leading_trivia {
             if tr.channel != 0 {
-                emit_lexer_token(&mut out, tr, &chars, index, eof_kind);
+                emit_lexer_token(&mut out, tr, &line_starts, index, eof_kind);
                 index += 1;
             }
         }
-        emit_lexer_token(&mut out, tok, &chars, index, eof_kind);
+        emit_lexer_token(&mut out, tok, &line_starts, index, eof_kind);
         index += 1;
     }
     return out;
@@ -457,7 +466,7 @@ pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> S
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i32, eof_kind: i32) {
+fn emit_lexer_token(out: &mut String, tok: &Token, line_starts: &List<i32>, index: i32, eof_kind: i32) {
     let is_eof = tok.kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
@@ -474,7 +483,7 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i3
         }
     }
     let type_id = if is_eof { -1 } else { tok.kind + 1 };
-    let line_col = line_col_at(chars, tok.span.start);
+    let line_col = line_col_from_starts(line_starts, tok.span.start);
     let line = line_col.0;
     let col = line_col.1;
     let end_inclusive = tok.span.end - 1;
@@ -484,6 +493,9 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i3
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
 /// 1-based line and 0-based column to match ANTLR4's `Token` getters.
+/// Used by the parser's error path, which reports at most one position
+/// per parse, so the linear scan is fine. The per-token dump uses
+/// `line_col_from_starts` to avoid the O(n²) rescan.
 fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
@@ -497,6 +509,25 @@ fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
         }
     }
     return [line, col];
+}
+
+/// Compute (line, column) from the precomputed `line_starts` table (char
+/// index where each line begins). Binary search for the greatest
+/// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
+/// offset past its start. O(log lines) per call, so a full token dump is
+/// O(n log n) rather than the O(n²) of rescanning from 0 per token.
+fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let mut lo = 0;
+    let mut hi = line_starts.len() - 1;
+    while lo < hi {
+        let mid = (lo + hi + 1) / 2;
+        if line_starts[mid] <= pos {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return [lo + 1, pos - line_starts[lo]];
 }
 //! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
 //! generated parser only when lowering constructed a caller-FOLLOW gate
@@ -1823,7 +1854,7 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
             try_7: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_7; }
                 pos += 1;
-                pos = scan_typespec(tokens, pos, &FOLLOW_MASK_2, 0);
+                pos = scan_typespec(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break try_7; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_7; }
                 pos += 1;
@@ -1835,7 +1866,7 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_0; }
                 pos += 1;
-                pos = scan_e(tokens, pos, &FOLLOW_MASK_2, 0);
+                pos = scan_e(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_0; }
                 pos += 1;
@@ -1871,7 +1902,7 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
             let mut best: i32 = -1;
             pos = start;
             try_5: {
-                pos = scan_typespec(tokens, pos, &FOLLOW_MASK_3, 0);
+                pos = scan_typespec(tokens, pos, &FOLLOW_MASK_2, 0);
                 if pos < 0 { break try_5; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break try_5; }
                 pos += 1;
@@ -1890,7 +1921,7 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
         } else if alt_kind == TK_LIT_INT {
             pos = start;
             try_5: {
-                pos = scan_typespec(tokens, pos, &FOLLOW_MASK_3, 0);
+                pos = scan_typespec(tokens, pos, &FOLLOW_MASK_2, 0);
                 if pos < 0 { break try_5; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break try_5; }
                 pos += 1;
@@ -1904,17 +1935,17 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
             try_6: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_NEW { break try_6; }
                 pos += 1;
-                pos = scan_typespec(tokens, pos, &FOLLOW_MASK_6, 0);
+                pos = scan_typespec(tokens, pos, &FOLLOW_MASK_3, 0);
                 if pos < 0 { break try_6; }
                 let gp_1 = pos;
                 let sgk_1 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-                if _gale_kind_set_0(sgk_1) {
+                if _gale_kind_set_1(sgk_1) {
                     sg_1: {
                         pos = gp_1;
                         sg_1_0: {
                             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break sg_1_0; }
                             pos += 1;
-                            if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
+                            if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
                                 let sp = pos;
                                 pos = scan_expression_list(tokens, pos, &EMPTY_FOLLOW, 0);
                                 if pos < 0 { pos = sp; }
@@ -1929,7 +1960,7 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
                                 sg_2: {
                                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break sg_2; }
                                     pos += 1;
-                                    pos = scan_e(tokens, pos, &FOLLOW_MASK_8, 0);
+                                    pos = scan_e(tokens, pos, &FOLLOW_MASK_4, 0);
                                     if pos < 0 { break sg_2; }
                                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break sg_2; }
                                     pos += 1;
@@ -1943,7 +1974,7 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
                                     sg_3: {
                                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break sg_3; }
                                         pos += 1;
-                                        pos = scan_e(tokens, pos, &FOLLOW_MASK_8, 0);
+                                        pos = scan_e(tokens, pos, &FOLLOW_MASK_4, 0);
                                         if pos < 0 { break sg_3; }
                                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break sg_3; }
                                         pos += 1;
@@ -2055,7 +2086,7 @@ fn scan_e_lr_8(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
     pos += 1;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_expression_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -2075,7 +2106,7 @@ fn scan_e_lr_9(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
     pos += 1;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_expression_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -2089,7 +2120,7 @@ fn scan_e_lr_11(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, &FOLLOW_MASK_8, 17);
+    pos = scan_e(tokens, pos, &FOLLOW_MASK_4, 17);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }
     pos += 1;
@@ -2121,7 +2152,7 @@ fn scan_e_lr_14(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
         pos = scan_expression_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -2328,7 +2359,7 @@ fn scan_e_lr_28(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_QUESTION { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, &FOLLOW_MASK_15, 0);
+    pos = scan_e(tokens, pos, &FOLLOW_MASK_5, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
     pos += 1;
@@ -2720,7 +2751,7 @@ fn _parse_expression_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 fn _parse_e__inner_bt_12(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
-    let typespec = _parse_typespec(p, &FOLLOW_MASK_2)?;
+    let typespec = _parse_typespec(p, &FOLLOW_MASK_1)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     let e = _parse_e(p, follow, 16)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt12(EAlt12 {
@@ -2736,7 +2767,7 @@ fn _parse_e__inner_scan_12(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    pos = scan_typespec(tokens, pos, &FOLLOW_MASK_2, 0);
+    pos = scan_typespec(tokens, pos, &FOLLOW_MASK_1, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
@@ -2748,7 +2779,7 @@ fn _parse_e__inner_scan_12(tokens: &List<Token>, pos: i32, follow: &List<List<i3
 fn _parse_e__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
-    let e = _parse_e(p, &FOLLOW_MASK_2)?;
+    let e = _parse_e(p, &FOLLOW_MASK_1)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt0(EAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -2762,7 +2793,7 @@ fn _parse_e__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, &FOLLOW_MASK_2, 0);
+    pos = scan_e(tokens, pos, &FOLLOW_MASK_1, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
@@ -2771,7 +2802,7 @@ fn _parse_e__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32
 
 fn _parse_e__inner_bt_5(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
-    let typespec = _parse_typespec(p, &FOLLOW_MASK_3)?;
+    let typespec = _parse_typespec(p, &FOLLOW_MASK_2)?;
     let dot = p.expect(TK_LIT_DOT)?;
     let lit_class = p.expect(TK_LIT_CLASS)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt5(EAlt5 {
@@ -2784,7 +2815,7 @@ fn _parse_e__inner_bt_5(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 
 fn _parse_e__inner_scan_5(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_typespec(tokens, pos, &FOLLOW_MASK_3, 0);
+    pos = scan_typespec(tokens, pos, &FOLLOW_MASK_2, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -2885,12 +2916,12 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     }
     if kind == TK_LIT_NEW {
         let lit_new = p.expect(TK_LIT_NEW)?;
-        let typespec = _parse_typespec(p, &FOLLOW_MASK_6)?;
+        let typespec = _parse_typespec(p, &FOLLOW_MASK_3)?;
         let mut group_0_inner: Option<EGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_LPAREN {
             let lparen = p.expect(TK_LIT_LPAREN)?;
-            let expression_list: Option<ExpressionListNode> = if _gale_kind_set_1(p.peek_kind()) {
+            let expression_list: Option<ExpressionListNode> = if _gale_kind_set_0(p.peek_kind()) {
                 let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW)?;
                 Option::<ExpressionListNode>::Some(expression_list)
             } else {
@@ -2916,7 +2947,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                             sg_14: {
                                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break sg_14; }
                                 pos += 1;
-                                pos = scan_e(tokens, pos, &FOLLOW_MASK_8, 0);
+                                pos = scan_e(tokens, pos, &FOLLOW_MASK_4, 0);
                                 if pos < 0 { break sg_14; }
                                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break sg_14; }
                                 pos += 1;
@@ -2931,7 +2962,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                 }
                 _plus_first = false;
                 let lbracket = p.expect(TK_LIT_LBRACKET)?;
-                let e = _parse_e(p, &FOLLOW_MASK_8)?;
+                let e = _parse_e(p, &FOLLOW_MASK_4)?;
                 let rbracket = p.expect(TK_LIT_RBRACKET)?;
                 let lbracket_e_rbracket = LbracketERbracketItem {
                     lbracket,
@@ -3003,7 +3034,7 @@ fn _parse_e__inner_lr_8(p: &mut Parser, left: ENode, start: i32, follow: &List<L
     let dot = p.expect(TK_LIT_DOT)?;
     let lit_super = p.expect(TK_LIT_SUPER)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
-    let expression_list: Option<ExpressionListNode> = if _gale_kind_set_1(p.peek_kind()) {
+    let expression_list: Option<ExpressionListNode> = if _gale_kind_set_0(p.peek_kind()) {
         let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW)?;
         Option::<ExpressionListNode>::Some(expression_list)
     } else {
@@ -3026,7 +3057,7 @@ fn _parse_e__inner_lr_9(p: &mut Parser, left: ENode, start: i32, follow: &List<L
     let lit_new = p.expect(TK_LIT_NEW)?;
     let id = p.expect(TK_ID)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
-    let expression_list: Option<ExpressionListNode> = if _gale_kind_set_1(p.peek_kind()) {
+    let expression_list: Option<ExpressionListNode> = if _gale_kind_set_0(p.peek_kind()) {
         let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW)?;
         Option::<ExpressionListNode>::Some(expression_list)
     } else {
@@ -3069,7 +3100,7 @@ fn _parse_e__inner_lr_13(p: &mut Parser, left: ENode, start: i32, follow: &List<
 
 fn _parse_e__inner_lr_14(p: &mut Parser, left: ENode, start: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ENode, ParseError> {
     let lparen = p.expect(TK_LIT_LPAREN)?;
-    let expression_list: Option<ExpressionListNode> = if _gale_kind_set_1(p.peek_kind()) {
+    let expression_list: Option<ExpressionListNode> = if _gale_kind_set_0(p.peek_kind()) {
         let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW)?;
         Option::<ExpressionListNode>::Some(expression_list)
     } else {
@@ -3929,11 +3960,11 @@ pub fn to_tree(node: &SNode) -> CstNode {
 }
 
 fn _gale_kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_LBRACKET | TK_LIT_LPAREN };
+    return k matches { TK_ID | TK_INT | TK_LIT_BANG | TK_LIT_INT | TK_LIT_LPAREN | TK_LIT_MINUS | TK_LIT_MINUSMINUS | TK_LIT_NEW | TK_LIT_PLUS | TK_LIT_PLUSPLUS | TK_LIT_SUPER | TK_LIT_THIS | TK_LIT_TILDE };
 }
 
 fn _gale_kind_set_1(k: i32) -> bool {
-    return k matches { TK_ID | TK_INT | TK_LIT_BANG | TK_LIT_INT | TK_LIT_LPAREN | TK_LIT_MINUS | TK_LIT_MINUSMINUS | TK_LIT_NEW | TK_LIT_PLUS | TK_LIT_PLUSPLUS | TK_LIT_SUPER | TK_LIT_THIS | TK_LIT_TILDE };
+    return k matches { TK_LIT_LBRACKET | TK_LIT_LPAREN };
 }
 
 fn _gale_kind_set_2(k: i32) -> bool {
@@ -3977,20 +4008,9 @@ fn _gale_kind_set_11(k: i32) -> bool {
 }
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_ID, TK_INT, TK_LIT_BANG, TK_LIT_INT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_NEW, TK_LIT_PLUS, TK_LIT_PLUSPLUS, TK_LIT_SUPER, TK_LIT_THIS, TK_LIT_TILDE]];
-global FOLLOW_MASK_2: List<List<i32>> = [[TK_LIT_RPAREN]];
-global FOLLOW_MASK_3: List<List<i32>> = [[TK_LIT_DOT], [TK_LIT_CLASS]];
-global FOLLOW_MASK_4: List<List<i32>> = [[TK_LIT_CLASS]];
-global FOLLOW_MASK_5: List<List<i32>> = [[TK_ID, TK_LIT_INT]];
-global FOLLOW_MASK_6: List<List<i32>> = [[TK_LIT_LBRACKET, TK_LIT_LPAREN]];
-global FOLLOW_MASK_7: List<List<i32>> = [[TK_ID, TK_INT, TK_LIT_BANG, TK_LIT_INT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_NEW, TK_LIT_PLUS, TK_LIT_PLUSPLUS, TK_LIT_RPAREN, TK_LIT_SUPER, TK_LIT_THIS, TK_LIT_TILDE]];
-global FOLLOW_MASK_8: List<List<i32>> = [[TK_LIT_RBRACKET]];
-global FOLLOW_MASK_9: List<List<i32>> = [[TK_ID]];
-global FOLLOW_MASK_10: List<List<i32>> = [[TK_LIT_THIS]];
-global FOLLOW_MASK_11: List<List<i32>> = [[TK_LIT_SUPER], [TK_LIT_LPAREN]];
-global FOLLOW_MASK_12: List<List<i32>> = [[TK_LIT_LPAREN]];
-global FOLLOW_MASK_13: List<List<i32>> = [[TK_LIT_NEW], [TK_ID], [TK_LIT_LPAREN]];
-global FOLLOW_MASK_14: List<List<i32>> = [[TK_ID], [TK_LIT_LPAREN]];
-global FOLLOW_MASK_15: List<List<i32>> = [[TK_LIT_COLON]];
-global FOLLOW_MASK_16: List<List<i32>> = [[TK_LIT_LBRACKET], [TK_LIT_RBRACKET]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_RPAREN]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_LIT_DOT], [TK_LIT_CLASS]];
+global FOLLOW_MASK_3: List<List<i32>> = [[TK_LIT_LBRACKET, TK_LIT_LPAREN]];
+global FOLLOW_MASK_4: List<List<i32>> = [[TK_LIT_RBRACKET]];
+global FOLLOW_MASK_5: List<List<i32>> = [[TK_LIT_COLON]];
 
