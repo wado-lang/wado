@@ -3,32 +3,24 @@
 //! Walks every function's arena [`Body`] and applies the
 //! [`niri::Interpreter`] rewrite rules at each visited node. All
 //! reduction logic (literal folding, integer cast collapsing,
-//! short-circuit identity rules, env-aware local lookup, **field-aware
-//! local-field reads**) lives in [`crate::niri`]; this module is only
-//! the visitor glue that drives `reduce_local_a` across function bodies
-//! and feeds the interpreter's local-variable env *and* its `field_env`
-//! from `Let` / `Assign` statements, struct-literal RHSs, and recognized
-//! `$value_copy$T(arg)` helpers.
+//! short-circuit identity rules, env-aware local lookup) lives in
+//! [`crate::niri`]; this module is only the visitor glue that drives
+//! `reduce_local_a` across function bodies and feeds the interpreter's
+//! local-variable env from `Let` / `Assign` statements.
+//!
+//! Per-local *field*-value tracking (the old `field_env`) has been retired:
+//! reaching-def of `obj.f` is now the engine [`ValueGraph`]'s job (store-load
+//! forwarding + hash-cons CSE), so this walker only tracks scalar local
+//! lattices. The local env needs no branch fork because mutable locals are
+//! recorded [`Lattice::NonConst`] up front.
 //!
 //! The visitor mutates the arena `Body` directly: the per-node rewrites
 //! (`reduce_local_a`) and the block-level branch splice
-//! (`reduce_local_block_a`) operate on arena ids, so const-fold no longer
-//! round-trips the body through a tree bridge. Global initializers are arena
-//! `ExprBody`s too, so the global env / field env are read from them via the
-//! arena interpreter path.
+//! (`reduce_local_block_a`) operate on arena ids. Global initializers are
+//! arena `ExprBody`s too, so the global env / global-field env are read from
+//! them via the arena interpreter path.
 //!
-//! The field-knowledge bookkeeping was originally a separate pass
-//! (`optimize::field_forward`); merging it into const-fold breaks the
-//! per-iteration ping-pong observed at `-O3 inline_threshold ≥ 35`,
-//! where a single iteration only propagates one statement of a chain
-//! because `field_forward` and `const_fold` had to alternate to make
-//! `let used = __b.used; __b.used = used + 1` advance one push at a
-//! time. With both responsibilities in the same walk, the chain
-//! folds in a single pass.
-//!
-//! See [`super::alias::build_alias_info`] /
-//! [`super::alias::build_value_copy_helpers`] for the per-function
-//! alias / helper computations the visitor consumes.
+//! [`ValueGraph`]: crate::nir_value_graph
 
 use std::cell::RefCell;
 
@@ -37,9 +29,7 @@ use cranelift_entity::EntityRef;
 use super::gate::{FunctionGate, FunctionId, GatedPass};
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
-use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::module_source::ModuleSource;
 use crate::nir::NirFunction;
 use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{
@@ -48,13 +38,10 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    Arm, CalleeMap, EditSink, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter,
-    Lattice, is_ctfe_eligible,
+    CalleeMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
+    is_ctfe_eligible,
 };
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
-
-use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy_a};
-use super::arena_query::has_break_to;
 
 /// Apply constant folding to all functions in the project.
 /// Flow-sensitive constant folding, gated: skips functions unchanged since this
@@ -87,15 +74,8 @@ fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionG
     // `global:X.used` read folds and the bounds-check / branch passes can drop
     // the checks they eliminate on the pre-hoist local form.
     let global_fields = build_global_field_env(project);
-    // Build the `$value_copy$T<id>` helpers map once per pass; the
-    // visitor uses it to recognize calls that transfer field
-    // knowledge across the synthesized one-level shallow copies
-    // (see `lower::plan::value_copy::synthesize`).
-    let value_copy_helpers = build_value_copy_helpers(project);
     let mut visitor = ConstFoldVisitor {
         interpreter: Interpreter::new(&type_table),
-        type_table: &type_table,
-        value_copy_helpers: &value_copy_helpers,
     };
     visitor.interpreter.with_callees(&callees);
     visitor.interpreter.with_globals(&globals);
@@ -109,30 +89,11 @@ fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionG
             continue;
         }
         let mut func = func_rc.borrow_mut();
-        let NirFunction {
-            body,
-            locals,
-            address_taken_locals,
-            stores_aliased_locals,
-            ..
-        } = &mut *func;
+        let NirFunction { body, locals, .. } = &mut *func;
         let func_changed = if let Some(body) = body.as_mut() {
             // Local indices are unique per function, not project-wide,
             // so reset the interpreter's env at every function boundary.
             visitor.interpreter.enter_function();
-            // Compute per-function alias annotations (driven by the
-            // function's stable address-taken / stores sets plus a
-            // body walk for transient inlined-in copies). The interpreter
-            // consults these every time the visitor calls `bind_field` /
-            // `invalidate_field` / `invalidate_aliased_fields`.
-            let alias_info = build_alias_info(
-                body,
-                locals,
-                address_taken_locals,
-                stores_aliased_locals,
-                &type_table,
-            );
-            visitor.interpreter.set_alias_info(alias_info);
             // Drive the flow-sensitive walk over an engine session so every
             // rewrite commits coherently (the engine is the commit mechanism;
             // the visitor still drives the bottom-up program-order walk).
@@ -418,13 +379,6 @@ impl SeqLenCollector<'_> {
 
 struct ConstFoldVisitor<'a> {
     interpreter: Interpreter<'a>,
-    type_table: &'a TypeTable,
-    /// `(module_source, func_name) → struct type id` for every
-    /// synthesized `$value_copy$T<id>` helper. The visitor uses this
-    /// to recognize `Call(helper, [Local(src)])` shapes inside `let
-    /// dst = …` and propagate `src`'s recorded fields onto `dst`
-    /// via [`Self::update_field_env_from_let`].
-    value_copy_helpers: &'a IndexMap<(ModuleSource, String), TypeId>,
 }
 
 /// The control-flow / scope expression shapes that need branch-aware
@@ -500,48 +454,21 @@ impl ConstFoldVisitor<'_> {
 
         match &engine.body.stmts[s].kind {
             StmtKind::Loop { body: lb } => {
-                // Loop back-edge: compute the set of entities the body
-                // could mutate, drop only those, then snapshot the
-                // resulting (loop-invariant) field state. The body
-                // walks against that state; on exit we restore from
-                // the snapshot so:
-                //
-                // - Outer facts the body never touched survive,
-                //   unlike the original blanket `clear_fields()` which
-                //   wiped them.
-                // - Bindings the body added mid-walk (and any
-                //   `clear_fields()` an inner if-stmt invoked) do not
-                //   leak past the loop boundary, since the snapshot is
-                //   taken at the loop-invariant state.
-                //
-                // This is a correct conservative approximation of the
-                // iteration fixpoint: at body entry and at post-loop,
-                // only facts unaffected by the body hold.
+                // Loop back-edge: every local the body may reassign or mutably
+                // borrow is dropped to `NonConst` before and after the body
+                // walk (`apply_loop_invalidations`), a conservative fixpoint
+                // approximation — only facts unaffected by the body hold at
+                // entry and post-loop. (Field-level loop invalidation is gone
+                // with `field_env`; the engine `ValueGraph` models loop heap
+                // effects itself.)
                 let lb = *lb;
                 let writes = collect_loop_write_effects(engine.body, lb);
                 self.apply_loop_invalidations(&writes);
-                let snap = self.interpreter.snapshot_fields();
-                let changed = self.visit_block(engine, lb);
-                self.interpreter.restore_fields(snap);
-                changed
+                self.visit_block(engine, lb)
             }
-            StmtKind::LabeledBlock { block, label } => {
-                // Sequential scope: outer knowledge flows in and the
-                // body's bottom state flows out, the same way it would
-                // for an unlabeled block. A `break label:` inside has
-                // multiple-exit semantics that the const-fold engine
-                // cannot precisely join in a single walk — fall back
-                // to dropping field knowledge then. A trailing
-                // `break label: value` is the inlined-function shape,
-                // exits at the body bottom, and is fine to walk
-                // straight through.
+            StmtKind::LabeledBlock { block, .. } => {
                 let block = *block;
-                let label = label.clone();
-                let changed = self.visit_block(engine, block);
-                if has_non_tail_break_to(engine.body, &label, block) {
-                    self.interpreter.clear_fields();
-                }
-                changed
+                self.visit_block(engine, block)
             }
             StmtKind::If {
                 condition,
@@ -552,34 +479,10 @@ impl ConstFoldVisitor<'_> {
                 let then_block = *then_block;
                 let else_block = *else_block;
                 let mut changed = self.visit_expr(engine, condition);
-                let snap_pre = self.interpreter.snapshot_fields();
-                // Capture reachability BEFORE the walk: see
-                // `block_falls_through`'s doc.
-                let then_reachable = block_falls_through(engine.body, then_block, self.type_table);
                 changed |= self.visit_block(engine, then_block);
-                let snap_then = self.interpreter.snapshot_fields();
-                self.interpreter.restore_fields(snap_pre.clone());
-                let mut arms = vec![Arm {
-                    reachable: then_reachable,
-                    post_state: snap_then,
-                }];
                 if let Some(eb) = else_block {
-                    let else_reachable = block_falls_through(engine.body, eb, self.type_table);
                     changed |= self.visit_block(engine, eb);
-                    let snap_else = self.interpreter.snapshot_fields();
-                    arms.push(Arm {
-                        reachable: else_reachable,
-                        post_state: snap_else,
-                    });
-                } else {
-                    // Implicit else: reachable, no field writes.
-                    arms.push(Arm {
-                        reachable: true,
-                        post_state: snap_pre.clone(),
-                    });
                 }
-                let post_state = FieldSnapshot::join_arms(snap_pre, arms);
-                self.interpreter.restore_fields(post_state);
                 changed
             }
             _ => unreachable!("non-control-flow stmt reached control-flow arm"),
@@ -600,125 +503,55 @@ impl ConstFoldVisitor<'_> {
             return self.visit_assign(engine, e);
         }
 
-        // Branch / scope expressions — fork or clear field state so
-        // a `local.field = …` inside one arm doesn't leak as known
-        // field knowledge to code reachable only when another arm
-        // ran.
+        // Branch / scope expressions: walk the condition / scrutinee and each
+        // arm, then reduce at this node. Field-knowledge forking across arms is
+        // gone — the per-local field map (`field_env`) has been retired in
+        // favour of the engine `ValueGraph` (see WEP 2026-06-05); the local
+        // env needs no fork because mutable locals are recorded `NonConst`
+        // up front.
         match expr_shape(engine.body, e) {
             ExprShape::If(condition, then_branch, else_branch) => {
                 let mut changed = self.visit_expr(engine, condition);
-                let snap_pre = self.interpreter.snapshot_fields();
-                let then_reachable = block_falls_through(engine.body, then_branch, self.type_table);
                 changed |= self.visit_block(engine, then_branch);
-                let snap_then = self.interpreter.snapshot_fields();
-                self.interpreter.restore_fields(snap_pre.clone());
-                let mut arms = vec![Arm {
-                    reachable: then_reachable,
-                    post_state: snap_then,
-                }];
                 if let Some(eb) = else_branch {
-                    let else_reachable = block_falls_through(engine.body, eb, self.type_table);
                     changed |= self.visit_block(engine, eb);
-                    let snap_else = self.interpreter.snapshot_fields();
-                    arms.push(Arm {
-                        reachable: else_reachable,
-                        post_state: snap_else,
-                    });
-                } else {
-                    arms.push(Arm {
-                        reachable: true,
-                        post_state: snap_pre.clone(),
-                    });
                 }
-                let post_state = FieldSnapshot::join_arms(snap_pre, arms);
-                self.interpreter.restore_fields(post_state);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::Match(scrutinee, arms) => {
                 let mut changed = self.visit_expr(engine, scrutinee);
-                let snap_pre = self.interpreter.snapshot_fields();
-                let mut arm_results: Vec<Arm> = Vec::with_capacity(arms.len());
                 for arm in &arms {
-                    let body_reachable =
-                        !is_never_type(engine.body.exprs[arm.body].type_id, self.type_table);
                     if let Some(g) = arm.guard {
                         changed |= self.visit_expr(engine, g);
                     }
                     changed |= self.visit_expr(engine, arm.body);
-                    let snap_arm = self.interpreter.snapshot_fields();
-                    self.interpreter.restore_fields(snap_pre.clone());
-                    arm_results.push(Arm {
-                        reachable: body_reachable,
-                        post_state: snap_arm,
-                    });
                 }
-                let post_state = FieldSnapshot::join_arms(snap_pre, arm_results);
-                self.interpreter.restore_fields(post_state);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::Switch(scrutinee, arms, default) => {
                 let mut changed = self.visit_expr(engine, scrutinee);
-                let snap_pre = self.interpreter.snapshot_fields();
-                let mut arm_results: Vec<Arm> = Vec::with_capacity(arms.len() + 1);
                 for arm in &arms {
-                    let arm_reachable = block_falls_through(engine.body, *arm, self.type_table);
                     changed |= self.visit_block(engine, *arm);
-                    let snap_arm = self.interpreter.snapshot_fields();
-                    self.interpreter.restore_fields(snap_pre.clone());
-                    arm_results.push(Arm {
-                        reachable: arm_reachable,
-                        post_state: snap_arm,
-                    });
                 }
-                let default_reachable = block_falls_through(engine.body, default, self.type_table);
                 changed |= self.visit_block(engine, default);
-                let snap_default = self.interpreter.snapshot_fields();
-                arm_results.push(Arm {
-                    reachable: default_reachable,
-                    post_state: snap_default,
-                });
-                let post_state = FieldSnapshot::join_arms(snap_pre, arm_results);
-                self.interpreter.restore_fields(post_state);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::Block(b) => {
-                // Unlabeled sequential scope: outer knowledge flows in
-                // and the body's bottom state flows out. The block has
-                // no label so no `break label:` can refer to it from
-                // inside, and any invalidation the body performed
-                // legitimately reflects post-block state.
                 let mut changed = self.visit_block(engine, b);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
-            ExprShape::Labeled(block, label) => {
-                // Labeled block: same as the unlabeled case when the
-                // only `break label:` (if any) is the trailing stmt
-                // delivering the block's value — that's the shape the
-                // inliner synthesises for an inlined function body, so
-                // post-block state equals body bottom state.
-                //
-                // For richer break shapes (early `break label:` from
-                // mid-body or from inside a nested expression) the
-                // post-block state would be the join of break points
-                // and the bottom — fall back to clearing rather than
-                // computing the join.
+            ExprShape::Labeled(block, _label) => {
                 let mut changed = self.visit_block(engine, block);
-                if has_non_tail_break_to(engine.body, &label, block) {
-                    self.interpreter.clear_fields();
-                }
                 changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::None => {
                 // Bottom-up walk for the remaining expressions.
                 let mut changed = self.walk_children(engine, NodeRef::Expr(e));
-                // After children have been walked, observe side effects
-                // that could have mutated aliased state.
-                self.update_field_env_from_expr(engine.body, e);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
@@ -791,42 +624,11 @@ impl ConstFoldVisitor<'_> {
         if let Some(inner) = inner_to_walk {
             changed |= self.visit_expr(engine, inner);
         }
-        // Field-env update based on the (post-walk) target shape.
-        let tgt = match &engine.body.exprs[target].kind {
-            ExprKind::Local { index, .. } => AssignTarget::Local(*index),
-            ExprKind::FieldAccess {
-                expr: inner,
-                field_name,
-                ..
-            } => match &engine.body.exprs[*inner].kind {
-                ExprKind::Local { index, .. } => {
-                    AssignTarget::FieldOnLocal(*index, field_name.clone())
-                }
-                _ => AssignTarget::Opaque,
-            },
-            _ => AssignTarget::Opaque,
-        };
-        match tgt {
-            AssignTarget::Local(index) => {
-                // Invalidates the local's lattice AND drops any field
-                // knowledge tied to it. Captures field-knowledge
-                // transfer for `dst = src` (Local→Local copy on a ref
-                // type, where both names alias the same heap object).
-                self.interpreter.invalidate_local(index);
-                self.update_field_env_from_let(engine.body, index, value);
-            }
-            AssignTarget::FieldOnLocal(local_index, field_name) => {
-                self.interpreter.invalidate_field(local_index, &field_name);
-                if let Some(v) = Value::from_arena_literal(engine.body, value, self.type_table) {
-                    self.interpreter.bind_field(local_index, &field_name, v);
-                }
-            }
-            AssignTarget::Opaque => {
-                // `(*p).field = …` / `q.outer.inner = …` / Index /
-                // Deref — unknown receiver, drop every aliased local's
-                // fields.
-                self.interpreter.invalidate_aliased_fields();
-            }
+        // A bare `local = …` reassignment drops the local's lattice to
+        // unknown; field-level and aliased-field invalidation is gone with
+        // `field_env` (the engine `ValueGraph` models heap writes itself).
+        if let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind {
+            self.interpreter.invalidate_local(*index);
         }
         changed |= self.reduce_local(engine, e);
         changed
@@ -838,87 +640,6 @@ impl ConstFoldVisitor<'_> {
     /// fields; `&mut local` escapes a mutable reference and drops
     /// `local`'s entry; struct / tuple / variant constructors that
     /// capture an aliased local invalidate aliased fields too.
-    fn update_field_env_from_expr(&mut self, body: &Body, e: ExprId) {
-        match &body.exprs[e].kind {
-            ExprKind::Call { args, func, .. } => {
-                for arg in args {
-                    if arg.is_mut
-                        && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
-                    {
-                        self.interpreter.invalidate_local(*index);
-                    }
-                }
-                // `$value_copy$T<id>(arg)` is a pure shallow copy that
-                // doesn't mutate `arg`; the caller (visit_assign /
-                // update_field_env_from_let) wants to copy field
-                // knowledge from `arg` to the binding's target. Skip
-                // the aliased-invalidation here so that path keeps
-                // working.
-                let key = (func.module_source.clone(), func.name.clone());
-                if !self.value_copy_helpers.contains_key(&key) {
-                    self.interpreter.invalidate_aliased_fields();
-                }
-            }
-            ExprKind::MethodCall { receiver, args, .. } => {
-                // Auto-ref hides &mut self: the receiver may have
-                // been mutated by the call.
-                if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind {
-                    self.interpreter.invalidate_local(*index);
-                }
-                for arg in args {
-                    if arg.is_mut
-                        && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
-                    {
-                        self.interpreter.invalidate_local(*index);
-                    }
-                }
-                self.interpreter.invalidate_aliased_fields();
-            }
-            ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
-                // Indirect callee is unknown — closures may capture
-                // and mutate any aliased local.
-                self.interpreter.invalidate_aliased_fields();
-            }
-            ExprKind::Unary {
-                op: NirUnaryOp::MutRef,
-                expr: inner,
-            } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
-                    self.interpreter.invalidate_local(*index);
-                }
-            }
-            ExprKind::StructLiteral { fields, .. } => {
-                let aliased = self.interpreter.aliased_locals();
-                let captured = fields
-                    .iter()
-                    .any(|f| value_captures_aliased_local(body, f.value, aliased));
-                if captured {
-                    self.interpreter.invalidate_aliased_fields();
-                }
-            }
-            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-                let aliased = self.interpreter.aliased_locals();
-                let captured = elements
-                    .iter()
-                    .any(|el| value_captures_aliased_local(body, *el, aliased));
-                if captured {
-                    self.interpreter.invalidate_aliased_fields();
-                }
-            }
-            ExprKind::VariantConstruct { payload, .. } => {
-                if let Some(p) = payload {
-                    let p = *p;
-                    let aliased = self.interpreter.aliased_locals();
-                    let captured = value_captures_aliased_local(body, p, aliased);
-                    if captured {
-                        self.interpreter.invalidate_aliased_fields();
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
     /// After a statement is walked, capture any introduced binding into
     /// the interpreter's env so subsequent uses can fold against it.
     fn update_env_from_stmt(&mut self, body: &Body, s: StmtId) {
@@ -946,298 +667,26 @@ impl ConstFoldVisitor<'_> {
         // before we record new ones below.
         self.interpreter.invalidate_local(local_index);
         self.interpreter.bind_local(local_index, lat);
-        self.update_field_env_from_let(body, local_index, value);
-    }
-
-    /// Update field env after `let local = value` (or
-    /// `local = value` Assign). Recognized RHS shapes:
-    ///
-    /// - `StructLiteral { f: lit, … }`: bind each forwardable
-    ///   field into `field_env`.
-    /// - `Local(src)`: copy `src`'s recorded fields onto `local`
-    ///   (covers reference-typed `let dst = src` aliasing — for
-    ///   value-typed copies the lower phase wraps in
-    ///   `$value_copy$T(src)` so the next case handles them).
-    /// - `Call($value_copy$T(src))`: same as above; the helper is a
-    ///   one-level shallow copy (field-by-field projection plus
-    ///   `array_clone` for raw arrays — see
-    ///   `lower::plan::value_copy::synthesize`), and the only fields we
-    ///   actually forward are primitive literals (`Int` / `Float` /
-    ///   `Bool` / `Char`) for which a shallow copy is observably
-    ///   equivalent to a deep copy. Reference-typed fields stay
-    ///   un-forwarded so the shared backing they preserve doesn't
-    ///   become a soundness hazard.
-    /// - `Block { …; tail_expr }` / `LabeledBlock { …; break label: tail }`:
-    ///   recurse on the producing tail. This is the shape produced by
-    ///   inlining a constructor (`List::filled(16, 0)` becomes
-    ///   `__inline_…: { …; break __inline_…: List<u16> { repr, used: 16 } }`),
-    ///   so the constructor's field knowledge reaches the let target.
-    fn update_field_env_from_let(&mut self, body: &Body, local_index: u32, value: ExprId) {
-        // Unwrap a chained `$value_copy$T<id>(arg)` so the underlying
-        // source's knowledge is what we read.
-        let inner = recognize_value_copy_a(body, value, self.value_copy_helpers).unwrap_or(value);
-        // Peer through Block / LabeledBlock tails: the producing tail
-        // is the final expression of an unlabeled block, or the value
-        // of the sole `break label: value` of a labeled block.
-        if let Some(tail) = single_producing_tail(body, inner) {
-            self.update_field_env_from_let(body, local_index, tail);
-            return;
-        }
-        match &body.exprs[inner].kind {
-            ExprKind::StructLiteral { fields, .. } => {
-                for f in fields {
-                    if let Some(v) = Value::from_arena_literal(body, f.value, self.type_table) {
-                        self.interpreter.bind_field(local_index, &f.name, v);
-                    }
-                }
-            }
-            ExprKind::Local { index: src, .. } => {
-                self.interpreter.copy_fields_from(*src, local_index);
-            }
-            _ => {}
-        }
     }
 
     /// Apply a [`LoopWriteEffects`] summary to the interpreter,
-    /// invalidating every local / field the body could mutate so the
-    /// pre-body and post-body state reflect a sound abstraction of any
-    /// possible iteration count.
+    /// dropping every local the body could reassign or mutably borrow to
+    /// `NonConst`, so the pre-body and post-body local env is a sound
+    /// abstraction of any iteration count. (Field-level loop invalidation
+    /// retired with `field_env`; the engine `ValueGraph` models loop heap
+    /// effects itself.)
     fn apply_loop_invalidations(&mut self, writes: &LoopWriteEffects) {
         for idx in &writes.reassigned_locals {
             self.interpreter.invalidate_local(*idx);
         }
         for idx in &writes.mut_borrowed {
             // A `&mut local` (or `is_mut` call arg) escapes a mutable
-            // reference the callee can store and mutate; drop both
-            // the local's lattice and any field knowledge.
+            // reference the callee can store and mutate; drop the local.
             self.interpreter.invalidate_local(*idx);
         }
-        for (idx, field) in &writes.written_fields {
-            self.interpreter.invalidate_field(*idx, field);
-        }
-        if writes.has_external_writes {
-            // Calls / indirect writes inside the body could have
-            // mutated any aliased local's fields. Drop them.
-            self.interpreter.invalidate_aliased_fields();
-        }
     }
 }
 
-/// Resolved shape of an `Assign` target for the field-env update.
-enum AssignTarget {
-    Local(u32),
-    FieldOnLocal(u32, String),
-    Opaque,
-}
-
-/// True when `block` contains a `break label:` (with or without a
-/// value) other than a trailing `break label: value` as its very last
-/// statement. The "trailing-only" shape is what `inline` synthesises
-/// to deliver a function's return value, and from a field-env point
-/// of view it exits at the body bottom — outer / body facts can flow
-/// through it intact.
-///
-/// A non-tail break, by contrast, is an early exit whose carried
-/// field state may differ from the bottom state. The const-fold
-/// engine cannot precisely join multiple exit states in a single
-/// walk, so the caller drops field knowledge when this returns
-/// `true`.
-fn has_non_tail_break_to(body: &Body, label: &str, block: BlockId) -> bool {
-    if !has_break_to(body, NodeRef::Block(block), label) {
-        return false;
-    }
-    let block_stmts = body.blocks[block].stmts.clone();
-    let Some(&last) = block_stmts.last() else {
-        return false;
-    };
-    let last_is_tail_break_to_self = matches!(
-        &body.stmts[last].kind,
-        StmtKind::Break {
-            label: Some(brk_label),
-            ..
-        } if brk_label == label
-    );
-    if !last_is_tail_break_to_self {
-        return true;
-    }
-    // The last stmt is `break label: ...` — any other break-to-label
-    // anywhere else in the block (including inside the trailing
-    // break's carried value) qualifies as non-tail.
-    if block_stmts[..block_stmts.len() - 1]
-        .iter()
-        .any(|s| has_break_to(body, NodeRef::Stmt(*s), label))
-    {
-        return true;
-    }
-    if let StmtKind::Break {
-        value: Some(value), ..
-    } = &body.stmts[last].kind
-    {
-        return has_break_to(body, NodeRef::Expr(*value), label);
-    }
-    false
-}
-
-/// Return the single value-producing tail of `expr` when peering
-/// through `Block` / `LabeledBlock` wrappers is safe — i.e. the wrapper
-/// has exactly one value-producing exit and dropping the wrapper would
-/// not change which value reaches the consumer.
-///
-/// Recognised shapes:
-///
-/// - `Block { stmts; tail_expr }`: the trailing `Expr(tail_expr)` stmt is
-///   the only producer (an unlabeled block has no break target).
-/// - `LabeledBlock { label, block }` whose only reference to `label` is
-///   a trailing `break label: value` stmt: that `value` is the sole
-///   producer. This is the shape `inline` synthesises for a function
-///   call — the only break exits through the label with the function's
-///   return value.
-///
-/// The walk is non-recursive at the call site; callers (currently only
-/// [`ConstFoldVisitor::update_field_env_from_let`]) recurse explicitly so
-/// they can also handle the `$value_copy$T(arg)` / `StructLiteral` /
-/// `Local` shapes that may sit directly inside the wrapper.
-fn single_producing_tail(body: &Body, e: ExprId) -> Option<ExprId> {
-    match &body.exprs[e].kind {
-        ExprKind::Block(b) => {
-            let last = *body.blocks[*b].stmts.last()?;
-            let StmtKind::Expr(tail) = &body.stmts[last].kind else {
-                return None;
-            };
-            Some(*tail)
-        }
-        ExprKind::LabeledBlock { label, block, .. } => {
-            let block_stmts = body.blocks[*block].stmts.clone();
-            let last = *block_stmts.last()?;
-            let StmtKind::Break {
-                label: Some(brk_label),
-                value: Some(value),
-            } = &body.stmts[last].kind
-            else {
-                return None;
-            };
-            if brk_label != label {
-                return None;
-            }
-            let value = *value;
-            // The trailing break is the only producer iff no other
-            // stmt in the block, and no sub-expression of the tail
-            // value, breaks to the same label.
-            if block_stmts[..block_stmts.len() - 1]
-                .iter()
-                .any(|s| has_break_to(body, NodeRef::Stmt(*s), label))
-            {
-                return None;
-            }
-            if has_break_to(body, NodeRef::Expr(value), label) {
-                return None;
-            }
-            Some(value)
-        }
-        _ => None,
-    }
-}
-
-/// True when control can reach the bottom of `block`.
-///
-/// Used by the if-handlers to detect a trapping arm
-/// (`if cond { panic("…"); }`, `if cond { return … }`) so the
-/// arm's field-env mutations are excluded from the post-if join.
-///
-/// Reads the last stmt only — see [`stmt_falls_through`] for the
-/// per-kind decisions. An empty block falls through trivially;
-/// `Loop` is reported as falling through (we don't analyse breaks).
-///
-/// Callers MUST invoke this BEFORE walking the block: the walker
-/// can rewrite the trailing expression's `type_id` (e.g. via
-/// `reduce_local` reconstructing a wrapper), making a post-walk
-/// read of `is_never_type` unreliable.
-fn block_falls_through(body: &Body, block: BlockId, type_table: &TypeTable) -> bool {
-    let Some(&last) = body.blocks[block].stmts.last() else {
-        return true;
-    };
-    stmt_falls_through(body, last, type_table)
-}
-
-fn stmt_falls_through(body: &Body, s: StmtId, type_table: &TypeTable) -> bool {
-    match &body.stmts[s].kind {
-        StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => false,
-        StmtKind::Expr(expr) => !is_never_type(body.exprs[*expr].type_id, type_table),
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            !is_never_type(body.exprs[*value].type_id, type_table)
-        }
-        // A labeled block falls through when its body reaches the bottom OR
-        // any `break` targets the block's OWN label — such a break resumes
-        // right after the block, i.e. it IS fall-through. The tail-only
-        // `block_falls_through` walk cannot see early self-breaks
-        // (`lbl: { if d { break lbl; } return; }`); see the e2e fixture
-        // `labeled_block_self_break_field_write.wado`.
-        StmtKind::LabeledBlock { block, label } => {
-            block_falls_through(body, *block, type_table)
-                || has_break_to(body, NodeRef::Block(*block), label)
-        }
-        StmtKind::If {
-            then_block,
-            else_block,
-            ..
-        } => {
-            // Falls through iff some reachable arm falls through.
-            // No `else` ⇒ the implicit (empty) else falls through.
-            let then_block = *then_block;
-            let else_block = *else_block;
-            block_falls_through(body, then_block, type_table)
-                || else_block.is_none_or(|eb| block_falls_through(body, eb, type_table))
-        }
-        StmtKind::Loop { .. } => true,
-    }
-}
-
-/// True when `type_id` resolves to [`ResolvedType::Never`] — the
-/// uninhabited `!` type the elaborator gives expressions that
-/// definitely do not produce a value (`panic(…)`, `unreachable()`,
-/// `loop { }`, calls whose return type is `!`).
-fn is_never_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    type_table.is_never(type_id)
-}
-
-/// True when a `Call`'s callee is a compiler builtin that cannot
-/// mutate any user-level struct field tracked by `niri`'s `field_env`.
-/// Every builtin in `core:builtin` and `wasm-asset` (whether emitted
-/// directly or via monomorphization) operates below the struct layer:
-/// `array_set` writes an array element, `memory_grow` resizes linear
-/// memory, `store_u8` writes a memory cell, etc. None of these touch
-/// the `(local, field) → Value` entries `field_env` records, so a
-/// loop that contains only such calls has no `external` field-env
-/// effects.
-///
-/// Used by [`collect_loop_write_effects`] to keep `has_external_writes`
-/// cleared for builtin-only loops so a pre-loop binding like
-/// `arr.used = 16` survives the loop's pre-walk
-/// `invalidate_aliased_fields` when `arr` is aliased.
-fn is_field_env_pure_call(func: &FunctionRef) -> bool {
-    func.builtin_name().is_some() || func.monomorphized_builtin_name().is_some()
-}
-
-/// True when an expression appearing as a struct / tuple / variant
-/// field value would hand the freshly-built aggregate access to an
-/// already-aliased local. Mirrors the predicate the original
-/// `field_forward` pass used inline; kept here so the const-fold
-/// visitor doesn't reach back into `optimize::alias`'s private
-/// module surface.
-fn value_captures_aliased_local(body: &Body, e: ExprId, aliased: &crate::niri::LocalSet) -> bool {
-    match &body.exprs[e].kind {
-        ExprKind::Unary { op, expr: inner } => {
-            (matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && matches!(body.exprs[*inner].kind, ExprKind::Local { .. }))
-                || value_captures_aliased_local(body, *inner, aliased)
-        }
-        ExprKind::Local { index, .. } => aliased.contains(*index),
-        ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            value_captures_aliased_local(body, *inner, aliased)
-        }
-        _ => false,
-    }
-}
 
 /// Summary of every entity a loop body could mutate. Used by
 /// [`ConstFoldVisitor::apply_loop_invalidations`] to drop just those
@@ -1245,20 +694,12 @@ fn value_captures_aliased_local(body: &Body, e: ExprId, aliased: &crate::niri::L
 /// body walk — facts about entities the body does not touch survive.
 #[derive(Default)]
 struct LoopWriteEffects {
-    /// `local = expr` targets — fully reassigned, so both lattice and
-    /// every recorded field of the local must be dropped.
+    /// `local = expr` targets — fully reassigned, so the local's lattice
+    /// must drop to unknown across the loop.
     reassigned_locals: IndexSet<u32>,
-    /// `local.field = expr` targets — drop just `(local, field)`.
-    written_fields: IndexSet<(u32, String)>,
     /// `&mut local` or `is_mut` call argument — callee may store and
     /// mutate through the reference, so drop the local fully.
     mut_borrowed: IndexSet<u32>,
-    /// Any expression that could mutate aliased state from outside the
-    /// straight-line walk: `Call`, `MethodCall`, `IndirectCall`,
-    /// `CmRawCall`, or an `Assign` with an opaque target shape
-    /// (`(*p).f = …`, `arr[i] = …`). Triggers
-    /// [`Interpreter::invalidate_aliased_fields`].
-    has_external_writes: bool,
 }
 
 /// Walk a loop body and collect every write effect that must be
@@ -1285,76 +726,26 @@ fn collect_loop_writes(body: &Body, node: NodeRef, effects: &mut LoopWriteEffect
 
 fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
     match &body.exprs[e].kind {
-        ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
-            ExprKind::Local { index, .. } => {
+        // `local = …` reassigns the local across iterations.
+        ExprKind::Assign { target, .. } => {
+            if let ExprKind::Local { index, .. } = &body.exprs[*target].kind {
                 effects.reassigned_locals.insert(*index);
             }
-            ExprKind::FieldAccess {
-                expr: inner,
-                field_name,
-                ..
-            } => match &body.exprs[*inner].kind {
-                ExprKind::Local { index, .. } => {
-                    effects.written_fields.insert((*index, field_name.clone()));
-                }
-                _ => {
-                    // `(*p).f = …` / `q.outer.inner = …` — opaque
-                    // receiver; conservatively treat as an external
-                    // write so aliased fields drop.
-                    effects.has_external_writes = true;
-                }
-            },
-            ExprKind::Index { .. } => {
-                // `arr[i] = …` mutates an array element, not any entry
-                // in `field_env` (which records `(local, fieldname) →
-                // Value`, not element-level state). Mirror
-                // `visit_assign`'s opaque-write treatment: mark
-                // `has_external_writes` so an aliased-local
-                // invalidation fires only when the receiver could be
-                // reachable through an external alias.
-                effects.has_external_writes = true;
-            }
-            _ => {
-                // Deref / other lvalue shape.
-                effects.has_external_writes = true;
-            }
-        },
+        }
+        // `&mut local` escapes a mutable reference the callee can store and
+        // write through. (`&mut local.field` mutates only the field, not the
+        // local's binding, so it needs no local-lattice invalidation now that
+        // field tracking is gone.)
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => match &body.exprs[*inner].kind {
-            ExprKind::Local { index, .. } => {
+        } => {
+            if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
                 effects.mut_borrowed.insert(*index);
             }
-            ExprKind::FieldAccess {
-                expr: receiver,
-                field_name,
-                ..
-            } => match &body.exprs[*receiver].kind {
-                ExprKind::Local { index, .. } => {
-                    // `&mut local.field` — callee can replace the
-                    // field or mutate its interior, so the cached
-                    // `(local, field)` entry is stale.
-                    effects.written_fields.insert((*index, field_name.clone()));
-                }
-                _ => {
-                    // `&mut local.f.g` or deeper — fall back to
-                    // dropping the whole rooted local, since we do not
-                    // track fields-of-fields.
-                    if let Some(root) = root_local_of(body, *receiver) {
-                        effects.mut_borrowed.insert(root);
-                    } else {
-                        effects.has_external_writes = true;
-                    }
-                }
-            },
-            _ => {
-                // `&mut (*p).x`, `&mut arr[i]`, … — opaque receiver;
-                // treat as an external write.
-                effects.has_external_writes = true;
-            }
-        },
-        ExprKind::Call { func, args, .. } => {
+        }
+        // A mut-ref argument or a `&mut self` method receiver may be mutated.
+        ExprKind::Call { args, .. } => {
             for arg in args {
                 if arg.is_mut
                     && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
@@ -1362,22 +753,8 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
                     effects.mut_borrowed.insert(*index);
                 }
             }
-            // Builtin intrinsics (`array_*`, `select`, `cold_path`,
-            // `memory_*`, `store_*`, `load_*`,
-            // `copy_value`, the i64-128 helpers, …) never mutate
-            // user-level struct fields tracked by `field_env`:
-            // `array_set` writes an array element, `memory_grow`
-            // resizes linear memory, and so on. Skipping
-            // `has_external_writes` for them lets a `.used` / `.repr`
-            // binding made before the loop survive past the loop
-            // boundary, even when the body reads / writes the
-            // underlying buffer.
-            if !is_field_env_pure_call(func) {
-                effects.has_external_writes = true;
-            }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            // Auto-ref hides `&mut self`: receiver may be mutated.
             if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind {
                 effects.mut_borrowed.insert(*index);
             }
@@ -1388,22 +765,7 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
                     effects.mut_borrowed.insert(*index);
                 }
             }
-            effects.has_external_writes = true;
-        }
-        ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
-            effects.has_external_writes = true;
         }
         _ => {}
-    }
-}
-
-/// Walk down a `local.f.g.…` field chain and return the rooted local
-/// index, or `None` if the chain is rooted at something other than a
-/// `Local` (e.g. `(*p).f`).
-fn root_local_of(body: &Body, e: ExprId) -> Option<u32> {
-    match &body.exprs[e].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. } => root_local_of(body, *inner),
-        _ => None,
     }
 }
