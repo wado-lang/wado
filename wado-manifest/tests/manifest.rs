@@ -122,7 +122,7 @@ version = "0.1.0"
 "wasi:cli/command" = "main.wado"
 "#;
     let m: Manifest = toml.parse().unwrap();
-    assert!(!m.is_kiln_generator());
+    assert!(m.world_entry("core:kiln/generator").is_none());
 }
 
 #[test]
@@ -136,7 +136,6 @@ version = "0.1.0"
 "core:kiln/generator" = "src/generator.wado"
 "#;
     let m: Manifest = toml.parse().unwrap();
-    assert!(m.is_kiln_generator());
     assert_eq!(
         m.world_entry("core:kiln/generator"),
         Some("src/generator.wado")

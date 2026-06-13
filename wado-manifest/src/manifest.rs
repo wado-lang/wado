@@ -34,13 +34,6 @@ impl Manifest {
     pub fn world_entry(&self, world_fq: &str) -> Option<&str> {
         self.world.get(world_fq).map(String::as_str)
     }
-
-    /// Whether this manifest declares a `core:kiln/generator` world entry — the
-    /// successor to the old `[package].generator` presence check.
-    #[must_use]
-    pub fn is_kiln_generator(&self) -> bool {
-        self.world.contains_key("core:kiln/generator")
-    }
 }
 
 /// The `[format]` section of `wado.toml`.
