@@ -624,7 +624,13 @@ impl<'a> Builder<'a> {
                     // A reference the conditionally-run rhs reassigned (or whose
                     // pointee it reassigned) no longer has a known target.
                     self.drop_ref_targets_for(&changed);
-                    self.heap_state.bump_all();
+                    // Invalidate only the heap the conditionally-run rhs may
+                    // write — not a blanket `bump_all`. A pure rhs (a field
+                    // comparison, say) writes nothing, so an unrelated
+                    // aggregate's fields survive across the short-circuit.
+                    let mut eff = LoopHeapEffects::default();
+                    collect_loop_heap_node(self.body, NodeRef::Expr(right), &mut eff);
+                    self.apply_loop_heap_effects(&eff);
                     rhs
                 } else {
                     self.walk_expr(right)
