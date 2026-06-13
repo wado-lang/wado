@@ -76,9 +76,8 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
         let deadline_ticks = 30;
         store.set_epoch_deadline(deadline_ticks);
 
-        // `wasi:cli/command` exports `run` via the `wasi:cli/run` interface
-        // instance; bind through the generated `Command` bindings and drive the
-        // async export with `run_concurrent`.
+        // `run` is exported through the `wasi:cli/run` instance; bind via
+        // `Command` and drive the async export with `run_concurrent`.
         let command =
             wasmtime_wasi::p3::bindings::Command::instantiate_async(&mut store, component, &linker)
                 .await

@@ -81,11 +81,10 @@ pub enum CmExportType {
     Named {
         interface_fq: String,
         cm_name: String,
-        /// Whether this names a CM resource (vs a variant / record / enum /
-        /// flags). Carried from the registry so codegen re-exports the resource
-        /// type (`{pkg}-{cm_name}-resource`) vs the plain named type
-        /// (`{pkg}-{cm_name}`) by match, not by probing the type registry by
-        /// name string.
+        /// Whether this names a CM resource (vs variant / record / enum /
+        /// flags). Lets codegen re-export the resource type
+        /// (`{pkg}-{cm_name}-resource`) vs the plain `{pkg}-{cm_name}` by match,
+        /// not by probing the type registry.
         is_resource: bool,
     },
     /// `result<own<resp>, error>` synthesized for the world's handler return.

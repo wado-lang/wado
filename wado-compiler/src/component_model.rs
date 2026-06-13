@@ -296,13 +296,10 @@ pub struct CmInterfaceInfo {
 }
 
 impl CmInterfaceInfo {
-    /// The codegen component-instance key for this interface:
-    /// `"{package}-{interface}"` (e.g. `"cli-stdout"`, `"http-types"`).
-    ///
-    /// This is the single source of truth for the instance-key format. A bare
+    /// The codegen component-instance key `"{package}-{interface}"` (e.g.
+    /// `"http-types"`). The single source of truth for this format: a bare
     /// interface name would collide across packages (`wasi:cli/types` vs
-    /// `wasi:http/types`, both interface `types`), so every `register_instance`
-    /// / `instance_idx` pair must build the key through here to stay in sync.
+    /// `wasi:http/types`), so every register/lookup pair builds the key here.
     #[must_use]
     pub fn instance_key(&self) -> String {
         format!("{}-{}", self.package, self.interface)

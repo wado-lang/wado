@@ -38,10 +38,8 @@ pub struct LockedPackage {
     pub integrity: Option<String>,
     /// Whether this is a dev-only dependency.
     pub dev: bool,
-    /// Target CM world FQ name → entry-point source path, mirroring the
-    /// package manifest's `[world]` table (e.g. `"wasi:cli/command"`,
-    /// `"wasi:http/service"`, `"core:kiln/generator"`). Serialized as a
-    /// `world = { ... }` inline table.
+    /// CM world FQ name → entry-point path, mirroring the manifest `[world]`
+    /// table. Serialized as a `world = { ... }` inline table.
     pub world: IndexMap<String, String>,
     /// Dependencies as `"id@version"` references.
     pub deps: Vec<String>,

@@ -62,9 +62,8 @@ fn run_component(stdin: &[u8]) -> String {
         let mut store = Store::new(engine, state);
         store.set_epoch_deadline(30);
 
-        // `wasi:cli/command` exports `run` via the `wasi:cli/run` interface
-        // instance; bind through the generated `Command` bindings and drive the
-        // async export with `run_concurrent`.
+        // `run` is exported through the `wasi:cli/run` instance; bind via
+        // `Command` and drive the async export with `run_concurrent`.
         let command =
             wasmtime_wasi::p3::bindings::Command::instantiate_async(&mut store, component, &linker)
                 .await

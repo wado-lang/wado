@@ -953,9 +953,8 @@ pub fn run_wasm_with_full_options(
         let deadline_ticks = (DEFAULT_TIMEOUT_MS / EPOCH_INTERVAL_MS).max(1);
         store.set_epoch_deadline(deadline_ticks);
 
-        // `wasi:cli/command` exports `run` through the `wasi:cli/run` interface
-        // instance, so bind via the generated `Command` bindings (not a bare
-        // top-level `run`). The async export is driven through `run_concurrent`.
+        // `run` is exported through the `wasi:cli/run` instance; bind via
+        // `Command` and drive the async export with `run_concurrent`.
         let command = wasmtime_wasi::p3::bindings::Command::instantiate_async(
             &mut store, &component, &linker,
         )

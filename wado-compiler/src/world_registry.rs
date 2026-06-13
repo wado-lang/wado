@@ -62,17 +62,10 @@ impl WorldExportInfo {
         }
     }
 
-    /// Whether this export is a handler-instance export: an interface export
-    /// (one synthesized from an `export Foo;` reference, so [`Self::from_interface_fq`]
-    /// is populated) whose return type is a non-unit `Result<_, _>`.
-    ///
-    /// This is the structural shape of `wasi:http/handler#handle`
-    /// (`Result<Response, ErrorCode>`). It is deliberately namespace- and
-    /// type-name-independent: a third-party world that exports a handler-shaped
-    /// interface is recognized the same way, and the `from_interface_fq` gate
-    /// keeps freestanding exports with the same return shape — the kiln
-    /// generator's `generate -> Result<Response, Error>` — out, since they carry
-    /// no parent interface FQ.
+    /// Whether this is a handler-instance export: an interface export
+    /// (`from_interface_fq` populated) returning a non-unit `Result<_, _>` — the
+    /// shape of `wasi:http/handler#handle`. The `from_interface_fq` gate excludes
+    /// freestanding exports of the same shape (the kiln generator's `generate`).
     pub fn is_handler_instance_export(&self) -> bool {
         self.from_interface_fq.is_some() && returns_non_unit_result(self.return_type.as_ref())
     }
@@ -139,18 +132,13 @@ impl WorldInfo {
         self.exports.iter().any(|e| e.is_async)
     }
 
-    /// Check if this world exports the WASI HTTP handler.
-    ///
-    /// This gates HTTP-specific behavior (importing `wasi:http/types`, the
-    /// free-list allocator default), so it is deliberately precise about HTTP:
-    /// a handler-instance export (an interface export returning a non-unit
-    /// `Result`, see [`WorldExportInfo::is_handler_instance_export`]) whose
-    /// parent interface is in the `http` package. The generic
-    /// instance-export wrapping for *all* interface exports (CLI `run`,
-    /// third-party handlers) is handled separately by
-    /// `append_interface_instance_exports`; only the HTTP-types import decision
-    /// keys on this. A non-HTTP handler-shaped export (e.g. a future
-    /// `acme:widget/handler`) is therefore not misrouted into the HTTP path.
+    /// Whether this world exports the WASI HTTP handler — a handler-instance
+    /// export whose interface is in the `http` package. Gates HTTP-specific
+    /// behavior (importing `wasi:http/types`, the free-list allocator), so the
+    /// package check keeps a non-HTTP handler-shaped export (e.g. a future
+    /// `acme:widget/handler`) out of the HTTP path. The generic instance-export
+    /// wrapping for all interface exports lives in
+    /// `append_interface_instance_exports`.
     pub fn has_http_handler_export(&self) -> bool {
         self.exports.iter().any(|e| {
             e.is_handler_instance_export()

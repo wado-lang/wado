@@ -312,10 +312,8 @@ async fn run_cli_component(
         None
     };
 
-    // The `wasi:cli/command` world exports `run` through the `wasi:cli/run`
-    // interface instance, so bind it via the generated `Command` bindings
-    // rather than a bare top-level `run` func. Async exports take an `Accessor`,
-    // so the call is driven through `run_concurrent`.
+    // `run` is exported through the `wasi:cli/run` instance, so bind via the
+    // `Command` bindings; the async export is driven through `run_concurrent`.
     let command =
         wasmtime_wasi::p3::bindings::Command::instantiate_async(&mut store, &component, &linker)
             .await?;

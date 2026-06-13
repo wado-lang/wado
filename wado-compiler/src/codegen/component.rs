@@ -1579,10 +1579,9 @@ fn cm_export_type_to_idx(
         CmExportType::Named {
             interface_fq,
             cm_name,
-            // A param/return position references the value type (`own<resource>`
-            // for a resource, registered as `{pkg}-{cm_name}`), not the resource
-            // type itself, so the resource/non-resource distinction does not
-            // change the lookup here.
+            // A param/return references the value type (`{pkg}-{cm_name}`, i.e.
+            // `own<resource>` for a resource), so the kind does not change the
+            // lookup — unlike the re-export in `collect_type_items`.
             is_resource: _,
         } => {
             let pkg = crate::world_registry::fq_name_package(interface_fq);
@@ -1594,11 +1593,9 @@ fn cm_export_type_to_idx(
             ctx.type_idx(&key)
         }
         CmExportType::HandlerResult { .. } => {
-            // The plan only emits `HandlerResult` for worlds with a known
-            // package — `world_package` is guaranteed `Some` at this point.
-            // The `ok`/`err` arms drive re-export enumeration in
-            // `append_interface_instance_exports`, not the lift signature, which
-            // resolves through the per-world `{pkg}-handler-result` alias.
+            // The lift signature resolves through the `{pkg}-handler-result`
+            // alias; the `ok`/`err` arms are used only for re-export enumeration.
+            // The plan only emits this for worlds with a known package.
             let pkg = world_package.expect(
                 "HandlerResult emitted for a world with no package: stdlib bootstrap regression",
             );
@@ -1675,12 +1672,9 @@ fn emit_world_exports(
             lift_opts,
         );
 
-        // Interface exports (`from_interface_fq` populated) are emitted only as
-        // instance exports (`wasi:cli/run`, `wasi:http/handler`) by
-        // `append_interface_instance_exports`; the lifted func is referenced
-        // from that instance, so no bare top-level func export is created here.
-        // Freestanding world function exports (kiln `generate`, with no parent
-        // interface) keep their bare export.
+        // Interface exports go in an instance export (added by
+        // `append_interface_instance_exports`), not bare; only freestanding world
+        // functions (kiln `generate`) are exported bare here.
         if export.from_interface_fq.is_none() {
             builder.export(
                 &export.name,
@@ -2344,10 +2338,10 @@ fn generate_cm_imports(
     // Import interfaces with resource types
     import_interfaces_with_resources(builder, ctx, project, import_plan);
 
-    // Import the resource-defining HTTP types interface when the plan calls for
-    // it (the world exports an HTTP handler, or the code uses the HTTP Client
-    // effect). The plan entry carries the versioned FQ; the import code derives
-    // package and type names from it rather than hardcoding `wasi:http/types`.
+    // HTTP types/client imports, keyed off the plan's versioned FQ (the import
+    // code derives package and type names from it — no `wasi:http/types`
+    // literal). `HttpClient` implies `HttpTypes`; assert it rather than
+    // re-deriving.
     let http_types_fq = import_plan
         .iter()
         .find(|e| e.kind == ImportKind::HttpTypes)
@@ -2356,11 +2350,6 @@ fn generate_cm_imports(
         import_http_types_for_service(project, builder, ctx, types_fq);
     }
 
-    // Import the HTTP client interface when the plan lists it (the program uses
-    // the HTTP Client effect). The plan guarantees `HttpClient` implies
-    // `HttpTypes`, and the types phase above registered the package's
-    // handler-result / request types, which the client import aliases. Assert
-    // that invariant rather than re-deriving membership.
     if let Some(client_entry) = import_plan
         .iter()
         .find(|e| e.kind == ImportKind::HttpClient)
@@ -2383,8 +2372,7 @@ fn import_http_types_for_service(
     ctx: &mut ComponentModelContext,
     types_fq: &str,
 ) {
-    // The package segment (`"http"`) and instance/type name prefixes derive from
-    // the interface FQ — no `"http"` / `wasi:http/types` string literals.
+    // Package and all instance/type name prefixes derive from `types_fq`.
     let pkg = crate::world_registry::fq_name_package(types_fq).to_string();
     let types_prefix = types_fq.split('@').next().unwrap_or(types_fq).to_string();
 
@@ -2395,11 +2383,8 @@ fn import_http_types_for_service(
         .map(|(wado, cm)| (wado.to_string(), cm.to_string()))
         .collect();
 
-    // The types interface's functions, fetched once (`interfaces()` deep-clones
-    // each interface's function list, so we avoid re-fetching for the
-    // resource-function alias pass below). The FQ comes from the import plan, so
-    // a miss means the plan and registry disagree on the version string — fail
-    // loudly rather than silently importing the instance with no functions.
+    // Fetch the interface's functions once (`interfaces()` deep-clones them) and
+    // reuse below. A miss means the plan/registry FQ disagree — fail loudly.
     let all_funcs: Vec<CmFunctionInfo> = project
         .cm_interface_registry
         .interfaces()
@@ -2706,8 +2691,7 @@ fn import_http_client(
     client_fq: &str,
     types_fq: &str,
 ) {
-    // Build the client instance type from registry metadata. The client
-    // references types defined by the types interface (request, handler-result),
+    // The client references the types interface's request / handler-result,
     // aliased from the outer scope. Package and names derive from the FQs.
     let pkg = crate::world_registry::fq_name_package(types_fq).to_string();
     let request_type_idx = ctx.type_idx(&format!("{pkg}-request"));
@@ -3076,11 +3060,9 @@ fn import_interfaces_with_resources(
     // These are needed by Transmission future types (future<result<_, error-code>>).
     for interface_info in &interfaces_with_resources {
         let instance_key = interface_info.instance_key();
-        // Only alias from interfaces whose instance was actually imported by one
-        // of the generic phases above. An interface handled by a dedicated path
-        // (e.g. `wasi:http/types`, imported later with its own error-code alias)
-        // has no generic instance here, so it is skipped rather than mis-aliased
-        // from a same-named instance of another package.
+        // Skip interfaces with no instance from the generic phases above — one
+        // handled by a dedicated path (`wasi:http/types`) aliases its own
+        // error-code later, and must not be mis-aliased from here.
         if !ctx.has_instance(&instance_key) {
             continue;
         }
@@ -3461,20 +3443,15 @@ fn lower_wasi_functions(
 
 /// Append one CM instance export per exported interface.
 ///
-/// World exports whose `from_interface_fq` is populated (CLI `run`, HTTP
-/// `handle`) are grouped by that FQ — an `export Foo;` with several methods
-/// expands to one world export per method, all sharing the FQ — and each group
-/// becomes a single instance export named by the FQ, carrying every method's
-/// lifted function plus the union of the named CM types their signatures
-/// reference (resources and variants such as `request`, `response`,
-/// `error-code`). Freestanding world function exports (no parent interface,
-/// e.g. the kiln generator's `generate`) carry no instance; `emit_world_exports`
-/// already emitted them bare.
+/// World exports with `from_interface_fq` populated (CLI `run`, HTTP `handle`)
+/// are grouped by that FQ — an `export Foo;` with several methods yields one
+/// world export per method sharing the FQ — into a single instance carrying
+/// every method's lifted func plus the union of the named CM types their
+/// signatures reference. Freestanding exports (no parent interface, e.g. kiln's
+/// `generate`) carry no instance; `emit_world_exports` emitted them bare.
 ///
-/// Runs after `builder.finish()`, so it appends raw CM sections; the instance
-/// index space continues from `ctx.instance_count()`. The re-export set and the
-/// instance name are derived entirely from the plan and the registered CM type
-/// names — there is no per-world or HTTP-specific branching.
+/// Runs after `builder.finish()`, appending raw CM sections; the instance index
+/// space continues from `ctx.instance_count()`. No HTTP-specific branching.
 fn append_interface_instance_exports(
     component_bytes: &mut Vec<u8>,
     ctx: &ComponentModelContext,
@@ -3483,11 +3460,8 @@ fn append_interface_instance_exports(
     use crate::wir_build::component_plan::CmExportType;
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
 
-    // Collect the named CM types a boundary type references as
-    // `(cm_name, component-type-index)` re-export items, in signature order and
-    // de-duplicated by name. A resource resolves to the registered
-    // `{pkg}-{cm_name}-resource` own type; any other named type (a variant /
-    // enum / record such as `error-code`) to `{pkg}-{cm_name}`.
+    // Collect the named CM types a boundary type references, as
+    // `(cm_name, type-index)` re-export items in signature order, deduped by name.
     fn collect_type_items(
         ty: &CmExportType,
         ctx: &ComponentModelContext,
@@ -3504,10 +3478,9 @@ fn append_interface_instance_exports(
                     return;
                 }
                 let pkg = crate::world_registry::fq_name_package(interface_fq);
-                // A resource re-exports its registered resource type
-                // (`{pkg}-{cm}-resource`); any other named type re-exports the
-                // plain named type (`{pkg}-{cm}`). The kind comes from the
-                // descriptor, not a type-registry name probe.
+                // Resource → its resource type (`{pkg}-{cm}-resource`); any
+                // other named type → `{pkg}-{cm}`. Kind from the descriptor, not
+                // a name probe.
                 let idx = if *is_resource {
                     ctx.type_idx(&format!("{pkg}-{cm_name}-resource"))
                 } else {
@@ -3522,11 +3495,7 @@ fn append_interface_instance_exports(
         }
     }
 
-    // Group exports by their parent interface FQ. An `export Foo;` whose
-    // interface has several methods expands to one `WorldExportPlan` per method,
-    // all sharing `from_interface_fq`; they must land in a SINGLE instance export
-    // (one CM instance carrying every method plus the union of the named CM types
-    // their signatures reference), not one duplicate-named instance per method.
+    // Group method-exports by their parent interface FQ (see fn doc).
     let mut groups: IndexMap<&str, Vec<&crate::wir_build::component_plan::WorldExportPlan>> =
         IndexMap::default();
     for export in &component_plan.world_exports {
@@ -3543,8 +3512,7 @@ fn append_interface_instance_exports(
     let mut instance_idx = ctx.instance_count();
 
     for (&fq, group) in &groups {
-        // Re-exported named CM types: the union over every method's signature,
-        // de-duplicated by name (`collect_type_items` dedups within `type_items`).
+        // Re-exported named types: union over every method's signature.
         let mut type_items: Vec<(String, u32)> = Vec::new();
         for export in group {
             for (_, cm_ty) in &export.cm_params {
