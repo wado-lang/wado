@@ -90,6 +90,17 @@ fn find_merge_branch(branches: &List<PredictionBranch>, child: &PredictionNode) 
     return -1;
 }
 
+/// Static branch-depth ceiling for SLL prediction. Each `Dispatch`
+/// level counts against it (shared-terminal `Consume` nodes do not), so
+/// it bounds the number of *branching* lookahead decisions, not raw
+/// tokens. Hitting it yields `AmbiguityReason::MaxDepth`.
+pub global MAX_LOOKAHEAD_DEPTH: i32 = 5;
+
+/// Config-set explosion guard: above this many live SLL configs the
+/// predictor bails to `AmbiguityReason::ConfigExplosion` (codegen then
+/// scan-dispatches) rather than keep growing the set.
+global MAX_CONFIG_SET: i32 = 200;
+
 pub fn build_prediction(
     alt_indices: &List<i32>,
     alt_elements: &List<List<Element>>,
@@ -591,7 +602,7 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     let closed = *configs;
 
     // Guard: if too many configs, fall back to Ambiguous (codegen scan-dispatches) to avoid explosion.
-    if closed.len() > 200 {
+    if closed.len() > MAX_CONFIG_SET {
         let alts = sll_unique_alts(&closed);
         return ambiguous(alts, AmbiguityReason::ConfigExplosion);
     }

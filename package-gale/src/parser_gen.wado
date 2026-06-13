@@ -33,7 +33,7 @@ use {
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
-use { PredictionNode, build_prediction, prediction_collect_all_indices } from "./prediction.wado";
+use { PredictionNode, build_prediction, prediction_collect_all_indices, MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
 use {
     alt_is_wildcard_led,
     compute_overlap_groups,
@@ -4280,6 +4280,12 @@ fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &List<Strin
     return ctx.kind_negate_check_str(&excluded, &"p.peek_kind()");
 }
 
+/// A first set larger than this is treated as "matches almost anything"
+/// (e.g. `name+?` where `name` covers every keyword): single-token
+/// lookahead can't distinguish the inner from the continuation, so the
+/// non-greedy loop falls back to the minimum match instead of gating.
+global BROAD_FIRST_SET_THRESHOLD: i32 = 20;
+
 fn compute_non_greedy_condition(
     rep_op: &RepeatOp,
     follow_first: &List<String>,
@@ -4305,7 +4311,7 @@ fn compute_non_greedy_condition(
         // Check if the subtracted set is still very broad (inner matches almost anything).
         // For cases like `name+?` where name matches all keywords, lookahead can't
         // distinguish names from constraint keywords. Use minimum match (don't loop).
-        if continue_first.len() > 20 && raw_first.len() > 20 {
+        if continue_first.len() > BROAD_FIRST_SET_THRESHOLD && raw_first.len() > BROAD_FIRST_SET_THRESHOLD {
             // Very broad first set — match minimum (1 for +?, 0 for *?)
             return "false";
         }
@@ -6059,7 +6065,7 @@ fn gen_multi_alt_body_bt(
                 pred_indices.push(real_idx);
                 pred_elements.push(rule.alternatives[real_idx].elements);
             }
-            let tree = build_prediction(&pred_indices, &pred_elements, 5, ctx);
+            let tree = build_prediction(&pred_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
             gen_prediction_code(w, &tree, fn_name, &rule.alternatives, lowered_rule, type_name, ctx, &rule.name);
         }
 
