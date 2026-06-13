@@ -244,15 +244,31 @@ userland package and not lazily fetched. `use { upper } from "core:text"` works
 with no dependency to add. Programs that do not reference an ICU feature link
 none of its code or data.
 
-The data image is a single compressed, indexed archive (a zip-like container
-with a central directory), with one entry per feature (and, where useful, per
-marker or per locale). This keeps the `wado` compiler a single self-contained
-binary while letting the host extract only the entries a build needs via the
-`read-asset(name)` host import — so a casemap-only build never decompresses the
-collation or segmentation entries. An indexed container (random access) is
-preferred over a streamed one (e.g. tar) precisely for this selective
-extraction. Postcard data compresses well, so the on-disk cost is far below the
-raw figures above.
+The data image is a single compressed, indexed archive embedded in the
+toolchain, keeping the `wado` compiler a self-contained binary while letting the
+host extract only the entries a build needs via `read-asset`.
+
+Archive layout:
+
+- Entries are per-marker (e.g. `collation/CollationTailoringV1`,
+  `segmentation/SegmenterDictionaryAutoV1`). Per-marker granularity is what lets
+  a grapheme-only build never touch segmentation's multi-MB dictionary/LSTM
+  entries, while keeping the index small — per-(marker, locale) would explode it
+  for collation. A locale-bearing marker's entry holds all locales; the provider
+  slices locales within it.
+- The index is a minimal central directory: entry name → (offset, length,
+  codec). A custom table suffices since the toolchain reads it itself; an actual
+  ZIP is a drop-in alternative if external inspection is wanted. Random access
+  (not a streamed `tar`) is required for selective extraction.
+- Compression is per-entry zstd, applied and reversed host-side: `read-asset`
+  returns already-decompressed bytes, so the provider links no decompressor.
+  Postcard data compresses well, so the on-disk image is far below the raw
+  figures above.
+
+Within-entry slicing: given the entries its `symbols → markers` need, plus the
+locale set, the provider produces the data-free component's blob by re-exporting
+the selected markers × locales through ICU's `BlobExporter` — the same machinery
+as the offline datagen, with the bundled entries as the source instead of CLDR.
 
 ## Consequences
 
@@ -305,9 +321,10 @@ Remaining:
       surface (Kiln's descriptor mechanism, canonical-JSON wire); type-driven
       merge (list → set-union, scalar → must-agree). All ICU options are lists;
       `strict` is a runtime API arg, not a `with` option.
-- [ ] Define the archive layout (entry granularity, index format, compression
-      codec) and the slicing the provider does within an entry (markers ×
-      locales).
+- [x] Define the archive layout: per-marker entries (skips unused heavy markers,
+      avoids per-locale explosion), minimal central-directory index, per-entry
+      zstd decompressed host-side (`read-asset` returns plaintext). The provider
+      slices markers × locales within entries and re-exports via `BlobExporter`.
 - [ ] Build the provider's marker-recording drift test against ICU constructors.
 - [x] Measure infra-code duplication across the three prebuilt components: the
       shared infra floor is ~10 KB/component (component glue + `BlobDataProvider`
