@@ -10,7 +10,7 @@ use {
     NotElement,
     RepeatKind,
     LexerRule,
-    LexerAlt,
+    LexerAlternative,
     LexerElement,
     CharClass,
     CharRange,
@@ -427,7 +427,7 @@ WS : ' ' -> channel(TYPO) ;";
 test "lexer rule with named channel resolves to user channel id" {
     // ANTLR4 reserves channel 0 (DEFAULT) and 1 (HIDDEN); user channels
     // declared via `channels { }` start at id 2. The parser should assign
-    // sequential ids based on the declaration order in the preamble.
+    // sequential ids based on the declaration order in the prequel.
     let input = "lexer grammar Test;
 channels { COMMENTS, DOCS }
 COMMENT : '//' -> channel(COMMENTS) ;

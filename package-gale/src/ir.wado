@@ -517,11 +517,11 @@ pub struct LexerRule {
     pub is_virtual: bool,
     /// Rule-level options from `options { ... }` prequel blocks.
     pub options: List<GrammarOption>,
-    pub body: List<LexerAlt>,
+    pub body: List<LexerAlternative>,
 }
 
 impl LexerRule {
-    pub fn new(name: String, is_fragment: bool, skip: bool, body: List<LexerAlt>) -> LexerRule {
+    pub fn new(name: String, is_fragment: bool, skip: bool, body: List<LexerAlternative>) -> LexerRule {
         return LexerRule {
             name,
             visibility: Visibility::Default,
@@ -548,8 +548,8 @@ impl LexerRule {
     }
 }
 
-/// LexerAlt is one alternative in a lexer rule.
-pub struct LexerAlt {
+/// LexerAlternative is one alternative in a lexer rule.
+pub struct LexerAlternative {
     pub elements: List<LexerElement>,
 }
 
@@ -560,7 +560,7 @@ pub variant LexerElement {
     CharClass(CharClass),
     AnyChar,
     RuleRef(String),
-    Group(List<LexerAlt>),
+    Group(List<LexerAlternative>),
     Repeat(LexerRepeatElement),
     Not(LexerNotElement),
 }

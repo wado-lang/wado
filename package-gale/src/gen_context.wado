@@ -288,13 +288,13 @@ impl GenContext {
     /// decision, so the dedup does not depend on a display-string
     /// heuristic. `message` already encodes everything `kind` does, so
     /// the pair is a sufficient key without an `Eq` on `DiagnosticKind`.
-    pub fn warn(&mut self, rule: &String, kind: DiagnosticKind, message: String) {
+    pub fn warn(&mut self, owner_label: &String, kind: DiagnosticKind, message: String) {
         for let d of &self.diagnostics {
-            if d.rule == *rule && d.message == message {
+            if d.rule == *owner_label && d.message == message {
                 return;
             }
         }
-        self.diagnostics.push(Diagnostic { rule: *rule, kind, message });
+        self.diagnostics.push(Diagnostic { rule: *owner_label, kind, message });
     }
 
     /// Return the collected diagnostics (a value copy under Wado value

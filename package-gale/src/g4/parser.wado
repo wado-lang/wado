@@ -20,7 +20,7 @@ use {
     NotElement,
     RepeatKind,
     LexerRule,
-    LexerAlt,
+    LexerAlternative,
     LexerElement,
     LexerRepeatElement,
     LexerNotElement,
@@ -77,7 +77,7 @@ pub struct G4Parser {
 
 /// Accumulator for lexer commands parsed from `-> cmd, cmd, ...`.
 /// See ANTLR4 lexer-rules.md for the canonical command set.
-struct LexerActions {
+struct LexerCommands {
     skip: bool,
     more: bool,
     type_override: Option<String>,
@@ -87,9 +87,9 @@ struct LexerActions {
     pop_mode: bool,
 }
 
-impl LexerActions {
-    fn empty() -> LexerActions {
-        return LexerActions {
+impl LexerCommands {
+    fn empty() -> LexerCommands {
+        return LexerCommands {
             skip: false,
             more: false,
             type_override: null,
@@ -252,7 +252,7 @@ impl G4Parser {
         self.expect(G4Token::Semicolon)?;
 
         let mut virtual_tokens: List<String> = [];
-        self.skip_preamble_blocks(&mut virtual_tokens)?;
+        self.skip_prequel_blocks(&mut virtual_tokens)?;
 
         let mut parser_rules: List<ParserRule> = [];
         let mut lexer_rules: List<LexerRule> = [];
@@ -405,7 +405,7 @@ impl G4Parser {
         );
     }
 
-    fn skip_preamble_blocks(&mut self, virtual_tokens: &mut List<String>) -> Result<(), ParseError> {
+    fn skip_prequel_blocks(&mut self, virtual_tokens: &mut List<String>) -> Result<(), ParseError> {
         // ANTLR4 grammar prequel constructs (any order, repeatable):
         //   optionsSpec      : 'options'  '{' ... '}'
         //   delegateGrammars : 'import' id ('=' id)? (',' id ('=' id)?)* ';'
@@ -1230,7 +1230,7 @@ impl G4Parser {
         let body = self.parse_lexer_alternatives()?;
         self.current_rule = "";
 
-        let mut actions = LexerActions::empty();
+        let mut actions = LexerCommands::empty();
         if self.is_kind(G4Token::Arrow) {
             self.advance();
             self.parse_lexer_actions(&mut actions, mode_names)?;
@@ -1259,7 +1259,7 @@ impl G4Parser {
 
     fn parse_lexer_actions(
         &mut self,
-        actions: &mut LexerActions,
+        actions: &mut LexerCommands,
         mode_names: &mut List<String>,
     ) -> Result<(), ParseError> {
         loop {
@@ -1350,8 +1350,8 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    fn parse_lexer_alternatives(&mut self) -> Result<List<LexerAlt>, ParseError> {
-        let mut alts: List<LexerAlt> = [];
+    fn parse_lexer_alternatives(&mut self) -> Result<List<LexerAlternative>, ParseError> {
+        let mut alts: List<LexerAlternative> = [];
         let first = self.parse_lexer_alt()?;
         alts.push(first);
 
@@ -1360,10 +1360,10 @@ impl G4Parser {
             let alt = self.parse_lexer_alt()?;
             alts.push(alt);
         }
-        return Result::<List<LexerAlt>, ParseError>::Ok(alts);
+        return Result::<List<LexerAlternative>, ParseError>::Ok(alts);
     }
 
-    fn parse_lexer_alt(&mut self) -> Result<LexerAlt, ParseError> {
+    fn parse_lexer_alt(&mut self) -> Result<LexerAlternative, ParseError> {
         let mut elements: List<LexerElement> = [];
         loop {
             if self.at_eof()
@@ -1389,7 +1389,7 @@ impl G4Parser {
             let elem = self.parse_lexer_element()?;
             elements.push(elem);
         }
-        return Result::<LexerAlt, ParseError>::Ok(LexerAlt { elements });
+        return Result::<LexerAlternative, ParseError>::Ok(LexerAlternative { elements });
     }
 
     fn parse_lexer_element(&mut self) -> Result<LexerElement, ParseError> {

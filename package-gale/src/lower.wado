@@ -576,8 +576,8 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
         all_indices.push(i);
     }
 
-    let ctx_label = `rule '{rule.name}'`;
-    let dispatch = build_overlap_dispatch(&ctx_label, &rule.alternatives, &all_indices, &first_sets, ctx);
+    let owner_label = `rule '{rule.name}'`;
+    let dispatch = build_overlap_dispatch(&owner_label, &rule.alternatives, &all_indices, &first_sets, ctx);
     return MultiAltRule {
         header,
         alts,
@@ -1113,8 +1113,8 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
         scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx));
     }
 
-    let ctx_label = `LR rule '{rule.name}' atom`;
-    let dispatch = build_overlap_dispatch(&ctx_label, &rule.alternatives, non_lr_indices, &first_sets, ctx);
+    let owner_label = `LR rule '{rule.name}' atom`;
+    let dispatch = build_overlap_dispatch(&owner_label, &rule.alternatives, non_lr_indices, &first_sets, ctx);
     return MultiAltRule {
         header,
         alts,
@@ -1466,12 +1466,12 @@ fn build_direct_dispatch(first_sets: &List<List<String>>) -> MultiAltDispatch {
 /// descending — emit runs each scan helper and commits to the
 /// longest match. ANTLR4's longest-match LL choice, no backtracking.
 ///
-/// `ctx_name` is the human-readable owner used in the panic message
+/// `owner_label` is the human-readable owner used in the panic message
 /// for unscannable alts (`"rule 'expr'"`, `"SimpleCst group"`, …).
 /// `alts` is the underlying surface alternative list; `indices`
 /// selects which alts participate in this dispatch.
 fn build_overlap_dispatch(
-    ctx_name: &String,
+    owner_label: &String,
     alts: &List<Alternative>,
     indices: &List<i32>,
     first_sets: &List<List<String>>,
@@ -1490,7 +1490,7 @@ fn build_overlap_dispatch(
 
     for let idx of indices {
         let mut visiting: List<String> = [];
-        assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), `{*ctx_name}: alt {*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
+        assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), `{*owner_label}: alt {*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
     }
 
     // Surface the overlap as an advisory diagnostic. `GenContext::warn`
@@ -1499,10 +1499,10 @@ fn build_overlap_dispatch(
     // distinct "(scan)" label that `warn` would NOT dedupe against the
     // parse-side label, so skip it here — the parse-side pass is the one
     // that carries the rule-facing label.
-    if !ends_with_scan(ctx_name) {
+    if !ends_with_scan(owner_label) {
         let shared = shared_overlap_tokens(first_sets);
         ctx.warn(
-            ctx_name,
+            owner_label,
             DiagnosticKind::OverlapTournament,
             `alts {join_kind_list(indices)} share lookahead {join_kind_set(&shared)}; resolved by longest-match scan tournament, not a token-led branch`,
         );
@@ -1516,7 +1516,7 @@ fn build_overlap_dispatch(
     return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });
 }
 
-/// True when a `build_overlap_dispatch` `ctx_name` marks a scan-side
+/// True when a `build_overlap_dispatch` `owner_label` marks a scan-side
 /// pass (suffix " (scan)"), so the warn site can skip it and keep the
 /// parse-side label. `strip_suffix` returns the input unchanged when the
 /// suffix is absent, so a shortened result means it matched.
@@ -3004,8 +3004,8 @@ fn lower_general_group(
         });
         scan_bodies.push(ScanBody { elements: scan_elements });
     }
-    let ctx_label = `General group {*rule_name}Group{group_index}`;
-    let dispatch = build_overlap_dispatch(&ctx_label, alts, &all_indices, &first_sets, ctx);
+    let owner_label = `General group {*rule_name}Group{group_index}`;
+    let dispatch = build_overlap_dispatch(&owner_label, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::General(GeneralShape {
             variant_type: variant_type,

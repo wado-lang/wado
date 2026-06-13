@@ -3,7 +3,7 @@ use {
     GrammarOption,
     OptionValue,
     LexerRule,
-    LexerAlt,
+    LexerAlternative,
     LexerElement,
     LexerRepeatElement,
     LexerNotElement,
@@ -377,7 +377,7 @@ fn fragment_is_recursive(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool 
 
 fn fragment_refs_self(
     target: &String,
-    alts: &List<LexerAlt>,
+    alts: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
     visited: &mut List<String>,
 ) -> bool {
@@ -465,7 +465,7 @@ fn gen_lexer_match_fn(
 
 fn gen_lexer_alts(
     w: &mut CodeWriter,
-    alts: &List<LexerAlt>,
+    alts: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
     fail_action: &String,
     ci: bool,
@@ -490,7 +490,7 @@ fn gen_lexer_alts(
     w.line(&`if !alts_ok_{id} \{ {fail_action}; \}`);
 }
 
-fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &List<LexerRule>, fail_action: &String, ci: bool) {
+fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlternative, all_rules: &List<LexerRule>, fail_action: &String, ci: bool) {
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
@@ -500,7 +500,7 @@ fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &List<LexerR
                 for let mut j = i + 1; j < alt.elements.len(); j += 1 {
                     rest_elems.push(alt.elements[j]);
                 }
-                let rest_alt = LexerAlt { elements: rest_elems };
+                let rest_alt = LexerAlternative { elements: rest_elems };
                 gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci);
                 return;
             }
@@ -857,7 +857,7 @@ fn gen_lexer_repeat(
 fn gen_lexer_non_greedy_repeat(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
-    rest: &LexerAlt,
+    rest: &LexerAlternative,
     all_rules: &List<LexerRule>,
     fail_action: &String,
     ci: bool,
@@ -1517,7 +1517,7 @@ fn build_rule_try_call(
 /// Analyze first elements of rule body alternatives to find first-char set.
 /// Returns true if it's a wildcard (any char could match).
 fn compute_elem_first_chars(
-    body: &List<LexerAlt>,
+    body: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
     ci: bool,
