@@ -278,7 +278,9 @@ Archive layout:
   is one-time (at toolchain-build), so its speed is irrelevant; decompression
   (per user build) is ~2–3× faster with zstd but already negligible with zlib
   (the largest 4 MB entry decompresses in ~24 ms, and a build pulls only the few
-  entries it uses).
+  entries it uses). zlib runs at its default level: on this data higher levels
+  buy no measurable ratio (level 9 matched or slightly trailed level 6), so the
+  extra compression time is pointless.
 
 Within-entry slicing: given the entries its `symbols → markers` need, plus the
 locale set, the provider produces the data-free component's blob by re-exporting
