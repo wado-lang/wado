@@ -12,6 +12,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
+use super::tysys::TypeSystem;
 use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError};
 
 /// Free-function form of [`Elaborator::canonical_decl_key`], callable from
@@ -108,6 +109,115 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
         }
     }
     None
+}
+
+impl TypeSystem {
+    /// Build the mapping from an impl block's declared type-parameter names to
+    /// the concrete type arguments at a use site, by position. Pure over the
+    /// AST impl type and the concrete arg list — needs no type table.
+    pub(crate) fn build_type_param_mapping(
+        impl_ty: &Type,
+        concrete_type_args: &[TypeId],
+        declared_type_params: &IndexSet<String>,
+    ) -> IndexMap<String, TypeId> {
+        let mut mapping = IndexMap::default();
+
+        // Extract type parameter names from impl_ty, tracking positions
+        // Position tracking is needed to map type params to the correct concrete arg
+        if let Type::Generic(g) = impl_ty {
+            for (concrete_idx, arg) in g.args.iter().enumerate() {
+                if let Type::Named(n) = arg {
+                    let is_type_param = if declared_type_params.is_empty() {
+                        true // legacy: treat all Named as type params
+                    } else {
+                        declared_type_params.contains(&n.name)
+                    };
+                    if is_type_param && let Some(&type_id) = concrete_type_args.get(concrete_idx) {
+                        mapping.insert(n.name.clone(), type_id);
+                    }
+                }
+            }
+        }
+
+        mapping
+    }
+
+    /// Check that concrete type args at non-type-parameter positions match the impl type.
+    /// e.g., `impl KeyValueLiteral for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
+    /// because position 0 expects String but got i32.
+    pub(crate) fn verify_impl_type_compatibility(
+        &self,
+        impl_ty: &Type,
+        concrete_type_args: &[TypeId],
+        declared_type_params: &IndexSet<String>,
+    ) -> bool {
+        if declared_type_params.is_empty() {
+            return true; // No filtering available, assume compatible
+        }
+        let Type::Generic(g) = impl_ty else {
+            return true;
+        };
+        let tt = self.type_table.borrow();
+        for (i, arg) in g.args.iter().enumerate() {
+            let Some(&concrete_id) = concrete_type_args.get(i) else {
+                continue;
+            };
+            if !Self::impl_type_matches_concrete(arg, concrete_id, declared_type_params, &tt) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Recursively check whether an impl type argument matches a concrete type ID.
+    /// - `Type::Named` that is a declared type param → always matches (free type param)
+    /// - `Type::Named` not in type params → concrete name must equal `type_table.type_name()`
+    /// - `Type::Generic` → concrete must be a `GenericInstance` with same outer name; inner args checked recursively
+    /// - Other types → not validated (return true)
+    pub(crate) fn impl_type_matches_concrete(
+        impl_ty: &Type,
+        concrete_id: TypeId,
+        declared_type_params: &IndexSet<String>,
+        type_table: &TypeTable,
+    ) -> bool {
+        match impl_ty {
+            Type::Named(n) => {
+                if declared_type_params.contains(&n.name) {
+                    true // free type param — matches anything
+                } else {
+                    type_table.type_name(concrete_id) == n.name
+                }
+            }
+            Type::Generic(g) => {
+                let resolved = type_table.get(concrete_id).clone();
+                match resolved {
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => {
+                        if name != g.name {
+                            return false;
+                        }
+                        for (i, inner) in g.args.iter().enumerate() {
+                            let Some(&inner_id) = type_args.get(i) else {
+                                return false;
+                            };
+                            if !Self::impl_type_matches_concrete(
+                                inner,
+                                inner_id,
+                                declared_type_params,
+                                type_table,
+                            ) {
+                                return false;
+                            }
+                        }
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => true,
+        }
+    }
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -1201,110 +1311,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// treated as type parameters. This prevents concrete types (e.g., `String` in
     /// `impl Trait for Map<String, V>`) from being incorrectly mapped.
     /// When empty, all `Named` types are assumed to be type parameters (legacy behavior).
-    pub(super) fn build_type_param_mapping(
-        impl_ty: &Type,
-        concrete_type_args: &[TypeId],
-        declared_type_params: &IndexSet<String>,
-    ) -> IndexMap<String, TypeId> {
-        let mut mapping = IndexMap::default();
-
-        // Extract type parameter names from impl_ty, tracking positions
-        // Position tracking is needed to map type params to the correct concrete arg
-        if let Type::Generic(g) = impl_ty {
-            for (concrete_idx, arg) in g.args.iter().enumerate() {
-                if let Type::Named(n) = arg {
-                    let is_type_param = if declared_type_params.is_empty() {
-                        true // legacy: treat all Named as type params
-                    } else {
-                        declared_type_params.contains(&n.name)
-                    };
-                    if is_type_param && let Some(&type_id) = concrete_type_args.get(concrete_idx) {
-                        mapping.insert(n.name.clone(), type_id);
-                    }
-                }
-            }
-        }
-
-        mapping
-    }
-
-    /// Check that concrete type args at non-type-parameter positions match the impl type.
-    /// e.g., `impl KeyValueLiteral for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
-    /// because position 0 expects String but got i32.
-    pub(super) fn verify_impl_type_compatibility(
-        impl_ty: &Type,
-        concrete_type_args: &[TypeId],
-        declared_type_params: &IndexSet<String>,
-        type_table: &std::cell::RefCell<TypeTable>,
-    ) -> bool {
-        if declared_type_params.is_empty() {
-            return true; // No filtering available, assume compatible
-        }
-        let Type::Generic(g) = impl_ty else {
-            return true;
-        };
-        let tt = type_table.borrow();
-        for (i, arg) in g.args.iter().enumerate() {
-            let Some(&concrete_id) = concrete_type_args.get(i) else {
-                continue;
-            };
-            if !Self::impl_type_matches_concrete(arg, concrete_id, declared_type_params, &tt) {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Recursively check whether an impl type argument matches a concrete type ID.
-    /// - `Type::Named` that is a declared type param → always matches (free type param)
-    /// - `Type::Named` not in type params → concrete name must equal `type_table.type_name()`
-    /// - `Type::Generic` → concrete must be a `GenericInstance` with same outer name; inner args checked recursively
-    /// - Other types → not validated (return true)
-    pub(super) fn impl_type_matches_concrete(
-        impl_ty: &Type,
-        concrete_id: TypeId,
-        declared_type_params: &IndexSet<String>,
-        type_table: &TypeTable,
-    ) -> bool {
-        match impl_ty {
-            Type::Named(n) => {
-                if declared_type_params.contains(&n.name) {
-                    true // free type param — matches anything
-                } else {
-                    type_table.type_name(concrete_id) == n.name
-                }
-            }
-            Type::Generic(g) => {
-                let resolved = type_table.get(concrete_id).clone();
-                match resolved {
-                    ResolvedType::GenericInstance {
-                        name, type_args, ..
-                    } => {
-                        if name != g.name {
-                            return false;
-                        }
-                        for (i, inner) in g.args.iter().enumerate() {
-                            let Some(&inner_id) = type_args.get(i) else {
-                                return false;
-                            };
-                            if !Self::impl_type_matches_concrete(
-                                inner,
-                                inner_id,
-                                declared_type_params,
-                                type_table,
-                            ) {
-                                return false;
-                            }
-                        }
-                        true
-                    }
-                    _ => false,
-                }
-            }
-            _ => true,
-        }
-    }
-
     /// Single entry point for resolving a trait method that a binary operator
     /// dispatches to (Eq / Ord / Add / Sub / Mul / Div / Rem / `BitAnd` / `BitOr` /
     /// `BitXor` / Shl / Shr). Produces a fully-populated

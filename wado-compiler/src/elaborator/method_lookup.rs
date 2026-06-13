@@ -13,6 +13,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::infer::InferCtx;
+use super::tysys::TypeSystem;
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
@@ -2545,16 +2546,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => continue,
             };
             let declared_type_params = self.build_declared_type_params(impl_block);
-            let type_param_mapping = Self::build_type_param_mapping(
+            let type_param_mapping = TypeSystem::build_type_param_mapping(
                 &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
             );
-            if !Self::verify_impl_type_compatibility(
+            if !self.tysys.verify_impl_type_compatibility(
                 &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
-                &self.tysys.type_table,
             ) {
                 continue;
             }
@@ -2807,7 +2807,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // keeps Self substitution on a single mechanism shared with
             // `find_trait_method_for_type`.
             let impl_block = self.get_impl_block(impl_ref);
-            let type_param_mapping = Self::build_type_param_mapping(
+            let type_param_mapping = TypeSystem::build_type_param_mapping(
                 &impl_block.ty,
                 &concrete_type_args,
                 &IndexSet::default(),
@@ -3035,7 +3035,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let declared_type_params = self.build_declared_type_params(impl_block);
 
             let impl_block = self.get_impl_block(impl_ref);
-            let type_param_mapping = Self::build_type_param_mapping(
+            let type_param_mapping = TypeSystem::build_type_param_mapping(
                 &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
@@ -3064,11 +3064,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Verify non-type-parameter positions match the concrete type args
             let impl_block = self.get_impl_block(impl_ref);
-            if !Self::verify_impl_type_compatibility(
+            if !self.tysys.verify_impl_type_compatibility(
                 &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
-                &self.tysys.type_table,
             ) {
                 continue;
             }
@@ -3238,17 +3237,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             let declared_type_params = self.build_declared_type_params(impl_block);
-            let type_param_mapping = Self::build_type_param_mapping(
+            let type_param_mapping = TypeSystem::build_type_param_mapping(
                 &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
             );
 
-            if !Self::verify_impl_type_compatibility(
+            if !self.tysys.verify_impl_type_compatibility(
                 &impl_block.ty,
                 &concrete_type_args,
                 &declared_type_params,
-                &self.tysys.type_table,
             ) {
                 continue;
             }
