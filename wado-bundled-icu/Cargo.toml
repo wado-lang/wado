@@ -16,12 +16,19 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Full ICU4X meta-crate with default features: this pulls in every component
-# (locale, casemap, collator, segmenter, plurals, decimal, datetime, ...) and
-# `compiled_data` (all CLDR locales baked in). We intentionally do NOT split or
-# slice here — Wado tree-shakes the final artifact, so the bundle stays whole.
-icu = "2.2"
-wit-bindgen = "0.58"
+# Full ICU4X meta-crate. `default-features = false` drops std from every
+# component so the bundle is no_std (zero wasi imports); `compiled_data` still
+# bakes in all CLDR data. Every component crate (locale, casemap, collator,
+# segmenter, plurals, decimal, datetime, ...) is an unconditional dependency of
+# the meta-crate, so they all remain available — we do NOT slice here; Wado
+# tree-shakes the final artifact, so the bundle stays whole.
+icu = { version = "2.2", default-features = false, features = ["compiled_data"] }
+# default-features = false drops the `std` feature (keeps generated bindings
+# no_std on core + alloc); re-enable the proc-macro and realloc export we need.
+wit-bindgen = { version = "0.58", default-features = false, features = ["macros", "realloc"] }
+# Global allocator for the no_std wasm32-unknown-unknown target. ICU4X allocates
+# heavily; this is the heap it manages inside the component's own linear memory.
+dlmalloc = { version = "0.2", features = ["global"] }
 
 # Size-optimized build: this is a bundled asset, not a dev-loop artifact.
 [profile.release]

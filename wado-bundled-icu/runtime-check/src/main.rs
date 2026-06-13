@@ -26,8 +26,10 @@ impl WasiView for Host {
     }
 }
 
-const COMPONENT: &[u8] =
-    include_bytes!("../../target/wasm32-wasip2/release/wado_bundled_icu.wasm");
+// The no_std wasm32-unknown-unknown core module wrapped by `wasm-tools
+// component new`. It imports nothing, so the wasi linker below is unused but
+// harmless.
+const COMPONENT: &[u8] = include_bytes!("../../target/wado_bundled_icu.component.wasm");
 
 fn main() -> Result<()> {
     let mut config = Config::new();

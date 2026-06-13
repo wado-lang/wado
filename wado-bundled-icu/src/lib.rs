@@ -1,6 +1,25 @@
 //! Technical-validation wrapper that exposes a slice of ICU4X over a Wasm
-//! Component Model interface. Built as a wasm32-wasip2 component; see
-//! `wit/world.wit` for the exported surface.
+//! Component Model interface. Built no_std for wasm32-unknown-unknown so the
+//! resulting module imports nothing; a post-build `wasm-tools component new`
+//! wraps it into a component. See `wit/world.wit` for the exported surface.
+
+#![no_std]
+
+extern crate alloc;
+
+use alloc::string::{String, ToString};
+
+// ICU4X allocates on the heap; provide the allocator it manages inside the
+// component's own linear memory.
+#[global_allocator]
+static ALLOC: dlmalloc::GlobalDlmalloc = dlmalloc::GlobalDlmalloc;
+
+// Wado has no exceptions: a panic is a programming error, so map it straight to
+// a Wasm trap (`unreachable`) instead of dragging in unwinding/formatting.
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    core::arch::wasm32::unreachable()
+}
 
 wit_bindgen::generate!({
     world: "icu",

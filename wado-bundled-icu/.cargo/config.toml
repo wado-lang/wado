@@ -1,7 +1,8 @@
-# Build directly to a Component Model component. The wasm32-wasip2 target's
-# linker (wasm-component-ld) wraps the core module — together with the
-# component-type custom section embedded by wit-bindgen's `generate!` macro —
-# into a component, so `cargo build` alone yields a .wasm component with no
-# external wasm-tools CLI required.
+# Build the no_std crate to a core wasm module. wasm32-unknown-unknown has no
+# WASI and no std, so the result imports nothing — a fully self-contained module
+# (like wado-bundled-libm). A post-build `wasm-tools component new` step wraps it
+# into a Component Model component using the component-type section embedded by
+# wit-bindgen's `generate!` macro.
 [build]
-target = "wasm32-wasip2"
+target = "wasm32-unknown-unknown"
+
