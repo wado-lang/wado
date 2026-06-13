@@ -1446,10 +1446,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let method = decl.methods.iter().find(|m| m.name == operation)?;
         let params: Vec<Type> = method.params.iter().map(|p| p.ty.clone()).collect();
-        let saved = std::mem::replace(&mut self.current_module_source, module_source);
-        let resolved = params.iter().map(|ty| self.resolve_type(ty)).collect();
-        self.current_module_source = saved;
-        Some(resolved)
+        // Resolve in the interface module's perspective *including its import
+        // scope*, so a type imported into the interface (e.g. `Instant` pulled
+        // into `Timezone` from `system_clock`) resolves to the same `TypeId` the
+        // call site sees, not a fresh same-named one.
+        let (imported_type_sources, import_original_names) =
+            self.tysys.trait_env.import_scope(&module_source);
+        Some(self.with_module_perspective(
+            module_source,
+            imported_type_sources,
+            import_original_names,
+            |s| params.iter().map(|ty| s.resolve_type(ty)).collect(),
+        ))
     }
 
     /// Resolve a WASI AST type to a `TypeId`
