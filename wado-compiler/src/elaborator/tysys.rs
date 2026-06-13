@@ -263,12 +263,10 @@ impl TypeSystem {
     }
 }
 
-/// Pure type-shape helpers — queries answerable from the type table alone
-/// (peeling references, extracting a declared type's name, newtype-base
-/// resolution, type stringification). Relocated off `impl Elaborator` as
-/// part of the WEP 2026-05-26 God-Object decomposition (Stage A): they
-/// touch only `self.type_table`, so they belong on the type system, and
-/// both the body walk and reify reach them through `self.tysys`.
+/// Pure type-shape helpers answerable from the type table alone (peel
+/// references, extract a declared type's name, newtype-base resolution, type
+/// stringification). They touch only `self.type_table`; the body walk and
+/// reify both reach them through `self.tysys`.
 impl TypeSystem {
     /// Build declared type params for an impl block, filtering out known type names.
     pub(crate) fn build_declared_type_params(&self, impl_block: &ImplBlock) -> IndexSet<String> {

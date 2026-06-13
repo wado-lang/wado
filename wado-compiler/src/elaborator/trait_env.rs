@@ -115,11 +115,9 @@ pub(crate) type DeclKey = (ModuleSource, String);
 pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
 
 /// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
-/// time so trait and method queries can read the trait name, target type,
+/// time so trait/method queries read its trait name, target type, methods,
 /// and type parameters without re-fetching the impl block from
-/// `loaded_modules`. This is the data-modelling half of the WEP 2026-05-26
-/// goal of keeping resolution queries off the raw AST: every index entry's
-/// `(ModuleSource, item_idx)` has a matching header in
+/// `loaded_modules`. Keyed by `(ModuleSource, item_idx)` in
 /// [`TraitEnv::impl_headers`].
 #[derive(Clone, Debug)]
 pub(super) struct ImplHeader {
@@ -1188,13 +1186,10 @@ pub(super) struct TraitContext {
 }
 
 /// Per-function annotate-time scope: the trait-resolution context
-/// ([`TraitContext`]) plus the `type_implements_trait` recursion guard.
-/// Bundled so the two pieces of per-call state live and move as a unit; a
-/// later step threads `&AnnotateCtx` explicitly into the resolution queries
-/// (WEP 2026-05-26, the trait_ctx scoping work) so they can leave the
-/// `Elaborator` God Object. Neither piece may move onto the shared
-/// `TypeSystem`: `trait_ctx` is per-function and `trait_check_stack` is a
-/// per-call frame stack (empty at quiescence) whose sharing would leak
+/// ([`TraitContext`]) plus the `type_implements_trait` recursion guard,
+/// bundled so they move as one unit (queries take `&AnnotateCtx`). Neither
+/// may move onto the shared `TypeSystem`: `trait_ctx` is per-function and
+/// `trait_check_stack` is a per-call frame stack whose sharing would leak
 /// frames across module walks.
 #[derive(Default)]
 pub(super) struct AnnotateCtx {

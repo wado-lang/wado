@@ -651,9 +651,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_name: &str,
         type_args: Option<&[TypeId]>,
     ) -> bool {
-        // Use pre-built index for O(1) lookup by type name; read each impl's
-        // digested header (trait name, target type, type params) rather than
-        // re-fetching the impl block from `loaded_modules`.
+        // O(1) lookup by type name; read each impl's digested header rather than
+        // the impl block AST.
         let trait_env = self.tysys.trait_env.clone();
         if let Some(entries) = trait_env.impl_index.get(type_name) {
             for entry in entries {

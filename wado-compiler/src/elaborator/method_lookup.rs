@@ -280,11 +280,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ModuleSource::primitive();
         }
 
-        // Struct / resource / variant / enum / builtin declarations, read from
-        // the digested index (covers every loaded module including the current
-        // one). The current module wins when it declares the type, matching the
-        // previous current-module-first scan; otherwise the first declaring
-        // module in build order is returned.
+        // Struct / resource / variant / enum / builtin declarations from the
+        // digest (covers every loaded module, incl. the current one). The
+        // current module wins when it declares the type; else the first
+        // declaring module in build order.
         if let Some(modules) = self
             .tysys
             .trait_env
@@ -311,8 +310,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Newtype declarations (fallback, no current-module preference — matches
-        // the previous loaded-modules scan order).
+        // Newtype declarations (fallback; no current-module preference).
         if let Some(modules) = self.tysys.trait_env.newtype_decl_modules.get(struct_name)
             && let Some(first) = modules.first()
         {
@@ -1195,9 +1193,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_names: &[String],
         method_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
-        // `trait_decl_headers` already covers every loaded module (including
-        // the current one), so a single pass over the digested headers
-        // replaces the previous loaded-modules + current-module scans.
+        // `trait_decl_headers` covers every loaded module (incl. the current
+        // one), so one pass suffices.
         for header in self.tysys.trait_env.trait_decl_headers.values() {
             if trait_names.iter().any(|n| n == &header.name) {
                 for trait_method in &header.methods {
@@ -1254,9 +1251,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_module_source: Option<&ModuleSource>,
         method_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
-        // Impl-method passes read the digested impl headers (which cover every
-        // loaded module including the current one, so the prior separate
-        // current-module scans are redundant). Inherent impls are tried first
+        // Impl-method passes read the digested headers (which cover every loaded
+        // module, incl. the current one). Inherent impls first
         // (include_trait = false), preferring the receiver's home module.
         if let Some(module_source) = struct_module_source
             && let Some(names) = self.search_impl_headers_method_tps(
@@ -2741,8 +2737,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let callee_module = &callee.module;
         let func_name = callee.name.as_str();
         let fn_type_params = &self.tysys.trait_env.function_type_params;
-        // Entry-point callees are looked up in the current module's functions
-        // first (preserving the previous current-module scan).
+        // Entry-point callees are looked up in the current module's functions first.
         if callee_module.is_entry_point()
             && let Some(tps) =
                 fn_type_params.get(&(self.current_module_source.clone(), func_name.to_string()))

@@ -127,13 +127,10 @@ pub struct Elaborator<'a, H: CompilerHost> {
     entry_module_source: ModuleSource,
     /// Current module items (for local function parameter lookup)
     current_module_items: &'a [Item],
-    /// Per-function annotate-time scope: the trait-resolution context
-    /// (`trait_ctx`: type params, bounds, associated type bindings, self type)
-    /// and the `type_implements_trait` recursion guard (`trait_check_stack`),
-    /// bundled so they save/restore and (eventually) thread as one unit. See
+    /// Per-function annotate-time scope (trait context + recursion guard); see
     /// [`trait_env::AnnotateCtx`].
-    // MIGRATION: transient annotate-time scope (Stage 5 carries it as an
-    //   explicit argument to `annotate_*` walkers).
+    // MIGRATION: transient annotate-time scope; to be threaded explicitly into
+    //   the resolution queries as `&AnnotateCtx` rather than read off the driver.
     annotate_ctx: trait_env::AnnotateCtx,
     /// Effect parameter names currently in scope (from enclosing function's `<effect E>`)
     // MIGRATION: transient annotate-time scope (per-function, not per-module).
