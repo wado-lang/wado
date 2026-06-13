@@ -648,7 +648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let impl_trait_name = self.get_type_name(trait_type);
                     if impl_trait_name == trait_name
-                        && self.inherent_impl_type_args_match(
+                        && self.tysys.inherent_impl_type_args_match(
                             &impl_block.ty,
                             &impl_block.type_params,
                             type_args,

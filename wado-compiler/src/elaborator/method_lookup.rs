@@ -62,6 +62,84 @@ pub(super) struct MethodInferenceInput<'a> {
     pub span: Span,
 }
 
+impl TypeSystem {
+    /// For an inherent `impl` on a possibly-generic type, check that any
+    /// concrete type arguments written in the impl header (e.g. the `u8` in
+    /// `impl List<u8>`) match the receiver's actual type arguments. Type
+    /// parameters (e.g. `T` in `impl List<T>`) match any argument. This is
+    /// what keeps `impl List<u8>` from applying to a `List<i32>` receiver.
+    ///
+    /// Non-generic impls (e.g. `impl i32`) impose no constraint here; the
+    /// struct-name match already pinned the receiver type.
+    pub(crate) fn inherent_impl_type_args_match(
+        &self,
+        impl_ty: &Type,
+        impl_params: &[ast::GenericParam],
+        receiver_type_args: Option<&[TypeId]>,
+        impl_module: &ModuleSource,
+    ) -> bool {
+        let inner = match impl_ty {
+            Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
+            other => other,
+        };
+        let Type::Generic(generic) = inner else {
+            return true;
+        };
+        // No receiver type args supplied (an existence/bounds check that did not
+        // thread them) — nothing to constrain against, so don't reject.
+        let Some(args) = receiver_type_args else {
+            return true;
+        };
+        for (i, arg) in generic.args.iter().enumerate() {
+            // A concrete arg (recursing into nested generics, excluding declared
+            // impl params) must equal the receiver's arg; a free type param
+            // matches anything.
+            if let Some(expected) = self.concrete_arg_mangled(arg, impl_params, impl_module) {
+                let Some(&recv) = args.get(i) else {
+                    return false;
+                };
+                if self.type_table.borrow().mangle_type_name(recv) != expected {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// The mangled type name a concrete impl argument must equal in the
+    /// receiver (`u8` → `"u8"`, `Box<u8>` → `"Box<u8>"`), or `None` when the
+    /// argument is a free type parameter (declared `impl<T>` or an unknown
+    /// name) that should match any receiver argument. Recurses so nested
+    /// generic args (`List<Box<u8>>`) are constrained, not silently accepted.
+    fn concrete_arg_mangled(
+        &self,
+        arg: &Type,
+        impl_params: &[ast::GenericParam],
+        impl_module: &ModuleSource,
+    ) -> Option<String> {
+        match arg {
+            Type::Named(named) => {
+                if self.is_known_type_name_in(impl_module, &named.name)
+                    && !impl_params.iter().any(|p| p.name == named.name)
+                {
+                    Some(named.name.clone())
+                } else {
+                    None
+                }
+            }
+            Type::Generic(g) => {
+                let parts: Vec<String> = g
+                    .args
+                    .iter()
+                    .map(|a| self.concrete_arg_mangled(a, impl_params, impl_module))
+                    .collect::<Option<Vec<String>>>()?;
+                Some(format!("{}<{}>", g.name, parts.join(",")))
+            }
+            _ => None,
+        }
+    }
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Get a reference to the `ImplBlock` from an `ImplBlockRef`.
     fn get_impl_block<'b>(&'b self, r: &ImplBlockRef) -> &'b ast::ImplBlock {
@@ -525,7 +603,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !targets_receiver {
                     continue;
                 }
-                if !(self.inherent_impl_type_args_match(
+                if !(self.tysys.inherent_impl_type_args_match(
                     &impl_block.ty,
                     &impl_block.type_params,
                     receiver_type_args.as_deref(),
@@ -714,7 +792,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 let impl_struct_name = self.get_type_name(&impl_block.ty);
                 if impl_struct_name == struct_name
-                    && self.inherent_impl_type_args_match(
+                    && self.tysys.inherent_impl_type_args_match(
                         &impl_block.ty,
                         &impl_block.type_params,
                         receiver_type_args.as_deref(),
@@ -958,81 +1036,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// For an inherent `impl` on a possibly-generic type, check that any
-    /// concrete type arguments written in the impl header (e.g. the `u8` in
-    /// `impl List<u8>`) match the receiver's actual type arguments. Type
-    /// parameters (e.g. `T` in `impl List<T>`) match any argument. This is
-    /// what keeps `impl List<u8>` from applying to a `List<i32>` receiver.
-    ///
-    /// Non-generic impls (e.g. `impl i32`) impose no constraint here; the
-    /// struct-name match already pinned the receiver type.
-    pub(super) fn inherent_impl_type_args_match(
-        &self,
-        impl_ty: &Type,
-        impl_params: &[ast::GenericParam],
-        receiver_type_args: Option<&[TypeId]>,
-        impl_module: &ModuleSource,
-    ) -> bool {
-        let inner = match impl_ty {
-            Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
-            other => other,
-        };
-        let Type::Generic(generic) = inner else {
-            return true;
-        };
-        // No receiver type args supplied (an existence/bounds check that did not
-        // thread them) — nothing to constrain against, so don't reject.
-        let Some(args) = receiver_type_args else {
-            return true;
-        };
-        for (i, arg) in generic.args.iter().enumerate() {
-            // A concrete arg (recursing into nested generics, excluding declared
-            // impl params) must equal the receiver's arg; a free type param
-            // matches anything.
-            if let Some(expected) = self.concrete_arg_mangled(arg, impl_params, impl_module) {
-                let Some(&recv) = args.get(i) else {
-                    return false;
-                };
-                if self.tysys.type_table.borrow().mangle_type_name(recv) != expected {
-                    return false;
-                }
-            }
-        }
-        true
-    }
-
-    /// The mangled type name a concrete impl argument must equal in the
-    /// receiver (`u8` → `"u8"`, `Box<u8>` → `"Box<u8>"`), or `None` when the
-    /// argument is a free type parameter (declared `impl<T>` or an unknown
-    /// name) that should match any receiver argument. Recurses so nested
-    /// generic args (`List<Box<u8>>`) are constrained, not silently accepted.
-    fn concrete_arg_mangled(
-        &self,
-        arg: &Type,
-        impl_params: &[ast::GenericParam],
-        impl_module: &ModuleSource,
-    ) -> Option<String> {
-        match arg {
-            Type::Named(named) => {
-                if self.tysys.is_known_type_name_in(impl_module, &named.name)
-                    && !impl_params.iter().any(|p| p.name == named.name)
-                {
-                    Some(named.name.clone())
-                } else {
-                    None
-                }
-            }
-            Type::Generic(g) => {
-                let parts: Vec<String> = g
-                    .args
-                    .iter()
-                    .map(|a| self.concrete_arg_mangled(a, impl_params, impl_module))
-                    .collect::<Option<Vec<String>>>()?;
-                Some(format!("{}<{}>", g.name, parts.join(",")))
-            }
-            _ => None,
-        }
-    }
 
     /// Extract parameter types (excluding self) from method parameters
     pub(super) fn extract_param_types(&mut self, params: &[ast::Param]) -> Vec<TypeId> {
