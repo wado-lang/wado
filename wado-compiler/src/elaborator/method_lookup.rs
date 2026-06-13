@@ -281,49 +281,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ModuleSource::primitive();
         }
 
-        // Check current module
-        for item in self.current_module_items {
-            match item {
-                Item::Struct(s) if s.name == struct_name => {
-                    return self.current_module_source.clone();
-                }
-                Item::Resource(r) if r.name == struct_name => {
-                    return self.current_module_source.clone();
-                }
-                Item::Variant(v) if v.name == struct_name => {
-                    return self.current_module_source.clone();
-                }
-                Item::Enum(e) if e.name == struct_name => {
-                    return self.current_module_source.clone();
-                }
-                Item::BuiltinTypeDecl(d) if d.name == struct_name => {
-                    return self.current_module_source.clone();
-                }
-                _ => {}
+        // Struct / resource / variant / enum / builtin declarations, read from
+        // the digested index (covers every loaded module including the current
+        // one). The current module wins when it declares the type, matching the
+        // previous current-module-first scan; otherwise the first declaring
+        // module in build order is returned.
+        if let Some(modules) = self
+            .tysys
+            .trait_env
+            .struct_like_decl_modules
+            .get(struct_name)
+        {
+            if modules.contains(&self.current_module_source) {
+                return self.current_module_source.clone();
             }
-        }
-
-        // Check loaded modules
-        for (module_source, module) in self.loaded_modules {
-            for item in &module.items {
-                match item {
-                    Item::Struct(s) if s.name == struct_name => {
-                        return module_source.clone();
-                    }
-                    Item::Resource(r) if r.name == struct_name => {
-                        return module_source.clone();
-                    }
-                    Item::Variant(v) if v.name == struct_name => {
-                        return module_source.clone();
-                    }
-                    Item::Enum(e) if e.name == struct_name => {
-                        return module_source.clone();
-                    }
-                    Item::BuiltinTypeDecl(d) if d.name == struct_name => {
-                        return module_source.clone();
-                    }
-                    _ => {}
-                }
+            if let Some(first) = modules.first() {
+                return first.clone();
             }
         }
 
@@ -339,15 +312,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Check loaded modules for newtype definitions
-        for (module_source, module) in self.loaded_modules {
-            for item in &module.items {
-                if let Item::Newtype(alias) = item
-                    && alias.name == struct_name
-                {
-                    return module_source.clone();
-                }
-            }
+        // Newtype declarations (fallback, no current-module preference — matches
+        // the previous loaded-modules scan order).
+        if let Some(modules) = self.tysys.trait_env.newtype_decl_modules.get(struct_name)
+            && let Some(first) = modules.first()
+        {
+            return first.clone();
         }
 
         // Aliased imports (`use { Counter as CounterA }`) aren't declared
@@ -2750,28 +2720,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<ast::GenericParam> {
         let callee_module = &callee.module;
         let func_name = callee.name.as_str();
-        // Try local functions
-        if callee_module.is_entry_point() {
-            for item in self.current_module_items {
-                if let ast::Item::Function(func) = item
-                    && func.name == func_name
-                {
-                    return func.type_params.clone();
-                }
-            }
+        let fn_type_params = &self.tysys.trait_env.function_type_params;
+        // Entry-point callees are looked up in the current module's functions
+        // first (preserving the previous current-module scan).
+        if callee_module.is_entry_point()
+            && let Some(tps) =
+                fn_type_params.get(&(self.current_module_source.clone(), func_name.to_string()))
+        {
+            return tps.clone();
         }
-
-        // Try loaded modules
-        if let Some(module) = self.loaded_modules.get(callee_module) {
-            for item in &module.items {
-                if let ast::Item::Function(func) = item
-                    && func.name == func_name
-                {
-                    return func.type_params.clone();
-                }
-            }
+        // Then the callee's own module.
+        if let Some(tps) = fn_type_params.get(&(callee_module.clone(), func_name.to_string())) {
+            return tps.clone();
         }
-
         Vec::new()
     }
 

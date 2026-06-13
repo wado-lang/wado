@@ -218,6 +218,19 @@ pub struct TraitEnv {
     /// method signatures without re-fetching the trait AST. See
     /// [`TraitDeclHeader`].
     pub(super) trait_decl_headers: IndexMap<(ModuleSource, usize), TraitDeclHeader>,
+    /// Free-function type parameters keyed by `(declaring module, function
+    /// name)`. Lets `lookup_function_type_params` read a callee's type params
+    /// without scanning the module AST.
+    pub(super) function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>>,
+    /// Type name → modules declaring a struct / resource / variant / enum /
+    /// builtin type of that name, in build order. Powers
+    /// `find_struct_module_source` without an AST scan. Newtypes are tracked
+    /// separately in [`Self::newtype_decl_modules`] because the query consults
+    /// them only as a later fallback.
+    pub(super) struct_like_decl_modules: IndexMap<String, Vec<ModuleSource>>,
+    /// Type name → modules declaring a `newtype` of that name, in build order.
+    /// The fallback half of `find_struct_module_source`'s module lookup.
+    pub(super) newtype_decl_modules: IndexMap<String, Vec<ModuleSource>>,
     /// `trait_name` → modules that host a blanket impl of that trait
     /// (`impl<T: Bound> Trait for T`). Used by the monomorphizer to find
     /// the home module of a generic dispatch when the receiver type
@@ -348,6 +361,10 @@ impl TraitEnv {
         let mut impl_headers: IndexMap<(ModuleSource, usize), ImplHeader> = IndexMap::default();
         let mut trait_decl_headers: IndexMap<(ModuleSource, usize), TraitDeclHeader> =
             IndexMap::default();
+        let mut function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>> =
+            IndexMap::default();
+        let mut struct_like_decl_modules: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
+        let mut newtype_decl_modules: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
         let mut blanket_trait_impl_modules: IndexMap<String, Vec<ModuleSource>> =
             IndexMap::default();
         let mut trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
@@ -500,6 +517,43 @@ impl TraitEnv {
         // every PascalCase reference to its declaring module.
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {
+                // Digest the per-item facts that `lookup_function_type_params`
+                // and `find_struct_module_source` read, so neither needs to
+                // re-scan `loaded_modules`. (Non-impl items fall through to the
+                // `Item::Impl` guard below and `continue`.)
+                match item {
+                    Item::Function(f) => {
+                        function_type_params.insert(
+                            (module_source.clone(), f.name.clone()),
+                            f.type_params.clone(),
+                        );
+                    }
+                    Item::Struct(s) => struct_like_decl_modules
+                        .entry(s.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    Item::Resource(r) => struct_like_decl_modules
+                        .entry(r.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    Item::Variant(v) => struct_like_decl_modules
+                        .entry(v.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    Item::Enum(e) => struct_like_decl_modules
+                        .entry(e.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    Item::BuiltinTypeDecl(d) => struct_like_decl_modules
+                        .entry(d.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    Item::Newtype(n) => newtype_decl_modules
+                        .entry(n.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    _ => {}
+                }
                 if let Item::Trait(trait_decl) = item {
                     trait_decl_headers.insert(
                         (module_source.clone(), item_idx),
@@ -645,6 +699,9 @@ impl TraitEnv {
                 blanket_impl_index,
                 impl_headers,
                 trait_decl_headers,
+                function_type_params,
+                struct_like_decl_modules,
+                newtype_decl_modules,
                 blanket_trait_impl_modules,
                 static_method_index,
                 resource_static_method_index,
