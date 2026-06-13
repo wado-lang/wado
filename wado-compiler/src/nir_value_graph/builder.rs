@@ -923,6 +923,17 @@ impl<'a> Builder<'a> {
         loop {
             match &self.body.exprs[producer].kind {
                 ExprKind::StructLiteral { .. } => break,
+                // The producing tail is a bare `Local` (e.g. inlining
+                // `fn f(mut p: S) -> S { p = S { … }; return p }` makes the
+                // break value the reassigned local `p`, not the literal). Copy
+                // that local's live field slots to the new binding — value
+                // semantics deep-copy the struct, so the binding observes the
+                // same field constants. Mirrors niri's `copy_fields_from`.
+                ExprKind::Local { index, .. } => {
+                    let src = *index;
+                    self.copy_local_field_slots(src, root, recv);
+                    return;
+                }
                 ExprKind::Block(b) => {
                     let Some(&last) = self.body.blocks[*b].stmts.last() else {
                         return;
@@ -976,6 +987,44 @@ impl<'a> Builder<'a> {
                 let ver = self.heap_state.version_of(Some(root), field_index);
                 self.field_store.insert((recv, field_index, ver), fv);
             }
+        }
+    }
+
+    /// Copy every currently-live field slot of source local `src` onto the new
+    /// binding `(dst_root, dst_recv)`. Used when a `let dst = …` binding's
+    /// producing tail is a bare `Local src` (the inlined `mut`-param-return
+    /// shape): value semantics deep-copy the struct, so `dst` observes the same
+    /// field constants `src` holds at this point. A slot is live when its
+    /// version equals `src`'s current read version for that field. Aliased
+    /// `src` slots are copied like any other: the snapshot is keyed by the
+    /// destination's own version, so a later write to the field through any
+    /// alias bumps the (global) field version and the stale copy becomes
+    /// unreachable — the same version-monotonicity argument the field
+    /// store→load seeding relies on. `untrackable` (`stores`-aliased) locals,
+    /// which the heap model cannot version, are excluded on both ends.
+    fn copy_local_field_slots(&mut self, src: u32, dst_root: u32, dst_recv: ValueId) {
+        if src == dst_root
+            || self.untrackable.contains(&src)
+            || self.untrackable.contains(&dst_root)
+        {
+            return;
+        }
+        let Some(&src_recv) = self.current_value.get(&src) else {
+            return;
+        };
+        // Collect the live (field, value) pairs first to release the borrow on
+        // `field_store` before inserting.
+        let live: Vec<(u32, ValueId)> = self
+            .field_store
+            .iter()
+            .filter_map(|(&(recv, field, ver), &stored)| {
+                (recv == src_recv && ver == self.heap_state.version_of(Some(src), field))
+                    .then_some((field, stored))
+            })
+            .collect();
+        for (field, stored) in live {
+            let dst_ver = self.heap_state.version_of(Some(dst_root), field);
+            self.field_store.insert((dst_recv, field, dst_ver), stored);
         }
     }
 
