@@ -419,7 +419,9 @@ async fn maybe_run_pipeline(
     if inline.is_empty() {
         return Ok(PipelineOutcome::default());
     }
-    let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
+    let provider = CliGeneratorProvider::new(manifest_root.clone())
+        .with_no_cache(no_cache)
+        .with_build_dependencies(build_dependency_paths(&manifest));
     crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline, no_cache)
         .await
 }
@@ -503,6 +505,21 @@ fn normalized_components(p: &Path) -> Vec<String> {
         }
     }
     out
+}
+
+/// `[build-dependencies]` name → package path (relative to the manifest
+/// root) for every path build-dependency. Consumed by the Kiln provider to
+/// resolve `module: "<name>"` generator references. Registry/git build-deps
+/// are skipped (unsupported for now).
+fn build_dependency_paths(manifest: &wado_manifest::Manifest) -> HashMap<String, String> {
+    manifest
+        .build_dependencies
+        .iter()
+        .filter_map(|(name, dep)| match &dep.source {
+            DependencySource::Path { path, .. } => Some((name.clone(), path.clone())),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Empty in-memory `wado.toml` manifest used as a fallback when the

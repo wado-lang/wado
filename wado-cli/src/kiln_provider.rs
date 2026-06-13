@@ -2,11 +2,12 @@
 //!
 //! Resolves a [`GeneratorModule`] into a [`ResolvedGenerator`] (wasm
 //! bytes + options descriptor + source-closure hash) for the Kiln
-//! driver. v1 supports [`GeneratorModule::LocalPath`] (`module = { path
-//! = "..." }`) resolution. Spec-form generators (`module =
-//! "ns:name@ver"`) surface [`ProviderError::Unsupported`] with a clear
-//! message, matching WEP open-q #4 — registry/git module sources are
-//! deferred to a follow-up.
+//! driver. Supports [`GeneratorModule::LocalPath`] (`module:
+//! "./generator.wado"`) and [`GeneratorModule::BuildDep`] (`module:
+//! "gale"`, resolved against `[build-dependencies]` to the package's
+//! `core:kiln/generator` world entry). Spec-form generators (`module =
+//! "ns:name@ver"`) surface [`ProviderError::Unsupported`] — registry/git
+//! module sources are deferred to a follow-up.
 //!
 //! For `LocalPath`, `resolve` reads the generator source, consults the
 //! on-disk cache at `build/kiln/{generators,metadata}/<stable-id>.*`
@@ -28,7 +29,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use wado_compiler::kiln::{GeneratorModule, OptionsDescriptor};
+use wado_compiler::kiln::{GeneratorModule, InvocationPath, OptionsDescriptor};
 use wado_compiler::lexer::lex;
 use wado_compiler::token::canonical_token_bytes;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
@@ -53,6 +54,9 @@ pub struct CliGeneratorProvider {
     /// When true, skip reads from the on-disk generator cache. Writes
     /// still happen so the next non-bypass run sees a warm tree.
     no_cache: bool,
+    /// `[build-dependencies]` name → package path, relative to the manifest
+    /// root. Used to resolve `module: "<name>"` generator references.
+    build_dependencies: std::collections::HashMap<String, String>,
 }
 
 impl CliGeneratorProvider {
@@ -62,12 +66,22 @@ impl CliGeneratorProvider {
             manifest_root,
             compile_count: Arc::new(AtomicUsize::new(0)),
             no_cache: false,
+            build_dependencies: std::collections::HashMap::new(),
         }
     }
 
     #[must_use]
     pub fn with_no_cache(mut self, no_cache: bool) -> Self {
         self.no_cache = no_cache;
+        self
+    }
+
+    #[must_use]
+    pub fn with_build_dependencies(
+        mut self,
+        build_dependencies: std::collections::HashMap<String, String>,
+    ) -> Self {
+        self.build_dependencies = build_dependencies;
         self
     }
 
@@ -549,6 +563,66 @@ fn hex32(bytes: &[u8; 32]) -> String {
     out
 }
 
+impl CliGeneratorProvider {
+    /// Compile (or read from cache) a generator at a manifest-root-relative
+    /// path. Shared by `LocalPath` and `BuildDep` resolution.
+    async fn resolve_local(
+        &self,
+        path: &InvocationPath,
+    ) -> Result<ResolvedGenerator, ProviderError> {
+        let (abs, _source, source_str, stable_id) = self.read_local_source(path)?;
+        let base = abs.parent().map(Path::to_path_buf).unwrap_or_default();
+        if !self.no_cache
+            && let Some(resolved) = self.try_read_cache(&stable_id, &base)
+        {
+            return Ok(resolved);
+        }
+        let artifacts = self
+            .compile_local(path.as_str().to_string(), abs, source_str, stable_id)
+            .await?;
+        Ok(ResolvedGenerator {
+            wasm: artifacts.wasm,
+            descriptor: artifacts.descriptor,
+            source_hash: artifacts.source_hash,
+        })
+    }
+
+    /// Resolve a `[build-dependencies]` name to its generator entry: the
+    /// dependency package's `core:kiln/generator` world entry, as a
+    /// manifest-root-relative path.
+    fn build_dep_generator_path(&self, name: &str) -> Result<InvocationPath, ProviderError> {
+        let dep_path = self.build_dependencies.get(name).ok_or_else(|| {
+            ProviderError::Internal {
+                message: format!(
+                    "kiln: generator module `{name}` is not declared in [build-dependencies]"
+                ),
+            }
+        })?;
+        let dep_manifest_path = self.resolve_path(dep_path).join("wado.toml");
+        let text = std::fs::read_to_string(&dep_manifest_path).map_err(|e| {
+            ProviderError::Internal {
+                message: format!(
+                    "kiln: build-dependency `{name}`: cannot read `{}`: {e}",
+                    dep_manifest_path.display()
+                ),
+            }
+        })?;
+        let manifest: wado_manifest::Manifest =
+            text.parse().map_err(|e| ProviderError::Internal {
+                message: format!("kiln: build-dependency `{name}`: invalid wado.toml: {e}"),
+            })?;
+        let entry = manifest
+            .world_entry("core:kiln/generator")
+            .ok_or_else(|| ProviderError::Internal {
+                message: format!(
+                    "kiln: build-dependency `{name}` does not declare a \
+                     [world].\"core:kiln/generator\" entry"
+                ),
+            })?;
+        Ok(InvocationPath::normalize(&format!("{dep_path}/{entry}")))
+    }
+}
+
 impl GeneratorProvider for CliGeneratorProvider {
     async fn resolve(&self, module: &GeneratorModule) -> Result<ResolvedGenerator, ProviderError> {
         match module {
@@ -559,22 +633,10 @@ impl GeneratorProvider for CliGeneratorProvider {
                      Use `module = {{ path = \"...\" }}` to point at a local generator package."
                 ),
             }),
-            GeneratorModule::LocalPath(path) => {
-                let (abs, _source, source_str, stable_id) = self.read_local_source(path)?;
-                let base = abs.parent().map(Path::to_path_buf).unwrap_or_default();
-                if !self.no_cache
-                    && let Some(resolved) = self.try_read_cache(&stable_id, &base)
-                {
-                    return Ok(resolved);
-                }
-                let artifacts = self
-                    .compile_local(path.as_str().to_string(), abs, source_str, stable_id)
-                    .await?;
-                Ok(ResolvedGenerator {
-                    wasm: artifacts.wasm,
-                    descriptor: artifacts.descriptor,
-                    source_hash: artifacts.source_hash,
-                })
+            GeneratorModule::LocalPath(path) => self.resolve_local(path).await,
+            GeneratorModule::BuildDep(name) => {
+                let path = self.build_dep_generator_path(name)?;
+                self.resolve_local(&path).await
             }
         }
     }

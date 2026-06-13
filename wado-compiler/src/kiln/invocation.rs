@@ -74,6 +74,9 @@ pub enum GeneratorModule {
     Spec(String),
     /// Resolved local path, already joined against the consuming file's directory.
     LocalPath(InvocationPath),
+    /// A bare `[build-dependencies]` key (`module: "gale"`). Resolved by the
+    /// host to the dependency package's `core:kiln/generator` world entry.
+    BuildDep(String),
 }
 
 /// Compiler-internal canonical form of a Kiln generator invocation.
