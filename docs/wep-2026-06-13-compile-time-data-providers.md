@@ -263,14 +263,22 @@ Archive layout:
   entries, while keeping the index small — per-(marker, locale) would explode it
   for collation. A locale-bearing marker's entry holds all locales; the provider
   slices locales within it.
-- The index is a minimal central directory: entry name → (offset, length,
-  codec). A custom table suffices since the toolchain reads it itself; an actual
-  ZIP is a drop-in alternative if external inspection is wanted. Random access
-  (not a streamed `tar`) is required for selective extraction.
-- Compression is per-entry zstd, applied and reversed host-side: `read-asset`
-  returns already-decompressed bytes, so the provider links no decompressor.
-  Postcard data compresses well, so the on-disk image is far below the raw
-  figures above.
+- The index is a minimal central directory: entry name → (offset, length). A
+  custom table suffices since the toolchain reads it itself; an actual ZIP is a
+  drop-in alternative if external inspection is wanted. Random access (not a
+  streamed `tar`) is required for selective extraction.
+- Compression is per-entry zlib (`flate2` / `miniz_oxide`), applied and reversed
+  host-side: `read-asset` returns already-decompressed bytes, so the provider
+  links no decompressor. zlib is chosen over zstd deliberately: it is already a
+  `wado-compiler` dependency and pure Rust, whereas zstd would add a new C
+  dependency to the otherwise runtime-free compiler. Measured on the ICU blobs,
+  zstd's advantage does not justify that cost: zstd-19 beats zlib-9 by only ~9%
+  on the dominant (near-incompressible) segmentation data and ~8% on the small
+  feature blobs — its biggest win, ~24%, is on mid-size locale data. Compression
+  is one-time (at toolchain-build), so its speed is irrelevant; decompression
+  (per user build) is ~2–3× faster with zstd but already negligible with zlib
+  (the largest 4 MB entry decompresses in ~24 ms, and a build pulls only the few
+  entries it uses).
 
 Within-entry slicing: given the entries its `symbols → markers` need, plus the
 locale set, the provider produces the data-free component's blob by re-exporting
@@ -330,8 +338,10 @@ Remaining:
       `strict` is a runtime API arg, not a `with` option.
 - [x] Define the archive layout: per-marker entries (skips unused heavy markers,
       avoids per-locale explosion), minimal central-directory index, per-entry
-      zstd decompressed host-side (`read-asset` returns plaintext). The provider
-      slices markers × locales within entries and re-exports via `BlobExporter`.
+      zlib (`flate2`, already a dep; zstd's ~9% ratio win on the dominant data
+      doesn't justify a new C dependency) decompressed host-side (`read-asset`
+      returns plaintext). The provider slices markers × locales within entries
+      and re-exports via `BlobExporter`.
 - [x] Marker-recording drift test mechanism validated: a `BufferProvider`
       recorder captures exactly the markers each constructor requests, including
       transitive ones (`collator → NormalizerNfd*`) the crate `MARKERS` lists
