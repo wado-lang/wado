@@ -335,17 +335,11 @@ impl<'a> Builder<'a> {
         right: ExprId,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
-        // Reflexivity: `x == x` is `true` and `x != x` is `false` for a value
-        // that compares equal to itself. Two operands sharing a `ValueId` are
-        // the same value by hash-cons, so this fires without knowing the
-        // literal (e.g. an identity reinterpret `v as SameType == v`, whose
-        // rebuilt field reads hash-cons to the original field's VN). Excludes
-        // `f32` / `f64` (`NaN != NaN`) and `v128` — its `==` is either IEEE
-        // lane-wise (NaN lanes) or an as-yet-undefined bitwise form, so
-        // `x == x` is not provably `true`. Every other operand that reaches a
-        // `NirBinaryOp::Eq` (integers, `bool`, `char`, enum discriminants)
-        // compares equal to itself; struct / reference equality dispatches to
-        // an `Eq` method / `RefEq`, never here.
+        // Reflexivity: operands sharing a `ValueId` are the same value, so
+        // `x == x` folds to `true` and `x != x` to `false` without a literal
+        // (e.g. an identity reinterpret `v as SameType == v`). Floats
+        // (`NaN != NaN`) and `v128` (no scalar `==`) are excluded; every other
+        // operand reaching here is reflexively equal.
         if lhs == rhs
             && matches!(op, NirBinaryOp::Eq | NirBinaryOp::NotEq)
             && !matches!(
@@ -626,14 +620,11 @@ impl<'a> Builder<'a> {
                 // it).
                 let lhs = self.walk_expr(left);
                 let rhs = if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
-                    // Short-circuit `&&` / `||`: the rhs runs only
-                    // conditionally, so its effects must be modelled as "may or
-                    // may not have happened" — any local it mutates goes
-                    // Opaque (below) and any field it writes is invalidated
-                    // (further below). Without the local part, `false && { x =
-                    // 2; true }` would commit `x = 2` to `current_value` and
-                    // let store-load forwarding substitute the never-stored
-                    // value into later reads.
+                    // Short-circuit `&&` / `||`: the rhs runs conditionally, so
+                    // its effects "may or may not have happened" — any local it
+                    // mutates goes Opaque and any field it writes is
+                    // invalidated (both below). Else `false && { x = 2; true }`
+                    // would commit `x = 2` and forward the never-stored value.
                     let saved_cur = self.current_value.clone();
                     let rhs = self.walk_expr(right);
                     let changed: crate::hashmap::IndexSet<u32> = self
@@ -650,10 +641,8 @@ impl<'a> Builder<'a> {
                     // A reference the conditionally-run rhs reassigned (or whose
                     // pointee it reassigned) no longer has a known target.
                     self.drop_ref_targets_for(&changed);
-                    // Invalidate only the heap the conditionally-run rhs may
-                    // write — not a blanket `bump_all`. A pure rhs (a field
-                    // comparison, say) writes nothing, so an unrelated
-                    // aggregate's fields survive across the short-circuit.
+                    // Invalidate only what the rhs writes, not a blanket
+                    // `bump_all`: a pure rhs leaves unrelated fields intact.
                     let eff = collect_node_heap_effects(self.body, NodeRef::Expr(right));
                     self.apply_loop_heap_effects(&eff);
                     rhs
@@ -1021,18 +1010,14 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Copy every currently-live field slot of source local `src` onto the new
-    /// binding `(dst_root, dst_recv)`. Used when a `let dst = …` binding's
-    /// producing tail is a bare `Local src` (the inlined `mut`-param-return
-    /// shape): value semantics deep-copy the struct, so `dst` observes the same
-    /// field constants `src` holds at this point. A slot is live when its
-    /// version equals `src`'s current read version for that field. Aliased
-    /// `src` slots are copied like any other: the snapshot is keyed by the
-    /// destination's own version, so a later write to the field through any
-    /// alias bumps the (global) field version and the stale copy becomes
-    /// unreachable — the same version-monotonicity argument the field
-    /// store→load seeding relies on. `untrackable` (`stores`-aliased) locals,
-    /// which the heap model cannot version, are excluded on both ends.
+    /// Copy `src`'s currently-live field slots onto the new binding
+    /// `(dst_root, dst_recv)` — for `let dst = …` whose producing tail is a
+    /// bare `Local src` (the inlined `mut`-param-return shape), where value
+    /// semantics make `dst` observe `src`'s field constants. Keyed by the
+    /// destination's own version, so a later write bumps the field version and
+    /// the stale copy becomes unreachable (the seeding monotonicity argument).
+    /// `untrackable` (`stores`-aliased) locals, which can't be versioned, are
+    /// excluded.
     fn copy_local_field_slots(&mut self, src: u32, dst_root: u32, dst_recv: ValueId) {
         if src == dst_root
             || self.untrackable.contains(&src)
@@ -1594,10 +1579,9 @@ fn collect_loop_heap_effects(body: &Body, block: BlockId) -> LoopHeapEffects {
     collect_node_heap_effects(body, NodeRef::Block(block))
 }
 
-/// The heap-write effects of an arbitrary node's subtree. Used by `walk_loop`
-/// (on the loop body block) and by the short-circuit `&&` / `||` arm (on the
-/// conditionally-evaluated rhs expression), so both invalidate exactly the
-/// fields / locals their subtree may write rather than `bump_all`.
+/// The heap-write effects of a node's subtree, so a caller can invalidate
+/// exactly what it writes rather than `bump_all`. Used by `walk_loop` (body
+/// block) and the short-circuit arm (conditional rhs).
 fn collect_node_heap_effects(body: &Body, node: NodeRef) -> LoopHeapEffects {
     let mut eff = LoopHeapEffects::default();
     collect_loop_heap_node(body, node, &mut eff);

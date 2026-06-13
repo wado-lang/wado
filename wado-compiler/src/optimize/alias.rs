@@ -120,22 +120,14 @@ pub(super) fn first_param_types(project: &NirPackage) -> IndexMap<(ModuleSource,
 }
 
 /// The `aliased`, `untrackable`, and `mut_escaped` local sets the `ValueGraph`
-/// builder needs, as plain `IndexSet`s (the builder is below the `optimize`
-/// layer and does not depend on `niri`'s `LocalSet`). A thin wrapper over
-/// [`build_alias_info`] (for `aliased` / `untrackable`) plus the mutable-escape
-/// analysis (for `mut_escaped`), so every engine-driven pass feeds the builder
-/// the same alias view the const-fold visitor uses.
+/// builder needs, as plain `IndexSet`s. Wraps [`build_alias_info`] (for
+/// `aliased` / `untrackable`) with the mutable-escape analysis (`mut_escaped`).
 ///
-/// `mut_escaped` is the subset of `aliased` a call can actually mutate. It is
-/// derived *subtractively* from the proven-conservative `aliased` set: a local
-/// is dropped from `mut_escaped` only when it is **provably immutable across
-/// calls** — its type is transitively free of shared mutable state
-/// ([`CallImmutability::is_call_immutable`]) *and* it has no syntactic mutable
-/// escape ([`collect_mut_escaped_node`]: `&mut v`, a mut-ref argument, a
-/// `&mut self` receiver, or a `stores` stash). Everything else stays, so the
-/// set is always ⊆ `aliased` and never bumps fewer locals than soundness
-/// allows. The builder still uses the full `aliased` set for field-*write*
-/// granularity; only call effects consult `mut_escaped`.
+/// `mut_escaped` ⊆ `aliased` is the subset a call can actually mutate, derived
+/// subtractively: a local is dropped only when its type is transitively free of
+/// shared mutable state ([`CallImmutability::is_call_immutable`]) *and* it has
+/// no syntactic mutable escape ([`collect_mut_escaped_node`]). Field-*write*
+/// granularity uses the full `aliased`; only call effects consult `mut_escaped`.
 pub(super) fn builder_alias_sets(
     body: &Body,
     locals: &[crate::nir::NirLocal],
