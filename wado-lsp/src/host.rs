@@ -67,28 +67,34 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     fn dependency_index(&self) -> HashMap<String, String> {
-        dependency_index(&self.base_path)
+        let Some((manifest, root)) = nearest_manifest(&self.base_path) else {
+            return HashMap::new();
+        };
+        dependency_index_from(&manifest, &root, &self.base_path)
     }
 }
 
-/// Build the bare-name → entry-path dependency index from the nearest
-/// `wado.toml`'s `[dependencies]`. Each path dependency's entry module (its
+/// Build the bare-name → entry-path dependency index from a manifest's
+/// `[dependencies]`. Each path dependency's entry module (its
 /// `[package].lib`, or the file itself for a single-`.wado` path dependency)
 /// is recorded relative to `base` — the same base `load_source` joins against
-/// — so `use { … } from "<name>"` resolves to it.
+/// — so `use { … } from "<name>"` resolves to it. `manifest_dir` is the
+/// directory containing the manifest (path deps resolve against it).
 ///
 /// Only `path` dependencies are supported for now; registry/git are skipped.
-fn dependency_index(base: &Path) -> HashMap<String, String> {
+#[must_use]
+pub fn dependency_index_from(
+    manifest: &wado_manifest::Manifest,
+    manifest_dir: &Path,
+    base: &Path,
+) -> HashMap<String, String> {
     let mut index = HashMap::new();
-    let Some((manifest, root)) = nearest_manifest(base) else {
-        return index;
-    };
     let base_abs = absolutize(base);
     for (name, dep) in &manifest.dependencies {
         let DependencySource::Path { path, .. } = &dep.source else {
             continue;
         };
-        let Some(entry) = dependency_entry_path(&root.join(path)) else {
+        let Some(entry) = dependency_entry_path(&manifest_dir.join(path)) else {
             continue;
         };
         index.insert(name.clone(), relative_path(&base_abs, &absolutize(&entry)));

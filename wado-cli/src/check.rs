@@ -113,9 +113,15 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let host = FilesystemCompilerHost::with_log_level(base_path, opts.log_level);
-
     let manifest_pair = crate::compile::load_nearest_manifest(path);
+    let dep_index = manifest_pair
+        .as_ref()
+        .map(|(manifest, root)| wado_lsp::host::dependency_index_from(manifest, root, &base_path));
+    let mut host = FilesystemCompilerHost::with_log_level(base_path, opts.log_level);
+    if let Some(index) = dep_index {
+        host = host.with_dependency_index(index);
+    }
+
     let manifest_root = manifest_pair
         .as_ref()
         .map(|(_, root)| root.clone())
@@ -124,7 +130,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
                 .map(std::path::Path::to_path_buf)
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
         });
-    let inline = crate::compile::collect_inline_invocations_for_entry(path, &manifest_root);
+    let mut inline = crate::compile::collect_inline_invocations_for_entry(path, &manifest_root);
 
     let outcome = if inline.is_empty() {
         CheckOutcome::default()
@@ -132,6 +138,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         let manifest = manifest_pair
             .map(|(m, _)| m)
             .unwrap_or_else(crate::compile::empty_manifest);
+        crate::compile::rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
         let provider = CliGeneratorProvider::new(manifest_root.clone());
         crate::kiln_driver::check_pipeline(&manifest, &manifest_root, &host, &provider, inline)
             .await

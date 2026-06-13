@@ -92,4 +92,10 @@ export fn run() with Stdout {
         .assert()
         .success()
         .stdout(predicate::str::contains("hi from generator"));
+
+    // `wado check` resolves the build-dependency generator too.
+    wado_in(&app)
+        .args(["check", "src/main.wado"])
+        .assert()
+        .success();
 }

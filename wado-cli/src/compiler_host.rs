@@ -31,6 +31,10 @@ pub struct FilesystemCompilerHost {
     /// Cache misses on `kiln_components`. Tests assert against this
     /// rather than wall-clock timing.
     kiln_component_compile_count: AtomicUsize,
+    /// Precomputed `[dependencies]` index. When set, `dependency_index`
+    /// returns it instead of having the inner host re-read the manifest —
+    /// the caller already parsed it for the Kiln pipeline.
+    dep_index: Option<std::collections::HashMap<String, String>>,
 }
 
 impl FilesystemCompilerHost {
@@ -44,6 +48,7 @@ impl FilesystemCompilerHost {
             kiln_engine: OnceLock::new(),
             kiln_components: Mutex::new(Vec::new()),
             kiln_component_compile_count: AtomicUsize::new(0),
+            dep_index: None,
         }
     }
 
@@ -57,6 +62,7 @@ impl FilesystemCompilerHost {
             kiln_engine: OnceLock::new(),
             kiln_components: Mutex::new(Vec::new()),
             kiln_component_compile_count: AtomicUsize::new(0),
+            dep_index: None,
         }
     }
 
@@ -70,7 +76,19 @@ impl FilesystemCompilerHost {
             kiln_engine: OnceLock::new(),
             kiln_components: Mutex::new(Vec::new()),
             kiln_component_compile_count: AtomicUsize::new(0),
+            dep_index: None,
         }
+    }
+
+    /// Supply a precomputed `[dependencies]` index so the inner host does not
+    /// re-read the manifest the caller already parsed for the Kiln pipeline.
+    #[must_use]
+    pub fn with_dependency_index(
+        mut self,
+        index: std::collections::HashMap<String, String>,
+    ) -> Self {
+        self.dep_index = Some(index);
+        self
     }
 
     #[must_use]
@@ -186,7 +204,10 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     fn dependency_index(&self) -> std::collections::HashMap<String, String> {
-        self.inner.dependency_index()
+        match &self.dep_index {
+            Some(index) => index.clone(),
+            None => self.inner.dependency_index(),
+        }
     }
 
     async fn run_generator(
