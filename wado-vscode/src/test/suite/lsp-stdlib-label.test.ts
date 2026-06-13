@@ -29,6 +29,36 @@ function findTabFor(uri: vscode.Uri): vscode.Tab | undefined {
     return undefined;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Open a stdlib virtual document, retrying while the language client is still
+ * starting up. The `core:`/`wasi:` content provider throws "Wado language
+ * server is not running" until the client is ready, and across the full test
+ * run our suite may execute before the client has finished launching.
+ */
+async function openStdlibDocument(
+    uri: vscode.Uri,
+    timeoutMs: number,
+): Promise<vscode.TextDocument> {
+    const deadline = Date.now() + timeoutMs;
+    let lastError: unknown;
+    for (;;) {
+        try {
+            return await vscode.workspace.openTextDocument(uri);
+        } catch (err) {
+            lastError = err;
+            if (Date.now() >= deadline) {
+                break;
+            }
+            await sleep(500);
+        }
+    }
+    throw new Error(
+        `Timed out after ${timeoutMs}ms opening ${uri.toString()}: ${String(lastError)}`,
+    );
+}
+
 async function waitForTab(
     uri: vscode.Uri,
     timeoutMs: number,
@@ -70,7 +100,7 @@ suite('Wado LSP (stdlib editor label)', () => {
         this.timeout(120_000);
 
         const uri = vscode.Uri.parse('core:json');
-        const doc = await vscode.workspace.openTextDocument(uri);
+        const doc = await openStdlibDocument(uri, 90_000);
         await vscode.window.showTextDocument(doc);
 
         const tab = await waitForTab(uri, 90_000);
@@ -86,7 +116,7 @@ suite('Wado LSP (stdlib editor label)', () => {
         this.timeout(120_000);
 
         const uri = vscode.Uri.parse('core:prelude/types.wado');
-        const doc = await vscode.workspace.openTextDocument(uri);
+        const doc = await openStdlibDocument(uri, 90_000);
         await vscode.window.showTextDocument(doc);
 
         const tab = await waitForTab(uri, 90_000);
