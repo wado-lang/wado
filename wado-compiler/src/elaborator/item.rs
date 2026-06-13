@@ -644,7 +644,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .filter(|p| !p.is_effect)
                     .map(|p| {
                         scope
-                            .annotate_ctx.trait_ctx
+                            .annotate_ctx
+                            .trait_ctx
                             .type_params
                             .get(&p.name)
                             .map(|(_, id)| *id)
@@ -954,7 +955,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|p| !p.is_effect)
             .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
             .filter_map(|p| {
-                self.annotate_ctx.trait_ctx
+                self.annotate_ctx
+                    .trait_ctx
                     .type_params
                     .get(&p.name)
                     .map(|&(_, id)| (p.name.clone(), id))
@@ -1407,7 +1409,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow_mut()
                             .make_type_param(name.clone(), i as u32);
                         scope
-                            .annotate_ctx.trait_ctx
+                            .annotate_ctx
+                            .trait_ctx
                             .type_params
                             .insert(name.clone(), (i as u32, type_id));
                         // Store impl type param info for later monomorphization
@@ -1433,7 +1436,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
                 scope
-                    .annotate_ctx.trait_ctx
+                    .annotate_ctx
+                    .trait_ctx
                     .type_params
                     .insert(named.name.clone(), (idx, type_id));
                 let bounds = scope
@@ -1463,7 +1467,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
                 scope
-                    .annotate_ctx.trait_ctx
+                    .annotate_ctx
+                    .trait_ctx
                     .type_params
                     .insert(named.name.clone(), (idx, type_id));
                 let bounds = scope
@@ -1494,7 +1499,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_type_pack(name.clone(), idx);
                     scope
-                        .annotate_ctx.trait_ctx
+                        .annotate_ctx
+                        .trait_ctx
                         .type_params
                         .insert(name.clone(), (idx, type_id));
                     let bounds = scope
@@ -1611,7 +1617,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             };
             scope
-                .annotate_ctx.trait_ctx
+                .annotate_ctx
+                .trait_ctx
                 .type_params
                 .insert(param.name.clone(), (idx, type_id));
             // Only push *real* type params (TypeParam-ids) into the
@@ -1630,7 +1637,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
             if !real_bounds.is_empty() {
                 scope
-                    .annotate_ctx.trait_ctx
+                    .annotate_ctx
+                    .trait_ctx
                     .type_param_bounds
                     .insert(param.name.clone(), real_bounds);
             }

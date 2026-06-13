@@ -652,10 +652,7 @@ impl TraitEnv {
                 impl_headers.insert(
                     (module_source.clone(), item_idx),
                     ImplHeader {
-                        trait_name: impl_block
-                            .trait_type
-                            .as_ref()
-                            .map(get_type_name_static),
+                        trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
                         methods: impl_block
@@ -805,7 +802,10 @@ impl TraitEnv {
     /// value). Returns empty maps for a module with no recorded scope,
     /// matching the previous `…unwrap_or_default()` behaviour.
     pub(super) fn import_scope(&self, module: &ModuleSource) -> ModuleImportScope {
-        self.module_import_scopes.get(module).cloned().unwrap_or_default()
+        self.module_import_scopes
+            .get(module)
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub(crate) fn impl_module_for(
@@ -1315,10 +1315,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     true,
                 )
             };
-            self.annotate_ctx.trait_ctx
+            self.annotate_ctx
+                .trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, type_id));
-            self.annotate_ctx.trait_ctx
+            self.annotate_ctx
+                .trait_ctx
                 .type_param_decls
                 .insert(tp.name.clone(), tp.id);
             // Filter out `fn`/`fn mut` bounds before recording (they're already
@@ -1331,7 +1333,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .cloned()
                 .collect();
             if !real_bounds.is_empty() {
-                self.annotate_ctx.trait_ctx
+                self.annotate_ctx
+                    .trait_ctx
                     .type_param_bounds
                     .insert(tp.name.clone(), real_bounds);
             }
@@ -1367,7 +1370,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .filter(|p| !p.is_effect)
             .enumerate()
         {
-            if self.annotate_ctx.trait_ctx.type_params.contains_key(&tp.name) {
+            if self
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .contains_key(&tp.name)
+            {
                 continue;
             }
             let Some(arg_ast) = trait_args.get(i) else {
@@ -1375,11 +1383,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             let resolved_arg = self.resolve_type(arg_ast);
             let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
-            self.annotate_ctx.trait_ctx
+            self.annotate_ctx
+                .trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, resolved_arg));
             if !tp.bounds.is_empty() {
-                self.annotate_ctx.trait_ctx
+                self.annotate_ctx
+                    .trait_ctx
                     .type_param_bounds
                     .entry(tp.name.clone())
                     .or_default()

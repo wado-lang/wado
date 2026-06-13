@@ -166,7 +166,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
-        if let Some(&(_, type_param_type_id)) = self.annotate_ctx.trait_ctx.type_params.get(prefix) {
+        if let Some(&(_, type_param_type_id)) = self.annotate_ctx.trait_ctx.type_params.get(prefix)
+        {
             // If the type parameter is bound to a concrete type (e.g. a
             // trait default method synthesised for an impl binds the
             // trait's `T` to the impl's concrete arg), dispatch
@@ -474,7 +475,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 if bound.fn_signature.is_some() {
                                     continue;
                                 }
-                                if self.type_implements_trait(&self.annotate_ctx, type_arg, &bound.name) {
+                                if self.type_implements_trait(
+                                    &self.annotate_ctx,
+                                    type_arg,
+                                    &bound.name,
+                                ) {
                                     self.register_assoc_types_for_concrete_type_and_trait(
                                         type_arg,
                                         &bound.name.clone(),
@@ -2179,7 +2184,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let scope_params: Vec<TypeId> = self
-            .annotate_ctx.trait_ctx
+            .annotate_ctx
+            .trait_ctx
             .type_params
             .values()
             .map(|&(_, tid)| tid)
@@ -2326,7 +2332,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&type_params, 0);
         let type_param_list: Vec<(String, TypeId)> = scope
-            .annotate_ctx.trait_ctx
+            .annotate_ctx
+            .trait_ctx
             .type_params
             .iter()
             .map(|(name, &(_, id))| (name.clone(), id))
@@ -2475,7 +2482,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .make_type_param(name.clone(), i as u32);
             scope
-                .annotate_ctx.trait_ctx
+                .annotate_ctx
+                .trait_ctx
                 .type_params
                 .insert(name.clone(), (i as u32, type_id));
             impl_param_ids.push(type_id);
@@ -2503,7 +2511,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_type_param(tp.name.clone(), idx)
             };
             scope
-                .annotate_ctx.trait_ctx
+                .annotate_ctx
+                .trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, type_id));
             method_param_ids.push(type_id);
@@ -2718,7 +2727,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         _ctx: &mut FunctionContext,
     ) -> TypeId {
         let bounds = self
-            .annotate_ctx.trait_ctx
+            .annotate_ctx
+            .trait_ctx
             .type_param_bounds
             .get(type_param_name)
             .cloned();

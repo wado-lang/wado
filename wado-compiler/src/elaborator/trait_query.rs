@@ -13,8 +13,8 @@ use crate::token::Span;
 use super::Elaborator;
 use super::callee::CalleeRef;
 use super::trait_env::AnnotateCtx;
-use super::tysys::TypeSystem;
 use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError};
+use super::tysys::TypeSystem;
 
 /// Free-function form of [`Elaborator::canonical_decl_key`], callable from
 /// any module that has the inputs in hand. Reify uses this for trait
@@ -469,7 +469,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(info) = self.lookup_variant_case(name)
         {
             let all_impl = info.cases.iter().all(|c| {
-                c.payload == TypeTable::UNIT || self.type_implements_trait(ctx, c.payload, trait_name)
+                c.payload == TypeTable::UNIT
+                    || self.type_implements_trait(ctx, c.payload, trait_name)
             });
             if all_impl {
                 return true;
@@ -748,7 +749,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Self::ns.name → type_param_name::ns.name
                     // Look in current_type_param_bounds[type_param_name] for direct binding
                     if let Some(param_bounds) = self
-                        .annotate_ctx.trait_ctx
+                        .annotate_ctx
+                        .trait_ctx
                         .type_param_bounds
                         .get(type_param_name)
                         .cloned()
@@ -890,7 +892,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             )
                     });
                     scope
-                        .annotate_ctx.trait_ctx
+                        .annotate_ctx
+                        .trait_ctx
                         .assoc_type_bindings
                         .insert(assoc_decl.name.clone(), projection);
                 }
@@ -909,12 +912,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_type_param(param.name.clone(), index as u32);
                     scope
-                        .annotate_ctx.trait_ctx
+                        .annotate_ctx
+                        .trait_ctx
                         .type_params
                         .insert(param.name.clone(), (index as u32, type_id));
                     if !param.bounds.is_empty() {
                         scope
-                            .annotate_ctx.trait_ctx
+                            .annotate_ctx
+                            .trait_ctx
                             .type_param_bounds
                             .insert(param.name.clone(), param.bounds.clone());
                     }
@@ -1197,7 +1202,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {
                 if let Some(&concrete_arg) = concrete_type_args.get(i) {
                     scope
-                        .annotate_ctx.trait_ctx
+                        .annotate_ctx
+                        .trait_ctx
                         .type_params
                         .insert(tp_name.clone(), (i as u32, concrete_arg));
                 }
@@ -1206,7 +1212,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for param in &info.type_params {
                 if !param.bounds.is_empty() {
                     scope
-                        .annotate_ctx.trait_ctx
+                        .annotate_ctx
+                        .trait_ctx
                         .type_param_bounds
                         .entry(param.name.clone())
                         .or_default()
@@ -1261,10 +1268,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
                     {
                         // Check if the concrete type satisfies the blanket param's bounds
-                        let bounds_ok = blanket_param
-                            .bounds
-                            .iter()
-                            .all(|bound| self.type_implements_trait(&self.annotate_ctx, concrete_type_id, &bound.name));
+                        let bounds_ok = blanket_param.bounds.iter().all(|bound| {
+                            self.type_implements_trait(
+                                &self.annotate_ctx,
+                                concrete_type_id,
+                                &bound.name,
+                            )
+                        });
                         if bounds_ok {
                             result.push(BlanketImplInfo {
                                 blanket_param_name: blanket_param.name.clone(),
@@ -1285,11 +1295,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
             // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
             scope
-                .annotate_ctx.trait_ctx
+                .annotate_ctx
+                .trait_ctx
                 .type_params
                 .insert(info.blanket_param_name.clone(), (0, concrete_type_id));
             scope
-                .annotate_ctx.trait_ctx
+                .annotate_ctx
+                .trait_ctx
                 .type_param_bounds
                 .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
 
@@ -1378,7 +1390,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
             (info.trait_name, info.self_kind, param_types, return_type)
-        } else if (is_eq || is_ord) && self.type_implements_trait(&self.annotate_ctx, lookup_type_id, trait_name) {
+        } else if (is_eq || is_ord)
+            && self.type_implements_trait(&self.annotate_ctx, lookup_type_id, trait_name)
+        {
             let ref_self_ty = self
                 .tysys
                 .type_table
@@ -1513,5 +1527,4 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             is_blanket_ref_impl: false,
         })
     }
-
 }

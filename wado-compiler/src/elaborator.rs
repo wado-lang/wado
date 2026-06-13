@@ -1419,7 +1419,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         {
                             // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
                             if !param.bounds.is_empty() {
-                                self.annotate_ctx.trait_ctx
+                                self.annotate_ctx
+                                    .trait_ctx
                                     .type_param_bounds
                                     .entry(param.name.clone())
                                     .or_default()
@@ -1427,7 +1428,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }
                             continue;
                         }
-                        if !self.annotate_ctx.trait_ctx.type_params.contains_key(&param.name) {
+                        if !self
+                            .annotate_ctx
+                            .trait_ctx
+                            .type_params
+                            .contains_key(&param.name)
+                        {
                             let type_id = if param.is_pack {
                                 self.tysys
                                     .type_table
@@ -1439,12 +1445,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     .borrow_mut()
                                     .make_type_param(param.name.clone(), actual_idx)
                             };
-                            self.annotate_ctx.trait_ctx
+                            self.annotate_ctx
+                                .trait_ctx
                                 .type_params
                                 .insert(param.name.clone(), (actual_idx, type_id));
                         }
                         if !param.bounds.is_empty() {
-                            self.annotate_ctx.trait_ctx
+                            self.annotate_ctx
+                                .trait_ctx
                                 .type_param_bounds
                                 .entry(param.name.clone())
                                 .or_default()
@@ -1474,7 +1482,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
-                                    self.annotate_ctx.trait_ctx
+                                    self.annotate_ctx
+                                        .trait_ctx
                                         .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
@@ -1491,7 +1500,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             let synth_trait_name = self.get_type_name_full(trait_type);
                             let target_type_id = self.resolve_type(&impl_block.ty);
                             let type_params: Vec<_> = self
-                                .annotate_ctx.trait_ctx
+                                .annotate_ctx
+                                .trait_ctx
                                 .type_params
                                 .iter()
                                 .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
@@ -1523,7 +1533,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
                         for binding in &impl_block.associated_types {
                             let type_id = self.resolve_type(&binding.ty);
-                            self.annotate_ctx.trait_ctx
+                            self.annotate_ctx
+                                .trait_ctx
                                 .assoc_type_bindings
                                 .insert(binding.name.clone(), type_id);
 

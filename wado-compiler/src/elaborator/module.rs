@@ -181,7 +181,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let type_param_type_ids: Vec<TypeId> = variant_decl
                         .type_params
                         .iter()
-                        .filter_map(|p| scope.annotate_ctx.trait_ctx.type_params.get(&p.name).map(|&(_, id)| id))
+                        .filter_map(|p| {
+                            scope
+                                .annotate_ctx
+                                .trait_ctx
+                                .type_params
+                                .get(&p.name)
+                                .map(|&(_, id)| id)
+                        })
                         .collect();
 
                     // Collect type parameters
@@ -399,16 +406,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .make_type_param(param.name.clone(), actual_idx)
                         };
                         scope
-                            .annotate_ctx.trait_ctx
+                            .annotate_ctx
+                            .trait_ctx
                             .type_params
                             .insert(param.name.clone(), (actual_idx, type_id));
                         scope
-                            .annotate_ctx.trait_ctx
+                            .annotate_ctx
+                            .trait_ctx
                             .type_param_decls
                             .insert(param.name.clone(), param.id);
                         if !param.bounds.is_empty() {
                             scope
-                                .annotate_ctx.trait_ctx
+                                .annotate_ctx
+                                .trait_ctx
                                 .type_param_bounds
                                 .insert(param.name.clone(), param.bounds.clone());
                         }
@@ -441,7 +451,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         .borrow_mut()
                                         .make_type_param(name.clone(), index);
                                     scope
-                                        .annotate_ctx.trait_ctx
+                                        .annotate_ctx
+                                        .trait_ctx
                                         .type_params
                                         .insert(name.clone(), (index, type_id));
                                 }
@@ -454,7 +465,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for binding in &impl_block.associated_types {
                             let type_id = scope.resolve_type(&binding.ty);
                             scope
-                                .annotate_ctx.trait_ctx
+                                .annotate_ctx
+                                .trait_ctx
                                 .assoc_type_bindings
                                 .insert(binding.name.clone(), type_id);
                         }
@@ -510,16 +522,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), idx);
                             scope
-                                .annotate_ctx.trait_ctx
+                                .annotate_ctx
+                                .trait_ctx
                                 .type_params
                                 .insert(param.name.clone(), (idx, type_id));
                             scope
-                                .annotate_ctx.trait_ctx
+                                .annotate_ctx
+                                .trait_ctx
                                 .type_param_decls
                                 .insert(param.name.clone(), param.id);
                             if !param.bounds.is_empty() {
                                 scope
-                                    .annotate_ctx.trait_ctx
+                                    .annotate_ctx
+                                    .trait_ctx
                                     .type_param_bounds
                                     .insert(param.name.clone(), param.bounds.clone());
                             }
@@ -535,7 +550,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // Remove method-level type params from scope
                         for name in &method_type_param_names {
                             scope.annotate_ctx.trait_ctx.type_params.shift_remove(name);
-                            scope.annotate_ctx.trait_ctx.type_param_bounds.shift_remove(name);
+                            scope
+                                .annotate_ctx
+                                .trait_ctx
+                                .type_param_bounds
+                                .shift_remove(name);
                         }
 
                         let mangled_name = MethodName::format_local(

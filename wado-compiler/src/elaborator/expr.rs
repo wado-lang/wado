@@ -969,7 +969,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             scope.annotate_ctx.trait_ctx.type_params.clear();
             scope.register_generic_params(&type_params_for_scope, 0);
             let type_param_ids: Vec<TypeId> = scope
-                .annotate_ctx.trait_ctx
+                .annotate_ctx
+                .trait_ctx
                 .type_params
                 .iter()
                 .map(|(_, &(_, id))| id)
@@ -1358,7 +1359,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // For newtypes, also resolve the base type name for trait impl lookup
-        let (lookup_name, lookup_type_id) = self.tysys.newtype_base_lookup(&struct_name, base_type_id);
+        let (lookup_name, lookup_type_id) =
+            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
             let index_type = self.resolve_expr(&index.index, ctx, None);

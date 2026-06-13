@@ -406,11 +406,13 @@ impl TypeSystem {
                 if new_args == type_args {
                     type_id
                 } else {
-                    self.type_table.borrow_mut().intern(ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        type_args: new_args,
-                    })
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::GenericInstance {
+                            name,
+                            module_source,
+                            type_args: new_args,
+                        })
                 }
             }
 

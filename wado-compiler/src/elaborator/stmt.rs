@@ -1849,12 +1849,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            let implements_into_iter = self.type_implements_trait(&self.annotate_ctx, iterable_type_id, "IntoIterator")
-                || self.type_implements_trait(&self.annotate_ctx, inner_type_id, "IntoIterator")
-                || matches!(
-                    self.tysys.type_table.borrow().get(iterable_type_id),
-                    ResolvedType::Unknown | ResolvedType::TypeParam { .. }
-                );
+            let implements_into_iter =
+                self.type_implements_trait(&self.annotate_ctx, iterable_type_id, "IntoIterator")
+                    || self.type_implements_trait(
+                        &self.annotate_ctx,
+                        inner_type_id,
+                        "IntoIterator",
+                    )
+                    || matches!(
+                        self.tysys.type_table.borrow().get(iterable_type_id),
+                        ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+                    );
             if !implements_into_iter {
                 let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
                 let _ = self.logger.error(TypeError::MissingTraitImpl {

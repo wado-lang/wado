@@ -399,7 +399,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             };
             if let Some(name) = type_param_name
-                && let Some(bounds) = self.annotate_ctx.trait_ctx.type_param_bounds.get(&name).cloned()
+                && let Some(bounds) = self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .get(&name)
+                    .cloned()
             {
                 let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
@@ -544,7 +549,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // TypeParam with trait bounds: resolve arithmetic operators via trait bound methods
             if let ResolvedType::TypeParam { name, .. } = &left_type
-                && let Some(bounds) = self.annotate_ctx.trait_ctx.type_param_bounds.get(name).cloned()
+                && let Some(bounds) = self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .get(name)
+                    .cloned()
             {
                 let operand_type_id = left.type_id;
                 let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();

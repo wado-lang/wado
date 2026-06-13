@@ -129,7 +129,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Handle Self::AssociatedType
         if namespaced.namespace.as_str() == "Self" {
             // Look up the associated type binding
-            if let Some(&type_id) = self.annotate_ctx.trait_ctx.assoc_type_bindings.get(&namespaced.name) {
+            if let Some(&type_id) = self
+                .annotate_ctx
+                .trait_ctx
+                .assoc_type_bindings
+                .get(&namespaced.name)
+            {
                 return type_id;
             }
             // If not found, it's an unknown associated type
@@ -141,7 +146,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Handle T::AssociatedType where T is a type parameter in scope
-        if let Some(&(_, param_type_id)) = self.annotate_ctx.trait_ctx.type_params.get(&namespaced.namespace) {
+        if let Some(&(_, param_type_id)) = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(&namespaced.namespace)
+        {
             // If the param is bound to a concrete type (not a TypeParam), look up the assoc
             // type from the TypeTable directly. This handles cases like blanket impl resolution
             // where we temporarily bind e.g. I = StrUtf8ByteIter (concrete struct), and
@@ -401,7 +411,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for (i, (param_name, bounds)) in info.type_param_bounds.iter().enumerate() {
                             if let Some(&type_arg) = type_args.get(i) {
                                 for bound in bounds {
-                                    if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
+                                    if !self.type_implements_trait(
+                                        &self.annotate_ctx,
+                                        type_arg,
+                                        bound,
+                                    ) {
                                         // Get the type name for the error message
                                         let type_name = self.tysys.type_id_to_string(type_arg);
                                         let reason =
@@ -510,7 +524,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: &str,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let bounds = self.annotate_ctx.trait_ctx.type_param_bounds.get(param_name)?.clone();
+        let bounds = self
+            .annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .get(param_name)?
+            .clone();
         for bound in &bounds {
             for assoc in &bound.assoc_types {
                 if assoc.name == assoc_name {
