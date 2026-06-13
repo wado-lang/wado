@@ -16,7 +16,7 @@
 //     ANTLR4 LL  → (r (a X) (b Y))
 //     SLL/greedy → (r (a X Y))      ← Gale must NOT do this
 
-grammar LLBasic;
+grammar LlBasic;
 
 r : (a b | a) EOF ;
 a : X Y? ;

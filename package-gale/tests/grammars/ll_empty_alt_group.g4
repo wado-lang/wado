@@ -10,7 +10,7 @@
 // package-gale/TODO.md "ATN-class grammars" and status.toml as
 // `ParserExec/IfIfElseNonGreedyBinding2`.
 
-grammar EmptyAltGroup;
+grammar LlEmptyAltGroup;
 
 start : statement+ ;
 statement : 'x' | ifStatement;

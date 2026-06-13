@@ -1,5 +1,5 @@
-#![generated(by = "local:src/generator.wado", sources = ["grammars/ll_ctx_follow.g4"])]
-#![generated(by = "gale", sources = ["LLCtxFollow.g4"])]
+#![generated(by = "local:src/generator.wado", sources = ["grammars/ll_basic.g4"])]
+#![generated(by = "gale", sources = ["LlBasic.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -615,23 +615,18 @@ pub variant RGroup0 {
 }
 
 pub struct RGroup0Alt0 {
-    pub wrapper: WrapperNode,
+    pub a: ANode,
     pub b: BNode,
 }
 
 pub struct RGroup0Alt1 {
-    pub wrapper: WrapperNode,
+    pub a: ANode,
 }
 
 pub struct RNode {
     pub span: Span,
     pub group_0: Option<RGroup0>,
     pub eof: Token,
-}
-
-pub struct WrapperNode {
-    pub span: Span,
-    pub a: ANode,
 }
 
 pub struct ANode {
@@ -892,7 +887,7 @@ fn scan_r(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                pos = scan_wrapper(tokens, pos, &FOLLOW_MASK_0, 0);
+                pos = scan_a(tokens, pos, &FOLLOW_MASK_0, 0);
                 if pos < 0 { break sg_0_0; }
                 pos = scan_b(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0_0; }
@@ -900,7 +895,7 @@ fn scan_r(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
             }
             pos = gp_0;
             sg_0_1: {
-                pos = scan_wrapper(tokens, pos, follow, 0);
+                pos = scan_a(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0_1; }
                 if pos > sg_0_best { sg_0_best = pos; }
             }
@@ -910,13 +905,6 @@ fn scan_r(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
-    return pos;
-}
-
-fn scan_wrapper(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_a(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -949,7 +937,7 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_wrapper(tokens, pos, &FOLLOW_MASK_0, 0);
+                pos = scan_a(tokens, pos, &FOLLOW_MASK_0, 0);
                 if pos < 0 { break gd_scan; }
                 pos = scan_b(tokens, pos, follow, 0);
                 if pos < 0 { break gd_scan; }
@@ -958,16 +946,16 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             }
         }
         if gd_winner == 0 {
-            let wrapper = _parse_wrapper(p, &FOLLOW_MASK_0)?;
+            let a = _parse_a(p, &FOLLOW_MASK_0)?;
             let b = _parse_b(p, follow)?;
             group_0_inner = Option::<RGroup0>::Some(RGroup0::Alt0(RGroup0Alt0 {
-                wrapper,
+                a,
                 b,
             }));
         } else {
-            let wrapper = _parse_wrapper(p, follow)?;
+            let a = _parse_a(p, follow)?;
             group_0_inner = Option::<RGroup0>::Some(RGroup0::Alt1(RGroup0Alt1 {
-                wrapper,
+                a,
             }));
         }
     }
@@ -985,24 +973,6 @@ fn _parse_r(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
     if let Err(mut e) = r {
         e.rule_stack.push("r");
         return Result::<RNode, ParseError>::Err(e);
-    }
-    return r;
-}
-
-fn _parse_wrapper__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<WrapperNode, ParseError> {
-    let start = p.peek().span.start;
-    let a = _parse_a(p, follow)?;
-    return Result::<WrapperNode, ParseError>::Ok(WrapperNode {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        a,
-    });
-}
-
-fn _parse_wrapper(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<WrapperNode, ParseError> {
-    let r = _parse_wrapper__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("wrapper");
-        return Result::<WrapperNode, ParseError>::Err(e);
     }
     return r;
 }
@@ -1076,15 +1046,6 @@ pub fn parse_r(input: &String) -> Result<RNode, ParseError> {
     return _result;
 }
 
-pub fn parse_wrapper(input: &String) -> Result<WrapperNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_wrapper(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<WrapperNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
-}
-
 pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let mut parser = _gale_new_parser(input);
     let _result = _parse_a(&mut parser);
@@ -1112,11 +1073,11 @@ pub fn walk_r<V: Visitor>(v: &mut V, node: &RNode) {
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                walk_wrapper(v, &inner.wrapper);
+                walk_a(v, &inner.a);
                 walk_b(v, &inner.b);
             }
             Alt1(inner) => {
-                walk_wrapper(v, &inner.wrapper);
+                walk_a(v, &inner.a);
             }
         }
     }
@@ -1124,25 +1085,19 @@ pub fn walk_r<V: Visitor>(v: &mut V, node: &RNode) {
     v.exit_rule(0, &"r", &node.span);
 }
 
-pub fn walk_wrapper<V: Visitor>(v: &mut V, node: &WrapperNode) {
-    v.enter_rule(1, &"wrapper", &node.span);
-    walk_a(v, &node.a);
-    v.exit_rule(1, &"wrapper", &node.span);
-}
-
 pub fn walk_a<V: Visitor>(v: &mut V, node: &ANode) {
-    v.enter_rule(2, &"a", &node.span);
+    v.enter_rule(1, &"a", &node.span);
     v.visit_token(&node.x);
     if let Some(item) = &node.y {
         v.visit_token(item);
     }
-    v.exit_rule(2, &"a", &node.span);
+    v.exit_rule(1, &"a", &node.span);
 }
 
 pub fn walk_b<V: Visitor>(v: &mut V, node: &BNode) {
-    v.enter_rule(3, &"b", &node.span);
+    v.enter_rule(2, &"b", &node.span);
     v.visit_token(&node.y);
-    v.exit_rule(3, &"b", &node.span);
+    v.exit_rule(2, &"b", &node.span);
 }
 
 pub fn to_tree(node: &RNode) -> CstNode {

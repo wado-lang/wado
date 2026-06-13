@@ -15,7 +15,7 @@
 // helpers. The atom path is what carries tail-greedy here (the LR
 // suffix is itself tail-greedy too, but that is a different sub-gap).
 
-grammar LLLRAtom;
+grammar LlLrAtom;
 
 r : (a b | a) EOF ;
 

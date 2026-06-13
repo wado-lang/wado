@@ -16,7 +16,7 @@
 // (variant emission is shared with `gen_scan_function_named`), so only
 // the parse-side needs catching up.
 
-grammar LLMultiAlt;
+grammar LlMultiAlt;
 
 r : (a b | a) EOF ;
 a : X Y?

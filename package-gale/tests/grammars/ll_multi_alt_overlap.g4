@@ -23,7 +23,7 @@
 // routes emission through `gen_multi_alt_body_bt` →
 // `gen_prediction_code`.
 
-grammar LLMultiAltOverlap;
+grammar LlMultiAltOverlap;
 
 r : (a b | a) EOF ;
 a : X a Y?
