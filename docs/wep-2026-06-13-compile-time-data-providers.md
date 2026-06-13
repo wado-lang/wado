@@ -53,8 +53,8 @@ Surface and data are separated:
 - The type surface of a provider-backed module (e.g. `core:collation`) is a
   prebuilt, bundled WIT interface. Type-checking resolves names against it with
   no provider involvement, so it works offline and is fast.
-- The provider produces only data. It is invoked at link/codegen time, after
-  tree-shaking, and returns the bytes to embed.
+- The provider produces only data. It is invoked once the elaborator has
+  resolved reachability (see below), and returns the bytes to embed.
 
 Provider contract (sketch; final WIT regenerated via
 [Wado→WIT mapping](./wep-2026-01-29-wit-wado-mapping.md)):
@@ -63,15 +63,11 @@ Provider contract (sketch; final WIT regenerated via
 package core:provider;
 
 interface types {
-  record dataset {
-    name: string,            // e.g. "icu"
-    bytes: list<u8>,         // compiler-supplied bundled image (preloaded)
-  }
   record request {
     module: string,          // "core:collation"
     symbols: list<string>,   // union of imported names across all use-sites
-    options: list<u8>,       // canonical-encoded union of `with { ... }`
-    datasets: list<dataset>, // the bundled images this provider declared it needs
+    options: list<u8>,       // canonical-encoded union of mergeable `with { ... }`
+    datasets: list<string>,  // names of bundled archive entries this provider may read
   }
   record diagnostic { /* span, severity, message */ }
   record response {
@@ -81,11 +77,20 @@ interface types {
 }
 
 world data-provider {
-  import core:kiln/kiln-host;   // shared I/O-free host boundary (logging, spans)
+  // Reuses Kiln's host. `read-file` is generalized to a name-keyed `read-asset`
+  // so a provider pulls bundled archive entries exactly the way a Kiln generator
+  // reads user files — no separate host interface is added.
+  import core:kiln/kiln-host;
   use types.{request, response};
   export provide: func(req: request) -> response;
 }
 ```
+
+The op→marker mapping lives entirely in the provider — it is ICU-version-specific
+(e.g. that `collator.compare` also pulls `NormalizerNfd*`). The compiler passes
+only Wado symbol names and stays ICU-agnostic. The provider's correctness is
+guarded by a test that records the markers each op's constructor actually
+requests and asserts the map covers them, catching drift on ICU upgrades.
 
 ### Compiler aggregation phase
 
@@ -95,18 +100,32 @@ provider is invoked once per (feature, program):
 1. Resolve `core:collation` etc. as provider-backed; type-check against the
    bundled surface.
 2. Collect every `use` site of that module across the program and take the union
-   of imported symbol names and of `with { ... }` options (locale lists union).
-3. If the feature is reachable after tree-shaking, invoke the provider with
+   of imported symbol names and of `with { ... }` options. Each option must be
+   _mergeable_: list options (e.g. `locales`) union; scalar options must agree
+   (a conflict is a diagnostic).
+3. If the feature is reachable, invoke the provider with
    `{ module, symbols, options, datasets }`; otherwise drop the feature entirely
    (its prebuilt component and data are never linked).
 4. Embed the returned `data` and wire it to the prebuilt data-free component
    (the `bdp-spike` composition). Cache key: `(module, sorted symbols, canonical
    options, dataset version, provider version)`.
 
-Because Wado uses explicit named imports, the imported names are a sufficient
-usage signal; no whole-program call-graph analysis is required for v1. The one
+Reachability is computed by the existing elaborator pass, which already does
+reachability analysis and elimination. It is less exhaustive than a full DCE,
+but sufficient here (over-keeping an op only over-bundles its data; correctness
+is never affected). Piggy-backing on the elaborator also means the same usage
+information can, with a small adjustment, be surfaced to the LSP. Because Wado
+uses explicit named imports, the imported names are already a sufficient usage
+signal; no separate whole-program call-graph pass is required. The one
 intra-feature cost cliff — segmentation's multi-MB dictionary/LSTM data — is
 gated by whether `words`/`lines` are imported.
+
+Locale declarations are transitive and additive across the dependency graph: a
+library that does `use ... with { locales: ["ja"] }` forces `ja` data into any
+program that links it. This is correct (the library genuinely needs it) but must
+be documented, since an application inherits locales it did not declare itself. A
+future extension may add an application-level _kill switch_ to forcibly cap or
+override the inherited locale/feature set; out of scope for v1.
 
 ### The `use ... with` surface
 
@@ -164,6 +183,16 @@ userland package and not lazily fetched. `use { upper } from "core:text"` works
 with no dependency to add. Programs that do not reference an ICU feature link
 none of its code or data.
 
+The data image is a single compressed, indexed archive (a zip-like container
+with a central directory), with one entry per feature (and, where useful, per
+marker or per locale). This keeps the `wado` compiler a single self-contained
+binary while letting the host extract only the entries a build needs via the
+`read-asset(name)` host import — so a casemap-only build never decompresses the
+collation or segmentation entries. An indexed container (random access) is
+preferred over a streamed one (e.g. tar) precisely for this selective
+extraction. Postcard data compresses well, so the on-disk cost is far below the
+raw figures above.
+
 ## Consequences
 
 - Per-program data is minimal: only the markers for imported ops and the
@@ -183,16 +212,32 @@ none of its code or data.
 
 ## TODO
 
-- [ ] Confirm the per-(feature, program) union aggregation model (vs Kiln's
-      per-site invocation).
-- [ ] Confirm dynamic-locale behavior (runtime fallback + compile-time
-      diagnostic for literal langids outside the declared set).
-- [ ] Finalize the `data-provider` world WIT and its relationship to
+Decided (folded into the design above):
+
+- [x] Aggregation = per-(feature, program) union; options must be mergeable.
+      Locale declarations are transitive; documented, with a future app-level
+      kill switch as a possible extension.
+- [x] op→marker map lives in the provider (compiler stays ICU-agnostic), guarded
+      by a marker-recording test against ICU's constructors.
+- [x] Reachability comes from the elaborator's existing reachability/elimination
+      pass (sufficient here; also surfaces usage to the LSP), not a separate DCE.
+- [x] Bundled image = a single compressed, indexed (zip-like) archive with
+      per-feature/per-marker entries; selective extraction via `read-asset`,
+      preserving the single-binary compiler.
+- [x] Dynamic locale = ICU fallback to root by default; compile-time diagnostic
+      for literal langids outside the declared set.
+- [x] Host: generalize Kiln's `read-file` into a name-keyed `read-asset`; the
+      data-provider reuses `core:kiln/kiln-host`, no separate host interface.
+
+Remaining:
+
+- [ ] Finalize the `data-provider` world WIT and the generalized `read-asset` on
       `core:kiln/kiln-host`.
-- [ ] Specify the compiler aggregation phase placement relative to tree-shaking
-      and linking.
-- [ ] Define the op→marker map maintenance (per component version) and where it
-      lives.
-- [ ] Decide the bundled image format (full ICU postcard image vs per-feature
-      images) used as the slicing source.
+- [ ] Pin down the elaborator hook: how the reachable import-edge set is handed
+      to the provisioning step, and the LSP surface for it.
+- [ ] Specify the option schema and its mergeability/canonical-encoding rules.
+- [ ] Define the archive layout (entry granularity, index format, compression
+      codec) and the slicing the provider does within an entry (markers ×
+      locales).
+- [ ] Build the provider's marker-recording drift test against ICU constructors.
 - [ ] Measure infra-code duplication across the three prebuilt components.
