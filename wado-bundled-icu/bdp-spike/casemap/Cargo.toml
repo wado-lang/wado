@@ -1,0 +1,37 @@
+# Data-free casemap feature component (BDP separation experiment).
+#
+# The crucial difference from ../../Cargo.toml (wado-bundled-icu) is that
+# icu_casemap is pulled WITHOUT `compiled_data`: no CLDR/Unicode data is baked
+# in. Instead the `serde` feature enables `try_new_with_buffer_provider`, and
+# icu_provider_blob's BlobDataProvider feeds data from a postcard blob handed in
+# at runtime via the `init` export. This is what makes the component tiny and
+# the data shareable.
+[workspace]
+
+[package]
+name = "bdp-casemap"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# default-features=false drops `compiled_data` (no baked data) AND `std`.
+# `serde` enables the *_with_buffer_provider constructors.
+icu_casemap = { version = "2.2", default-features = false, features = ["serde"] }
+# Parses the BCP-47 `langid` argument; no data needed for plain langid parsing.
+icu_locale_core = { version = "2.2", default-features = false }
+# BlobDataProvider: reads the postcard blob at runtime. alloc, no std.
+icu_provider_blob = { version = "2.2", default-features = false, features = ["alloc"] }
+wit-bindgen = { version = "0.58", default-features = false, features = ["macros", "realloc"] }
+dlmalloc = { version = "0.2", features = ["global"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

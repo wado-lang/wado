@@ -1,0 +1,7 @@
+# Override the parent wado-bundled-icu/.cargo/config.toml, which sets the build
+# target to wasm32-wasip2 for the bundled crate. This harness is a NATIVE host
+# program (it runs wasmtime), so it must build for the host triple. Cargo merges
+# config files up the directory tree, so without this it would inherit the wasm
+# target and fail.
+[build]
+target = "x86_64-unknown-linux-gnu"

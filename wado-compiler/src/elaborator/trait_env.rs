@@ -4,14 +4,65 @@
 //! It provides O(1) lookup of trait implementations by type name and trait name,
 //! replacing linear scans across all modules.
 
+use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
+use crate::kiln::InvocationIndex;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::name;
 use crate::tir::{TypeId, TypeTable};
+
+/// A module's import scope: `(imported_type_sources, import_original_names)`.
+/// The first maps each in-scope bare type name to its declaring module; the
+/// second maps an aliased local name back to its original declaration name.
+pub(super) type ModuleImportScope = (IndexMap<String, ModuleSource>, IndexMap<String, String>);
+
+/// Compute a module's import scope from its `use` declarations. Pure over
+/// `(module, from_module, entry_module, invocations)` plus the (idempotent,
+/// loader-warmed) interner; safe to memoize per module. This is the body
+/// behind `Elaborator::build_imported_type_sources`, lifted to a free
+/// function so [`TraitEnv::build`] can pre-compute the per-module scopes
+/// without an `Elaborator`/host in hand.
+pub(super) fn module_import_scope(
+    interner: &mut ModuleSourceInterner,
+    module: &Module,
+    from_module: &ModuleSource,
+    entry_module: Option<&ModuleSource>,
+    invocations: &InvocationIndex,
+) -> ModuleImportScope {
+    let mut sources = IndexMap::default();
+    let mut original_names = IndexMap::default();
+    for item in &module.items {
+        if let Item::Use(use_decl) = item {
+            let source = name::resolve_import_with_invocations(
+                interner,
+                from_module,
+                &use_decl.source,
+                entry_module,
+                invocations,
+            );
+            for use_item in &use_decl.items {
+                match use_item {
+                    ast::UseItem::Simple { name, alias, .. } => {
+                        let local_name = alias.as_ref().unwrap_or(name);
+                        sources.insert(local_name.clone(), source.clone());
+                        if alias.is_some() {
+                            original_names.insert(local_name.clone(), name.clone());
+                        }
+                    }
+                    ast::UseItem::InterfaceFunctions { .. }
+                    | ast::UseItem::Wildcard
+                    | ast::UseItem::Namespace { .. } => {}
+                }
+            }
+        }
+    }
+    (sources, original_names)
+}
 
 use super::Elaborator;
 use super::types::TypeError;
@@ -62,6 +113,55 @@ pub(crate) type DeclKey = (ModuleSource, String);
 /// two `struct Widget` declarations in different modules share one bucket
 /// without ambiguity.
 pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
+
+/// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
+/// time so trait/method queries read its trait name, target type, methods,
+/// and type parameters without re-fetching the impl block from
+/// `loaded_modules`. Keyed by `(ModuleSource, item_idx)` in
+/// [`TraitEnv::impl_headers`].
+#[derive(Clone, Debug)]
+pub(super) struct ImplHeader {
+    /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
+    /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
+    pub(super) trait_name: Option<String>,
+    /// The impl target type (`impl_block.ty`).
+    pub(super) ty: Type,
+    /// The impl block's type parameters.
+    pub(super) type_params: Vec<ast::GenericParam>,
+    /// Digested signatures of the block's methods, in source order. Carries
+    /// only what method-lookup queries read off the AST today; extended as
+    /// further consumers move onto the digest.
+    pub(super) methods: Vec<ImplMethodHeader>,
+    /// The block's `type X = …;` associated-type bindings, cloned so
+    /// associated-type resolution reads them without the impl-block AST.
+    pub(super) associated_types: Vec<ast::AssociatedTypeBinding>,
+}
+
+/// Digested signature of a single method inside an [`ImplHeader`]. Holds the
+/// name and type parameters method-lookup queries need without the method
+/// body; grows field-by-field as consumers migrate off the impl-block AST.
+#[derive(Clone, Debug)]
+pub(super) struct ImplMethodHeader {
+    pub(super) name: String,
+    pub(super) type_params: Vec<ast::GenericParam>,
+    /// Whether the method has a body. Always true for impl methods; for trait
+    /// declarations it distinguishes default methods from bare signatures,
+    /// which method-lookup's fallback ordering depends on.
+    pub(super) has_body: bool,
+}
+
+/// Digested header of a `trait` declaration: its name plus per-method
+/// signatures method-lookup queries read off the AST. Built in
+/// [`TraitEnv::build`] and keyed by `(ModuleSource, item_idx)` in
+/// [`TraitEnv::trait_decl_headers`]. Reuses [`ImplMethodHeader`] for the
+/// per-method digest (name + type parameters).
+#[derive(Clone, Debug)]
+pub(super) struct TraitDeclHeader {
+    pub(super) name: String,
+    /// The trait's own type parameters (e.g. `<T, U>` in `trait Foo<T, U>`).
+    pub(super) type_params: Vec<ast::GenericParam>,
+    pub(super) methods: Vec<ImplMethodHeader>,
+}
 
 /// Pre-built index: `(declaring module, trait name)` → (`ModuleSource`, item index)
 /// for trait declarations.
@@ -160,6 +260,34 @@ pub struct TraitEnv {
     pub(super) resource_decl_index: ResourceDeclIndex,
     /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
     pub(super) blanket_impl_index: BlanketTraitImplIndex,
+    /// Digested headers for every indexed impl block, keyed by
+    /// `(ModuleSource, item_idx)`. Trait/method queries read this instead of
+    /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
+    pub(super) impl_headers: IndexMap<(ModuleSource, usize), ImplHeader>,
+    /// Digested headers for every `trait` declaration, keyed by
+    /// `(ModuleSource, item_idx)`. Lets method-lookup queries read trait
+    /// method signatures without re-fetching the trait AST. See
+    /// [`TraitDeclHeader`].
+    pub(super) trait_decl_headers: IndexMap<(ModuleSource, usize), TraitDeclHeader>,
+    /// Free-function type parameters keyed by `(declaring module, function
+    /// name)`. Lets `lookup_function_type_params` read a callee's type params
+    /// without scanning the module AST.
+    pub(super) function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>>,
+    /// Type name → modules declaring a struct / resource / variant / enum /
+    /// builtin type of that name, in build order. Powers
+    /// `find_struct_module_source` without an AST scan. Newtypes are tracked
+    /// separately in [`Self::newtype_decl_modules`] because the query consults
+    /// them only as a later fallback.
+    pub(super) struct_like_decl_modules: IndexMap<String, Vec<ModuleSource>>,
+    /// Type name → modules declaring a `newtype` of that name, in build order.
+    /// The fallback half of `find_struct_module_source`'s module lookup.
+    pub(super) newtype_decl_modules: IndexMap<String, Vec<ModuleSource>>,
+    /// Per-module import scope (`use`-derived `imported_type_sources` /
+    /// `import_original_names`), pre-computed once. Dispatch-core queries that
+    /// resolve type names in a foreign impl/callee signature read this instead
+    /// of rebuilding it from the module AST in `loaded_modules`. See
+    /// [`module_import_scope`].
+    pub(super) module_import_scopes: IndexMap<ModuleSource, ModuleImportScope>,
     /// `trait_name` → modules that host a blanket impl of that trait
     /// (`impl<T: Bound> Trait for T`). Used by the monomorphizer to find
     /// the home module of a generic dispatch when the receiver type
@@ -280,13 +408,33 @@ impl TraitEnv {
     pub(super) fn build(
         modules: &IndexMap<ModuleSource, Module>,
         symbols: &SymbolTable,
+        interner: &mut ModuleSourceInterner,
+        entry_module: Option<&ModuleSource>,
+        invocations: &InvocationIndex,
     ) -> (Arc<Self>, Vec<TypeError>) {
+        // Pre-compute every module's `use`-derived import scope so dispatch
+        // queries read it instead of rebuilding from the module AST.
+        let mut module_import_scopes: IndexMap<ModuleSource, ModuleImportScope> =
+            IndexMap::default();
+        for (module_source, module) in modules {
+            module_import_scopes.insert(
+                module_source.clone(),
+                module_import_scope(interner, module, module_source, entry_module, invocations),
+            );
+        }
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut inherent_impl_index: TraitImplIndex = IndexMap::default();
         let mut decl_index: TraitDeclIndex = IndexMap::default();
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
+        let mut impl_headers: IndexMap<(ModuleSource, usize), ImplHeader> = IndexMap::default();
+        let mut trait_decl_headers: IndexMap<(ModuleSource, usize), TraitDeclHeader> =
+            IndexMap::default();
+        let mut function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>> =
+            IndexMap::default();
+        let mut struct_like_decl_modules: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
+        let mut newtype_decl_modules: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
         let mut blanket_trait_impl_modules: IndexMap<String, Vec<ModuleSource>> =
             IndexMap::default();
         let mut trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
@@ -439,10 +587,84 @@ impl TraitEnv {
         // every PascalCase reference to its declaring module.
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {
+                // Digest the per-item facts that `lookup_function_type_params`
+                // and `find_struct_module_source` read, so neither needs to
+                // re-scan `loaded_modules`. (Non-impl items fall through to the
+                // `Item::Impl` guard below and `continue`.)
+                match item {
+                    Item::Function(f) => {
+                        function_type_params.insert(
+                            (module_source.clone(), f.name.clone()),
+                            f.type_params.clone(),
+                        );
+                    }
+                    Item::Struct(s) => struct_like_decl_modules
+                        .entry(s.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    Item::Resource(r) => struct_like_decl_modules
+                        .entry(r.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    Item::Variant(v) => struct_like_decl_modules
+                        .entry(v.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    Item::Enum(e) => struct_like_decl_modules
+                        .entry(e.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    Item::BuiltinTypeDecl(d) => struct_like_decl_modules
+                        .entry(d.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    Item::Newtype(n) => newtype_decl_modules
+                        .entry(n.name.clone())
+                        .or_default()
+                        .push(module_source.clone()),
+                    _ => {}
+                }
+                if let Item::Trait(trait_decl) = item {
+                    trait_decl_headers.insert(
+                        (module_source.clone(), item_idx),
+                        TraitDeclHeader {
+                            name: trait_decl.name.clone(),
+                            type_params: trait_decl.type_params.clone(),
+                            methods: trait_decl
+                                .methods
+                                .iter()
+                                .map(|m| ImplMethodHeader {
+                                    name: m.name.clone(),
+                                    type_params: m.type_params.clone(),
+                                    has_body: m.body.is_some(),
+                                })
+                                .collect(),
+                        },
+                    );
+                    continue;
+                }
                 let Item::Impl(impl_block) = item else {
                     continue;
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
+                impl_headers.insert(
+                    (module_source.clone(), item_idx),
+                    ImplHeader {
+                        trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
+                        ty: impl_block.ty.clone(),
+                        type_params: impl_block.type_params.clone(),
+                        methods: impl_block
+                            .methods
+                            .iter()
+                            .map(|m| ImplMethodHeader {
+                                name: m.name.clone(),
+                                type_params: m.type_params.clone(),
+                                has_body: m.body.is_some(),
+                            })
+                            .collect(),
+                        associated_types: impl_block.associated_types.clone(),
+                    },
+                );
                 if let Some(trait_type) = &impl_block.trait_type {
                     let trait_name = get_type_name_static(trait_type);
                     let is_blanket = impl_block
@@ -543,6 +765,12 @@ impl TraitEnv {
                 effect_decl_index,
                 resource_decl_index,
                 blanket_impl_index,
+                impl_headers,
+                trait_decl_headers,
+                function_type_params,
+                struct_like_decl_modules,
+                newtype_decl_modules,
+                module_import_scopes,
                 blanket_trait_impl_modules,
                 static_method_index,
                 resource_static_method_index,
@@ -567,6 +795,17 @@ impl TraitEnv {
     /// `find_trait_impl_for_type_with_args` iterates [`TraitImplIndex`] and
     /// checks each candidate impl individually instead of collapsing on the
     /// `(name, trait)` key.
+    /// The pre-computed import scope for `module`, cloned for callers that
+    /// install it via `with_module_perspective` (which takes the maps by
+    /// value). Returns empty maps for a module with no recorded scope,
+    /// matching the previous `…unwrap_or_default()` behaviour.
+    pub(super) fn import_scope(&self, module: &ModuleSource) -> ModuleImportScope {
+        self.module_import_scopes
+            .get(module)
+            .cloned()
+            .unwrap_or_default()
+    }
+
     pub(crate) fn impl_module_for(
         &self,
         type_name: &str,
@@ -946,6 +1185,18 @@ pub(super) struct TraitContext {
     pub(super) self_type: Option<TypeId>,
 }
 
+/// Per-function annotate-time scope: the trait-resolution context
+/// ([`TraitContext`]) plus the `type_implements_trait` recursion guard,
+/// bundled so they move as one unit (queries take `&AnnotateCtx`). Neither
+/// may move onto the shared `TypeSystem`: `trait_ctx` is per-function and
+/// `trait_check_stack` is a per-call frame stack whose sharing would leak
+/// frames across module walks.
+#[derive(Default)]
+pub(super) struct AnnotateCtx {
+    pub(super) trait_ctx: TraitContext,
+    pub(super) trait_check_stack: RefCell<Vec<(TypeId, String)>>,
+}
+
 /// RAII guard that restores `Elaborator::trait_ctx` to its saved value on drop.
 ///
 /// Implements `Deref<Target = Elaborator>` so it can be used as a transparent
@@ -956,7 +1207,7 @@ pub(super) struct TraitContext {
 /// It preserves the current `trait_ctx` so the child scope can register new
 /// entries on top of the parent's. Callers that want a clean slate for a
 /// specific field (matching the legacy `mem::take` pattern) should clear that
-/// field on `scope.trait_ctx` after entering.
+/// field on `scope.annotate_ctx.trait_ctx` after entering.
 pub(super) struct TypeParamScope<'r, 'a, H: CompilerHost> {
     elaborator: &'r mut Elaborator<'a, H>,
     saved: TraitContext,
@@ -986,7 +1237,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
 impl<H: CompilerHost> Drop for TypeParamScope<'_, '_, H> {
     fn drop(&mut self) {
-        self.elaborator.trait_ctx = std::mem::take(&mut self.saved);
+        self.elaborator.annotate_ctx.trait_ctx = std::mem::take(&mut self.saved);
     }
 }
 
@@ -997,12 +1248,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// original context is restored when the returned guard is dropped.
     ///
     /// Callers that want a clean slate (matching the legacy
-    /// `mem::take(&mut self.trait_ctx.type_params)` pattern) should clear the
-    /// specific fields they want to reset on `scope.trait_ctx` after entering
+    /// `mem::take(&mut self.annotate_ctx.trait_ctx.type_params)` pattern) should clear the
+    /// specific fields they want to reset on `scope.annotate_ctx.trait_ctx` after entering
     /// the scope — only the fields they touch need to be cleared, all others
     /// are inherited from the parent scope.
     pub(super) fn enter_inherited_type_param_scope(&mut self) -> TypeParamScope<'_, 'a, H> {
-        let saved = self.trait_ctx.clone();
+        let saved = self.annotate_ctx.trait_ctx.clone();
         TypeParamScope {
             elaborator: self,
             saved,
@@ -1059,10 +1310,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     true,
                 )
             };
-            self.trait_ctx
+            self.annotate_ctx
+                .trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, type_id));
-            self.trait_ctx
+            self.annotate_ctx
+                .trait_ctx
                 .type_param_decls
                 .insert(tp.name.clone(), tp.id);
             // Filter out `fn`/`fn mut` bounds before recording (they're already
@@ -1075,7 +1328,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .cloned()
                 .collect();
             if !real_bounds.is_empty() {
-                self.trait_ctx
+                self.annotate_ctx
+                    .trait_ctx
                     .type_param_bounds
                     .insert(tp.name.clone(), real_bounds);
             }
@@ -1111,19 +1365,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .filter(|p| !p.is_effect)
             .enumerate()
         {
-            if self.trait_ctx.type_params.contains_key(&tp.name) {
+            if self
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .contains_key(&tp.name)
+            {
                 continue;
             }
             let Some(arg_ast) = trait_args.get(i) else {
                 continue;
             };
             let resolved_arg = self.resolve_type(arg_ast);
-            let idx = self.trait_ctx.type_params.len() as u32;
-            self.trait_ctx
+            let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
+            self.annotate_ctx
+                .trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, resolved_arg));
             if !tp.bounds.is_empty() {
-                self.trait_ctx
+                self.annotate_ctx
+                    .trait_ctx
                     .type_param_bounds
                     .entry(tp.name.clone())
                     .or_default()

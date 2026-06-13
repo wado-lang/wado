@@ -1,0 +1,24 @@
+// Minimal components to measure the shared-infrastructure baseline that every
+// data-free feature component re-links (CM has no cross-component code sharing).
+//   bare : dlmalloc + panic + wit-bindgen glue only (the component floor).
+//   bdp  : bare + icu's BlobDataProvider construction (postcard/zerovec/
+//          icu_provider core) but NO feature algorithm — the universal ICU infra.
+package wado:infra@0.1.0;
+
+interface bare-iface {
+  ping: func() -> u32;
+}
+
+interface bdp-iface {
+  // Construct a BlobDataProvider from the bytes and report success. This pulls
+  // the postcard + zerovec + icu_provider machinery without any feature data.
+  check: func(blob: list<u8>) -> bool;
+}
+
+world bare {
+  export bare-iface;
+}
+
+world bdp {
+  export bdp-iface;
+}

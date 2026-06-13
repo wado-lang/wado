@@ -1,0 +1,44 @@
+# Standalone crate: this is its own workspace root so its heavy dependency
+# tree (icu + wit-bindgen) is resolved in an isolated lockfile and never
+# perturbs the main workspace's pinned wasm-tools generation (`check-deps`).
+# Built independently; the resulting Wasm component is the deliverable, just
+# like `wado-bundled-libm` ships a prebuilt module.
+[workspace]
+
+[package]
+name = "wado-bundled-icu"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Full ICU4X meta-crate. `default-features = false` drops std from every
+# component so the bundle is no_std (zero wasi imports); `compiled_data` still
+# bakes in all CLDR data. Every component crate (locale, casemap, collator,
+# segmenter, plurals, decimal, datetime, ...) is an unconditional dependency of
+# the meta-crate, so they all remain available — we do NOT slice here; Wado
+# tree-shakes the final artifact, so the bundle stays whole.
+icu = { version = "2.2", default-features = false, features = ["compiled_data"] }
+# Same icu_segmenter instance the `icu` meta-crate re-exports, but with the
+# `auto` feature so WordSegmenter/LineSegmenter::new_auto are available (this is
+# what pulls in the LSTM + dictionary data for CJK / SE-Asian scripts). Cargo
+# unifies it with icu's copy; features are additive.
+icu_segmenter = { version = "2.2", default-features = false, features = ["compiled_data", "auto"] }
+# default-features = false drops the `std` feature (keeps generated bindings
+# no_std on core + alloc); re-enable the proc-macro and realloc export we need.
+wit-bindgen = { version = "0.58", default-features = false, features = ["macros", "realloc"] }
+# Global allocator for the no_std wasm32-unknown-unknown target. ICU4X allocates
+# heavily; this is the heap it manages inside the component's own linear memory.
+dlmalloc = { version = "0.2", features = ["global"] }
+
+# Size-optimized build: this is a bundled asset, not a dev-loop artifact.
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

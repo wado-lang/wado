@@ -30,11 +30,6 @@ pub struct ComponentPlan {
     /// to resolve `HandlerResult` to the per-world `{pkg}-handler-result`
     /// registered type.
     pub world_package: Option<String>,
-    /// Whether the target world exports a `wasi:http/handler`. Codegen appends
-    /// the handler export to the finished component when set. This is an export
-    /// decision, so it lives on the plan rather than being re-derived in codegen;
-    /// `link` computes it once and passes it to `build_component_plan`.
-    pub has_http_handler_export: bool,
 }
 
 /// A world export to create at the component boundary.
@@ -52,6 +47,15 @@ pub struct WorldExportPlan {
     pub cm_params: Vec<(String, CmExportType)>,
     /// CM-resolved return type at the component boundary.
     pub cm_result: CmExportType,
+    /// Fully-qualified CM interface name this export was synthesized from
+    /// (`WorldExportInfo::from_interface_fq`), e.g.
+    /// `"wasi:http/handler@0.3.0-rc-2026-03-15"` or
+    /// `"wasi:cli/run@0.3.0-rc-2026-03-15"`. `Some` marks the export as an
+    /// interface-instance export: codegen wraps it (and the named CM types its
+    /// signature references) in an instance export under this FQ. `None` is a
+    /// freestanding world function export (the kiln generator's `generate`,
+    /// test exports) emitted as a bare top-level function.
+    pub from_interface_fq: Option<String>,
 }
 
 /// CM-level type at the world export boundary.
@@ -72,11 +76,16 @@ pub enum CmExportType {
     /// by `interface_fq` with the given kebab-case `cm_name`.
     ///
     /// Examples: `Request` from `wasi:http/types` resolves to
-    /// `Named { interface_fq: "wasi:http/types", cm_name: "request" }` and
-    /// codegen looks it up as `ctx.type_idx("http-request")`.
+    /// `Named { interface_fq: "wasi:http/types", cm_name: "request", is_resource: true }`
+    /// and codegen looks it up as `ctx.type_idx("http-request")`.
     Named {
         interface_fq: String,
         cm_name: String,
+        /// Whether this names a CM resource (vs variant / record / enum /
+        /// flags). Lets codegen re-export the resource type
+        /// (`{pkg}-{cm_name}-resource`) vs the plain `{pkg}-{cm_name}` by match,
+        /// not by probing the type registry.
+        is_resource: bool,
     },
     /// `result<own<resp>, error>` synthesized for the world's handler return.
     ///
@@ -84,7 +93,16 @@ pub enum CmExportType {
     /// one non-unit component. Codegen registers a per-world named alias
     /// (e.g. `http-handler-result`, `kiln-handler-result`) and resolves this
     /// variant to `ctx.type_idx(&format!("{world_package}-handler-result"))`.
-    HandlerResult,
+    ///
+    /// The resolved `ok`/`err` boundary types are carried so codegen can
+    /// enumerate the named CM types to re-export in an interface-instance
+    /// export (e.g. `response`, `error-code`) without re-deriving them from
+    /// hardcoded type names. Either arm may be [`Self::Unit`] (e.g.
+    /// `Result<(), Error>`); such arms contribute no re-exported type.
+    HandlerResult {
+        ok: Box<CmExportType>,
+        err: Box<CmExportType>,
+    },
 }
 
 /// A test function to export from the component.
@@ -126,7 +144,6 @@ pub fn build_component_plan(
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
-    has_http_handler_export: bool,
 ) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
@@ -183,7 +200,6 @@ pub fn build_component_plan(
         world_exports,
         test_exports,
         world_package,
-        has_http_handler_export,
     }
 }
 
@@ -235,6 +251,7 @@ fn build_world_export_plans(
                 .unwrap_or(CmExportType::Unit);
 
             WorldExportPlan {
+                from_interface_fq: export.from_interface_fq.clone(),
                 name: export.name,
                 core_func_name,
                 is_async: export.is_async,
@@ -271,7 +288,16 @@ fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry
         if is_unit_type(&generic.args[0]) && is_unit_type(&generic.args[1]) {
             return CmExportType::Unit;
         }
-        return CmExportType::HandlerResult;
+        return CmExportType::HandlerResult {
+            ok: Box::new(resolve_cm_export_type(
+                &generic.args[0],
+                cm_interface_registry,
+            )),
+            err: Box::new(resolve_cm_export_type(
+                &generic.args[1],
+                cm_interface_registry,
+            )),
+        };
     }
     if let Type::Named(named) = ty {
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)
@@ -290,8 +316,10 @@ fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry
                     named.name,
                 )
             });
-        let cm_name = cm_interface_registry
-            .get_resource_cm_name_by_source(&interface_fq, &named.name)
+        let resource_cm =
+            cm_interface_registry.get_resource_cm_name_by_source(&interface_fq, &named.name);
+        let is_resource = resource_cm.is_some();
+        let cm_name = resource_cm
             .or_else(|| cm_interface_registry.get_variant_cm_name_by_source(&interface_fq, &named.name))
             .or_else(|| cm_interface_registry.get_struct_cm_name_by_source(&interface_fq, &named.name))
             .or_else(|| cm_interface_registry.get_enum_cm_name_by_source(&interface_fq, &named.name))
@@ -304,6 +332,7 @@ fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry
         return CmExportType::Named {
             interface_fq,
             cm_name,
+            is_resource,
         };
     }
     panic!("unsupported world export type shape: {ty:?}");
@@ -449,18 +478,27 @@ mod tests {
         use resolver_helpers::*;
         let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
-        // wasi:http handler shape: Result<Response, ErrorCode>
+        // wasi:http handler shape: Result<Response, ErrorCode>. The resolved
+        // `ok`/`err` arms are carried so codegen can enumerate the re-exported
+        // CM types (here `response` and `error-code`).
         let http = result_of(named("Response"), named("ErrorCode"));
-        assert!(matches!(
-            resolve_cm_export_type(&http, registry),
-            CmExportType::HandlerResult
-        ));
+        match resolve_cm_export_type(&http, registry) {
+            CmExportType::HandlerResult { ok, err } => {
+                assert!(
+                    matches!(*ok, CmExportType::Named { ref cm_name, .. } if cm_name == "response")
+                );
+                assert!(
+                    matches!(*err, CmExportType::Named { ref cm_name, .. } if cm_name == "error-code")
+                );
+            }
+            other => panic!("expected HandlerResult, got {other:?}"),
+        }
 
         // core:kiln generator shape: Result<Response, Error>
         let kiln = result_of(named("Response"), named("Error"));
         assert!(matches!(
             resolve_cm_export_type(&kiln, registry),
-            CmExportType::HandlerResult
+            CmExportType::HandlerResult { .. }
         ));
     }
 
@@ -474,12 +512,14 @@ mod tests {
             CmExportType::Named {
                 interface_fq,
                 cm_name,
+                is_resource,
             } => {
                 assert!(
                     interface_fq.starts_with("wasi:http/types"),
                     "expected wasi:http/types prefix, got `{interface_fq}`",
                 );
                 assert_eq!(cm_name, "request");
+                assert!(is_resource, "Request is a CM resource");
             }
             other => panic!("expected Named, got {other:?}"),
         }
@@ -496,7 +536,12 @@ mod tests {
             CmExportType::Named {
                 interface_fq,
                 cm_name,
+                is_resource,
             } => {
+                assert!(
+                    !is_resource,
+                    "RawRequest is a record (struct), not a resource"
+                );
                 assert!(
                     interface_fq.starts_with("core:kiln/types"),
                     "expected core:kiln/types prefix, got `{interface_fq}`",

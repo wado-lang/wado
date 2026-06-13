@@ -11,8 +11,57 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
+  # Detects whether the change touches anything other than Markdown. A
+  # docs-only (*.md) change skips every heavy test job below, and the
+  # aggregator `test` short-circuits to success so the required "Test"
+  # check goes green immediately.
+  #
+  # The skip is done with a job-level `if`, NOT a workflow-level
+  # `paths-ignore`: a path-ignored workflow never creates the "Test" check
+  # run, so a required check would stay stuck "Expected" and block the PR.
+  # A job-level-skipped required check, by contrast, is treated as passing.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base="${BASE_SHA:-$BEFORE_SHA}"
+          # Fall back to the full suite if the base ref is missing or unknown.
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "No usable base ref; running full CI."
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only "${base}...HEAD")"
+          echo "Changed files:"
+          echo "$files"
+          if [ -z "$files" ]; then
+            # No detectable diff — be safe and run everything.
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          elif printf '%s\n' "$files" | grep -qvE '\.md$'; then
+            # At least one non-Markdown file changed.
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Docs-only (*.md) change: skipping test jobs."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test-core:
     name: Test (Core)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,6 +79,8 @@ jobs:
 
   test-e2e-o0:
     name: Test (E2E O0)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -47,6 +98,8 @@ jobs:
 
   test-e2e-o1:
     name: Test (E2E O1)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -64,6 +117,8 @@ jobs:
 
   test-e2e-o2:
     name: Test (E2E O2)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -81,6 +136,8 @@ jobs:
 
   test-e2e-o3:
     name: Test (E2E O3)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -98,6 +155,8 @@ jobs:
 
   test-e2e-os:
     name: Test (E2E Os)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -115,6 +174,8 @@ jobs:
 
   test-wado:
     name: Test (Wado)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -139,6 +200,8 @@ jobs:
 
   test-gale-o1:
     name: Test (Gale O1)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -163,6 +226,8 @@ jobs:
 
   test-gale-o2:
     name: Test (Gale O2)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -187,6 +252,8 @@ jobs:
 
   test-gale-o3:
     name: Test (Gale O3)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -217,6 +284,8 @@ jobs:
   # — while removing a runner slot.
   check:
     name: Check (deps + wasm32)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -243,6 +312,7 @@ jobs:
     if: always()
     needs:
       [
+        changes,
         test-core,
         test-wado,
         test-gale-o1,
@@ -260,6 +330,17 @@ jobs:
     steps:
       - name: Check all jobs passed
         run: |
+          # Fail closed if the change detector itself did not succeed.
+          if [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "Change detector did not succeed (${{ needs.changes.result }})."
+            exit 1
+          fi
+          # Docs-only (*.md) change: the heavy jobs were skipped on purpose, so
+          # report success and let the required "Test" check go green at once.
+          if [ "${{ needs.changes.outputs.code }}" != "true" ]; then
+            echo "Docs-only change: test jobs skipped, reporting success."
+            exit 0
+          fi
           results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-gale-o1.result }} ${{ needs.test-gale-o2.result }} ${{ needs.test-gale-o3.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o2.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check.result }}"
           for result in $results; do
             if [ "$result" != "success" ]; then

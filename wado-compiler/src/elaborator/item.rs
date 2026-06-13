@@ -531,9 +531,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Set up type parameters in scope before resolving fields. Use an
         // inherited scope so that any caller-provided `assoc_type_bindings` or
         // `self_type` remain visible — only `type_params` are replaced, matching
-        // the original `mem::take(&mut self.trait_ctx.type_params)` semantics.
+        // the original `mem::take(&mut self.annotate_ctx.trait_ctx.type_params)` semantics.
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
 
         // Resolve field types (recorded below as `struct_field_types`) and
@@ -629,7 +629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resource_self: Option<(&str, ModuleSource)>,
     ) -> Vec<TirEffectOp> {
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(type_params, 0);
 
         // Construct the resource's `Self` type after type params are in
@@ -644,6 +644,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .filter(|p| !p.is_effect)
                     .map(|p| {
                         scope
+                            .annotate_ctx
                             .trait_ctx
                             .type_params
                             .get(&p.name)
@@ -807,9 +808,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Set up type parameters in scope before resolving field types. Use an
         // inherited scope so any caller-provided `assoc_type_bindings`/`self_type`
         // stay visible — only `type_params` are replaced, matching the original
-        // `mem::take(&mut self.trait_ctx.type_params)` semantics.
+        // `mem::take(&mut self.annotate_ctx.trait_ctx.type_params)` semantics.
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&variant_decl.type_params, 0);
 
         // Convert AST type params to TIR type params (while type params still in scope)
@@ -913,8 +914,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.trait_ctx.type_params.clear();
-        scope.trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         // Install effect params before `register_generic_params` so eager
         // `<F: fn() with E>` bound resolution sees `E` as `EffectRef::Param`.
         let old_effect_params = std::mem::take(&mut scope.current_effect_params);
@@ -936,7 +937,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (`generic_function_params`, `generic_function_resolved_param_types`,
     /// `generic_function_resolved_return_types`) for `func`, keyed by its
     /// name. Type parameters must already be registered in
-    /// `self.trait_ctx.type_params` before calling this.
+    /// `self.annotate_ctx.trait_ctx.type_params` before calling this.
     ///
     /// Returns the resolved declared return type so callers that need it
     /// (e.g. `resolve_function` for `task_return_type`) can avoid resolving
@@ -954,7 +955,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|p| !p.is_effect)
             .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
             .filter_map(|p| {
-                self.trait_ctx
+                self.annotate_ctx
+                    .trait_ctx
                     .type_params
                     .get(&p.name)
                     .map(|&(_, id)| (p.name.clone(), id))
@@ -993,8 +995,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // stay visible — only `type_params` and `type_param_bounds` are replaced,
         // matching the original `mem::take` semantics for those two fields.
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.trait_ctx.type_params.clear();
-        scope.trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
 
         // Set effect params in scope before `register_generic_params`. Eager
         // `<F: fn() with E>` bound resolution runs inside
@@ -1373,7 +1375,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and bounds get rebuilt below to match the original `mem::take`
         // behavior.
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
         let mut type_param_list = Vec::new();
 
         // Bare base trait name (e.g. `"Stream"` for an `impl Stream<u8>`).
@@ -1400,13 +1402,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg {
                     let name = &named.name;
-                    if !scope.trait_ctx.type_params.contains_key(name) {
+                    if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
                         let type_id = scope
                             .tysys
                             .type_table
                             .borrow_mut()
                             .make_type_param(name.clone(), i as u32);
                         scope
+                            .annotate_ctx
                             .trait_ctx
                             .type_params
                             .insert(name.clone(), (i as u32, type_id));
@@ -1433,6 +1436,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
                 scope
+                    .annotate_ctx
                     .trait_ctx
                     .type_params
                     .insert(named.name.clone(), (idx, type_id));
@@ -1463,6 +1467,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
                 scope
+                    .annotate_ctx
                     .trait_ctx
                     .type_params
                     .insert(named.name.clone(), (idx, type_id));
@@ -1494,6 +1499,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_type_pack(name.clone(), idx);
                     scope
+                        .annotate_ctx
                         .trait_ctx
                         .type_params
                         .insert(name.clone(), (idx, type_id));
@@ -1533,7 +1539,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // scope contains the caller's bounds. We start from those and add
         // method-level bounds on top.
         let saved_bounds = scope.saved().type_param_bounds.clone();
-        scope.trait_ctx.type_param_bounds = saved_bounds;
+        scope.annotate_ctx.trait_ctx.type_param_bounds = saved_bounds;
 
         // Bind the trait's own type parameters to the impl's concrete trait
         // args so that references like `T` inside a default method body resolve
@@ -1611,6 +1617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             };
             scope
+                .annotate_ctx
                 .trait_ctx
                 .type_params
                 .insert(param.name.clone(), (idx, type_id));
@@ -1630,6 +1637,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
             if !real_bounds.is_empty() {
                 scope
+                    .annotate_ctx
                     .trait_ctx
                     .type_param_bounds
                     .insert(param.name.clone(), real_bounds);
@@ -1641,8 +1649,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Set up Self type for the impl block
         // This allows `&Self` to resolve correctly in method parameters
-        let old_self_type = scope.trait_ctx.self_type;
-        scope.trait_ctx.self_type = Some(scope.resolve_type(impl_type));
+        let old_self_type = scope.annotate_ctx.trait_ctx.self_type;
+        scope.annotate_ctx.trait_ctx.self_type = Some(scope.resolve_type(impl_type));
 
         // Resolve return type
         let return_type = func
@@ -1830,7 +1838,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `drop(scope)`, which replaces everything set up above.
         scope.current_effect_params = old_effect_params;
         scope.current_effect_param_decls = old_effect_param_decls;
-        scope.trait_ctx.self_type = old_self_type;
+        scope.annotate_ctx.trait_ctx.self_type = old_self_type;
         drop(scope);
 
         // Record the resolved param/return types for reify to read back

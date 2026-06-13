@@ -12,7 +12,9 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
+use super::trait_env::AnnotateCtx;
 use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError};
+use super::tysys::TypeSystem;
 
 /// Free-function form of [`Elaborator::canonical_decl_key`], callable from
 /// any module that has the inputs in hand. Reify uses this for trait
@@ -110,6 +112,115 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
     None
 }
 
+impl TypeSystem {
+    /// Build the mapping from an impl block's declared type-parameter names to
+    /// the concrete type arguments at a use site, by position. Pure over the
+    /// AST impl type and the concrete arg list — needs no type table.
+    pub(crate) fn build_type_param_mapping(
+        impl_ty: &Type,
+        concrete_type_args: &[TypeId],
+        declared_type_params: &IndexSet<String>,
+    ) -> IndexMap<String, TypeId> {
+        let mut mapping = IndexMap::default();
+
+        // Extract type parameter names from impl_ty, tracking positions
+        // Position tracking is needed to map type params to the correct concrete arg
+        if let Type::Generic(g) = impl_ty {
+            for (concrete_idx, arg) in g.args.iter().enumerate() {
+                if let Type::Named(n) = arg {
+                    let is_type_param = if declared_type_params.is_empty() {
+                        true // legacy: treat all Named as type params
+                    } else {
+                        declared_type_params.contains(&n.name)
+                    };
+                    if is_type_param && let Some(&type_id) = concrete_type_args.get(concrete_idx) {
+                        mapping.insert(n.name.clone(), type_id);
+                    }
+                }
+            }
+        }
+
+        mapping
+    }
+
+    /// Check that concrete type args at non-type-parameter positions match the impl type.
+    /// e.g., `impl KeyValueLiteral for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
+    /// because position 0 expects String but got i32.
+    pub(crate) fn verify_impl_type_compatibility(
+        &self,
+        impl_ty: &Type,
+        concrete_type_args: &[TypeId],
+        declared_type_params: &IndexSet<String>,
+    ) -> bool {
+        if declared_type_params.is_empty() {
+            return true; // No filtering available, assume compatible
+        }
+        let Type::Generic(g) = impl_ty else {
+            return true;
+        };
+        let tt = self.type_table.borrow();
+        for (i, arg) in g.args.iter().enumerate() {
+            let Some(&concrete_id) = concrete_type_args.get(i) else {
+                continue;
+            };
+            if !Self::impl_type_matches_concrete(arg, concrete_id, declared_type_params, &tt) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Recursively check whether an impl type argument matches a concrete type ID.
+    /// - `Type::Named` that is a declared type param → always matches (free type param)
+    /// - `Type::Named` not in type params → concrete name must equal `type_table.type_name()`
+    /// - `Type::Generic` → concrete must be a `GenericInstance` with same outer name; inner args checked recursively
+    /// - Other types → not validated (return true)
+    pub(crate) fn impl_type_matches_concrete(
+        impl_ty: &Type,
+        concrete_id: TypeId,
+        declared_type_params: &IndexSet<String>,
+        type_table: &TypeTable,
+    ) -> bool {
+        match impl_ty {
+            Type::Named(n) => {
+                if declared_type_params.contains(&n.name) {
+                    true // free type param — matches anything
+                } else {
+                    type_table.type_name(concrete_id) == n.name
+                }
+            }
+            Type::Generic(g) => {
+                let resolved = type_table.get(concrete_id).clone();
+                match resolved {
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => {
+                        if name != g.name {
+                            return false;
+                        }
+                        for (i, inner) in g.args.iter().enumerate() {
+                            let Some(&inner_id) = type_args.get(i) else {
+                                return false;
+                            };
+                            if !Self::impl_type_matches_concrete(
+                                inner,
+                                inner_id,
+                                declared_type_params,
+                                type_table,
+                            ) {
+                                return false;
+                            }
+                        }
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => true,
+        }
+    }
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Find a trait declaration by name across all modules.
     /// Returns the trait's methods (cloned) if found.
@@ -146,24 +257,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `canonical_decl_key` is local-first (issue #1298), so the type-param
         // list and the default-method bodies resolve to the same trait.
         let canonical_key = self.canonical_decl_key(trait_name);
-        if let Some((module_src, item_idx)) = self.tysys.trait_env.decl_index.get(&canonical_key) {
-            let module = &self.loaded_modules[module_src];
-            if let Item::Trait(trait_decl) = &module.items[*item_idx] {
-                return Some(trait_decl.type_params.clone());
-            }
+        if let Some(loc) = self.tysys.trait_env.decl_index.get(&canonical_key)
+            && let Some(header) = self.tysys.trait_env.trait_decl_headers.get(loc)
+        {
+            return Some(header.type_params.clone());
         }
-        for item in self.current_module_items {
-            if let Item::Trait(trait_decl) = item
-                && trait_decl.name == trait_name
-            {
-                return Some(trait_decl.type_params.clone());
+        // Fallback: a trait declared in the current module whose canonical key
+        // missed the decl index. (`trait_decl_headers` covers every loaded
+        // module, so the current module is included.)
+        for (key, header) in &self.tysys.trait_env.trait_decl_headers {
+            if key.0 == self.current_module_source && header.name == trait_name {
+                return Some(header.type_params.clone());
             }
         }
         None
     }
 
     /// Check if a type implements a specific trait (for trait bound checking)
-    pub(super) fn type_implements_trait(&self, type_id: TypeId, trait_name: &str) -> bool {
+    pub(super) fn type_implements_trait(
+        &self,
+        ctx: &AnnotateCtx,
+        type_id: TypeId,
+        trait_name: &str,
+    ) -> bool {
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
 
         // Recursion guard: if we're already checking this (type, trait) pair,
@@ -173,18 +289,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If any non-recursive field fails the trait check, it will be caught on that path.
         {
             let key = (type_id, trait_name.to_string());
-            let stack = self.trait_check_stack.borrow();
+            let stack = ctx.trait_check_stack.borrow();
             if stack.contains(&key) {
                 return true;
             }
         }
-        self.trait_check_stack
+        ctx.trait_check_stack
             .borrow_mut()
             .push((type_id, trait_name.to_string()));
 
-        let result = self.type_implements_trait_inner(&resolved, trait_name);
+        let result = self.type_implements_trait_inner(ctx, &resolved, trait_name);
 
-        self.trait_check_stack.borrow_mut().pop();
+        ctx.trait_check_stack.borrow_mut().pop();
 
         result
     }
@@ -280,9 +396,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Report the first member that breaks the trait, then recurse to
         // explain that member in turn.
         for (label, member_tid) in members {
-            if !self.type_implements_trait(member_tid, trait_name) {
-                let owner = self.type_id_to_string(type_id);
-                let member_ty = self.type_id_to_string(member_tid);
+            if !self.type_implements_trait(&self.annotate_ctx, member_tid, trait_name) {
+                let owner = self.tysys.type_id_to_string(type_id);
+                let member_ty = self.tysys.type_id_to_string(member_tid);
                 chain.push(format!(
                     "`{owner}` does not implement `{trait_name}` because {label} of type `{member_ty}` does not implement `{trait_name}`"
                 ));
@@ -292,12 +408,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn type_implements_trait_inner(&self, resolved: &ResolvedType, trait_name: &str) -> bool {
+    fn type_implements_trait_inner(
+        &self,
+        ctx: &AnnotateCtx,
+        resolved: &ResolvedType,
+        trait_name: &str,
+    ) -> bool {
         // Type parameters satisfy bounds declared on them (e.g., T: Describable
         // means T implements Describable within the scope of that declaration)
         if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
         {
-            if let Some(bounds) = self.trait_ctx.type_param_bounds.get(name) {
+            if let Some(bounds) = ctx.trait_ctx.type_param_bounds.get(name) {
                 return bounds.iter().any(|b| b.name == trait_name);
             }
             return false;
@@ -348,7 +469,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(info) = self.lookup_variant_case(name)
         {
             let all_impl = info.cases.iter().all(|c| {
-                c.payload == TypeTable::UNIT || self.type_implements_trait(c.payload, trait_name)
+                c.payload == TypeTable::UNIT
+                    || self.type_implements_trait(ctx, c.payload, trait_name)
             });
             if all_impl {
                 return true;
@@ -363,7 +485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let field_types: Vec<TypeId> = info.fields.iter().map(|(_, tid, _)| *tid).collect();
             let all_impl = field_types
                 .iter()
-                .all(|tid| self.type_implements_trait(*tid, trait_name));
+                .all(|tid| self.type_implements_trait(ctx, *tid, trait_name));
             if all_impl {
                 return true;
             }
@@ -397,7 +519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
             let all_impl = info.fields.iter().all(|(_, field_tid, _)| {
                 let concrete_tid = param_map.get(field_tid).copied().unwrap_or(*field_tid);
-                self.type_implements_trait(concrete_tid, trait_name)
+                self.type_implements_trait(ctx, concrete_tid, trait_name)
             });
             if all_impl {
                 return true;
@@ -423,7 +545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return true;
                 }
                 let concrete_tid = param_map.get(&c.payload).copied().unwrap_or(c.payload);
-                self.type_implements_trait(concrete_tid, trait_name)
+                self.type_implements_trait(ctx, concrete_tid, trait_name)
             });
             if all_impl {
                 return true;
@@ -451,7 +573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let elems = type_args.clone();
                     return elems
                         .iter()
-                        .all(|e| self.type_implements_trait(*e, trait_name));
+                        .all(|e| self.type_implements_trait(ctx, *e, trait_name));
                 }
                 (
                     name.clone(),
@@ -472,7 +594,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.find_trait_impl_for_type_with_args("&", trait_name, Some(&[inner_id])) {
                     return true;
                 }
-                return self.type_implements_trait(inner_id, trait_name);
+                return self.type_implements_trait(ctx, inner_id, trait_name);
             }
             ResolvedType::MutRef(inner) => {
                 // Mutable references always implement Eq via ref.eq (identity comparison)
@@ -483,7 +605,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.find_trait_impl_for_type_with_args("&mut", trait_name, Some(&[inner_id])) {
                     return true;
                 }
-                return self.type_implements_trait(inner_id, trait_name);
+                return self.type_implements_trait(ctx, inner_id, trait_name);
             }
             ResolvedType::AssocTypeProjection { bounds, .. } => {
                 // An associated type projection T::Assoc implements a trait if
@@ -500,7 +622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // Fall back to base type's trait implementation
                 let base_id = *base_type;
-                return self.type_implements_trait(base_id, trait_name);
+                return self.type_implements_trait(ctx, base_id, trait_name);
             }
             ResolvedType::Flags { name, .. } => {
                 // Check for a direct impl on the flags type first (e.g., impl Serialize for Perms)
@@ -508,7 +630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return true;
                 }
                 // Fall back to u32's trait implementation
-                return self.type_implements_trait(TypeTable::U32, trait_name);
+                return self.type_implements_trait(ctx, TypeTable::U32, trait_name);
             }
             _ => return false,
         };
@@ -529,25 +651,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_name: &str,
         type_args: Option<&[TypeId]>,
     ) -> bool {
-        // Use pre-built index for O(1) lookup by type name.
-        if let Some(entries) = self.tysys.trait_env.impl_index.get(type_name) {
-            for (module_src, item_idx) in entries {
-                let module = &self.loaded_modules[module_src];
-                if let Item::Impl(impl_block) = &module.items[*item_idx]
-                    && let Some(trait_type) = &impl_block.trait_type
+        let trait_env = self.tysys.trait_env.clone();
+        if let Some(entries) = trait_env.impl_index.get(type_name) {
+            for entry in entries {
+                let (module_src, _) = entry;
+                let Some(header) = trait_env.impl_headers.get(entry) else {
+                    continue;
+                };
+                let Some(impl_trait_name) = &header.trait_name else {
+                    continue;
+                };
+                if impl_trait_name == trait_name
+                    && self.tysys.inherent_impl_type_args_match(
+                        &header.ty,
+                        &header.type_params,
+                        type_args,
+                        module_src,
+                    )
+                    && self.check_impl_block_bounds(&header.type_params, &header.ty, type_args)
                 {
-                    let impl_trait_name = self.get_type_name(trait_type);
-                    if impl_trait_name == trait_name
-                        && self.inherent_impl_type_args_match(
-                            &impl_block.ty,
-                            &impl_block.type_params,
-                            type_args,
-                            module_src,
-                        )
-                        && self.check_impl_block_bounds(impl_block, type_args)
-                    {
-                        return true;
-                    }
+                    return true;
                 }
             }
         }
@@ -558,26 +681,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the
         // concrete type satisfies the bound.
-        for (module_src, item_idx) in &self.tysys.trait_env.blanket_impl_index {
-            let module = &self.loaded_modules[module_src];
-            if let Item::Impl(impl_block) = &module.items[*item_idx]
-                && let Some(trait_type) = &impl_block.trait_type
-            {
-                let impl_trait_name = self.get_type_name(trait_type);
-                if impl_trait_name == trait_name {
-                    let impl_type_name = Self::get_type_name_static(&impl_block.ty);
-                    let matching_param = impl_block
-                        .type_params
+        for entry in &trait_env.blanket_impl_index {
+            let Some(header) = trait_env.impl_headers.get(entry) else {
+                continue;
+            };
+            let Some(impl_trait_name) = &header.trait_name else {
+                continue;
+            };
+            if impl_trait_name == trait_name {
+                let impl_type_name = Self::get_type_name_static(&header.ty);
+                let matching_param = header
+                    .type_params
+                    .iter()
+                    .find(|tp| tp.name == impl_type_name);
+                if let Some(param) = matching_param {
+                    let bounds_satisfied = param
+                        .bounds
                         .iter()
-                        .find(|tp| tp.name == impl_type_name);
-                    if let Some(param) = matching_param {
-                        let bounds_satisfied = param
-                            .bounds
-                            .iter()
-                            .all(|bound| self.find_trait_impl_for_type(type_name, &bound.name));
-                        if bounds_satisfied {
-                            return true;
-                        }
+                        .all(|bound| self.find_trait_impl_for_type(type_name, &bound.name));
+                    if bounds_satisfied {
+                        return true;
                     }
                 }
             }
@@ -623,6 +746,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Self::ns.name → type_param_name::ns.name
                     // Look in current_type_param_bounds[type_param_name] for direct binding
                     if let Some(param_bounds) = self
+                        .annotate_ctx
                         .trait_ctx
                         .type_param_bounds
                         .get(type_param_name)
@@ -708,8 +832,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Save the entire trait context; we'll modify self_type, assoc_type_bindings,
                 // type_params, and type_param_bounds during this resolution scope.
                 let mut scope = self.enter_inherited_type_param_scope();
-                scope.trait_ctx.self_type = Some(self_type_id);
-                scope.trait_ctx.assoc_type_bindings.clear();
+                scope.annotate_ctx.trait_ctx.self_type = Some(self_type_id);
+                scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
                 // Set up associated type bindings as projections so that
                 // Self::AssocType resolves to AssocTypeProjection(self_type_id, "AssocType").
@@ -765,6 +889,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             )
                     });
                     scope
+                        .annotate_ctx
                         .trait_ctx
                         .assoc_type_bindings
                         .insert(assoc_decl.name.clone(), projection);
@@ -784,11 +909,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_type_param(param.name.clone(), index as u32);
                     scope
+                        .annotate_ctx
                         .trait_ctx
                         .type_params
                         .insert(param.name.clone(), (index as u32, type_id));
                     if !param.bounds.is_empty() {
                         scope
+                            .annotate_ctx
                             .trait_ctx
                             .type_param_bounds
                             .insert(param.name.clone(), param.bounds.clone());
@@ -857,11 +984,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// For `impl<T: Ord> List<T>`, checks that the concrete type substituted for T implements Ord.
     pub(super) fn check_impl_block_bounds(
         &self,
-        impl_block: &ast::ImplBlock,
+        type_params: &[ast::GenericParam],
+        impl_ty: &ast::Type,
         type_args: Option<&[TypeId]>,
     ) -> bool {
         // No type params with bounds → always OK
-        if impl_block.type_params.iter().all(|p| p.bounds.is_empty()) {
+        if type_params.iter().all(|p| p.bounds.is_empty()) {
             return true;
         }
 
@@ -871,8 +999,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Build name → bounds map from impl block type params (trait names only)
-        let bounds_map: IndexMap<&str, Vec<String>> = impl_block
-            .type_params
+        let bounds_map: IndexMap<&str, Vec<String>> = type_params
             .iter()
             .filter(|p| !p.bounds.is_empty())
             .map(|p| {
@@ -885,7 +1012,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Match type params to receiver type args via generic type arg positions
         let inner_type_name: Option<&str> =
-            if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = &impl_block.ty {
+            if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_ty {
                 if let ast::Type::Named(inner) = boxed.as_ref() {
                     Some(&inner.name)
                 } else {
@@ -895,7 +1022,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None
             };
 
-        if let ast::Type::Generic(generic) = &impl_block.ty {
+        if let ast::Type::Generic(generic) = impl_ty {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg
                     && let Some(bounds) = bounds_map.get(named.name.as_str())
@@ -911,7 +1038,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     }
                     for bound in bounds {
-                        if !self.type_implements_trait(type_arg, bound) {
+                        if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
                             return false;
                         }
                     }
@@ -928,7 +1055,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             {
                 for bound in bounds {
-                    if !self.type_implements_trait(type_arg, bound) {
+                    if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
                         return false;
                     }
                 }
@@ -959,7 +1086,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if bound.fn_signature.is_some() {
                         continue;
                     }
-                    if self.type_implements_trait(type_arg, &bound.name) {
+                    if self.type_implements_trait(&self.annotate_ctx, type_arg, &bound.name) {
                         // Register associated type resolutions so the monomorphizer can
                         // substitute e.g. I::Iter → ListIter<u8> when I = List<u8>.
                         self.register_assoc_types_for_concrete_type_and_trait(
@@ -967,7 +1094,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &bound.name.clone(),
                         );
                     } else {
-                        let type_name = self.type_id_to_string(type_arg);
+                        let type_name = self.tysys.type_id_to_string(type_arg);
                         let reason = self.trait_unimpl_reason_chain(type_arg, &bound.name);
                         let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                             type_name,
@@ -1026,18 +1153,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_ty_param_names: Vec<String>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
         }
+        let trait_env = self.tysys.trait_env.clone();
         let impl_infos: Vec<ImplInfo> = {
             let mut result = vec![];
-            if let Some(entries) = self.tysys.trait_env.impl_index.get(&type_name) {
-                let entries = entries.clone();
-                for (module_src, item_idx) in entries {
-                    let module = &self.loaded_modules[&module_src];
-                    if let Item::Impl(impl_block) = &module.items[item_idx]
-                        && let Some(trait_type) = &impl_block.trait_type
-                        && self.get_type_name(trait_type) == trait_name
-                        && !impl_block.associated_types.is_empty()
+            if let Some(entries) = trait_env.impl_index.get(&type_name) {
+                for entry in entries {
+                    let Some(header) = trait_env.impl_headers.get(entry) else {
+                        continue;
+                    };
+                    if header.trait_name.as_deref() == Some(trait_name)
+                        && !header.associated_types.is_empty()
                     {
-                        let impl_ty_param_names: Vec<String> = match &impl_block.ty {
+                        let impl_ty_param_names: Vec<String> = match &header.ty {
                             ast::Type::Generic(g) => g
                                 .args
                                 .iter()
@@ -1052,9 +1179,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             _ => vec![],
                         };
                         result.push(ImplInfo {
-                            type_params: impl_block.type_params.clone(),
+                            type_params: header.type_params.clone(),
                             impl_ty_param_names,
-                            assoc_types: impl_block.associated_types.clone(),
+                            assoc_types: header.associated_types.clone(),
                         });
                     }
                 }
@@ -1072,6 +1199,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {
                 if let Some(&concrete_arg) = concrete_type_args.get(i) {
                     scope
+                        .annotate_ctx
                         .trait_ctx
                         .type_params
                         .insert(tp_name.clone(), (i as u32, concrete_arg));
@@ -1081,6 +1209,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for param in &info.type_params {
                 if !param.bounds.is_empty() {
                     scope
+                        .annotate_ctx
                         .trait_ctx
                         .type_param_bounds
                         .entry(param.name.clone())
@@ -1122,29 +1251,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
-            for (module_src, item_idx) in &self.tysys.trait_env.blanket_impl_index {
-                let module = &self.loaded_modules[module_src];
-                if let Item::Impl(impl_block) = &module.items[*item_idx]
-                    && let Some(trait_type) = &impl_block.trait_type
-                    && self.get_type_name(trait_type) == trait_name
-                    && !impl_block.associated_types.is_empty()
+            for entry in &trait_env.blanket_impl_index {
+                let Some(header) = trait_env.impl_headers.get(entry) else {
+                    continue;
+                };
+                if header.trait_name.as_deref() == Some(trait_name)
+                    && !header.associated_types.is_empty()
                 {
-                    let impl_type_name = Self::get_type_name_static(&impl_block.ty);
-                    if let Some(blanket_param) = impl_block
+                    let impl_type_name = Self::get_type_name_static(&header.ty);
+                    if let Some(blanket_param) = header
                         .type_params
                         .iter()
                         .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
                     {
                         // Check if the concrete type satisfies the blanket param's bounds
-                        let bounds_ok = blanket_param
-                            .bounds
-                            .iter()
-                            .all(|bound| self.type_implements_trait(concrete_type_id, &bound.name));
+                        let bounds_ok = blanket_param.bounds.iter().all(|bound| {
+                            self.type_implements_trait(
+                                &self.annotate_ctx,
+                                concrete_type_id,
+                                &bound.name,
+                            )
+                        });
                         if bounds_ok {
                             result.push(BlanketImplInfo {
                                 blanket_param_name: blanket_param.name.clone(),
                                 blanket_param_bounds: blanket_param.bounds.clone(),
-                                assoc_types: impl_block.associated_types.clone(),
+                                assoc_types: header.associated_types.clone(),
                             });
                         }
                     }
@@ -1160,10 +1292,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
             // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
             scope
+                .annotate_ctx
                 .trait_ctx
                 .type_params
                 .insert(info.blanket_param_name.clone(), (0, concrete_type_id));
             scope
+                .annotate_ctx
                 .trait_ctx
                 .type_param_bounds
                 .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
@@ -1201,110 +1335,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// treated as type parameters. This prevents concrete types (e.g., `String` in
     /// `impl Trait for Map<String, V>`) from being incorrectly mapped.
     /// When empty, all `Named` types are assumed to be type parameters (legacy behavior).
-    pub(super) fn build_type_param_mapping(
-        impl_ty: &Type,
-        concrete_type_args: &[TypeId],
-        declared_type_params: &IndexSet<String>,
-    ) -> IndexMap<String, TypeId> {
-        let mut mapping = IndexMap::default();
-
-        // Extract type parameter names from impl_ty, tracking positions
-        // Position tracking is needed to map type params to the correct concrete arg
-        if let Type::Generic(g) = impl_ty {
-            for (concrete_idx, arg) in g.args.iter().enumerate() {
-                if let Type::Named(n) = arg {
-                    let is_type_param = if declared_type_params.is_empty() {
-                        true // legacy: treat all Named as type params
-                    } else {
-                        declared_type_params.contains(&n.name)
-                    };
-                    if is_type_param && let Some(&type_id) = concrete_type_args.get(concrete_idx) {
-                        mapping.insert(n.name.clone(), type_id);
-                    }
-                }
-            }
-        }
-
-        mapping
-    }
-
-    /// Check that concrete type args at non-type-parameter positions match the impl type.
-    /// e.g., `impl KeyValueLiteral for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
-    /// because position 0 expects String but got i32.
-    pub(super) fn verify_impl_type_compatibility(
-        impl_ty: &Type,
-        concrete_type_args: &[TypeId],
-        declared_type_params: &IndexSet<String>,
-        type_table: &std::cell::RefCell<TypeTable>,
-    ) -> bool {
-        if declared_type_params.is_empty() {
-            return true; // No filtering available, assume compatible
-        }
-        let Type::Generic(g) = impl_ty else {
-            return true;
-        };
-        let tt = type_table.borrow();
-        for (i, arg) in g.args.iter().enumerate() {
-            let Some(&concrete_id) = concrete_type_args.get(i) else {
-                continue;
-            };
-            if !Self::impl_type_matches_concrete(arg, concrete_id, declared_type_params, &tt) {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Recursively check whether an impl type argument matches a concrete type ID.
-    /// - `Type::Named` that is a declared type param → always matches (free type param)
-    /// - `Type::Named` not in type params → concrete name must equal `type_table.type_name()`
-    /// - `Type::Generic` → concrete must be a `GenericInstance` with same outer name; inner args checked recursively
-    /// - Other types → not validated (return true)
-    pub(super) fn impl_type_matches_concrete(
-        impl_ty: &Type,
-        concrete_id: TypeId,
-        declared_type_params: &IndexSet<String>,
-        type_table: &TypeTable,
-    ) -> bool {
-        match impl_ty {
-            Type::Named(n) => {
-                if declared_type_params.contains(&n.name) {
-                    true // free type param — matches anything
-                } else {
-                    type_table.type_name(concrete_id) == n.name
-                }
-            }
-            Type::Generic(g) => {
-                let resolved = type_table.get(concrete_id).clone();
-                match resolved {
-                    ResolvedType::GenericInstance {
-                        name, type_args, ..
-                    } => {
-                        if name != g.name {
-                            return false;
-                        }
-                        for (i, inner) in g.args.iter().enumerate() {
-                            let Some(&inner_id) = type_args.get(i) else {
-                                return false;
-                            };
-                            if !Self::impl_type_matches_concrete(
-                                inner,
-                                inner_id,
-                                declared_type_params,
-                                type_table,
-                            ) {
-                                return false;
-                            }
-                        }
-                        true
-                    }
-                    _ => false,
-                }
-            }
-            _ => true,
-        }
-    }
-
     /// Single entry point for resolving a trait method that a binary operator
     /// dispatches to (Eq / Ord / Add / Sub / Mul / Div / Rem / `BitAnd` / `BitOr` /
     /// `BitXor` / Shl / Shr). Produces a fully-populated
@@ -1357,7 +1387,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
             (info.trait_name, info.self_kind, param_types, return_type)
-        } else if (is_eq || is_ord) && self.type_implements_trait(lookup_type_id, trait_name) {
+        } else if (is_eq || is_ord)
+            && self.type_implements_trait(&self.annotate_ctx, lookup_type_id, trait_name)
+        {
             let ref_self_ty = self
                 .tysys
                 .type_table
@@ -1447,11 +1479,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "cmp" => ord_name,
             _ => return None,
         };
-        let base_type_id = self.get_base_type(receiver_type_id);
-        if !self.auto_derive_eligible_kind(base_type_id) {
+        let base_type_id = self.tysys.get_base_type(receiver_type_id);
+        if !self.tysys.auto_derive_eligible_kind(base_type_id) {
             return None;
         }
-        if !self.type_implements_trait(base_type_id, &trait_name) {
+        if !self.type_implements_trait(&self.annotate_ctx, base_type_id, &trait_name) {
             return None;
         }
         let ref_self_ty = self
@@ -1491,20 +1523,5 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_struct_name: struct_name.to_string(),
             is_blanket_ref_impl: false,
         })
-    }
-
-    /// Whether the given type is a kind for which `synthesis::traits` emits
-    /// auto-derived `Eq` / `Ord` method bodies: named structs, variants, and
-    /// enums (including generic instances thereof). Primitives and reference
-    /// types are excluded because their equality lowers to Wasm instructions
-    /// rather than a callable method.
-    fn auto_derive_eligible_kind(&self, type_id: TypeId) -> bool {
-        matches!(
-            self.tysys.type_table.borrow().get(type_id),
-            ResolvedType::Struct { .. }
-                | ResolvedType::Variant { .. }
-                | ResolvedType::Enum { .. }
-                | ResolvedType::GenericInstance { .. }
-        )
     }
 }

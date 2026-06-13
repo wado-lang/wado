@@ -1,0 +1,18 @@
+[workspace]
+[package]
+name = "infra-bdp"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[lib]
+crate-type = ["cdylib"]
+[dependencies]
+icu_provider_blob = { version = "2.2", default-features = false, features = ["alloc"] }
+wit-bindgen = { version = "0.58", default-features = false, features = ["macros", "realloc"] }
+dlmalloc = { version = "0.2", features = ["global"] }
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

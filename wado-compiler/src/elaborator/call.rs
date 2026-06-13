@@ -160,13 +160,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let suffix = &ident.name[pos + 2..];
 
         if prefix == "Self"
-            && let Some(self_type_id) = self.trait_ctx.self_type
+            && let Some(self_type_id) = self.annotate_ctx.trait_ctx.self_type
         {
             let self_name = self.tysys.type_table.borrow().type_name(self_type_id);
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
-        if let Some(&(_, type_param_type_id)) = self.trait_ctx.type_params.get(prefix) {
+        if let Some(&(_, type_param_type_id)) = self.annotate_ctx.trait_ctx.type_params.get(prefix)
+        {
             // If the type parameter is bound to a concrete type (e.g. a
             // trait default method synthesised for an impl binds the
             // trait's `T` to the impl's concrete arg), dispatch
@@ -474,13 +475,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 if bound.fn_signature.is_some() {
                                     continue;
                                 }
-                                if self.type_implements_trait(type_arg, &bound.name) {
+                                if self.type_implements_trait(
+                                    &self.annotate_ctx,
+                                    type_arg,
+                                    &bound.name,
+                                ) {
                                     self.register_assoc_types_for_concrete_type_and_trait(
                                         type_arg,
                                         &bound.name.clone(),
                                     );
                                 } else {
-                                    let type_name = self.type_id_to_string(type_arg);
+                                    let type_name = self.tysys.type_id_to_string(type_arg);
                                     let reason =
                                         self.trait_unimpl_reason_chain(type_arg, &bound.name);
                                     let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
@@ -1325,24 +1330,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Build the callee module's import context so type names in the
                 // callee's signature resolve to the callee's types, not the
                 // caller's (which may have same-named different types).
-                let callee_module_ast = self.loaded_modules.get(callee_module);
-                let (callee_imported, callee_original_names) = callee_module_ast.map_or_else(
-                    || (IndexMap::default(), IndexMap::default()),
-                    |m| {
-                        Self::build_imported_type_sources(
-                            &mut self.interner.borrow_mut(),
-                            m,
-                            callee_module,
-                            Some(&self.entry_module_source),
-                            &self.invocations,
-                        )
-                    },
-                );
+                let (callee_imported, callee_original_names) =
+                    self.tysys.trait_env.import_scope(callee_module);
 
                 // Set up the function's type parameters in an inherited scope so we
                 // can resolve type parameter references (like T -> TypeParam { index: 0 }).
                 let mut scope = self.enter_inherited_type_param_scope();
-                scope.trait_ctx.type_params.clear();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
                 scope.register_generic_params(&type_params, 0);
 
                 // Swap the elaborator's "current module" perspective onto the
@@ -1761,7 +1755,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `register_generic_params` and consults that channel
                 // to recognise `E` as `EffectRef::Param`.
                 let mut scope = self.enter_inherited_type_param_scope();
-                scope.trait_ctx.type_params.clear();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
                 let old_effect_params = std::mem::take(&mut scope.current_effect_params);
                 let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
                 let effect_params: Vec<&ast::GenericParam> =
@@ -1797,25 +1791,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve types in the definition module's perspective
                 // so that type names resolve to the correct module's types
                 // (e.g., "Direction" resolves to module B's Direction, not module A's)
-                let callee_module = self
-                    .loaded_modules
-                    .iter()
-                    .find(|(ms, _)| **ms == src)
-                    .map(|(_, m)| m);
                 let (imported_type_sources, import_original_names) =
-                    if let Some(module) = callee_module {
-                        Self::build_imported_type_sources(
-                            &mut self.interner.borrow_mut(),
-                            module,
-                            &src,
-                            Some(&self.entry_module_source),
-                            &self.invocations,
-                        )
-                    } else {
-                        (IndexMap::default(), IndexMap::default())
-                    };
+                    self.tysys.trait_env.import_scope(&src);
                 return self.with_module_perspective(
-                    src.clone(),
+                    src,
                     imported_type_sources,
                     import_original_names,
                     |s| params.iter().map(|p| s.resolve_type(&p.ty)).collect(),
@@ -1839,17 +1818,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|func| func.params.clone());
             if let Some(params) = params {
                 let (imported_type_sources, import_original_names) =
-                    if let Some(module) = self.loaded_modules.get(&fallback) {
-                        Self::build_imported_type_sources(
-                            &mut self.interner.borrow_mut(),
-                            module,
-                            &fallback,
-                            Some(&self.entry_module_source),
-                            &self.invocations,
-                        )
-                    } else {
-                        (IndexMap::default(), IndexMap::default())
-                    };
+                    self.tysys.trait_env.import_scope(&fallback);
                 return self.with_module_perspective(
                     fallback,
                     imported_type_sources,
@@ -2215,6 +2184,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let scope_params: Vec<TypeId> = self
+            .annotate_ctx
             .trait_ctx
             .type_params
             .values()
@@ -2359,9 +2329,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // TypeParam ids for parameter types like `T`. Inherited scope; only
         // `type_params` is replaced, matching the original `mem::take` semantics.
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&type_params, 0);
         let type_param_list: Vec<(String, TypeId)> = scope
+            .annotate_ctx
             .trait_ctx
             .type_params
             .iter()
@@ -2501,7 +2472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `resolve_static_method_params_in_scope`, so substitution by a single
         // flat `[impl_args.., method_args..]` list lines up correctly.
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
 
         let mut impl_param_ids: Vec<TypeId> = Vec::with_capacity(impl_type_param_names.len());
         for (i, name) in impl_type_param_names.iter().enumerate() {
@@ -2511,6 +2482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .make_type_param(name.clone(), i as u32);
             scope
+                .annotate_ctx
                 .trait_ctx
                 .type_params
                 .insert(name.clone(), (i as u32, type_id));
@@ -2539,6 +2511,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_type_param(tp.name.clone(), idx)
             };
             scope
+                .annotate_ctx
                 .trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, type_id));
@@ -2634,7 +2607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `EffectRef::Concrete { name: "E" }` and leak out as a phantom
         // local effect.
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
         let old_effect_params = std::mem::take(&mut scope.current_effect_params);
         let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<&ast::GenericParam> =
@@ -2728,7 +2701,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .any(|&t| self.tysys.type_table.borrow().contains_type_param(t));
 
-        if has_unresolved && self.trait_ctx.type_params.is_empty() {
+        if has_unresolved && self.annotate_ctx.trait_ctx.type_params.is_empty() {
             return self.tysys.type_table.borrow_mut().make_variant(
                 variant_info.name.clone(),
                 variant_info.module_source.clone(),
@@ -2754,6 +2727,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         _ctx: &mut FunctionContext,
     ) -> TypeId {
         let bounds = self
+            .annotate_ctx
             .trait_ctx
             .type_param_bounds
             .get(type_param_name)

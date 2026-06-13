@@ -1,0 +1,137 @@
+// Technical-validation WIT surface for bundling ICU4X as a Wasm Component
+// Model component. This iteration covers the *string-oriented* ICU4X
+// components plus character properties:
+//   - locale       opaque locale handle (base type for locale-aware ops)
+//   - casemap      upper / lower / title casing, case folding
+//   - collator     locale-aware string comparison
+//   - normalizer   Unicode normalization NFC/NFD/NFKC/NFKD
+//   - segmenter    grapheme / word / sentence / line boundary analysis
+//   - properties   per-character Unicode properties
+package wado:icu@0.1.0;
+
+interface locale {
+  /// A parsed BCP-47 locale (opaque handle).
+  resource locale {
+    /// Parse a BCP-47 language tag (e.g. "en-US", "ja", "tr-TR").
+    parse: static func(tag: string) -> result<locale, string>;
+    /// Canonical string form.
+    to-string: func() -> string;
+  }
+}
+
+interface casemap {
+  use locale.{locale};
+
+  /// Locale-aware full uppercase mapping.
+  uppercase: func(text: string, loc: borrow<locale>) -> string;
+  /// Locale-aware full lowercase mapping.
+  lowercase: func(text: string, loc: borrow<locale>) -> string;
+  /// Locale-aware titlecase of the first segment.
+  titlecase: func(text: string, loc: borrow<locale>) -> string;
+  /// Locale-independent full case folding (for caseless matching).
+  fold: func(text: string) -> string;
+}
+
+interface collator {
+  use locale.{locale};
+
+  enum ordering {
+    less,
+    equal,
+    greater,
+  }
+
+  /// A locale-aware string comparator (opaque handle).
+  resource collator {
+    create: static func(loc: borrow<locale>) -> result<collator, string>;
+    compare: func(left: string, right: string) -> ordering;
+  }
+}
+
+interface normalizer {
+  /// Normalization Form C (canonical composition).
+  nfc: func(text: string) -> string;
+  /// Normalization Form D (canonical decomposition).
+  nfd: func(text: string) -> string;
+  /// Normalization Form KC (compatibility composition).
+  nfkc: func(text: string) -> string;
+  /// Normalization Form KD (compatibility decomposition).
+  nfkd: func(text: string) -> string;
+  /// Whether the text is already in NFC.
+  is-nfc: func(text: string) -> bool;
+}
+
+interface segmenter {
+  // Each function returns the UTF-8 byte offsets of the boundaries found in the
+  // text, as yielded by the corresponding ICU4X segmenter.
+
+  /// Grapheme cluster boundaries (user-perceived characters).
+  graphemes: func(text: string) -> list<u32>;
+  /// Word boundaries (uses dictionary/LSTM data for CJK & SE-Asian scripts).
+  words: func(text: string) -> list<u32>;
+  /// Sentence boundaries.
+  sentences: func(text: string) -> list<u32>;
+  /// Line break opportunities.
+  lines: func(text: string) -> list<u32>;
+}
+
+interface properties {
+  /// Unicode General_Category.
+  enum general-category {
+    unassigned,
+    uppercase-letter,
+    lowercase-letter,
+    titlecase-letter,
+    modifier-letter,
+    other-letter,
+    nonspacing-mark,
+    spacing-mark,
+    enclosing-mark,
+    decimal-number,
+    letter-number,
+    other-number,
+    space-separator,
+    line-separator,
+    paragraph-separator,
+    control,
+    format,
+    private-use,
+    surrogate,
+    dash-punctuation,
+    open-punctuation,
+    close-punctuation,
+    connector-punctuation,
+    initial-punctuation,
+    final-punctuation,
+    other-punctuation,
+    math-symbol,
+    currency-symbol,
+    modifier-symbol,
+    other-symbol,
+  }
+
+  /// General_Category of a character.
+  category: func(ch: char) -> general-category;
+  /// Short Script code (ISO 15924), e.g. "Latn", "Hani", "Zyyy".
+  script: func(ch: char) -> string;
+
+  /// Binary property: Alphabetic.
+  alphabetic: func(ch: char) -> bool;
+  /// Binary property: White_Space.
+  white-space: func(ch: char) -> bool;
+  /// Binary property: Uppercase.
+  uppercase: func(ch: char) -> bool;
+  /// Binary property: Lowercase.
+  lowercase: func(ch: char) -> bool;
+  /// Emoji property.
+  emoji: func(ch: char) -> bool;
+}
+
+world icu {
+  export locale;
+  export casemap;
+  export collator;
+  export normalizer;
+  export segmenter;
+  export properties;
+}

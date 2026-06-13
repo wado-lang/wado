@@ -94,6 +94,11 @@ impl ComponentModelContext {
             .unwrap_or_else(|| panic!("unknown component instance: {name}"))
     }
 
+    /// Check whether a component instance is registered under `name`.
+    pub fn has_instance(&self, name: &str) -> bool {
+        self.instance_names.contains_key(name)
+    }
+
     /// Get the current component instance count
     pub fn instance_count(&self) -> u32 {
         self.next_instance_idx

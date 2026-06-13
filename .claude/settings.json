@@ -2,6 +2,9 @@
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true
   },
+  "permissions": {
+    "deny": ["AskUserQuestion"]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -20,6 +23,15 @@
           {
             "type": "command",
             "command": "./.claude/hooks/bash-pipefail.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__create_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/pr-conventions.sh"
           }
         ]
       }

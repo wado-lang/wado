@@ -461,7 +461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Get base struct name from target type
-        let base_name = self.struct_name_for_type(target_type)?;
+        let base_name = self.tysys.struct_name_for_type(target_type)?;
 
         // Check if target type implements KeyValueLiteralBuilder (or legacy KeyValueLiteral)
         let from_literal_info = self.find_key_value_literal_trait_impl(&base_name, target_type)?;
@@ -476,6 +476,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the receiver type's module for inherent / auto-derived impls; if
         // neither resolves, panic (no current-module fallback per #1110 (2)).
         let builder_name_for_lookup = self
+            .tysys
             .struct_name_for_type(builder_type)
             .unwrap_or_else(|| base_name.clone());
         let builder_type_module = match self.tysys.type_table.borrow().get(builder_type) {
@@ -523,6 +524,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Get type args for monomorphization from builder type
         let builder_base_name = self
+            .tysys
             .struct_name_for_type(builder_type)
             .unwrap_or_else(|| base_name.clone());
         let (type_arg_names, type_arg_ids): (Vec<String>, Vec<TypeId>) = {
@@ -664,7 +666,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => return None,
         };
 
-        let base_name = self.struct_name_for_type(target_type)?;
+        let base_name = self.tysys.struct_name_for_type(target_type)?;
         let (seq_info, needs_newtype_cast) = self
             .find_sequence_literal_trait_impl(&base_name, target_type)
             .map(|info| (info, false))
@@ -675,7 +677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow()
                     .get_newtype_base(target_type)?;
-                let base_name = self.struct_name_for_type(base_type)?;
+                let base_name = self.tysys.struct_name_for_type(base_type)?;
                 self.find_sequence_literal_trait_impl(&base_name, base_type)
                     .map(|info| (info, true))
             })?;
@@ -686,6 +688,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let output_type = seq_info.output_type;
         let impl_module_source = seq_info.impl_module_source;
         let builder_base_name = self
+            .tysys
             .struct_name_for_type(builder_type)
             .unwrap_or_else(|| base_name.clone());
 

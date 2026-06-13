@@ -135,12 +135,12 @@ fn compile_help() {
 
 #[test]
 fn compile_no_input() {
-    // The repo root carries a wado.toml without `[package].command`, so
+    // The repo root carries a wado.toml without `[world]."wasi:cli/command"`, so
     // the resolver short-circuits with the more specific message.
     let parser = Parser::from_args::<&[&str]>(&[]);
     assert_err(
         compile::parse_args(parser),
-        "wado.toml found but [package].command is not set",
+        "wado.toml found but [world].\"wasi:cli/command\" is not set",
     );
 }
 
@@ -250,11 +250,11 @@ fn run_help() {
 #[test]
 fn run_no_input() {
     // Same situation as compile_no_input: repo-root wado.toml has no
-    // `[package].command`, and the resolver surfaces that.
+    // `[world]."wasi:cli/command"`, and the resolver surfaces that.
     let parser = Parser::from_args::<&[&str]>(&[]);
     assert_err(
         wado_cli::run::parse_args(parser),
-        "wado.toml found but [package].command is not set",
+        "wado.toml found but [world].\"wasi:cli/command\" is not set",
     );
 }
 
@@ -326,13 +326,13 @@ fn serve_help() {
 
 #[test]
 fn serve_no_input() {
-    // `wado serve` resolves the entry point against `[package].service`;
+    // `wado serve` resolves the entry point against `[world]."wasi:http/service"`;
     // the repo-root wado.toml is missing that, so the resolver emits the
     // more specific error.
     let parser = Parser::from_args::<&[&str]>(&[]);
     assert_err(
         wado_cli::serve::parse_args(parser),
-        "wado.toml found but [package].service is not set",
+        "wado.toml found but [world].\"wasi:http/service\" is not set",
     );
 }
 

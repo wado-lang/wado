@@ -127,11 +127,11 @@ pub struct Elaborator<'a, H: CompilerHost> {
     entry_module_source: ModuleSource,
     /// Current module items (for local function parameter lookup)
     current_module_items: &'a [Item],
-    /// Mutable trait resolution context: type params, bounds, associated type bindings, self type.
-    /// Grouped together so scope entry/exit can save/restore the whole context at once.
-    // MIGRATION: transient annotate-time scope (Stage 5 carries it as an
-    //   explicit argument to `annotate_*` walkers).
-    trait_ctx: trait_env::TraitContext,
+    /// Per-function annotate-time scope (trait context + recursion guard); see
+    /// [`trait_env::AnnotateCtx`].
+    // MIGRATION: transient annotate-time scope; to be threaded explicitly into
+    //   the resolution queries as `&AnnotateCtx` rather than read off the driver.
+    annotate_ctx: trait_env::AnnotateCtx,
     /// Effect parameter names currently in scope (from enclosing function's `<effect E>`)
     // MIGRATION: transient annotate-time scope (per-function, not per-module).
     current_effect_params: IndexSet<String>,
@@ -139,21 +139,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Used to record use→def edges for effect parameter references in `with` clauses.
     // MIGRATION: transient annotate-time scope (per-function, not per-module).
     current_effect_param_decls: IndexMap<String, crate::ast::AstId>,
-    /// Recursion guard for `type_implements_trait` to avoid infinite recursion
-    /// on recursive types (e.g., variant Elem containing struct `RepeatElem` with field Elem).
-    /// Frames are pushed on entry and popped on return; the stack is empty
-    /// at every quiescent point.
-    // MIGRATION: transient annotate-time scope. Despite the `RefCell<Vec<…>>`
-    //   shape this is NOT a type-system cache (whose entries would persist
-    //   across calls) — it is a per-call frame stack. Sharing it across
-    //   modules via `TypeSystem` would either leak stale frames (producing
-    //   wrong "recursive, optimistically true" answers from
-    //   `type_implements_trait` — a soundness bug) or require per-call
-    //   save/restore plumbing that defeats the move. Belongs with
-    //   `trait_ctx` in Stage 5's per-function walker argument bag, not on
-    //   `TypeSystem`. See `tysys.rs` module docs ("Deferred fields") for
-    //   the full rationale.
-    trait_check_stack: RefCell<Vec<(TypeId, String)>>,
     /// When resolving a default-expression AST at a call site, fall back to
     /// looking up unresolved identifiers in this module's global scope. This
     /// preserves the callee's lexical scope for defaults that reference
@@ -461,7 +446,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// to share the name. Falls through to the symbol-table lookup
     /// otherwise.
     pub(super) fn record_type_name_reference(&mut self, use_id: crate::ast::AstId, name: &str) {
-        if let Some(&decl_id) = self.trait_ctx.type_param_decls.get(name) {
+        if let Some(&decl_id) = self.annotate_ctx.trait_ctx.type_param_decls.get(name) {
             self.record_reference(use_id, decl_id);
         } else {
             self.record_item_reference_by_name(use_id, name);
@@ -1415,9 +1400,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
                     // Register type parameters from impl block's generic type FIRST
                     // e.g., impl IndexValue<i32> for Triple<T> needs T registered
-                    let saved_trait_ctx = self.trait_ctx.clone();
-                    self.trait_ctx.type_params.clear();
-                    self.trait_ctx.type_param_bounds.clear();
+                    let saved_trait_ctx = self.annotate_ctx.trait_ctx.clone();
+                    self.annotate_ctx.trait_ctx.type_params.clear();
+                    self.annotate_ctx.trait_ctx.type_param_bounds.clear();
 
                     // Register explicit type params from impl<T: Bound> declarations,
                     // skipping concrete types (e.g., `impl<i32, T>` — skip "i32").
@@ -1431,7 +1416,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         {
                             // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
                             if !param.bounds.is_empty() {
-                                self.trait_ctx
+                                self.annotate_ctx
+                                    .trait_ctx
                                     .type_param_bounds
                                     .entry(param.name.clone())
                                     .or_default()
@@ -1439,7 +1425,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }
                             continue;
                         }
-                        if !self.trait_ctx.type_params.contains_key(&param.name) {
+                        if !self
+                            .annotate_ctx
+                            .trait_ctx
+                            .type_params
+                            .contains_key(&param.name)
+                        {
                             let type_id = if param.is_pack {
                                 self.tysys
                                     .type_table
@@ -1451,12 +1442,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     .borrow_mut()
                                     .make_type_param(param.name.clone(), actual_idx)
                             };
-                            self.trait_ctx
+                            self.annotate_ctx
+                                .trait_ctx
                                 .type_params
                                 .insert(param.name.clone(), (actual_idx, type_id));
                         }
                         if !param.bounds.is_empty() {
-                            self.trait_ctx
+                            self.annotate_ctx
+                                .trait_ctx
                                 .type_param_bounds
                                 .entry(param.name.clone())
                                 .or_default()
@@ -1476,7 +1469,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         for (i, arg) in generic.args.iter().enumerate() {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;
-                                if !self.trait_ctx.type_params.contains_key(name)
+                                if !self.annotate_ctx.trait_ctx.type_params.contains_key(name)
                                     && !self
                                         .tysys
                                         .is_known_type_name_in(&self.current_module_source, name)
@@ -1486,7 +1479,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
-                                    self.trait_ctx
+                                    self.annotate_ctx
+                                        .trait_ctx
                                         .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
@@ -1503,6 +1497,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             let synth_trait_name = self.get_type_name_full(trait_type);
                             let target_type_id = self.resolve_type(&impl_block.ty);
                             let type_params: Vec<_> = self
+                                .annotate_ctx
                                 .trait_ctx
                                 .type_params
                                 .iter()
@@ -1517,13 +1512,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             };
                             self.record_pending_synthesis_request(req);
                         }
-                        self.trait_ctx = saved_trait_ctx;
+                        self.annotate_ctx.trait_ctx = saved_trait_ctx;
                         continue;
                     }
 
                     // Set up associated type bindings for trait implementations
                     // This now works because type params (like T) are registered above
-                    self.trait_ctx.assoc_type_bindings.clear();
+                    self.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
                     if impl_block.trait_type.is_some() {
                         // Resolve the target type for registering associated type resolutions
                         let target_type_id = self.resolve_type(&impl_block.ty);
@@ -1535,7 +1530,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
                         for binding in &impl_block.associated_types {
                             let type_id = self.resolve_type(&binding.ty);
-                            self.trait_ctx
+                            self.annotate_ctx
+                                .trait_ctx
                                 .assoc_type_bindings
                                 .insert(binding.name.clone(), type_id);
 
@@ -1749,7 +1745,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
 
                     // Restore trait context
-                    self.trait_ctx = saved_trait_ctx;
+                    self.annotate_ctx.trait_ctx = saved_trait_ctx;
                 }
                 Item::Trait(_trait_decl) => {
                     // Trait declarations are handled in the first pass (signature registration)

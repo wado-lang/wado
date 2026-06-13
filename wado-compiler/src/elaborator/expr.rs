@@ -707,7 +707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if needs_param_scope {
                 let mut scope = s.enter_inherited_type_param_scope();
-                scope.trait_ctx.type_params.clear();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
                 scope.register_generic_params(&type_params_for_scope, 0);
                 inner(&mut scope)
             } else {
@@ -717,19 +717,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (mut param_types, mut return_type, effects) = if same_module {
             resolve(self)
         } else {
-            let callee_module = self.loaded_modules.get(def_module);
-            let (imported_type_sources, import_original_names) = if let Some(module) = callee_module
-            {
-                Self::build_imported_type_sources(
-                    &mut self.interner.borrow_mut(),
-                    module,
-                    def_module,
-                    Some(&self.entry_module_source),
-                    &self.invocations,
-                )
-            } else {
-                (IndexMap::default(), IndexMap::default())
-            };
+            let (imported_type_sources, import_original_names) =
+                self.tysys.trait_env.import_scope(def_module);
             self.with_module_perspective(
                 def_module.clone(),
                 imported_type_sources,
@@ -977,9 +966,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_return_type = func.return_type.clone();
         let resolve = move |s: &mut Self| -> (Vec<TypeId>, TypeId, Vec<TypeId>) {
             let mut scope = s.enter_inherited_type_param_scope();
-            scope.trait_ctx.type_params.clear();
+            scope.annotate_ctx.trait_ctx.type_params.clear();
             scope.register_generic_params(&type_params_for_scope, 0);
             let type_param_ids: Vec<TypeId> = scope
+                .annotate_ctx
                 .trait_ctx
                 .type_params
                 .iter()
@@ -999,19 +989,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (decl_params, decl_return, type_param_ids) = if same_module {
             resolve(self)
         } else {
-            let callee_module = self.loaded_modules.get(def_module);
-            let (imported_type_sources, import_original_names) = if let Some(module) = callee_module
-            {
-                Self::build_imported_type_sources(
-                    &mut self.interner.borrow_mut(),
-                    module,
-                    def_module,
-                    Some(&self.entry_module_source),
-                    &self.invocations,
-                )
-            } else {
-                (IndexMap::default(), IndexMap::default())
-            };
+            let (imported_type_sources, import_original_names) =
+                self.tysys.trait_env.import_scope(def_module);
             self.with_module_perspective(
                 def_module.clone(),
                 imported_type_sources,
@@ -1380,7 +1359,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // For newtypes, also resolve the base type name for trait impl lookup
-        let (lookup_name, lookup_type_id) = self.newtype_base_lookup(&struct_name, base_type_id);
+        let (lookup_name, lookup_type_id) =
+            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
             let index_type = self.resolve_expr(&index.index, ctx, None);
@@ -3237,8 +3217,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {
-                            if !self.type_implements_trait(type_arg, bound) {
-                                let type_name = self.type_id_to_string(type_arg);
+                            if !self.type_implements_trait(&self.annotate_ctx, type_arg, bound) {
+                                let type_name = self.tysys.type_id_to_string(type_arg);
                                 let reason = self.trait_unimpl_reason_chain(type_arg, bound);
                                 let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                                     type_name,
@@ -3968,9 +3948,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_name(crate::compiler_item::CompilerItem::Ord)
             .to_string();
         if element_type != TypeTable::ERROR
-            && !self.type_implements_trait(element_type, &ord_trait_name)
+            && !self.type_implements_trait(&self.annotate_ctx, element_type, &ord_trait_name)
         {
-            let type_name = self.type_id_to_string(element_type);
+            let type_name = self.tysys.type_id_to_string(element_type);
             let reason = self.trait_unimpl_reason_chain(element_type, &ord_trait_name);
             let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                 type_name,

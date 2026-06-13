@@ -62,22 +62,12 @@ impl WorldExportInfo {
         }
     }
 
-    /// Check if this export returns an HTTP response.
-    ///
-    /// Returns true if the return type is `Result<Response, ErrorCode>`.
-    pub fn returns_http_response(&self) -> bool {
-        let Some(return_type) = &self.return_type else {
-            return false;
-        };
-
-        if let Type::Generic(generic) = return_type
-            && generic.name == "Result"
-            && generic.args.len() == 2
-            && let Type::Named(ok_type) = &generic.args[0]
-        {
-            return ok_type.name == "Response";
-        }
-        false
+    /// Whether this is a handler-instance export: an interface export
+    /// (`from_interface_fq` populated) returning a non-unit `Result<_, _>` — the
+    /// shape of `wasi:http/handler#handle`. The `from_interface_fq` gate excludes
+    /// freestanding exports of the same shape (the kiln generator's `generate`).
+    pub fn is_handler_instance_export(&self) -> bool {
+        self.from_interface_fq.is_some() && returns_non_unit_result(self.return_type.as_ref())
     }
 }
 
@@ -142,19 +132,18 @@ impl WorldInfo {
         self.exports.iter().any(|e| e.is_async)
     }
 
-    /// Check if this world has an HTTP handler export.
-    ///
-    /// Keyed on the world's fully-qualified name rather than the return-type
-    /// shape so same-named types in other namespaces — notably
-    /// `core:kiln/types::Response` under the `core:kiln/generator` world —
-    /// cannot be mistaken for `wasi:http/types::Response` and route the
-    /// generator through the HTTP codegen branch.
+    /// Whether this world exports the WASI HTTP handler — a handler-instance
+    /// export whose interface is in the `http` package. Gates HTTP-specific
+    /// behavior (importing `wasi:http/types`, the free-list allocator), so the
+    /// package check keeps a non-HTTP handler-shaped export (e.g. a future
+    /// `acme:widget/handler`) out of the HTTP path. The generic instance-export
+    /// wrapping for all interface exports lives in
+    /// `append_interface_instance_exports`.
     pub fn has_http_handler_export(&self) -> bool {
-        self.namespace_prefix() == "wasi:http/"
-            && self
-                .exports
-                .iter()
-                .any(WorldExportInfo::returns_http_response)
+        self.exports.iter().any(|e| {
+            e.is_handler_instance_export()
+                && e.from_interface_fq.as_deref().map(fq_name_package) == Some("http")
+        })
     }
 
     /// The CM package segment of this world's fully-qualified name.
@@ -193,6 +182,19 @@ impl WorldInfo {
             .iter()
             .any(|i| i.interface_name == interface_name)
     }
+}
+
+/// Whether `return_type` is a `Result<Ok, Err>` with at least one non-unit
+/// arm — the "handler" return shape. `Result<(), ()>` (the CLI `Run` shape)
+/// and any non-`Result` type return `false`.
+fn returns_non_unit_result(return_type: Option<&Type>) -> bool {
+    let Some(Type::Generic(generic)) = return_type else {
+        return false;
+    };
+    generic.name == "Result"
+        && generic.args.len() == 2
+        && !(crate::component_model::is_unit_type(&generic.args[0])
+            && crate::component_model::is_unit_type(&generic.args[1]))
 }
 
 /// Extract the package segment of a CM-style fully-qualified name
@@ -492,6 +494,133 @@ mod tests {
             exports: Vec::new(),
             imports: Vec::new(),
         }
+    }
+
+    /// Build a `Result<Ok, Err>` return type from two named-type names.
+    fn result_return(ok: &str, err: &str) -> Type {
+        Type::Generic(crate::ast::GenericType {
+            id: crate::ast::AstId::fresh(),
+            name: "Result".to_string(),
+            args: vec![
+                Type::Named(crate::ast::NamedType::new(
+                    crate::ast::AstId::fresh(),
+                    ok.to_string(),
+                    make_span(),
+                )),
+                Type::Named(crate::ast::NamedType::new(
+                    crate::ast::AstId::fresh(),
+                    err.to_string(),
+                    make_span(),
+                )),
+            ],
+            span: make_span(),
+        })
+    }
+
+    #[test]
+    fn test_has_http_handler_export_from_stdlib() {
+        // Characterization: the stdlib worlds keep their current classification
+        // after the detection logic moves from namespace+`Response` sniffing to
+        // the structural `from_interface_fq` + non-unit `Result` check.
+        let (_registry, world_registry) =
+            crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+
+        assert!(
+            world_registry
+                .get("wasi:http/service")
+                .unwrap()
+                .has_http_handler_export(),
+            "wasi:http/service exports the Handler interface (handle -> Result<Response, _>)"
+        );
+        assert!(
+            !world_registry
+                .get("wasi:cli/command")
+                .unwrap()
+                .has_http_handler_export(),
+            "wasi:cli/command's Run export returns Result<(), ()> — not a handler instance"
+        );
+        assert!(
+            !world_registry
+                .get("core:kiln/generator")
+                .unwrap()
+                .has_http_handler_export(),
+            "kiln generate returns a non-unit Result but is a freestanding export \
+             (from_interface_fq is None), so it is not a handler instance export"
+        );
+    }
+
+    #[test]
+    fn test_http_handler_detection_is_package_precise() {
+        // `is_handler_instance_export` is the generic shape predicate (an
+        // interface export returning a non-unit `Result`), detected with no
+        // dependence on the `wasi:http/` namespace or the `Response` type name.
+        // `has_http_handler_export` additionally requires the parent interface
+        // to be in the `http` package, so it gates HTTP-specific behavior
+        // precisely and does not misfire for a non-HTTP handler-shaped export.
+        let http_handler = WorldExportInfo {
+            name: "handle".to_string(),
+            is_async: true,
+            params: vec![],
+            return_type: Some(result_return("Response", "ErrorCode")),
+            from_interface_fq: Some("wasi:http/handler@0.3.0".to_string()),
+        };
+        let mut http_world = world_info("wasi:http/service");
+        http_world.exports.push(http_handler);
+        assert!(http_world.exports[0].is_handler_instance_export());
+        assert!(
+            http_world.has_http_handler_export(),
+            "an http-package handler export gates the HTTP path"
+        );
+
+        // A third-party handler-shaped export has the same generic shape but is
+        // NOT an HTTP handler — it must not be routed into the HTTP-types import
+        // path.
+        let mut widget_world = world_info("acme:widget/service");
+        widget_world.exports.push(WorldExportInfo {
+            name: "handle".to_string(),
+            is_async: true,
+            params: vec![],
+            return_type: Some(result_return("Widget", "WidgetError")),
+            from_interface_fq: Some("acme:widget/handler@1.0.0".to_string()),
+        });
+        assert!(
+            widget_world.exports[0].is_handler_instance_export(),
+            "the generic shape predicate is namespace-independent"
+        );
+        assert!(
+            !widget_world.has_http_handler_export(),
+            "a non-HTTP handler-shaped export is not an HTTP handler"
+        );
+
+        // The same return shape on a freestanding export (no parent interface)
+        // is the kiln pattern — not a handler instance export at all.
+        let mut freestanding = http_world.clone();
+        freestanding.exports[0].from_interface_fq = None;
+        assert!(!freestanding.exports[0].is_handler_instance_export());
+        assert!(!freestanding.has_http_handler_export());
+
+        // A unit `Result<(), ()>` interface export (the CLI Run shape) is not a
+        // handler instance even with a parent interface FQ.
+        let mut unit_export = world_info("wasi:http/command");
+        unit_export.exports.push(WorldExportInfo {
+            name: "run".to_string(),
+            is_async: true,
+            params: vec![],
+            return_type: Some(result_return_unit()),
+            from_interface_fq: Some("wasi:http/run@1.0.0".to_string()),
+        });
+        assert!(!unit_export.exports[0].is_handler_instance_export());
+        assert!(!unit_export.has_http_handler_export());
+    }
+
+    /// `Result<(), ()>` built from empty tuples.
+    fn result_return_unit() -> Type {
+        Type::Generic(crate::ast::GenericType {
+            id: crate::ast::AstId::fresh(),
+            name: "Result".to_string(),
+            args: vec![Type::Tuple(vec![]), Type::Tuple(vec![])],
+            span: make_span(),
+        })
     }
 
     #[test]

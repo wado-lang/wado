@@ -1,0 +1,26 @@
+# Shared "data" component for the BDP separation experiment. It bakes the sliced
+# casemap postcard blob and serves it via the `data` interface. In the
+# composition demo this is the single place the Unicode data lives; feature
+# components import it instead of each baking their own copy.
+[workspace]
+
+[package]
+name = "bdp-data"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = { version = "0.58", default-features = false, features = ["macros", "realloc"] }
+dlmalloc = { version = "0.2", features = ["global"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
