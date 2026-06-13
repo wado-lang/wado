@@ -136,7 +136,6 @@ fn assert_sim_matches_atn(sim: &AtnSim, atn: &Atn) {
         let base = sim.state_tr_start[i];
         for let mut j = 0; j < st.transitions.len(); j += 1 {
             let t = &st.transitions[j];
-            assert sim.tr_src[base + j] == i, `state {i} tr {j} src`;
             assert sim.tr_kind[base + j] == t.kind, `state {i} tr {j} kind`;
             assert sim.tr_target[base + j] == t.target, `state {i} tr {j} target`;
             assert sim.tr_label[base + j] == t.label, `state {i} tr {j} label`;

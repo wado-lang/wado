@@ -71,13 +71,6 @@ pub global ATN_TR_PRECEDENCE: i32 = 5;
 #[allow(dead_code)]
 global ATN_ACCEPT_EOF: i32 = -2;
 
-/// Bounds that keep a pathological closure (deep recursion, config blow-up)
-/// from looping forever. On overflow the predictor bails to the lowest
-/// viable alt — the same conservative answer it gives on a true conflict.
-#[allow(dead_code)]
-global ATN_MAX_STACK: i32 = 64;
-#[allow(dead_code)]
-global ATN_MAX_CONFIGS: i32 = 6000;
 /// Safety caps for the merged closure. With graph-merged contexts the work is
 /// polynomial for any finite input, so these are only tripped by pathological
 /// epsilon-cycle grammars; on overflow the predictor bails to the lowest
@@ -98,7 +91,6 @@ pub struct AtnSim {
     pub state_tr_start: List<i32>,
     pub state_tr_count: List<i32>,
     pub tr_kind: List<i32>,
-    pub tr_src: List<i32>,
     pub tr_target: List<i32>,
     pub tr_label: List<i32>,
     pub tr_follow: List<i32>,
@@ -362,7 +354,6 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
     let mut state_tr_start: List<i32> = [];
     let mut state_tr_count: List<i32> = [];
     let mut tr_kind: List<i32> = [];
-    let mut tr_src: List<i32> = [];
     let mut tr_target: List<i32> = [];
     let mut tr_label: List<i32> = [];
     let mut tr_follow: List<i32> = [];
@@ -384,7 +375,6 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
         for let mut j = 0; j < ntrans; j += 1 {
             tr_kind.push(data[p]);
             p += 1;
-            tr_src.push(i);
             tr_target.push(data[p]);
             p += 1;
             tr_label.push(data[p]);
@@ -403,7 +393,6 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
         state_tr_start,
         state_tr_count,
         tr_kind,
-        tr_src,
         tr_target,
         tr_label,
         tr_follow,

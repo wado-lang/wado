@@ -92,9 +92,7 @@ Decide each convention once, record it here, then migrate mechanically.
 
 ### Dead code
 
-- [ ] Dead weight shipped inside every ATN-bearing generated parser: `ATN_MAX_STACK`/`ATN_MAX_CONFIGS` (unused, with comments claiming they guard the closure — `ATN_CLOSURE_GUARD`/`ATN_ARENA_CAP` actually do), `AtnSim.tr_src` (decoded and stored, read only by a test), duplicated-then-unused `escape_html`. `src/runtime/atn.wado:75-80`, `:101`, `src/runtime/highlight.wado:125-139` — needs regenerating every committed `tests/generated/` parser since these live in inlined runtime fragments.
-- [ ] Misc: unreachable `return` after panic in `src/runtime/cst.wado:129-130` (a runtime fragment, so removing it requires regenerating every committed `tests/generated/` parser); `compute_first_chars`' `use_modes` branch (`src/lexer_gen.wado`) — flagged as dead by the audit but the param is in fact read, so re-confirm before touching.
-- [ ] `is_wado_reserved` contains non-keywords (`move` — a Rust leftover — plus `scope`, `panic`, `handler`, `unreachable`) and misses contextual keywords it should arguably escape; the over/under-inclusion policy is undocumented. `src/ident.wado:10-44`
+- [ ] Misc: `compute_first_chars`' `use_modes` branch (`src/lexer_gen.wado`) — flagged as dead by the audit but the param is in fact read, so re-confirm before touching.
 
 ### Stale and contradictory comments
 

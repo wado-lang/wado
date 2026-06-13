@@ -122,22 +122,6 @@ impl Visitor for HighlightVisitor {
     }
 }
 
-fn escape_html(out: &mut String, text: &String) {
-    for let c of text.chars() {
-        if c == '&' {
-            out.push_str(&"&amp;");
-        } else if c == '<' {
-            out.push_str(&"&lt;");
-        } else if c == '>' {
-            out.push_str(&"&gt;");
-        } else if c == '"' {
-            out.push_str(&"&quot;");
-        } else {
-            out.push(c);
-        }
-    }
-}
-
 fn escape_html_char(out: &mut String, c: char) {
     if c == '&' {
         out.push_str(&"&amp;");

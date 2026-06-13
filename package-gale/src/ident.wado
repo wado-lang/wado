@@ -7,6 +7,18 @@
 /// switch short-circuits without any string comparison. The inner
 /// `match *name` for each length only walks the (much smaller) set of
 /// reserved words sharing that length.
+///
+/// Inclusion policy: this is a deliberate **superset** of the Wado lexer
+/// keyword set (`wado-compiler/src/syntax.rs`). It also lists builtin
+/// type names (`List`, `Option`, `Result`, `String`, the `i*`/`u*`/`f*`
+/// scalars) and builtin intrinsics (`panic`, `unreachable`) so a grammar
+/// rule/token named after one cannot shadow it in the generated module.
+/// Over-inclusion is intentional and harmless — a spurious `_` suffix on
+/// an identifier that did not strictly need it — whereas under-inclusion
+/// emits code that fails to compile. When in doubt, add the word: err
+/// toward escaping. (A few entries such as `move`/`scope`/`handler` are
+/// not currently reserved by either list; they are kept under this same
+/// err-toward-escaping rule rather than risk a future contextual use.)
 fn is_wado_reserved(name: &String) -> bool {
     return match name.len() {
         2 => match *name {

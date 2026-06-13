@@ -343,7 +343,6 @@ fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
         return CstNode { name: info.name, span: info.span, children };
     }
     panic("TreeRecorder: expected Enter event");
-    return CstNode { name: "", span: Span::new(0, 0), children: [] };
 }
 //! Consumer-facing tree / token utilities exposed by every generated
 //! parser: S-expression normalisation, child-node lookup, and the
@@ -689,22 +688,6 @@ impl Visitor for HighlightVisitor {
         let cap = self.classify(token.kind);
         if !cap.is_empty() {
             self.captures.push(HighlightCapture { capture: cap, start: token.span.start, end: token.span.end });
-        }
-    }
-}
-
-fn escape_html(out: &mut String, text: &String) {
-    for let c of text.chars() {
-        if c == '&' {
-            out.push_str(&"&amp;");
-        } else if c == '<' {
-            out.push_str(&"&lt;");
-        } else if c == '>' {
-            out.push_str(&"&gt;");
-        } else if c == '"' {
-            out.push_str(&"&quot;");
-        } else {
-            out.push(c);
         }
     }
 }
