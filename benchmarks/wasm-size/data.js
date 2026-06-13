@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781346317999,
+  "lastUpdate": 1781347084987,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32593,6 +32593,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 432251,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9e86da9768a649cb493086b0b77ed45e236f3e4b",
+          "message": "Merge pull request #1363 from wado-lang/claude/wir-build-compiler-abstraction-75w853\n\nrefactor(compiler)!: drive CM world imports/exports from data, remove HTTP special-casing",
+          "timestamp": "2026-06-13T19:20:04+09:00",
+          "tree_id": "c2967c11537819abb2829887b7ec63e94cd973e7",
+          "url": "https://github.com/wado-lang/wado/commit/9e86da9768a649cb493086b0b77ed45e236f3e4b"
+        },
+        "date": 1781347084629,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432292,
             "unit": "bytes"
           }
         ]
