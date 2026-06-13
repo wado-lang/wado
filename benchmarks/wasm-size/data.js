@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781350911668,
+  "lastUpdate": 1781354353993,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32725,6 +32725,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 432292,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eea10d6ab20b3d7b86585abb07010f53e4696f23",
+          "message": "Merge pull request #1367 from wado-lang/claude/worklist-rewrite-engine-zhhzss\n\nrefactor(optimizer): retire niri's per-local field_env for the ValueGraph",
+          "timestamp": "2026-06-13T21:30:16+09:00",
+          "tree_id": "6d7d77409a62e6b8394d439f79e10b8ffa0f40e6",
+          "url": "https://github.com/wado-lang/wado/commit/eea10d6ab20b3d7b86585abb07010f53e4696f23"
+        },
+        "date": 1781354353425,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
             "unit": "bytes"
           }
         ]
