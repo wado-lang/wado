@@ -1369,16 +1369,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// -> i32; }`. The effect must be a project-declared effect (in
     /// `trait_env.effect_decl_index`); WASI effects flow through
     /// `get_wasi_effect_return_type` instead.
-    pub(super) fn get_user_effect_return_type(
+    /// Resolve a user/WASI effect operation's signature (parameter types and
+    /// optional return type) from its Wado `interface` declaration.
+    ///
+    /// `effect_decl_index` keys by canonical `(decl_module, name)`; the call
+    /// site's import context disambiguates which interface a bare name refers to
+    /// (two modules can each declare `pub interface Logger`). Types are resolved
+    /// in the interface module's own import scope, so a type the interface
+    /// imports (e.g. `Instant` pulled into `Timezone` from `system_clock`)
+    /// resolves to the same `TypeId` the call site holds — not a fresh same-named
+    /// one. Surface types are preserved (`Mark`, `Result<(), ()>`), unlike the CM
+    /// registry's flattened form.
+    fn resolve_effect_op_signature(
         &mut self,
         effect: &str,
         operation: &str,
-    ) -> Option<TypeId> {
-        // `effect_decl_index` keys by canonical `(decl_module, name)`. The
-        // current module's import context is the source of truth for which
-        // declaration this bare name refers to — two modules can declare
-        // `pub interface Logger` independently, and only the import graph
-        // disambiguates which Logger this call site means.
+    ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
         let canonical_key = self.canonical_decl_key(effect);
         let (module_source, item_idx) = self
             .tysys
@@ -1391,13 +1397,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         };
         let method = decl.methods.iter().find(|m| m.name == operation)?;
-        let return_ast = method.return_type.as_ref()?;
-        // Resolve in the effect's defining module so any types it
-        // references are looked up in the right scope.
-        let saved = std::mem::replace(&mut self.current_module_source, module_source);
-        let return_type = self.resolve_type(return_ast);
-        self.current_module_source = saved;
-        Some(return_type)
+        let param_asts: Vec<Type> = method.params.iter().map(|p| p.ty.clone()).collect();
+        let return_ast = method.return_type.clone();
+        let (imported_type_sources, import_original_names) =
+            self.tysys.trait_env.import_scope(&module_source);
+        Some(self.with_module_perspective(
+            module_source,
+            imported_type_sources,
+            import_original_names,
+            |s| {
+                let params = param_asts.iter().map(|ty| s.resolve_type(ty)).collect();
+                let ret = return_ast.as_ref().map(|ty| s.resolve_type(ty));
+                (params, ret)
+            },
+        ))
+    }
+
+    pub(super) fn get_user_effect_return_type(
+        &mut self,
+        effect: &str,
+        operation: &str,
+    ) -> Option<TypeId> {
+        self.resolve_effect_op_signature(effect, operation)
+            .and_then(|(_, ret)| ret)
     }
 
     pub(super) fn get_wasi_effect_return_type(
@@ -1424,40 +1446,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Parameter types of an effect operation, from its Wado `interface`
-    /// declaration (`effect_decl_index` covers WASI and user effects alike).
-    /// Uses surface types, not the CM registry whose flattened `u64` would reject
-    /// a `Mark`-like alias argument.
     pub(super) fn get_effect_op_param_types(
         &mut self,
         effect: &str,
         operation: &str,
     ) -> Option<Vec<TypeId>> {
-        let canonical_key = self.canonical_decl_key(effect);
-        let (module_source, item_idx) = self
-            .tysys
-            .trait_env
-            .effect_decl_index
-            .get(&canonical_key)?
-            .clone();
-        let module = self.loaded_modules.get(&module_source)?;
-        let crate::ast::Item::Interface(decl) = module.items.get(item_idx)? else {
-            return None;
-        };
-        let method = decl.methods.iter().find(|m| m.name == operation)?;
-        let params: Vec<Type> = method.params.iter().map(|p| p.ty.clone()).collect();
-        // Resolve in the interface module's perspective *including its import
-        // scope*, so a type imported into the interface (e.g. `Instant` pulled
-        // into `Timezone` from `system_clock`) resolves to the same `TypeId` the
-        // call site sees, not a fresh same-named one.
-        let (imported_type_sources, import_original_names) =
-            self.tysys.trait_env.import_scope(&module_source);
-        Some(self.with_module_perspective(
-            module_source,
-            imported_type_sources,
-            import_original_names,
-            |s| params.iter().map(|ty| s.resolve_type(ty)).collect(),
-        ))
+        self.resolve_effect_op_signature(effect, operation)
+            .map(|(params, _)| params)
     }
 
     /// Resolve a WASI AST type to a `TypeId`
