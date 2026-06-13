@@ -237,10 +237,14 @@ WIR output stays byte-identical.
       `mark_changed` re-runs affected callers when a callee shrinks, with
       `OptConfig::iterations` the quiescence bound. Terminal stages
       (`multi_value_return`, `field_scalarize`, `const_object_globalization`,
-      `dce`) stay explicit. Propagation stays both-direction: a directed
-      (callee-shrink → callers) narrowing would miss the edges `inline` adds to
-      the build-once call graph, and is net-neutral until the graph is kept
-      fresh.
+      `dce`) stay explicit. Propagation stays both-direction; it over-approximates
+      but measured byte-identical to a fresh-graph rebuild, so it costs no
+      optimization quality today. A directed (callee-shrink → callers) narrowing
+      is deferred: it drops the edges `inline` adds to the build-once call graph,
+      and a per-iteration rebuild does **not** recover them (the staleness is
+      intra-iteration — `inline` adds an edge and a callee changes within the
+      same round), so it would need immediate incremental edge maintenance —
+      fragile, for a net-neutral gain.
 
 ### Open
 
