@@ -14,32 +14,30 @@
 //! field deduplication, scan/parse symmetry) is committed here so the emit
 //! layer can translate structurally without consulting the surface IR.
 //!
-//! ## Phase status
+//! ## What lower handles
 //!
-//! Phase 2 is complete: lower handles every shape the surface IR
-//! produces — single-alt and multi-alt rules, left-recursive rules
-//! (atom + lr_alts), every Group classifier (`Transparent`,
-//! `SingleAlt`, `TokenOnly`, `SimpleCst`, `General`), every Repeat
-//! kind (`Star` / `Plus` / `Optional`) with both greedy and
-//! non-greedy semantics, `Not` complements (single token or
-//! multi-token Group), and scalar / list (`+=`) Labels. Dispatch
-//! falls into `Direct` for disjoint first-sets or `Tournament` for
-//! overlapping fully-scannable alts. The tail-position caller-FOLLOW
-//! repair is threaded at runtime (a `FollowArg` per `RuleRef` call
-//! site and a `gate_caller_follow` flag per tail Repeat), so greedy
-//! Repeats stay `Plain` and yield to the caller via `follow_yields`
-//! at run time. Repeats over General-Group inners coordinate the
-//! per-rule `group_counter` so the outer field name and the inner
-//! variant share the same id.
+//! `lower` handles every shape the surface IR produces — single-alt and
+//! multi-alt rules, left-recursive rules (atom + lr_alts), every Group
+//! classifier (`Transparent`, `SingleAlt`, `TokenOnly`, `SimpleCst`,
+//! `General`), every Repeat kind (`Star` / `Plus` / `Optional`) with both
+//! greedy and non-greedy semantics, `Not` complements (single token or
+//! multi-token Group), and scalar / list (`+=`) Labels. Dispatch falls
+//! into `Direct` for disjoint first-sets or `Tournament` for overlapping
+//! fully-scannable alts. The tail-position caller-FOLLOW repair is
+//! threaded at runtime (a `FollowArg` per `RuleRef` call site and a
+//! `gate_caller_follow` flag per tail Repeat), so greedy Repeats stay
+//! `Plain` and yield to the caller via `follow_yields` at run time.
+//! Repeats over General-Group inners coordinate the per-rule
+//! `group_counter` so the outer field name and the inner variant share
+//! the same id.
 //!
-//! Optional `?` Repeats resolve to `OptionalLookahead` when the
-//! inner is a single-alt Group of ≥ 2 fixed tokens, or to
-//! `OptionalScanGuard` when the inner is a scannable Group /
-//! RuleRef without a usable fixed-token prefix; otherwise `Plain`.
+//! Optional `?` Repeats resolve to `OptionalLookahead` when the inner is a
+//! single-alt Group of ≥ 2 fixed tokens, or to `OptionalScanGuard` when
+//! the inner is a scannable Group / RuleRef without a usable fixed-token
+//! prefix; otherwise `Plain`.
 //!
-//! Phase 3 swaps `codegen::generate` to call `lower` and feed the
-//! result through a thin emit adapter; until then this file is
-//! exercised only by `lower_test.wado`.
+//! `codegen::generate` calls `lower` and feeds the result through the emit
+//! layer (`parser_gen.wado` / `codegen.wado`).
 
 use {
     Grammar,
@@ -195,12 +193,11 @@ fn compute_gate_caller_follow(ctx: &mut GenContext, elements: &List<Element>, i:
 /// `lit_tokens` is computed by `lexer_gen::collect_literal_tokens`
 /// before lowering and threaded in so a single literal-collection
 /// pass serves both the lexer and parser sides.
-/// Translate the surface IR to GIR. `ctx` is shared with downstream
-/// emit: the follow-mask and kind-set registries lower writes into it
-/// are the same ones emit reads later, so real codegen threads its own
-/// ctx in. Callers that don't share a ctx (e.g. `lower_test.wado`
-/// smoke tests) omit it and lowering builds a fresh one from the
-/// grammar.
+///
+/// `ctx` is shared with downstream emit (real codegen threads its own
+/// in); callers that don't share one (e.g. `lower_test.wado` smoke
+/// tests) omit it and lowering builds a fresh one from the grammar. The
+/// body comment explains what the shared registries buy.
 pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContext = &mut GenContext::new(
     &grammar.parser_rules,
     lit_tokens,
@@ -519,10 +516,9 @@ fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext) -> SimpleRule {
     };
 }
 
-/// Lower a multi-alt rule (no LR alts). Phase 2.3a only handles the
-/// case where every pair of alts has disjoint first-sets — the
-/// dispatch is a single token-led `if / else if` chain (`Direct`).
-/// Overlapping first-sets land in `Tournament` (scan-and-commit).
+/// Lower a multi-alt rule (no LR alts). Disjoint first-sets dispatch as a
+/// single token-led `if / else if` chain (`Direct`); overlapping
+/// first-sets land in `Tournament` (scan-and-commit).
 fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule {
     let header = lower_header(rule);
 
@@ -571,9 +567,9 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
 /// * `lr_dispatch: LrDispatchData` — the suffix-loop overlap groups
 ///   and the indices of LR alts that have a non-empty suffix.
 ///
-/// Phase 2.4 only handles the disjoint-suffix-first case (no overlap
-/// groups beyond singletons). Overlapping suffix first-sets need
-/// the scan-tournament dispatch from Phase 2.3c.
+/// Only the disjoint-suffix-first case is handled (no overlap groups
+/// beyond singletons); overlapping suffix first-sets would need the
+/// scan-tournament dispatch.
 fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     let header = lower_header(rule);
 
@@ -2322,9 +2318,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
 /// the enclosing rule's name, threaded through so nested
 /// `SingleAlt` / `General` groups can fill in their `owner_rule`
 /// slot (the rule whose monomorph table the group's struct names
-/// live under). Phase 2.1 covers the trivial leaf elements; the
-/// remaining shapes panic with their own `TODO Phase 2.x` markers
-/// so a half-lowered alt body can't quietly reach codegen.
+/// live under).
 fn lower_op(
     elem: &Element,
     name_counts: &mut List<[String, i32]>,
@@ -2773,7 +2767,7 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         });
         // SimpleCst alts are single `RuleRef`s — outer_follow does
         // not propagate into the callee (whole-rule follow is the
-        // callee's concern via Phase 2.6 variants).
+        // callee's concern, handled by the runtime caller-FOLLOW gate).
         let empty_follow: List<String> = [];
         scan_bodies.push(ScanBody {
             elements: [
@@ -3581,10 +3575,11 @@ fn repeat_inner_is_list_label(elem: &Element) -> bool {
 /// uses the inner base unchanged. Mirrors `parser_gen`'s
 /// `dedup_name(&"<inner>_list", ...)` / `dedup_name(&"<inner>", ...)`
 /// pattern at field-info call sites.
-
-/// outer field name embeds this id (`group_<id>_list`); the
-/// subsequent inner lowering consumes the same id and increments
-/// the counter. Other shapes ignore this parameter.
+///
+/// `gc_speculative` is the speculative group counter for a
+/// General-Group inner: the outer field name embeds this id
+/// (`group_<id>_list`) and the subsequent inner lowering consumes the
+/// same id and increments the counter. Other shapes ignore it.
 fn repeat_outer_base_name(elem: &Element, kind: RepeatKind, gc_speculative: i32) -> String {
     let base = repeat_inner_base_name(elem, gc_speculative);
     return match kind {

@@ -1106,12 +1106,13 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &
     }
 
     // Sort each partition (and the unguarded alts) longest-first via
-    // `sort_group_by_element_count`. First-success-wins in
-    // `emit_scan_partition_body` relies on this order: the most specific
-    // (highest-priority, then most-elements) candidate is scanned first,
-    // so committing on first success is correctness-equivalent to a
-    // longest-match tournament when alts may share prefixes (e.g.
-    // `expr`'s `column_ref` IDENT vs `function_call` IDENT '(' ... ')' ).
+    // `sort_group_by_element_count`. `emit_scan_partition_body` runs a
+    // real longest-match tournament per partition (keeping the greatest
+    // successful end), so this order does not decide correctness — it only
+    // breaks ties deterministically, preferring the most specific
+    // (highest-priority, then most-elements) candidate when two alts scan
+    // to the same end (e.g. `expr`'s `column_ref` IDENT vs
+    // `function_call` IDENT '(' ... ')' ).
     for let mut g = 0; g < groups_alts.len(); g += 1 {
         sort_group_by_element_count(&mut groups_alts[g], alts);
     }
@@ -1767,21 +1768,6 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     );
 }
 
-/// Emit a thin entry wrapper named `outer_name` that delegates to
-/// `inner_name` and, on failure, records `rule_display` onto the
-/// propagating `ParseError`'s rule stack. Every cross-rule call site and
-/// the public input entry reference the canonical `_parse_<rule>` name, so
-/// making that name the wrapper threads the whole call chain through it
-/// without touching any call site.
-///
-/// The success path is a single not-taken branch, so the rule context is
-/// paid for only when a parse actually fails. `rule_stack` is stored
-/// innermost-first: the failing token's rule pushes first as the `Err`
-/// unwinds, the start rule last.
-///
-/// `takes_min_prec` mirrors the wrapped function's signature. Left-recursive
-/// rule entries carry a defaulted `min_prec` (callers pass it only at
-/// precedence-aware self-ref sites), so the wrapper reproduces that default.
 /// Emit the trace helpers (the `trace` option is on). The emit sites only
 /// emit simple calls — `trace_enter`/`trace_ok`/`trace_fail` from the rule
 /// wrappers, `trace_pick`/`trace_scan_alt`/`trace_try` from the multi-alt
@@ -1850,6 +1836,21 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
+/// Emit a thin entry wrapper named `outer_name` that delegates to
+/// `inner_name` and, on failure, records `rule_display` onto the
+/// propagating `ParseError`'s rule stack. Every cross-rule call site and
+/// the public input entry reference the canonical `_parse_<rule>` name, so
+/// making that name the wrapper threads the whole call chain through it
+/// without touching any call site.
+///
+/// The success path is a single not-taken branch, so the rule context is
+/// paid for only when a parse actually fails. `rule_stack` is stored
+/// innermost-first: the failing token's rule pushes first as the `Err`
+/// unwinds, the start rule last.
+///
+/// `takes_min_prec` mirrors the wrapped function's signature. Left-recursive
+/// rule entries carry a defaulted `min_prec` (callers pass it only at
+/// precedence-aware self-ref sites), so the wrapper reproduces that default.
 fn gen_rule_entry_wrapper(
     w: &mut CodeWriter,
     outer_name: &String,
@@ -2570,6 +2571,24 @@ fn op_is_leaf(op: &Op) -> bool {
     };
 }
 
+/// Emit `p.atn_ret_pending = <state>;` immediately before a `_parse_X` call
+/// so the callee's entry wrapper pushes the call's exact ATN return state
+/// onto `p.atn_stack` (full-context prediction). No-op unless the grammar
+/// needs the ATN and the call site has a known return state
+/// (`Atn.call_site_returns`, keyed by `RuleCallOp.atn_call_site`). An
+/// unstamped call leaves `atn_ret_pending` at -1, which the simulator reads
+/// as an unknown caller (SLL-accept at that frame).
+fn emit_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
+    if !ctx.needs_atn() {
+        return;
+    }
+    let ret = ctx.atn_call_site_return(call_site);
+    if ret < 0 {
+        return;
+    }
+    w.line(&`p.atn_ret_pending = {ret};`);
+}
+
 /// Emit a single leaf-op parse line, reading the deduped field name
 /// and resolved token / follow-arg / min-prec values straight from
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
@@ -2589,24 +2608,6 @@ fn op_is_leaf(op: &Op) -> bool {
 /// emitted field name comes from `op.field` exclusively — `dedup_base`
 /// is consulted only for the sync. The sync goes away entirely once
 /// every emit path consumes `Op`.
-/// Emit `p.atn_ret_pending = <state>;` immediately before a `_parse_X` call
-/// so the callee's entry wrapper pushes the call's exact ATN return state
-/// onto `p.atn_stack` (full-context prediction). No-op unless the grammar
-/// needs the ATN and the call site has a known return state
-/// (`Atn.call_site_returns`, keyed by `RuleCallOp.atn_call_site`). An
-/// unstamped call leaves `atn_ret_pending` at -1, which the simulator reads
-/// as an unknown caller (SLL-accept at that frame).
-fn emit_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
-    if !ctx.needs_atn() {
-        return;
-    }
-    let ret = ctx.atn_call_site_return(call_site);
-    if ret < 0 {
-        return;
-    }
-    w.line(&`p.atn_ret_pending = {ret};`);
-}
-
 fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
@@ -2983,12 +2984,6 @@ fn gen_op_storable_optional(
     };
 }
 
-/// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
-/// yield gate: `!(follow_yields(...)) && (cond)` when the Repeat is
-/// tail-position (`gate_caller_follow`), so the Optional fires only when
-/// the caller's continuation does NOT claim the upcoming tokens; the
-/// unchanged `cond` otherwise. The Group-bodied counterpart of
-/// `gen_op_repeat_optional_{leaf,rulecall}`'s gate.
 /// Runtime entry condition for a non-greedy `??`: the ATN simulator
 /// decides enter vs skip with full context. The current rule is read from
 /// `p.atn_stack`'s top at runtime, so no compile-time decision number is
@@ -3006,6 +3001,12 @@ fn atn_optional_enter_cond(ctx: &GenContext) -> String {
     return `atn_ng_optional_enter(&GALE_ATN_SIM, {rule}, &p.atn_stack, &p.tokens, p.pos, TK_EOF)`;
 }
 
+/// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
+/// yield gate: `!(follow_yields(...)) && (cond)` when the Repeat is
+/// tail-position (`gate_caller_follow`), so the Optional fires only when
+/// the caller's continuation does NOT claim the upcoming tokens; the
+/// unchanged `cond` otherwise. The Group-bodied counterpart of
+/// `gen_op_repeat_optional_{leaf,rulecall}`'s gate.
 fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> String {
     if gate_caller_follow {
         return `!(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && ({*cond})`;

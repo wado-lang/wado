@@ -1680,32 +1680,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
 
 // ===== Stage B: descriptor [output] normaliser =====
 
-/// Decide whether a descriptor `[output]` block can be checked as a Stage B
-/// parse-tree shape. The descriptor format is documented in
-/// `vendor/antlr4/runtime-testsuite/test/.../RuntimeTestDescriptorParser.java`;
-/// in practice `[output]` carries one of:
-///
-/// - **a parse tree** in `to_string_tree()` form, e.g. `(s (declarator a))`.
-///   These are emitted by descriptors whose grammar prequel ends with
-///   `@after { <ToStringTree("$ctx"):writeln()> }`. Stage B can compare
-///   against `tree.to_string_tree()`.
-/// - **a host-language artefact** — lexer token-type names (one per
-///   line), `Lexer.next()` token dumps (`[@0,0:-1='<EOF>',<-1>,1:0]`),
-///   ATN decision traces (`Decision 0:\n s0-ID->:s1`), or arbitrary
-///   action-block prints. None of these reflect the parse tree, so they
-///   are not Stage B testable and must be triaged as `[stage_b_skip]`.
-///
-/// Returns `Some(tree)` for the parse-tree case, with ANTLR4's literal
-/// ` <EOF>` token stripped — Gale's `to_string_tree()` omits empty-text
-/// tokens (see `package-gale/CLAUDE.md` "Driver Tests"). Returns `None`
-/// for everything else.
-///
-/// The detector is intentionally conservative: any leftover `<…>` token
-/// in the output (after `<EOF>` stripping) is treated as a testsuite
-/// StringTemplate substitution (e.g. `<AltNum()>`) rather than a real
-/// parse-tree node, and the descriptor is rejected. Likewise, `${…}`
-/// always denotes an action-block reference. False rejections are
-/// triaged as `[stage_b_todo]` once the underlying capability lands.
+/// Decide whether a descriptor is eligible for Stage B′ oracle handling.
 /// Lexer-only descriptors have no parse tree to compare; error-bearing
 /// inputs produce trees with `<missing>` / `<error>` placeholders that
 /// can't be pinned; ANTLR4's TestRig (unlike Gale) requires an explicit
@@ -1957,6 +1932,32 @@ fn emit_stage_b_oracle_test_file(
     return w.to_string();
 }
 
+/// Decide whether a descriptor `[output]` block can be checked as a Stage B
+/// parse-tree shape. The descriptor format is documented in
+/// `vendor/antlr4/runtime-testsuite/test/.../RuntimeTestDescriptorParser.java`;
+/// in practice `[output]` carries one of:
+///
+/// - **a parse tree** in `to_string_tree()` form, e.g. `(s (declarator a))`.
+///   These are emitted by descriptors whose grammar prequel ends with
+///   `@after { <ToStringTree("$ctx"):writeln()> }`. Stage B can compare
+///   against `tree.to_string_tree()`.
+/// - **a host-language artefact** — lexer token-type names (one per
+///   line), `Lexer.next()` token dumps (`[@0,0:-1='<EOF>',<-1>,1:0]`),
+///   ATN decision traces (`Decision 0:\n s0-ID->:s1`), or arbitrary
+///   action-block prints. None of these reflect the parse tree, so they
+///   are not Stage B testable and must be triaged as `[stage_b_skip]`.
+///
+/// Returns `Some(tree)` for the parse-tree case, with ANTLR4's literal
+/// ` <EOF>` token stripped — Gale's `to_string_tree()` omits empty-text
+/// tokens (see `package-gale/CLAUDE.md` "Driver Tests"). Returns `None`
+/// for everything else.
+///
+/// The detector is intentionally conservative: any leftover `<…>` token
+/// in the output (after `<EOF>` stripping) is treated as a testsuite
+/// StringTemplate substitution (e.g. `<AltNum()>`) rather than a real
+/// parse-tree node, and the descriptor is rejected. Likewise, `${…}`
+/// always denotes an action-block reference. False rejections are
+/// triaged as `[stage_b_todo]` once the underlying capability lands.
 fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
     let s = raw.trim();
     if s.is_empty() {

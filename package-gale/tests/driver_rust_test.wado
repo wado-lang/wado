@@ -94,7 +94,7 @@ test "fn keyword requires semantic predicates" {
     assert result matches { Err(_) }, "expected parse to fail due to missing semantic predicates";
 }
 
-// Multi-token tail-greedy K-prefix gate (parse-side + scan-side).
+// Multi-token tail-greedy caller-FOLLOW gate (parse-side + scan-side).
 //
 // Rust's `expression` rule has alts whose tail is an Optional expression
 // whose body's first set includes `{`:
@@ -104,14 +104,14 @@ test "fn keyword requires semantic predicates" {
 //   | KW_RETURN                      expression?
 //   | expression DOTDOT              expression?
 //
-// In `if EXPR { … }` the trailing block starts with `{`. Before this PR
-// Gale's greedy SLL ate the block as the optional `expression?` and
-// then failed because `if` had no `blockExpression` left. The K-prefix
-// variant `parse_expression__follow_<id>_atom` / `_lr_<n>` now gates
-// each Optional with `peek_kind() == TK_LCURLYBRACE → null`, and the
-// scan-side mirror gate in `gen_scan_op_repeat` keeps the alt
-// tournament happy so the cascade reaches parse.
-test "tree: bare `return` as if condition (K-prefix gate)" {
+// In `if EXPR { … }` the trailing block starts with `{`. A greedy SLL
+// would eat the block as the optional `expression?` and then fail because
+// `if` had no `blockExpression` left. The runtime caller-FOLLOW gate
+// threads the caller's continuation (which includes `{`) into
+// `expression` as the `follow` argument; `follow_yields` then skips the
+// tail Optional, and the scan-side mirror keeps the alt tournament in
+// lockstep so the cascade reaches parse.
+test "tree: bare `return` as if condition (caller-FOLLOW gate)" {
     let r = rust::parse(&"const X: i32 = if return { 1 } else { 2 };");
     if let Err(e) = &r {
         panic(`parse failed: {e:?}`);

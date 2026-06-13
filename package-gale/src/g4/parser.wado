@@ -113,11 +113,11 @@ fn is_lexer_rule_name(name: &String) -> bool {
     return false;
 }
 
-/// ANTLR4 spec (`notSet : NOT setElement | NOT blockSet`) restricts `~` in
-/// parser rules to a token reference, string literal, or a parenthesised
-/// block whose alternatives are themselves set elements. Rule references,
-/// wildcards, and EBNF-suffixed elements are rejected. Spec:
-/// `vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g`.
+/// ANTLR4 restricts `~` in parser rules to a token reference, string
+/// literal, or a parenthesised block whose alternatives are themselves
+/// set elements. Rule references, wildcards, and EBNF-suffixed elements
+/// are rejected. Spec: `vendor/antlr4/doc/parser-rules.md` (sets),
+/// confirmed against the published ANTLR4 jar as a black-box oracle.
 fn is_valid_not_set_element(elem: &Element) -> bool {
     if let TokenRef(_) = elem {
         return true;
@@ -263,8 +263,8 @@ impl G4Parser {
             // Check for mode declaration: mode NAME;
             // ANTLR4 only allows `mode X;` in lexer grammars (combined or
             // split lexer). Reject it in `parser grammar` form — see
-            // vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g where
-            // `modeSpec` only appears under lexerRule branches.
+            // `vendor/antlr4/doc/lexer-rules.md` (modes are a lexer-only
+            // construct); confirmed against the published ANTLR4 jar.
             if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str(&"mode", &self.peek().text) {
                 if is_parser_grammar {
                     let tok = self.peek();
@@ -376,8 +376,8 @@ impl G4Parser {
 
         // Semantic rule-reference resolution runs as a separate phase
         // (`check_references` in `ir.wado`), mirroring ANTLR4's split
-        // between the syntactic parser (`ANTLRParser.g`) and the
-        // semantic analyzer (`SymbolChecks.java`). `parse_grammar`
+        // between syntactic parsing and a later semantic-analysis pass.
+        // `parse_grammar`
         // publishes the raw `pending_refs` onto the returned `Grammar`
         // so callers can either validate immediately (`parse_checked`)
         // or first merge split-grammar halves with `merge_grammars` and
@@ -1793,8 +1793,8 @@ fn parse_int_literal(text: &String) -> i32 {
 
 /// Syntactic parse only. Turns a `.g4` source string into a `Grammar` IR
 /// without running the semantic rule-reference resolution pass — mirrors
-/// ANTLR4's `ANTLRParser.g`, which accepts any syntactically well-formed
-/// grammar and leaves symbol resolution to a later phase.
+/// ANTLR4 accepting any syntactically well-formed grammar and leaving
+/// symbol resolution to a later phase.
 ///
 /// The parser still rejects mistakes that can be caught locally during a
 /// single pass: duplicate rule names (B1), a `mode X;` declaration inside
@@ -1828,8 +1828,8 @@ pub fn parse(input: String) -> Result<Grammar, ParseError> {
 
 /// Parse + semantic rule-reference resolution, in one call. Equivalent
 /// to `parse` followed by `ir::check_references`, and mirrors ANTLR4's
-/// full tool-level contract (`ANTLRParser.g` +
-/// `SymbolChecks.checkForUnresolvedRuleRefs`).
+/// full tool-level contract (a syntactic parse plus the
+/// unresolved-rule-reference check).
 ///
 /// Rejects grammars that `parse` would accept but where a parser-rule
 /// ref, token ref, or lexer-rule ref does not resolve against the rule

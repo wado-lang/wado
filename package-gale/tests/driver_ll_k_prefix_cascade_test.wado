@@ -16,11 +16,12 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
 }
 
-// K-prefix cascade through a multi-alt RuleRef. The tail-greedy
+// Caller-FOLLOW cascade through a multi-alt RuleRef. The tail-greedy
 // `(X Y)+` lives inside `m`, reached via `a : N m`. The caller's
-// deterministic prefix `[{X}, {Y}, {W}]` (from `c : X Y W`) must flow
-// through `a`'s transparent variant into `m`'s variant so `m`'s loop
-// yields the trailing `X Y W` block to `c` instead of swallowing it.
+// deterministic continuation `[{X}, {Y}, {W}]` (from `c : X Y W`) must
+// flow through `a` (transparent at its tail) into `m` as the runtime
+// `follow` argument so `m`'s loop yields the trailing `X Y W` block to
+// `c` instead of swallowing it.
 test "tree: N K X Y X Y W — cascade yields the caller's prefix through m" {
     assert_tree(&"N K X Y X Y W", &"
         (r (a N (m K X Y)) (c X Y W))
@@ -38,8 +39,8 @@ test "tree: N K X Y X Y X Y W — gate fires on the iter that exposes c's prefix
     ");
 }
 
-// `m`'s second alt (`K Z`) stays reachable: the variant must not
-// disturb non-loop dispatch. Here there is no trailing `c`-shaped
+// `m`'s second alt (`K Z`) stays reachable: the caller-FOLLOW gate must
+// not disturb non-loop dispatch. Here there is no trailing `c`-shaped
 // suffix, so the input is just `a` ending in `m K Z`.
 test "tree: N K Z — m's second alt still dispatches" {
     assert_tree(&"N K Z X Y W", &"

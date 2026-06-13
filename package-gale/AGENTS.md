@@ -104,7 +104,7 @@ sees, not the raw surface IR. ATN-class decisions where static
 prediction cannot disambiguate surface as `Ambiguous([alt N, alt M]) —
 <reason>` under the relevant rule's `prediction:` section, where
 `<reason>` names _why_ the static path halted (`opaque rule-ref
-prefix`, `at-end vs branch conflict`, `lookahead exhausted (k=5)`,
+prefix`, `at-end vs branch conflict`, `branch-depth limit (5)`,
 `config-set explosion`, `multiple alts end together`) — see
 `AmbiguityReason` in `prediction.wado`. Left-recursive rules also print
 a `loop-entry:` section (per-alt `conflict-min` precedence plus the

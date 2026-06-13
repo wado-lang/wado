@@ -864,9 +864,7 @@ impl GenContext {
     /// `sort_group_by_element_count` order, mirroring parse-side `bt_try`.
     /// Sorting longest-first ensures the most specific candidate is tried
     /// first, so commit-on-success is correctness-equivalent to longest-
-    /// match here. See `AGENTS.md` "Failed Approaches: Removing the LR
-    /// Gate ... 2026-04" for the historical context that ruled out a naive
-    /// gate removal.
+    /// match here.
     pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
         let cached = self.scannable_cache.get(*name);
         if let Some(val) = cached {

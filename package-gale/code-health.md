@@ -94,15 +94,6 @@ Decide each convention once, record it here, then migrate mechanically.
 
 - [ ] Misc: `compute_first_chars`' `use_modes` branch (`src/lexer_gen.wado`) — flagged as dead by the audit but the param is in fact read, so re-confirm before touching.
 
-### Stale and contradictory comments
-
-- [ ] "Phase" fossils in `lower.wado`: the header still says codegen does not call `lower` yet (it does, `src/codegen.wado:87`); "Phase 2.3a only handles disjoint first-sets" sits above Tournament handling; "remaining shapes panic with TODO Phase 2.x markers" — no such panics remain; "Phase 2.6 variant masks" references the retired mechanism. `src/lower.wado:40-42`, `:524-527`, `:576-578`, `:2264-2265`, `:2330-2332`, `:2998-3002`
-- [ ] `gen_scan_multi_alt`'s comment claims first-success-wins is correctness-equivalent to the tournament — directly contradicted by `emit_scan_partition_body`'s own doc citing the #1245 fix. `src/parser_gen.wado:1114-1120` vs `:1175-1182`
-- [ ] Five driver tests document the retired `__follow_<id>` variant mechanism as current behavior (`tests/driver_ll_basic_test.wado:20-21`, `driver_ll_multi_alt_overlap_test.wado:27-30`, `driver_rust_test.wado:110-113`, `driver_ll_multi_token_tail_test.wado:19-27`, `driver_ll_k_prefix_cascade_test.wado:19-23`).
-- [ ] Doc blocks fused onto the wrong function (one comment documenting two functions): `src/parser_gen.wado:1782-1802`, `:2624-2630`, `:3018-3027`; a 30-line doc block attached to `stage_b_oracle_eligible` actually describes `normalize_output_for_stage_b` (`scripts/extract_antlr4_descriptors.wado:1635-1667`); mangled doc on `repeat_outer_base_name` (`src/lower.wado:3560-3568`); duplicated/stacked doc on `lower` itself (`:192-227`).
-- [ ] Citations of forbidden ANTLR4 implementation sources (`tool/.../ANTLRParser.g`) in comments — either stale or a license-hygiene breach; resolve and replace with `doc/*.md` citations. `src/g4/parser.wado:120`, `:236-238`, `src/g4/parser_test.wado:958`, `:971`
-- [ ] Smaller: `gen_context.wado:853-855` cites a nonexistent "Failed Approaches" section; packed-key width comment disagrees between test and code (`src/atn_sim_test.wado:328-329` vs `src/runtime/atn.wado:653-662`); "k=5 lookahead exhausted" label overstates the bound since Consume nodes do not count against depth (`src/dump.wado:378`, `src/prediction.wado:617-629`); obsolete "FLIPPED GREEN" narrative inside `[stage_a_todo]` in `tests/antlr4-compat/status.toml:64-69`.
-
 ### Known representation gaps
 
 - [ ] Surrogate / astral handling in char ranges: `CharRange` endpoints are Wado `char` (Unicode scalars), so a surrogate code point (`[\uD800-\uDBFF]`, legal in ANTLR4 for matching UTF-16 code units) cannot be represented — the escape resolvers now fall back to U+FFFD instead of trapping, but a surrogate _range_ collapses to a single replacement char. Full support needs a wider char-range representation (i32 code-point endpoints). `src/g4/parser.wado` `resolve_unicode_escape`, `src/ir.wado` `CharRange`.
