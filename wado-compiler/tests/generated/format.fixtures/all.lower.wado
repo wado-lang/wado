@@ -2032,11 +2032,11 @@ pub fn cwd() -> Option<String> with Environment {
 }
 
 pub fn exit_success() -> ! with Exit {
-    __cm_binding__Exit_exit(core::cli::Ok(()) as i32);
+    __cm_binding__Exit_exit(Result<(), ()>::Ok(()));
 }
 
 pub fn exit_error() -> ! with Exit {
-    __cm_binding__Exit_exit(core::cli::Err(()) as i32);
+    __cm_binding__Exit_exit(Result<(), ()>::Err(()));
 }
 
 pub fn exit(code: u8) -> ! with Exit {
@@ -5905,7 +5905,7 @@ pub fn i128::from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntErro
 
 pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T183"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T184"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -6735,7 +6735,7 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 
 pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T183"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T184"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -13399,7 +13399,7 @@ pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f:
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T319"(item));
+                f("$value_copy$T320"(item));
             },
             _ => {
                 break;
@@ -13413,7 +13413,7 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T319"(item)) {
+                if pred("$value_copy$T320"(item)) {
                     return Option<[i32, char]>::Some(item);
                 }
             },
@@ -13430,7 +13430,7 @@ pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T319"(item)) {
+                if pred("$value_copy$T320"(item)) {
                     return true;
                 }
             },
@@ -13447,7 +13447,7 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T319"(item)) {
+                if !pred("$value_copy$T320"(item)) {
                     return false;
                 }
             },
@@ -13500,7 +13500,7 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T319"(item)) {
+                if pred("$value_copy$T320"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -13517,12 +13517,12 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
     let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: [i32, char] = "$value_copy$T319"(first);
+            let mut acc: [i32, char] = "$value_copy$T320"(first);
             loop {
                 let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T319"(acc), "$value_copy$T319"(item));
+                        acc = f("$value_copy$T320"(acc), "$value_copy$T320"(item));
                     },
                     _ => {
                         break;
@@ -15615,8 +15615,10 @@ fn __cm_binding__Environment_get_initial_cwd() -> Option<String> with Environmen
     return __option_result;
 }
 
-fn __cm_binding__Exit_exit(status: i32) with Exit {
-    cm_raw_call wasi:cli/Exit::exit(status);
+fn __cm_binding__Exit_exit(status: Result<(), ()>) with Exit {
+    let __status_resval: Result<(), ()> = status;
+    let __status_disc: i32 = __variant_tag(__status_resval);
+    cm_raw_call wasi:cli/Exit::exit(__status_disc);
 }
 
 fn __cm_binding__Exit_exit_with_code(status_code: i32) with Exit {
@@ -20550,7 +20552,7 @@ fn "$value_copy$T28"(v: [f64, f64]) -> [f64, f64] {
     return Tuple<f64,f64> { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T319"(v: [i32, char]) -> [i32, char] {
+fn "$value_copy$T320"(v: [i32, char]) -> [i32, char] {
     return Tuple<i32,char> { 0: v.0, 1: v.1 };
 }
 
@@ -20558,7 +20560,7 @@ fn "$value_copy$T41"(v: String) -> String {
     return String { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T183"(v: [bool, i32]) -> [bool, i32] {
+fn "$value_copy$T184"(v: [bool, i32]) -> [bool, i32] {
     return Tuple<bool,i32> { 0: v.0, 1: v.1 };
 }
 
