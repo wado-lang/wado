@@ -65,10 +65,7 @@ suite('Wado LSP (stdlib editor label)', () => {
         }
     });
 
-    // The bundled stdlib modules are served as virtual `core:` / `wasi:`
-    // documents. Without the `resourceLabelFormatters` contribution VS Code
-    // would label the tab with the URI basename only (`json`); the formatter
-    // renders the full `core:json` so the scheme stays visible.
+    // `resourceLabelFormatters` renders the tab as `core:json`, not `json`.
     test('labels a core: stdlib document with its scheme', async function () {
         this.timeout(120_000);
 
@@ -84,13 +81,7 @@ suite('Wado LSP (stdlib editor label)', () => {
         );
     });
 
-    // Submodules carry a path with a `/` (e.g. `core:prelude/types.wado`).
-    // VS Code derives the tab name from the basename of the formatted label,
-    // so the directory and scheme are stripped down to the file name. We
-    // deliberately keep this native behaviour (the formatter uses a real `/`
-    // separator) rather than swapping in a look-alike glyph: the full
-    // `core:prelude/types.wado` still shows in the breadcrumb / quick-open
-    // path, while the tab stays a clean ASCII basename.
+    // Submodules with a `/` keep the basename: VS Code basenames the label.
     test('labels a core: submodule document with its basename', async function () {
         this.timeout(120_000);
 

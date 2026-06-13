@@ -92,14 +92,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 // `wado` language is forced on documents we served because opaque URIs
 // (e.g. `core:cli`) carry no extension for VS Code's language detector.
 //
-// The editor tab/breadcrumb label for these URIs is set by the
-// `resourceLabelFormatters` contribution in `package.json`: without it VS Code
-// shows only the basename (`json`), whereas the formatter renders the full
-// `core:json` / `wasi:io` so the scheme is visible. Submodules whose path has
-// a `/` (e.g. `core:prelude/types.wado`) still show just the basename in the
-// tab — VS Code basenames the formatted label — while the breadcrumb / path
-// view keeps the full scheme-qualified path. This is intentional: a real `/`
-// separator keeps the tab a clean ASCII basename.
+// The `resourceLabelFormatters` contribution in `package.json` renders the
+// tab label as `core:json` / `wasi:io` instead of the bare basename `json`.
+// Submodules with a `/` (e.g. `core:prelude/types.wado`) still show just the
+// basename, since VS Code basenames the label; the full path stays in the
+// breadcrumb.
 function registerStdlibContentProvider(context: vscode.ExtensionContext): void {
     // Track URIs our provider has actually served, so we only override the
     // language on documents we own — other extensions could conceivably
