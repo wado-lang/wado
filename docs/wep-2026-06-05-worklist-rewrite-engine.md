@@ -13,11 +13,12 @@ Stage 3 – 6 rule migrations onto the ValueGraph — culminating in the
 retirement of niri's per-local `field_env` (the ValueGraph now owns all
 field reaching-def; one `int128_cast` reinterpret assert is a +36-byte
 code-size residual deferred to `mod_ref.rs`). The interprocedural worklist
-(Stage 9) is the remaining required-path item. Full Layer-2 promotion (Skel
-pure-`ExprKind` retirement and saturation-driven engine) stays in this
-WEP as the terminal ideal but is gated behind measurement — see "Why
-Layer 2 promotion is deferred" and the "Optional acceleration" entries
-in the migration plan.
+(Stage 9) has landed: the interprocedural passes now pull their candidate set
+from the gate's dirty set rather than scanning every function. The required
+path is complete. Full Layer-2 promotion (Skel pure-`ExprKind` retirement and
+saturation-driven engine) stays in this WEP as the terminal ideal but is gated
+behind measurement — see "Why Layer 2 promotion is deferred" and the "Optional
+acceleration" entries in the migration plan.
 
 ## Context
 
@@ -230,6 +231,21 @@ WIR output stays byte-identical.
   - `condition_implication` unified into one `GuardFact` (facts go stale by
     construction — a mutation changes the operand's `ValueId`); `licm` hoists by
     pre-header `ValueId` stability.
+- [x] **Stage 9 — interprocedural worklist.** `inline` / `dae` / `drve` /
+      `sroa_param` / `value_copy_demote` pull their candidate set from the
+      per-function gate's dirty set (`FunctionGate::dirty_funcs`) instead of
+      scanning every function each round; `mark_changed` re-runs affected callers
+      when a callee shrinks, and the fixed-point loop terminates at quiescence
+      with `OptConfig::iterations` as the bound. Terminal stages
+      (`multi_value_return`, `field_scalarize`, `const_object_globalization`,
+      `dce`) stay explicit. Propagation stays at the conservative both-direction
+      form: the call graph is built once and not refreshed, so an `inline`-added
+      edge is invisible to a directed (callee-shrink → callers) narrowing, which
+      would silently drop the dependent rewrite. A directed rule is net-neutral
+      until the graph is kept fresh (per-iteration rebuild costs roughly what the
+      narrowing saves), so it waits on that — the remaining loop cost is the
+      per-function dataflow the standalone walkers still rebuild, which is the
+      Layer-2 ValueGraph's domain, not the worklist's.
 
 ### Open
 
@@ -240,12 +256,6 @@ WIR output stays byte-identical.
 - [ ] **Stage 6 — induction-variable recognition** (`Opaque` tagged
       `{ base, step }`). Not needed yet — post-increment reads already appear
       as `Add(opaque_i, step)` — so it lands when a rule first wants it.
-- [ ] **Stage 9 — interprocedural worklist.** Move `inline` / `dae` / `drve` /
-      `sroa_param` / `value_copy_demote` onto a call-graph worklist that re-runs
-      affected callers when a callee shrinks; `OptConfig::iterations` becomes the
-      worklist convergence bound. Terminal stages (`multi_value_return`,
-      `field_scalarize`, `const_object_globalization`, `dce`) stay explicit. The
-      stub per-pass walkers are then deleted in bulk.
 
 ### Optional acceleration (measured-deferred)
 

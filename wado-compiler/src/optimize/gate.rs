@@ -29,10 +29,11 @@
 //! call site appearing or vanishing changes a callee's dead-argument analysis).
 //!
 //! Every fixed-point loop pass is gate-aware, so every change is reported at
-//! function granularity: a per-function pass skips functions it has already
-//! processed at their current revision (via [`FunctionGate::run_gated`]); an
-//! interprocedural pass scans all functions but reports exactly the ones it
-//! touched (via [`FunctionGate::mark_changed`]).
+//! function granularity. The intra-procedural passes skip functions unchanged
+//! since they last ran (via [`FunctionGate::run_gated`]); the interprocedural
+//! passes (`inline` / `dae` / `drve` / `sroa_param` / `value_copy_demote`) gate
+//! their candidate scan on the dirty set and report the functions they touched
+//! (via [`FunctionGate::mark_changed`]).
 //!
 //! # Safety
 //!
@@ -56,6 +57,13 @@ cranelift_entity::entity_impl!(FunctionId, "func");
 
 /// The gated passes. Each owns a column of per-function watermarks. Add a
 /// variant when a pass becomes gate-aware; `COUNT` sizes the watermark table.
+///
+/// Interprocedural passes gate on the function their candidate scan reads —
+/// caller-driven `inline` on the caller it walks; callee-driven `dae` / `drve`
+/// / `sroa_param` on the candidate callee; `value_copy_demote` on the function
+/// it rewrites. Both-direction 1-hop propagation makes a clean function one
+/// whose body and every call-graph neighbour are unchanged, so skipping its
+/// scan reproduces the previous no-op verdict — byte-output-identical.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GatedPass {
     Peephole,
@@ -68,10 +76,15 @@ pub enum GatedPass {
     StoreLoadForward,
     TmplHoist,
     ContainerSroa,
+    Inline,
+    Dae,
+    Drve,
+    SroaParam,
+    ValueCopyDemote,
 }
 
 impl GatedPass {
-    const COUNT: usize = 10;
+    const COUNT: usize = 15;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.
@@ -189,8 +202,28 @@ impl FunctionGate {
         self.watermarks[pass as usize][func.index()] = self.revision[func.index()];
     }
 
+    /// The functions `pass` must (re)examine this round, each marked seen. The
+    /// interprocedural passes pull this as their candidate worklist; a function
+    /// a later apply re-dirties (via [`Self::mark_changed`]) reappears next
+    /// round.
+    pub fn dirty_funcs(&mut self, pass: GatedPass, len: usize) -> Vec<FunctionId> {
+        (0..len)
+            .map(FunctionId::new)
+            .filter(|&fid| {
+                let dirty = self.needs(pass, fid);
+                if dirty {
+                    self.seen(pass, fid);
+                }
+                dirty
+            })
+            .collect()
+    }
+
     /// Record that `func`'s body changed: bump its revision and, conservatively,
-    /// its 1-hop call-graph neighbours (callers and callees).
+    /// its 1-hop call-graph neighbours (callers and callees). The graph is built
+    /// once and not refreshed, so this over-approximation also absorbs the edges
+    /// a call-restructuring pass (e.g. `inline` copying a callee body in) adds
+    /// after the build — narrowing it to directed edges would miss those.
     pub fn mark_changed(&mut self, func: FunctionId) {
         self.ensure(func.index() + 1);
         let i = func.index();
@@ -253,6 +286,11 @@ mod tests {
             GatedPass::StoreLoadForward,
             GatedPass::TmplHoist,
             GatedPass::ContainerSroa,
+            GatedPass::Inline,
+            GatedPass::Dae,
+            GatedPass::Drve,
+            GatedPass::SroaParam,
+            GatedPass::ValueCopyDemote,
         ];
         for p in all {
             match p {
@@ -265,7 +303,12 @@ mod tests {
                 | GatedPass::ConditionImplication
                 | GatedPass::StoreLoadForward
                 | GatedPass::TmplHoist
-                | GatedPass::ContainerSroa => {}
+                | GatedPass::ContainerSroa
+                | GatedPass::Inline
+                | GatedPass::Dae
+                | GatedPass::Drve
+                | GatedPass::SroaParam
+                | GatedPass::ValueCopyDemote => {}
             }
         }
         assert_eq!(all.len(), GatedPass::COUNT);

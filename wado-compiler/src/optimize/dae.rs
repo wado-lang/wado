@@ -60,7 +60,7 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 
 use super::arena_query;
-use super::gate::{FunctionGate, FunctionId};
+use super::gate::{FunctionGate, FunctionId, GatedPass};
 
 pub(super) type FnKey = (ModuleSource, String);
 
@@ -68,10 +68,11 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
     let pinned = collect_pinned(project);
     let closure_call_keys = collect_closure_call_keys(project);
 
-    // Phase 1: identify candidate (function, dead positions) pairs.
+    // Phase 1: identify candidate (function, dead positions) pairs. Validation
+    // below still scans every body, so a dirty candidate sees all its call sites.
     let mut candidates: IndexMap<FnKey, Vec<bool>> = IndexMap::default();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
+    for fid in gate.dirty_funcs(GatedPass::Dae, project.functions.len()) {
+        let func = project.functions[fid.index()].borrow();
         let key = (func.module_source.clone(), func.name.clone());
         let is_closure_dae_relaxed = closure_call_keys.contains(&key);
         if !is_eligible(&func, &pinned, is_closure_dae_relaxed) {

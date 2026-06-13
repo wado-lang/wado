@@ -42,7 +42,7 @@ use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeTable};
 
 use super::arena_query::{expr_mentions_local, is_local, strip_refs};
-use super::gate::{FunctionGate, FunctionId};
+use super::gate::{FunctionGate, FunctionId, GatedPass};
 use cranelift_entity::EntityRef;
 
 type FuncKey = (ModuleSource, String);
@@ -100,8 +100,9 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     // being collaterally demoted.
     let mut site_elig: IndexMap<(usize, u32), bool> = IndexMap::default();
     let mut site_key: IndexMap<(usize, u32), FuncKey> = IndexMap::default();
-    for (fi, f) in project.functions.iter().enumerate() {
-        let f = f.borrow();
+    for fid in gate.dirty_funcs(GatedPass::ValueCopyDemote, project.functions.len()) {
+        let fi = fid.index();
+        let f = project.functions[fi].borrow();
         if f.value_copy_type().is_some() {
             continue;
         }

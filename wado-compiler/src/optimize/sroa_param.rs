@@ -37,7 +37,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use cranelift_entity::EntityRef;
 
 use super::arena_query::place_root_local;
-use super::gate::{FunctionGate, FunctionId};
+use super::gate::{FunctionGate, FunctionId, GatedPass};
 
 type FnKey = (ModuleSource, String);
 
@@ -55,7 +55,7 @@ struct SroaInfo {
 }
 
 pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let candidates = collect_and_validate(project);
+    let candidates = collect_and_validate(project, gate);
     if candidates.is_empty() {
         return false;
     }
@@ -111,13 +111,18 @@ fn build_single_field_index(project: &NirPackage) -> SingleFieldIndex {
     out
 }
 
-fn collect_and_validate(project: &NirPackage) -> IndexMap<(FnKey, usize), SroaInfo> {
+fn collect_and_validate(
+    project: &NirPackage,
+    gate: &mut FunctionGate,
+) -> IndexMap<(FnKey, usize), SroaInfo> {
     let type_table = project.type_table.borrow();
     let single_field = build_single_field_index(project);
 
+    // Candidacy is callee-local: call sites are rewritten unconditionally in
+    // apply, never consulted here.
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
+    for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
+        let func = project.functions[fid.index()].borrow();
         if !is_eligible(&func) || func.body.is_none() {
             continue;
         }
