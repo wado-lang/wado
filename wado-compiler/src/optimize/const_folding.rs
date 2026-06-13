@@ -687,7 +687,6 @@ impl ConstFoldVisitor<'_> {
     }
 }
 
-
 /// Summary of every entity a loop body could mutate. Used by
 /// [`ConstFoldVisitor::apply_loop_invalidations`] to drop just those
 /// `(local, field)` and `local` lattice entries before and after the

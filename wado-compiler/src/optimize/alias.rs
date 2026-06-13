@@ -38,7 +38,6 @@ fn walk_all(body: &Body, node: NodeRef, f: &mut impl FnMut(&Body, NodeRef)) {
     }
 }
 
-
 /// Compute per-function alias annotations for a function body.
 ///
 /// Returns an [`AliasInfo`] populated as follows:

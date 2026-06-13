@@ -349,7 +349,9 @@ impl<'a> Builder<'a> {
                 Some(crate::tir::PrimitiveType::F32 | crate::tir::PrimitiveType::F64)
             )
         {
-            return Some(self.const_to_value(crate::const_eval::Value::Bool(op == NirBinaryOp::Eq)));
+            return Some(
+                self.const_to_value(crate::const_eval::Value::Bool(op == NirBinaryOp::Eq)),
+            );
         }
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;

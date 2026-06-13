@@ -9,9 +9,11 @@ interprocedural driver replacing the global fixed-point loop.
 The engine substrate, the arena NIR, the routing of every intra-procedural
 pass through the engine edit API, and the ValueGraph foundation (kinds,
 hash-cons pool, per-function builder) have all landed, along with the
-Stage 3 (`cse`) and Stage 5 (`store_load_forward`) rule migrations onto
-the ValueGraph. The remaining required-path migrations and the
-interprocedural worklist are open. Full Layer-2 promotion (Skel
+Stage 3 – 6 rule migrations onto the ValueGraph — culminating in the
+retirement of niri's per-local `field_env` (the ValueGraph now owns all
+field reaching-def; one `int128_cast` reinterpret assert is a +36-byte
+code-size residual deferred to `mod_ref.rs`). The interprocedural worklist
+(Stage 9) is the remaining required-path item. Full Layer-2 promotion (Skel
 pure-`ExprKind` retirement and saturation-driven engine) stays in this
 WEP as the terminal ideal but is gated behind measurement — see "Why
 Layer 2 promotion is deferred" and the "Optional acceleration" entries
@@ -319,19 +321,29 @@ Migrations:
       the whole HFS cluster. (`hfs_break_from_scalar_state_commits` rewritten to
       `self.base + k` via `#[inline(never)]` so its commit-on-break machinery
       stays non-constant under the improved optimizer.)
-- [ ] `field_env` not yet deletable: disabling it regresses 5 residual
-      fixtures (gap 29 → 5 across `mut_escaped` + HFS + arithmetic folding).
-      The store→load duplication the WEP set out to remove is gone and the HFS
-      / CTFE-cluster folds happen IR-side; what remains is two narrow gaps:
-  - int128 const-object dedup (`coerce_int_3`, `int128_cast_to_primitives`):
-    make `const_object_globalization` match repeated constant structs via the
-    ValueGraph, not `field_env`'s global field map. Code-size only.
-  - Mutable-reference field forwarding (`mut_param`, `mut_param_merged`,
-    `ref_1`): the general reference-copy chain folds (probe above), but these
-    fixtures' nested-inline shape (`add_four → add_two → add_one`, extra
-    `&n` / `&mut q` handles) still leaves the chain un-forwarded — a per-fixture
-    field-forwarding gap to diagnose against value-graph state. Then delete
-    `field_env`.
+- [x] `field_env` retired. niri's per-local `(local, field) → constant`
+      map and all its machinery (`bind_field` / `invalidate_field` /
+      `invalidate_aliased_fields` / `copy_fields_from` / branch-fork
+      `FieldSnapshot` / `Arm` join / `$value_copy$T` field transfer) are
+      deleted; the const-fold visitor now tracks only scalar local lattices
+      and the ValueGraph owns all field reaching-def. Three ValueGraph
+      precision fixes closed the gap that blocked deletion (residual 5 → 0
+      for all but one fixture):
+  - struct-field forwarding through a bare-`Local` producer tail (the inlined
+    `mut`-param-return shape) — `copy_local_field_slots`. Closed `mut_param`,
+    `mut_param_merged`, `ref_1`.
+  - short-circuit `&&`/`||` invalidates only the rhs-written heap (not a
+    blanket `bump_all`), so a read-only aggregate survives a pure field
+    comparison. Closed `coerce_int_3`.
+  - reflexive equality (`x == x → true`, `x != x → false` for non-float equal
+    VNs) folds identity reinterpret casts (`v as SameType == v`). Closed the
+    identity-cast asserts in `int128_cast_to_primitives`.
+  - Residual: `int128_cast_to_primitives` keeps one `max as i128 == neg`
+    reinterpret assert (+36 bytes, code-size only). Its source struct-literal
+    seed and the consuming reinterpret never coexist in one per-build
+    ValueGraph (they live in different optimizer iterations); closing it needs
+    the Phase-2 `mod_ref.rs` cross-pass heap model, tracked there. No fixture
+    asserts on its output.
 - [x] `condition_implication`: all guard kinds (loop, dominating,
       early-exit, short-circuit, bitmask) unified into one
       `GuardFact { var_vn, max_offset, bound_vn, is_strict }` with
