@@ -1,0 +1,35 @@
+// BlobDataProvider (BDP) separation experiment.
+//
+// The feature component bakes NO Unicode data (icu_casemap is built with
+// `default-features = false`). It IMPORTS a `data` interface that yields the
+// casemap postcard blob, loads it lazily through icu's BlobDataProvider, and
+// exports the actual casemap operations. The `data` import is satisfied either
+// by the host (runtime-check) or, in the composition demo, by a separate shared
+// `data` component — the "shared part as its own component" model.
+package wado:icu-bdp@0.1.0;
+
+interface data {
+  /// Yields the ICU casemap postcard blob (the sliced data artifact produced by
+  /// the datagen tool). Implemented by the host or by a sibling data component.
+  get-casemap-blob: func() -> list<u8>;
+}
+
+interface casemap {
+  /// Locale-independent full case folding (for caseless matching).
+  fold: func(text: string) -> result<string, string>;
+
+  /// Locale-aware full uppercase mapping. `langid` is a BCP-47 language tag
+  /// such as "und" (root) or "tr" (Turkish dotted-i behaviour).
+  uppercase: func(text: string, langid: string) -> result<string, string>;
+}
+
+/// The data-free casemap feature component.
+world feature {
+  import data;
+  export casemap;
+}
+
+/// The shared data component: provides the blob, nothing else.
+world provider {
+  export data;
+}

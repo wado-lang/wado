@@ -93,3 +93,10 @@ cd runtime-check && cargo run --release
   survives, so the WIT surface is the size knob (see Size above).
 - no_std + wasm32-unknown-unknown yields a zero-import, fully self-contained
   component — the same self-contained model as `wado-bundled-libm`.
+
+## Follow-up: data/code separation
+
+This spike bakes data into the component via `compiled_data`. The alternative —
+a **data-free feature component** that loads a postcard blob at runtime via
+ICU4X's `BlobDataProvider`, with the blob supplied by a shared **data** component
+composed in over the Component Model — is validated in [`bdp-spike/`](bdp-spike/).

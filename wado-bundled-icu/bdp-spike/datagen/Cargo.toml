@@ -1,0 +1,21 @@
+# Native host tool that generates a sliced ICU4X postcard *blob* containing only
+# the casemap data markers, using icu_provider_export + icu_provider_source.
+# The blob is the "shared data" artifact a data component would serve; here we
+# produce it offline so the data-free casemap component can load it at runtime.
+[workspace]
+
+[package]
+name = "bdp-datagen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+icu_casemap = "2.2"
+icu_provider = "2.2"
+# blob_exporter re-exports icu_provider_blob::export (BlobExporter).
+icu_provider_export = { version = "2.2", features = ["blob_exporter"] }
+# networking lets SourceDataProvider::new() fetch the CLDR/Unicode tags icu4x
+# was tested against, straight from GitHub.
+icu_provider_source = { version = "2.2", features = ["networking"] }
+anyhow = "1"
