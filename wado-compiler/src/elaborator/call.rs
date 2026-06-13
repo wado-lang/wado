@@ -1794,7 +1794,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let (imported_type_sources, import_original_names) =
                     self.tysys.trait_env.import_scope(&src);
                 return self.with_module_perspective(
-                    src.clone(),
+                    src,
                     imported_type_sources,
                     import_original_names,
                     |s| params.iter().map(|p| s.resolve_type(&p.ty)).collect(),
