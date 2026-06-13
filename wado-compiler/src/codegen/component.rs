@@ -1804,9 +1804,6 @@ fn generate_cm_imports(
         if interface_info.resource_type.is_some() {
             continue;
         }
-        if interface_info.package == "http" {
-            continue;
-        }
         // Membership: the plan lists this FQ as a function-bearing interface.
         // (The shared `wasi:cli/types` is `SharedTypes`, not `FunctionInterface`,
         // so it is correctly excluded from this loop and handled by Phase 0.)
@@ -2785,10 +2782,6 @@ fn import_interface_with_resource(
         return;
     };
 
-    if interface_info.package == "http" {
-        return;
-    }
-
     let Some(func) = interface_info.functions.first() else {
         return;
     };
@@ -3011,7 +3004,7 @@ fn import_interfaces_with_resources(
     let interfaces_with_resources: Vec<_> = project
         .cm_interface_registry
         .interfaces()
-        .filter(|info| info.resource_type.is_some() && info.package != "http")
+        .filter(|info| info.resource_type.is_some())
         .collect();
 
     // Phase 1: Import resource-defining source interfaces the plan calls for.
@@ -3058,6 +3051,15 @@ fn import_interfaces_with_resources(
     // Register per-package error-code aliases for resource-defining interfaces.
     // These are needed by Transmission future types (future<result<_, error-code>>).
     for interface_info in &interfaces_with_resources {
+        let instance_key = format!("{}-{}", interface_info.package, interface_info.interface);
+        // Only alias from interfaces whose instance was actually imported by one
+        // of the generic phases above. An interface handled by a dedicated path
+        // (e.g. `wasi:http/types`, imported later with its own error-code alias)
+        // has no generic instance here, so it is skipped rather than mis-aliased
+        // from a same-named instance of another package.
+        if !ctx.has_instance(&instance_key) {
+            continue;
+        }
         let has_error_code = project
             .cm_interface_registry
             .has_enum_in_interface(&interface_info.path, "ErrorCode")
@@ -3070,7 +3072,7 @@ fn import_interfaces_with_resources(
             if !ctx.has_type(&error_code_key) {
                 ctx.register_type(&error_code_key);
                 builder.alias_export(
-                    ctx.instance_idx(&format!("{}-{}", interface_info.package, interface_info.interface)),
+                    ctx.instance_idx(&instance_key),
                     "error-code",
                     ComponentExportKind::Type,
                 );
@@ -3102,9 +3104,6 @@ fn import_resource_using_interfaces(
             continue;
         }
         if interface_info.resource_type.is_some() {
-            continue;
-        }
-        if interface_info.package == "http" {
             continue;
         }
         // Membership: the plan categorizes this interface as resource-using
