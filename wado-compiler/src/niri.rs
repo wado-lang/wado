@@ -114,6 +114,20 @@ use crate::nir_arena::{
 };
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
+/// Whether the per-local `field_env` reads are disabled (the
+/// `WADO_NO_FIELD_ENV` env var is set). Temporary scaffolding for the
+/// Stage 6 `field_env` retirement: with it set, `FieldAccess(Local, f)`
+/// reads never consult `field_env`, so any fold that survives must come
+/// from the ValueGraph instead. Used to measure the residual gap before
+/// deleting `field_env` outright. The global `GlobalFieldEnv` path is
+/// unaffected. Cached on first read; on `wasm32-unknown-unknown`
+/// `std::env::var` returns `Err` so the flag is always off.
+pub(crate) fn field_env_disabled() -> bool {
+    use std::sync::OnceLock;
+    static FLAG: OnceLock<bool> = OnceLock::new();
+    *FLAG.get_or_init(|| std::env::var("WADO_NO_FIELD_ENV").is_ok())
+}
+
 /// Three-state lattice over compile-time evaluation results.
 ///
 /// Ordering: `Unevaluated` ⊑ `Const(v)` ⊑ `NonConst`. Equivalent to the
@@ -1053,7 +1067,7 @@ impl<'a> Interpreter<'a> {
                 field_name,
                 ..
             } => match &body.exprs[*inner].kind {
-                ExprKind::Local { index, .. } => self
+                ExprKind::Local { index, .. } if !field_env_disabled() => self
                     .field_env
                     .get(index)
                     .and_then(|m| m.get(field_name.as_str()))
@@ -1418,11 +1432,12 @@ impl<'a> Interpreter<'a> {
         {
             return Some(value_to_arena_kind(v));
         }
-        if let ExprKind::FieldAccess {
-            expr: inner,
-            field_name,
-            ..
-        } = &body.exprs[e].kind
+        if !field_env_disabled()
+            && let ExprKind::FieldAccess {
+                expr: inner,
+                field_name,
+                ..
+            } = &body.exprs[e].kind
             && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
             && let Some(v) = self
                 .field_env
