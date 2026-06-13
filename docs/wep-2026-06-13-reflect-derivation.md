@@ -184,11 +184,9 @@ remember to call `.validate()`):
   honest place to enforce a wire contract. Values constructed in trusted code
   (a struct literal) are deliberately _not_ checked here; whole-program
   invariants are the future `where` refinement's job, not this attribute's.
-  _Where_ this check lives follows the serde migration in §5: while
-  `Deserialize` is compiler-synthesized, the synthesizer emits the checks; once
-  `Deserialize` is library code over `Reflect`, the generic impl reads
-  `FieldMeta::validate` and enforces — the same guarantee, with the compiler's
-  only permanent job being to _expose_ the entries via `Reflect`.
+  (Where the check physically lives — synthesized `Deserialize` now, generic
+  library `Deserialize` after §5 — is a migration detail; the guarantee is the
+  same either way.)
 - **Expose via `Reflect`.** The same entries appear in `FieldMeta::validate`, so
   Jade (and any schema/validation library) reads them and emits the
   corresponding schema keywords. A _closed_ vocabulary is exactly what lets one
