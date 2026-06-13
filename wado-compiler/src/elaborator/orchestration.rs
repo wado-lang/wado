@@ -34,7 +34,6 @@ use crate::compiler_host::CompilerHost;
 use crate::component_model::CmInterfaceRegistry;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{self as name};
 use crate::symbol::SymbolTable;
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::world_registry::WorldRegistry;
@@ -798,7 +797,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Also runs orphan rule checking; violations are emitted as errors.
         let (trait_env, orphan_violations) = {
             let _span = logger.span("elaborate/trait_env");
-            super::trait_env::TraitEnv::build(modules, symbols)
+            super::trait_env::TraitEnv::build(
+                modules,
+                symbols,
+                &mut interner.borrow_mut(),
+                Some(entry_module_source),
+                &invocations,
+            )
         };
         for violation in orphan_violations {
             let _ = logger.error(violation);
@@ -1579,34 +1584,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         entry_module: Option<&ModuleSource>,
         invocations: &crate::kiln::InvocationIndex,
     ) -> (IndexMap<String, ModuleSource>, IndexMap<String, String>) {
-        let mut sources = IndexMap::default();
-        let mut original_names = IndexMap::default();
-        for item in &module.items {
-            if let Item::Use(use_decl) = item {
-                let source = name::resolve_import_with_invocations(
-                    interner,
-                    from_module,
-                    &use_decl.source,
-                    entry_module,
-                    invocations,
-                );
-                for use_item in &use_decl.items {
-                    match use_item {
-                        ast::UseItem::Simple { name, alias, .. } => {
-                            let local_name = alias.as_ref().unwrap_or(name);
-                            sources.insert(local_name.clone(), source.clone());
-                            if alias.is_some() {
-                                original_names.insert(local_name.clone(), name.clone());
-                            }
-                        }
-                        ast::UseItem::InterfaceFunctions { .. }
-                        | ast::UseItem::Wildcard
-                        | ast::UseItem::Namespace { .. } => {}
-                    }
-                }
-            }
-        }
-        (sources, original_names)
+        super::trait_env::module_import_scope(
+            interner,
+            module,
+            from_module,
+            entry_module,
+            invocations,
+        )
     }
 
     /// Resolve an optional AST return type using the source module's type context.

@@ -10,8 +10,58 @@ use std::sync::Arc;
 use crate::ast::{self, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
+use crate::kiln::InvocationIndex;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::name;
 use crate::tir::{TypeId, TypeTable};
+
+/// A module's import scope: `(imported_type_sources, import_original_names)`.
+/// The first maps each in-scope bare type name to its declaring module; the
+/// second maps an aliased local name back to its original declaration name.
+pub(super) type ModuleImportScope = (IndexMap<String, ModuleSource>, IndexMap<String, String>);
+
+/// Compute a module's import scope from its `use` declarations. Pure over
+/// `(module, from_module, entry_module, invocations)` plus the (idempotent,
+/// loader-warmed) interner; safe to memoize per module. This is the body
+/// behind `Elaborator::build_imported_type_sources`, lifted to a free
+/// function so [`TraitEnv::build`] can pre-compute the per-module scopes
+/// without an `Elaborator`/host in hand.
+pub(super) fn module_import_scope(
+    interner: &mut ModuleSourceInterner,
+    module: &Module,
+    from_module: &ModuleSource,
+    entry_module: Option<&ModuleSource>,
+    invocations: &InvocationIndex,
+) -> ModuleImportScope {
+    let mut sources = IndexMap::default();
+    let mut original_names = IndexMap::default();
+    for item in &module.items {
+        if let Item::Use(use_decl) = item {
+            let source = name::resolve_import_with_invocations(
+                interner,
+                from_module,
+                &use_decl.source,
+                entry_module,
+                invocations,
+            );
+            for use_item in &use_decl.items {
+                match use_item {
+                    ast::UseItem::Simple { name, alias, .. } => {
+                        let local_name = alias.as_ref().unwrap_or(name);
+                        sources.insert(local_name.clone(), source.clone());
+                        if alias.is_some() {
+                            original_names.insert(local_name.clone(), name.clone());
+                        }
+                    }
+                    ast::UseItem::InterfaceFunctions { .. }
+                    | ast::UseItem::Wildcard
+                    | ast::UseItem::Namespace { .. } => {}
+                }
+            }
+        }
+    }
+    (sources, original_names)
+}
 
 use super::Elaborator;
 use super::types::TypeError;
@@ -233,6 +283,12 @@ pub struct TraitEnv {
     /// Type name → modules declaring a `newtype` of that name, in build order.
     /// The fallback half of `find_struct_module_source`'s module lookup.
     pub(super) newtype_decl_modules: IndexMap<String, Vec<ModuleSource>>,
+    /// Per-module import scope (`use`-derived `imported_type_sources` /
+    /// `import_original_names`), pre-computed once. Dispatch-core queries that
+    /// resolve type names in a foreign impl/callee signature read this instead
+    /// of rebuilding it from the module AST in `loaded_modules`. See
+    /// [`module_import_scope`].
+    pub(super) module_import_scopes: IndexMap<ModuleSource, ModuleImportScope>,
     /// `trait_name` → modules that host a blanket impl of that trait
     /// (`impl<T: Bound> Trait for T`). Used by the monomorphizer to find
     /// the home module of a generic dispatch when the receiver type
@@ -353,7 +409,20 @@ impl TraitEnv {
     pub(super) fn build(
         modules: &IndexMap<ModuleSource, Module>,
         symbols: &SymbolTable,
+        interner: &mut ModuleSourceInterner,
+        entry_module: Option<&ModuleSource>,
+        invocations: &InvocationIndex,
     ) -> (Arc<Self>, Vec<TypeError>) {
+        // Pre-compute every module's `use`-derived import scope so dispatch
+        // queries read it instead of rebuilding from the module AST.
+        let mut module_import_scopes: IndexMap<ModuleSource, ModuleImportScope> =
+            IndexMap::default();
+        for (module_source, module) in modules {
+            module_import_scopes.insert(
+                module_source.clone(),
+                module_import_scope(interner, module, module_source, entry_module, invocations),
+            );
+        }
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut inherent_impl_index: TraitImplIndex = IndexMap::default();
         let mut decl_index: TraitDeclIndex = IndexMap::default();
@@ -705,6 +774,7 @@ impl TraitEnv {
                 function_type_params,
                 struct_like_decl_modules,
                 newtype_decl_modules,
+                module_import_scopes,
                 blanket_trait_impl_modules,
                 static_method_index,
                 resource_static_method_index,
@@ -729,6 +799,14 @@ impl TraitEnv {
     /// `find_trait_impl_for_type_with_args` iterates [`TraitImplIndex`] and
     /// checks each candidate impl individually instead of collapsing on the
     /// `(name, trait)` key.
+    /// The pre-computed import scope for `module`, cloned for callers that
+    /// install it via `with_module_perspective` (which takes the maps by
+    /// value). Returns empty maps for a module with no recorded scope,
+    /// matching the previous `…unwrap_or_default()` behaviour.
+    pub(super) fn import_scope(&self, module: &ModuleSource) -> ModuleImportScope {
+        self.module_import_scopes.get(module).cloned().unwrap_or_default()
+    }
+
     pub(crate) fn impl_module_for(
         &self,
         type_name: &str,

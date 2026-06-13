@@ -554,19 +554,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // (the impl may live in a different module than the receiver
                 // type's declaration), and it reveals which declaration the
                 // impl's bare target name refers to.
-                let (target_imports, target_originals) = self
-                    .loaded_modules
-                    .get(impl_module)
-                    .map(|m| {
-                        Self::build_imported_type_sources(
-                            &mut self.interner.borrow_mut(),
-                            m,
-                            impl_module,
-                            Some(&self.entry_module_source),
-                            &self.invocations,
-                        )
-                    })
-                    .unwrap_or_default();
+                let (target_imports, target_originals) =
+                    self.tysys.trait_env.import_scope(impl_module);
                 // Identity guard: the impl's target type must be the receiver's
                 // own declaration. An impl in the receiver's home module
                 // declares it; otherwise the impl must import that same
@@ -1734,19 +1723,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 if !skip_filter {
                     let impl_module = impl_ref.0.clone();
-                    let (imports, originals) = self
-                        .loaded_modules
-                        .get(&impl_module)
-                        .map(|m| {
-                            Self::build_imported_type_sources(
-                                &mut self.interner.borrow_mut(),
-                                m,
-                                &impl_module,
-                                Some(&self.entry_module_source),
-                                &self.invocations,
-                            )
-                        })
-                        .unwrap_or_default();
+                    let (imports, originals) = self.tysys.trait_env.import_scope(&impl_module);
                     let impl_recv_id =
                         self.with_module_perspective(impl_module, imports, originals, |s| {
                             s.resolve_type(&impl_ty_clone)

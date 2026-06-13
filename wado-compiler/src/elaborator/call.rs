@@ -1325,19 +1325,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Build the callee module's import context so type names in the
                 // callee's signature resolve to the callee's types, not the
                 // caller's (which may have same-named different types).
-                let callee_module_ast = self.loaded_modules.get(callee_module);
-                let (callee_imported, callee_original_names) = callee_module_ast.map_or_else(
-                    || (IndexMap::default(), IndexMap::default()),
-                    |m| {
-                        Self::build_imported_type_sources(
-                            &mut self.interner.borrow_mut(),
-                            m,
-                            callee_module,
-                            Some(&self.entry_module_source),
-                            &self.invocations,
-                        )
-                    },
-                );
+                let (callee_imported, callee_original_names) =
+                    self.tysys.trait_env.import_scope(callee_module);
 
                 // Set up the function's type parameters in an inherited scope so we
                 // can resolve type parameter references (like T -> TypeParam { index: 0 }).
@@ -1797,23 +1786,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve types in the definition module's perspective
                 // so that type names resolve to the correct module's types
                 // (e.g., "Direction" resolves to module B's Direction, not module A's)
-                let callee_module = self
-                    .loaded_modules
-                    .iter()
-                    .find(|(ms, _)| **ms == src)
-                    .map(|(_, m)| m);
                 let (imported_type_sources, import_original_names) =
-                    if let Some(module) = callee_module {
-                        Self::build_imported_type_sources(
-                            &mut self.interner.borrow_mut(),
-                            module,
-                            &src,
-                            Some(&self.entry_module_source),
-                            &self.invocations,
-                        )
-                    } else {
-                        (IndexMap::default(), IndexMap::default())
-                    };
+                    self.tysys.trait_env.import_scope(&src);
                 return self.with_module_perspective(
                     src.clone(),
                     imported_type_sources,
@@ -1839,17 +1813,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|func| func.params.clone());
             if let Some(params) = params {
                 let (imported_type_sources, import_original_names) =
-                    if let Some(module) = self.loaded_modules.get(&fallback) {
-                        Self::build_imported_type_sources(
-                            &mut self.interner.borrow_mut(),
-                            module,
-                            &fallback,
-                            Some(&self.entry_module_source),
-                            &self.invocations,
-                        )
-                    } else {
-                        (IndexMap::default(), IndexMap::default())
-                    };
+                    self.tysys.trait_env.import_scope(&fallback);
                 return self.with_module_perspective(
                     fallback,
                     imported_type_sources,

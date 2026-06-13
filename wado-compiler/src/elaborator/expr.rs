@@ -717,19 +717,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (mut param_types, mut return_type, effects) = if same_module {
             resolve(self)
         } else {
-            let callee_module = self.loaded_modules.get(def_module);
-            let (imported_type_sources, import_original_names) = if let Some(module) = callee_module
-            {
-                Self::build_imported_type_sources(
-                    &mut self.interner.borrow_mut(),
-                    module,
-                    def_module,
-                    Some(&self.entry_module_source),
-                    &self.invocations,
-                )
-            } else {
-                (IndexMap::default(), IndexMap::default())
-            };
+            let (imported_type_sources, import_original_names) =
+                self.tysys.trait_env.import_scope(def_module);
             self.with_module_perspective(
                 def_module.clone(),
                 imported_type_sources,
@@ -999,19 +988,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (decl_params, decl_return, type_param_ids) = if same_module {
             resolve(self)
         } else {
-            let callee_module = self.loaded_modules.get(def_module);
-            let (imported_type_sources, import_original_names) = if let Some(module) = callee_module
-            {
-                Self::build_imported_type_sources(
-                    &mut self.interner.borrow_mut(),
-                    module,
-                    def_module,
-                    Some(&self.entry_module_source),
-                    &self.invocations,
-                )
-            } else {
-                (IndexMap::default(), IndexMap::default())
-            };
+            let (imported_type_sources, import_original_names) =
+                self.tysys.trait_env.import_scope(def_module);
             self.with_module_perspective(
                 def_module.clone(),
                 imported_type_sources,

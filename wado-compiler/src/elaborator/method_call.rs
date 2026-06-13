@@ -2179,19 +2179,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module B resolves against the caller's perspective (which only
         // knows about `CounterA` / `CounterB` aliases) and falls back to
         // `Unknown`, breaking arg-type coercion at the call site.
-        let (imports, originals) = self
-            .loaded_modules
-            .get(impl_module)
-            .map(|m| {
-                Self::build_imported_type_sources(
-                    &mut self.interner.borrow_mut(),
-                    m,
-                    impl_module,
-                    Some(&self.entry_module_source),
-                    &self.invocations,
-                )
-            })
-            .unwrap_or_default();
+        let (imports, originals) = self.tysys.trait_env.import_scope(impl_module);
         // Inherited scope; only `type_params` is replaced.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
@@ -2481,16 +2469,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
                 .unwrap_or_else(fallback);
         }
-        let Some(ast_module) = self.loaded_modules.get(module) else {
-            return fallback();
-        };
-        let (_, originals) = Self::build_imported_type_sources(
-            &mut self.interner.borrow_mut(),
-            ast_module,
-            module,
-            Some(&self.entry_module_source),
-            &self.invocations,
-        );
+        let (_, originals) = self.tysys.trait_env.import_scope(module);
         originals.get(name).cloned().unwrap_or_else(fallback)
     }
 
