@@ -71,13 +71,6 @@ pub global ATN_TR_PRECEDENCE: i32 = 5;
 #[allow(dead_code)]
 global ATN_ACCEPT_EOF: i32 = -2;
 
-/// Bounds that keep a pathological closure (deep recursion, config blow-up)
-/// from looping forever. On overflow the predictor bails to the lowest
-/// viable alt — the same conservative answer it gives on a true conflict.
-#[allow(dead_code)]
-global ATN_MAX_STACK: i32 = 64;
-#[allow(dead_code)]
-global ATN_MAX_CONFIGS: i32 = 6000;
 /// Safety caps for the merged closure. With graph-merged contexts the work is
 /// polynomial for any finite input, so these are only tripped by pathological
 /// epsilon-cycle grammars; on overflow the predictor bails to the lowest
@@ -87,6 +80,11 @@ global ATN_MAX_CONFIGS: i32 = 6000;
 global ATN_CLOSURE_GUARD: i32 = 2000000;
 #[allow(dead_code)]
 global ATN_ARENA_CAP: i32 = 400000;
+
+/// Stride for `CtxArena::merge`'s pair-key packing (`lo * stride + hi`).
+/// Must exceed `ATN_ARENA_CAP` so two distinct arena ids can never alias
+/// onto the same key; kept comfortably above it.
+global ATN_MERGE_CACHE_STRIDE: i64 = 1000000;
 
 /// The decoded ATN, in struct-of-arrays form. Decoded once from the
 /// serialized blob (into the module-level `GALE_ATN_SIM` in a generated
@@ -98,7 +96,6 @@ pub struct AtnSim {
     pub state_tr_start: List<i32>,
     pub state_tr_count: List<i32>,
     pub tr_kind: List<i32>,
-    pub tr_src: List<i32>,
     pub tr_target: List<i32>,
     pub tr_label: List<i32>,
     pub tr_follow: List<i32>,
@@ -129,7 +126,7 @@ pub struct AtnSim {
 global CTX_BOUNDARY: i32 = -3;
 
 /// The empty during-prediction context (no frames entered yet). A config with
-/// `ctx == CTX_EMPTY` pops straight to the caller stack.
+/// `pctx == CTX_EMPTY` pops straight to the caller stack.
 #[allow(dead_code)]
 global CTX_EMPTY: i32 = 0;
 
@@ -150,14 +147,14 @@ struct CtxArena {
     merge_cache: TreeMap<i64, i32>,
 }
 
-/// One ATN configuration. `ctx` is the graph-structured during-prediction
+/// One ATN configuration. `pctx` is the graph-structured during-prediction
 /// stack (a `CtxArena` node id); `rs` indexes the caller's pre-existing parse
-/// stack (the next outer frame to return into once `ctx` empties, or -1 for
+/// stack (the next outer frame to return into once `pctx` empties, or -1 for
 /// SLL / exhausted). `pr` is the current min-precedence context.
 struct AtnConfig {
     state: i32,
     alt: i32,
-    ctx: i32,
+    pctx: i32,
     rs: i32,
     pr: i32,
 }
@@ -240,7 +237,7 @@ impl CtxArena {
         }
         let lo = if a < b { a } else { b };
         let hi = if a < b { b } else { a };
-        let ck = lo as i64 * 1000000 + hi as i64;
+        let ck = lo as i64 * ATN_MERGE_CACHE_STRIDE + hi as i64;
         if let Some(id) = self.merge_cache.get(ck) {
             return id;
         }
@@ -362,7 +359,6 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
     let mut state_tr_start: List<i32> = [];
     let mut state_tr_count: List<i32> = [];
     let mut tr_kind: List<i32> = [];
-    let mut tr_src: List<i32> = [];
     let mut tr_target: List<i32> = [];
     let mut tr_label: List<i32> = [];
     let mut tr_follow: List<i32> = [];
@@ -384,7 +380,6 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
         for let mut j = 0; j < ntrans; j += 1 {
             tr_kind.push(data[p]);
             p += 1;
-            tr_src.push(i);
             tr_target.push(data[p]);
             p += 1;
             tr_label.push(data[p]);
@@ -403,7 +398,6 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
         state_tr_start,
         state_tr_count,
         tr_kind,
-        tr_src,
         tr_target,
         tr_label,
         tr_follow,
@@ -615,7 +609,7 @@ fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
 }
 
 /// A merged configuration set: at most one config per `(state, alt, rs, pr)`,
-/// its `ctx` the merged graph context of every path that reached it. This
+/// its `pctx` the merged graph context of every path that reached it. This
 /// collapse is what bounds the closure to polynomial size under deep left
 /// recursion (instead of one config per distinct list-stack). Keyed by a
 /// string for O(log n) lookup.
@@ -624,7 +618,7 @@ struct CfgSet {
     alt: List<i32>,
     rs: List<i32>,
     pr: List<i32>,
-    ctx: List<i32>,
+    pctx: List<i32>,
     index: TreeMap<i64, i32>,
 }
 
@@ -636,14 +630,14 @@ impl CfgSet {
             alt: [],
             rs: [],
             pr: [],
-            ctx: [],
+            pctx: [],
             index: TreeMap::<i64, i32>::new(),
         };
     }
 
-    /// Merge `(state, alt, rs, pr, ctx)` in. Returns `[index, changed]` where
-    /// `changed` is true iff the stored ctx grew (a fresh key always counts).
-    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, rs: i32, pr: i32, ctx: i32) -> [i32, bool] {
+    /// Merge `(state, alt, rs, pr, pctx)` in. Returns `[index, changed]` where
+    /// `changed` is true iff the stored pctx grew (a fresh key always counts).
+    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, rs: i32, pr: i32, pctx: i32) -> [i32, bool] {
         // Packed i64 key (avoids per-config string allocation on the hot
         // closure path). Each field gets a power-of-two bit slot, offset by
         // its -2/-1 sentinel so the value stays non-negative:
@@ -663,9 +657,9 @@ impl CfgSet {
         assert state + 2 < 1048576, `ATN config state {state} exceeds packed-key slot`;
         let k = (state + 2) as i64 * 4398046511104 + (rs + 2) as i64 * 4194304 + (alt + 1) as i64 * 2048 + (pr + 2) as i64;
         if let Some(i) = self.index.get(k) {
-            let merged = arena.merge(self.ctx[i], ctx);
-            let changed = merged != self.ctx[i];
-            self.ctx[i] = merged;
+            let merged = arena.merge(self.pctx[i], pctx);
+            let changed = merged != self.pctx[i];
+            self.pctx[i] = merged;
             return [i, changed];
         }
         let i = self.state.len();
@@ -673,7 +667,7 @@ impl CfgSet {
         self.alt.push(alt);
         self.rs.push(rs);
         self.pr.push(pr);
-        self.ctx.push(ctx);
+        self.pctx.push(pctx);
         self.index[k] = i;
         return [i, true];
     }
@@ -684,7 +678,7 @@ impl CfgSet {
             out.push(AtnConfig {
                 state: self.state[i],
                 alt: self.alt[i],
-                ctx: self.ctx[i],
+                pctx: self.pctx[i],
                 rs: self.rs[i],
                 pr: self.pr[i],
             });
@@ -714,17 +708,17 @@ fn atn_closure(sim: &AtnSim, arena: &mut CtxArena, seeds: &List<AtnConfig>, rstk
         if guard > ATN_CLOSURE_GUARD {
             break;
         }
-        let res = cset.add(arena, c.state, c.alt, c.rs, c.pr, c.ctx);
+        let res = cset.add(arena, c.state, c.alt, c.rs, c.pr, c.pctx);
         let idx = res.0;
         while expanded.len() <= idx {
             expanded.push(-9);
         }
-        let merged_ctx = cset.ctx[idx];
-        if expanded[idx] == merged_ctx {
+        let merged_pctx = cset.pctx[idx];
+        if expanded[idx] == merged_pctx {
             continue;
         }
-        expanded[idx] = merged_ctx;
-        let cur = AtnConfig { state: c.state, alt: c.alt, ctx: merged_ctx, rs: c.rs, pr: c.pr };
+        expanded[idx] = merged_pctx;
+        let cur = AtnConfig { state: c.state, alt: c.alt, pctx: merged_pctx, rs: c.rs, pr: c.pr };
         atn_expand(sim, arena, &cur, rstk, &mut work, &mut rset);
     }
     return rset.to_list();
@@ -742,7 +736,7 @@ fn atn_expand(
     rset: &mut CfgSet,
 ) {
     if cur.state == ATN_ACCEPT_EOF {
-        rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.ctx);
+        rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.pctx);
         return;
     }
     if sim.state_kind[cur.state] == ATN_RULE_STOP {
@@ -750,7 +744,7 @@ fn atn_expand(
         return;
     }
     if atn_state_consumes(sim, cur.state) {
-        rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.ctx);
+        rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.pctx);
         return;
     }
     let start = sim.state_tr_start[cur.state];
@@ -759,11 +753,11 @@ fn atn_expand(
         let k = sim.tr_kind[start + j];
         let target = sim.tr_target[start + j];
         if k == ATN_TR_EPSILON {
-            work.push(AtnConfig { state: target, alt: cur.alt, ctx: cur.ctx, rs: cur.rs, pr: cur.pr });
+            work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
         } else if k == ATN_TR_PRECEDENCE {
             // Loop-entry predicate `{prec_i >= pr}?`: prune below the context.
             if sim.tr_prec[start + j] >= cur.pr {
-                work.push(AtnConfig { state: target, alt: cur.alt, ctx: cur.ctx, rs: cur.rs, pr: cur.pr });
+                work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
             }
         } else if k == ATN_TR_RULE {
             if target < 0 || arena.edges.len() >= ATN_ARENA_CAP {
@@ -771,8 +765,8 @@ fn atn_expand(
             }
             // A recursive operand `expr[next_i]` carries its raised floor on
             // the RuleRef `prec`; push a frame saving the current `pr`.
-            let nctx = arena.push(sim.tr_follow[start + j], cur.pr, cur.ctx);
-            work.push(AtnConfig { state: target, alt: cur.alt, ctx: nctx, rs: cur.rs, pr: sim.tr_prec[start + j] });
+            let npctx = arena.push(sim.tr_follow[start + j], cur.pr, cur.pctx);
+            work.push(AtnConfig { state: target, alt: cur.alt, pctx: npctx, rs: cur.rs, pr: sim.tr_prec[start + j] });
         }
     }
 }
@@ -789,16 +783,16 @@ fn atn_pop(
     work: &mut List<AtnConfig>,
     rset: &mut CfgSet,
 ) {
-    if cur.ctx == CTX_EMPTY {
+    if cur.pctx == CTX_EMPTY {
         atn_rs_pop(arena, cur.state, cur.alt, cur.rs, cur.pr, rstk, work, rset);
         return;
     }
-    let edges = arena.edges[cur.ctx];
+    let edges = arena.edges[cur.pctx];
     for let e of &edges {
         if e.0 == CTX_BOUNDARY {
             atn_rs_pop(arena, cur.state, cur.alt, cur.rs, cur.pr, rstk, work, rset);
         } else {
-            work.push(AtnConfig { state: e.0, alt: cur.alt, ctx: e.2, rs: cur.rs, pr: e.1 });
+            work.push(AtnConfig { state: e.0, alt: cur.alt, pctx: e.2, rs: cur.rs, pr: e.1 });
         }
     }
 }
@@ -821,7 +815,7 @@ fn atn_rs_pop(
     if rs >= 0 {
         let ret = rstk[rs];
         if ret >= 0 {
-            work.push(AtnConfig { state: ret, alt: alt, ctx: CTX_EMPTY, rs: rs - 1, pr: pr });
+            work.push(AtnConfig { state: ret, alt: alt, pctx: CTX_EMPTY, rs: rs - 1, pr: pr });
         } else if rs == 0 {
             rset.add(arena, ATN_ACCEPT_EOF, alt, -1, pr, CTX_EMPTY);
         } else {
@@ -866,7 +860,7 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
                 false;
             };
             if matched {
-                out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, ctx: c.ctx, rs: c.rs, pr: c.pr });
+                out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, pctx: c.pctx, rs: c.rs, pr: c.pr });
             }
         }
     }
@@ -940,10 +934,10 @@ pub fn atn_predict_with_stack(
     let start = sim.state_tr_start[dstate];
     let cnt = sim.state_tr_count[dstate];
     let rs_init = rule_stack.len() - 1;
-    // Fresh context arena per prediction. (A persistent per-Parser arena was
-    // measured to hurt: it accumulates every prediction's contexts, growing
-    // the intern buckets; and full-context LR results are not memoizable
-    // since the context encodes the whole nesting depth — see git history.)
+    // Fresh context arena per prediction: a persistent per-Parser arena
+    // measured slower (it accumulates contexts, growing the intern buckets),
+    // and full-context LR results aren't memoizable (the context encodes the
+    // whole nesting depth).
     let mut arena = CtxArena::new();
     let mut seeds: List<AtnConfig> = [];
     for let mut j = 0; j < cnt; j += 1 {
@@ -952,7 +946,7 @@ pub fn atn_predict_with_stack(
         if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
             continue;
         }
-        seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, ctx: CTX_EMPTY, rs: rs_init, pr: min_prec });
+        seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: CTX_EMPTY, rs: rs_init, pr: min_prec });
     }
     let mut configs = atn_closure(sim, &mut arena, &seeds, rule_stack);
     let mut pos = start_pos;

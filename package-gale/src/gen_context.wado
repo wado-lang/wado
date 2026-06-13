@@ -288,20 +288,20 @@ impl GenContext {
     /// decision, so the dedup does not depend on a display-string
     /// heuristic. `message` already encodes everything `kind` does, so
     /// the pair is a sufficient key without an `Eq` on `DiagnosticKind`.
-    pub fn warn(&mut self, rule: &String, kind: DiagnosticKind, message: String) {
+    pub fn warn(&mut self, owner_label: &String, kind: DiagnosticKind, message: String) {
         for let d of &self.diagnostics {
-            if d.rule == *rule && d.message == message {
+            if d.rule == *owner_label && d.message == message {
                 return;
             }
         }
-        self.diagnostics.push(Diagnostic { rule: *rule, kind, message });
+        self.diagnostics.push(Diagnostic { rule: *owner_label, kind, message });
     }
 
     /// Return the collected diagnostics (a value copy under Wado value
     /// semantics; `self` keeps its own). `lower_with_ctx` reads them
     /// exactly once into `LoweredGrammar.diagnostics`, so the copy is
     /// harmless.
-    pub fn take_diagnostics(&self) -> List<Diagnostic> {
+    pub fn copy_diagnostics(&self) -> List<Diagnostic> {
         return self.diagnostics;
     }
 
@@ -858,15 +858,14 @@ impl GenContext {
     /// them correctly. The cost concern that previously forced a top-level
     /// LR gate here — exhaustive longest-match tournaments running every
     /// candidate's full LR scan even when an earlier alt already matched —
-    /// is addressed at the dispatch sites: `emit_scan_partition_body`,
-    /// `gen_group_scan_dispatch`, `gen_general_group_scan_dispatch`, and
-    /// `gen_rule_ref_group_scan_dispatch` use first-success-wins on
-    /// `sort_group_by_element_count` order, mirroring parse-side `bt_try`.
-    /// Sorting longest-first ensures the most specific candidate is tried
-    /// first, so commit-on-success is correctness-equivalent to longest-
-    /// match here. See `AGENTS.md` "Failed Approaches: Removing the LR
-    /// Gate ... 2026-04" for the historical context that ruled out a naive
-    /// gate removal.
+    /// is addressed at the dispatch sites: the group dispatchers
+    /// (`gen_group_scan_dispatch`, `gen_general_group_scan_dispatch`,
+    /// `gen_rule_ref_group_scan_dispatch`) commit on first success in
+    /// `sort_group_by_element_count` order (longest-first, so the most
+    /// specific candidate is tried first), and `gen_scan_partition_body`
+    /// runs a real longest-match tournament per partition. Either way the
+    /// per-candidate LR scan is bounded, not run exhaustively for already-
+    /// matched alts.
     pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
         let cached = self.scannable_cache.get(*name);
         if let Some(val) = cached {

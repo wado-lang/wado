@@ -8,7 +8,7 @@
 // (`}` / EOF) at the *next* item. The generated parser instead re-parses the
 // stuck item on the failure path to surface the precise inner error.
 
-grammar ErrRec;
+grammar ErrorRecovery;
 
 prog  : item* EOF ;
 item  : 'let' ID '=' ID ';'

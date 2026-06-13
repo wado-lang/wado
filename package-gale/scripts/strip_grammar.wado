@@ -10,13 +10,13 @@ use { strip_action_bodies } from "../src/g4/action_strip.wado";
 export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let arguments = args();
     if arguments.len() != 1 {
-        eprintln("usage: strip-grammar <path/to/Grammar.g4>");
+        eprintln("usage: strip_grammar <path/to/Grammar.g4>");
         exit(1);
     }
     let path = arguments[0];
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
-        eprintln("strip-grammar: no preopened directories available");
+        eprintln("strip_grammar: no preopened directories available");
         exit(1);
     }
     let root = dirs[0].0;
@@ -27,7 +27,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         DescriptorFlags::Read,
     ).wait();
     if let Err(_) = open_result {
-        eprintln(`strip-grammar: cannot open file: {path}`);
+        eprintln(`strip_grammar: cannot open file: {path}`);
         exit(1);
     }
     let file = open_result.unwrap();

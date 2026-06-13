@@ -41,11 +41,10 @@ use {
     GeneralShape,
     ScanBody,
     ScanElement,
-    ScanTokenElem,
-    ScanRuleCallElem,
-    ScanExcludedElem,
-    ScanRepeatElem,
-    ScanRepeatStrategy,
+    ScanTokenElement,
+    ScanRuleCallElement,
+    ScanExcludedElement,
+    ScanRepeatElement,
     FieldDecl,
     FieldKind,
     KindSet,
@@ -195,7 +194,7 @@ test "Op::Wildcard / Excluded round-trip" {
 
 test "Op::Repeat carries inner element and strategy" {
     let inner = Op::Token(TokenOp { kind: "TK_X", field: "x", dedup_base: "x" });
-    let scan_inner = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
+    let scan_inner = ScanElement::Token(ScanTokenElement { kind: "TK_X" });
     let rep = Op::Repeat(RepeatOp {
         kind: RepeatKind::Star,
         body: inner,
@@ -376,21 +375,20 @@ test "MultiAltDispatch variant set is exactly { Direct, Tournament }" {
 }
 
 test "ScanElement variants round-trip" {
-    let token = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
-    let call = ScanElement::RuleCall(ScanRuleCallElem {
+    let token = ScanElement::Token(ScanTokenElement { kind: "TK_X" });
+    let call = ScanElement::RuleCall(ScanRuleCallElement {
         target_snake: "expr",
         follow_arg: FollowArg::NoFollow,
         min_prec_arg: null,
     });
     let any = ScanElement::Wildcard;
-    let excl = ScanElement::Excluded(ScanExcludedElem {
+    let excl = ScanElement::Excluded(ScanExcludedElement {
         kinds: ["TK_A"],
     });
-    let inner_scan = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
-    let rep = ScanElement::Repeat(ScanRepeatElem {
+    let inner_scan = ScanElement::Token(ScanTokenElement { kind: "TK_X" });
+    let rep = ScanElement::Repeat(ScanRepeatElement {
         kind: RepeatKind::Plus,
         body: inner_scan,
-        strategy: ScanRepeatStrategy::Plain,
         inner_first: [],
         caller_follow_first: [],
         gate_caller_follow: false,

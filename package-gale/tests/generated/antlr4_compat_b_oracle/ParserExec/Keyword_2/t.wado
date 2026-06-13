@@ -1,5 +1,5 @@
 #![generated(by = "local:src/generator.wado", sources = ["../../grammars/ParserExec/Keyword_2.g4"])]
-#![generated(by = "gale", sources = ["T.g4"])]
+#![generated(by = "gale", sources = ["../../grammars/ParserExec/Keyword_2.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -343,7 +343,6 @@ fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
         return CstNode { name: info.name, span: info.span, children };
     }
     panic("TreeRecorder: expected Enter event");
-    return CstNode { name: "", span: Span::new(0, 0), children: [] };
 }
 //! Consumer-facing tree / token utilities exposed by every generated
 //! parser: S-expression normalisation, child-node lookup, and the
@@ -425,30 +424,35 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// `0..num_lexer_rules` range maps directly onto ANTLR4's
 /// `1..num_lexer_rules+1`.
 ///
-/// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
-/// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
-/// `\t` are escaped; backslashes and quotes pass through unchanged.
+/// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
+/// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
+/// escaped; backslashes and quotes pass through unchanged.
 pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
+    // Char index where each line begins; built once so each token's `line:col`
+    // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
+    let mut line_starts: List<i32> = [0];
+    for let mut i = 0; i < chars.len(); i += 1 {
+        if chars[i] == '\n' {
+            line_starts.push(i + 1);
+        }
+    }
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
         let tok = &tokens[i];
-        // Non-default-channel tokens (e.g. `-> channel(HIDDEN)`) are invisible
-        // to the parser, so the generated tokenizer parks them in the next
-        // token's `leading_trivia` alongside skip tokens. ANTLR4 still emits
-        // them into the token dump in source order with a `channel=N`
-        // attribute and a sequential index, so interleave them ahead of their
-        // host token. Skip tokens carry channel 0 and are discarded entirely —
-        // they neither print nor advance the index (matching ANTLR4's
-        // `Lexer.skip()`).
+        // Non-default-channel tokens (`-> channel(HIDDEN)`) are parked in the
+        // next token's `leading_trivia`; ANTLR4 still dumps them in source
+        // order with a `channel=N` attribute, so interleave them ahead of the
+        // host token. Skip tokens (channel 0) are discarded — neither printed
+        // nor indexed (matching ANTLR4's `Lexer.skip()`).
         for let tr of &tok.leading_trivia {
             if tr.channel != 0 {
-                emit_lexer_token(&mut out, tr, &chars, index, eof_kind);
+                emit_lexer_token(&mut out, tr, &line_starts, index, eof_kind);
                 index += 1;
             }
         }
-        emit_lexer_token(&mut out, tok, &chars, index, eof_kind);
+        emit_lexer_token(&mut out, tok, &line_starts, index, eof_kind);
         index += 1;
     }
     return out;
@@ -458,7 +462,7 @@ pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> S
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i32, eof_kind: i32) {
+fn emit_lexer_token(out: &mut String, tok: &Token, line_starts: &List<i32>, index: i32, eof_kind: i32) {
     let is_eof = tok.kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
@@ -475,7 +479,7 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i3
         }
     }
     let type_id = if is_eof { -1 } else { tok.kind + 1 };
-    let line_col = line_col_at(chars, tok.span.start);
+    let line_col = line_col_from_starts(line_starts, tok.span.start);
     let line = line_col.0;
     let col = line_col.1;
     let end_inclusive = tok.span.end - 1;
@@ -485,6 +489,8 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i3
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
 /// 1-based line and 0-based column to match ANTLR4's `Token` getters.
+/// The parser's error path reports at most one position per parse, so the
+/// linear scan is fine; the per-token dump uses `line_col_from_starts`.
 fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
@@ -498,6 +504,24 @@ fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
         }
     }
     return [line, col];
+}
+
+/// Compute (line, column) from the precomputed `line_starts` table (char
+/// index where each line begins). Binary search for the greatest
+/// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
+/// offset past its start. O(log lines) per call.
+fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let mut lo = 0;
+    let mut hi = line_starts.len() - 1;
+    while lo < hi {
+        let mid = (lo + hi + 1) / 2;
+        if line_starts[mid] <= pos {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return [lo + 1, pos - line_starts[lo]];
 }
 pub enum TokenKind {
     Eof,

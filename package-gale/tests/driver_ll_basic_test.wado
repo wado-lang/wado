@@ -17,8 +17,9 @@ fn assert_tree(input: &String, expected: &String) {
 }
 
 // X Y matches both (a b) and (a). LL must pick (a b) so that `b` claims
-// the trailing `Y`. This exercises the `scan_a__follow_<Y>` /
-// `parse_a__follow_<Y>` variants emitted by `intern_follow_variant`.
+// the trailing `Y`. This exercises the runtime caller-FOLLOW gate
+// (`follow_yields` against `a`'s `gate_caller_follow`) that yields the
+// trailing `Y` back to the caller.
 test "tree: X Y picks (a b)" {
     assert_tree(&"X Y", &"
         (r (a X) (b Y))

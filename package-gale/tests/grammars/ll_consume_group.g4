@@ -12,7 +12,7 @@
 // consumed element against alts[0] ("A") instead of the group's own alts,
 // spuriously failing, skipping the consume, and emitting the child
 // Dispatch one token early — rejecting valid `i x i` / `i y i` input.
-grammar LLConsumeGroup;
+grammar LlConsumeGroup;
 
 r : A | ID X ID | ID Y ID ;
 

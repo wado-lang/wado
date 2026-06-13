@@ -1,4 +1,4 @@
-use { Span, Token, ParseError } from "../runtime/lex.wado";
+use { Token, ParseError } from "../runtime/lex.wado";
 use {
     Grammar,
     GrammarKind,
@@ -20,7 +20,7 @@ use {
     NotElement,
     RepeatKind,
     LexerRule,
-    LexerAlt,
+    LexerAlternative,
     LexerElement,
     LexerRepeatElement,
     LexerNotElement,
@@ -34,7 +34,7 @@ use {
     check_references,
     synthesize_implicit_tokens,
 } from "../ir.wado";
-use { G4Token, make_token } from "./token.wado";
+use { G4Token } from "./token.wado";
 use { tokenize_chars } from "./lexer.wado";
 
 pub struct G4Parser {
@@ -77,7 +77,7 @@ pub struct G4Parser {
 
 /// Accumulator for lexer commands parsed from `-> cmd, cmd, ...`.
 /// See ANTLR4 lexer-rules.md for the canonical command set.
-struct LexerActions {
+struct LexerCommands {
     skip: bool,
     more: bool,
     type_override: Option<String>,
@@ -87,9 +87,9 @@ struct LexerActions {
     pop_mode: bool,
 }
 
-impl LexerActions {
-    fn empty() -> LexerActions {
-        return LexerActions {
+impl LexerCommands {
+    fn empty() -> LexerCommands {
+        return LexerCommands {
             skip: false,
             more: false,
             type_override: null,
@@ -113,11 +113,11 @@ fn is_lexer_rule_name(name: &String) -> bool {
     return false;
 }
 
-/// ANTLR4 spec (`notSet : NOT setElement | NOT blockSet`) restricts `~` in
-/// parser rules to a token reference, string literal, or a parenthesised
-/// block whose alternatives are themselves set elements. Rule references,
-/// wildcards, and EBNF-suffixed elements are rejected. Spec:
-/// `vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g`.
+/// ANTLR4 restricts `~` in parser rules to a token reference, string
+/// literal, or a parenthesised block whose alternatives are themselves
+/// set elements. Rule references, wildcards, and EBNF-suffixed elements
+/// are rejected. Spec: `vendor/antlr4/doc/parser-rules.md` (sets),
+/// confirmed against the published ANTLR4 jar as a black-box oracle.
 fn is_valid_not_set_element(elem: &Element) -> bool {
     if let TokenRef(_) = elem {
         return true;
@@ -252,7 +252,7 @@ impl G4Parser {
         self.expect(G4Token::Semicolon)?;
 
         let mut virtual_tokens: List<String> = [];
-        self.skip_preamble_blocks(&mut virtual_tokens)?;
+        self.skip_prequel_blocks(&mut virtual_tokens)?;
 
         let mut parser_rules: List<ParserRule> = [];
         let mut lexer_rules: List<LexerRule> = [];
@@ -263,8 +263,8 @@ impl G4Parser {
             // Check for mode declaration: mode NAME;
             // ANTLR4 only allows `mode X;` in lexer grammars (combined or
             // split lexer). Reject it in `parser grammar` form — see
-            // vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g where
-            // `modeSpec` only appears under lexerRule branches.
+            // `vendor/antlr4/doc/lexer-rules.md` (modes are a lexer-only
+            // construct); confirmed against the published ANTLR4 jar.
             if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str(&"mode", &self.peek().text) {
                 if is_parser_grammar {
                     let tok = self.peek();
@@ -376,8 +376,8 @@ impl G4Parser {
 
         // Semantic rule-reference resolution runs as a separate phase
         // (`check_references` in `ir.wado`), mirroring ANTLR4's split
-        // between the syntactic parser (`ANTLRParser.g`) and the
-        // semantic analyzer (`SymbolChecks.java`). `parse_grammar`
+        // between syntactic parsing and a later semantic-analysis pass.
+        // `parse_grammar`
         // publishes the raw `pending_refs` onto the returned `Grammar`
         // so callers can either validate immediately (`parse_checked`)
         // or first merge split-grammar halves with `merge_grammars` and
@@ -405,7 +405,7 @@ impl G4Parser {
         );
     }
 
-    fn skip_preamble_blocks(&mut self, virtual_tokens: &mut List<String>) -> Result<(), ParseError> {
+    fn skip_prequel_blocks(&mut self, virtual_tokens: &mut List<String>) -> Result<(), ParseError> {
         // ANTLR4 grammar prequel constructs (any order, repeatable):
         //   optionsSpec      : 'options'  '{' ... '}'
         //   delegateGrammars : 'import' id ('=' id)? (',' id ('=' id)?)* ';'
@@ -797,7 +797,6 @@ impl G4Parser {
             }
             let name_tok = self.peek();
             let name = name_tok.text.to_string();
-            let name_span = name_tok.span;
             self.advance();
             if !self.is_kind(G4Token::Assign) {
                 while !self.at_eof() && !self.is_kind(G4Token::Comma) && !self.is_kind(G4Token::RAngle) {
@@ -835,7 +834,6 @@ impl G4Parser {
                     );
                 }
             }
-            let _ = name_span;
             out.push(GrammarOption { name, value });
             if self.is_kind(G4Token::Comma) {
                 self.advance();
@@ -845,7 +843,7 @@ impl G4Parser {
     }
 
     fn parse_parser_rule(&mut self, name: String) -> Result<ParserRule, ParseError> {
-        let options = self.skip_rule_prequel();
+        let options = self.parse_rule_prequel();
         self.expect(G4Token::Colon)?;
         self.current_rule = name;
         let alternatives = self.parse_alternatives()?;
@@ -863,7 +861,7 @@ impl G4Parser {
     /// `@after`). ANTLR4 fixes the order of args/returns/throws/locals before
     /// the repeated `options{}`/`@id{}` block, but we accept any order here
     /// for resilience. Returns the union of any `options { ... }` entries.
-    fn skip_rule_prequel(&mut self) -> List<GrammarOption> {
+    fn parse_rule_prequel(&mut self) -> List<GrammarOption> {
         let mut options: List<GrammarOption> = [];
         loop {
             if self.is_kind(G4Token::CharClass) {
@@ -1058,7 +1056,9 @@ impl G4Parser {
             if self.is_kind(G4Token::LAngle) {
                 options = self.parse_angle_options()?;
             }
-            if is_lexer_rule_name(&name) || name == "EOF" {
+            // `EOF` is upper-case-led, so `is_lexer_rule_name` already
+            // classifies it as a token reference.
+            if is_lexer_rule_name(&name) {
                 self.pending_refs.push(PendingRef {
                     kind: RefKind::TokenRef,
                     containing_rule: self.current_rule,
@@ -1224,13 +1224,13 @@ impl G4Parser {
     ) -> Result<LexerRule, ParseError> {
         // Lexer rules in ANTLR4 also accept the rule prequel (rare but legal,
         // most commonly `locals [int n]`).
-        let options = self.skip_rule_prequel();
+        let options = self.parse_rule_prequel();
         self.expect(G4Token::Colon)?;
         self.current_rule = name;
         let body = self.parse_lexer_alternatives()?;
         self.current_rule = "";
 
-        let mut actions = LexerActions::empty();
+        let mut actions = LexerCommands::empty();
         if self.is_kind(G4Token::Arrow) {
             self.advance();
             self.parse_lexer_actions(&mut actions, mode_names)?;
@@ -1259,7 +1259,7 @@ impl G4Parser {
 
     fn parse_lexer_actions(
         &mut self,
-        actions: &mut LexerActions,
+        actions: &mut LexerCommands,
         mode_names: &mut List<String>,
     ) -> Result<(), ParseError> {
         loop {
@@ -1350,8 +1350,8 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    fn parse_lexer_alternatives(&mut self) -> Result<List<LexerAlt>, ParseError> {
-        let mut alts: List<LexerAlt> = [];
+    fn parse_lexer_alternatives(&mut self) -> Result<List<LexerAlternative>, ParseError> {
+        let mut alts: List<LexerAlternative> = [];
         let first = self.parse_lexer_alt()?;
         alts.push(first);
 
@@ -1360,10 +1360,10 @@ impl G4Parser {
             let alt = self.parse_lexer_alt()?;
             alts.push(alt);
         }
-        return Result::<List<LexerAlt>, ParseError>::Ok(alts);
+        return Result::<List<LexerAlternative>, ParseError>::Ok(alts);
     }
 
-    fn parse_lexer_alt(&mut self) -> Result<LexerAlt, ParseError> {
+    fn parse_lexer_alt(&mut self) -> Result<LexerAlternative, ParseError> {
         let mut elements: List<LexerElement> = [];
         loop {
             if self.at_eof()
@@ -1389,7 +1389,7 @@ impl G4Parser {
             let elem = self.parse_lexer_element()?;
             elements.push(elem);
         }
-        return Result::<LexerAlt, ParseError>::Ok(LexerAlt { elements });
+        return Result::<LexerAlternative, ParseError>::Ok(LexerAlternative { elements });
     }
 
     fn parse_lexer_element(&mut self) -> Result<LexerElement, ParseError> {
@@ -1793,8 +1793,8 @@ fn parse_int_literal(text: &String) -> i32 {
 
 /// Syntactic parse only. Turns a `.g4` source string into a `Grammar` IR
 /// without running the semantic rule-reference resolution pass — mirrors
-/// ANTLR4's `ANTLRParser.g`, which accepts any syntactically well-formed
-/// grammar and leaves symbol resolution to a later phase.
+/// ANTLR4 accepting any syntactically well-formed grammar and leaving
+/// symbol resolution to a later phase.
 ///
 /// The parser still rejects mistakes that can be caught locally during a
 /// single pass: duplicate rule names (B1), a `mode X;` declaration inside
@@ -1828,8 +1828,8 @@ pub fn parse(input: String) -> Result<Grammar, ParseError> {
 
 /// Parse + semantic rule-reference resolution, in one call. Equivalent
 /// to `parse` followed by `ir::check_references`, and mirrors ANTLR4's
-/// full tool-level contract (`ANTLRParser.g` +
-/// `SymbolChecks.checkForUnresolvedRuleRefs`).
+/// full tool-level contract (a syntactic parse plus the
+/// unresolved-rule-reference check).
 ///
 /// Rejects grammars that `parse` would accept but where a parser-rule
 /// ref, token ref, or lexer-rule ref does not resolve against the rule

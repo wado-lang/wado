@@ -17,7 +17,7 @@ use {
     NotElement,
     RepeatKind,
     LexerRule,
-    LexerAlt,
+    LexerAlternative,
     LexerElement,
     Visibility,
 } from "./ir.wado";
@@ -42,9 +42,9 @@ test "generate header" {
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert output.len() > 0;
-    // Grammar was constructed with no source_files, so gen_header falls back
-    // to `{name}.g4`.
-    let header = `#![generated(by = "gale", sources = ["Test.g4"])]`;
+    // Grammar was constructed with no source_files, so gen_header emits an
+    // empty sources list rather than fabricating a nonexistent `{name}.g4`.
+    let header = `#![generated(by = "gale", sources = [])]`;
     for let mut i = 0; i < header.len(); i += 1 {
         assert output.get_byte_unchecked(i) == header.get_byte_unchecked(i);
     }
@@ -567,7 +567,7 @@ test "generate lexer set_mode" {
                 is_virtual: false,
                 options: [],
                 body: [
-                    LexerAlt {
+                    LexerAlternative {
                         elements: [LexerElement::Literal("<")],
                     },
                 ],
@@ -587,7 +587,7 @@ test "generate lexer set_mode" {
                 is_virtual: false,
                 options: [],
                 body: [
-                    LexerAlt {
+                    LexerAlternative {
                         elements: [LexerElement::Literal("a")],
                     },
                 ],
@@ -627,7 +627,7 @@ test "generate lexer more" {
                 is_virtual: false,
                 options: [],
                 body: [
-                    LexerAlt {
+                    LexerAlternative {
                         elements: [LexerElement::Literal("a")],
                     },
                 ],
@@ -667,7 +667,7 @@ test "generate lexer type_override" {
                 is_virtual: false,
                 options: [],
                 body: [
-                    LexerAlt {
+                    LexerAlternative {
                         elements: [LexerElement::Literal("x")],
                     },
                 ],
@@ -687,7 +687,7 @@ test "generate lexer type_override" {
                 is_virtual: false,
                 options: [],
                 body: [
-                    LexerAlt {
+                    LexerAlternative {
                         elements: [LexerElement::Literal("if")],
                     },
                 ],
@@ -729,7 +729,7 @@ test "generate lexer channel" {
                 is_virtual: false,
                 options: [],
                 body: [
-                    LexerAlt {
+                    LexerAlternative {
                         elements: [LexerElement::Literal("#")],
                     },
                 ],

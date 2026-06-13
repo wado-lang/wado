@@ -54,6 +54,12 @@ pub struct GeneratedOutput {
     pub diagnostics: List<Diagnostic>,
 }
 
+/// Output-buffer pre-sizing heuristic (see `generate`): a base allocation
+/// plus a per-rule estimate, tuned so a large grammar's generated source
+/// fits within one `String::grow` doubling.
+global GEN_BASE_CAPACITY: i32 = 4096;
+global GEN_PER_RULE_CAPACITY: i32 = 4096;
+
 pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {
     // Fill in `snake_name` / `field_name` caches on every name-bearing IR
     // node before any codegen pass touches the grammar. Production IR built
@@ -75,7 +81,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // trigger `String::grow` doubling events. Empirical Rust*.g4 output
     // is ~1.3 MB across 197 parser + 130 lexer rules; the 4 KB +
     // 4 KB/rule heuristic matches that within one doubling.
-    let estimated_size = 4096 + 4096 * (grammar.parser_rules.len() + grammar.lexer_rules.len());
+    let estimated_size = GEN_BASE_CAPACITY + GEN_PER_RULE_CAPACITY * (grammar.parser_rules.len() + grammar.lexer_rules.len(
+    ));
     let mut w = CodeWriter::with_capacity(estimated_size);
     // Lower up-front so CST emission can consume `AltBody.fields` /
     // `GroupShape` directly. Sharing the GenContext primes the
@@ -174,12 +181,13 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
     // unit test), fall back to `{name}.g4` so existing tests still see a
     // sensible provenance entry.
     let mut sources: List<String> = [];
-    if grammar.source_files.is_empty() {
-        sources.push(`{grammar.name}.g4`);
-    } else {
-        for let sf of &grammar.source_files {
-            sources.push(*sf);
-        }
+    // `source_files` is set by both entry points (the Kiln generator from
+    // `req.primary.path`, the CLI from the loaded file paths). When it is
+    // genuinely unknown, emit an empty list rather than fabricating
+    // `<GrammarName>.g4` — a plausible-looking name for a file that does
+    // not exist.
+    for let sf of &grammar.source_files {
+        sources.push(*sf);
     }
     let mut parts = String::with_capacity(32);
     parts.push_str(&"#![generated(by = \"gale\", sources = [");
@@ -206,22 +214,22 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
 /// - `atn` only when lowering needs the runtime simulator (`needs_atn`).
 ///
 /// Each fragment is a real module for dev/test, importing its siblings via
-/// `use { ... } from "./lex.wado"` etc.; `emit_runtime_fragment` drops those
+/// `use { ... } from "./lex.wado"` etc.; `gen_runtime_fragment` drops those
 /// relative imports because every fragment is concatenated into the single
 /// generated module (with `lex` first), where such imports are both
 /// redundant and unresolvable.
 fn gen_runtime(w: &mut CodeWriter, ctx: &GenContext, highlight: bool) {
-    emit_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
-    emit_runtime_fragment(w, &#include_str("./runtime/cst.wado"));
-    emit_runtime_fragment(w, &#include_str("./runtime/tools.wado"));
+    gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
+    gen_runtime_fragment(w, &#include_str("./runtime/cst.wado"));
+    gen_runtime_fragment(w, &#include_str("./runtime/tools.wado"));
     if ctx.emit_follow() {
-        emit_runtime_fragment(w, &#include_str("./runtime/follow.wado"));
+        gen_runtime_fragment(w, &#include_str("./runtime/follow.wado"));
     }
     if highlight {
-        emit_runtime_fragment(w, &#include_str("./runtime/highlight.wado"));
+        gen_runtime_fragment(w, &#include_str("./runtime/highlight.wado"));
     }
     if ctx.needs_atn() {
-        emit_runtime_fragment(w, &#include_str("./runtime/atn.wado"));
+        gen_runtime_fragment(w, &#include_str("./runtime/atn.wado"));
     }
 }
 
@@ -232,7 +240,7 @@ fn gen_runtime(w: &mut CodeWriter, ctx: &GenContext, highlight: bool) {
 /// terminating `;` (semicolons are mandatory). Standard-library imports
 /// (`core:` / `wasi:`) are kept verbatim and flow into the generated parser
 /// (none are needed today, but they are permitted).
-fn emit_runtime_fragment(w: &mut CodeWriter, src: &String) {
+fn gen_runtime_fragment(w: &mut CodeWriter, src: &String) {
     // Lines of an open `use ...;` statement whose siblingness is not yet known.
     let mut block: List<String> = [];
     let mut in_use = false;
@@ -372,7 +380,7 @@ fn gen_rule_cst_type(w: &mut CodeWriter, rule: &Rule, surface_alts: &List<Altern
     return match *rule {
         Simple(s) => {
             gen_ops_nested_types(w, &s.body.ops, &s.header.name, emitted);
-            emit_alt_struct(w, &s.body.struct_name, &s.body.fields);
+            gen_alt_struct(w, &s.body.struct_name, &s.body.fields);
         },
         MultiAlt(m) => gen_multi_alt_cst(w, &m.header.name, &m.header.type_name, &m.alts, surface_alts, emitted),
         LeftRecursive(l) => gen_lr_cst(w, &l.header.name, &l.header.type_name, &l.atom.alts, &l.lr_alts, emitted),
@@ -409,7 +417,7 @@ fn gen_multi_alt_cst(
     w.blank();
     for let alt of alts {
         gen_ops_nested_types(w, &alt.ops, rule_name, emitted);
-        emit_alt_struct(w, &alt.struct_name, &alt.fields);
+        gen_alt_struct(w, &alt.struct_name, &alt.fields);
     }
 }
 
@@ -435,7 +443,7 @@ fn gen_lr_cst(
     v.emit(w);
     w.blank();
     for let mut idx = 0; idx < total; idx += 1 {
-        emit_lr_alt_struct(w, atom_alts, lr_alts, idx, rule_name, emitted);
+        gen_lr_alt_struct(w, atom_alts, lr_alts, idx, rule_name, emitted);
     }
 }
 
@@ -453,7 +461,7 @@ fn find_lr_alt_names(atom_alts: &List<AltBody>, lr_alts: &List<LrAlt>, idx: i32)
     panic(`gen_lr_cst: no atom / lr alt has alt_index = {idx}`);
 }
 
-fn emit_lr_alt_struct(
+fn gen_lr_alt_struct(
     w: &mut CodeWriter,
     atom_alts: &List<AltBody>,
     lr_alts: &List<LrAlt>,
@@ -464,7 +472,7 @@ fn emit_lr_alt_struct(
     for let a of atom_alts {
         if a.alt_index == idx {
             gen_ops_nested_types(w, &a.ops, rule_name, emitted);
-            emit_alt_struct(w, &a.struct_name, &a.fields);
+            gen_alt_struct(w, &a.struct_name, &a.fields);
             return;
         }
     }
@@ -482,18 +490,18 @@ fn emit_lr_alt_struct(
                     combined.push(l.prefix_self_ref);
                 }
             }
-            emit_alt_struct(w, &l.struct_name, &combined);
+            gen_alt_struct(w, &l.struct_name, &combined);
             return;
         }
     }
-    panic(`emit_lr_alt_struct: no atom / lr alt has alt_index = {idx}`);
+    panic(`gen_lr_alt_struct: no atom / lr alt has alt_index = {idx}`);
 }
 
 /// Emit a `pub struct <name> { <fields> }` from a `FieldDecl` list.
 /// The leading `span: Span` field is part of the `FieldDecl` list
 /// (`FieldKind::Span`) when the struct is a rule-level alt body;
 /// nested SingleAlt / General-group alt structs omit it.
-fn emit_alt_struct(w: &mut CodeWriter, type_name: &String, fields: &List<FieldDecl>) {
+fn gen_alt_struct(w: &mut CodeWriter, type_name: &String, fields: &List<FieldDecl>) {
     let mut s = StructSpec::new(type_name);
     s.set_pub();
     for let f of fields {
@@ -531,13 +539,13 @@ fn gen_group_nested_types(w: &mut CodeWriter, g: &GroupOp, rule_name: &String, e
         },
         TokenOnly(_) => {
         },
-        SimpleCst(scst) => emit_simple_cst_enum_if_new(w, scst, &g.alts, emitted),
-        SingleAlt(sa) => emit_single_alt_struct_if_new(w, sa, &g.alts, emitted),
-        General(gen) => emit_general_group_types_if_new(w, gen, &g.alts, rule_name, emitted),
+        SimpleCst(scst) => gen_simple_cst_enum_if_new(w, scst, &g.alts, emitted),
+        SingleAlt(sa) => gen_single_alt_struct_if_new(w, sa, &g.alts, emitted),
+        General(gen) => gen_general_group_types_if_new(w, gen, &g.alts, rule_name, emitted),
     };
 }
 
-fn emit_simple_cst_enum_if_new(
+fn gen_simple_cst_enum_if_new(
     w: &mut CodeWriter,
     scst: &SimpleCstShape,
     alts: &List<AltBody>,
@@ -564,7 +572,7 @@ fn emit_simple_cst_enum_if_new(
     w.blank();
 }
 
-fn emit_single_alt_struct_if_new(
+fn gen_single_alt_struct_if_new(
     w: &mut CodeWriter,
     sa: &SingleAltShape,
     alts: &List<AltBody>,
@@ -580,10 +588,10 @@ fn emit_single_alt_struct_if_new(
     // monomorph table (per `single_alt_owner`) — nested groups inside
     // it follow the same key.
     gen_ops_nested_types(w, &alts[0].ops, &sa.owner_rule, emitted);
-    emit_alt_struct(w, &sa.struct_name, &alts[0].fields);
+    gen_alt_struct(w, &sa.struct_name, &alts[0].fields);
 }
 
-fn emit_general_group_types_if_new(
+fn gen_general_group_types_if_new(
     w: &mut CodeWriter,
     gen: &GeneralShape,
     alts: &List<AltBody>,
@@ -608,7 +616,7 @@ fn emit_general_group_types_if_new(
     v.emit(w);
     w.blank();
     for let mut i = 0; i < alts.len(); i += 1 {
-        emit_alt_struct(w, &gen.alt_struct_names[i], &alts[i].fields);
+        gen_alt_struct(w, &gen.alt_struct_names[i], &alts[i].fields);
     }
 }
 

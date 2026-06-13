@@ -15,10 +15,8 @@ pub struct CodeWriter {
 
 impl CodeWriter {
     pub fn new() -> CodeWriter {
-        // For small grammars the 64 KB headroom is a few-page overhead;
-        // for production grammars (Rust*.g4 ≈ 1.3 MB output) this
-        // single-shot allocation replaces ~9 `String::grow` doubling
-        // events through the codegen pass.
+        // Pre-size to 64 KB: amortizes `String::grow` doublings over the
+        // codegen pass (Rust*.g4 output ≈ 1.3 MB), negligible for small grammars.
         return CodeWriter::with_capacity(65536);
     }
 
@@ -293,37 +291,6 @@ impl EnumSpec {
     }
 }
 
-pub struct FlagsSpec {
-    pub name: String,
-    members: List<String>,
-    is_pub: bool,
-}
-
-impl FlagsSpec {
-    pub fn new(name: &String) -> FlagsSpec {
-        return FlagsSpec { name: *name, members: [], is_pub: false };
-    }
-
-    pub fn set_pub(&mut self) -> &mut FlagsSpec with stores[self] {
-        self.is_pub = true;
-        return self;
-    }
-
-    pub fn add_member(&mut self, name: &String) -> &mut FlagsSpec with stores[self] {
-        self.members.push(*name);
-        return self;
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter) {
-        let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(&`{prefix}flags {self.name}`);
-        for let member of &self.members {
-            w.line(&`{*member},`);
-        }
-        w.end();
-    }
-}
-
 pub struct ParamSpec {
     pub name: String,
     pub type_str: String,
@@ -335,10 +302,19 @@ impl ParamSpec {
     pub fn new(name: &String, type_str: &String) -> ParamSpec {
         return ParamSpec { name: *name, type_str: *type_str };
     }
+}
 
-    pub fn new_mut(name: &String, type_str: &String) -> ParamSpec {
-        return ParamSpec { name: *name, type_str: *type_str, is_mut: true };
+/// Join strings with ", " — the separator every spec list (generics,
+/// effects, …) renders with.
+fn join_comma(items: &List<String>) -> String {
+    let mut out = String::with_capacity(items.len() * 8);
+    for let mut i = 0; i < items.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&", ");
+        }
+        out.push_str(&items[i]);
     }
+    return out;
 }
 
 pub struct FnSpec {
@@ -346,6 +322,13 @@ pub struct FnSpec {
     params: List<ParamSpec>,
     return_type: Option<String>,
     is_pub: bool,
+    is_export: bool,
+    /// Generic type parameters, each rendered verbatim between the name
+    /// and the parameter list (e.g. `"V: Visitor"` → `fn walk<V: Visitor>(`).
+    generics: List<String>,
+    /// Effect names for the `with …` clause, rendered after the return
+    /// type (e.g. `["Stdout", "Stderr"]` → ` with Stdout, Stderr`).
+    effects: List<String>,
     receiver: Option<String>,
 }
 
@@ -356,12 +339,32 @@ impl FnSpec {
             params: [],
             return_type: null,
             is_pub: false,
+            is_export: false,
+            generics: [],
+            effects: [],
             receiver: null,
         };
     }
 
     pub fn set_pub(&mut self) -> &mut FnSpec with stores[self] {
         self.is_pub = true;
+        return self;
+    }
+
+    /// Mark the function `export` (component-model export). Mutually
+    /// exclusive with `pub`; `export` wins if both are set.
+    pub fn set_export(&mut self) -> &mut FnSpec with stores[self] {
+        self.is_export = true;
+        return self;
+    }
+
+    pub fn add_generic(&mut self, generic: &String) -> &mut FnSpec with stores[self] {
+        self.generics.push(*generic);
+        return self;
+    }
+
+    pub fn add_effect(&mut self, effect_name: &String) -> &mut FnSpec with stores[self] {
+        self.effects.push(*effect_name);
         return self;
     }
 
@@ -372,11 +375,6 @@ impl FnSpec {
 
     pub fn add_param(&mut self, name: &String, type_str: &String) -> &mut FnSpec with stores[self] {
         self.params.push(ParamSpec::new(name, type_str));
-        return self;
-    }
-
-    pub fn add_mut_param(&mut self, name: &String, type_str: &String) -> &mut FnSpec with stores[self] {
-        self.params.push(ParamSpec::new_mut(name, type_str));
         return self;
     }
 
@@ -399,10 +397,16 @@ impl FnSpec {
     /// Build the full signature string.
     pub fn signature(&self) -> String {
         let mut sig = String::with_capacity(64);
-        if self.is_pub {
+        if self.is_export {
+            sig.push_str(&"export ");
+        } else if self.is_pub {
             sig.push_str(&"pub ");
         }
-        sig.push_str(&`fn {self.name}(`);
+        sig.push_str(&`fn {self.name}`);
+        if self.generics.len() > 0 {
+            sig.push_str(&`<{join_comma(&self.generics)}>`);
+        }
+        sig.push_str(&"(");
         let mut first = true;
         if let Some(recv) = &self.receiver {
             sig.push_str(recv);
@@ -424,6 +428,9 @@ impl FnSpec {
         sig.push_str(&")");
         if let Some(ret) = &self.return_type {
             sig.push_str(&` -> {*ret}`);
+        }
+        if self.effects.len() > 0 {
+            sig.push_str(&` with {join_comma(&self.effects)}`);
         }
         return sig;
     }
@@ -455,11 +462,6 @@ impl GlobalSpec {
         return self;
     }
 
-    pub fn set_mut(&mut self) -> &mut GlobalSpec with stores[self] {
-        self.is_mut = true;
-        return self;
-    }
-
     pub fn set_trailing_comment(&mut self, comment: &String) -> &mut GlobalSpec with stores[self] {
         self.trailing_comment = Option::<String>::Some(*comment);
         return self;
@@ -474,57 +476,6 @@ impl GlobalSpec {
             "";
         };
         w.line(&`{vis}global {mutability}{self.name}: {self.type_str} = {self.initializer};{trailer}`);
-    }
-}
-
-pub struct TraitSpec {
-    name: String,
-    associated_types: List<String>,
-    methods: List<FnSpec>,
-    is_pub: bool,
-}
-
-impl TraitSpec {
-    pub fn new(name: &String) -> TraitSpec {
-        return TraitSpec {
-            name: *name,
-            associated_types: [],
-            methods: [],
-            is_pub: false,
-        };
-    }
-
-    pub fn set_pub(&mut self) -> &mut TraitSpec with stores[self] {
-        self.is_pub = true;
-        return self;
-    }
-
-    pub fn add_associated_type(&mut self, name: &String) -> &mut TraitSpec with stores[self] {
-        self.associated_types.push(*name);
-        return self;
-    }
-
-    pub fn add_method(&mut self, method: FnSpec) -> &mut TraitSpec with stores[self] {
-        self.methods.push(method);
-        return self;
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter) {
-        let prefix = if self.is_pub { "pub " } else { "" };
-        w.begin(&`{prefix}trait {self.name}`);
-        for let assoc of &self.associated_types {
-            w.line(&`type {*assoc};`);
-        }
-        if self.associated_types.len() > 0 && self.methods.len() > 0 {
-            w.blank();
-        }
-        for let mut i = 0; i < self.methods.len(); i += 1 {
-            if i > 0 {
-                w.blank();
-            }
-            w.line(&`{self.methods[i].signature()};`);
-        }
-        w.end();
     }
 }
 

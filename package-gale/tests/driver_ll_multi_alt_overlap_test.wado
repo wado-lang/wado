@@ -23,11 +23,10 @@ test "tree: X parses through a's second alt" {
     ");
 }
 
-// `a` must yield the trailing `Y` to the outer `b`. With the
-// multi-alt variant dispatcher fix (#3), the variant
-// `parse_a__follow_<id>_bt_<n>` is reachable and suppresses the
-// `Y?` tail; without the fix the dispatcher delegates to the
-// greedy `parse_a_bt_<n>` and swallows `Y`.
+// `a` must yield the trailing `Y` to the outer `b`. The runtime
+// caller-FOLLOW gate threads `b`'s first set into `a` as the
+// `follow` argument, so `a`'s tail-greedy `Y?` is suppressed
+// (`follow_yields` true) instead of swallowing the `Y`.
 test "tree: X Y yields Y to outer b" {
     assert_tree(&"X Y", &"
         (r (a X) (b Y))
@@ -36,7 +35,7 @@ test "tree: X Y yields Y to outer b" {
 
 // Recursive nesting through `a`. ANTLR4 first-alt-wins: `r`'s
 // `a b` alt is preferred when reachable, so `a` must yield the
-// trailing `Y` to `b`. The variant's per-alt mask flows through
+// trailing `Y` to `b`. The runtime `follow` argument flows through
 // the inner `a` call as well (both sit at tail-greedy positions
 // whose suffix-follow contains `Y`).
 test "tree: X X Y is parsed by alt 0 (a b)" {

@@ -4,11 +4,9 @@ use {
     StructSpec,
     VariantSpec,
     EnumSpec,
-    FlagsSpec,
     ParamSpec,
     FnSpec,
     GlobalSpec,
-    TraitSpec,
     ImplSpec,
 } from "./wadopoet.wado";
 
@@ -169,31 +167,6 @@ test "StructSpec with FieldSpec" {
 }
 
 
-test "FlagsSpec basic" {
-    let mut f = FlagsSpec::new("Perms");
-    f.set_pub();
-    f.add_member(&"Read");
-    f.add_member(&"Write");
-    f.add_member(&"Execute");
-
-    let mut w = CodeWriter::new();
-    f.emit(&mut w);
-    let expected = "pub flags Perms {\n    Read,\n    Write,\n    Execute,\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
-}
-
-test "FlagsSpec private" {
-    let mut f = FlagsSpec::new("Mode");
-    f.add_member(&"A");
-    f.add_member(&"B");
-
-    let mut w = CodeWriter::new();
-    f.emit(&mut w);
-    let expected = "flags Mode {\n    A,\n    B,\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
-}
-
-
 test "VariantSpec unit cases" {
     let mut v = VariantSpec::new("TokenKind");
     v.set_pub();
@@ -257,13 +230,6 @@ test "FnSpec with receiver" {
     assert f.signature() == "pub fn len(&self) -> i32";
 }
 
-test "FnSpec with mut param" {
-    let mut f = FnSpec::new("process");
-    f.add_mut_param(&"n", &"i32");
-
-    assert f.signature() == "fn process(mut n: i32)";
-}
-
 test "FnSpec with default-valued param" {
     let mut f = FnSpec::new("parse_expr");
     f.add_param(&"p", &"&mut Parser");
@@ -301,6 +267,40 @@ test "FnSpec signature string" {
     assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String", `got: {sig}`;
 }
 
+test "FnSpec export with effects" {
+    let mut f = FnSpec::new("run");
+    f.set_export();
+    f.add_effect(&"Stdout");
+    f.add_effect(&"Stderr");
+    f.add_effect(&"Environment");
+
+    let sig = f.signature();
+    assert sig == "export fn run() with Stdout, Stderr, Environment", `got: {sig}`;
+}
+
+test "FnSpec generic type parameter" {
+    let mut f = FnSpec::new("walk_stmt");
+    f.set_pub();
+    f.add_generic(&"V: Visitor");
+    f.add_param(&"v", &"&mut V");
+    f.add_param(&"node", &"&StmtNode");
+
+    let sig = f.signature();
+    assert sig == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)", `got: {sig}`;
+}
+
+test "FnSpec multiple generics" {
+    let mut f = FnSpec::new("zip");
+    f.add_generic(&"A");
+    f.add_generic(&"B");
+    f.add_param(&"a", &"A");
+    f.add_param(&"b", &"B");
+    f.set_return_type(&"[A, B]");
+
+    let sig = f.signature();
+    assert sig == "fn zip<A, B>(a: A, b: B) -> [A, B]", `got: {sig}`;
+}
+
 
 test "GlobalSpec basic" {
     let g = GlobalSpec::new("TK_EOF", "i32", "0");
@@ -310,14 +310,13 @@ test "GlobalSpec basic" {
     assert w.to_string() == "global TK_EOF: i32 = 0;\n";
 }
 
-test "GlobalSpec pub mut" {
+test "GlobalSpec pub" {
     let mut g = GlobalSpec::new("COUNTER", "i32", "0");
     g.set_pub();
-    g.set_mut();
 
     let mut w = CodeWriter::new();
     g.emit(&mut w);
-    assert w.to_string() == "pub global mut COUNTER: i32 = 0;\n";
+    assert w.to_string() == "pub global COUNTER: i32 = 0;\n";
 }
 
 // Integration: composing specs with CodeWriter
@@ -386,63 +385,6 @@ test "chaining builder methods" {
 }
 
 
-test "TraitSpec simple" {
-    let mut t = TraitSpec::new("Greet");
-    t.set_pub();
-    let mut m = FnSpec::new("greet");
-    m.set_receiver(&"&self");
-    m.set_return_type(&"String");
-    t.add_method(m);
-
-    let mut w = CodeWriter::new();
-    t.emit(&mut w);
-    let expected = "pub trait Greet {\n    fn greet(&self) -> String;\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
-}
-
-test "TraitSpec with associated type" {
-    let mut t = TraitSpec::new("Container");
-    t.add_associated_type(&"Item");
-    let mut m = FnSpec::new("get");
-    m.set_receiver(&"&self");
-    m.set_return_type(&"Self::Item");
-    t.add_method(m);
-
-    let mut w = CodeWriter::new();
-    t.emit(&mut w);
-    let expected = "trait Container {\n    type Item;\n\n    fn get(&self) -> Self::Item;\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
-}
-
-test "TraitSpec multiple methods" {
-    let mut t = TraitSpec::new("ReadWrite");
-    let mut m1 = FnSpec::new("read");
-    m1.set_receiver(&"&self");
-    m1.set_return_type(&"String");
-    t.add_method(m1);
-    let mut m2 = FnSpec::new("write");
-    m2.set_receiver(&"&mut self");
-    m2.add_param(&"data", &"&String");
-    t.add_method(m2);
-
-    let mut w = CodeWriter::new();
-    t.emit(&mut w);
-    let expected = "trait ReadWrite {\n    fn read(&self) -> String;\n\n    fn write(&mut self, data: &String);\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
-}
-
-test "TraitSpec with multiple associated types" {
-    let mut t = TraitSpec::new("Map");
-    t.add_associated_type(&"Key");
-    t.add_associated_type(&"Value");
-
-    let mut w = CodeWriter::new();
-    t.emit(&mut w);
-    let expected = "trait Map {\n    type Key;\n    type Value;\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
-}
-
-
 test "ImplSpec basic" {
     let mut w = CodeWriter::new();
     let i = ImplSpec::new("Point");
@@ -473,18 +415,8 @@ test "ImplSpec trait impl" {
     assert w.to_string() == expected, `got: {w.to_string()}`;
 }
 
-test "full trait + impl composition" {
+test "struct + impl trait composition" {
     let mut w = CodeWriter::new();
-
-    // trait
-    let mut t = TraitSpec::new("Summary");
-    t.set_pub();
-    let mut m = FnSpec::new("title");
-    m.set_receiver(&"&self");
-    m.set_return_type(&"String");
-    t.add_method(m);
-    t.emit(&mut w);
-    w.blank();
 
     // struct
     let mut s = StructSpec::new("Article");
@@ -504,6 +436,6 @@ test "full trait + impl composition" {
     w.end();
     w.end();
 
-    let expected = "pub trait Summary {\n    fn title(&self) -> String;\n}\n\npub struct Article {\n    pub name: String,\n}\n\nimpl Summary for Article {\n    fn title(&self) -> String {\n        return self.name;\n    }\n}\n";
+    let expected = "pub struct Article {\n    pub name: String,\n}\n\nimpl Summary for Article {\n    fn title(&self) -> String {\n        return self.name;\n    }\n}\n";
     assert w.to_string() == expected, `got: {w.to_string()}`;
 }

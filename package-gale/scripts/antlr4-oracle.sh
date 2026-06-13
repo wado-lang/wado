@@ -73,6 +73,54 @@ resolve_latest_version() {
     printf '%s' "$version"
 }
 
+# Verify a freshly downloaded ANTLR4 jar against the SHA-1 checksum
+# published on Maven Central for the same version. The jar binary is
+# fetched from antlr.org; the checksum comes from an independent host
+# (repo1.maven.org), so a corrupted or tampered download fails the
+# comparison. The version is resolved dynamically (see the note above),
+# so a single pinned hash is not viable — we fetch the publisher's own
+# digest instead. Best-effort: if the checksum cannot be fetched (e.g. a
+# transient Maven Central outage) or no SHA-1 tool is on PATH, warn and
+# accept the download rather than breaking the oracle entirely. Returns
+# non-zero only on a definite mismatch.
+verify_jar_checksum() {
+    local jar="$1" version="$2"
+    local sha_url="https://repo1.maven.org/maven2/org/antlr/antlr4/${version}/antlr4-${version}-complete.jar.sha1"
+
+    local sha_tool
+    if command -v sha1sum >/dev/null 2>&1; then
+        sha_tool="sha1sum"
+    elif command -v shasum >/dev/null 2>&1; then
+        sha_tool="shasum -a 1"
+    else
+        echo "oracle: no sha1 tool (sha1sum/shasum) on PATH; skipping checksum verification" >&2
+        return 0
+    fi
+
+    local expected=""
+    if command -v curl >/dev/null 2>&1; then
+        expected=$(curl -fsSL "$sha_url" 2>/dev/null) || expected=""
+    elif command -v wget >/dev/null 2>&1; then
+        expected=$(wget -q -O - "$sha_url" 2>/dev/null) || expected=""
+    fi
+    # Maven Central .sha1 files hold the bare hex digest; take the first
+    # whitespace-delimited field and lowercase it for a stable compare.
+    expected=$(printf '%s' "$expected" | awk '{print $1}' | tr 'A-Z' 'a-z')
+    if [ -z "$expected" ]; then
+        echo "oracle: could not fetch published SHA-1 for $version; skipping checksum verification" >&2
+        return 0
+    fi
+
+    local actual
+    actual=$($sha_tool "$jar" | awk '{print $1}' | tr 'A-Z' 'a-z')
+    if [ "$actual" != "$expected" ]; then
+        echo "oracle: SHA-1 mismatch for downloaded jar (expected $expected, got $actual)" >&2
+        return 1
+    fi
+    echo "oracle: verified SHA-1 $actual" >&2
+    return 0
+}
+
 ANTLR4_VERSION="${ANTLR4_VERSION:-}"
 if [ -z "$ANTLR4_VERSION" ]; then
     if ! ANTLR4_VERSION=$(resolve_latest_version); then
@@ -142,6 +190,10 @@ if [ ! -f "$JAR_PATH" ]; then
         echo "oracle: neither curl nor wget is available" >&2
         exit 1
     fi
+    if ! verify_jar_checksum "$JAR_PATH.tmp" "$ANTLR4_VERSION"; then
+        rm -f "$JAR_PATH.tmp"
+        exit 1
+    fi
     mv "$JAR_PATH.tmp" "$JAR_PATH"
 fi
 
@@ -200,7 +252,15 @@ cat "$WORK_DIR/out.txt"
 if [ $RC -ne 0 ]; then
     exit 1
 fi
-if [ -s "$WORK_DIR/err.txt" ]; then
+# ANTLR4's default ConsoleErrorListener reports lexer/parser recognizer
+# errors to stderr as `line <l>:<c> <message>` (mismatched input, no
+# viable alternative, token recognition error, extraneous/missing
+# input, …). Only those mean the input failed to parse. Other stderr
+# output — JVM warnings, ANTLR4 advisory notices — is benign and must
+# NOT be classified as a parse error, or the descriptor is wrongly
+# dropped from Stage B′. Gate exit 2 on the recognizer-error line shape
+# rather than "any stderr".
+if [ -s "$WORK_DIR/err.txt" ] && grep -Eq '^line [0-9]+:[0-9]+ ' "$WORK_DIR/err.txt"; then
     exit 2
 fi
 exit 0

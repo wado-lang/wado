@@ -74,6 +74,16 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
 
     let mut grammar = merge_grammars(grammars);
 
+    // The pure g4 parser leaves `source_files` empty (it parses a string,
+    // not a path), so stamp the real Kiln-provided paths here — otherwise
+    // the generated header's `sources = [...]` fabricates `<GrammarName>.g4`,
+    // a file that does not exist.
+    let mut source_files: List<String> = [req.primary.path];
+    for let supp of &req.inputs {
+        source_files.push(supp.path);
+    }
+    grammar.source_files = source_files;
+
     // Must run before `check_references`. See `ir.wado` for rationale.
     synthesize_implicit_tokens(&mut grammar);
 

@@ -10,7 +10,7 @@ use {
     NotElement,
     RepeatKind,
     LexerRule,
-    LexerAlt,
+    LexerAlternative,
     LexerElement,
     CharClass,
     CharRange,
@@ -427,7 +427,7 @@ WS : ' ' -> channel(TYPO) ;";
 test "lexer rule with named channel resolves to user channel id" {
     // ANTLR4 reserves channel 0 (DEFAULT) and 1 (HIDDEN); user channels
     // declared via `channels { }` start at id 2. The parser should assign
-    // sequential ids based on the declaration order in the preamble.
+    // sequential ids based on the declaration order in the prequel.
     let input = "lexer grammar Test;
 channels { COMMENTS, DOCS }
 COMMENT : '//' -> channel(COMMENTS) ;
@@ -1033,8 +1033,8 @@ expr : ID ;";
 
 test "mode declaration is rejected in parser grammar" {
     // ANTLR4 only allows `mode X;` in lexer grammars (combined or split lexer).
-    // Spec: vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g — mode rules
-    // appear only under lexerRule branches.
+    // Spec: vendor/antlr4/doc/lexer-rules.md (modes are a lexer-only
+    // construct); confirmed against the published ANTLR4 jar.
     let input = "parser grammar Test;
 mode FOO;
 expr : ID ;";
@@ -1046,7 +1046,8 @@ test "tilde applied to rule reference is rejected" {
     // ANTLR4 spec: `notSet : NOT setElement | NOT blockSet` where setElement is
     // TOKEN_REF / STRING_LITERAL (/ charSet / LEXER_CHAR_SET in lexer rules).
     // A rule reference is not a set element, so `~ruleref` must be rejected.
-    // Spec: vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g (notSet).
+    // Spec: vendor/antlr4/doc/parser-rules.md (sets); confirmed against
+    // the published ANTLR4 jar.
     let input = "grammar Test;
 a : ~b ;
 b : 'x' ;";
@@ -1627,8 +1628,8 @@ root : missing_rule ;";
 }
 
 test "bare parse does not run reference checks" {
-    // `parse` keeps the syntactic-only posture (ANTLRParser.g equivalent)
-    // so upstream consumers can still round-trip partial or minimal
+    // `parse` keeps the syntactic-only posture (no semantic reference
+    // checks) so upstream consumers can still round-trip partial or minimal
     // grammars that defer symbol resolution. Semantic checks run only
     // via `parse_checked` / `check_references`.
     let input = "grammar Test;

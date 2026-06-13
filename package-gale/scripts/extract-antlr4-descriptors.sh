@@ -95,7 +95,7 @@ else
             stripped_g4="$tmpdir/$name.g4"
             if ! cargo run --quiet --bin wado -- run \
                     --dir "$GRAMMARS_ROOT/$category" \
-                    -- "$SCRIPT_DIR/strip-grammar.wado" "$name.g4" \
+                    -- "$SCRIPT_DIR/strip_grammar.wado" "$name.g4" \
                     > "$stripped_g4" 2> "$tmpdir/strip.err"; then
                 echo "  $category/$name: strip-grammar failed" >&2
                 sed 's/^/    /' "$tmpdir/strip.err" >&2

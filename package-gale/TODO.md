@@ -117,7 +117,7 @@ Marked `[stage_a_todo]` (or `[stage_b_oracle_todo]`) in `status.toml`, each ship
 
 ## Stage B′ — JVM-oracle integration
 
-First full-corpus run has landed: 78 Stage B′ tests across `FullContextParsing`, `LeftRecursion`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, and `Sets`, with ATN-class divergences pinned under `[stage_b_oracle_todo]`. Infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md); `scripts/antlr4-oracle.sh`, `scripts/strip-grammar.wado`, `scripts/extract_antlr4_descriptors.wado --finalize-stage-b-oracle`, `scripts/extract-antlr4-descriptors.sh`; `[stage_b_oracle_skip]` / `[stage_b_oracle_todo]` in `status.toml`) is complete and Java is needed only at extract time, not in CI.
+First full-corpus run has landed: 78 Stage B′ tests across `FullContextParsing`, `LeftRecursion`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, and `Sets`, with ATN-class divergences pinned under `[stage_b_oracle_todo]`. Infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md); `scripts/antlr4-oracle.sh`, `scripts/strip_grammar.wado`, `scripts/extract_antlr4_descriptors.wado --finalize-stage-b-oracle`, `scripts/extract-antlr4-descriptors.sh`; `[stage_b_oracle_skip]` / `[stage_b_oracle_todo]` in `status.toml`) is complete and Java is needed only at extract time, not in CI.
 
 Remaining:
 
@@ -152,3 +152,49 @@ Translating Java/Rust/Python action bodies to Wado is the hard part. A reasonabl
 Runtime performance — the benchmark state, the live profile, the
 directions that would move the needle, and measured dead-ends (e.g.
 data-driven scan) — lives in [`perf.md`](./perf.md).
+
+## Code-health bugs (from the 2026-06-10 `package-gale/` audit)
+
+Correctness findings migrated from `code-health.md` when that file was
+narrowed to cleanup work. Line numbers are as of the audit commit and
+will drift. "✓ verified" meant re-confirmed by reading the cited code;
+the rest deserve a failing test first.
+
+### Soundness and compatibility divergence
+
+These are the highest-risk bugs: a static-prediction edge or a parse/scan
+asymmetry that can mis-parse valid input. Several need their own focused
+PR with full-corpus validation rather than a quick patch (the AGENTS.md
+"LL Prediction" notes the static path "will always have edges").
+
+- [ ] SLL prediction under-approximates and emits incomplete Dispatch trees (valid input rejected, since codegen emits Dispatch with no else-fallback):
+  - `sll_advance` collapses `+`/`*` repeats to "consumes exactly one token" (`a : X+ Y | X Z` mispredicts on `X X Y`). `src/prediction.wado:522-539`
+  - `try_expand_opaque` lacks the at-end-config handling its template `build_sll_node` has, dropping at-end alts from the returned Dispatch. `src/prediction.wado:753-901` vs `:712-745`
+- [ ] Scan/parse EOF asymmetry: parse-side `expect`/`match_set` match `TK_EOF` without advancing (matchedEOF), scan side emits `pos += 1` unconditionally — scan over-counts by 1 whenever EOF is the last matched element, which can flip a tournament tie. `src/parser_gen.wado:1311-1314`, `:1388`, `:626` vs `:312-316`, `:413-416`
+- [ ] Tournament/scan-gate call sites never forward the runtime `follow` argument (helpers run with `&EMPTY_FOLLOW`) while the corresponding parse calls forward it — violating the documented scan/parse lockstep invariant on FOLLOW-gated grammars. `src/parser_gen.wado:5856`, `:5905`, `:5913`, `:5447`, `:5455`
+- [ ] SimpleCst group scan lowering threads `outer_follow` while the parse-op path threads `empty_follow`, and the two comments contradict each other about which is sound. Decide once, fix the other side, pin with a fixture. `src/lower.wado:2783-2796` vs `:2820-2841`
+- [ ] A label on a Transparent group (`x=(ID)`) silently drops the binding: `rebind_group_shape`'s Transparent arm returns unchanged and the promised caller recursion does not exist; the inner field was also deduped against a throwaway scope. `src/lower.wado:3962-3972`, `:3638-3683`
+- [ ] `\P{...}` (negated Unicode property) is parsed as literal chars `P { L }` (only lowercase `p` is detected); unknown `\p{...}` properties expand to an empty set silently. At minimum warn. Full handling needs Unicode complement ranges (Gale's `\p` support is already a hand-rolled approximation). `src/g4/parser.wado:1517`, `:1546-1616`
+- [ ] GIR-level multi-alt dispatch has no wildcard-alt awareness (soundness invariant 4 is only applied on parser_gen's surface-IR paths); a wildcard alt gets an empty-token branch in a `Direct` dispatch. Also `alt_is_wildcard_led` does not unwrap labels, so `w=.` escapes the wildcard machinery entirely. `src/lower.wado:1450-1494`, `src/alt_grouping.wado:31-41`
+- [ ] Overlapping-but-unequal first-char ranges in the lexer dispatch shadow later rules: groups are keyed by exact guard string and emitted as `if/else if`, so a char in the intersection only tries the first range group; the wildcard fallback containing all range calls is unreachable for it. `src/lexer_gen.wado:1629-1666`, `:1702-1728`
+- [ ] Surrogate / astral handling in char ranges: `CharRange` endpoints are Wado `char` (Unicode scalars), so a surrogate code point (`[\uD800-\uDBFF]`, legal in ANTLR4 for matching UTF-16 code units) cannot be represented — the escape resolvers fall back to U+FFFD instead of trapping, but a surrogate _range_ collapses to a single replacement char. Full support needs a wider char-range representation (i32 code-point endpoints). `src/g4/parser.wado` `resolve_unicode_escape`, `src/ir.wado` `CharRange`.
+
+### Pipeline and tooling correctness
+
+- [ ] WASI helpers drop completion futures unchecked: `write_file_string` returns `Ok(())` on partial/failed writes; `read_file_to_string` cannot distinguish mid-stream errors from EOF (silently truncated grammars could be committed). `scripts/extract_antlr4_descriptors.wado:450-469`, `:419-448` — BLOCKED on a wado-compiler bug: consuming a `Future<Result<(), ErrorCode>>` (`done.read()`) ICEs the CLI-world compile (unit-payload result lifting at the CM boundary; "WIR pipeline generated invalid core Wasm module — values remaining on stack at end of block" in the consuming fn). Same family as the `Exit::exit(Result<(),()>)` ICE. The intended checks are in place as TODO(compiler) comments at both helpers and in `src/main.wado::read_all`; re-apply once the compiler is fixed.
+- [ ] `action_strip`'s `[...]` now ends at the first unescaped `]` (correct for char sets, the corpus case). This loses the depth tracking that handled a rule-argument action whose host type contains `[]` (`r[int[] arr]`): such an action ends early and its remainder leaks into the grammar text (`catch [...]` is already handled separately via `find_balanced_close_bracket`). No corpus grammar exercises this (all nested-`[` cases are char sets), but a context-aware stripper (distinguish set vs arg-action by lexer/parser position) would handle both. `src/g4/action_strip.wado:38-61`
+
+### Diagnostics and minor
+
+- [ ] `gen_error_fallback` puts internal constant names (`TK_IDENT`) in user-facing "expected" lists while the `expect` path uses `token_kind_name` — two error paths, two vocabularies. `src/parser_gen.wado:6290-6313`
+- [ ] Error-token text is a message, so diagnostics read `unexpected token "unterminated string"`. `src/g4/lexer.wado:110`, `src/g4/parser.wado:1107`
+- [ ] `ParseError.expected` is populated everywhere but rendered by nothing (the Display impl omits it). `src/runtime/lex.wado:166`, `:207-214`
+- [ ] Empty lookahead `sig` is guarded on the scan side but not the parse side, where `gen_lookahead_condition` would emit syntactically broken code (`if` / `&& ()`); either the guard is dead or the parse side is missing it. `src/parser_gen.wado:1679-1681` vs `:3178`, `:3240`
+- [ ] Diagnostic-to-rule association is by substring on a free-form label; `Diagnostic.rule` carries labels like `"SimpleCst group"` with no rule name, so the `(rule, message)` dedup can collapse diagnostics from different rules. Already tracked under "Structured diagnostic-to-rule identity". `src/gir.wado:106-109`, `src/dump.wado:505-517`
+- [ ] List-label leaf path double-bumps the inner name counter (lower bakes one bump, codegen applies two), and the Group arm lacks the collision rebind the leaf arm has — both in the dedup bug class `codegen_label_collision_test.wado` exists for. Also the non-greedy transparent first iteration dedups outer-scope bindings against a fresh counter table. `src/parser_gen.wado:3502-3530`, `:3480-3493`, `:3835-3838`
+- [ ] `gen_alt_scan_op_elements` treats the last scanned-prefix element as "trailing self-ref" even when the prefix is partial, short-circuiting the LR climb and under-scanning the tournament prefix. `src/parser_gen.wado:1253-1258`
+- [ ] Static `gen_scan_lr_suffix_dispatch` lacks the no-progress guard its ATN twin has; combined with the `continue` that skips emitting `scan_X_lr_N` for 1-element LR alts, a future `valid_lr_alts` change could reference an undefined function. `src/parser_gen.wado:825-885`, `:743` vs `:819-821`
+
+### Unchecked-argument quality nits (non-crash)
+
+- [ ] Malformed lexer command _arguments_ are still unchecked (the paren panics are fixed): `pushMode(42)` interns a mode literally named `42`, `-> ;` yields the odd "unknown lexer command ;". Validate the argument is an identifier. `src/g4/parser.wado:1232-1290`

@@ -101,7 +101,13 @@ fn gen_highlight_run(w: &mut CodeWriter) {
     w.line(&"use { args, print, eprintln, Stdout, Stderr, Environment } from \"core:cli\";");
     w.line(&"use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from \"wasi:filesystem\";");
     w.blank();
-    w.begin(&"export fn run() with Stdout, Stderr, Environment, Preopens");
+    let mut run_fn = FnSpec::new("run");
+    run_fn.set_export();
+    run_fn.add_effect(&"Stdout");
+    run_fn.add_effect(&"Stderr");
+    run_fn.add_effect(&"Environment");
+    run_fn.add_effect(&"Preopens");
+    run_fn.emit_begin(w);
     w.line(&"let arguments = args();");
     w.begin(&"if arguments.len() < 1");
     w.line(&"eprintln(\"Usage: <highlighter> <input-file>\");");
@@ -134,22 +140,19 @@ fn gen_highlight_run(w: &mut CodeWriter) {
 fn classify_lexer_rule(rule: &LexerRule) -> String {
     let name = rule.name;
     if rule.skip {
-        if contains_upper(&name, &"WS") || contains_upper(&name, &"WHITESPACE") || contains_upper(&name, &"NEWLINE") {
+        if contains_substr(&name, &"WS") || contains_substr(&name, &"WHITESPACE") || contains_substr(&name, &"NEWLINE") {
             return "";
         }
     }
-    if contains_upper(&name, &"COMMENT")
-        || contains_upper(&name, &"LINE_COMMENT")
-        || contains_upper(&name, &"BLOCK_COMMENT") {
+    // `contains_substr` is a substring test, so `COMMENT` already covers
+    // `LINE_COMMENT` / `BLOCK_COMMENT` / `DOC_COMMENT`.
+    if contains_substr(&name, &"COMMENT") {
         return "comment";
     }
-    if contains_upper(&name, &"DOC_COMMENT") {
-        return "comment";
-    }
-    if name == "STRING" || name == "STRING_LITERAL" || name == "QUOTED_STRING" || contains_upper(&name, &"STRING") {
+    if name == "STRING" || name == "STRING_LITERAL" || name == "QUOTED_STRING" || contains_substr(&name, &"STRING") {
         return "string";
     }
-    if name == "CHAR" || name == "CHAR_LITERAL" || contains_upper(&name, &"CHAR_LIT") {
+    if name == "CHAR" || name == "CHAR_LITERAL" || contains_substr(&name, &"CHAR_LIT") {
         return "string";
     }
     if name == "NUMBER"
@@ -159,8 +162,8 @@ fn classify_lexer_rule(rule: &LexerRule) -> String {
         || name == "DECIMAL"
         || name == "INTEGER_LITERAL"
         || name == "FLOAT_LITERAL"
-        || contains_upper(&name, &"NUMBER")
-        || contains_upper(&name, &"NUMERIC") {
+        || contains_substr(&name, &"NUMBER")
+        || contains_substr(&name, &"NUMERIC") {
         return "number";
     }
     if name == "IDENTIFIER" || name == "ID" || name == "NAME" || name == "IDENT" {
@@ -171,7 +174,7 @@ fn classify_lexer_rule(rule: &LexerRule) -> String {
         return "keyword";
     }
     // Lexer rules containing KEYWORD are keyword tokens
-    if contains_upper(&name, &"KEYWORD") {
+    if contains_substr(&name, &"KEYWORD") {
         return "keyword";
     }
     if rule.skip {
@@ -250,7 +253,7 @@ fn starts_with(haystack: &String, prefix: &String) -> bool {
     return true;
 }
 
-fn contains_upper(haystack: &String, needle: &String) -> bool {
+fn contains_substr(haystack: &String, needle: &String) -> bool {
     let h = haystack.chars().collect();
     let n = needle.chars().collect();
     if n.len() > h.len() {

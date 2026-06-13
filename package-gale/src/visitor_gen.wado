@@ -15,7 +15,7 @@ use {
     not_element_field_name,
     all_alts_are_single_token,
 } from "./gen_util.wado";
-use { CodeWriter } from "./wadopoet.wado";
+use { CodeWriter, FnSpec } from "./wadopoet.wado";
 
 /// Generate Visitor walk functions and to_tree for a grammar.
 pub fn gen_visitor(w: &mut CodeWriter, grammar: &Grammar) {
@@ -27,7 +27,12 @@ pub fn gen_visitor(w: &mut CodeWriter, grammar: &Grammar) {
 
 fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule, rule_name: &String, rule_id: i32) {
     let type_name = rule.type_name;
-    w.begin(&`pub fn walk_{rule.name}<V: Visitor>(v: &mut V, node: &{type_name})`);
+    let mut f = FnSpec::new(&`walk_{rule.name}`);
+    f.set_pub();
+    f.add_generic(&"V: Visitor");
+    f.add_param(&"v", &"&mut V");
+    f.add_param(&"node", &`&{type_name}`);
+    f.emit_begin(w);
 
     let mut group_counter: i32 = 0;
     if rule.alternatives.len() > 1 && all_alts_are_single_token(&rule.alternatives) {
@@ -190,7 +195,11 @@ fn gen_to_tree_fn(w: &mut CodeWriter, grammar: &Grammar) {
     let root_rule = &grammar.parser_rules[0];
     let root_type = root_rule.type_name;
 
-    w.begin(&`pub fn to_tree(node: &{root_type}) -> CstNode`);
+    let mut f = FnSpec::new("to_tree");
+    f.set_pub();
+    f.add_param(&"node", &`&{root_type}`);
+    f.set_return_type(&"CstNode");
+    f.emit_begin(w);
     w.line(&"let mut recorder = TreeRecorder::new();");
     w.line(&`walk_{root_rule.name}(&mut recorder, node);`);
     w.line(&"return recorder.build();");

@@ -59,9 +59,8 @@ impl HighlightVisitor {
                     break;
                 }
             }
-            // Skip overrides whose rule_name doesn't match any known rule —
-            // they can never fire (no rule_id on the stack is ever < 0) and
-            // would otherwise waste a comparison on every classify() call.
+            // Skip overrides whose rule_name matches no rule: they can never
+            // fire and would waste a comparison on every classify() call.
             if id < 0 {
                 continue;
             }
@@ -118,22 +117,6 @@ impl Visitor for HighlightVisitor {
         let cap = self.classify(token.kind);
         if !cap.is_empty() {
             self.captures.push(HighlightCapture { capture: cap, start: token.span.start, end: token.span.end });
-        }
-    }
-}
-
-fn escape_html(out: &mut String, text: &String) {
-    for let c of text.chars() {
-        if c == '&' {
-            out.push_str(&"&amp;");
-        } else if c == '<' {
-            out.push_str(&"&lt;");
-        } else if c == '>' {
-            out.push_str(&"&gt;");
-        } else if c == '"' {
-            out.push_str(&"&quot;");
-        } else {
-            out.push(c);
         }
     }
 }

@@ -104,7 +104,7 @@ sees, not the raw surface IR. ATN-class decisions where static
 prediction cannot disambiguate surface as `Ambiguous([alt N, alt M]) —
 <reason>` under the relevant rule's `prediction:` section, where
 `<reason>` names _why_ the static path halted (`opaque rule-ref
-prefix`, `at-end vs branch conflict`, `lookahead exhausted (k=5)`,
+prefix`, `at-end vs branch conflict`, `branch-depth limit (5)`,
 `config-set explosion`, `multiple alts end together`) — see
 `AmbiguityReason` in `prediction.wado`. Left-recursive rules also print
 a `loop-entry:` section (per-alt `conflict-min` precedence plus the
@@ -394,8 +394,11 @@ Implementation references:
   `emit_caller_follow_gate` (parse side; the scan side emits the same
   `follow_yields` gate inline), `follow_arg_expr`, `gen_follow_mask_globals`,
   the optional-gate hook in `gen_op_repeat_optional_{leaf,rulecall}`.
-- `package-gale/src/follow_env.wado` — pure analysis (`FollowEnv`'s
-  `tail_greedy` snapshot and the call-graph `rule_follow` fixed-point).
+- `package-gale/src/follow_env.wado` — **parked scaffolding, not wired
+  into the pipeline.** A complete, tested static analysis (`FollowEnv`'s
+  `tail_greedy` snapshot and the call-graph `rule_follow` fixed-point)
+  kept as a reference for a future static call-graph-FOLLOW pass; the
+  live repair is the runtime `gate_caller_follow` gate above.
 - `package-gale/src/gir.wado` — `FollowArg`, `RuleCallOp.follow_arg`,
   `RepeatOp.gate_caller_follow` (+ `ScanRuleCallElem`/`ScanRepeatElem`
   mirrors).

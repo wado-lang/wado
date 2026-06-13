@@ -8,7 +8,7 @@
 // semantics. Tracked in package-gale/TODO.md "ATN-class grammars"
 // and status.toml as `[stage_a_todo] ParserExec/IfIfElseNonGreedyBinding1`.
 
-grammar OptionalNonGreedy;
+grammar LlOptionalNonGreedy;
 
 start : statement+ ;
 statement : 'x' | ifStatement;

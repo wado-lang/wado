@@ -2,11 +2,14 @@
 /// per-element name caches at construction time) and the codegen layer.
 /// This module deliberately has no IR dependencies — `ir.wado` imports it.
 ///
-/// Length-first dispatch: most non-reserved identifiers are either too
-/// short or too long to match any reserved word, so the outer length
-/// switch short-circuits without any string comparison. The inner
-/// `match *name` for each length only walks the (much smaller) set of
-/// reserved words sharing that length.
+/// Length-first dispatch: the outer switch on `name.len()` short-circuits
+/// most identifiers without any string comparison.
+///
+/// Inclusion policy: a deliberate **superset** of the Wado lexer keyword set
+/// (`wado-compiler/src/syntax.rs`), plus builtin type names and intrinsics
+/// (`panic` / `unreachable`), so a grammar rule/token cannot shadow them in
+/// the generated module. Over-inclusion is harmless (a spurious `_`);
+/// under-inclusion emits code that fails to compile — when in doubt, escape.
 fn is_wado_reserved(name: &String) -> bool {
     return match name.len() {
         2 => match *name {

@@ -20,7 +20,7 @@
 // suffixes. Then `intern_follow_variant` for `a` should see {Y, …}
 // transitively.
 
-grammar LLCtxFollow;
+grammar LlCtxFollow;
 
 r : (wrapper b | wrapper) EOF ;
 

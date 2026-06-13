@@ -11,7 +11,7 @@
 //
 // License: BSD 3-Clause (vendor/antlr4/LICENSE.txt) — derived test grammar.
 
-grammar LLWildcard;
+grammar LlWildcardAlt;
 
 a : (assign | .)+ EOF ;
 assign : ID '=' INT ';' ;

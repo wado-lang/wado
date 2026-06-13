@@ -39,6 +39,11 @@ use { to_snake_case } from "../src/ident.wado";
 
 // ===== Constants =====
 
+/// Bytes per `Stream<u8>::read` when slurping a descriptor / grammar file.
+global FILE_READ_CHUNK: i32 = 8192;
+/// Directory entries per `Stream<DirectoryEntry>::read` when listing a dir.
+global DIR_READ_CHUNK: i32 = 64;
+
 fn descriptors_root() -> String {
     return "vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/runtime/descriptors";
 }
@@ -400,13 +405,6 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     return TriageMaps { category, stage_a, stage_b, stage_b_oracle };
 }
 
-/// Per-category convenience wrapper retained so the test blocks at the
-/// bottom of this file can keep using a single map without destructuring
-/// `TriageMaps`.
-fn load_triage_map(content: &Option<String>) -> TriageMap {
-    return load_triage_maps(content).category;
-}
-
 fn unquote(s: &String) -> String {
     if s.len() >= 2 && s.starts_with("\"") && s.ends_with("\"") {
         return s.substr_bytes(1, s.len() - 1);
@@ -431,7 +429,7 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
     let [stream, done] = opened.read_via_stream(0 as Filesize);
     let mut bytes: List<u8> = [];
     loop {
-        let chunk = stream.read(8192);
+        let chunk = stream.read(FILE_READ_CHUNK);
         if chunk.len() == 0 {
             break;
         }
@@ -513,7 +511,7 @@ fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> List<String> {
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     loop {
-        let chunk = stream.read(64);
+        let chunk = stream.read(DIR_READ_CHUNK);
         if chunk.len() == 0 {
             break;
         }
@@ -533,7 +531,7 @@ fn list_subdirs(dir: &Descriptor) -> List<String> {
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     loop {
-        let chunk = stream.read(64);
+        let chunk = stream.read(DIR_READ_CHUNK);
         if chunk.len() == 0 {
             break;
         }
@@ -551,23 +549,6 @@ fn list_subdirs(dir: &Descriptor) -> List<String> {
 
 // ===== Test file emission =====
 
-fn category_to_snake(name: &String) -> String {
-    // CamelCase → snake_case
-    let mut out = String::with_capacity(name.len() + 4);
-    let mut first = true;
-    for let c of name.chars() {
-        if c.is_ascii_uppercase() {
-            if !first {
-                out.push('_');
-            }
-            out.push(c.to_ascii_lowercase());
-        } else {
-            out.push(c);
-        }
-        first = false;
-    }
-    return out;
-}
 
 /// Escape a string so it can sit between Wado `"..."` quotes.
 fn escape_for_wado_str(s: &String) -> String {
@@ -618,8 +599,8 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
                 continue;
             },
             Todo(reason) => {
-                w.line(&"#[TODO]");
                 w.line(&`// triage: {escape_for_wado_str(reason)}`);
+                w.line(&"#[TODO]");
             },
             Pass => {
             },
@@ -687,8 +668,8 @@ fn emit_stage_b_test_file(
     w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_b: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -743,8 +724,8 @@ fn emit_stage_sub_b_test_file(
     w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_b_sub: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -798,8 +779,8 @@ fn emit_stage_a_parse_test_file(
     w.line(&"    };");
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_a_parse: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -943,8 +924,8 @@ fn emit_stage_a_err_test_file(
     }
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_a_err: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -1006,8 +987,8 @@ fn emit_stage_a_tokens_test_file(
     w.line(&`use \{ TK_EOF \} from "../../grammars/{*category}/{*name}.g4";`);
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_a_tokens: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -1032,7 +1013,7 @@ struct CliArgs {
     finalize_stage_b_oracle: bool,
 }
 
-fn parse_cli_args(arguments: List<String>) -> CliArgs {
+fn parse_cli_args(arguments: List<String>) -> Result<CliArgs, String> {
     let mut want_all = false;
     let mut categories: List<String> = [];
     let mut finalize_stage_b_oracle = false;
@@ -1045,20 +1026,34 @@ fn parse_cli_args(arguments: List<String>) -> CliArgs {
                 finalize_stage_b_oracle = true;
             },
             _ => {
-                if !a.starts_with("-") {
-                    categories.push(a);
+                // A leading `-` marks an option, not a category. Reject
+                // unknown flags loudly: silently dropping a typo'd flag
+                // (e.g. `--finalize-stage-b-oracl`) would otherwise run a
+                // full extract with the intended behaviour disabled.
+                if a.starts_with("-") {
+                    return Result::<CliArgs, String>::Err(`extract: unknown flag '{a}'`);
                 }
+                categories.push(a);
             },
         }
     }
     if !want_all && categories.is_empty() {
         categories = default_categories();
     }
-    return CliArgs { want_all, categories, finalize_stage_b_oracle };
+    return Result::<CliArgs, String>::Ok(CliArgs { want_all, categories, finalize_stage_b_oracle });
 }
 
 export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
-    let cli = parse_cli_args(args());
+    let cli = match parse_cli_args(args()) {
+        Ok(c) => c,
+        Err(msg) => {
+            eprintln(msg);
+            eprintln(
+                "extract: usage: extract_antlr4_descriptors.wado [all | <Category> ...] [--finalize-stage-b-oracle]",
+            );
+            exit(2);
+        },
+    };
     let want_all = cli.want_all;
     let mut categories = cli.categories;
 
@@ -1615,7 +1610,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         // file in place: deleting it would silently hide the failure
         // behind an `empty:` line, and rewriting it as a header-only stub
         // would erase the last good run's coverage.
-        let test_filename = `{category_to_snake(category)}_test.wado`;
+        let test_filename = `{to_snake_case(category)}_test.wado`;
         if entries.is_empty() {
             if category_errors > 0 {
                 eprintln(
@@ -1673,32 +1668,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
 
 // ===== Stage B: descriptor [output] normaliser =====
 
-/// Decide whether a descriptor `[output]` block can be checked as a Stage B
-/// parse-tree shape. The descriptor format is documented in
-/// `vendor/antlr4/runtime-testsuite/test/.../RuntimeTestDescriptorParser.java`;
-/// in practice `[output]` carries one of:
-///
-/// - **a parse tree** in `to_string_tree()` form, e.g. `(s (declarator a))`.
-///   These are emitted by descriptors whose grammar prequel ends with
-///   `@after { <ToStringTree("$ctx"):writeln()> }`. Stage B can compare
-///   against `tree.to_string_tree()`.
-/// - **a host-language artefact** — lexer token-type names (one per
-///   line), `Lexer.next()` token dumps (`[@0,0:-1='<EOF>',<-1>,1:0]`),
-///   ATN decision traces (`Decision 0:\n s0-ID->:s1`), or arbitrary
-///   action-block prints. None of these reflect the parse tree, so they
-///   are not Stage B testable and must be triaged as `[stage_b_skip]`.
-///
-/// Returns `Some(tree)` for the parse-tree case, with ANTLR4's literal
-/// ` <EOF>` token stripped — Gale's `to_string_tree()` omits empty-text
-/// tokens (see `package-gale/CLAUDE.md` "Driver Tests"). Returns `None`
-/// for everything else.
-///
-/// The detector is intentionally conservative: any leftover `<…>` token
-/// in the output (after `<EOF>` stripping) is treated as a testsuite
-/// StringTemplate substitution (e.g. `<AltNum()>`) rather than a real
-/// parse-tree node, and the descriptor is rejected. Likewise, `${…}`
-/// always denotes an action-block reference. False rejections are
-/// triaged as `[stage_b_todo]` once the underlying capability lands.
+/// Decide whether a descriptor is eligible for Stage B′ oracle handling.
 /// Lexer-only descriptors have no parse tree to compare; error-bearing
 /// inputs produce trees with `<missing>` / `<error>` placeholders that
 /// can't be pinned; ANTLR4's TestRig (unlike Gale) requires an explicit
@@ -1936,8 +1906,8 @@ fn emit_stage_b_oracle_test_file(
     w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
     w.blank();
     if let Todo(reason) = triage {
-        w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
     }
     w.begin(&`test "stage_b_oracle: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
@@ -1950,6 +1920,32 @@ fn emit_stage_b_oracle_test_file(
     return w.to_string();
 }
 
+/// Decide whether a descriptor `[output]` block can be checked as a Stage B
+/// parse-tree shape. The descriptor format is documented in
+/// `vendor/antlr4/runtime-testsuite/test/.../RuntimeTestDescriptorParser.java`;
+/// in practice `[output]` carries one of:
+///
+/// - **a parse tree** in `to_string_tree()` form, e.g. `(s (declarator a))`.
+///   These are emitted by descriptors whose grammar prequel ends with
+///   `@after { <ToStringTree("$ctx"):writeln()> }`. Stage B can compare
+///   against `tree.to_string_tree()`.
+/// - **a host-language artefact** — lexer token-type names (one per
+///   line), `Lexer.next()` token dumps (`[@0,0:-1='<EOF>',<-1>,1:0]`),
+///   ATN decision traces (`Decision 0:\n s0-ID->:s1`), or arbitrary
+///   action-block prints. None of these reflect the parse tree, so they
+///   are not Stage B testable and must be triaged as `[stage_b_skip]`.
+///
+/// Returns `Some(tree)` for the parse-tree case, with ANTLR4's literal
+/// ` <EOF>` token stripped — Gale's `to_string_tree()` omits empty-text
+/// tokens (see `package-gale/CLAUDE.md` "Driver Tests"). Returns `None`
+/// for everything else.
+///
+/// The detector is intentionally conservative: any leftover `<…>` token
+/// in the output (after `<EOF>` stripping) is treated as a testsuite
+/// StringTemplate substitution (e.g. `<AltNum()>`) rather than a real
+/// parse-tree node, and the descriptor is rejected. Likewise, `${…}`
+/// always denotes an action-block reference. False rejections are
+/// triaged as `[stage_b_todo]` once the underlying capability lands.
 fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
     let s = raw.trim();
     if s.is_empty() {
@@ -2412,4 +2408,37 @@ test "strip_eof_marker: does not strip ' <EOF>' that is not at the end" {
     // rather than the closing ')') stays untouched.
     let r = strip_eof_marker(&"(start <EOF> x)");
     assert r == "(start <EOF> x)", `got '{r}'`;
+}
+
+test "parse_cli_args: unknown -- flag is rejected" {
+    // A typo'd flag must not silently run a default extract: it should
+    // be reported as an error so the caller (`run`) can exit non-zero.
+    let r = parse_cli_args(["--finalize-stage-b-oracl"]);
+    assert r matches { Err(_) }, `expected Err for typo'd flag`;
+    let r2 = parse_cli_args(["-x"]);
+    assert r2 matches { Err(_) }, `expected Err for short unknown flag`;
+}
+
+test "parse_cli_args: known flags parse without error" {
+    let all = parse_cli_args(["all"]).unwrap();
+    assert all.want_all == true;
+    assert all.finalize_stage_b_oracle == false;
+
+    let fin = parse_cli_args(["--finalize-stage-b-oracle"]).unwrap();
+    assert fin.finalize_stage_b_oracle == true;
+    assert fin.want_all == false;
+}
+
+test "parse_cli_args: positional categories are collected" {
+    let r = parse_cli_args(["LexerExec", "ParserExec"]).unwrap();
+    assert r.want_all == false;
+    assert r.categories.len() == 2;
+    assert r.categories[0] == "LexerExec";
+    assert r.categories[1] == "ParserExec";
+}
+
+test "parse_cli_args: empty args fall back to default categories" {
+    let r = parse_cli_args([]).unwrap();
+    assert r.want_all == false;
+    assert !r.categories.is_empty();
 }

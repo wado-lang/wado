@@ -21,7 +21,7 @@
 //     ANTLR4 LL → (r (a N X Y) (c X Y Z))   — `a` stops after 1 iter
 //     Gale v1   → parse error                — `a` eats 2 iters → `c` starved
 
-grammar LLMultiTokenTail;
+grammar LlMultiTokenTail;
 
 r : a c EOF ;
 a : N (X Y)+ ;

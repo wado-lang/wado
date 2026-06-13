@@ -23,7 +23,7 @@
 //   - a 2-token lookahead variant that distinguishes `Y EOF` (alt 0
 //     wants `b?` to fire) from `Y` followed by something else.
 
-grammar LLNullableSuffix;
+grammar LlNullableSuffix;
 
 r : (a b? | a) EOF ;
 a : X Y? ;

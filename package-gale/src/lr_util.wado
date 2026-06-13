@@ -74,17 +74,17 @@ pub fn unwrap_label(elem: &Element) -> &Element with stores[elem] {
 /// (in which case `parse_<rule>` has no `min_prec` parameter and the
 /// override would not be valid).
 ///
-/// Formula: count the LR alts at positions strictly greater than `alt_idx`
+/// Formula: count the LR alts at positions strictly greater than `alt_index`
 /// in `rule.alternatives`. Their `own_prec` values are 1..N (N = the count),
 /// so setting `min_prec = N + 1` rejects all of them while still admitting
 /// LR alts that come before this prefix.
-pub fn compute_prefix_self_ref_min_prec(rule: &ParserRule, alt_idx: i32) -> i32 {
+pub fn compute_prefix_self_ref_min_prec(rule: &ParserRule, alt_index: i32) -> i32 {
     let alts = &rule.alternatives;
     let rule_name = &rule.name;
-    if alt_idx < 0 || alt_idx >= alts.len() {
+    if alt_index < 0 || alt_index >= alts.len() {
         return 0;
     }
-    let alt = &alts[alt_idx];
+    let alt = &alts[alt_index];
     if !is_prefix_alt(alt, rule_name) {
         return 0;
     }
@@ -93,7 +93,7 @@ pub fn compute_prefix_self_ref_min_prec(rule: &ParserRule, alt_idx: i32) -> i32 
     for let mut i = 0; i < alts.len(); i += 1 {
         if is_left_recursive(&alts[i], rule_name) {
             has_any_lr = true;
-            if i > alt_idx {
+            if i > alt_index {
                 lr_after += 1;
             }
         }

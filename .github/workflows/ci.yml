@@ -50,8 +50,12 @@ jobs:
           if [ -z "$files" ]; then
             # No detectable diff — be safe and run everything.
             echo "code=true" >> "$GITHUB_OUTPUT"
-          elif printf '%s\n' "$files" | grep -qvE '\.md$'; then
-            # At least one non-Markdown file changed.
+          elif grep -qvE '\.md$' <<< "$files"; then
+            # At least one non-Markdown file changed. Feed grep via a
+            # here-string, not `printf | grep -q`: under `pipefail`, `grep -q`
+            # exits on the first match and the producer dies with SIGPIPE,
+            # which pipefail then reports as a pipeline failure — so a large
+            # diff would be misclassified as docs-only and skip every test job.
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "Docs-only (*.md) change: skipping test jobs."
