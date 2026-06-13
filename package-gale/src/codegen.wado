@@ -54,6 +54,12 @@ pub struct GeneratedOutput {
     pub diagnostics: List<Diagnostic>,
 }
 
+/// Output-buffer pre-sizing heuristic (see `generate`): a base allocation
+/// plus a per-rule estimate, tuned so a large grammar's generated source
+/// fits within one `String::grow` doubling.
+global GEN_BASE_CAPACITY: i32 = 4096;
+global GEN_PER_RULE_CAPACITY: i32 = 4096;
+
 pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {
     // Fill in `snake_name` / `field_name` caches on every name-bearing IR
     // node before any codegen pass touches the grammar. Production IR built
@@ -75,7 +81,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // trigger `String::grow` doubling events. Empirical Rust*.g4 output
     // is ~1.3 MB across 197 parser + 130 lexer rules; the 4 KB +
     // 4 KB/rule heuristic matches that within one doubling.
-    let estimated_size = 4096 + 4096 * (grammar.parser_rules.len() + grammar.lexer_rules.len());
+    let estimated_size = GEN_BASE_CAPACITY + GEN_PER_RULE_CAPACITY * (grammar.parser_rules.len() + grammar.lexer_rules.len(
+    ));
     let mut w = CodeWriter::with_capacity(estimated_size);
     // Lower up-front so CST emission can consume `AltBody.fields` /
     // `GroupShape` directly. Sharing the GenContext primes the

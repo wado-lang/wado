@@ -39,6 +39,11 @@ use { to_snake_case } from "../src/ident.wado";
 
 // ===== Constants =====
 
+/// Bytes per `Stream<u8>::read` when slurping a descriptor / grammar file.
+global FILE_READ_CHUNK: i32 = 8192;
+/// Directory entries per `Stream<DirectoryEntry>::read` when listing a dir.
+global DIR_READ_CHUNK: i32 = 64;
+
 fn descriptors_root() -> String {
     return "vendor/antlr4/runtime-testsuite/resources/org/antlr/v4/test/runtime/descriptors";
 }
@@ -424,7 +429,7 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
     let [stream, done] = opened.read_via_stream(0 as Filesize);
     let mut bytes: List<u8> = [];
     loop {
-        let chunk = stream.read(8192);
+        let chunk = stream.read(FILE_READ_CHUNK);
         if chunk.len() == 0 {
             break;
         }
@@ -506,7 +511,7 @@ fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> List<String> {
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     loop {
-        let chunk = stream.read(64);
+        let chunk = stream.read(DIR_READ_CHUNK);
         if chunk.len() == 0 {
             break;
         }
@@ -526,7 +531,7 @@ fn list_subdirs(dir: &Descriptor) -> List<String> {
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     loop {
-        let chunk = stream.read(64);
+        let chunk = stream.read(DIR_READ_CHUNK);
         if chunk.len() == 0 {
             break;
         }

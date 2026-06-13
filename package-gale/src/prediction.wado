@@ -227,20 +227,9 @@ struct SllConfig {
     return_stack: List<SllReturn>,
 }
 
-fn sll_config_clone(c: &SllConfig) -> SllConfig {
-    return SllConfig {
-        alt_index: c.alt_index,
-        elements: c.elements,
-        pos: c.pos,
-        return_stack: c.return_stack,
-    };
-}
-
 fn push_return(stack: &List<SllReturn>, elements: List<Element>, pos: i32) -> List<SllReturn> {
-    let mut new_stack: List<SllReturn> = [];
-    for let s of stack {
-        new_stack.push(*s);
-    }
+    // Value semantics deep-copies the list; just append the new frame.
+    let mut new_stack = *stack;
     new_stack.push(SllReturn { elements, pos });
     return new_stack;
 }
@@ -589,7 +578,7 @@ fn sll_dedup_by_alt(configs: &List<SllConfig>) -> List<SllConfig> {
     for let c of configs {
         if !array_contains_i32(&seen_alts, c.alt_index) {
             seen_alts.push(c.alt_index);
-            result.push(sll_config_clone(c));
+            result.push(*c);
         }
     }
     return result;
@@ -832,7 +821,7 @@ fn try_expand_opaque(
     // so their FIRST sets are all at the same lookahead level (depth).
     let mut all_configs: List<SllConfig> = [];
     for let c of non_opaque_configs {
-        all_configs.push(sll_config_clone(c));
+        all_configs.push(*c);
     }
     for let ec of expanded_configs {
         all_configs.push(ec);

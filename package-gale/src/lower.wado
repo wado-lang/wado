@@ -582,7 +582,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
         header,
         alts,
         scan_alts,
-        dispatch: clone_dispatch(&dispatch),
+        dispatch: dispatch,
         scan_dispatch: dispatch,
     };
 }
@@ -1119,7 +1119,7 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
         header,
         alts,
         scan_alts,
-        dispatch: clone_dispatch(&dispatch),
+        dispatch: dispatch,
         scan_dispatch: dispatch,
     };
 }
@@ -1456,13 +1456,6 @@ fn build_direct_dispatch(first_sets: &List<List<String>>) -> MultiAltDispatch {
         });
     }
     return MultiAltDispatch::Direct(DirectDispatch { branches });
-}
-
-fn clone_dispatch(d: &MultiAltDispatch) -> MultiAltDispatch {
-    return match d {
-        Direct(dd) => MultiAltDispatch::Direct(DirectDispatch { branches: dd.branches }),
-        Tournament(td) => MultiAltDispatch::Tournament(TournamentDispatch { alts: td.alts }),
-    };
 }
 
 /// Choose a dispatch for a set of alternatives. When the per-alt
@@ -2744,7 +2737,7 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         alts: bodies,
         scan_alts: scan_bodies,
         dispatch: dispatch,
-        scan_dispatch: clone_dispatch(&dispatch),
+        scan_dispatch: dispatch,
     });
 }
 
@@ -2837,7 +2830,7 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         }),
         alts: bodies,
         scan_alts: scan_bodies,
-        dispatch: clone_dispatch(&dispatch),
+        dispatch: dispatch,
         scan_dispatch: dispatch,
     });
 }
@@ -3022,7 +3015,7 @@ fn lower_general_group(
         }),
         alts: bodies,
         scan_alts: scan_bodies,
-        dispatch: clone_dispatch(&dispatch),
+        dispatch: dispatch,
         scan_dispatch: dispatch,
     });
 }
