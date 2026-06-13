@@ -5,8 +5,9 @@
 Some standard-library capabilities are dominated not by code but by large,
 statically-bakeable data: Unicode/CLDR tables (ICU), time-zone databases,
 i18n message catalogs, font glyph sets. Baking all of it into every program is
-untenable — see the measured ICU spike under `wado-bundled-icu/`, where the full
-library is ~3.7 MB and a single feature (segmentation) is ~4 MB of data alone.
+untenable — in the measured ICU spike under `wado-bundled-icu/`, the all-features
+bundle is ~3.7 MB, dominated by segmentation (~2.35 MB) and collation (~1.1 MB)
+data.
 
 A companion findings document, [research: splitting large libraries](./research-library-splitting.md), establishes the levers and the
 hard constraints (separate component memories; only bytes cross the boundary;
@@ -126,21 +127,17 @@ provider is invoked once per (feature, program):
    _mergeable_: list options (e.g. `locales`) union; scalar options must agree
    (a conflict is a diagnostic).
 3. If the feature is reachable, invoke the provider with
-   `{ module, symbols, options, datasets }`; otherwise drop the feature entirely
-   (its prebuilt component and data are never linked).
+   `{ module, symbols, options }`; otherwise drop the feature entirely (its
+   prebuilt component and data are never linked).
 4. Embed the returned `data` and wire it to the prebuilt data-free component
    (the `bdp-spike` composition). Cache key: `(module, sorted symbols, canonical
    options, provider source hash, recorded read-asset names)`.
 
-Reachability is computed by the existing elaborator pass, which already does
-reachability analysis and elimination. It is less exhaustive than a full DCE,
-but sufficient here (over-keeping an op only over-bundles its data; correctness
-is never affected). Piggy-backing on the elaborator also means the same usage
-information can, with a small adjustment, be surfaced to the LSP. Because Wado
-uses explicit named imports, the imported names are already a sufficient usage
-signal; no separate whole-program call-graph pass is required. The one
-intra-feature cost cliff — segmentation's multi-MB dictionary/LSTM data — is
-gated by whether `words`/`lines` are imported.
+Reachability comes from the existing elaborator pass (detailed under _Elaborator
+hook_ below). It is less exhaustive than a full DCE but sufficient here:
+over-keeping an op only over-bundles its data, never affecting correctness. And
+because Wado uses explicit named imports, the imported names are themselves the
+usage signal — no separate whole-program call-graph pass is needed.
 
 Locale declarations are transitive and additive across the dependency graph: a
 library that does `use ... with { locales: ["ja"] }` forces `ja` data into any
@@ -193,8 +190,8 @@ Locale option semantics:
 
 - Omitted ⇒ root/`und` only (collation root UCA; no tailorings). Minimal by
   default.
-- The declared set is the union across all use-sites; datagen expands it with
-  likely-subtags and the fallback chain.
+- The declared set is the union across all use-sites; the provider expands it
+  with likely-subtags and the fallback chain.
 - A runtime langid outside the declared set falls back per ICU (to the nearest
   available, ultimately root). A _literal_ langid outside the set is a
   compile-time diagnostic.
@@ -304,52 +301,22 @@ as the offline datagen, with the bundled entries as the source instead of CLDR.
   provider must share one pinned ICU/CLDR version, tied to the `core:*` package
   versions.
 
-## TODO
+## Implementation status
 
-Decided (folded into the design above):
+The design above is settled and validated end-to-end by the spikes under
+`wado-bundled-icu/bdp-spike/`: data-free components running on runtime-loaded and
+composed-in blobs, the collator→normalizer marker dedup (37 KB), the
+casemap/properties/segmenter non-dedup (~0), the shared-infra floor (~10 KB), the
+marker-recording mechanism, and the zlib-vs-zstd comparison. What remains is
+implementation, roughly in order:
 
-- [x] Aggregation = per-(feature, program) union; options must be mergeable.
-      Locale declarations are transitive; documented, with a future app-level
-      kill switch as a possible extension.
-- [x] op→marker map lives in the provider (compiler stays ICU-agnostic), guarded
-      by a marker-recording test against ICU's constructors.
-- [x] Reachability comes from the elaborator's existing reachability/elimination
-      pass (sufficient here; also surfaces usage to the LSP), not a separate DCE.
-- [x] Bundled image = a single compressed, indexed (zip-like) archive with
-      per-feature/per-marker entries; selective extraction via `read-asset`,
-      preserving the single-binary compiler.
-- [x] Dynamic locale = ICU fallback to root by default; compile-time diagnostic
-      for literal langids outside the declared set.
-- [x] Host: generalize Kiln's `read-file` into a name-keyed `read-asset`; the
-      data-provider reuses `core:kiln/kiln-host`, no separate host interface.
-
-Remaining:
-
-- [x] Finalize the `data-provider` world WIT and the `read-asset` addition on
-      `core:kiln/kiln-host`: request `{module, symbols, options}` (canonical-JSON
-      options), response `{data}`, diagnostics via host, `read-asset` a binary
-      sibling to `read-file`, cache key includes recorded reads + provider hash.
-- [x] Pin down the elaborator hook: provisioning is a third consumer of the
-      `liveness` pass's `live_items` (sibling to reify and unused diagnostics);
-      live provider-backed imports grouped by module form the request `symbols`,
-      and an unreachable module drops out for free. LSP "imported but unused"
-      comes free; a data-cost inlay hint is deferred.
-- [x] Specify the option schema and merge rules: typed Options on the bundled
-      surface (Kiln's descriptor mechanism, canonical-JSON wire); type-driven
-      merge (list → set-union, scalar → must-agree). All ICU options are lists;
-      `strict` is a runtime API arg, not a `with` option.
-- [x] Define the archive layout: per-marker entries (skips unused heavy markers,
-      avoids per-locale explosion), minimal central-directory index, per-entry
-      zlib (`flate2`, already a dep; zstd's ~9% ratio win on the dominant data
-      doesn't justify a new C dependency) decompressed host-side (`read-asset`
-      returns plaintext). The provider slices markers × locales within entries
-      and re-exports via `BlobExporter`.
-- [x] Marker-recording drift test mechanism validated: a `BufferProvider`
-      recorder captures exactly the markers each constructor requests, including
-      transitive ones (`collator → NormalizerNfd*`) the crate `MARKERS` lists
-      omit. Prototype in `wado-bundled-icu/bdp-spike/marker-recording/`; to be
-      ported into the provider crate (union over path-exercising inputs).
-- [x] Measure infra-code duplication across the three prebuilt components: the
-      shared infra floor is ~10 KB/component (component glue + `BlobDataProvider`
-      core), so the three-way split duplicates only ~20 KB total — negligible
-      against the data. See `wado-bundled-icu/bdp-spike/infra-baseline/`.
+- [ ] Promote the spike's data-free `text` / `collation` / `segmentation`
+      components into first-party prebuilt artifacts with their `core:*` WIT
+      surfaces.
+- [ ] Build the ICU provider component (`icu_provider_export`-based) with its
+      op→marker map and the marker-recording drift test.
+- [ ] Build the bundled archive (per-marker zlib entries + index) and the
+      `read-asset` capability on `core:kiln/kiln-host`.
+- [ ] Wire the compiler provisioning phase: aggregate live provider-backed
+      imports + options off the `liveness` pass, invoke the provider, embed and
+      compose the result, and cache by content.
