@@ -70,3 +70,12 @@ ls -l collator-feature.wasm normalizer-feature.wasm cn-data.wasm collator-compos
 
 echo "== runtime check (both features off one shared blob) =="
 ( cd runtime-check-cn && cargo run --release )
+
+echo
+echo "###### negative control: casemap + properties + segmenter ######"
+echo "== generate per-feature blobs and their union =="
+( cd datagen && for s in casemap properties segmenter csp; do cargo run --release -- $s ../$s.blob; done )
+C=$(stat -c%s casemap.blob); P=$(stat -c%s properties.blob)
+S=$(stat -c%s segmenter.blob); U=$(stat -c%s csp.blob)
+echo "  casemap=$C properties=$P segmenter=$S  sum=$((C+P+S))  union=$U"
+echo "  dedup = sum - union = $((C+P+S-U)) bytes  (≈0: these features share no markers)"

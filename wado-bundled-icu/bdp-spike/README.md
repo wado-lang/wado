@@ -54,10 +54,14 @@ curl -sSL -o "$CACHE/unicode-org/icu/releases/download/release-78.1rc/icu4x-icue
   https://github.com/unicode-org/icu/releases/download/release-78.1rc/icu4x-icuexportdata-78.1rc.zip
 curl -sSL -o "$CACHE/unicode-org/cldr-json/releases/download/48.2.0/cldr-48.2.0-json-full.zip" \
   https://github.com/unicode-org/cldr-json/releases/download/48.2.0/cldr-48.2.0-json-full.zip
+# Only needed for the `segmenter` set (word/line `auto` = LSTM models):
+mkdir -p "$CACHE/unicode-org/lstm_word_segmentation/releases/download/v0.1.0"
+curl -sSL -o "$CACHE/unicode-org/lstm_word_segmentation/releases/download/v0.1.0/models.zip" \
+  https://github.com/unicode-org/lstm_word_segmentation/releases/download/v0.1.0/models.zip
 ```
 
 (The tags come from `SourceDataProvider::TESTED_CLDR_TAG` /
-`TESTED_ICUEXPORT_TAG`.)
+`TESTED_ICUEXPORT_TAG` / `TESTED_SEGMENTER_LSTM_TAG`.)
 
 ## Result — it works
 
@@ -144,6 +148,34 @@ host-supplied and composed. The clincher is the collator comparing decomposed
 `"e"+◌́` **equal** to precomposed `"é"`: that canonical equivalence only succeeds
 if the collator is reading the normalization markers the blob shares with the
 normalizer.
+
+## Where dedup does NOT happen: casemap + properties + segmenter
+
+A natural guess is that "related" string features share `icu_properties` data
+and would dedup even more. **Measured, they do not.** ICU4X bakes derived
+property data into each consumer's *own* markers: the segmenter carries its own
+break tables (`SegmenterBreak*V1`), casemap its own (`CaseMap*V1`), and the
+`properties` feature its own enum/binary markers (`PropertyEnum*`,
+`PropertyBinary*`). Their constructors confirm it — `GraphemeClusterSegmenter`'s
+buffer constructor requires only `SegmenterBreakGraphemeClusterV1`, and casemap
+requires no property markers at all. So the three marker sets are disjoint:
+
+| blob | size |
+|---|---:|
+| `casemap` | 23.9 KB |
+| `properties` (GC, Script, 5 binaries) | 58 KB |
+| `segmenter` (grapheme/word/line/sentence, `auto`) | 4.15 MB |
+| sum of the three | 4,234,052 B |
+| `csp` (union of all three) | 4,234,049 B |
+
+`sum − union = 3 bytes` — i.e. zero real sharing (just blob-index rounding).
+(Segmenter's 4.15 MB also reaffirms that the dominant data is feature-specific.)
+
+**The lesson:** shared-blob dedup materializes only for a genuine *runtime data
+dependency* — one feature's constructor requesting another's markers, as with
+collator→normalizer (37 KB) — not for conceptual relatedness. Bundling
+unrelated features behind one blob saves nothing; slicing per used feature is
+what controls size.
 
 ### Caveat
 

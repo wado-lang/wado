@@ -17,11 +17,32 @@
 
 use anyhow::{Context, Result};
 use icu_normalizer::provider::{NormalizerNfdDataV1, NormalizerNfdTablesV1};
+use icu_properties::provider::{
+    PropertyBinaryAlphabeticV1, PropertyBinaryEmojiV1, PropertyBinaryLowercaseV1,
+    PropertyBinaryUppercaseV1, PropertyBinaryWhiteSpaceV1, PropertyEnumGeneralCategoryV1,
+    PropertyEnumScriptV1, PropertyNameShortScriptV1,
+};
 use icu_provider::DataMarker;
 use icu_provider_export::blob_exporter::BlobExporter;
 use icu_provider_export::prelude::*;
 use icu_provider_source::SourceDataProvider;
 use std::fs::File;
+
+// The property markers the `properties` feature uses (General_Category, Script
+// + short names, and the binaries Alphabetic/White_Space/Uppercase/Lowercase/
+// Emoji).
+fn properties_markers() -> Vec<DataMarkerInfo> {
+    vec![
+        PropertyEnumGeneralCategoryV1::INFO,
+        PropertyEnumScriptV1::INFO,
+        PropertyNameShortScriptV1::INFO,
+        PropertyBinaryAlphabeticV1::INFO,
+        PropertyBinaryWhiteSpaceV1::INFO,
+        PropertyBinaryUppercaseV1::INFO,
+        PropertyBinaryLowercaseV1::INFO,
+        PropertyBinaryEmojiV1::INFO,
+    ]
+}
 
 fn main() -> Result<()> {
     let set = std::env::args().nth(1).unwrap_or_else(|| "casemap".into());
@@ -45,6 +66,16 @@ fn main() -> Result<()> {
             let mut m = icu_collator::provider::MARKERS.to_vec();
             m.extend_from_slice(icu_normalizer::provider::MARKERS);
             (m, DataLocaleFamily::single("und".parse().unwrap()))
+        }
+        "properties" => (properties_markers(), DataLocaleFamily::FULL),
+        "segmenter" => (icu_segmenter::provider::MARKERS.to_vec(), DataLocaleFamily::FULL),
+        // Union of the three independent string features, to measure whether
+        // they share any markers (dedup = sum of singles - this union).
+        "csp" => {
+            let mut m = icu_casemap::provider::MARKERS.to_vec();
+            m.extend(properties_markers());
+            m.extend_from_slice(icu_segmenter::provider::MARKERS);
+            (m, DataLocaleFamily::FULL)
         }
         other => anyhow::bail!("unknown marker set: {other}"),
     };
