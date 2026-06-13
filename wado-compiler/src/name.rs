@@ -180,8 +180,8 @@ impl fmt::Display for FreeFunctionName {
             ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
             ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
             ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
-            ModuleSource::Dependency { package, path } => {
-                write!(f, "{}/{}/{}", package, path, self.name)
+            ModuleSource::Dependency { .. } => {
+                write!(f, "{}/{}", self.module_source.to_path_string(), self.name)
             }
             ModuleSource::Remote { url } => write!(f, "{}/{}", url, self.name),
             ModuleSource::Redirected { uri } => write!(f, "{}/{}", uri, self.name),
@@ -873,7 +873,7 @@ pub fn resolve_import_with_invocations(
 ) -> ModuleSource {
     if !invocations.is_empty() {
         let decl_file = match from_module {
-            ModuleSource::Local { path } => path.as_str(),
+            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
             ModuleSource::EntryPoint { filename } => filename.as_str(),
             ModuleSource::Redirected { uri } => uri.as_str(),
             _ => "",
@@ -913,9 +913,12 @@ pub fn resolve_import_with_entry(
     }
 
     // Bare dependency name (`use { … } from "router"`): resolve against
-    // `[dependencies]` before treating it as a relative sibling file.
+    // `[dependencies]` before treating it as a relative sibling file. Only
+    // the consuming project resolves its own `[dependencies]`; a bare import
+    // from within a dependency must not bind to the consumer's deps.
     if !import_source.starts_with("./")
         && !import_source.starts_with("../")
+        && !matches!(from_module, ModuleSource::Dependency { .. })
         && let Some(dep) = interner.resolve_dependency(import_source)
     {
         return dep;
@@ -1252,6 +1255,27 @@ pub fn test_name_to_snake(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bare_dep_resolves_only_for_consumer_not_inside_dependency() {
+        let mut interner = ModuleSourceInterner::new();
+        interner.set_dependencies(
+            [("logger".to_string(), "../logger/src/lib.wado".to_string())]
+                .into_iter()
+                .collect(),
+        );
+        let entry = interner.entry_point("main.wado");
+        // From the consuming project, a bare name binds to its dependency.
+        let from_entry = resolve_import_with_entry(&mut interner, &entry, "logger", None);
+        assert!(matches!(from_entry, ModuleSource::Dependency { .. }));
+        // From inside a dependency, the same bare name must NOT bind to the
+        // consumer's deps — it falls through to the local fallback.
+        let from_dep = interner.dependency("greet", "../greet/src/lib.wado");
+        let resolved = resolve_import_with_entry(&mut interner, &from_dep, "logger", None);
+        assert!(
+            !matches!(resolved, ModuleSource::Dependency { ref package, .. } if package == "logger")
+        );
+    }
 
     #[test]
     fn test_test_name_to_snake_is_ascii_only() {

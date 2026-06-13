@@ -229,6 +229,9 @@ impl ModuleSourceInterner {
             [first] if first.starts_with("./") || first.starts_with("../") => self.local(first),
             [first, rest @ ..] if first == "core" => self.core(&rest.join("/")),
             [first, rest @ ..] if first == "wasi" => self.wasi(&rest.join("/")),
+            [first, package, rest @ ..] if first == "dep" => {
+                self.dependency(package, &rest.join("/"))
+            }
             segments => self.local(&segments.join("/")),
         }
     }
@@ -522,7 +525,9 @@ impl ModuleSource {
             Self::Core { name } => vec!["core".to_string(), name.to_string()],
             Self::Wasi { interface } => vec!["wasi".to_string(), interface.to_string()],
             Self::Local { path } => vec![path.to_string()],
-            Self::Dependency { package, path } => vec![package.to_string(), path.to_string()],
+            Self::Dependency { package, path } => {
+                vec!["dep".to_string(), package.to_string(), path.to_string()]
+            }
             Self::Remote { url } => vec![url.to_string()],
             Self::EntryPoint { filename } => vec![filename.to_string()],
             Self::Redirected { uri } => vec![uri.to_string()],

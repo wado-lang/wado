@@ -1378,7 +1378,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = match from_module_source {
-            ModuleSource::Local { path } => path.to_string(),
+            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.to_string(),
             ModuleSource::EntryPoint { filename } => filename.to_string(),
             ModuleSource::Redirected { uri } => uri.to_string(),
             _ => String::new(),
@@ -1411,7 +1411,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // base-path joining or relative-path normalization happens.
         if !self.invocations.is_empty() {
             let decl_file = match from_module_source {
-                ModuleSource::Local { path } => path.as_str(),
+                ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+                    path.as_str()
+                }
                 ModuleSource::EntryPoint { filename } => filename.as_str(),
                 ModuleSource::Redirected { uri } => uri.as_str(),
                 _ => "",
@@ -1469,8 +1471,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             return Ok(self.interner.local(&canonical));
         }
 
-        // Bare dependency name: resolve against `[dependencies]`.
-        if let Some(dep) = self.interner.resolve_dependency(import_source) {
+        // Bare dependency name: resolve against `[dependencies]`. Only the
+        // consuming project resolves its own deps; a bare import from within
+        // a dependency must not bind to the consumer's deps.
+        if !matches!(from_module_source, ModuleSource::Dependency { .. })
+            && let Some(dep) = self.interner.resolve_dependency(import_source)
+        {
             return Ok(dep);
         }
 
