@@ -62,22 +62,19 @@ impl WorldExportInfo {
         }
     }
 
-    /// Check if this export returns an HTTP response.
+    /// Whether this export is a handler-instance export: an interface export
+    /// (one synthesized from an `export Foo;` reference, so [`Self::from_interface_fq`]
+    /// is populated) whose return type is a non-unit `Result<_, _>`.
     ///
-    /// Returns true if the return type is `Result<Response, ErrorCode>`.
-    pub fn returns_http_response(&self) -> bool {
-        let Some(return_type) = &self.return_type else {
-            return false;
-        };
-
-        if let Type::Generic(generic) = return_type
-            && generic.name == "Result"
-            && generic.args.len() == 2
-            && let Type::Named(ok_type) = &generic.args[0]
-        {
-            return ok_type.name == "Response";
-        }
-        false
+    /// This is the structural shape of `wasi:http/handler#handle`
+    /// (`Result<Response, ErrorCode>`). It is deliberately namespace- and
+    /// type-name-independent: a third-party world that exports a handler-shaped
+    /// interface is recognized the same way, and the `from_interface_fq` gate
+    /// keeps freestanding exports with the same return shape — the kiln
+    /// generator's `generate -> Result<Response, Error>` — out, since they carry
+    /// no parent interface FQ.
+    pub fn is_handler_instance_export(&self) -> bool {
+        self.from_interface_fq.is_some() && returns_non_unit_result(self.return_type.as_ref())
     }
 }
 
@@ -144,17 +141,17 @@ impl WorldInfo {
 
     /// Check if this world has an HTTP handler export.
     ///
-    /// Keyed on the world's fully-qualified name rather than the return-type
-    /// shape so same-named types in other namespaces — notably
-    /// `core:kiln/types::Response` under the `core:kiln/generator` world —
-    /// cannot be mistaken for `wasi:http/types::Response` and route the
-    /// generator through the HTTP codegen branch.
+    /// Detected structurally: the world has an interface export whose return
+    /// type is a non-unit `Result<_, _>` (see
+    /// [`WorldExportInfo::is_handler_instance_export`]). The
+    /// `from_interface_fq` gate in that check is what separates the HTTP
+    /// `Handler` export from the kiln generator's freestanding
+    /// `generate -> Result<Response, Error>`, so no namespace prefix or
+    /// `Response` type-name match is needed.
     pub fn has_http_handler_export(&self) -> bool {
-        self.namespace_prefix() == "wasi:http/"
-            && self
-                .exports
-                .iter()
-                .any(WorldExportInfo::returns_http_response)
+        self.exports
+            .iter()
+            .any(WorldExportInfo::is_handler_instance_export)
     }
 
     /// The CM package segment of this world's fully-qualified name.
@@ -193,6 +190,19 @@ impl WorldInfo {
             .iter()
             .any(|i| i.interface_name == interface_name)
     }
+}
+
+/// Whether `return_type` is a `Result<Ok, Err>` with at least one non-unit
+/// arm — the "handler" return shape. `Result<(), ()>` (the CLI `Run` shape)
+/// and any non-`Result` type return `false`.
+fn returns_non_unit_result(return_type: Option<&Type>) -> bool {
+    let Some(Type::Generic(generic)) = return_type else {
+        return false;
+    };
+    generic.name == "Result"
+        && generic.args.len() == 2
+        && !(crate::component_model::is_unit_type(&generic.args[0])
+            && crate::component_model::is_unit_type(&generic.args[1]))
 }
 
 /// Extract the package segment of a CM-style fully-qualified name
@@ -492,6 +502,115 @@ mod tests {
             exports: Vec::new(),
             imports: Vec::new(),
         }
+    }
+
+    /// Build a `Result<Ok, Err>` return type from two named-type names.
+    fn result_return(ok: &str, err: &str) -> Type {
+        Type::Generic(crate::ast::GenericType {
+            id: crate::ast::AstId::fresh(),
+            name: "Result".to_string(),
+            args: vec![
+                Type::Named(crate::ast::NamedType::new(
+                    crate::ast::AstId::fresh(),
+                    ok.to_string(),
+                    make_span(),
+                )),
+                Type::Named(crate::ast::NamedType::new(
+                    crate::ast::AstId::fresh(),
+                    err.to_string(),
+                    make_span(),
+                )),
+            ],
+            span: make_span(),
+        })
+    }
+
+    #[test]
+    fn test_has_http_handler_export_from_stdlib() {
+        // Characterization: the stdlib worlds keep their current classification
+        // after the detection logic moves from namespace+`Response` sniffing to
+        // the structural `from_interface_fq` + non-unit `Result` check.
+        let (_registry, world_registry) =
+            crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+
+        assert!(
+            world_registry
+                .get("wasi:http/service")
+                .unwrap()
+                .has_http_handler_export(),
+            "wasi:http/service exports the Handler interface (handle -> Result<Response, _>)"
+        );
+        assert!(
+            !world_registry
+                .get("wasi:cli/command")
+                .unwrap()
+                .has_http_handler_export(),
+            "wasi:cli/command's Run export returns Result<(), ()> — not a handler instance"
+        );
+        assert!(
+            !world_registry
+                .get("core:kiln/generator")
+                .unwrap()
+                .has_http_handler_export(),
+            "kiln generate returns a non-unit Result but is a freestanding export \
+             (from_interface_fq is None), so it is not a handler instance export"
+        );
+    }
+
+    #[test]
+    fn test_handler_detection_is_namespace_independent() {
+        // A third-party world that exports a handler-shaped interface (an
+        // interface export — `from_interface_fq` populated — returning a
+        // non-unit `Result`) is detected with no dependence on the
+        // `wasi:http/` namespace or the `Response` type name.
+        let widget_handler = WorldExportInfo {
+            name: "handle".to_string(),
+            is_async: true,
+            params: vec![],
+            return_type: Some(result_return("Widget", "WidgetError")),
+            from_interface_fq: Some("acme:widget/handler@1.0.0".to_string()),
+        };
+        let mut world = world_info("acme:widget/service");
+        world.exports.push(widget_handler);
+        assert!(
+            world.has_http_handler_export(),
+            "an interface export returning a non-unit Result is a handler instance \
+             regardless of namespace"
+        );
+
+        // The same return shape on a freestanding export (no parent interface)
+        // is the kiln pattern — not a handler instance export.
+        let mut freestanding = world.clone();
+        freestanding.exports[0].from_interface_fq = None;
+        assert!(
+            !freestanding.has_http_handler_export(),
+            "a freestanding export is never wrapped in a handler instance"
+        );
+
+        // A unit `Result<(), ()>` interface export (the CLI Run shape) is not a
+        // handler instance even with a parent interface FQ.
+        let mut unit_export = world_info("acme:widget/command");
+        unit_export.exports.push(WorldExportInfo {
+            name: "run".to_string(),
+            is_async: true,
+            params: vec![],
+            return_type: Some(result_return_unit()),
+            from_interface_fq: Some("acme:widget/run@1.0.0".to_string()),
+        });
+        assert!(
+            !unit_export.has_http_handler_export(),
+            "a unit-Result interface export is not a handler instance"
+        );
+    }
+
+    /// `Result<(), ()>` built from empty tuples.
+    fn result_return_unit() -> Type {
+        Type::Generic(crate::ast::GenericType {
+            id: crate::ast::AstId::fresh(),
+            name: "Result".to_string(),
+            args: vec![Type::Tuple(vec![]), Type::Tuple(vec![])],
+            span: make_span(),
+        })
     }
 
     #[test]

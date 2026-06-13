@@ -779,6 +779,41 @@ will get one when work starts.
       instance exports in `emit_world_exports` (currently top-level
       function exports + post-hoc wrap).
 
+## Codegen Genericization: Removing HTTP/world Special-Casing
+
+The three roadmap items above (HTTP decoupling, ad-hoc detection retirement,
+instance-export emission) are one body of work: make `codegen/component.rs`
+encode CM imports/exports from registry-derived structured descriptors with no
+`package == "http"`, `namespace_prefix == "wasi:http/"`, `returns_http_response`,
+`{pkg}-handler-result`, or `get_package_version("http")` hardcoding. HTTP and
+kiln (`emit_kiln_world_types`) both fall out of the same generic mechanism.
+Scope is the stdlib-derived registry path only; external `.wasm` consumption is
+a separate item.
+
+- [ ] P1 — World-driven handler detection. Replace `has_http_handler_export` /
+      `returns_http_response` / `namespace_prefix == "wasi:http/"` with
+      `WorldExportInfo::from_interface_fq`-driven dispatch. Output bytes
+      unchanged.
+- [ ] P2 — Generic instance-export emission. Fold `append_http_handler_export`
+      into `emit_world_exports`; an export with `from_interface_fq = Some(fq)`
+      is wrapped in an `fq`-named instance export (so CLI `run` becomes
+      `wasi:cli/run@<v>`), bare otherwise.
+- [ ] P2.5 — Structural CM type interner in `ComponentModelContext`: dedupe
+      composite boundary types (`result`/`option`/`tuple`/`list`/`own`) by
+      resolved structure key, shared across the handler export lift and the
+      `Client` import.
+- [ ] P3 — Drop the `{pkg}-handler-result` named convention; resolve
+      `CmExportType::HandlerResult` through the interner. Absorb
+      `emit_kiln_world_types` and the `KilnHost`-import gate.
+- [ ] P4 — Seed the import-resource closure with exported-interface signature
+      types; collapse `ImportKind::{HttpTypes,HttpClient}` into the generic
+      `ResourceSource` / `ResourceUsingInterface` variants; delete
+      `import_http_types_for_service` / `import_http_client` and the
+      `package == "http"` skips.
+- [ ] P5 — Remove the remaining `get_package_version("http")` and FQ string
+      literals; descriptors carry version/FQ. `tests/wit_import_plan.rs` keeps
+      the plan faithful to the emitted bytes.
+
 ## Consequences
 
 ### Positive
