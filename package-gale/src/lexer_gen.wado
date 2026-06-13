@@ -490,7 +490,13 @@ fn gen_lexer_alts(
     w.line(&`if !alts_ok_{id} \{ {fail_action}; \}`);
 }
 
-fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlternative, all_rules: &List<LexerRule>, fail_action: &String, ci: bool) {
+fn gen_lexer_alt_seq(
+    w: &mut CodeWriter,
+    alt: &LexerAlternative,
+    all_rules: &List<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+) {
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
