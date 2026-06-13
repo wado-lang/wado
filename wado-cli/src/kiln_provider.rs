@@ -573,7 +573,6 @@ impl CliGeneratorProvider {
             source_hash: artifacts.source_hash,
         })
     }
-
 }
 
 impl GeneratorProvider for CliGeneratorProvider {

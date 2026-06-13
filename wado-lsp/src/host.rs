@@ -137,10 +137,12 @@ fn dependency_entry_path(dep_path: &Path) -> Result<PathBuf, String> {
     let manifest: wado_manifest::Manifest = text
         .parse()
         .map_err(|e| format!("invalid {}: {e}", manifest_path.display()))?;
-    let lib = manifest
-        .package
-        .and_then(|p| p.lib)
-        .ok_or_else(|| format!("{} declares no [package].lib entry", manifest_path.display()))?;
+    let lib = manifest.package.and_then(|p| p.lib).ok_or_else(|| {
+        format!(
+            "{} declares no [package].lib entry",
+            manifest_path.display()
+        )
+    })?;
     Ok(dep_path.join(lib))
 }
 

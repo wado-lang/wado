@@ -328,9 +328,7 @@ pub enum ModuleSource {
     /// source dependencies compile into the same component (the CM boundary
     /// is skipped), so dependency modules are ordinary Wado source once
     /// loaded.
-    Dependency {
-        path: InternedStr,
-    },
+    Dependency { path: InternedStr },
     /// Remote module loaded via HTTP/HTTPS
     Remote {
         /// Full URL (e.g., "<https://example.com/lib.wado>")
@@ -709,9 +707,10 @@ mod tests {
         index
             .resolved
             .insert("greet".to_string(), "../greet/src/lib.wado".to_string());
-        index
-            .unresolved
-            .insert("broken".to_string(), "declares no [package].lib".to_string());
+        index.unresolved.insert(
+            "broken".to_string(),
+            "declares no [package].lib".to_string(),
+        );
         interner.set_dependencies(index);
         assert_eq!(
             interner.resolve_dependency("greet"),

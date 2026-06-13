@@ -1409,9 +1409,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // base-path joining or relative-path normalization happens.
         if !self.invocations.is_empty() {
             let decl_file = match from_module_source {
-                ModuleSource::Local { path } | ModuleSource::Dependency { path } => {
-                    path.as_str()
-                }
+                ModuleSource::Local { path } | ModuleSource::Dependency { path } => path.as_str(),
                 ModuleSource::EntryPoint { filename } => filename.as_str(),
                 ModuleSource::Redirected { uri } => uri.as_str(),
                 _ => "",

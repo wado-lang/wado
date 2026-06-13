@@ -356,16 +356,16 @@ pub async fn try_compile(
         host = host.with_dependency_index(index);
     }
 
-    let pipeline_outcome = match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await
-    {
-        Ok(outcome) => outcome,
-        Err(e) => {
-            eprintln!("{e}");
-            return Err(wado_compiler::CompileFailure {
-                is_todo_module: false,
-            });
-        }
-    };
+    let pipeline_outcome =
+        match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {
+            Ok(outcome) => outcome,
+            Err(e) => {
+                eprintln!("{e}");
+                return Err(wado_compiler::CompileFailure {
+                    is_todo_module: false,
+                });
+            }
+        };
 
     let options = wado_compiler::CompilerOptions {
         opt_level: to_compiler_opt_level(flags.opt_level),

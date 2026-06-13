@@ -9,7 +9,7 @@
 //!
 //! This is a black-box test driving the real `wado` binary against a
 //! self-contained two-package layout under a tempdir, which is the only place
-//! that exercises the full vertical slice: manifest parse → CompilerHost
+//! that exercises the full vertical slice: manifest parse → `CompilerHost`
 //! dependency mapping → loader `resolve_import` → compile/run.
 
 use predicates::prelude::*;
@@ -218,8 +218,7 @@ export fn run() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("greet").and(
-            predicate::str::contains("[package].lib")
-                .or(predicate::str::contains("declares no")),
+            predicate::str::contains("[package].lib").or(predicate::str::contains("declares no")),
         ));
 }
 
