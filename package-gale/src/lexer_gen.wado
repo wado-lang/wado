@@ -1084,7 +1084,7 @@ pub fn collect_keyword_rules(lexer_rules: &List<LexerRule>, grammar_opts: &List<
         if is_keyword_rule_name(&rule.name, &candidates) {
             continue;
         }
-        let try_call = compute_first_chars(rule, lexer_rules, false, false, false, false, grammar_opts);
+        let try_call = build_rule_try_call(rule, lexer_rules, false, false, false, false, grammar_opts);
         carrier_indices.push(i);
         carrier_first_chars.push(try_call.first_chars);
         carrier_is_wildcard.push(try_call.is_wildcard);
@@ -1292,13 +1292,13 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
                     if kw.lowercase_text.chars().next().unwrap() != *fc {
                         continue;
                     }
-                    emit_keyword_check(w, *kw);
+                    gen_keyword_check(w, *kw);
                 }
             }
             w.end();
         } else {
             for let kw of &len_keywords {
-                emit_keyword_check(w, *kw);
+                gen_keyword_check(w, *kw);
             }
         }
     }
@@ -1329,7 +1329,7 @@ fn gen_char_mismatch(access: &String, c: char, ci: bool) -> String {
     return `{access} != {escape_char(c)}`;
 }
 
-fn emit_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
+fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
     let kw_chars: List<char> = kw.lowercase_text.chars().collect();
     w.write(&"if ");
     for let mut kc = 0; kc < kw_chars.len(); kc += 1 {
@@ -1440,7 +1440,7 @@ fn default_extras(use_modes: bool, has_set_mode_rules: bool, has_more_rules: boo
 }
 
 /// Compute the first-char set for a lexer rule body's first element.
-fn compute_first_chars(
+fn build_rule_try_call(
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
     use_modes: bool,
@@ -1775,10 +1775,10 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     return groups;
 }
 
-fn emit_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<DispatchGroup>, needs_extras: bool) {
+fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<DispatchGroup>, needs_extras: bool) {
     // If only a wildcard group exists, emit calls directly without dispatch
     if groups.len() == 1 && groups[0].guard == "true" {
-        emit_group_calls(w, calls, &groups[0].calls, needs_extras, true);
+        gen_group_calls(w, calls, &groups[0].calls, needs_extras, true);
         return;
     }
     let mut first_group = true;
@@ -1786,7 +1786,7 @@ fn emit_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List
         let is_wc = g.guard == "true";
         if is_wc {
             if first_group {
-                emit_group_calls(w, calls, &g.calls, needs_extras, true);
+                gen_group_calls(w, calls, &g.calls, needs_extras, true);
                 continue;
             }
             w.else_begin(&"else");
@@ -1796,14 +1796,14 @@ fn emit_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List
             w.else_begin(&`else if {g.guard}`);
         }
         first_group = false;
-        emit_group_calls(w, calls, &g.calls, needs_extras, is_wc);
+        gen_group_calls(w, calls, &g.calls, needs_extras, is_wc);
     }
     if !first_group {
         w.end();
     }
 }
 
-fn emit_group_calls(
+fn gen_group_calls(
     w: &mut CodeWriter,
     calls: &List<TryCall>,
     indices: &List<i32>,
@@ -2016,7 +2016,7 @@ fn gen_tokenize_fn(
                 && !rule.is_virtual
                 && !is_keyword_rule_name(&rule.name, keywords)
                 && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                all_calls.push(compute_first_chars(
+                all_calls.push(build_rule_try_call(
                     rule,
                     lexer_rules,
                     false,
@@ -2028,7 +2028,7 @@ fn gen_tokenize_fn(
             }
         }
         let groups = build_dispatch_groups(&all_calls);
-        emit_dispatch_groups(w, &all_calls, &groups, needs_extras);
+        gen_dispatch_groups(w, &all_calls, &groups, needs_extras);
     }
 
     // Keyword reclassification: check if the matched text is actually a keyword.

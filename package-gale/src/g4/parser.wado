@@ -843,7 +843,7 @@ impl G4Parser {
     }
 
     fn parse_parser_rule(&mut self, name: String) -> Result<ParserRule, ParseError> {
-        let options = self.skip_rule_prequel();
+        let options = self.parse_rule_prequel();
         self.expect(G4Token::Colon)?;
         self.current_rule = name;
         let alternatives = self.parse_alternatives()?;
@@ -861,7 +861,7 @@ impl G4Parser {
     /// `@after`). ANTLR4 fixes the order of args/returns/throws/locals before
     /// the repeated `options{}`/`@id{}` block, but we accept any order here
     /// for resilience. Returns the union of any `options { ... }` entries.
-    fn skip_rule_prequel(&mut self) -> List<GrammarOption> {
+    fn parse_rule_prequel(&mut self) -> List<GrammarOption> {
         let mut options: List<GrammarOption> = [];
         loop {
             if self.is_kind(G4Token::CharClass) {
@@ -1224,7 +1224,7 @@ impl G4Parser {
     ) -> Result<LexerRule, ParseError> {
         // Lexer rules in ANTLR4 also accept the rule prequel (rare but legal,
         // most commonly `locals [int n]`).
-        let options = self.skip_rule_prequel();
+        let options = self.parse_rule_prequel();
         self.expect(G4Token::Colon)?;
         self.current_rule = name;
         let body = self.parse_lexer_alternatives()?;

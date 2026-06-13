@@ -1128,9 +1128,9 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
 /// lowers everything after it as the alt's suffix body. The
 /// precedence (`own_prec`) and conflict floor (`conflict_min`) are
 /// computed by the caller and stored verbatim.
-fn lower_lr_alt(rule: &ParserRule, alt_idx: i32, own_prec: i32, conflict_min: i32, ctx: &mut GenContext) -> LrAlt {
-    let alt = &rule.alternatives[alt_idx];
-    assert !alt.elements.is_empty(), `LR alt {alt_idx} of '{rule.name}' is empty — should not be classified LR`;
+fn lower_lr_alt(rule: &ParserRule, alt_index: i32, own_prec: i32, conflict_min: i32, ctx: &mut GenContext) -> LrAlt {
+    let alt = &rule.alternatives[alt_index];
+    assert !alt.elements.is_empty(), `LR alt {alt_index} of '{rule.name}' is empty — should not be classified LR`;
 
     // Build per-alt CST identifiers. `case_name` mirrors
     // `case_names_for_rule`, and `struct_name` follows the
@@ -1141,7 +1141,7 @@ fn lower_lr_alt(rule: &ParserRule, alt_idx: i32, own_prec: i32, conflict_min: i3
     let case_names = case_names_for_rule(&rule.alternatives);
     let type_name = rule.type_name;
     let base = strip_suffix(&type_name, &"Node");
-    let case_name = case_names[alt_idx];
+    let case_name = case_names[alt_index];
     let struct_name = `{base}{case_name}`;
 
     // Compute `last_self_ref_idx` — the index (within the original
@@ -1155,11 +1155,11 @@ fn lower_lr_alt(rule: &ParserRule, alt_idx: i32, own_prec: i32, conflict_min: i3
     let suffix_first = ctx.first_of_elements_from(&alt.elements, 1);
 
     // Lower the suffix (elements[1..]) as an AltBody / ScanBody.
-    let suffix = lower_lr_alt_suffix(rule, alt_idx, &case_name, &struct_name, ctx);
-    let scan_suffix = lower_lr_alt_scan_suffix(rule, alt_idx, ctx);
+    let suffix = lower_lr_alt_suffix(rule, alt_index, &case_name, &struct_name, ctx);
+    let scan_suffix = lower_lr_alt_scan_suffix(rule, alt_index, ctx);
 
     return LrAlt {
-        alt_index: alt_idx,
+        alt_index: alt_index,
         case_name: case_name,
         struct_name: struct_name,
         suffix: suffix,
@@ -1175,18 +1175,18 @@ fn lower_lr_alt(rule: &ParserRule, alt_idx: i32, own_prec: i32, conflict_min: i3
 
 fn lower_lr_alt_suffix(
     rule: &ParserRule,
-    alt_idx: i32,
+    alt_index: i32,
     case_name: &String,
     struct_name: &String,
     ctx: &mut GenContext,
 ) -> AltBody {
-    let alt = &rule.alternatives[alt_idx];
+    let alt = &rule.alternatives[alt_index];
 
     // Per-alt counter starts at this alt's position in the rule's
     // alt_gc_starts table — same as `lower_alt_body` does for the
     // full-alt case. The suffix walk continues from there.
     let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
-    let mut group_counter: i32 = alt_gc_starts[alt_idx];
+    let mut group_counter: i32 = alt_gc_starts[alt_index];
 
     // Seed the dedup counter with the prefix self-ref's field name so
     // a trailing self-ref dedups to `<name>_2` — matching the
@@ -1227,7 +1227,7 @@ fn lower_lr_alt_suffix(
     let fields = enumerate_alt_field_decls(&ops);
 
     return AltBody {
-        alt_index: alt_idx,
+        alt_index: alt_index,
         case_name: *case_name,
         struct_name: *struct_name,
         ops: ops,
@@ -1236,8 +1236,8 @@ fn lower_lr_alt_suffix(
     };
 }
 
-fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_idx: i32, ctx: &mut GenContext) -> ScanBody {
-    let alt = &rule.alternatives[alt_idx];
+fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_index: i32, ctx: &mut GenContext) -> ScanBody {
+    let alt = &rule.alternatives[alt_index];
     let mut elements: List<ScanElement> = [];
     // LR suffix walks `alt.elements[1..]` — the leading self-ref is
     // stripped. The end-of-suffix outer follow is left empty; threading
@@ -3182,7 +3182,7 @@ fn lower_repeat_op(
     let mut body_visiting: List<String> = [];
     let body_scannable = ctx.is_element_scannable(&rep.element, &mut body_visiting);
     // Scan-side mirror of `body`. Computed here so emit's scan-guard
-    // helpers (`emit_rep_scan_guard` / `emit_scan_guard_with_prefix`)
+    // helpers (`gen_rep_scan_guard` / `gen_scan_guard_with_prefix`)
     // can scan the inner element via the op-driven scan walker
     // (`gen_scan_op_element`) without falling back to the surface
     // `gen_scan_*` walker graph. Uses the same `iter_follow` as the

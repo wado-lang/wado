@@ -593,7 +593,7 @@ pub struct RepeatOp {
     pub body: Op,
     /// Scan-side mirror of `body`. Lower computes it alongside the
     /// parse-side op so emit's scan-guard helpers
-    /// (`emit_rep_scan_guard`, `emit_scan_guard_with_prefix`) can
+    /// (`gen_rep_scan_guard`, `gen_scan_guard_with_prefix`) can
     /// drive an op-driven scan walker over the inner element without
     /// the surface `gen_scan_*` graph as fallback.
     pub scan_body: ScanElement,
@@ -1007,22 +1007,22 @@ pub fn rule_header(rule: &Rule) -> &RuleHeader with stores[rule] {
 }
 
 /// Look up the `AltBody` for a given surface-IR alt index inside the
-/// lowered rule. For `Simple` rules `alt_idx` is always `0`; for
+/// lowered rule. For `Simple` rules `alt_index` is always `0`; for
 /// `MultiAlt` the lookup scans `alts` for the entry whose
-/// `alt_index == alt_idx`; for `LeftRecursive` it searches the atom's
+/// `alt_index == alt_index`; for `LeftRecursive` it searches the atom's
 /// alts first and falls back to the matching LR alt's `suffix`. Returns
 /// `null` only when no alt with that index exists on either side.
-pub fn rule_alt_body(rule: &Rule, alt_idx: i32) -> Option<&AltBody> with stores[rule] {
+pub fn rule_alt_body(rule: &Rule, alt_index: i32) -> Option<&AltBody> with stores[rule] {
     return match rule {
-        Simple(s) => if alt_idx == 0 { Option::<&AltBody>::Some(&s.body) } else { null },
-        MultiAlt(m) => find_alt_body_in_array(&m.alts, alt_idx),
+        Simple(s) => if alt_index == 0 { Option::<&AltBody>::Some(&s.body) } else { null },
+        MultiAlt(m) => find_alt_body_in_array(&m.alts, alt_index),
         LeftRecursive(l) => {
-            if let Some(b) = find_alt_body_in_array(&l.atom.alts, alt_idx) {
+            if let Some(b) = find_alt_body_in_array(&l.atom.alts, alt_index) {
                 Option::<&AltBody>::Some(b);
             } else {
                 let mut found: Option<&AltBody> = null;
                 for let lr of &l.lr_alts {
-                    if lr.alt_index == alt_idx {
+                    if lr.alt_index == alt_index {
                         found = Option::<&AltBody>::Some(&lr.suffix);
                         break;
                     }
@@ -1033,9 +1033,9 @@ pub fn rule_alt_body(rule: &Rule, alt_idx: i32) -> Option<&AltBody> with stores[
     };
 }
 
-fn find_alt_body_in_array(alts: &List<AltBody>, alt_idx: i32) -> Option<&AltBody> with stores[alts] {
+fn find_alt_body_in_array(alts: &List<AltBody>, alt_index: i32) -> Option<&AltBody> with stores[alts] {
     for let a of alts {
-        if a.alt_index == alt_idx {
+        if a.alt_index == alt_index {
             return Option::<&AltBody>::Some(a);
         }
     }
@@ -1044,19 +1044,19 @@ fn find_alt_body_in_array(alts: &List<AltBody>, alt_idx: i32) -> Option<&AltBody
 
 /// Scan-side counterpart of `rule_alt_body`. Returns the
 /// `ScanBody` for the alt at the given index — `s.scan_body` for
-/// `Simple` (alt_idx 0), or the parallel `scan_alts` entry for
+/// `Simple` (alt_index 0), or the parallel `scan_alts` entry for
 /// `MultiAlt` / LR atom shapes, or `lr.scan_suffix` for LR alts.
-pub fn rule_alt_scan_body(rule: &Rule, alt_idx: i32) -> Option<&ScanBody> with stores[rule] {
+pub fn rule_alt_scan_body(rule: &Rule, alt_index: i32) -> Option<&ScanBody> with stores[rule] {
     return match rule {
-        Simple(s) => if alt_idx == 0 { Option::<&ScanBody>::Some(&s.scan_body) } else { null },
-        MultiAlt(m) => find_scan_body_in_array(&m.alts, &m.scan_alts, alt_idx),
+        Simple(s) => if alt_index == 0 { Option::<&ScanBody>::Some(&s.scan_body) } else { null },
+        MultiAlt(m) => find_scan_body_in_array(&m.alts, &m.scan_alts, alt_index),
         LeftRecursive(l) => {
-            if let Some(b) = find_scan_body_in_array(&l.atom.alts, &l.atom.scan_alts, alt_idx) {
+            if let Some(b) = find_scan_body_in_array(&l.atom.alts, &l.atom.scan_alts, alt_index) {
                 Option::<&ScanBody>::Some(b);
             } else {
                 let mut found: Option<&ScanBody> = null;
                 for let lr of &l.lr_alts {
-                    if lr.alt_index == alt_idx {
+                    if lr.alt_index == alt_index {
                         found = Option::<&ScanBody>::Some(&lr.scan_suffix);
                         break;
                     }
@@ -1070,10 +1070,10 @@ pub fn rule_alt_scan_body(rule: &Rule, alt_idx: i32) -> Option<&ScanBody> with s
 fn find_scan_body_in_array(
     alts: &List<AltBody>,
     scan_alts: &List<ScanBody>,
-    alt_idx: i32,
+    alt_index: i32,
 ) -> Option<&ScanBody> with stores[scan_alts] {
     for let mut i = 0; i < alts.len(); i += 1 {
-        if alts[i].alt_index == alt_idx {
+        if alts[i].alt_index == alt_index {
             return Option::<&ScanBody>::Some(&scan_alts[i]);
         }
     }
