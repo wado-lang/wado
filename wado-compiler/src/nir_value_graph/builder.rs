@@ -2471,9 +2471,9 @@ mod tests {
         //     if cond { break; }      // guard arm: no field write, does not fall through
         //     let b = obj.f;          // must share VN with `a`
         // }
-        // The previous unconditional `bump_all` after the `if` split the
-        // heap version, denying every desugared loop's guard/body field VN
-        // sharing. The reachability-aware join keeps it.
+        // A guard arm with no field write that does not fall through must not
+        // split the heap version: `b`'s read of `obj.f` must share `a`'s VN,
+        // so a desugared loop's guard and body see the same field version.
         let mut body = empty_body();
         let recv_a = local_ref(&mut body, 0);
         let read_a = field_access(&mut body, recv_a, 0);
