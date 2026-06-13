@@ -335,18 +335,26 @@ impl<'a> Builder<'a> {
         right: ExprId,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
-        // Reflexivity: `x == x` is `true` and `x != x` is `false` for any value
-        // that compares equal to itself — every type except floats, where
-        // `NaN != NaN`. Two operands sharing a `ValueId` are the same value by
-        // hash-cons, so this fires without knowing the literal (e.g. an
-        // identity reinterpret `v as SameType == v`, whose rebuilt field reads
-        // hash-cons to the original field's VN). Excludes floats by the
-        // operand's NIR primitive type.
+        // Reflexivity: `x == x` is `true` and `x != x` is `false` for a value
+        // that compares equal to itself. Two operands sharing a `ValueId` are
+        // the same value by hash-cons, so this fires without knowing the
+        // literal (e.g. an identity reinterpret `v as SameType == v`, whose
+        // rebuilt field reads hash-cons to the original field's VN). Excludes
+        // `f32` / `f64` (`NaN != NaN`) and `v128` — its `==` is either IEEE
+        // lane-wise (NaN lanes) or an as-yet-undefined bitwise form, so
+        // `x == x` is not provably `true`. Every other operand that reaches a
+        // `NirBinaryOp::Eq` (integers, `bool`, `char`, enum discriminants)
+        // compares equal to itself; struct / reference equality dispatches to
+        // an `Eq` method / `RefEq`, never here.
         if lhs == rhs
             && matches!(op, NirBinaryOp::Eq | NirBinaryOp::NotEq)
             && !matches!(
                 crate::const_eval::prim_of(self.body.exprs[left].type_id, tt),
-                Some(crate::tir::PrimitiveType::F32 | crate::tir::PrimitiveType::F64)
+                Some(
+                    crate::tir::PrimitiveType::F32
+                        | crate::tir::PrimitiveType::F64
+                        | crate::tir::PrimitiveType::V128
+                )
             )
         {
             return Some(
