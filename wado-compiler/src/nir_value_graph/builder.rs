@@ -626,14 +626,14 @@ impl<'a> Builder<'a> {
                 // it).
                 let lhs = self.walk_expr(left);
                 let rhs = if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
-                    // Short-circuit logical ops: the rhs is conditionally
-                    // evaluated at runtime. Walk it inside a snapshot, then
-                    // model "may or may not have happened" by dirtying any
-                    // local the walk mutated and bumping the heap. Without
-                    // this, a write inside the rhs (e.g. `false && { x =
-                    // 2; true }`) would commit unconditionally to
-                    // `current_value` and let store-load forwarding
-                    // substitute later reads with the never-stored value.
+                    // Short-circuit `&&` / `||`: the rhs runs only
+                    // conditionally, so its effects must be modelled as "may or
+                    // may not have happened" — any local it mutates goes
+                    // Opaque (below) and any field it writes is invalidated
+                    // (further below). Without the local part, `false && { x =
+                    // 2; true }` would commit `x = 2` to `current_value` and
+                    // let store-load forwarding substitute the never-stored
+                    // value into later reads.
                     let saved_cur = self.current_value.clone();
                     let rhs = self.walk_expr(right);
                     let changed: crate::hashmap::IndexSet<u32> = self

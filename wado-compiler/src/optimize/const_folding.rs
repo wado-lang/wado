@@ -684,9 +684,8 @@ fn collect_loop_write_effects(body: &Body, block: BlockId) -> LoopWriteEffects {
     effects
 }
 
-/// Record the write effects of `node`, then recurse into every child
-/// (nested blocks and loops included — the full subtree, matching the
-/// original `NirRefVisitor`-based collector).
+/// Record the write effects of `node`, then recurse into every child —
+/// nested blocks and loops included, so the whole subtree is scanned.
 fn collect_loop_writes(body: &Body, node: NodeRef, effects: &mut LoopWriteEffects) {
     if let NodeRef::Expr(e) = node {
         record_loop_write(body, e, effects);
