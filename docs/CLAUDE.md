@@ -125,3 +125,4 @@ It may include TODOs on WIP.
 - [NIR Rewrite Engine — Detailed Design](./wep-2026-06-05-nir-rewrite-engine-design.md)
 - [Reference Representation and Mutation Write-Back](./wep-2026-06-13-reference-representation.md)
 - [Jade — JSON Schema for Wado](./wep-2026-06-13-jade.md)
+- [Library-Defined Derivation: `Reflect` Extensions and the `#[validate]` Attribute](./wep-2026-06-13-reflect-derivation.md)
