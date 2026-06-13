@@ -109,6 +109,8 @@ pub(super) struct ImplMethodHeader {
 #[derive(Clone, Debug)]
 pub(super) struct TraitDeclHeader {
     pub(super) name: String,
+    /// The trait's own type parameters (e.g. `<T, U>` in `trait Foo<T, U>`).
+    pub(super) type_params: Vec<ast::GenericParam>,
     pub(super) methods: Vec<ImplMethodHeader>,
 }
 
@@ -559,6 +561,7 @@ impl TraitEnv {
                         (module_source.clone(), item_idx),
                         TraitDeclHeader {
                             name: trait_decl.name.clone(),
+                            type_params: trait_decl.type_params.clone(),
                             methods: trait_decl
                                 .methods
                                 .iter()

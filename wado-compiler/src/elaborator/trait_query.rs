@@ -256,17 +256,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `canonical_decl_key` is local-first (issue #1298), so the type-param
         // list and the default-method bodies resolve to the same trait.
         let canonical_key = self.canonical_decl_key(trait_name);
-        if let Some((module_src, item_idx)) = self.tysys.trait_env.decl_index.get(&canonical_key) {
-            let module = &self.loaded_modules[module_src];
-            if let Item::Trait(trait_decl) = &module.items[*item_idx] {
-                return Some(trait_decl.type_params.clone());
-            }
+        if let Some(loc) = self.tysys.trait_env.decl_index.get(&canonical_key)
+            && let Some(header) = self.tysys.trait_env.trait_decl_headers.get(loc)
+        {
+            return Some(header.type_params.clone());
         }
-        for item in self.current_module_items {
-            if let Item::Trait(trait_decl) = item
-                && trait_decl.name == trait_name
-            {
-                return Some(trait_decl.type_params.clone());
+        // Fallback: a trait declared in the current module whose canonical key
+        // missed the decl index. (`trait_decl_headers` covers every loaded
+        // module, so the current module is included.)
+        for (key, header) in &self.tysys.trait_env.trait_decl_headers {
+            if key.0 == self.current_module_source && header.name == trait_name {
+                return Some(header.type_params.clone());
             }
         }
         None
