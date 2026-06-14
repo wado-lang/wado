@@ -2220,3 +2220,100 @@ fn query_references_by_symbol_tolerates_unanalyzable_sibling() {
         .success()
         .stdout(predicate::str::contains("main.wado:2:26"));
 }
+
+/// Build a generator package + a consumer that routes a schema through it
+/// via an inline `with { generator }` clause. Returns the consumer dir.
+/// `wado compile` must be run in it to materialize the Kiln artifacts.
+fn kiln_consumer_fixture(root: &std::path::Path) -> std::path::PathBuf {
+    let gen_pkg = root.join("gen");
+    std::fs::create_dir_all(gen_pkg.join("src")).unwrap();
+    std::fs::write(
+        gen_pkg.join("wado.toml"),
+        "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n\n[world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        gen_pkg.join("src/generator.wado"),
+        r#"use { RawRequest, Response, OutputFile, Error } from "core:kiln";
+
+export fn generate(raw: RawRequest) -> Result<Response, Error> {
+    let _ = raw;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "greeting.wado",
+            content: "pub fn greeting() -> String { return \"hi\"; }",
+            is_entry: true,
+        }],
+    });
+}
+"#,
+    )
+    .unwrap();
+
+    let app = root.join("app");
+    std::fs::create_dir_all(app.join("src")).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n[build-dependencies]\ngen = { path = \"../gen\" }\n",
+    )
+    .unwrap();
+    std::fs::write(app.join("src/schema.idl"), "anything\n").unwrap();
+    std::fs::write(
+        app.join("src/main.wado"),
+        "use { println, Stdout } from \"core:cli\";\nuse { greeting } from \"./schema.idl\" with {\n    generator: { module: \"gen\" },\n};\n\nexport fn run() with Stdout {\n    println(greeting());\n}\n",
+    )
+    .unwrap();
+    app
+}
+
+/// Once the Kiln artifacts exist on disk (here via `wado compile`),
+/// consume-only `wado query` must redirect the schema import to the
+/// generated module so symbols resolve — no stale-cache warning, and
+/// hover reports the generated signature.
+#[test]
+fn query_resolves_kiln_generated_symbol_after_compile() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = kiln_consumer_fixture(tmp.path());
+
+    // Materialize the generated `.wado` + `<primary>.kiln.json`.
+    wado_in(&app)
+        .args(["compile", "-o", "out.wasm", "src/main.wado"])
+        .assert()
+        .success();
+
+    wado_in(&app)
+        .args(["query", "diagnostics", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No diagnostics."));
+
+    // `greeting` is on line 7 (`println(greeting())`), column 13.
+    wado_in(&app)
+        .args([
+            "query",
+            "hover",
+            "--line",
+            "7",
+            "--column",
+            "13",
+            "src/main.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn greeting() -> String"));
+}
+
+/// Without artifacts, consume-only cannot generate them, so the query
+/// surfaces a `KILN_STALE_CACHE` warning pointing the user at
+/// `wado compile` rather than silently producing a confusing parse error.
+#[test]
+fn query_warns_when_kiln_artifacts_absent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = kiln_consumer_fixture(tmp.path());
+
+    wado_in(&app)
+        .args(["query", "diagnostics", "src/main.wado"])
+        .assert()
+        .stdout(predicate::str::contains("KILN_STALE_CACHE"))
+        .stdout(predicate::str::contains("wado compile"));
+}
