@@ -186,6 +186,14 @@ impl Package {
         self.target_world == world_registry::TEST_WORLD
     }
 
+    /// Whether this package targets a synthesized library world (`wado compile
+    /// --lib`). Single source of truth for the fact; gates the freelist
+    /// allocator default, the synchronous CM lift, and the static-registry
+    /// validation bypass.
+    pub fn is_lib_world(&self) -> bool {
+        self.lib_world_info.is_some()
+    }
+
     /// The active world for export synthesis and component planning.
     ///
     /// Prefers the synthesized library world (`--lib`) over the `&'static`

@@ -847,6 +847,106 @@ pub(super) fn synthesize_lift_from_flat_params(
     }
 }
 
+/// Build the adapter parameters and call arguments for an export binding.
+///
+/// Shared by [`synthesize_sync_export_binding`] and
+/// [`synthesize_general_export_binding`]: both lift flat CM params back to
+/// Wado-typed args (when `export_needs_param_lifting`) or pass the user
+/// params through unchanged. The lifting prelude is appended to `body_stmts`
+/// and the param locals to `locals`. Only the divergent tail (async
+/// `task.return` vs sync `return`/expr) is left to the callers.
+///
+/// Returns `(adapter_params, call_args, next_local)` where `next_local` is the
+/// first free local index after the params and any lifting temporaries.
+#[allow(clippy::too_many_arguments)]
+fn build_export_adapter_params(
+    user_func_ref: &TirFunction,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &Rc<RefCell<TypeTable>>,
+    world_params: &[(String, Type)],
+    lift_ctx: LiftContext<'_>,
+    body_stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+) -> (Vec<TirParam>, Vec<TirExpr>, u32) {
+    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
+    if needs_lifting {
+        let tt = type_table.borrow();
+        let flat_param_types = compute_export_flat_param_types(world_params, tir_modules, &tt);
+        drop(tt);
+
+        let flat_params: Vec<TirParam> = flat_param_types
+            .iter()
+            .enumerate()
+            .map(|(i, &vt)| TirParam {
+                name: format!("__p{i}"),
+                type_id: cm_val_type_to_type_id(vt),
+                local_index: i as u32,
+                is_mut: false,
+                span: synth_span(),
+            })
+            .collect();
+
+        let flat_count = flat_params.len() as u32;
+        for p in &flat_params {
+            locals.push(param_local(&p.name, p.type_id, false));
+        }
+
+        let mut next_local_tmp = flat_count;
+        let flat_param_locals: Vec<u32> = (0..flat_count).collect();
+
+        let mut lifted_args = Vec::new();
+        let mut flat_offset = 0;
+        for (i, (_name, param_ty)) in world_params.iter().enumerate() {
+            let user_type_id = user_func_ref
+                .params
+                .get(i)
+                .map(|p| p.type_id)
+                .unwrap_or(TypeTable::I32);
+            let (lifted, consumed) = synthesize_lift_from_flat_params(
+                param_ty,
+                &flat_param_locals[flat_offset..],
+                &flat_param_types[flat_offset..],
+                user_type_id,
+                &mut next_local_tmp,
+                body_stmts,
+                locals,
+                tir_modules,
+                type_table,
+                lift_ctx,
+            );
+            lifted_args.push(lifted);
+            flat_offset += consumed;
+        }
+
+        (flat_params, lifted_args, next_local_tmp)
+    } else {
+        let params: Vec<TirParam> = user_func_ref
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| TirParam {
+                name: p.name.clone(),
+                type_id: p.type_id,
+                local_index: i as u32,
+                is_mut: false,
+                span: synth_span(),
+            })
+            .collect();
+
+        let count = params.len() as u32;
+        for p in &params {
+            locals.push(param_local(&p.name, p.type_id, false));
+        }
+
+        let args: Vec<TirExpr> = params
+            .iter()
+            .map(|p| local_ref(p.local_index, &p.name, p.type_id))
+            .collect();
+
+        (params, args, count)
+    }
+}
+
 /// Synthesize a CM export binding for an async export with a Result return type.
 ///
 /// The binding:
@@ -1455,7 +1555,6 @@ pub(super) fn synthesize_general_export_binding(
 
     let user_func_ref = user_func.borrow();
     let user_return_type = user_func_ref.return_type;
-    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
     let lift_ctx = LiftContext {
         cm_interface_registry,
         type_table,
@@ -1463,83 +1562,15 @@ pub(super) fn synthesize_general_export_binding(
         interner,
     };
 
-    // Build adapter params and call args
-    let (adapter_params, call_args, param_count) = if needs_lifting {
-        let tt = type_table.borrow();
-        let flat_param_types = compute_export_flat_param_types(world_params, tir_modules, &tt);
-        drop(tt);
-
-        let flat_params: Vec<TirParam> = flat_param_types
-            .iter()
-            .enumerate()
-            .map(|(i, &vt)| TirParam {
-                name: format!("__p{i}"),
-                type_id: cm_val_type_to_type_id(vt),
-                local_index: i as u32,
-                is_mut: false,
-                span: synth_span(),
-            })
-            .collect();
-
-        let flat_count = flat_params.len() as u32;
-        for p in &flat_params {
-            locals.push(param_local(&p.name, p.type_id, false));
-        }
-
-        let mut next_local_tmp = flat_count;
-        let flat_param_locals: Vec<u32> = (0..flat_count).collect();
-
-        let mut lifted_args = Vec::new();
-        let mut flat_offset = 0;
-        for (i, (_name, param_ty)) in world_params.iter().enumerate() {
-            let user_type_id = user_func_ref
-                .params
-                .get(i)
-                .map(|p| p.type_id)
-                .unwrap_or(TypeTable::I32);
-            let (lifted, consumed) = synthesize_lift_from_flat_params(
-                param_ty,
-                &flat_param_locals[flat_offset..],
-                &flat_param_types[flat_offset..],
-                user_type_id,
-                &mut next_local_tmp,
-                &mut body_stmts,
-                &mut locals,
-                tir_modules,
-                type_table,
-                lift_ctx,
-            );
-            lifted_args.push(lifted);
-            flat_offset += consumed;
-        }
-
-        (flat_params, lifted_args, next_local_tmp)
-    } else {
-        let params: Vec<TirParam> = user_func_ref
-            .params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| TirParam {
-                name: p.name.clone(),
-                type_id: p.type_id,
-                local_index: i as u32,
-                is_mut: false,
-                span: synth_span(),
-            })
-            .collect();
-
-        let count = params.len() as u32;
-        for p in &params {
-            locals.push(param_local(&p.name, p.type_id, false));
-        }
-
-        let args: Vec<TirExpr> = params
-            .iter()
-            .map(|p| local_ref(p.local_index, &p.name, p.type_id))
-            .collect();
-
-        (params, args, count)
-    };
+    let (adapter_params, call_args, param_count) = build_export_adapter_params(
+        &user_func_ref,
+        tir_modules,
+        type_table,
+        world_params,
+        lift_ctx,
+        &mut body_stmts,
+        &mut locals,
+    );
 
     let mut next_local = param_count;
 
@@ -1662,7 +1693,6 @@ pub(super) fn synthesize_sync_export_binding(
 
     let user_func_ref = user_func.borrow();
     let user_return_type = user_func_ref.return_type;
-    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
     let lift_ctx = LiftContext {
         cm_interface_registry,
         type_table,
@@ -1670,82 +1700,15 @@ pub(super) fn synthesize_sync_export_binding(
         interner,
     };
 
-    let (adapter_params, call_args, param_count) = if needs_lifting {
-        let tt = type_table.borrow();
-        let flat_param_types = compute_export_flat_param_types(world_params, tir_modules, &tt);
-        drop(tt);
-
-        let flat_params: Vec<TirParam> = flat_param_types
-            .iter()
-            .enumerate()
-            .map(|(i, &vt)| TirParam {
-                name: format!("__p{i}"),
-                type_id: cm_val_type_to_type_id(vt),
-                local_index: i as u32,
-                is_mut: false,
-                span: synth_span(),
-            })
-            .collect();
-
-        let flat_count = flat_params.len() as u32;
-        for p in &flat_params {
-            locals.push(param_local(&p.name, p.type_id, false));
-        }
-
-        let mut next_local_tmp = flat_count;
-        let flat_param_locals: Vec<u32> = (0..flat_count).collect();
-
-        let mut lifted_args = Vec::new();
-        let mut flat_offset = 0;
-        for (i, (_name, param_ty)) in world_params.iter().enumerate() {
-            let user_type_id = user_func_ref
-                .params
-                .get(i)
-                .map(|p| p.type_id)
-                .unwrap_or(TypeTable::I32);
-            let (lifted, consumed) = synthesize_lift_from_flat_params(
-                param_ty,
-                &flat_param_locals[flat_offset..],
-                &flat_param_types[flat_offset..],
-                user_type_id,
-                &mut next_local_tmp,
-                &mut body_stmts,
-                &mut locals,
-                tir_modules,
-                type_table,
-                lift_ctx,
-            );
-            lifted_args.push(lifted);
-            flat_offset += consumed;
-        }
-
-        (flat_params, lifted_args, next_local_tmp)
-    } else {
-        let params: Vec<TirParam> = user_func_ref
-            .params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| TirParam {
-                name: p.name.clone(),
-                type_id: p.type_id,
-                local_index: i as u32,
-                is_mut: false,
-                span: synth_span(),
-            })
-            .collect();
-
-        let count = params.len() as u32;
-        for p in &params {
-            locals.push(param_local(&p.name, p.type_id, false));
-        }
-
-        let args: Vec<TirExpr> = params
-            .iter()
-            .map(|p| local_ref(p.local_index, &p.name, p.type_id))
-            .collect();
-
-        (params, args, count)
-    };
+    let (adapter_params, call_args, param_count) = build_export_adapter_params(
+        &user_func_ref,
+        tir_modules,
+        type_table,
+        world_params,
+        lift_ctx,
+        &mut body_stmts,
+        &mut locals,
+    );
 
     let call_user_param_is_mut: Vec<bool> =
         user_func.borrow().params.iter().map(|p| p.is_mut).collect();

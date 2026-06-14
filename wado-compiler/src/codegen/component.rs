@@ -369,22 +369,12 @@ pub fn build_component(
 
 fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
     match ty {
-        Type::Named(named) => match named.name.as_str() {
-            "i8" => ComponentValType::Primitive(PrimitiveValType::S8),
-            "i16" => ComponentValType::Primitive(PrimitiveValType::S16),
-            "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
-            "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
-            "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
-            "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
-            "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
-            "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
-            "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
-            "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
-            "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
-            "char" => ComponentValType::Primitive(PrimitiveValType::Char),
-            "String" => ComponentValType::Primitive(PrimitiveValType::String),
-            _ => panic!("unsupported Wado primitive type for CM: {}", named.name),
-        },
+        Type::Named(named) => {
+            match crate::component_model::wado_primitive_name_to_cm(&named.name) {
+                Some(prim) => ComponentValType::Primitive(prim),
+                None => panic!("unsupported Wado primitive type for CM: {}", named.name),
+            }
+        }
         _ => panic!("unsupported Wado type for CM primitive: {ty:?}"),
     }
 }
@@ -1657,32 +1647,12 @@ fn cm_export_type_to_valtype(
     }
 }
 
-/// Kebab-case a world export name for the Component Model boundary: underscores
-/// become hyphens. Wado identifiers are `[a-z0-9_]`, so this yields a valid CM
-/// extern name. Already-kebab WASI names (`run`, `handle`) are unchanged.
-fn kebab_export_name(name: &str) -> String {
-    name.replace('_', "-")
-}
-
 /// Map a Wado primitive type name to its Component Model `PrimitiveValType`.
 fn cm_primitive_name_to_valtype(name: &str) -> ComponentValType {
-    let prim = match name {
-        "i8" => PrimitiveValType::S8,
-        "i16" => PrimitiveValType::S16,
-        "i32" => PrimitiveValType::S32,
-        "i64" => PrimitiveValType::S64,
-        "u8" => PrimitiveValType::U8,
-        "u16" => PrimitiveValType::U16,
-        "u32" => PrimitiveValType::U32,
-        "u64" => PrimitiveValType::U64,
-        "f32" => PrimitiveValType::F32,
-        "f64" => PrimitiveValType::F64,
-        "bool" => PrimitiveValType::Bool,
-        "char" => PrimitiveValType::Char,
-        "String" => PrimitiveValType::String,
-        _ => panic!("unsupported CM primitive type name: {name}"),
-    };
-    ComponentValType::Primitive(prim)
+    match crate::component_model::wado_primitive_name_to_cm(name) {
+        Some(prim) => ComponentValType::Primitive(prim),
+        None => panic!("unsupported CM primitive type name: {name}"),
+    }
 }
 
 fn emit_world_exports(
@@ -1695,9 +1665,10 @@ fn emit_world_exports(
         // The Component Model requires kebab-case extern names. Core export
         // names allow underscores, so a `--lib` export `fn id_bool` is aliased
         // from the core module by its underscore name but exported at the
-        // component boundary as `id-bool`. WASI world names (`run`, `handle`,
-        // `generate`) are already kebab-safe, so this is a no-op for them.
-        let cm_name = kebab_export_name(&export.name);
+        // component boundary as `id-bool` (computed at plan time as
+        // `cm_export_name`). WASI world names (`run`, `handle`, `generate`) are
+        // already kebab-safe, so this equals `export.name` for them.
+        let cm_name = export.cm_export_name.as_str();
         let core_name = format!("{}-core", export.name);
         let func_type_name = format!("{}-func-type", export.name);
 
@@ -1738,7 +1709,7 @@ fn emit_world_exports(
                 .result(Some(result_val));
         }
 
-        ctx.register_comp_func(&cm_name);
+        ctx.register_comp_func(cm_name);
         // `realloc` is always supplied to the canon. The Wado runtime always
         // exports a `realloc` (the chosen allocator), and wasm-tools accepts
         // the option even on canons whose lift code never calls back into it
@@ -1754,7 +1725,7 @@ fn emit_world_exports(
         lift_opts.push(CanonicalOption::Memory(ctx.memory_idx()));
         lift_opts.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));
         builder.lift_func(
-            Some(&cm_name),
+            Some(cm_name),
             ctx.core_func_idx(&core_name),
             func_type,
             lift_opts,
@@ -1765,9 +1736,9 @@ fn emit_world_exports(
         // functions (kiln `generate`) are exported bare here.
         if export.from_interface_fq.is_none() {
             builder.export(
-                &cm_name,
+                cm_name,
                 ComponentExportKind::Func,
-                ctx.comp_func_idx(&cm_name),
+                ctx.comp_func_idx(cm_name),
                 None,
             );
             ctx.skip_comp_func_idx();

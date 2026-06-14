@@ -232,7 +232,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     let world_info = project.active_world_info().cloned();
     // Library world exports use a synchronous lift (the core function returns
     // the value directly), unlike the async/task-return WASI worlds.
-    let is_lib_world = project.lib_world_info.is_some();
+    let is_lib_world = project.is_lib_world();
     if let Some(world_info) = world_info {
         let entry_type_table = project
             .tir_modules

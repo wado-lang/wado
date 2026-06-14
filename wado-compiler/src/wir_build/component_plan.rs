@@ -28,8 +28,14 @@ pub struct ComponentPlan {
 /// A world export to create at the component boundary.
 #[derive(Debug, Clone)]
 pub struct WorldExportPlan {
-    /// Export function name (e.g., "run", "handle")
+    /// Export function name (e.g., "run", "handle"). Used as-is for the core
+    /// module alias (`{name}-core`).
     pub name: String,
+    /// Kebab-case CM extern name for the component boundary (underscores → hyphens).
+    /// Computed once here so codegen emits the plan as-is rather than owning the
+    /// underscore→kebab transform. WASI names (`run`, `handle`, `generate`) are
+    /// already kebab-safe, so this equals `name` for them.
+    pub cm_export_name: String,
     /// Core function name in the Wasm module (e.g., `"__cm_export__run"` if adapter exists, or `"run"`)
     pub core_func_name: String,
     /// Whether this is an async export
@@ -150,6 +156,7 @@ pub fn build_component_plan(
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
     lib_world: Option<&WorldInfo>,
+    is_lib_world: bool,
 ) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
@@ -162,6 +169,7 @@ pub fn build_component_plan(
             world_registry,
             cm_interface_registry,
             lib_world,
+            is_lib_world,
         )
     };
 
@@ -208,6 +216,7 @@ fn build_world_export_plans(
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
     lib_world: Option<&WorldInfo>,
+    is_lib_world: bool,
 ) -> Vec<WorldExportPlan> {
     // The synthesized library world (`--lib`) takes priority over the static
     // registry, which cannot hold a per-package world.
@@ -254,6 +263,7 @@ fn build_world_export_plans(
 
             WorldExportPlan {
                 from_interface_fq: export.from_interface_fq.clone(),
+                cm_export_name: kebab_export_name(&export.name),
                 name: export.name,
                 core_func_name,
                 is_async: export.is_async,
@@ -261,7 +271,7 @@ fn build_world_export_plans(
                 cm_result,
                 // Library exports use a synchronous lift; the WASI worlds keep
                 // the async/task-return lift.
-                sync_lift: lib_world.is_some(),
+                sync_lift: is_lib_world,
             }
         })
         .collect()
@@ -285,21 +295,7 @@ fn build_world_export_plans(
 /// Whether `name` is a Wado primitive that maps directly to a Component Model
 /// primitive value type at the export boundary.
 fn is_cm_primitive_name(name: &str) -> bool {
-    matches!(
-        name,
-        "i8" | "i16"
-            | "i32"
-            | "i64"
-            | "u8"
-            | "u16"
-            | "u32"
-            | "u64"
-            | "f32"
-            | "f64"
-            | "bool"
-            | "char"
-            | "String"
-    )
+    crate::component_model::wado_primitive_name_to_cm(name).is_some()
 }
 
 fn resolve_cm_export_type(
@@ -379,6 +375,13 @@ fn resolve_cm_export_type(
         };
     }
     panic!("unsupported world export type shape: {ty:?}");
+}
+
+/// Kebab-case a world export name for the Component Model boundary: underscores
+/// become hyphens. Wado identifiers are `[a-z0-9_]`, so this yields a valid CM
+/// extern name. Already-kebab WASI names (`run`, `handle`) are unchanged.
+fn kebab_export_name(name: &str) -> String {
+    name.replace('_', "-")
 }
 
 /// Convert a test function name (e.g., `__test_0_my_name`) to a valid kebab-case

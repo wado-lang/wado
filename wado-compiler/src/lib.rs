@@ -675,7 +675,7 @@ fn compile_after_load<H: CompilerHost>(
                 .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
             if package.is_test_world() {
                 "debug".to_string()
-            } else if is_http_service || package.lib_world_info.is_some() {
+            } else if is_http_service || package.is_lib_world() {
                 // A library is consumed by a long-running host; reclaim memory.
                 "freelist".to_string()
             } else {
@@ -708,7 +708,7 @@ fn compile_after_load<H: CompilerHost>(
     // Validate target world (test and library worlds are handled specially,
     // not in the static registry)
     if !package.is_test_world()
-        && package.lib_world_info.is_none()
+        && !package.is_lib_world()
         && package.world_registry.get(&package.target_world).is_none()
     {
         let _ = logger.error(compiler_host::Diagnostic {
