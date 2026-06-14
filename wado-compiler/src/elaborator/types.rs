@@ -1309,6 +1309,17 @@ impl<'a> TypeLookup<'a> {
                     }
                 }
             }
+            // The name is imported from `src` but absent from this registry
+            // there. If `src` defines it in *some* registry, the import is
+            // authoritative — it is simply not of this kind (e.g. an imported
+            // `enum ErrorCode` queried against the variant registry), so return
+            // `None` rather than let the global scan grab a same-named type from
+            // an unrelated module. If `src` does not define it at all, the
+            // import is a `pub use` re-export barrel; fall through to the scan to
+            // reach the real definer.
+            if self.src_defines(src, canonical) {
+                return None;
+            }
         }
         for m in all_per_module.values() {
             if let Some(v) = m.get(name) {
@@ -1316,6 +1327,39 @@ impl<'a> TypeLookup<'a> {
             }
         }
         None
+    }
+
+    /// Whether `src` declares a type named `name` in any registry. Used to tell
+    /// a genuine import (the source defines the name) from a `pub use`
+    /// re-export barrel (the source merely forwards it).
+    fn src_defines(&self, src: &ModuleSource, name: &str) -> bool {
+        self.all_newtypes
+            .get(src)
+            .is_some_and(|m| m.contains_key(name))
+            || self
+                .all_struct_fields
+                .get(src)
+                .is_some_and(|m| m.contains_key(name))
+            || self
+                .all_variant_cases
+                .get(src)
+                .is_some_and(|m| m.contains_key(name))
+            || self
+                .all_enum_cases
+                .get(src)
+                .is_some_and(|m| m.contains_key(name))
+            || self
+                .all_flags_cases
+                .get(src)
+                .is_some_and(|m| m.contains_key(name))
+            || self
+                .all_resource_types
+                .get(src)
+                .is_some_and(|m| m.contains_key(name))
+            || self
+                .all_generic_newtypes
+                .get(src)
+                .is_some_and(|m| m.contains_key(name))
     }
 
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
