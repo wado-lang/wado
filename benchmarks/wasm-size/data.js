@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781420987818,
+  "lastUpdate": 1781425390144,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33101,6 +33101,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/83df1e3b99e7b5e39ca850f26332f71addb0f7cb"
         },
         "date": 1781420987260,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0739d9f26e1247494fb99e8ac42d6679554c0313",
+          "message": "Merge pull request #1379 from wado-lang/claude/admiring-newton-te6uho\n\nfix(kiln): don't double-stamp the generated header",
+          "timestamp": "2026-06-14T17:13:57+09:00",
+          "tree_id": "5a69d79103f6f90e577cae5d524e38039ff11230",
+          "url": "https://github.com/wado-lang/wado/commit/0739d9f26e1247494fb99e8ac42d6679554c0313"
+        },
+        "date": 1781425389816,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
