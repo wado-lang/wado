@@ -1550,6 +1550,14 @@ impl CmInterfaceRegistry {
         find_unique_source_in(&self.resources, name)
     }
 
+    /// Source interface of the resource whose CM (kebab) name is `cm_name`.
+    pub fn resource_source_by_cm_name(&self, cm_name: &str) -> Option<&str> {
+        self.resources
+            .iter()
+            .find(|((_, _), cm)| cm.as_str() == cm_name)
+            .map(|((src, _), _)| src.as_str())
+    }
+
     /// Check if a type name is a registered enum (in any interface).
     pub fn is_enum(&self, name: &str) -> bool {
         has_any_in(&self.enums, name)
@@ -2039,22 +2047,6 @@ impl CmInterfaceRegistry {
                 if let Some(at_pos) = path.find('@') {
                     return Some(&path[at_pos + 1..]);
                 }
-            }
-        }
-        None
-    }
-
-    /// Get the WASI version for a specific package (e.g., "cli", "clocks")
-    ///
-    /// Returns the version string from the first interface of that package.
-    pub fn get_package_version(&self, package: &str) -> Option<&str> {
-        for path in self.interfaces.keys() {
-            if let Some(wasi) = CmImport::parse(path)
-                && wasi.namespace == "wasi"
-                && wasi.package == package
-                && let Some(at_pos) = path.find('@')
-            {
-                return Some(&path[at_pos + 1..]);
             }
         }
         None

@@ -192,13 +192,22 @@ pub fn build_component(
         });
 
     let (trailers_future_type, transmission_future_types) = if needs_trailers_future {
-        let (t, http_ft) = build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type);
+        // The trailers/transmission futures belong to the resource-defining
+        // interface that declares them (the HTTP types interface); derive its
+        // package from the plan rather than hardcoding it.
+        let pkg = wir_package
+            .import_plan
+            .iter()
+            .find(|e| e.kind == crate::wir::ImportKind::ResourceDefiningInterface)
+            .map(|e| crate::world_registry::fq_name_package(&e.fq).to_string())
+            .expect("trailers future needs a resource-defining interface in the plan");
+        let (t, defining_ft) =
+            build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type, &pkg);
         let mut map: IndexMap<String, u32> = IndexMap::default();
-        // HTTP build creates http-error-code based transmission future
-        map.insert("http".to_string(), http_ft);
+        map.insert(pkg.clone(), defining_ft);
         // Build additional transmission types for other error-code sources
         for source in &transmission_sources {
-            if source != "http" && !map.contains_key(source.as_str()) {
+            if *source != pkg && !map.contains_key(source.as_str()) {
                 let ft = build_transmission_future_type_for(&mut builder, &mut ctx, source);
                 map.insert(source.clone(), ft);
             }
@@ -221,6 +230,7 @@ pub fn build_component(
 
     // Canonical intrinsics
     emit_canonical_intrinsics(
+        project,
         &mut builder,
         &mut ctx,
         &all_canonical_intrinsics,
@@ -1224,29 +1234,30 @@ fn build_future_intrinsic_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     stream_u8_type: u32,
+    pkg: &str,
 ) -> (u32, u32) {
-    let fields_resource_idx = ctx.type_idx("http-fields-resource");
-    let error_code = CmTypeKey::Leaf(ctx.type_idx("http-error-code"));
+    let fields_resource_idx = ctx.type_idx(&format!("{pkg}-fields-resource"));
+    let error_code = CmTypeKey::Leaf(ctx.type_idx(&format!("{pkg}-error-code")));
 
     let fields = intern_cm_type(
         builder,
         ctx,
         &CmTypeKey::Own(Box::new(CmTypeKey::Leaf(fields_resource_idx))),
-        Some("http-fields"),
+        Some(&format!("{pkg}-fields")),
     );
 
     intern_cm_type(
         builder,
         ctx,
         &CmTypeKey::Option(Box::new(CmTypeKey::Leaf(stream_u8_type))),
-        Some("http-option-stream-u8"),
+        Some(&format!("{pkg}-option-stream-u8")),
     );
 
     let option_fields = intern_cm_type(
         builder,
         ctx,
         &CmTypeKey::Option(Box::new(CmTypeKey::Leaf(fields))),
-        Some("http-option-fields"),
+        Some(&format!("{pkg}-option-fields")),
     );
 
     let trailers_result = intern_cm_type(
@@ -1256,14 +1267,14 @@ fn build_future_intrinsic_types(
             ok: Some(Box::new(CmTypeKey::Leaf(option_fields))),
             err: Some(Box::new(error_code.clone())),
         },
-        Some("http-trailers-result"),
+        Some(&format!("{pkg}-trailers-result")),
     );
 
     let trailers_future_type = intern_cm_type(
         builder,
         ctx,
         &CmTypeKey::Future(Box::new(CmTypeKey::Leaf(trailers_result))),
-        Some("http-trailers-future"),
+        Some(&format!("{pkg}-trailers-future")),
     );
 
     let transmission_result = intern_cm_type(
@@ -1273,14 +1284,14 @@ fn build_future_intrinsic_types(
             ok: None,
             err: Some(Box::new(error_code)),
         },
-        Some("http-transmission-result"),
+        Some(&format!("{pkg}-transmission-result")),
     );
 
     let transmission_future_type = intern_cm_type(
         builder,
         ctx,
         &CmTypeKey::Future(Box::new(CmTypeKey::Leaf(transmission_result))),
-        Some("http-transmission-future"),
+        Some(&format!("{pkg}-transmission-future")),
     );
 
     (trailers_future_type, transmission_future_type)
@@ -1337,6 +1348,7 @@ fn cm_scalar_to_primitive(scalar: CmScalarType) -> PrimitiveValType {
 }
 
 fn emit_canonical_intrinsics(
+    project: &NirPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     canonical_intrinsics: &[CanonicalIntrinsic],
@@ -1535,16 +1547,18 @@ fn emit_canonical_intrinsics(
                 builder.error_context_drop();
             }
             CanonicalIntrinsic::ResourceDrop(cm_name) => {
-                // The imported resource type is aliased into the component's
-                // local type space by `generate_cm_imports` (which runs first):
-                // HTTP resources as `http-<cm>-resource`, others as
-                // `resource:<cm>`.
-                let http_key = format!("http-{cm_name}-resource");
-                let generic_key = format!("resource:{cm_name}");
-                let type_idx = if ctx.has_type(&http_key) {
-                    ctx.type_idx(&http_key)
-                } else {
-                    ctx.type_idx(&generic_key)
+                // A resource-defining interface aliases its resource type as
+                // `{pkg}-<cm>-resource`; other interfaces use `resource:<cm>`.
+                let defining_key = project
+                    .cm_interface_registry
+                    .resource_source_by_cm_name(cm_name)
+                    .map(|src| {
+                        format!("{}-{cm_name}-resource", crate::world_registry::fq_name_package(src))
+                    })
+                    .filter(|key| ctx.has_type(key));
+                let type_idx = match defining_key {
+                    Some(key) => ctx.type_idx(&key),
+                    None => ctx.type_idx(&format!("resource:{cm_name}")),
                 };
                 builder.resource_drop(type_idx);
             }
