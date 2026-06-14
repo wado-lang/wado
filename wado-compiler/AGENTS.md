@@ -1,6 +1,6 @@
-# Overview
+# wado-compiler
 
-This is the wado-compiler crate.
+The Wado compiler crate: frontend, IR pipeline, optimizer, and codegen.
 
 ## Rules
 

@@ -1,6 +1,6 @@
-# Overview of Docs
+# docs
 
-This is the documentation directory of Wado.
+Wado documentation, including the WEP (Wado Evolution Proposals) archive.
 
 ## Rules for Markdown
 
