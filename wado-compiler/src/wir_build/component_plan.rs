@@ -301,8 +301,9 @@ fn resolve_cm_export_type(
             .source_interface
             .as_deref()
             .or_else(|| {
-                world_namespace_prefix
-                    .and_then(|prefix| cm_interface_registry.resolve_cm_source_with_prefix(named, prefix))
+                world_namespace_prefix.and_then(|prefix| {
+                    cm_interface_registry.resolve_cm_source_with_prefix(named, prefix)
+                })
             })
             .or_else(|| cm_interface_registry.resolve_cm_source_for(named, None))
             .map(str::to_string)
@@ -480,10 +481,14 @@ mod tests {
         let http = result_of(named("Response"), named("ErrorCode"));
         match resolve_cm_export_type(&http, registry, Some("wasi:http/")) {
             CmExportType::HandlerResult { ok, err } => {
-                assert!(matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
-                    if cm_name == "response" && interface_fq.starts_with("wasi:http/types")));
-                assert!(matches!(*err, CmExportType::Named { ref cm_name, ref interface_fq, .. }
-                    if cm_name == "error-code" && interface_fq.starts_with("wasi:http/types")));
+                assert!(
+                    matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "response" && interface_fq.starts_with("wasi:http/types"))
+                );
+                assert!(
+                    matches!(*err, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "error-code" && interface_fq.starts_with("wasi:http/types"))
+                );
             }
             other => panic!("expected HandlerResult, got {other:?}"),
         }
@@ -494,10 +499,14 @@ mod tests {
         let kiln = result_of(named("Response"), named("Error"));
         match resolve_cm_export_type(&kiln, registry, Some("core:kiln/")) {
             CmExportType::HandlerResult { ok, err } => {
-                assert!(matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
-                    if cm_name == "response" && interface_fq.starts_with("core:kiln/types")));
-                assert!(matches!(*err, CmExportType::Named { ref cm_name, ref interface_fq, .. }
-                    if cm_name == "error" && interface_fq.starts_with("core:kiln/types")));
+                assert!(
+                    matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "response" && interface_fq.starts_with("core:kiln/types"))
+                );
+                assert!(
+                    matches!(*err, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "error" && interface_fq.starts_with("core:kiln/types"))
+                );
             }
             other => panic!("expected HandlerResult, got {other:?}"),
         }

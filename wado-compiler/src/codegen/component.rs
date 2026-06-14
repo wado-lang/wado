@@ -1179,9 +1179,7 @@ fn intern_cm_type(
     }
     let resolved = match key {
         CmTypeKey::Leaf(_) => unreachable!("Leaf handled above"),
-        CmTypeKey::Own(inner) => {
-            ResolvedCmType::Own(intern_cm_type(builder, ctx, inner, None))
-        }
+        CmTypeKey::Own(inner) => ResolvedCmType::Own(intern_cm_type(builder, ctx, inner, None)),
         CmTypeKey::Option(inner) => {
             ResolvedCmType::Option(intern_cm_type(builder, ctx, inner, None))
         }
@@ -1205,8 +1203,7 @@ fn intern_cm_type(
             enc.defined_type().own(resource);
         }
         ResolvedCmType::Option(inner) => {
-            enc.defined_type()
-                .option(ComponentValType::Type(inner));
+            enc.defined_type().option(ComponentValType::Type(inner));
         }
         ResolvedCmType::Future(inner) => {
             enc.defined_type()
@@ -1366,9 +1363,7 @@ fn emit_canonical_intrinsics(
     let task_return_type = component_plan
         .world_exports
         .first()
-        .map(|export| {
-            cm_export_type_to_idx(ctx, &export.cm_result, result_unit_type)
-        })
+        .map(|export| cm_export_type_to_idx(ctx, &export.cm_result, result_unit_type))
         .unwrap_or(result_unit_type);
     for intrinsic in canonical_intrinsics {
         ctx.register_core_func(&intrinsic.import_name());
@@ -1553,7 +1548,10 @@ fn emit_canonical_intrinsics(
                     .cm_interface_registry
                     .resource_source_by_cm_name(cm_name)
                     .map(|src| {
-                        format!("{}-{cm_name}-resource", crate::world_registry::fq_name_package(src))
+                        format!(
+                            "{}-{cm_name}-resource",
+                            crate::world_registry::fq_name_package(src)
+                        )
                     })
                     .filter(|key| ctx.has_type(key));
                 let type_idx = match defining_key {
@@ -2827,7 +2825,9 @@ fn import_resource_using_composite_interface(
                 .iter()
                 .map(|(n, ci)| (n.as_str(), ComponentValType::Type(alias_local[ci])))
                 .collect();
-            let result = sig.result.map(|ci| ComponentValType::Type(alias_local[&ci]));
+            let result = sig
+                .result
+                .map(|ci| ComponentValType::Type(alias_local[&ci]));
             let mut fe = instance_type.ty().function();
             if sig.is_async {
                 fe.async_(true).params(params).result(result);
@@ -3224,11 +3224,13 @@ fn resource_using_references_defining_interface(
         }
     }
     resources.iter().any(|r| {
-        registry.get_resource_source_interface(r).is_some_and(|src| {
-            import_plan
-                .iter()
-                .any(|e| e.fq == src && e.kind == crate::wir::ImportKind::ResourceDefiningInterface)
-        })
+        registry
+            .get_resource_source_interface(r)
+            .is_some_and(|src| {
+                import_plan.iter().any(|e| {
+                    e.fq == src && e.kind == crate::wir::ImportKind::ResourceDefiningInterface
+                })
+            })
     })
 }
 
@@ -3576,8 +3578,8 @@ fn lower_wasi_functions(
                         project.cm_interface_registry,
                     )
             });
-            let needs_memory =
-                func.needs_memory_with_registry(project.cm_interface_registry) || returns_via_outptr;
+            let needs_memory = func.needs_memory_with_registry(project.cm_interface_registry)
+                || returns_via_outptr;
             let needs_realloc = needs_memory;
 
             if needs_memory {

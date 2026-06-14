@@ -1515,9 +1515,15 @@ impl CmInterfaceRegistry {
             return None;
         }
         find_unique_source_with_prefix(&self.newtypes, namespace_prefix, &named.name)
-            .or_else(|| find_unique_source_with_prefix(&self.resources, namespace_prefix, &named.name))
-            .or_else(|| find_unique_source_with_prefix(&self.structs, namespace_prefix, &named.name))
-            .or_else(|| find_unique_source_with_prefix(&self.variants, namespace_prefix, &named.name))
+            .or_else(|| {
+                find_unique_source_with_prefix(&self.resources, namespace_prefix, &named.name)
+            })
+            .or_else(|| {
+                find_unique_source_with_prefix(&self.structs, namespace_prefix, &named.name)
+            })
+            .or_else(|| {
+                find_unique_source_with_prefix(&self.variants, namespace_prefix, &named.name)
+            })
             .or_else(|| find_unique_source_with_prefix(&self.enums, namespace_prefix, &named.name))
             .or_else(|| find_unique_source_with_prefix(&self.flags, namespace_prefix, &named.name))
     }
@@ -3100,10 +3106,9 @@ fn is_return_type_supported_with_types(
                 "List" | "Option" => {
                     // A list/option element is any supported value type (e.g.
                     // `list<list<u8>>`, `list<tuple<field-name, field-value>>`).
-                    generic
-                        .args
-                        .iter()
-                        .all(|arg| is_return_type_supported_with_types(arg, enums, resources, structs))
+                    generic.args.iter().all(|arg| {
+                        is_return_type_supported_with_types(arg, enums, resources, structs)
+                    })
                 }
                 "Tuple" => {
                     // All tuple elements must be supported return types
