@@ -2116,7 +2116,6 @@ fn query_hover_type_default_view_lists_public_api() {
         .args(["query", "hover", "--symbol", "./c.wado#Counter"])
         .assert()
         .success()
-        // Private field elided, impl block with the public method shown.
         .stdout(predicate::str::contains("struct Counter { .. }"))
         .stdout(predicate::str::contains("impl Counter {"))
         .stdout(predicate::str::contains("pub fn get(&self) -> i32"))

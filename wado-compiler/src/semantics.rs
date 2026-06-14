@@ -571,7 +571,6 @@ impl Semantics {
             return Err(SymbolResolveError::ModuleNotLoaded);
         }
         let Some(receiver) = &notation.receiver else {
-            // Free / module-level symbol.
             let symbol = self
                 .symbols
                 .lookup_in_module(&module, &notation.member)

@@ -206,8 +206,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
 
     let kind = kind.ok_or_else(|| CliExit::error_with_usage("missing query kind", &usage))?;
 
-    // The `--symbol` locator names its own module, so it takes no input file
-    // and no position; it is the alternative to `--line`/`--column`.
     if symbol.is_some() {
         if input.is_some() {
             return Err(CliExit::error_with_usage(
@@ -284,7 +282,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
 }
 
 pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
-    // Default to the public-API view; `--all` opts into private members.
     let public_only = !opts.all;
     if let Some(notation) = &opts.symbol {
         let base = opts.base.as_deref().unwrap_or(".");
@@ -315,7 +312,6 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
             QueryKind::Hover => {
                 query_adapter::run_hover_by_symbol(notation, base, public_only, opts.json).await
             }
-            // Rejected during parse_args.
             QueryKind::Diagnostics => unreachable!("--symbol rejected for diagnostics"),
         };
     }

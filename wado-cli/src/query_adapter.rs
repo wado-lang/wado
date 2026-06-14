@@ -206,8 +206,6 @@ fn report_symbol_error(
 ) {
     match reason {
         wado_lsp::SymbolQueryError::NotFound { available } => {
-            // Member miss (`Type::m`) lists the type's members; a free miss
-            // lists the module's public symbols.
             let (subject, listing) = match &parsed.receiver {
                 Some(r) => (
                     format!("no member '{}' on {}", parsed.member, r.type_name),
