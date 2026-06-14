@@ -95,6 +95,15 @@ pub struct CachedAnalysis {
     param_locals: Vec<u32>,
 }
 
+impl CachedAnalysis {
+    /// Whether the parked graph carries checkpoints, so it can be incrementally
+    /// rebuilt after the function changes. Without them a changed function must
+    /// full-rebuild.
+    pub fn has_checkpoints(&self) -> bool {
+        self.value_graph.has_checkpoints()
+    }
+}
+
 /// An engine session over one function body: the arena plus the [`EngineBuffers`]
 /// scratch (parent map, use index, and worklist) the worklist discipline needs,
 /// and the function's `locals` list so rules can allocate fresh locals.

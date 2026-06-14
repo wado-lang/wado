@@ -349,11 +349,16 @@ impl FunctionGate {
                     self.invalidate_journal(c);
                 }
                 self.vg_cache[idx] = match (outcome.analysis, outcome.dirty) {
-                    (Some(analysis), Some(dirty)) => Some(VgJournal {
-                        analysis,
-                        dirty,
-                        complete: true,
-                    }),
+                    // An incremental rebuild needs the parked graph's checkpoints;
+                    // a build made without them (passes that don't record) can't
+                    // be the basis for one, so the next pass full-rebuilds.
+                    (Some(analysis), Some(dirty)) if analysis.has_checkpoints() => {
+                        Some(VgJournal {
+                            analysis,
+                            dirty,
+                            complete: true,
+                        })
+                    }
                     _ => None,
                 };
                 any = true;
@@ -387,10 +392,17 @@ impl FunctionGate {
     }
 }
 
-/// Whether the incremental `ValueGraph` rebuild is enabled (default on; set
-/// `WADO_INCREMENTAL_VG=0` to force full rebuilds for measurement / bisection).
-fn incremental_vg_enabled() -> bool {
-    !matches!(std::env::var("WADO_INCREMENTAL_VG").as_deref(), Ok("0"))
+/// Whether the incremental `ValueGraph` rebuild is enabled. Default **off**:
+/// measurement (see the WEP) shows it fires on well under 1% of value-graph
+/// builds under the current multi-pass pipeline — the value-graph passes are
+/// interleaved with non-journaling passes (`inline`, `const_fold`, `licm`) that
+/// spoil the cross-pass journal, and `cse`, the one clean upstream of
+/// `store_load_forward`, rarely changes a function — so the checkpoint-recording
+/// cost is not repaid. The verified mechanism stays available via
+/// `WADO_INCREMENTAL_VG=1` for the single-worklist work that unlocks it. When
+/// off, this also disables checkpoint recording, so a run pays nothing.
+pub fn incremental_vg_enabled() -> bool {
+    matches!(std::env::var("WADO_INCREMENTAL_VG").as_deref(), Ok("1"))
 }
 
 #[cfg(test)]

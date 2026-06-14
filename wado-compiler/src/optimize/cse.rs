@@ -95,7 +95,7 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
                 let mut engine = Engine::new(body, &mut buffers, locals);
                 engine.set_alias_sets(aliased, untrackable, mut_escaped);
                 engine.set_value_graph_type_table(&type_table);
-                engine.set_record_checkpoints(true);
+                engine.set_record_checkpoints(super::gate::incremental_vg_enabled());
                 engine
             }
         };

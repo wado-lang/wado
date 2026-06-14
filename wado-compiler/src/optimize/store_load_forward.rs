@@ -130,7 +130,6 @@ fn forward_one(
             let mut engine = Engine::new(body, buffers, locals);
             engine.set_alias_sets(aliased, untrackable, mut_escaped);
             engine.set_value_graph_type_table(type_table);
-            engine.set_record_checkpoints(true);
             engine
         }
     };

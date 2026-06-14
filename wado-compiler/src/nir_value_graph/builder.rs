@@ -231,6 +231,16 @@ pub struct ValueGraphBuild {
     checkpoints: Vec<Checkpoint>,
 }
 
+impl ValueGraphBuild {
+    /// Whether this build carries per-root-statement checkpoints — the
+    /// precondition for an incremental rebuild from it. A build made without
+    /// `record_checkpoints` cannot be incrementally rebuilt, so a changed
+    /// function must full-rebuild instead.
+    pub fn has_checkpoints(&self) -> bool {
+        !self.checkpoints.is_empty()
+    }
+}
+
 /// Build the `ValueGraph` for one function body.
 ///
 /// `param_locals` are the local indices of the function's parameters; each

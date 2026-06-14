@@ -394,17 +394,58 @@ mode builds both ways and asserts the observable queries (`value_of` equivalence
 classes, `loop_entry_values`, `literal_source`) agree, run across the E2E suite;
 the terminal bar stays byte-identical WIR on the full suite + `package-gale`.
 
-Status: in progress on this WEP's required path.
+Status: implemented and verified, but gated **off** by measurement — the current
+multi-pass pipeline fires it too rarely to repay its cost. The mechanism is the
+foundation the single-worklist promotion (Stages 7 – 8) builds on.
 
 - [x] Stage A — edit journal on the engine: every edit-API mutation records its
       node, mapped at teardown to the enclosing root-block `StmtId`
       (`Engine::dirty_root_stmts`), or `None` when a root-list edit can't be
       localized. Behavior-invariant.
-- [ ] Stage B — per-root-statement checkpoints on the build (the complete
+- [x] Stage B — per-root-statement checkpoints on the build (the complete
       flow-sensitive state: `current_value`, heap incl. the `next` counter,
-      `ref_targets`, `field_store`) + a partial rebuild that reuses the clean
-      prefix and re-walks from the first dirty statement to the end, gated on a
-      complete journal, with the `WADO_VERIFY_INCREMENTAL_VG` harness.
+      `ref_targets`, `field_store`, `literal_source`) + `rebuild_incremental`,
+      which reuses the clean prefix and re-walks from the first dirty statement to
+      the end. Wired through a per-function journal in the gate
+      (`run_gated_incremental`): a value-graph pass parks its graph plus the
+      statements it edited, and the next pass in the trio rebuilds incrementally
+      from it. `WADO_VERIFY_INCREMENTAL_VG` builds both ways per rebuild and
+      asserts observable equality (value_of partition, `loop_entry_values`,
+      literal payloads); the full E2E suite passes under it and WIR is
+      byte-identical with the rebuild on vs off.
+- [ ] Stage C — reconvergence early-stop (deferred; would not change the verdict).
+
+### Measured: the fire rate is the ceiling (gated off)
+
+Instrumenting the value-graph build decisions across benchmarks:
+
+| workload                       | full builds | wholesale reuse | incremental | re-walked fraction |
+| ------------------------------ | ----------: | --------------: | ----------: | -----------------: |
+| sqlite_parse (gale-generated)  |       16308 |            4856 |      **32** |               0.30 |
+| fts / mandelbrot / count_prime |     ~560 ea |         ~135 ea |       **0** |                  — |
+
+Incremental rebuild fires on **~0.15%** of value-graph builds on the large
+workload and **0%** on the small ones. The cause is architectural, exactly as
+the redesign anticipated:
+
+- The only clean adjacency is `cse → store_load_forward` (nothing runs between
+  them, so `cse`'s edits are the complete delta). Every other handoff is spoiled
+  by a non-journaling pass: `const_fold` (a direct-arena walker) and `licm` sit
+  between `store_load_forward` and `condition_implication`; `inline` /
+  `const_fold` / `sroa` / `copy_prop` run between iterations before `cse`.
+- And `cse` itself — a specialized loop-guard CSE — rarely changes a function,
+  so even the clean adjacency has almost nothing to hand downstream.
+
+With recording confined to `cse` (the only pass whose parked graph is ever
+consumed incrementally) the optimise phase is within run-to-run noise of the
+baseline: the savings on 32 rebuilds cannot outweigh the checkpoint cost on
+`cse`'s builds. So the feature is gated behind `WADO_INCREMENTAL_VG=1` (default
+off pays nothing and reproduces the prior behaviour exactly) and kept as the
+verified substrate for the single-worklist driver, where one pass maintains the
+graph across all rewrites and the fire rate becomes ~100%. Raising the fire rate
+needs that architecture, not more journaling — `inline` restructures bodies
+wholesale every iteration and would spoil any cross-iteration journal regardless.
+
 - [ ] Stage C — deepen checkpoint granularity into nested blocks where
       measurement on `package-gale` shows root-statement granularity too coarse.
 
