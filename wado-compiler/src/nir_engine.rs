@@ -141,6 +141,11 @@ pub struct Engine<'a> {
     /// arithmetic. `None` (the default) disables folding. Set via
     /// [`Engine::set_value_graph_type_table`] before the first value query.
     vg_type_table: Option<&'a crate::tir::TypeTable>,
+    /// Whether the lazily-built `ValueGraph` records per-root-statement
+    /// checkpoints, so a later session can rebuild it incrementally
+    /// ([`crate::nir_value_graph::builder::rebuild_incremental`]). Off unless a
+    /// pass on the incremental path opts in via [`Engine::set_record_checkpoints`].
+    vg_record_checkpoints: bool,
     /// Nodes this session mutated through the edit API, in edit order. The
     /// incremental `ValueGraph` rebuild (WEP lever 1) maps each to its enclosing
     /// root-block statement so the next build re-walks only the disturbed
@@ -173,6 +178,7 @@ impl<'a> Engine<'a> {
             mut_escaped_locals: IndexSet::default(),
             param_locals: Vec::new(),
             vg_type_table: None,
+            vg_record_checkpoints: false,
             dirty_nodes: Vec::new(),
         };
         engine.build_parents();
@@ -205,6 +211,7 @@ impl<'a> Engine<'a> {
             mut_escaped_locals: cached.mut_escaped_locals,
             param_locals: cached.param_locals,
             vg_type_table: Some(type_table),
+            vg_record_checkpoints: false,
             dirty_nodes: Vec::new(),
         };
         engine.build_parents();
@@ -377,6 +384,7 @@ impl<'a> Engine<'a> {
             &self.untrackable_locals,
             &self.mut_escaped_locals,
             self.vg_type_table,
+            self.vg_record_checkpoints,
         );
         self.value_graph = Some(build);
     }
