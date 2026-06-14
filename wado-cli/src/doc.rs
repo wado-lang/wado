@@ -5,7 +5,7 @@ use std::path::Path;
 use lexopt::Arg::Value;
 use wado_compiler::doc::{
     DocEffect, DocEnum, DocFlags, DocModule, DocPrimitiveType, DocResource, DocStruct, DocTrait,
-    DocVariant, extract_doc, extract_stdlib_doc,
+    DocVariant, extract_doc_with, extract_stdlib_doc_with,
 };
 
 use crate::args::{self, CliExit};
@@ -26,6 +26,8 @@ pub struct DocOptions {
     /// Output destination. `None` writes to stdout. A path containing
     /// `{module}` enables batch mode (one file per input module).
     pub output: Option<String>,
+    /// Document private items, fields, and inherent methods too.
+    pub all: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -33,11 +35,18 @@ enum Opt {
     Format,
     Title,
     Output,
+    All,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::Format, Self::Title, Self::Output, Self::Help];
+    const ALL: &[Self] = &[
+        Self::Format,
+        Self::Title,
+        Self::Output,
+        Self::All,
+        Self::Help,
+    ];
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -59,6 +68,12 @@ impl Opt {
                 value: Some("<path>"),
                 desc: "Write to file instead of stdout. \
                        A `{module}` placeholder enables batch mode (one file per module).",
+            },
+            Self::All => args::OptSpec {
+                long: Some("all"),
+                short: None,
+                value: None,
+                desc: "Document private items, fields, and inherent methods too",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -118,6 +133,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
     let mut format = OutputFormat::Markdown;
     let mut title: Option<String> = None;
     let mut output: Option<String> = None;
+    let mut all = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -141,6 +157,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
                 Opt::Output => {
                     output = Some(args::require_string(&mut parser)?);
                 }
+                Opt::All => all = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -174,6 +191,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
         format,
         title,
         output,
+        all,
     })
 }
 
@@ -185,7 +203,7 @@ pub fn run(opts: DocOptions) -> Result<(), CliExit> {
     let docs: Vec<(String, DocModule)> = opts
         .inputs
         .iter()
-        .map(|input| load_doc(input).map(|doc| (input.clone(), doc)))
+        .map(|input| load_doc(input, opts.all).map(|doc| (input.clone(), doc)))
         .collect::<Result<_, _>>()?;
 
     let format_name = match opts.format {
@@ -217,9 +235,9 @@ pub fn run(opts: DocOptions) -> Result<(), CliExit> {
     Ok(())
 }
 
-fn load_doc(input: &str) -> Result<DocModule, CliExit> {
+fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
     if is_stdlib_module(input) {
-        return extract_stdlib_doc(input)
+        return extract_stdlib_doc_with(input, include_private)
             .ok_or_else(|| CliExit::error(format!("Unknown stdlib module: {input}")));
     }
 
@@ -235,7 +253,12 @@ fn load_doc(input: &str) -> Result<DocModule, CliExit> {
         .file_stem()
         .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
 
-    Ok(extract_doc(&parsed.ast, &parsed.trivia, module_name))
+    Ok(extract_doc_with(
+        &parsed.ast,
+        &parsed.trivia,
+        module_name,
+        include_private,
+    ))
 }
 
 /// Filesystem-safe stem for a module input: stdlib `core:cli` -> `core-cli`,
@@ -331,7 +354,32 @@ fn format_markdown(content: &str) -> String {
 #[cfg(test)]
 mod format_contract_tests {
     use super::*;
-    use wado_compiler::doc::extract_stdlib_doc;
+    use wado_compiler::doc::{extract_stdlib_doc, extract_stdlib_doc_with};
+
+    #[test]
+    fn all_view_includes_private_members() {
+        // `append_bytes` is a non-`pub` inherent helper on CborDeserializer.
+        let default = render_single(
+            &extract_stdlib_doc("core:cbor").expect("doc"),
+            "simple",
+            "core:cbor",
+            OutputFormat::Simple,
+        );
+        let all = render_single(
+            &extract_stdlib_doc_with("core:cbor", true).expect("doc"),
+            "simple",
+            "core:cbor",
+            OutputFormat::Simple,
+        );
+        assert!(
+            !default.contains("fn append_bytes"),
+            "default doc leaked a private method"
+        );
+        assert!(
+            all.contains("fn append_bytes"),
+            "--all doc must include private methods"
+        );
+    }
 
     fn assert_dprint_stable(content: &str, label: &str) {
         let reformatted = format_markdown(content);
@@ -367,6 +415,7 @@ mod format_contract_tests {
             format: OutputFormat::Markdown,
             title: Some("Test".to_string()),
             output: None,
+            all: false,
         };
         let out = render_combined(&docs, opts.title.as_deref(), "markdown", &opts);
         assert_dprint_stable(&out, "markdown combined");

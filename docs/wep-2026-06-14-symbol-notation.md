@@ -72,6 +72,8 @@ across a whole project still need a project-wide context (a follow-up).
 - [x] Two views via `wado query --all`: default = public-API (matches `wado
       doc`, private fields elided as `..`); `--all` = everything. A type's hover
       also lists its `impl` blocks (method / assoc-const signatures) as Wado.
+- [x] `wado doc --all` mirrors the view, documenting private items/fields/
+      inherent methods (default stays public).
 - [x] Resolve members: `Type::m` / `Type.m` / `Type^Trait::m` (and generic
       types by base name) → methods and associated constants, by scanning the
       module's `impl` blocks and `trait` declarations. A member miss suggests

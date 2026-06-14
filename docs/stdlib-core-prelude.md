@@ -264,25 +264,25 @@ Counts the number of remaining elements in the iterator.
 
 Transforms each element using a function.
 
-#### `fn fold<Acc>(&mut self, init: Acc, f: fn mut(Acc, Self::Item) -> Acc) -> Acc`
+#### `fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc) -> Acc`
 
 Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
 Always returns a value (unlike `reduce`, which returns None for empty iterators).
 
-#### `fn for_each(&mut self, f: fn mut(Self::Item))`
+#### `fn for_each(&mut self, mut f: fn mut(Self::Item))`
 
 Calls `f` for every remaining element. Consumes the iterator.
 
-#### `fn find(&mut self, pred: fn mut(Self::Item) -> bool) -> Option<Self::Item>`
+#### `fn find(&mut self, mut pred: fn mut(Self::Item) -> bool) -> Option<Self::Item>`
 
 Returns the first element for which `pred` returns true, advancing the iterator up to that point.
 
-#### `fn any(&mut self, pred: fn mut(Self::Item) -> bool) -> bool`
+#### `fn any(&mut self, mut pred: fn mut(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a matching element is found.
 
-#### `fn all(&mut self, pred: fn mut(Self::Item) -> bool) -> bool`
+#### `fn all(&mut self, mut pred: fn mut(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for every element (∀). True for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
@@ -295,11 +295,11 @@ Advances the entire iterator and returns the last element, or None if empty.
 
 Returns the nth element (0-indexed), advancing the iterator up to and including it.
 
-#### `fn position(&mut self, pred: fn mut(Self::Item) -> bool) -> Option<i32>`
+#### `fn position(&mut self, mut pred: fn mut(Self::Item) -> bool) -> Option<i32>`
 
 Returns the 0-based index of the first element for which `pred` returns true, or None.
 
-#### `fn reduce(&mut self, f: fn mut(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
+#### `fn reduce(&mut self, mut f: fn mut(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
 
 Reduces elements to a single value without an initial accumulator.
 Returns None if the iterator is empty.
@@ -593,25 +593,25 @@ Counts the number of remaining elements in the iterator.
 
 Transforms each element using a function.
 
-#### `fn fold<Acc>(&mut self, init: Acc, f: fn mut(Acc, Self::Item) -> Acc) -> Acc`
+#### `fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc) -> Acc`
 
 Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
 Always returns a value (unlike `reduce`, which returns None for empty iterators).
 
-#### `fn for_each(&mut self, f: fn mut(Self::Item))`
+#### `fn for_each(&mut self, mut f: fn mut(Self::Item))`
 
 Calls `f` for every remaining element. Consumes the iterator.
 
-#### `fn find(&mut self, pred: fn mut(Self::Item) -> bool) -> Option<Self::Item>`
+#### `fn find(&mut self, mut pred: fn mut(Self::Item) -> bool) -> Option<Self::Item>`
 
 Returns the first element for which `pred` returns true, advancing the iterator up to that point.
 
-#### `fn any(&mut self, pred: fn mut(Self::Item) -> bool) -> bool`
+#### `fn any(&mut self, mut pred: fn mut(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a matching element is found.
 
-#### `fn all(&mut self, pred: fn mut(Self::Item) -> bool) -> bool`
+#### `fn all(&mut self, mut pred: fn mut(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for every element (∀). True for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
@@ -624,11 +624,11 @@ Advances the entire iterator and returns the last element, or None if empty.
 
 Returns the nth element (0-indexed), advancing the iterator up to and including it.
 
-#### `fn position(&mut self, pred: fn mut(Self::Item) -> bool) -> Option<i32>`
+#### `fn position(&mut self, mut pred: fn mut(Self::Item) -> bool) -> Option<i32>`
 
 Returns the 0-based index of the first element for which `pred` returns true, or None.
 
-#### `fn reduce(&mut self, f: fn mut(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
+#### `fn reduce(&mut self, mut f: fn mut(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
 
 Reduces elements to a single value without an initial accumulator.
 Returns None if the iterator is empty.
@@ -683,7 +683,7 @@ Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
 UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
 `core:json` `from_bytes`) accept any of them without copying.
 
-#### `fn as_byte_slice(&self) -> ByteSlice`
+#### `fn as_byte_slice(&self) -> ByteSlice with stores[self]`
 
 ### `pub trait Step`
 
@@ -2473,7 +2473,7 @@ Current indentation level for pretty-printing (used by InspectAlt)
 
 Reference to the output buffer
 
-#### `pub fn new(buf: &mut String) -> Formatter`
+#### `pub fn new(buf: &mut String) -> Formatter with stores[buf]`
 
 Create a Formatter with the default spec, writing into the given buffer.
 
@@ -3064,7 +3064,7 @@ never copies elements.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, start: i32, end: i32) -> ArraySlice<T>`
+#### `pub fn internal_new(repr: &Array<T>, start: i32, end: i32) -> ArraySlice<T> with stores[repr]`
 
 Internal: build a slice from a backing array reference and bounds.
 
@@ -3108,7 +3108,7 @@ Returns a by-value iterator over the slice.
 
 Copies the slice's elements into a new `Array<T>`.
 
-#### `pub fn internal_repr(&self) -> &Array<T>`
+#### `pub fn internal_repr(&self) -> &Array<T> with stores[self]`
 
 Internal: the backing array this slice views. Paired with
 `internal_start`, lets bulk-copy paths (`List::extend_from_slice`)
@@ -3132,7 +3132,7 @@ A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayIter<T>`
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayIter<T> with stores[repr]`
 
 Internal: build an iterator over `[index, end)` of a backing array.
 
@@ -3164,7 +3164,7 @@ backing array. Backs `for x of &list`.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayRefIter<T>`
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayRefIter<T> with stores[repr]`
 
 Internal: build a by-reference iterator over `[index, end)`.
 
@@ -3179,7 +3179,7 @@ item is a `ArraySlice<T>` viewing the backing array.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayWindows<T>`
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayWindows<T> with stores[repr]`
 
 Internal: build a windows iterator over `[index, end)` with window `size`.
 
@@ -3198,7 +3198,7 @@ chunk may be shorter. Each item is a `ArraySlice<T>` viewing the backing array.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayChunks<T>`
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayChunks<T> with stores[repr]`
 
 Internal: build a chunks iterator over `[index, end)` with chunk `size`.
 
@@ -3244,7 +3244,7 @@ Read the byte at `index` without bounds checks.
 For safe byte access, use `bytes()` iterator instead. This method is
 reserved for performance-critical code where bounds have been proven.
 
-#### `pub fn as_bytes(&self) -> ArraySlice<u8>`
+#### `pub fn as_bytes(&self) -> ArraySlice<u8> with stores[self]`
 
 Zero-copy view of the string's UTF-8 bytes as an `ArraySlice<u8>`.
 No allocation: the slice references the string's backing buffer over
@@ -3476,7 +3476,7 @@ Returns the byte index of the last occurrence of `pat`, or None.
 
 Returns true if the string contains the given character.
 
-#### `pub fn find_char(&self, pred: fn mut(char) -> bool) -> Option<i32>`
+#### `pub fn find_char(&self, mut pred: fn mut(char) -> bool) -> Option<i32>`
 
 Returns the byte index of the first character matching the predicate, or None.
 
@@ -3775,7 +3775,7 @@ Returns the total number of elements the list can hold without reallocating.
 
 #### `pub fn internal_from_raw(repr: Array<T>, used: i32) -> List<T>`
 
-#### `pub fn push(&mut self, value: T)`
+#### `pub fn push(&mut self, value: T) with stores[value]`
 
 Appends a single element to the end.
 
@@ -3789,7 +3789,7 @@ Returns the first element, or None if empty.
 
 #### `pub fn get(&self, index: i32) -> Option<T>`
 
-#### `pub fn insert(&mut self, index: i32, value: T)`
+#### `pub fn insert(&mut self, index: i32, value: T) with stores[value]`
 
 Inserts an element at the given index, shifting all elements after it to the right.
 Panics if `index > len()`.
@@ -3871,7 +3871,7 @@ Returns an iterator over non-overlapping chunks of up to `size`
 elements. The last chunk may be shorter. Panics if `size` is not
 positive.
 
-#### `pub fn sort_by(&mut self, cmp: fn mut(&T, &T) -> Ordering)`
+#### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering)`
 
 In-place sort with comparator. Stable, O(n log n) worst case.
 
@@ -3906,7 +3906,7 @@ byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 
 #### `impl IndexAssign<i32> for List<T>`
 
-##### `fn index_assign(&mut self, index: i32, value: Self::Input)`
+##### `fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value]`
 
 #### `impl Eq for List<T>`
 
@@ -3936,7 +3936,7 @@ byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 
 ##### `fn new_literal(capacity: i32) -> List<T>`
 
-##### `fn push_literal(&mut self, value: T)`
+##### `fn push_literal(&mut self, value: T) with stores[value]`
 
 ##### `fn build(&self) -> List<T>`
 

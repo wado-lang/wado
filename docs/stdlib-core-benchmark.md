@@ -100,7 +100,7 @@ Unit label for the throughput figure when `work_per_iter` is set
 (e.g. `"conversions"`, `"px"`, `"numbers"`). Ignored when throughput
 falls back to a byte rate or to `ops/s`.
 
-#### `pub fn run<T>(&mut self, label: String, f: fn mut() -> T) -> T with Stdout, MonotonicClock`
+#### `pub fn run<T>(&mut self, label: String, mut f: fn mut() -> T) -> T with Stdout, MonotonicClock`
 
 Run a single phase and report its throughput.
 
