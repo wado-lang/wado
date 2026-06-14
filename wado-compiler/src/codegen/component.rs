@@ -284,14 +284,13 @@ pub fn build_component(
         ));
     }
     // The HTTP request-construction core funcs are exported from the core
-    // instance whenever `wasi:http/types` is imported — the plan's `HttpTypes`
-    // condition (handler export or the Client effect), read here rather than
-    // re-derived from project queries.
-    let imports_http_types = wir_package
+    // instance whenever a resource-defining interface that registered them is
+    // imported.
+    let imports_resource_defining = wir_package
         .import_plan
         .iter()
-        .any(|e| e.kind == crate::wir::ImportKind::HttpTypes);
-    if imports_http_types && ctx.has_core_func("http-fields-constructor") {
+        .any(|e| e.kind == crate::wir::ImportKind::ResourceDefiningInterface);
+    if imports_resource_defining && ctx.has_core_func("http-fields-constructor") {
         wasi_exports.push((
             "http-fields-constructor".to_string(),
             ExportKind::Func,
@@ -2399,31 +2398,24 @@ fn generate_cm_imports(
         }
     }
 
-    // Import interfaces with resource types
-    import_interfaces_with_resources(builder, ctx, project, import_plan);
-
-    // HTTP types/client imports, keyed off the plan's FQ. `HttpClient` implies
-    // `HttpTypes`, asserted below.
-    let http_types_fq = import_plan
+    // Resource-defining interfaces (resources + their members + getter, e.g.
+    // wasi:http/types) — emitted before the resource-using phase so their
+    // resource and composite types are available to interfaces that consume them.
+    for fq in import_plan
         .iter()
-        .find(|e| e.kind == ImportKind::HttpTypes)
-        .map(|e| e.fq.clone());
-    if let Some(types_fq) = &http_types_fq {
-        import_http_types_for_service(project, builder, ctx, types_fq);
-    }
-
-    if let Some(client_entry) = import_plan
-        .iter()
-        .find(|e| e.kind == ImportKind::HttpClient)
+        .filter(|e| e.kind == ImportKind::ResourceDefiningInterface)
+        .map(|e| e.fq.clone())
+        .collect::<Vec<_>>()
     {
-        let types_fq = http_types_fq
-            .as_deref()
-            .expect("HttpClient in import plan without HttpTypes: types must be imported first");
-        import_http_client(builder, ctx, project, &client_entry.fq, types_fq);
+        import_resource_defining_interface(project, builder, ctx, &fq);
     }
+
+    // Import interfaces with resource types (including resource-using interfaces
+    // such as the HTTP client, which consume the resources/composites above).
+    import_interfaces_with_resources(builder, ctx, project, import_plan);
 }
 
-fn http_handler_result_key(ctx: &ComponentModelContext, pkg: &str) -> CmTypeKey {
+fn handler_result_key(ctx: &ComponentModelContext, pkg: &str) -> CmTypeKey {
     CmTypeKey::Result {
         ok: Some(Box::new(CmTypeKey::Leaf(
             ctx.type_idx(&format!("{pkg}-response")),
@@ -2434,7 +2426,7 @@ fn http_handler_result_key(ctx: &ComponentModelContext, pkg: &str) -> CmTypeKey 
     }
 }
 
-fn import_http_types_for_service(
+fn import_resource_defining_interface(
     project: &NirPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -2731,95 +2723,198 @@ fn import_http_types_for_service(
         );
     }
 
-    let handler_result_key = http_handler_result_key(ctx, &pkg);
-    intern_cm_type(builder, ctx, &handler_result_key, None);
+    // Intern the `result<own<response>, error-code>` handler composite when this
+    // interface provides both arms (the handler/world-export shape). The export
+    // lift and any client interface resolve it by structure.
+    if ctx.has_type(&format!("{pkg}-response")) && ctx.has_type(&format!("{pkg}-error-code")) {
+        let key = handler_result_key(ctx, &pkg);
+        intern_cm_type(builder, ctx, &key, None);
+    }
 }
 
-fn import_http_client(
+/// Resolve a function signature type to a component-level type index, reusing
+/// the resource own-handles and composites a resource-defining interface already
+/// emitted (`{pkg}-{cm}`, `{pkg}-error-code`, and the interned `result<...>`).
+/// Used by composite resource-using interfaces (e.g. the HTTP client) whose
+/// signatures reference another interface's resources and error composite.
+fn component_type_idx_for_signature_type(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    client_fq: &str,
-    types_fq: &str,
-) {
-    // The client's funcs use request / handler-result, aliased from the outer
-    // (types) instance.
-    let pkg = crate::world_registry::fq_name_package(types_fq).to_string();
-    let request_type_idx = ctx.type_idx(&format!("{pkg}-request"));
-    let handler_result_type_idx = ctx
-        .intern_lookup(&http_handler_result_key(ctx, &pkg))
-        .expect("HttpClient in import plan without HttpTypes: types must be imported first");
+    ty: &Type,
+) -> u32 {
+    let registry = project.cm_interface_registry;
+    match ty {
+        Type::Generic(g) if g.name == "AsyncCall" && g.args.len() == 1 => {
+            component_type_idx_for_signature_type(builder, ctx, project, &g.args[0])
+        }
+        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+            let ok = component_type_idx_for_signature_type(builder, ctx, project, &g.args[0]);
+            let err = component_type_idx_for_signature_type(builder, ctx, project, &g.args[1]);
+            intern_cm_type(
+                builder,
+                ctx,
+                &CmTypeKey::Result {
+                    ok: Some(Box::new(CmTypeKey::Leaf(ok))),
+                    err: Some(Box::new(CmTypeKey::Leaf(err))),
+                },
+                None,
+            )
+        }
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            component_type_idx_for_signature_type(builder, ctx, project, inner)
+        }
+        Type::Named(named) => {
+            if let Some(source) = registry.get_resource_source_interface(&named.name)
+                && let Some(cm) = registry.get_resource_cm_name_by_source(source, &named.name)
+            {
+                let pkg = crate::world_registry::fq_name_package(source);
+                return ctx.type_idx(&format!("{pkg}-{cm}"));
+            }
+            let source = named.source_interface.as_deref().unwrap_or_else(|| {
+                panic!(
+                    "composite signature type `{}` has no source interface",
+                    named.name
+                )
+            });
+            let pkg = crate::world_registry::fq_name_package(source);
+            ctx.type_idx(&format!("{pkg}-error-code"))
+        }
+        other => panic!("unsupported composite signature type: {other:?}"),
+    }
+}
 
-    let client_iface = project
+/// Import a function-bearing interface whose signatures reference the resources
+/// and error composite of a resource-defining interface (e.g. `wasi:http/client`,
+/// whose `send` is `own<request> -> result<own<response>, error-code>`). Each
+/// param/result type is resolved to a component-level type the resource-defining
+/// pass already emitted, then outer-aliased into this interface's instance.
+fn import_resource_using_composite_interface(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    iface_fq: &str,
+) {
+    let iface = project
         .cm_interface_registry
         .interfaces()
-        .find(|i| i.path == client_fq)
-        .expect("client interface not found in registry");
-    let client_funcs = client_iface.functions;
+        .find(|i| i.path == iface_fq)
+        .expect("composite resource-using interface not found in registry");
+    let funcs: Vec<CmFunctionInfo> = iface
+        .functions
+        .iter()
+        .filter(|f| {
+            project.cm_interface_registry.is_function_supported(f)
+                && project
+                    .used_wasi_functions
+                    .contains(&format!("{}::{}", f.interface_name, f.method_name))
+        })
+        .cloned()
+        .collect();
+    if funcs.is_empty() {
+        return;
+    }
 
-    let client_instance_type_name = format!("{pkg}-client-instance-type");
-    let instance_type_idx = ctx.register_type(&client_instance_type_name);
-    {
-        let (_, enc) = builder.ty(Some(&client_instance_type_name));
-        let mut instance_type = InstanceType::new();
-
-        // Alias outer types needed by client functions.
-        // local index 0 = request (param type), 1 = handler-result (return type)
-        instance_type.alias(Alias::Outer {
-            kind: ComponentOuterAliasKind::Type,
-            count: 1,
-            index: request_type_idx,
-        });
-        instance_type.alias(Alias::Outer {
-            kind: ComponentOuterAliasKind::Type,
-            count: 1,
-            index: handler_result_type_idx,
-        });
-
-        // Emit each function from registry metadata.
-        // Client functions use the same param/result types as the HTTP handler
-        // (own<request> → result<own<response>, error-code>).
-        // local_type_idx starts at 2: 0=request alias, 1=result alias
-        for (func_type_idx, func) in (2_u32..).zip(client_funcs.iter()) {
-            let mut func_encoder = instance_type.ty().function();
-            if func.is_async {
-                func_encoder
-                    .async_(true)
-                    .params([("request", ComponentValType::Type(0))])
-                    .result(Some(ComponentValType::Type(1)));
-            } else {
-                func_encoder
-                    .params([("request", ComponentValType::Type(0))])
-                    .result(Some(ComponentValType::Type(1)));
+    struct ResolvedSig {
+        wasi_name: String,
+        is_async: bool,
+        params: Vec<(String, u32)>,
+        result: Option<u32>,
+    }
+    let sigs: Vec<ResolvedSig> = funcs
+        .iter()
+        .map(|f| {
+            let params = f
+                .params
+                .iter()
+                .map(|(_, cm_name, ty)| {
+                    let resolved = project.cm_interface_registry.resolve_type(ty);
+                    (
+                        cm_name.clone(),
+                        component_type_idx_for_signature_type(builder, ctx, project, &resolved),
+                    )
+                })
+                .collect();
+            let result = f.return_type.as_ref().map(|ty| {
+                let resolved = project.cm_interface_registry.resolve_type(ty);
+                component_type_idx_for_signature_type(builder, ctx, project, &resolved)
+            });
+            ResolvedSig {
+                wasi_name: f.wasi_func_name.clone(),
+                is_async: f.is_async,
+                params,
+                result,
             }
+        })
+        .collect();
 
-            instance_type.export(
-                &func.wasi_func_name,
-                wasm_encoder::ComponentTypeRef::Func(func_type_idx),
-            );
+    let instance_type_name = format!("{}-{}-instance-type", iface.package, iface.interface);
+    let instance_type_idx = ctx.register_type(&instance_type_name);
+    {
+        let (_, enc) = builder.ty(Some(&instance_type_name));
+        let mut instance_type = InstanceType::new();
+        let mut alias_local: IndexMap<u32, u32> = IndexMap::default();
+        let mut next_local = 0u32;
+        let mut alias = |it: &mut InstanceType, comp_idx: u32| -> u32 {
+            if let Some(&l) = alias_local.get(&comp_idx) {
+                return l;
+            }
+            it.alias(Alias::Outer {
+                kind: ComponentOuterAliasKind::Type,
+                count: 1,
+                index: comp_idx,
+            });
+            let l = next_local;
+            next_local += 1;
+            alias_local.insert(comp_idx, l);
+            l
+        };
+        for sig in &sigs {
+            for (_, comp_idx) in &sig.params {
+                alias(&mut instance_type, *comp_idx);
+            }
+            if let Some(comp_idx) = sig.result {
+                alias(&mut instance_type, comp_idx);
+            }
         }
 
+        let mut deferred: Vec<(String, u32)> = Vec::new();
+        for sig in &sigs {
+            let params: Vec<(&str, ComponentValType)> = sig
+                .params
+                .iter()
+                .map(|(n, ci)| (n.as_str(), ComponentValType::Type(alias_local[ci])))
+                .collect();
+            let result = sig.result.map(|ci| ComponentValType::Type(alias_local[&ci]));
+            let mut fe = instance_type.ty().function();
+            if sig.is_async {
+                fe.async_(true).params(params).result(result);
+            } else {
+                fe.params(params).result(result);
+            }
+            let func_type_local = next_local;
+            next_local += 1;
+            deferred.push((sig.wasi_name.clone(), func_type_local));
+        }
+        for (name, idx) in &deferred {
+            instance_type.export(name, wasm_encoder::ComponentTypeRef::Func(*idx));
+        }
         enc.instance(&instance_type);
     }
 
-    let client_instance = format!("{pkg}-client");
-    ctx.register_instance(&client_instance);
+    let instance_key = format!("{}-{}", iface.package, iface.interface);
+    ctx.register_instance(&instance_key);
     builder.import(
-        client_fq,
+        iface_fq,
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
     );
 
-    // Alias each function from the instance
-    for func in &client_funcs {
-        let local_name = project
-            .cm_interface_registry
-            .get_local_name(client_fq, &func.wasi_func_name)
-            .cloned()
-            .unwrap_or_else(|| format!("wasi:http/Client::{}", func.method_name));
+    for f in &funcs {
+        let local_name = f.local_alias_name();
         ctx.register_comp_func(&local_name);
         builder.alias_export(
-            ctx.instance_idx(&client_instance),
-            &func.wasi_func_name,
+            ctx.instance_idx(&instance_key),
+            &f.wasi_func_name,
             ComponentExportKind::Func,
         );
     }
@@ -3139,11 +3234,60 @@ fn import_interfaces_with_resources(
         }
     }
 
+    // Composite resource-using interfaces (e.g. the HTTP client) whose
+    // signatures reference a resource-defining interface's resources/composite.
+    // Emitted before the generic resource-using phase, which then self-skips them
+    // (their funcs are already registered).
+    for fq in import_plan
+        .iter()
+        .filter(|e| e.kind == ImportKind::ResourceUsingInterface)
+        .filter(|e| resource_using_references_defining_interface(project, import_plan, &e.fq))
+        .map(|e| e.fq.clone())
+        .collect::<Vec<_>>()
+    {
+        import_resource_using_composite_interface(builder, ctx, project, &fq);
+    }
+
     // Phase 3: Import interfaces that reference resources from other interfaces
     // (e.g. wasi:filesystem/preopens whose get-directories returns a list of descriptors
     // from wasi:filesystem/types). These must be imported AFTER Phase 1 so that the
     // resource outer-aliases are available in ctx.
     import_resource_using_interfaces(builder, ctx, project, import_plan);
+}
+
+/// Whether a resource-using interface's used signatures reference resources
+/// defined by a `ResourceDefiningInterface` (rather than a plain resource
+/// source). Such interfaces consume that interface's `{pkg}-*` own-handles and
+/// error composite, so they go through `import_resource_using_composite_interface`.
+fn resource_using_references_defining_interface(
+    project: &NirPackage,
+    import_plan: &[crate::wir::ImportEntry],
+    iface_fq: &str,
+) -> bool {
+    let registry = project.cm_interface_registry;
+    let Some(iface) = registry.interfaces().find(|i| i.path == iface_fq) else {
+        return false;
+    };
+    let mut resources: Vec<String> = Vec::new();
+    for func in &iface.functions {
+        let key = format!("{}::{}", func.interface_name, func.method_name);
+        if !project.used_wasi_functions.contains(&key) || !registry.is_function_supported(func) {
+            continue;
+        }
+        if let Some(ret) = &func.return_type {
+            collect_resources_in_type(ret, registry, &mut resources);
+        }
+        for (_, _, ty) in &func.params {
+            collect_resources_in_type(ty, registry, &mut resources);
+        }
+    }
+    resources.iter().any(|r| {
+        registry.get_resource_source_interface(r).is_some_and(|src| {
+            import_plan
+                .iter()
+                .any(|e| e.fq == src && e.kind == crate::wir::ImportKind::ResourceDefiningInterface)
+        })
+    })
 }
 
 /// Import interfaces that reference resources from other interfaces but don't define resources
