@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781405359217,
+  "lastUpdate": 1781406003573,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32969,6 +32969,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ae5d3cd6a34933b7a1d976c9ad09651279f315f7"
         },
         "date": 1781405358859,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e44e0347a3d0ab651d8db3ff5f54c66af9c4541",
+          "message": "Merge pull request #1374 from wado-lang/claude/wado-syntax-highlight-test-alp6n7\n\nfeat(kiln): resolve a directory generator module to its package entry",
+          "timestamp": "2026-06-14T11:47:30+09:00",
+          "tree_id": "29f857dedd8e4fb04bab4072268292babdd00913",
+          "url": "https://github.com/wado-lang/wado/commit/5e44e0347a3d0ab651d8db3ff5f54c66af9c4541"
+        },
+        "date": 1781406003014,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
