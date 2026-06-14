@@ -985,24 +985,21 @@ fn build_transmission_future_type_for(
         ctx.type_idx("error-code")
     };
 
-    let result_key = format!("{source}-transmission-result");
-    ctx.register_type(&result_key);
-    {
-        let (_, enc) = builder.ty(Some(&result_key));
-        enc.defined_type()
-            .result(None, Some(ComponentValType::Type(error_code_idx)));
-    }
-
-    let future_key = format!("{source}-transmission-future");
-    ctx.register_type(&future_key);
-    {
-        let result_idx = ctx.type_idx(&result_key);
-        let (_, enc) = builder.ty(Some(&future_key));
-        enc.defined_type()
-            .future(Some(ComponentValType::Type(result_idx)));
-    }
-
-    ctx.type_idx(&future_key)
+    let result = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Result {
+            ok: None,
+            err: Some(Box::new(CmTypeKey::Leaf(error_code_idx))),
+        },
+        Some(&format!("{source}-transmission-result")),
+    );
+    intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Future(Box::new(CmTypeKey::Leaf(result))),
+        Some(&format!("{source}-transmission-future")),
+    )
 }
 
 /// Emit the `core:kiln/types` record/variant surface via an imported
@@ -2721,12 +2718,13 @@ fn import_http_types_for_service(
     }
 
     for (_, cm_name) in &http_resources {
-        let resource_local = format!("{pkg}-{cm_name}-resource");
-        let own_local = format!("{pkg}-{cm_name}");
-        let resource_idx = ctx.type_idx(&resource_local);
-        ctx.register_type(&own_local);
-        let (_, enc) = builder.ty(Some(&own_local));
-        enc.defined_type().own(resource_idx);
+        let resource_idx = ctx.type_idx(&format!("{pkg}-{cm_name}-resource"));
+        intern_cm_type(
+            builder,
+            ctx,
+            &CmTypeKey::Own(Box::new(CmTypeKey::Leaf(resource_idx))),
+            Some(&format!("{pkg}-{cm_name}")),
+        );
     }
 
     let response_type_idx = ctx.type_idx(&format!("{pkg}-response"));
