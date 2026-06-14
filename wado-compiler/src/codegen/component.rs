@@ -2637,6 +2637,7 @@ fn import_resource_defining_interface(
                     || f.wasi_func_name.starts_with("[method]")
                     || f.wasi_func_name.starts_with("[static]");
                 is_resource_func
+                    && project.cm_interface_registry.is_function_supported(f)
                     && project
                         .used_wasi_functions
                         .contains(&format!("{}::{}", f.interface_name, f.method_name))
@@ -2711,6 +2712,10 @@ fn component_type_idx_for_signature_type(
                 let pkg = crate::world_registry::fq_name_package(source);
                 return ctx.type_idx(&format!("{pkg}-{cm}"));
             }
+            // A non-resource named type (e.g. the error composite's `error-code`
+            // variant) resolves to the `{pkg}-{cm}` component type the
+            // resource-defining pass aliased to the outer scope. `type_idx`
+            // fails loudly if the type was not exposed there.
             let source = named.source_interface.as_deref().unwrap_or_else(|| {
                 panic!(
                     "composite signature type `{}` has no source interface",
@@ -2718,7 +2723,15 @@ fn component_type_idx_for_signature_type(
                 )
             });
             let pkg = crate::world_registry::fq_name_package(source);
-            ctx.type_idx(&format!("{pkg}-error-code"))
+            let cm = registry
+                .get_variant_cm_name_by_source(source, &named.name)
+                .or_else(|| registry.get_enum_cm_name_by_source(source, &named.name))
+                .or_else(|| registry.get_struct_cm_name_by_source(source, &named.name))
+                .or_else(|| registry.get_flags_cm_name_by_source(source, &named.name))
+                .unwrap_or_else(|| {
+                    panic!("composite signature type `{}` has no CM name", named.name)
+                });
+            ctx.type_idx(&format!("{pkg}-{cm}"))
         }
         other => panic!("unsupported composite signature type: {other:?}"),
     }
@@ -3176,20 +3189,6 @@ fn import_interfaces_with_resources(
         }
     }
 
-    // Composite resource-using interfaces (e.g. the HTTP client) whose
-    // signatures reference a resource-defining interface's resources/composite.
-    // Emitted before the generic resource-using phase, which then self-skips them
-    // (their funcs are already registered).
-    for fq in import_plan
-        .iter()
-        .filter(|e| e.kind == ImportKind::ResourceUsingInterface)
-        .filter(|e| resource_using_references_defining_interface(project, import_plan, &e.fq))
-        .map(|e| e.fq.clone())
-        .collect::<Vec<_>>()
-    {
-        import_resource_using_composite_interface(builder, ctx, project, &fq);
-    }
-
     // Phase 3: Import interfaces that reference resources from other interfaces
     // (e.g. wasi:filesystem/preopens whose get-directories returns a list of descriptors
     // from wasi:filesystem/types). These must be imported AFTER Phase 1 so that the
@@ -3261,6 +3260,15 @@ fn import_resource_using_interfaces(
             .iter()
             .any(|e| e.fq == interface_info.path && e.kind == ImportKind::ResourceUsingInterface)
         {
+            continue;
+        }
+
+        // A resource-using interface whose signatures reference a
+        // resource-defining interface's resources/error composite (e.g. the HTTP
+        // client) consumes that interface's `{pkg}-*` types by outer alias rather
+        // than building them instance-locally; resolve those through the interner.
+        if resource_using_references_defining_interface(project, import_plan, &interface_info.path) {
+            import_resource_using_composite_interface(builder, ctx, project, &interface_info.path);
             continue;
         }
 
