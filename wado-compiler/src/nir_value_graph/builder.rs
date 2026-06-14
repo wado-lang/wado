@@ -60,7 +60,6 @@ use super::{HeapVersion, ValueId, ValuePool};
 ///   call, loop entry).
 ///
 /// Branch endpoints join per arm instead of bumping ([`Builder::join_heap`]).
-#[derive(Clone, Debug)]
 struct HeapState {
     /// Next fresh version to hand out.
     next: HeapVersion,
@@ -182,26 +181,6 @@ struct FlowArm {
     falls_through: bool,
 }
 
-/// The complete flow-sensitive builder state captured before one root-block
-/// statement, for the incremental rebuild ([`rebuild_incremental`]). Every
-/// component the walk threads forward is here, so restoring it lets the suffix
-/// re-walk from an exact mid-function point: `current_value`, the full
-/// `heap_state` (including its `next` counter), `ref_targets`, the
-/// `field_store` forwarding table, and `literal_source` (a live value→expr
-/// query, so it must restore to the prefix-only state rather than carry stale
-/// suffix producers). `value_of` / `loop_entry_values` / `pool` are monotonic
-/// outputs the re-walk overwrites or leaves harmlessly stale on dead ids, so
-/// they need no per-statement snapshot.
-#[derive(Clone, Debug)]
-struct Checkpoint {
-    stmt: StmtId,
-    current_value: IndexMap<u32, ValueId>,
-    heap_state: HeapState,
-    ref_targets: IndexMap<u32, u32>,
-    field_store: IndexMap<(ValueId, u32, HeapVersion), ValueId>,
-    literal_source: IndexMap<ValueId, ExprId>,
-}
-
 /// The result of running [`build`] over a function body: the populated
 /// pool plus the side-table mapping pure `ExprId`s to their `ValueId`.
 ///
@@ -224,21 +203,6 @@ pub struct ValueGraphBuild {
     /// invariance is not enough (`loop { x = 5; … x + n … }` has an
     /// invariant use value that differs from the pre-header `x`).
     pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
-    /// Per-root-statement entry checkpoints, in document order, recorded only
-    /// when [`build`] is called with `record_checkpoints`. Empty otherwise.
-    /// [`rebuild_incremental`] reuses the clean prefix up to the first disturbed
-    /// statement and re-walks the rest from that statement's checkpoint.
-    checkpoints: Vec<Checkpoint>,
-}
-
-impl ValueGraphBuild {
-    /// Whether this build carries per-root-statement checkpoints — the
-    /// precondition for an incremental rebuild from it. A build made without
-    /// `record_checkpoints` cannot be incrementally rebuilt, so a changed
-    /// function must full-rebuild instead.
-    pub fn has_checkpoints(&self) -> bool {
-        !self.checkpoints.is_empty()
-    }
 }
 
 /// Build the `ValueGraph` for one function body.
@@ -273,216 +237,15 @@ pub fn build(
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     type_table: Option<&crate::tir::TypeTable>,
-    record_checkpoints: bool,
 ) -> ValueGraphBuild {
     let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table);
-    b.record_checkpoints = record_checkpoints;
     b.seed_params(param_locals);
-    b.walk_root_block(body.root);
-    b.finish()
-}
-
-/// Incrementally rebuild the `ValueGraph` after the body changed only inside the
-/// root statements named by `dirty_stmts`. Reuses `prev`'s clean prefix — every
-/// root statement up to the first dirty one keeps its `value_of` / checkpoints —
-/// and re-walks from that statement to the end of the root block, restoring the
-/// exact flow-state the prefix left behind so cross-boundary value identities
-/// hold. The result is observably identical to a full [`build`] of the changed
-/// body: the equivalence classes over `value_of`, plus `loop_entry_values` and
-/// `literal_source`, all match (absolute `ValueId` / `Opaque` / `HeapVersion`
-/// numbering may differ, which no consumer observes).
-///
-/// Falls back to a full build (returning `None` is *not* used — callers gate on
-/// `prev.checkpoints` being present and the journal complete) when the live root
-/// statement list no longer matches the recorded checkpoints; that can only
-/// happen if a root-list edit slipped past the journal's `None` gate, so it is a
-/// defensive full rebuild, never a miscompile.
-pub fn rebuild_incremental(
-    prev: ValueGraphBuild,
-    body: &Body,
-    dirty_stmts: &crate::hashmap::IndexSet<StmtId>,
-    param_locals: &[u32],
-    aliased: &crate::hashmap::IndexSet<u32>,
-    untrackable: &crate::hashmap::IndexSet<u32>,
-    mut_escaped: &crate::hashmap::IndexSet<u32>,
-    type_table: Option<&crate::tir::TypeTable>,
-) -> ValueGraphBuild {
-    let live = &body.blocks[body.root].stmts;
-    // The first live root statement that is dirty, by checkpoint position. The
-    // checkpoints are recorded in document order and (on the incremental path)
-    // match the live list one-for-one.
-    let first_dirty = prev
-        .checkpoints
-        .iter()
-        .position(|c| dirty_stmts.contains(&c.stmt));
-    let Some(k) = first_dirty else {
-        // Nothing dirty intersected the recorded root statements: the graph is
-        // already current.
-        return prev;
-    };
-    // Defensive: the checkpoint list must mirror the live root list up to `k`,
-    // or the prefix reuse would be unsound. A mismatch means a root-list edit
-    // escaped the journal gate; fall back to a full build.
-    let prefix_intact = prev.checkpoints.len() <= live.len()
-        && prev
-            .checkpoints
-            .iter()
-            .zip(live.iter())
-            .take(k + 1)
-            .all(|(c, &s)| c.stmt == s);
-    if !prefix_intact {
-        return build(
-            body,
-            param_locals,
-            aliased,
-            untrackable,
-            mut_escaped,
-            type_table,
-            true,
-        );
-    }
-
-    let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table);
-    b.record_checkpoints = true;
-    // Adopt the parked outputs; the prefix's entries stay, the suffix overwrites.
-    b.pool = prev.pool;
-    b.value_of = prev.value_of;
-    b.loop_entry_values = prev.loop_entry_values;
-    // Keep the prefix checkpoints; the suffix re-walk re-appends from `k`.
-    let cp = prev.checkpoints[k].clone();
-    b.checkpoints = prev.checkpoints;
-    b.checkpoints.truncate(k);
-    // Restore the exact flow-state the prefix left at the entry to statement `k`.
-    b.current_value = cp.current_value;
-    b.heap_state = cp.heap_state;
-    b.ref_targets = cp.ref_targets;
-    b.field_store = cp.field_store;
-    b.literal_source = cp.literal_source;
-    for &s in &live[k..] {
-        b.record_root_checkpoint(s);
-        b.walk_stmt(s);
-    }
-    let res = b.finish();
-    if verify_incremental_enabled() {
-        let full = build(
-            body,
-            param_locals,
-            aliased,
-            untrackable,
-            mut_escaped,
-            type_table,
-            false,
-        );
-        verify_observably_identical(&res, &full, body);
-    }
-    res
-}
-
-/// Whether `WADO_VERIFY_INCREMENTAL_VG` is set, enabling the per-rebuild
-/// cross-check against a full build. Off by default (zero cost); used in CI /
-/// local verification runs over the whole E2E suite.
-fn verify_incremental_enabled() -> bool {
-    std::env::var_os("WADO_VERIFY_INCREMENTAL_VG").is_some()
-}
-
-/// Pre-order list of every live `ExprId` reachable from the body root. Dead
-/// nodes left by in-place rewrites are excluded, matching what a consumer can
-/// actually query.
-fn live_exprs(body: &Body) -> Vec<ExprId> {
-    let mut out = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    let mut kids = Vec::new();
-    while let Some(n) = stack.pop() {
-        if let NodeRef::Expr(e) = n {
-            out.push(e);
-        }
-        kids.clear();
-        body.for_each_child(n, |c| kids.push(c));
-        for &c in kids.iter().rev() {
-            stack.push(c);
-        }
-    }
-    out
-}
-
-/// The literal payload of a value kind, or `None` for a non-literal — the part
-/// of a value's identity a const-folding consumer reads beyond equality.
-fn literal_key(kind: &super::ValueKind) -> Option<super::ValueKind> {
-    use super::ValueKind::*;
-    matches!(
-        kind,
-        Int(_) | Float(_) | Bool(_) | Char(_) | String(_) | Null | Unit
-    )
-    .then(|| kind.clone())
-}
-
-/// Assert an incremental rebuild is observably identical to a full build: over
-/// every live expression, the value-equality partition matches (canonical
-/// renumbering, since absolute ids legitimately differ) and each value's
-/// literal payload matches. Also checks `loop_entry_values` agrees per live
-/// loop. Panics on divergence — a compiler-correctness check (P0).
-fn verify_observably_identical(incr: &ValueGraphBuild, full: &ValueGraphBuild, body: &Body) {
-    let live = live_exprs(body);
-    // Canonical signature: each value's first-seen order over `live` (so the two
-    // builds are comparable despite different absolute numbering), paired with
-    // its literal payload.
-    let canon = |b: &ValueGraphBuild| -> Vec<Option<(u32, Option<super::ValueKind>)>> {
-        let mut map: IndexMap<ValueId, u32> = IndexMap::default();
-        live.iter()
-            .map(|&e| {
-                b.value_of.get(&e).map(|&v| {
-                    let next = map.len() as u32;
-                    let c = *map.entry(v).or_insert(next);
-                    (c, literal_key(b.pool.kind(v)))
-                })
-            })
-            .collect()
-    };
-    assert_eq!(
-        canon(incr),
-        canon(full),
-        "incremental ValueGraph value_of diverged from a full rebuild"
-    );
-    // loop_entry_values: for every live loop, the per-local value partition must
-    // match. Dead loops (deleted by the edit) are excluded.
-    let live_loops: crate::hashmap::IndexSet<BlockId> = {
-        let mut s = crate::hashmap::IndexSet::default();
-        let mut stack = vec![NodeRef::Block(body.root)];
-        let mut kids = Vec::new();
-        while let Some(n) = stack.pop() {
-            if let NodeRef::Stmt(st) = n
-                && let StmtKind::Loop { body: lb } = &body.stmts[st].kind
-            {
-                s.insert(*lb);
-            }
-            kids.clear();
-            body.for_each_child(n, |c| kids.push(c));
-            for &c in kids.iter().rev() {
-                stack.push(c);
-            }
-        }
-        s
-    };
-    let loop_canon = |b: &ValueGraphBuild, lb: BlockId| -> Option<Vec<(u32, u32)>> {
-        let m = b.loop_entry_values.get(&lb)?;
-        let mut map: IndexMap<ValueId, u32> = IndexMap::default();
-        let mut pairs: Vec<(u32, u32)> = m
-            .iter()
-            .map(|(&local, &v)| {
-                let next = map.len() as u32;
-                let c = *map.entry(v).or_insert(next);
-                (local, c)
-            })
-            .collect();
-        pairs.sort_unstable();
-        Some(pairs)
-    };
-    for lb in live_loops {
-        assert_eq!(
-            loop_canon(incr, lb),
-            loop_canon(full, lb),
-            "incremental ValueGraph loop_entry_values diverged at {lb:?}"
-        );
+    b.walk_block(body.root);
+    ValueGraphBuild {
+        pool: b.pool,
+        value_of: b.value_of,
+        literal_source: b.literal_source,
+        loop_entry_values: b.loop_entry_values,
     }
 }
 
@@ -528,12 +291,6 @@ struct Builder<'a> {
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
-    /// Whether to capture a [`Checkpoint`] before each root-block statement, for
-    /// the incremental rebuild. Off by default (a fresh non-cached build pays
-    /// nothing); set by [`build`]'s `record_checkpoints` flag.
-    record_checkpoints: bool,
-    /// The recorded checkpoints, in document order. See [`Checkpoint`].
-    checkpoints: Vec<Checkpoint>,
 }
 
 impl<'a> Builder<'a> {
@@ -558,47 +315,7 @@ impl<'a> Builder<'a> {
             ref_targets: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
-            record_checkpoints: false,
-            checkpoints: Vec::new(),
         }
-    }
-
-    /// Assemble the finished [`ValueGraphBuild`] from the builder's outputs.
-    fn finish(self) -> ValueGraphBuild {
-        ValueGraphBuild {
-            pool: self.pool,
-            value_of: self.value_of,
-            literal_source: self.literal_source,
-            loop_entry_values: self.loop_entry_values,
-            checkpoints: self.checkpoints,
-        }
-    }
-
-    /// Walk the root block, capturing a [`Checkpoint`] before each statement
-    /// when `record_checkpoints` is set (otherwise identical to [`walk_block`]).
-    fn walk_root_block(&mut self, root: BlockId) {
-        if !self.record_checkpoints {
-            self.walk_block(root);
-            return;
-        }
-        let stmts = self.body.blocks[root].stmts.clone();
-        for s in stmts {
-            self.record_root_checkpoint(s);
-            self.walk_stmt(s);
-        }
-    }
-
-    /// Capture the current flow-state as the entry checkpoint for root statement
-    /// `s`. See [`Checkpoint`].
-    fn record_root_checkpoint(&mut self, s: StmtId) {
-        self.checkpoints.push(Checkpoint {
-            stmt: s,
-            current_value: self.current_value.clone(),
-            heap_state: self.heap_state.clone(),
-            ref_targets: self.ref_targets.clone(),
-            field_store: self.field_store.clone(),
-            literal_source: self.literal_source.clone(),
-        });
     }
 
     /// If both operands are constant literals and `op` is a const-foldable
@@ -2048,7 +1765,7 @@ mod tests {
     fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
-        build(body, &param_locals, &empty, &empty, &empty, None, false)
+        build(body, &param_locals, &empty, &empty, &empty, None)
     }
 
     /// `build` with an explicit reference-aliased set (no `untrackable`). The
@@ -2061,7 +1778,7 @@ mod tests {
     ) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
-        build(body, &param_locals, aliased, &empty, aliased, None, false)
+        build(body, &param_locals, aliased, &empty, aliased, None)
     }
 
     fn empty_body() -> Body {
@@ -3459,116 +3176,5 @@ mod tests {
             r.pool.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
-    }
-
-    // ----- Incremental rebuild -----
-
-    fn build_ck(body: &Body) -> ValueGraphBuild {
-        let empty = crate::hashmap::IndexSet::default();
-        build(body, &[], &empty, &empty, &empty, None, true)
-    }
-
-    fn rebuild_ck(prev: ValueGraphBuild, body: &Body, dirty: &[StmtId]) -> ValueGraphBuild {
-        let empty = crate::hashmap::IndexSet::default();
-        let mut set = crate::hashmap::IndexSet::default();
-        for &s in dirty {
-            set.insert(s);
-        }
-        rebuild_incremental(prev, body, &set, &[], &empty, &empty, &empty, None)
-    }
-
-    /// Two builds are observably identical over `probes` iff each probe's
-    /// pure/impure classification matches and the pairwise value-equality
-    /// relation matches — the only facts a consumer (`value(a) == value(b)`)
-    /// can observe. Absolute `ValueId` numbering is deliberately not compared.
-    fn assert_same_relation(a: &ValueGraphBuild, b: &ValueGraphBuild, probes: &[ExprId]) {
-        for &i in probes {
-            assert_eq!(
-                a.value_of.get(&i).is_some(),
-                b.value_of.get(&i).is_some(),
-                "presence mismatch at {i:?}"
-            );
-            for &j in probes {
-                let ar = a.value_of.get(&i) == a.value_of.get(&j);
-                let br = b.value_of.get(&i) == b.value_of.get(&j);
-                assert_eq!(ar, br, "relation mismatch at ({i:?}, {j:?})");
-            }
-        }
-    }
-
-    /// A nested edit re-walks only the suffix yet reproduces a full rebuild's
-    /// equivalence relation, including a value identity that crosses the
-    /// reuse boundary (a suffix statement reading a prefix-bound local).
-    #[test]
-    fn incremental_matches_full_rebuild_on_nested_edit() {
-        // s0: let l0 = 10
-        // s1: let l1 = l0 + 5
-        // s2: let l2 = l0 + 5      <- edited (the `5` becomes `7`)
-        // s3: let l3 = l1 + l2     <- suffix; reads prefix-bound l1
-        let mut body = empty_body();
-        let ten = int_lit(&mut body, 10);
-        let s0 = let_stmt(&mut body, 0, ten, false);
-
-        let l0_a = local_ref(&mut body, 0);
-        let five1 = int_lit(&mut body, 5);
-        let rhs1 = binary(&mut body, NirBinaryOp::Add, l0_a, five1);
-        let s1 = let_stmt(&mut body, 1, rhs1, false);
-
-        let l0_b = local_ref(&mut body, 0);
-        let five2 = int_lit(&mut body, 5);
-        let rhs2 = binary(&mut body, NirBinaryOp::Add, l0_b, five2);
-        let s2 = let_stmt(&mut body, 2, rhs2, false);
-
-        let l1_r = local_ref(&mut body, 1);
-        let l2_r = local_ref(&mut body, 2);
-        let rhs3 = binary(&mut body, NirBinaryOp::Add, l1_r, l2_r);
-        let s3 = let_stmt(&mut body, 3, rhs3, false);
-        root_with(&mut body, vec![s0, s1, s2, s3]);
-
-        let probes = [rhs1, rhs2, rhs3, l0_a, l0_b, l1_r, l2_r];
-
-        // Baseline build (with checkpoints) over the pristine body.
-        let base = build_ck(&body);
-        // rhs1 and rhs2 are the same expression — they must share a value.
-        assert_eq!(base.value_of[&rhs1], base.value_of[&rhs2]);
-
-        // Edit s2: the `5` literal becomes `7`, disturbing only statement s2.
-        body.exprs[five2].kind = ExprKind::IntLiteral {
-            value: 7,
-            repr: "7".to_string(),
-        };
-
-        let full = build_ck(&body);
-        let incr = rebuild_ck(base, &body, &[s2]);
-
-        // The edit broke the rhs1/rhs2 equality in both builds.
-        assert_ne!(full.value_of[&rhs1], full.value_of[&rhs2]);
-        assert_ne!(incr.value_of[&rhs1], incr.value_of[&rhs2]);
-        // And the incremental result is observably identical to a full rebuild.
-        assert_same_relation(&full, &incr, &probes);
-    }
-
-    /// With nothing dirty intersecting the recorded root statements, the
-    /// incremental rebuild returns the parked graph untouched.
-    #[test]
-    fn incremental_noop_when_no_dirty_root_stmt() {
-        let mut body = empty_body();
-        let ten = int_lit(&mut body, 10);
-        let s0 = let_stmt(&mut body, 0, ten, false);
-        let l0 = local_ref(&mut body, 0);
-        let five = int_lit(&mut body, 5);
-        let rhs = binary(&mut body, NirBinaryOp::Add, l0, five);
-        let s1 = let_stmt(&mut body, 1, rhs, false);
-        root_with(&mut body, vec![s0, s1]);
-
-        let base = build_ck(&body);
-        let base_vid = base.value_of[&rhs];
-        // A StmtId not present in the root list: nothing to re-walk.
-        let bogus = body.stmts.push(StmtNode {
-            kind: StmtKind::Continue,
-            span: Span::default(),
-        });
-        let incr = rebuild_ck(base, &body, &[bogus]);
-        assert_eq!(incr.value_of[&rhs], base_vid);
     }
 }

@@ -351,103 +351,64 @@ only helps _unchanged_ functions), and (2) function-level parallelism (the
 per-function build / walk is independent). Both are prerequisites to the ~1.5×
 target; the full single-worklist promotion subsumes (1).
 
-### Incremental ValueGraph (lever 1)
+### Incremental ValueGraph (lever 1) — prototyped, measured, reverted
 
-The `vg_cache` reuses a parked graph only when the function is byte-for-byte
-unchanged since the park. The hot functions change every iteration, so they
-always full-rebuild. Lever 1 reuses the parked graph's _unchanged prefix_ and
-re-walks only the region a mutation actually disturbed.
+Lever 1's idea: instead of full-rebuilding a changed function's graph, reuse the
+parked graph's _unchanged prefix_ and re-walk only the disturbed region. A
+working, verified prototype was built and then **reverted** from the tree — it is
+subsumed by the single-worklist promotion (Stages 7 – 8) and fires too rarely in
+the current multi-pass pipeline to pay for itself. The implementation lives in
+the branch history; retrieve it if Stage 7 – 8 work wants the verified mechanism:
 
-What makes it sound: the consumers (`cse` / `store_load_forward` /
-`condition_implication`) only ever test `value(a) == value(b)` — the
-_equivalence relation_ over `ValueId`s, never the absolute numbering. A partial
-re-walk that mints fresh `Opaque`s for the re-walked suffix is correct as long
-as it reproduces the from-scratch equivalence classes. Restoring the exact
-entry flow-state (`current_value` / `heap_state` / `ref_targets`) before the
-first disturbed statement guarantees that: a re-walked read of a prefix-defined
-local reads the prefix's `ValueId`, so cross-boundary equalities hold.
+- `feat(optimize): edit journal on the NIR engine` — `Engine::dirty_root_stmts`,
+  mapping each edit-API mutation to its enclosing root-block `StmtId`.
+- `feat(optimize): incremental ValueGraph rebuild core` — per-root-statement
+  checkpoints (the full flow state: `current_value`, heap incl. its `next`,
+  `ref_targets`, `field_store`, `literal_source`) + `rebuild_incremental`, which
+  restores the checkpoint at the first dirty statement and re-walks to the end.
+- `feat(optimize): wire incremental ValueGraph through the gate` — a per-function
+  journal (`run_gated_incremental`): a value-graph pass parks its graph plus the
+  statements it edited; the next pass rebuilds incrementally. A
+  `WADO_VERIFY_INCREMENTAL_VG` harness builds both ways per rebuild and asserts
+  observable equality (value_of partition, `loop_entry_values`, literal
+  payloads).
 
-Mechanism:
+Soundness held: the consumers only test `value(a) == value(b)` (the equivalence
+relation, never absolute numbering), and restoring the exact entry flow-state
+before the first disturbed statement reproduces the from-scratch equivalence
+classes. The full E2E suite passed under the verify harness and WIR was
+byte-identical with the rebuild on vs off.
 
-- Edit journal. Every mutation between two builds must be known, or a reuse
-  could skip a statement that actually changed. Engine-API edits
-  (`replace_expr_kind` / `set_block_stmts` / `alloc_*`) journal the touched
-  node; at session teardown each is mapped (via the parent map) to its enclosing
-  root-block `StmtId` and unioned into the function's dirty set. A pass that
-  mutates the arena directly (the flow-sensitive walkers) marks the journal
-  _incomplete_ instead. The dirty unit is the `StmtId`, not a slot index, so it
-  survives the slot shifts a `set_block_stmts` causes.
-- Checkpoints. The build records, per root-block statement, the entry
-  `FlowSnapshot`; the parked graph carries them.
-- Partial rebuild. Walk the live root statements. A statement is reused (its
-  parked `value_of` entries kept, flow advanced to its parked exit) while it is
-  not in the dirty set and its entry snapshot equals the parked one; otherwise
-  it is re-walked. A re-walk diverges the flow, so following statements compare
-  snapshots and resume reuse once flow reconverges.
+What killed it was the fire rate, instrumented across benchmarks:
 
-Soundness gate: incremental rebuild runs only when the journal is _complete_
-over the whole delta since the park (every mutation journaled). Any direct-arena
-mutation, or a root-block-structure edit the mapping can't localize, drops to a
-full rebuild — the same one-sided safety as the dirty-set gate (imprecision
-costs a redundant full rebuild, never correctness). A `WADO_VERIFY_INCREMENTAL_VG`
-mode builds both ways and asserts the observable queries (`value_of` equivalence
-classes, `loop_entry_values`, `literal_source`) agree, run across the E2E suite;
-the terminal bar stays byte-identical WIR on the full suite + `package-gale`.
-
-Status: implemented and verified, but gated **off** by measurement — the current
-multi-pass pipeline fires it too rarely to repay its cost. The mechanism is the
-foundation the single-worklist promotion (Stages 7 – 8) builds on.
-
-- [x] Stage A — edit journal on the engine: every edit-API mutation records its
-      node, mapped at teardown to the enclosing root-block `StmtId`
-      (`Engine::dirty_root_stmts`), or `None` when a root-list edit can't be
-      localized. Behavior-invariant.
-- [x] Stage B — per-root-statement checkpoints on the build (the complete
-      flow-sensitive state: `current_value`, heap incl. the `next` counter,
-      `ref_targets`, `field_store`, `literal_source`) + `rebuild_incremental`,
-      which reuses the clean prefix and re-walks from the first dirty statement to
-      the end. Wired through a per-function journal in the gate
-      (`run_gated_incremental`): a value-graph pass parks its graph plus the
-      statements it edited, and the next pass in the trio rebuilds incrementally
-      from it. `WADO_VERIFY_INCREMENTAL_VG` builds both ways per rebuild and
-      asserts observable equality (value_of partition, `loop_entry_values`,
-      literal payloads); the full E2E suite passes under it and WIR is
-      byte-identical with the rebuild on vs off.
-- [ ] Stage C — reconvergence early-stop (deferred; would not change the verdict).
-
-### Measured: the fire rate is the ceiling (gated off)
-
-Instrumenting the value-graph build decisions across benchmarks:
-
-| workload                       | full builds | wholesale reuse | incremental | re-walked fraction |
-| ------------------------------ | ----------: | --------------: | ----------: | -----------------: |
-| sqlite_parse (gale-generated)  |       16308 |            4856 |      **32** |               0.30 |
-| fts / mandelbrot / count_prime |     ~560 ea |         ~135 ea |       **0** |                  — |
+| workload                       | full builds | wholesale reuse | incremental |
+| ------------------------------ | ----------: | --------------: | ----------: |
+| sqlite_parse (gale-generated)  |       16308 |            4856 |      **32** |
+| fts / mandelbrot / count_prime |     ~560 ea |         ~135 ea |       **0** |
 
 Incremental rebuild fires on **~0.15%** of value-graph builds on the large
-workload and **0%** on the small ones. The cause is architectural, exactly as
-the redesign anticipated:
+workload and **0%** on the small ones, so the optimise phase was within run-to-run
+noise of the baseline. The cause is architectural:
 
-- The only clean adjacency is `cse → store_load_forward` (nothing runs between
-  them, so `cse`'s edits are the complete delta). Every other handoff is spoiled
-  by a non-journaling pass: `const_fold` (a direct-arena walker) and `licm` sit
-  between `store_load_forward` and `condition_implication`; `inline` /
-  `const_fold` / `sroa` / `copy_prop` run between iterations before `cse`.
-- And `cse` itself — a specialized loop-guard CSE — rarely changes a function,
-  so even the clean adjacency has almost nothing to hand downstream.
+- The only clean pass adjacency is `cse → store_load_forward` (nothing runs
+  between them, so `cse`'s edits are the complete delta). Every other handoff is
+  spoiled by a non-journaling pass — `const_fold` (a direct-arena walker) and
+  `licm` between `store_load_forward` and `condition_implication`; `inline` /
+  `const_fold` / `sroa` / `copy_prop` between iterations before `cse`.
+- And `cse` — a specialized loop-guard CSE — rarely changes a function, so even
+  the one clean adjacency has almost nothing to hand downstream.
 
-With recording confined to `cse` (the only pass whose parked graph is ever
-consumed incrementally) the optimise phase is within run-to-run noise of the
-baseline: the savings on 32 rebuilds cannot outweigh the checkpoint cost on
-`cse`'s builds. So the feature is gated behind `WADO_INCREMENTAL_VG=1` (default
-off pays nothing and reproduces the prior behaviour exactly) and kept as the
-verified substrate for the single-worklist driver, where one pass maintains the
-graph across all rewrites and the fire rate becomes ~100%. Raising the fire rate
-needs that architecture, not more journaling — `inline` restructures bodies
-wholesale every iteration and would spoil any cross-iteration journal regardless.
-
-- [ ] Stage C — deepen checkpoint granularity into nested blocks where
-      measurement on `package-gale` shows root-statement granularity too coarse.
+Raising the fire rate is not a journaling problem: `inline` restructures bodies
+wholesale every iteration and spoils any cross-iteration journal regardless. It
+needs the single-worklist architecture, where one pass maintains the graph across
+all rewrites (fire rate ~100%) — which is exactly Stages 7 – 8. So lever 1 and the
+single-worklist promotion are **not orthogonal**: Stage 8 subsumes lever 1 (the
+per-pass rebuild it makes incremental simply ceases to exist), and most of the
+prototype's code (the `value_of` side-table rebuild, the gate journal) would
+retire alongside the side-table at Stage 7. The durable takeaways — the
+incremental-dataflow correctness argument and the verify-harness approach — are
+recorded here; the rest is left in history rather than carried as a gated-off
+path through the optimizer's hot code.
 
 ### Additional effect — if optional acceleration ever activates
 
