@@ -315,6 +315,14 @@ WIT kebab-case (`distance`, `my-api`, `set-level`). Conflicts after
 kebabification (e.g. two declarations colliding) are a compile error at WIT
 emit time with both source spans surfaced.
 
+The structural constructors (`option` / `list` / `tuple` / `result` /
+`future` / `stream`) are assembled by one shared rule (`wit_emit::assemble`
+over a single-level `CmShape` classification). The two front-ends — resolved
+types (user exports) and CM-registry AST signatures (`full`-scope interface
+reconstruction) — only classify their input and render leaves, so the two
+paths cannot drift in how a shape becomes WIT. `own<R>`/`borrow<R>` map from a
+resource value / `&resource` respectively.
+
 ### Interface grouping
 
 Drives off the `pub interface` and `export interface` shapes already
@@ -577,24 +585,29 @@ Each phase ends with green E2E tests for the listed fixtures.
 
 ## Open Design Questions
 
-### World-less libraries
+### World-less libraries (`wado compile --lib`)
 
-A `.wado` file may carry only `pub interface` declarations and bare
-`export` items with no world entry point (`fn run` / `fn handle`). Such a
-file is conceptually a _library_: a bag of interfaces meant to be consumed
-by other components, not a runnable world. WIT can express this — a package
-may contain interface definitions with no world, or with a world that only
-re-exports interfaces — but Wado has not yet decided what a world-less
-library _is_ at the language level (how it is declared, published, and
-depended upon).
+A `.wado` file with only `export` items and no world entry point
+(`fn run` / `fn handle`) is a _library_. It is declared by `[package].lib` in
+`wado.toml` and built with `wado compile --lib`: every `export fn` becomes a
+Component Model export under a world named after the package
+(`<namespace>:<name>/<name>@<version>`; `[package].namespace` is required for
+`--lib`, and `--lib` is mutually exclusive with `--world`). The library world
+is synthesized from the entry module's export signatures and carried on
+`Package.lib_world_info` — it cannot live in the `&'static` stdlib
+`WorldRegistry`, so it is special-cased like the `test` world. Library exports
+use a synchronous lift (the core function returns the value directly), and the
+default allocator is `freelist`.
 
-Until that is settled, `wado wit` and `wado compile` take the conservative
-path: a file with no world entry point emits an **empty world** (the
-resolved world name, no exports) alongside its interface definitions. This
-keeps the output valid WIT and round-trippable without committing to a
-library model. Promoting world-less libraries to a first-class concept —
-and deciding whether the emitted world should disappear entirely rather
-than be empty — is deferred to a future WEP.
+Status: plumbing plus the primitive value types compile and validate today
+(milestones 1–2). Containers, the four `result` forms, `string` returns, and
+user-defined named types (record/enum/variant/flags/newtype) are still being
+wired; `package-cm-catalog` is the corpus that enumerates the value-type ABI
+surface and tracks which CM shapes the lift/lower path supports.
+
+`wado wit` (without `--lib`) still wraps a no-entry-point file's interface in
+the resolved default world (an otherwise empty `world`), which keeps its output
+valid, round-trippable WIT.
 
 ### World structure faithfulness
 
@@ -667,9 +680,15 @@ will get one when work starts.
 - [ ] Construct world / interface / resource entries in the existing
       registries directly from parsed WIT, on the same code path as
       stdlib-derived entries.
-- [ ] Close the binding-synthesis gaps required for arbitrary worlds: struct,
-      variant, and `Result` parameter lifting; sync export support;
-      return-via-outptr when flat count exceeds `MAX_FLAT_RESULTS`.
+- [ ] `wado compile --lib`: export every `export fn` under a package-named
+      library world (the world-less-library path; see Open Design Questions).
+      Plumbing and primitive sync exports landed (M1–M2); containers,
+      `result`/`string` returns, user-defined named-type emission, and
+      default-interface grouping remain. `package-cm-catalog` tracks the surface.
+- [ ] Close the binding-synthesis gaps for arbitrary exports: container and
+      user-named-type lift/lower, `result`/`string` returns, and
+      return-via-outptr when flat count exceeds `MAX_FLAT_RESULTS`. Sync export
+      support and primitive lift/lower landed with `--lib`.
 - [x] Retire ad-hoc HTTP detection from the import/codegen path: the
       `has_http_handler_export` package field and `append_http_handler_export`
       are gone (P2/P5). `WorldInfo::has_http_handler_export` survives only as the
