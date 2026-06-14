@@ -66,23 +66,22 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut Functio
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let mut engine = match cached {
-            Some(cached) => Engine::with_analysis(body, &mut buffers, locals, &type_table, cached),
-            None => {
-                let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
-                    body,
-                    locals,
-                    address_taken_locals,
-                    stores_aliased_locals,
-                    &type_table,
-                    &first_param_types,
-                    &call_immutability,
-                );
-                let mut engine = Engine::new(body, &mut buffers, locals);
-                engine.set_alias_sets(aliased, untrackable, mut_escaped);
-                engine.set_value_graph_type_table(&type_table);
-                engine
-            }
+        let mut engine = if let Some(cached) = cached {
+            Engine::with_analysis(body, &mut buffers, locals, &type_table, cached)
+        } else {
+            let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+                body,
+                locals,
+                address_taken_locals,
+                stores_aliased_locals,
+                &type_table,
+                &first_param_types,
+                &call_immutability,
+            );
+            let mut engine = Engine::new(body, &mut buffers, locals);
+            engine.set_alias_sets(aliased, untrackable, mut_escaped);
+            engine.set_value_graph_type_table(&type_table);
+            engine
         };
         let changed = engine.run(&[&rule]);
         let parked = if changed {
