@@ -2102,3 +2102,40 @@ fn query_by_symbol_unknown_member_lists_type_members() {
         .stderr(predicate::str::contains("members of Point:"))
         .stderr(predicate::str::contains("zero"));
 }
+
+#[test]
+fn query_hover_type_default_view_lists_public_api() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("c.wado"),
+        "pub struct Counter { n: i32 }\nimpl Counter { pub fn get(&self) -> i32 { return self.n; } fn helper(&self) -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "hover", "--symbol", "./c.wado#Counter"])
+        .assert()
+        .success()
+        // Private field elided, impl block with the public method shown.
+        .stdout(predicate::str::contains("struct Counter { .. }"))
+        .stdout(predicate::str::contains("impl Counter {"))
+        .stdout(predicate::str::contains("pub fn get(&self) -> i32"))
+        .stdout(predicate::str::contains("helper").not());
+}
+
+#[test]
+fn query_hover_type_all_view_shows_private() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("c.wado"),
+        "pub struct Counter { n: i32 }\nimpl Counter { pub fn get(&self) -> i32 { return self.n; } fn helper(&self) -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "hover", "--symbol", "./c.wado#Counter", "--all"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("struct Counter { n: i32 }"))
+        .stdout(predicate::str::contains("fn helper(&self) -> i32"));
+}

@@ -3,10 +3,10 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
-    BuiltinTypeDecl, CallExpr, CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr,
-    CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
+    AssertStmt, AssignExpr, AssociatedConst, AttrArg, Attribute, BinaryExpr, BinaryOp, Block,
+    BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ClosureExpr, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
+    ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
     GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl,
     InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
     MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
@@ -3711,6 +3711,68 @@ pub fn unparse_struct_signature(s: &StructDecl, public_only: bool) -> String {
         out.push_str("..");
     }
     out.push_str(" }");
+    out
+}
+
+/// Render an associated constant's signature (no value): `[pub ]const NAME: T`.
+pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
+    let mut out = String::new();
+    emit_kw_if_into(c.is_pub, "pub ", &mut out);
+    out.push_str("const ");
+    out.push_str(&c.name);
+    out.push_str(": ");
+    unparse_type_into(&c.ty, &mut out);
+    out
+}
+
+/// Render an `impl` block as Wado with member **signatures** only (bodies
+/// omitted), for type overviews:
+///
+/// ```text
+/// impl<T> Trait for Type {
+///     const C: T
+///     fn m(&self) -> T
+/// }
+/// ```
+///
+/// With `public_only`, an inherent `impl` (no trait) shows only `pub` members;
+/// a trait `impl`'s members are always shown (they are the trait's public
+/// surface). Returns an empty string when no member is visible, so callers can
+/// drop the block.
+pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String {
+    let inherent = b.trait_type.is_none();
+    let visible = |is_pub: bool| !public_only || !inherent || is_pub;
+
+    let mut lines: Vec<String> = Vec::new();
+    for c in &b.constants {
+        if visible(c.is_pub) {
+            lines.push(unparse_assoc_const_signature(c));
+        }
+    }
+    for m in &b.methods {
+        if visible(m.is_pub) {
+            lines.push(unparse_function_signature(m));
+        }
+    }
+    if lines.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::from("impl");
+    unparse_generic_params_into(&b.type_params, &mut out);
+    out.push(' ');
+    if let Some(trait_type) = &b.trait_type {
+        unparse_type_into(trait_type, &mut out);
+        out.push_str(" for ");
+    }
+    unparse_type_into(&b.ty, &mut out);
+    out.push_str(" {\n");
+    for line in lines {
+        out.push_str("    ");
+        out.push_str(&line);
+        out.push('\n');
+    }
+    out.push('}');
     out
 }
 

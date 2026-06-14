@@ -187,12 +187,13 @@ fn report_symbol_error(
 pub async fn run_definition_by_symbol(
     notation: &str,
     base: &str,
+    public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
     let q = prepare_symbol_query(notation, base)?;
     match q
         .engine
-        .definition_by_symbol(&q.uri, &q.parsed, &q.host)
+        .definition_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
         .await
     {
         Ok(def) => {
@@ -219,12 +220,13 @@ pub async fn run_references_by_symbol(
     notation: &str,
     base: &str,
     include_declaration: bool,
+    public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
     let q = prepare_symbol_query(notation, base)?;
     match q
         .engine
-        .references_by_symbol(&q.uri, &q.parsed, include_declaration, &q.host)
+        .references_by_symbol(&q.uri, &q.parsed, include_declaration, public_only, &q.host)
         .await
     {
         Ok(refs) => {
@@ -251,12 +253,13 @@ pub async fn run_references_by_symbol(
 pub async fn run_document_highlight_by_symbol(
     notation: &str,
     base: &str,
+    public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
     let q = prepare_symbol_query(notation, base)?;
     match q
         .engine
-        .document_highlight_by_symbol(&q.uri, &q.parsed, &q.host)
+        .document_highlight_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
         .await
     {
         Ok((def_uri, highlights)) => {
@@ -305,13 +308,14 @@ pub async fn run_hover(
     filename: &str,
     line: u32,
     column: u32,
+    public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
     let prepared = prepare_query(filename)?;
     let position = position_from_one_based(line, column);
     let result = prepared
         .engine
-        .hover(&prepared.uri, position, &prepared.host)
+        .hover_with(&prepared.uri, position, public_only, &prepared.host)
         .await;
 
     if json_output {
@@ -328,10 +332,15 @@ pub async fn run_hover(
 pub async fn run_hover_by_symbol(
     notation: &str,
     base: &str,
+    public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
     let q = prepare_symbol_query(notation, base)?;
-    match q.engine.hover_by_symbol(&q.uri, &q.parsed, &q.host).await {
+    match q
+        .engine
+        .hover_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
+        .await
+    {
         Ok(hover) => {
             if json_output {
                 print_hover_json(Some(&hover));

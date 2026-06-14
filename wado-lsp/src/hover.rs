@@ -37,13 +37,19 @@ pub enum MarkupKind {
     Markdown,
 }
 
+/// Position-based hover. `public_only` controls how container types render
+/// their members (matching `wado doc` when true; everything when false).
 #[must_use]
-pub(crate) fn find_hover(ctx: &QueryContext, position: Position) -> Option<HoverResult> {
+pub(crate) fn find_hover_opts(
+    ctx: &QueryContext,
+    position: Position,
+    public_only: bool,
+) -> Option<HoverResult> {
     let cursor = ctx.cursor_at(position)?;
     let symbol = cursor.def_symbol()?;
     let signature = match &symbol.kind {
         SymbolKind::Variable(_) => render_local_binding(ctx.sem, symbol.defined_at, &symbol.name)?,
-        _ => render_item_signature(ctx.sem, symbol)?,
+        _ => render_item_signature(ctx.sem, symbol, public_only)?,
     };
 
     let cursor_span = cursor.span()?;
@@ -56,16 +62,75 @@ pub(crate) fn find_hover(ctx: &QueryContext, position: Position) -> Option<Hover
     })
 }
 
-/// Hover for an item-level [`Symbol`] resolved by name (no cursor). Renders
-/// the signature; locals are not name-resolution targets so they yield `None`.
-/// The result carries no `range` — there is no request position to anchor it.
+/// Hover for an item-level [`Symbol`] resolved by name (no cursor). Renders the
+/// declaration; for a type, also appends its `impl` blocks (method / associated
+/// constant signatures) as Wado, so the result is a usage overview. With
+/// `public_only` the rendering matches `wado doc` (private fields elided as
+/// `..`, only `pub` inherent members shown); otherwise everything is shown.
+/// Locals are not name-resolution targets so they yield `None`. The result
+/// carries no `range` — there is no request position to anchor it.
 #[must_use]
-pub(crate) fn hover_for_item_symbol(sem: &Semantics, symbol: &Symbol) -> Option<HoverResult> {
+pub(crate) fn hover_for_item_symbol(
+    sem: &Semantics,
+    symbol: &Symbol,
+    public_only: bool,
+) -> Option<HoverResult> {
     if matches!(symbol.kind, SymbolKind::Variable(_)) {
         return None;
     }
-    let signature = render_item_signature(sem, symbol)?;
-    Some(fenced_hover(signature))
+    let mut value = render_item_signature(sem, symbol, public_only)?;
+    if is_type_symbol(&symbol.kind) {
+        append_impl_blocks(sem, symbol, public_only, &mut value);
+    }
+    Some(fenced_hover(value))
+}
+
+/// True for symbol kinds that name a type (and so can carry `impl` blocks).
+fn is_type_symbol(kind: &SymbolKind) -> bool {
+    matches!(
+        kind,
+        SymbolKind::Struct(_)
+            | SymbolKind::Enum(_)
+            | SymbolKind::Variant(_)
+            | SymbolKind::Flags(_)
+            | SymbolKind::Newtype(_)
+            | SymbolKind::Resource(_)
+            | SymbolKind::Trait(_)
+            | SymbolKind::Effect(_)
+    )
+}
+
+/// Append the module's `impl` blocks targeting `symbol`'s type, each rendered
+/// as Wado with member signatures (bodies omitted).
+fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: &mut String) {
+    let Some(module) = sem.modules.get(symbol.module_source()) else {
+        return;
+    };
+    for item in &module.items {
+        let Item::Impl(b) = item else { continue };
+        if impl_target_base(&b.ty) != Some(symbol.name.as_str()) {
+            continue;
+        }
+        let block = unparse::unparse_impl_block_signature(b, public_only);
+        if !block.is_empty() {
+            out.push_str("\n\n");
+            out.push_str(&block);
+        }
+    }
+}
+
+/// Base name of an `impl` target type, peeling references and generics
+/// (`&List<T>` → `List`). `None` for structural types.
+fn impl_target_base(ty: &ast::Type) -> Option<&str> {
+    let name = match ty {
+        ast::Type::Named(n) => n.name.as_str(),
+        ast::Type::Generic(g) => g.name.as_str(),
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+            return impl_target_base(inner);
+        }
+        _ => return None,
+    };
+    Some(name.split('<').next().unwrap_or(name))
 }
 
 /// Hover for a method or free function reached by [`AstId`] (e.g. a symbol
@@ -86,10 +151,10 @@ fn fenced_hover(signature: String) -> HoverResult {
 }
 
 /// Render a signature for the given item-level symbol.
-fn render_item_signature(sem: &Semantics, symbol: &Symbol) -> Option<String> {
+fn render_item_signature(sem: &Semantics, symbol: &Symbol, public_only: bool) -> Option<String> {
     let module = sem.modules.get(symbol.module_source())?;
     for item in &module.items {
-        if let Some(rendered) = item_info(item, &symbol.name) {
+        if let Some(rendered) = item_info(item, &symbol.name, public_only) {
             return Some(rendered);
         }
     }
@@ -341,12 +406,14 @@ fn find_let_in_expr(expr: &Expr, target: AstId, name: &str) -> Option<String> {
     }
 }
 
-fn item_info(item: &Item, name: &str) -> Option<String> {
+fn item_info(item: &Item, name: &str, public_only: bool) -> Option<String> {
     match item {
         Item::Function(f) if f.name == name => Some(unparse::unparse_function_signature(f)),
-        // Hover shows the definition as written (all fields/cases), like the
-        // `wado doc` signature but without the public-only filtering.
-        Item::Struct(s) if s.name == name => Some(unparse::unparse_struct_signature(s, false)),
+        // Struct fields follow `public_only` (matching `wado doc`'s `..`
+        // elision when set); enum cases are always public.
+        Item::Struct(s) if s.name == name => {
+            Some(unparse::unparse_struct_signature(s, public_only))
+        }
         Item::Enum(e) if e.name == name => Some(unparse::unparse_enum_signature(e)),
         Item::Variant(v) if v.name == name => Some(unparse::unparse_variant_header(v)),
         Item::Flags(fl) if fl.name == name => Some(unparse::unparse_flags_header(fl)),
@@ -574,7 +641,7 @@ mod tests {
             uri: &uri,
             encoding,
         };
-        find_hover(&ctx, Position { line, character })
+        find_hover_opts(&ctx, Position { line, character }, true)
     }
 
     #[test]

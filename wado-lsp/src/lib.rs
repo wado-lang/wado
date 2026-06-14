@@ -289,6 +289,7 @@ impl Engine {
         &self,
         uri: &str,
         notation: &wado_compiler::symbol_notation::SymbolNotation,
+        public_only: bool,
         host: &H,
     ) -> Result<(Rc<Snapshot>, wado_compiler::Definition), SymbolQueryError> {
         use wado_compiler::SymbolResolveError;
@@ -302,8 +303,12 @@ impl Engine {
             Err(SymbolResolveError::SymbolNotFound) => {
                 let module = snapshot.sem.resolve_notation_module(&notation.module);
                 let available = match &notation.receiver {
-                    Some(receiver) => snapshot.sem.type_member_names(&module, receiver),
-                    None => snapshot.sem.public_symbol_names(&module),
+                    Some(receiver) => {
+                        snapshot
+                            .sem
+                            .type_member_names(&module, receiver, public_only)
+                    }
+                    None => snapshot.sem.module_symbol_names(&module, public_only),
                 };
                 Err(SymbolQueryError::NotFound { available })
             }
@@ -321,14 +326,18 @@ impl Engine {
         }
     }
 
-    /// Resolve a symbol notation to a definition location.
+    /// Resolve a symbol notation to a definition location. `public_only` only
+    /// affects the suggestions on a miss (public symbols vs. everything).
     pub async fn definition_by_symbol<H: CompilerHost>(
         &self,
         uri: &str,
         notation: &wado_compiler::symbol_notation::SymbolNotation,
+        public_only: bool,
         host: &H,
     ) -> Result<DefinitionResult, SymbolQueryError> {
-        let (snapshot, def) = self.resolve_symbol_def(uri, notation, host).await?;
+        let (snapshot, def) = self
+            .resolve_symbol_def(uri, notation, public_only, host)
+            .await?;
         let sem = &snapshot.sem;
         let span = def.span.ok_or(SymbolQueryError::NoLocation)?;
         let entry = &sem.entry_module_source;
@@ -345,19 +354,25 @@ impl Engine {
         })
     }
 
-    /// Compute hover info (signature / type) for a symbol named by notation.
+    /// Compute hover info for a symbol named by notation. With `public_only`,
+    /// a type's rendering matches `wado doc` (private fields elided, only `pub`
+    /// inherent members listed); otherwise everything is shown.
     pub async fn hover_by_symbol<H: CompilerHost>(
         &self,
         uri: &str,
         notation: &wado_compiler::symbol_notation::SymbolNotation,
+        public_only: bool,
         host: &H,
     ) -> Result<HoverResult, SymbolQueryError> {
-        let (snapshot, def) = self.resolve_symbol_def(uri, notation, host).await?;
+        let (snapshot, def) = self
+            .resolve_symbol_def(uri, notation, public_only, host)
+            .await?;
         let sem = &snapshot.sem;
         // Module-level symbols render from the symbol table; methods and free
         // functions reached by AstId (e.g. `Type::m`) render from the AST.
         if let Some(symbol) = sem.symbol_at(def.ast_id) {
-            return hover::hover_for_item_symbol(sem, symbol).ok_or(SymbolQueryError::NoLocation);
+            return hover::hover_for_item_symbol(sem, symbol, public_only)
+                .ok_or(SymbolQueryError::NoLocation);
         }
         if let Some(function) = sem.function_at(def.ast_id) {
             return Ok(hover::hover_for_function(function));
@@ -372,9 +387,12 @@ impl Engine {
         uri: &str,
         notation: &wado_compiler::symbol_notation::SymbolNotation,
         include_declaration: bool,
+        public_only: bool,
         host: &H,
     ) -> Result<Vec<ReferenceLocation>, SymbolQueryError> {
-        let (snapshot, def) = self.resolve_symbol_def(uri, notation, host).await?;
+        let (snapshot, def) = self
+            .resolve_symbol_def(uri, notation, public_only, host)
+            .await?;
         let ctx = self.query_ctx_over(&snapshot, uri);
         Ok(references::references_for_def(
             &ctx,
@@ -390,9 +408,12 @@ impl Engine {
         &self,
         uri: &str,
         notation: &wado_compiler::symbol_notation::SymbolNotation,
+        public_only: bool,
         host: &H,
     ) -> Result<(String, Vec<DocumentHighlight>), SymbolQueryError> {
-        let (snapshot, def) = self.resolve_symbol_def(uri, notation, host).await?;
+        let (snapshot, def) = self
+            .resolve_symbol_def(uri, notation, public_only, host)
+            .await?;
         let sem = &snapshot.sem;
         let def_uri = location::module_uri(&sem.entry_module_source, &def.module, uri)
             .ok_or(SymbolQueryError::NoLocation)?;
@@ -401,15 +422,30 @@ impl Engine {
         Ok((def_uri, highlights))
     }
 
-    /// Compute hover information for the symbol at the given position.
+    /// Compute hover information for the symbol at the given position
+    /// (public-API view: container types render like `wado doc`).
     pub async fn hover<H: CompilerHost>(
         &self,
         uri: &str,
         position: Position,
         host: &H,
     ) -> Option<HoverResult> {
-        self.with_query_ctx(uri, host, None, |ctx| hover::find_hover(ctx, position))
-            .await
+        self.hover_with(uri, position, true, host).await
+    }
+
+    /// [`Engine::hover`] with explicit member visibility: `public_only = false`
+    /// shows private fields too (the `wado query --all` view).
+    pub async fn hover_with<H: CompilerHost>(
+        &self,
+        uri: &str,
+        position: Position,
+        public_only: bool,
+        host: &H,
+    ) -> Option<HoverResult> {
+        self.with_query_ctx(uri, host, None, |ctx| {
+            hover::find_hover_opts(ctx, position, public_only)
+        })
+        .await
     }
 
     /// Find every reference to the symbol named at the given position.

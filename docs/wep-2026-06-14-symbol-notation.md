@@ -67,9 +67,11 @@ across a whole project still need a project-wide context (a follow-up).
 - [x] `--symbol` locator for `definition` / `references` / `document-highlight`
       / `hover` on free / module-level symbols.
 - [x] `hover` kind: notation (or position) → signature / type. The signature
-      is the Wado definition with the body omitted (struct fields / enum cases
-      shown), rendered by the same `unparse::unparse_{struct,enum}_signature` /
-      `unparse_function_signature` that `wado doc` uses.
+      is the Wado definition with the body omitted, rendered by the same
+      `unparse::*_signature` helpers that `wado doc` uses.
+- [x] Two views via `wado query --all`: default = public-API (matches `wado
+      doc`, private fields elided as `..`); `--all` = everything. A type's hover
+      also lists its `impl` blocks (method / assoc-const signatures) as Wado.
 - [x] Resolve members: `Type::m` / `Type.m` / `Type^Trait::m` (and generic
       types by base name) → methods and associated constants, by scanning the
       module's `impl` blocks and `trait` declarations. A member miss suggests

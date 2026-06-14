@@ -644,12 +644,16 @@ impl Semantics {
 
     /// Names of the members (methods + associated constants) reachable on
     /// `receiver`'s type in `module` — used to suggest targets when a
-    /// `Type::member` notation does not resolve. Sorted and deduplicated.
+    /// `Type::member` notation does not resolve. With `public_only`, an
+    /// inherent `impl`'s non-`pub` members are omitted (trait-`impl` members
+    /// are always included, being the trait's public surface). Sorted and
+    /// deduplicated.
     #[must_use]
     pub fn type_member_names(
         &self,
         module: &ModuleSource,
         receiver: &crate::symbol_notation::Receiver,
+        public_only: bool,
     ) -> Vec<String> {
         use crate::ast::Item;
         let mut names: Vec<String> = Vec::new();
@@ -674,8 +678,20 @@ impl Semantics {
                     {
                         continue;
                     }
-                    names.extend(b.methods.iter().map(|m| m.name.clone()));
-                    names.extend(b.constants.iter().map(|c| c.name.clone()));
+                    let inherent = b.trait_type.is_none();
+                    let visible = |is_pub: bool| !public_only || !inherent || is_pub;
+                    names.extend(
+                        b.methods
+                            .iter()
+                            .filter(|m| visible(m.is_pub))
+                            .map(|m| m.name.clone()),
+                    );
+                    names.extend(
+                        b.constants
+                            .iter()
+                            .filter(|c| visible(c.is_pub))
+                            .map(|c| c.name.clone()),
+                    );
                 }
                 Item::Trait(t) if want_trait.is_none() && t.name == want_type => {
                     names.extend(t.methods.iter().map(|m| m.name.clone()));
@@ -711,11 +727,12 @@ impl Semantics {
         )
     }
 
-    /// Public, module-level symbol names declared in `module` — `pub` items
-    /// plus `pub use` re-exports — sorted and deduplicated. Used to suggest
-    /// valid targets when a symbol notation does not resolve.
+    /// Module-level symbol names declared in `module`, sorted and deduplicated.
+    /// Used to suggest valid targets when a symbol notation does not resolve.
+    /// With `public_only`, only `pub` items (plus `pub use` re-exports) are
+    /// listed; otherwise every declared item is.
     #[must_use]
-    pub fn public_symbol_names(&self, module: &ModuleSource) -> Vec<String> {
+    pub fn module_symbol_names(&self, module: &ModuleSource, public_only: bool) -> Vec<String> {
         use crate::ast::Item;
         let mut names: Vec<String> = Vec::new();
         if let Some(ast) = self.modules.get(module) {
@@ -733,11 +750,12 @@ impl Semantics {
                     Item::Interface(d) => (d.is_pub, &d.name),
                     _ => continue,
                 };
-                if is_pub {
+                if !public_only || is_pub {
                     names.push(name.clone());
                 }
             }
         }
+        // `pub use` re-exports are public names regardless of the filter.
         names.extend(self.symbols.reexport_names(module));
         names.sort();
         names.dedup();

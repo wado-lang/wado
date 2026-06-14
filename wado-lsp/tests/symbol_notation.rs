@@ -30,7 +30,9 @@ async fn resolve(
 ) -> Result<DefinitionResult, SymbolQueryError> {
     let (engine, host) = engine_for(&[(lib_path, lib_src)], module_spec);
     let parsed = symbol_notation::parse(notation).expect("notation parses");
-    engine.definition_by_symbol(ENTRY_URI, &parsed, &host).await
+    engine
+        .definition_by_symbol(ENTRY_URI, &parsed, true, &host)
+        .await
 }
 
 async fn references(
@@ -42,7 +44,7 @@ async fn references(
     let (engine, host) = engine_for(files, module_spec);
     let parsed = symbol_notation::parse(notation).expect("notation parses");
     engine
-        .references_by_symbol(ENTRY_URI, &parsed, include_declaration, &host)
+        .references_by_symbol(ENTRY_URI, &parsed, include_declaration, true, &host)
         .await
 }
 
@@ -55,7 +57,7 @@ async fn highlights(
     let (engine, host) = engine_for(&[(lib_path, lib_src)], module_spec);
     let parsed = symbol_notation::parse(notation).expect("notation parses");
     engine
-        .document_highlight_by_symbol(ENTRY_URI, &parsed, &host)
+        .document_highlight_by_symbol(ENTRY_URI, &parsed, true, &host)
         .await
 }
 
@@ -65,9 +67,21 @@ async fn hover(
     module_spec: &str,
     notation: &str,
 ) -> Result<wado_lsp::HoverResult, SymbolQueryError> {
+    hover_view(lib_path, lib_src, module_spec, notation, true).await
+}
+
+async fn hover_view(
+    lib_path: &str,
+    lib_src: &str,
+    module_spec: &str,
+    notation: &str,
+    public_only: bool,
+) -> Result<wado_lsp::HoverResult, SymbolQueryError> {
     let (engine, host) = engine_for(&[(lib_path, lib_src)], module_spec);
     let parsed = symbol_notation::parse(notation).expect("notation parses");
-    engine.hover_by_symbol(ENTRY_URI, &parsed, &host).await
+    engine
+        .hover_by_symbol(ENTRY_URI, &parsed, public_only, &host)
+        .await
 }
 
 #[test]
@@ -210,20 +224,67 @@ fn hover_renders_function_signature() {
 }
 
 #[test]
-fn hover_renders_struct_definition_with_fields() {
+fn hover_struct_default_view_elides_private_fields() {
     futures::executor::block_on(async {
-        let lib = "pub struct Point { x: i32, y: i32 }\n";
+        // Default (public) view matches `wado doc`: non-`pub` fields collapse to `..`.
+        let lib = "pub struct Point { pub x: i32, secret: i32 }\n";
         let result = hover("./geo.wado", lib, "./geo.wado", "./geo.wado#Point")
             .await
             .expect("resolves hover");
-        // Hover shows the definition as written, including fields.
         assert!(
             result
                 .contents
                 .value
-                .contains("struct Point { x: i32, y: i32 }"),
+                .contains("struct Point { x: i32, .. }"),
             "got: {}",
             result.contents.value
+        );
+    });
+}
+
+#[test]
+fn hover_struct_all_view_shows_private_fields() {
+    futures::executor::block_on(async {
+        let lib = "pub struct Point { pub x: i32, secret: i32 }\n";
+        let result = hover_view("./geo.wado", lib, "./geo.wado", "./geo.wado#Point", false)
+            .await
+            .expect("resolves hover");
+        assert!(
+            result
+                .contents
+                .value
+                .contains("struct Point { x: i32, secret: i32 }"),
+            "got: {}",
+            result.contents.value
+        );
+    });
+}
+
+#[test]
+fn hover_type_lists_impl_methods() {
+    futures::executor::block_on(async {
+        let lib = concat!(
+            "pub struct Counter { n: i32 }\n",
+            "impl Counter { pub fn get(&self) -> i32 { return self.n; } fn helper(&self) -> i32 { return 0; } }\n",
+        );
+        // Default view: the struct decl plus the public method, as Wado syntax.
+        let result = hover("./c.wado", lib, "./c.wado", "./c.wado#Counter")
+            .await
+            .expect("resolves hover");
+        let v = &result.contents.value;
+        assert!(v.contains("impl Counter {"), "got: {v}");
+        assert!(v.contains("pub fn get(&self) -> i32"), "got: {v}");
+        // Private inherent method hidden in the public view.
+        assert!(!v.contains("helper"), "private method leaked: {v}");
+
+        // `--all` shows the private inherent method too.
+        let all = hover_view("./c.wado", lib, "./c.wado", "./c.wado#Counter", false)
+            .await
+            .expect("resolves hover --all");
+        assert!(
+            all.contents.value.contains("fn helper(&self)"),
+            "got: {}",
+            all.contents.value
         );
     });
 }
