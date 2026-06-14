@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781406003573,
+  "lastUpdate": 1781418592768,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33013,6 +33013,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5e44e0347a3d0ab651d8db3ff5f54c66af9c4541"
         },
         "date": 1781406003014,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f2c7859f77bb2646fea14e0f84b7a61c72f91c2b",
+          "message": "Merge pull request #1376 from wado-lang/claude/logic-duplication-code-health-le1xjv\n\nrefactor(gale): de-duplicate logic across package-gale",
+          "timestamp": "2026-06-14T15:20:50+09:00",
+          "tree_id": "c2184755fc6649904d0643f0fd241ded67be71b9",
+          "url": "https://github.com/wado-lang/wado/commit/f2c7859f77bb2646fea14e0f84b7a61c72f91c2b"
+        },
+        "date": 1781418592226,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
