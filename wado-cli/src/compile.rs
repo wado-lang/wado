@@ -709,7 +709,7 @@ mod kiln_dir_module_tests {
         rewrite_local_dir_modules(&mut inline, &root);
         match &inline[0].module {
             GeneratorModule::LocalPath(p) => {
-                assert_eq!(p.as_str(), "gen-pkg/src/generator.wado")
+                assert_eq!(p.as_str(), "gen-pkg/src/generator.wado");
             }
             other => panic!("expected LocalPath, got {other:?}"),
         }
