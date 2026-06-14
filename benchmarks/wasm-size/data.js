@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781395913475,
+  "lastUpdate": 1781399029060,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32881,6 +32881,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/076615382211b92a6b68b5b665d2376cb0d503e9"
         },
         "date": 1781395913012,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed42f081e9b3b5db4b85e44e4b5f55823bc4ee68",
+          "message": "Merge pull request #1372 from wado-lang/claude/worklist-engine-perf-997vd0\n\nperf(optimize): interprocedural worklist (Stage 9) + per-function ValueGraph sharing",
+          "timestamp": "2026-06-14T09:56:17+09:00",
+          "tree_id": "d52fa12cd15a7675590f22e6f7a000d89a845d28",
+          "url": "https://github.com/wado-lang/wado/commit/ed42f081e9b3b5db4b85e44e4b5f55823bc4ee68"
+        },
+        "date": 1781399028684,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
