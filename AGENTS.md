@@ -175,6 +175,31 @@ wado dump --tir-monomorphized file.wado  # show TIR after monomorphization
 wado dump --nir-lowered file.wado        # show NIR right after lowering (before optimize)
 ```
 
+### Query Command
+
+`wado query` answers compiler questions about a symbol, for tooling and docs. A symbol is addressed either by position (`--line`/`--column` in a file) or by _symbol notation_ `MODULE#SYMBOL`:
+
+- `MODULE` is the import specifier (`core:json`, `./utils.wado`); quote it only when it contains `#`.
+- `SYMBOL` uses Wado's operators: bare `name` (free function/type/global), `Type::name` (associated const/fn), `Type.name` (method), `Type^Trait::name` (trait-impl member).
+
+```sh
+wado query hover --symbol core:json#from_string                   # signature / type
+wado query hover --symbol ./hello.wado#run --base example          # local module
+wado query definition --symbol core:cbor#CborDeserializer.peek_byte
+wado query references --symbol core:cli#println --base example     # all uses (workspace)
+wado query hover --line 5 --column 10 file.wado                   # position-based
+wado query diagnostics file.wado                                  # errors/warnings
+```
+
+Common options:
+
+- `--symbol <notation>` — locate by name instead of `--line`/`--column`.
+- `--base <dir>` — anchor relative modules (default: cwd; `core:` / `wasi:` are location-independent).
+- `--all` — include private members; the default is the public-API view (matches `wado doc`).
+- `--json` — machine-readable output.
+
+For a type, `hover` also lists its `impl` blocks. `references` loads every `.wado` under `--base`, so it spans the workspace. See `docs/wep-2026-06-14-symbol-notation.md` for the notation spec.
+
 ### The Formatter
 
 The `wado format` command formats Wado source code.

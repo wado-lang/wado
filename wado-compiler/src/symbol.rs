@@ -336,6 +336,14 @@ impl SymbolTable {
         );
     }
 
+    /// Names a module re-exports via `pub use`, in declaration order.
+    pub fn reexport_names(&self, module_source: &ModuleSource) -> Vec<String> {
+        self.reexports
+            .get(module_source)
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default()
+    }
+
     /// Check if a name is re-exported from a module
     pub fn get_reexport(
         &self,

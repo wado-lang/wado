@@ -153,6 +153,26 @@ pub struct Definition {
     pub uri: Option<String>,
 }
 
+/// Why [`Semantics::resolve_symbol_notation`] could not resolve a notation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SymbolResolveError {
+    /// The notation's module is not loaded in this `Semantics`.
+    ModuleNotLoaded,
+    /// The module is loaded but defines no matching symbol or member.
+    SymbolNotFound,
+}
+
+impl std::fmt::Display for SymbolResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ModuleNotLoaded => f.write_str("module not found or not loaded"),
+            Self::SymbolNotFound => f.write_str("no such symbol in module"),
+        }
+    }
+}
+
+impl std::error::Error for SymbolResolveError {}
+
 impl Semantics {
     /// True when every analysis phase ran to completion without bailing.
     ///
@@ -529,6 +549,201 @@ impl Semantics {
             ast_id: sym.defined_at,
             span: sym.span,
         })
+    }
+
+    /// Resolve a parsed [`SymbolNotation`](crate::symbol_notation::SymbolNotation)
+    /// to a [`Definition`] within this analysis.
+    ///
+    /// The notation's module is resolved against the entry module (so relative
+    /// paths anchor at the entry's directory; `core:` / `wasi:` are
+    /// location-independent) and must already be loaded in this `Semantics`.
+    ///
+    /// - A free notation (`mod#name`) resolves a module-level symbol.
+    /// - A receiver notation (`mod#Type::m`, `mod#Type.m`, `mod#Type^Trait::m`)
+    ///   resolves a method or associated constant on `Type` — scanning the
+    ///   `impl` blocks (and `trait` declaration for `Trait::m`) in the module.
+    pub fn resolve_symbol_notation(
+        &self,
+        notation: &crate::symbol_notation::SymbolNotation,
+    ) -> Result<Definition, SymbolResolveError> {
+        let module = self.resolve_notation_module(&notation.module);
+        if !self.modules.contains_key(&module) {
+            return Err(SymbolResolveError::ModuleNotLoaded);
+        }
+        let Some(receiver) = &notation.receiver else {
+            let symbol = self
+                .symbols
+                .lookup_in_module(&module, &notation.member)
+                .ok_or(SymbolResolveError::SymbolNotFound)?;
+            let def_module = symbol.module_source().clone();
+            let ast_id = symbol.defined_at;
+            return Ok(Definition {
+                uri: self.uri_of(&def_module),
+                module: def_module,
+                ast_id,
+                span: self.name_span_of(ast_id).or(symbol.span),
+            });
+        };
+        self.resolve_member(&module, receiver, &notation.member)
+    }
+
+    /// Resolve `Type::member` / `Type.member` / `Type^Trait::member` to the
+    /// method or associated constant's definition, scanning `impl` blocks and
+    /// (for `Trait::member`) the `trait` declaration in `module`.
+    ///
+    /// Limitation: the receiver type is matched by **base name only** — generic
+    /// arguments in the notation (`List<String>`) are parsed but not used to
+    /// disambiguate. If a type has several instantiation-specific inherent
+    /// impls that each define `member` (`impl Foo<i32>` and `impl Foo<bool>`),
+    /// the first textual match wins. Trait disambiguation via `^Trait` is
+    /// honored; per-instantiation disambiguation is not yet supported.
+    fn resolve_member(
+        &self,
+        module: &ModuleSource,
+        receiver: &crate::symbol_notation::Receiver,
+        member: &str,
+    ) -> Result<Definition, SymbolResolveError> {
+        use crate::ast::Item;
+        let ast = self
+            .modules
+            .get(module)
+            .ok_or(SymbolResolveError::ModuleNotLoaded)?;
+        let want_type = crate::name::split_base_name(&receiver.type_name);
+        let want_trait = receiver
+            .trait_name
+            .as_deref()
+            .map(crate::name::split_base_name);
+
+        for item in &ast.items {
+            match item {
+                Item::Impl(b) if receiver_matches_impl(b, want_type, want_trait) => {
+                    if let Some(m) = b.methods.iter().find(|m| m.name == member) {
+                        return Ok(self.member_definition(module, m.id, m.name_span));
+                    }
+                    if let Some(c) = b.constants.iter().find(|c| c.name == member) {
+                        let span = self.name_span_of(c.id).unwrap_or(c.span);
+                        return Ok(self.member_definition(module, c.id, span));
+                    }
+                }
+                // `Trait::member` (no `^`) — a method declared on the trait itself.
+                Item::Trait(t) if want_trait.is_none() && t.name == want_type => {
+                    if let Some(m) = t.methods.iter().find(|m| m.name == member) {
+                        return Ok(self.member_definition(module, m.id, m.name_span));
+                    }
+                }
+                _ => {}
+            }
+        }
+        Err(SymbolResolveError::SymbolNotFound)
+    }
+
+    /// Names of the members (methods + associated constants) reachable on
+    /// `receiver`'s type in `module` — used to suggest targets when a
+    /// `Type::member` notation does not resolve. With `public_only`, an
+    /// inherent `impl`'s non-`pub` members are omitted (trait-`impl` members
+    /// are always included, being the trait's public surface). Sorted and
+    /// deduplicated.
+    #[must_use]
+    pub fn type_member_names(
+        &self,
+        module: &ModuleSource,
+        receiver: &crate::symbol_notation::Receiver,
+        public_only: bool,
+    ) -> Vec<String> {
+        use crate::ast::Item;
+        let mut names: Vec<String> = Vec::new();
+        let Some(ast) = self.modules.get(module) else {
+            return names;
+        };
+        let want_type = crate::name::split_base_name(&receiver.type_name);
+        let want_trait = receiver
+            .trait_name
+            .as_deref()
+            .map(crate::name::split_base_name);
+        for item in &ast.items {
+            match item {
+                Item::Impl(b) if receiver_matches_impl(b, want_type, want_trait) => {
+                    let inherent = b.trait_type.is_none();
+                    names.extend(
+                        b.methods
+                            .iter()
+                            .filter(|m| member_visible(public_only, inherent, m.is_pub))
+                            .map(|m| m.name.clone()),
+                    );
+                    names.extend(
+                        b.constants
+                            .iter()
+                            .filter(|c| member_visible(public_only, inherent, c.is_pub))
+                            .map(|c| c.name.clone()),
+                    );
+                }
+                Item::Trait(t) if want_trait.is_none() && t.name == want_type => {
+                    names.extend(t.methods.iter().map(|m| m.name.clone()));
+                }
+                _ => {}
+            }
+        }
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    fn member_definition(&self, module: &ModuleSource, id: AstId, name_span: Span) -> Definition {
+        Definition {
+            uri: self.uri_of(module),
+            module: module.clone(),
+            ast_id: id,
+            span: Some(name_span),
+        }
+    }
+
+    /// Resolve the module half of a symbol notation to a [`ModuleSource`],
+    /// anchored at the entry module (relative paths from its directory;
+    /// `core:` / `wasi:` location-independent).
+    #[must_use]
+    pub fn resolve_notation_module(&self, module_spec: &str) -> ModuleSource {
+        let from = self.entry_module_source.clone();
+        crate::name::resolve_import_with_entry(
+            &mut self.interner.borrow_mut(),
+            &from,
+            module_spec,
+            Some(&from),
+        )
+    }
+
+    /// Module-level symbol names declared in `module`, sorted and deduplicated.
+    /// Used to suggest valid targets when a symbol notation does not resolve.
+    /// With `public_only`, only `pub` items (plus `pub use` re-exports) are
+    /// listed; otherwise every declared item is.
+    #[must_use]
+    pub fn module_symbol_names(&self, module: &ModuleSource, public_only: bool) -> Vec<String> {
+        use crate::ast::Item;
+        let mut names: Vec<String> = Vec::new();
+        if let Some(ast) = self.modules.get(module) {
+            for item in &ast.items {
+                let (is_pub, name) = match item {
+                    Item::Function(d) => (d.is_pub, &d.name),
+                    Item::Struct(d) => (d.is_pub, &d.name),
+                    Item::Enum(d) => (d.is_pub, &d.name),
+                    Item::Variant(d) => (d.is_pub, &d.name),
+                    Item::Flags(d) => (d.is_pub, &d.name),
+                    Item::Newtype(d) => (d.is_pub, &d.name),
+                    Item::Trait(d) => (d.is_pub, &d.name),
+                    Item::Resource(d) => (d.is_pub, &d.name),
+                    Item::Global(d) => (d.is_pub, &d.name),
+                    Item::Interface(d) => (d.is_pub, &d.name),
+                    _ => continue,
+                };
+                if !public_only || is_pub {
+                    names.push(name.clone());
+                }
+            }
+        }
+        // `pub use` re-exports are public names regardless of the filter.
+        names.extend(self.symbols.reexport_names(module));
+        names.sort();
+        names.dedup();
+        names
     }
 
     /// Module that owns the node `id`, resolved through the per-parse
@@ -1078,4 +1293,29 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         liveness,
         is_complete: lower_ok && no_syntax_errors,
     }
+}
+
+/// True when `b` is an `impl` on `want_type` and — if `want_trait` is set —
+/// implements that trait. Both type names are compared by base name (generic
+/// arguments are not matched; see `resolve_member`). Shared by member
+/// resolution and the member-suggestion list so they never disagree.
+fn receiver_matches_impl(
+    b: &crate::ast::ImplBlock,
+    want_type: &str,
+    want_trait: Option<&str>,
+) -> bool {
+    if b.ty.head_base_name() != Some(want_type) {
+        return false;
+    }
+    match want_trait {
+        Some(wt) => b.trait_type.as_ref().and_then(|t| t.head_base_name()) == Some(wt),
+        None => true,
+    }
+}
+
+/// Whether a type member is shown in the public-API view. Inherent-`impl`
+/// members need `pub`; trait-`impl` members are always shown (they are the
+/// trait's public surface). Shared with `unparse::unparse_impl_block_signature`.
+pub(crate) fn member_visible(public_only: bool, inherent: bool, is_pub: bool) -> bool {
+    !public_only || !inherent || is_pub
 }

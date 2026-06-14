@@ -9,7 +9,10 @@ use crate::ast::{
 use crate::comment::{CommentKind, TriviaMap};
 use crate::stdlib;
 use crate::token::Span;
-use crate::unparse::{get_item_id, unparse_type_into};
+use crate::unparse::{
+    get_item_id, unparse_enum_signature, unparse_function_signature, unparse_struct_signature,
+    unparse_type_into,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocModule {
@@ -185,7 +188,20 @@ pub struct DocFlagsMember {
     pub doc: Option<String>,
 }
 
+/// Extract the public-API documentation of a module.
 pub fn extract_doc(module: &Module, trivia: &TriviaMap, module_name: &str) -> DocModule {
+    extract_doc_with(module, trivia, module_name, false)
+}
+
+/// [`extract_doc`] with explicit visibility: `include_private` documents
+/// non-`pub` items, fields, and inherent methods too (the `wado doc --all`
+/// view). The default (`false`) is the public API.
+pub fn extract_doc_with(
+    module: &Module,
+    trivia: &TriviaMap,
+    module_name: &str,
+    include_private: bool,
+) -> DocModule {
     let module_doc = extract_module_doc(trivia, module);
 
     let mut traits: Vec<DocTrait> = Vec::new();
@@ -208,12 +224,12 @@ pub fn extract_doc(module: &Module, trivia: &TriviaMap, module_name: &str) -> Do
     }
 
     for item in &module.items {
-        if !is_pub_or_export(item) {
+        if !include_private && !is_pub_or_export(item) {
             continue;
         }
         match item {
             Item::Trait(t) => traits.push(build_doc_trait(t, trivia)),
-            Item::Struct(s) => structs.push(build_doc_struct(s, &impls, trivia)),
+            Item::Struct(s) => structs.push(build_doc_struct(s, &impls, trivia, include_private)),
             Item::Newtype(t) => types.push(build_doc_type(t, trivia)),
             Item::Global(g) => globals.push(build_doc_global(g, trivia)),
             Item::Enum(e) => enums.push(build_doc_enum(e, trivia)),
@@ -273,13 +289,19 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
     }
 }
 
-fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], trivia: &TriviaMap) -> DocStruct {
+fn build_doc_struct(
+    s: &StructDecl,
+    impls: &[&ImplBlock],
+    trivia: &TriviaMap,
+    include_private: bool,
+) -> DocStruct {
     // `__`-prefixed fields are an internal-naming convention (CM ABI
     // plumbing on `AsyncCall<T>`, etc.). Treat them like private fields
     // for documentation: hide the field row but still flag the struct
     // as having hidden state via `has_private_fields` so the rendered
-    // signature gets a `..` placeholder.
-    let is_hidden = |f: &StructField| !f.is_pub || f.name.starts_with("__");
+    // signature gets a `..` placeholder. With `include_private`, nothing is
+    // hidden.
+    let is_hidden = |f: &StructField| !include_private && (!f.is_pub || f.name.starts_with("__"));
     let has_private_fields = s.fields.iter().any(is_hidden);
 
     let fields: Vec<DocField> = s
@@ -293,10 +315,11 @@ fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], trivia: &TriviaMap) ->
         })
         .collect();
 
-    let (methods, trait_impls) = collect_impl_methods_for_type(&s.name, impls, trivia);
+    let (methods, trait_impls) =
+        collect_impl_methods_for_type(&s.name, impls, trivia, include_private);
 
     DocStruct {
-        signature: render_struct_signature(s),
+        signature: unparse_struct_signature(s, !include_private),
         doc: extract_doc_comment_with_attrs(trivia, s.id, &s.span, &s.attrs),
         fields,
         has_private_fields,
@@ -355,7 +378,7 @@ fn build_doc_enum(e: &EnumDecl, trivia: &TriviaMap) -> DocEnum {
         })
         .collect();
     DocEnum {
-        signature: render_enum_signature(e),
+        signature: unparse_enum_signature(e),
         cases,
         doc: extract_doc_comment_with_attrs(trivia, e.id, &e.span, &e.attrs),
     }
@@ -470,7 +493,7 @@ fn build_doc_resource(r: &crate::ast::ResourceDecl, trivia: &TriviaMap) -> DocRe
 
 fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
     DocFunction {
-        signature: render_fn_signature(f),
+        signature: unparse_function_signature(f),
         doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
     }
 }
@@ -644,93 +667,6 @@ fn render_interface_method_signature(m: &crate::ast::InterfaceMethod) -> String 
     sig
 }
 
-fn render_fn_signature(f: &Function) -> String {
-    let mut sig = String::new();
-    if f.is_pub {
-        sig.push_str("pub ");
-    }
-    if f.is_export {
-        sig.push_str("export ");
-    }
-    if f.is_async {
-        sig.push_str("async ");
-    }
-    sig.push_str("fn ");
-    sig.push_str(&f.name);
-    sig.push_str(&render_generic_params(&f.type_params));
-    sig.push('(');
-    for (i, param) in f.params.iter().enumerate() {
-        if i > 0 {
-            sig.push_str(", ");
-        }
-        sig.push_str(&render_param(param));
-    }
-    sig.push(')');
-    if let Some(ret) = &f.return_type {
-        sig.push_str(" -> ");
-        sig.push_str(&render_type(ret));
-    }
-    if !f.effects.is_empty() {
-        sig.push_str(" with ");
-        sig.push_str(&f.effects.join(", "));
-    }
-    sig
-}
-
-fn render_struct_signature(s: &StructDecl) -> String {
-    let mut sig = String::new();
-    if s.is_pub {
-        sig.push_str("pub ");
-    }
-    sig.push_str("struct ");
-    sig.push_str(&s.name);
-    sig.push_str(&render_generic_params(&s.type_params));
-    sig.push_str(" { ");
-
-    // Mirror `build_doc_struct`: `__`-prefixed fields are hidden in docs.
-    let is_hidden = |f: &StructField| !f.is_pub || f.name.starts_with("__");
-    let has_private = s.fields.iter().any(is_hidden);
-    let pub_fields: Vec<&StructField> = s.fields.iter().filter(|f| !is_hidden(f)).collect();
-
-    for (i, field) in pub_fields.iter().enumerate() {
-        if i > 0 {
-            sig.push_str(", ");
-        }
-        sig.push_str(&field.name);
-        sig.push_str(": ");
-        sig.push_str(&render_type(&field.ty));
-    }
-
-    if has_private {
-        if !pub_fields.is_empty() {
-            sig.push_str(", ");
-        }
-        sig.push_str("..");
-    }
-
-    sig.push_str(" }");
-    sig
-}
-
-fn render_enum_signature(e: &EnumDecl) -> String {
-    let mut sig = String::new();
-    if e.is_pub {
-        sig.push_str("pub ");
-    }
-    sig.push_str("enum ");
-    sig.push_str(&e.name);
-    sig.push_str(&render_generic_params(&e.type_params));
-    sig.push_str(" { ");
-    for (i, case) in e.cases.iter().enumerate() {
-        if i > 0 {
-            sig.push_str(", ");
-        }
-        sig.push_str(&case.name);
-    }
-    sig.push_str(" }");
-    sig
-}
-
 /// Resolve a stdlib module name (e.g., "core:cli", "wasi:http") to source code.
 ///
 /// Returns `None` if the name is not a known stdlib module.
@@ -765,9 +701,14 @@ fn parse_stdlib_for_doc(label: &str, source: &str) -> crate::ParseResult {
 ///
 /// Returns `None` if the module name is not a known stdlib module.
 pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
+    extract_stdlib_doc_with(module_name, false)
+}
+
+/// [`extract_stdlib_doc`] with explicit visibility (see [`extract_doc_with`]).
+pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Option<DocModule> {
     let source = stdlib::get_stdlib_module(module_name)?;
     let parsed = parse_stdlib_for_doc(module_name, source);
-    let mut doc = extract_doc(&parsed.ast, &parsed.trivia, module_name);
+    let mut doc = extract_doc_with(&parsed.ast, &parsed.trivia, module_name, include_private);
 
     // For modules with pub use re-exports, follow them to get the actual items
     let reexport_sources = collect_pub_use_sources(&parsed.ast);
@@ -776,7 +717,12 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
         for reexport_source in &reexport_sources {
             if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
                 let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
-                let sub_doc = extract_doc(&sub_parsed.ast, &sub_parsed.trivia, reexport_source);
+                let sub_doc = extract_doc_with(
+                    &sub_parsed.ast,
+                    &sub_parsed.trivia,
+                    reexport_source,
+                    include_private,
+                );
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
             }
         }
@@ -787,8 +733,11 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
     for se_source in &side_effect_sources {
         if let Some(sub_source) = stdlib::get_stdlib_module(se_source) {
             let sub_parsed = parse_stdlib_for_doc(se_source, sub_source);
-            let prim_types =
-                collect_primitive_types_from_module(&sub_parsed.ast, &sub_parsed.trivia);
+            let prim_types = collect_primitive_types_from_module(
+                &sub_parsed.ast,
+                &sub_parsed.trivia,
+                include_private,
+            );
             merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
     }
@@ -802,14 +751,20 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
             for sub_se in &sub_se_sources {
                 if let Some(se_source) = stdlib::get_stdlib_module(sub_se) {
                     let se_parsed = parse_stdlib_for_doc(sub_se, se_source);
-                    let prim_types =
-                        collect_primitive_types_from_module(&se_parsed.ast, &se_parsed.trivia);
+                    let prim_types = collect_primitive_types_from_module(
+                        &se_parsed.ast,
+                        &se_parsed.trivia,
+                        include_private,
+                    );
                     merge_primitive_types(&mut doc.primitive_types, prim_types);
                 }
             }
             // Also check the re-exported module itself
-            let prim_types =
-                collect_primitive_types_from_module(&sub_parsed.ast, &sub_parsed.trivia);
+            let prim_types = collect_primitive_types_from_module(
+                &sub_parsed.ast,
+                &sub_parsed.trivia,
+                include_private,
+            );
             merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
     }
@@ -939,6 +894,7 @@ fn collect_impl_methods_for_type(
     type_name: &str,
     impls: &[&ImplBlock],
     trivia: &TriviaMap,
+    include_private: bool,
 ) -> (Vec<DocFunction>, Vec<DocTraitImpl>) {
     let mut inherent_methods = Vec::new();
     let mut trait_impls = Vec::new();
@@ -970,7 +926,7 @@ fn collect_impl_methods_for_type(
             });
         } else {
             for m in &i.methods {
-                if m.is_pub || m.is_export {
+                if include_private || m.is_pub || m.is_export {
                     inherent_methods.push(build_doc_function(m, trivia));
                 }
             }
@@ -1016,6 +972,7 @@ fn collect_side_effect_import_sources(module: &Module) -> Vec<String> {
 fn collect_primitive_types_from_module(
     module: &Module,
     trivia: &TriviaMap,
+    include_private: bool,
 ) -> Vec<DocPrimitiveType> {
     use crate::hashmap::IndexMap;
 
@@ -1029,7 +986,8 @@ fn collect_primitive_types_from_module(
     let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::default();
 
     for &prim_name in PRIMITIVE_TYPE_NAMES {
-        let (methods, trait_impls) = collect_impl_methods_for_type(prim_name, &impls, trivia);
+        let (methods, trait_impls) =
+            collect_impl_methods_for_type(prim_name, &impls, trivia, include_private);
 
         // Also collect associated constants
         let mut constants = Vec::new();
@@ -1043,7 +1001,7 @@ fn collect_primitive_types_from_module(
                 continue;
             }
             for c in &i.constants {
-                if c.is_pub {
+                if include_private || c.is_pub {
                     constants.push(build_doc_const(c, trivia));
                 }
             }

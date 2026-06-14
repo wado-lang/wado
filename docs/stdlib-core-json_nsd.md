@@ -71,15 +71,15 @@ _Fields are private._
 
 ##### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
 
-##### `fn begin_seq(&mut self, len: i32) -> Result<NsdSeqSerializer, SerializeError>`
+##### `fn begin_seq(&mut self, len: i32) -> Result<NsdSeqSerializer, SerializeError> with stores[self]`
 
-##### `fn begin_map(&mut self, len: i32) -> Result<NsdMapSerializer, SerializeError>`
+##### `fn begin_map(&mut self, len: i32) -> Result<NsdMapSerializer, SerializeError> with stores[self]`
 
-##### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<NsdStructSerializer, SerializeError>`
+##### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<NsdStructSerializer, SerializeError> with stores[self]`
 
 ##### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
 
-##### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<NsdVariantSerializer, SerializeError>`
+##### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<NsdVariantSerializer, SerializeError> with stores[self]`
 
 ### `pub struct NsdDeserializer`
 
@@ -111,12 +111,12 @@ _Fields are private._
 
 ##### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 
-##### `fn begin_seq(&mut self) -> Result<NsdSeqAccess, DeserializeError>`
+##### `fn begin_seq(&mut self) -> Result<NsdSeqAccess, DeserializeError> with stores[self]`
 
-##### `fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError>`
+##### `fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError> with stores[self]`
 
-##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<NsdStructAccess, DeserializeError>`
+##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<NsdStructAccess, DeserializeError> with stores[self]`
 
-##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<NsdVariantAccess, DeserializeError>`
+##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<NsdVariantAccess, DeserializeError> with stores[self]`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`

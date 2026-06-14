@@ -3,10 +3,10 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
-    BuiltinTypeDecl, CallExpr, CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr,
-    CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
+    AssertStmt, AssignExpr, AssociatedConst, AttrArg, Attribute, BinaryExpr, BinaryOp, Block,
+    BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ClosureExpr, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
+    ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
     GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl,
     InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
     MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
@@ -3654,18 +3654,6 @@ fn emit_decl_header(
     unparse_generic_params_into(type_params, out);
 }
 
-pub fn unparse_struct_header(s: &StructDecl) -> String {
-    let mut out = String::new();
-    emit_decl_header(s.is_pub, "struct ", &s.name, &s.type_params, &mut out);
-    out
-}
-
-pub fn unparse_enum_header(e: &EnumDecl) -> String {
-    let mut out = String::new();
-    emit_decl_header(e.is_pub, "enum ", &e.name, &e.type_params, &mut out);
-    out
-}
-
 pub fn unparse_variant_header(v: &VariantDecl) -> String {
     let mut out = String::new();
     emit_decl_header(v.is_pub, "variant ", &v.name, &v.type_params, &mut out);
@@ -3681,6 +3669,114 @@ pub fn unparse_flags_header(fl: &FlagsDecl) -> String {
 pub fn unparse_trait_header(t: &TraitDecl) -> String {
     let mut out = String::new();
     emit_decl_header(t.is_pub, "trait ", &t.name, &t.type_params, &mut out);
+    out
+}
+
+/// Render a struct as its full declaration with the field list inline:
+/// `struct Point { x: i32, y: i32 }`. With `public_only`, non-public and
+/// `__`-prefixed fields are hidden and summarized with `..` (for `wado doc`);
+/// otherwise every field is shown as written (for editor hover).
+pub fn unparse_struct_signature(s: &StructDecl, public_only: bool) -> String {
+    let mut out = String::new();
+    emit_decl_header(s.is_pub, "struct ", &s.name, &s.type_params, &mut out);
+    out.push_str(" { ");
+    let hidden = |f: &StructField| public_only && (!f.is_pub || f.name.starts_with("__"));
+    let has_hidden = s.fields.iter().any(hidden);
+    let mut first = true;
+    for field in s.fields.iter().filter(|f| !hidden(f)) {
+        if !first {
+            out.push_str(", ");
+        }
+        first = false;
+        out.push_str(&field.name);
+        out.push_str(": ");
+        unparse_type_into(&field.ty, &mut out);
+    }
+    if has_hidden {
+        if !first {
+            out.push_str(", ");
+        }
+        out.push_str("..");
+    }
+    out.push_str(" }");
+    out
+}
+
+/// Render an associated constant's signature (no value): `[pub ]const NAME: T`.
+pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
+    let mut out = String::new();
+    emit_kw_if_into(c.is_pub, "pub ", &mut out);
+    out.push_str("const ");
+    out.push_str(&c.name);
+    out.push_str(": ");
+    unparse_type_into(&c.ty, &mut out);
+    out
+}
+
+/// Render an `impl` block as Wado with member **signatures** only (bodies
+/// omitted), for type overviews:
+///
+/// ```text
+/// impl<T> Trait for Type {
+///     const C: T
+///     fn m(&self) -> T
+/// }
+/// ```
+///
+/// With `public_only`, an inherent `impl` (no trait) shows only `pub` members;
+/// a trait `impl`'s members are always shown (they are the trait's public
+/// surface). Returns an empty string when no member is visible, so callers can
+/// drop the block.
+pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String {
+    let inherent = b.trait_type.is_none();
+    let visible = |is_pub: bool| crate::semantics::member_visible(public_only, inherent, is_pub);
+
+    let mut lines: Vec<String> = Vec::new();
+    for c in &b.constants {
+        if visible(c.is_pub) {
+            lines.push(unparse_assoc_const_signature(c));
+        }
+    }
+    for m in &b.methods {
+        if visible(m.is_pub) {
+            lines.push(unparse_function_signature(m));
+        }
+    }
+    if lines.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::from("impl");
+    unparse_generic_params_into(&b.type_params, &mut out);
+    out.push(' ');
+    if let Some(trait_type) = &b.trait_type {
+        unparse_type_into(trait_type, &mut out);
+        out.push_str(" for ");
+    }
+    unparse_type_into(&b.ty, &mut out);
+    out.push_str(" {\n");
+    for line in lines {
+        out.push_str("    ");
+        out.push_str(&line);
+        out.push('\n');
+    }
+    out.push('}');
+    out
+}
+
+/// Render an enum as its full declaration with the case list inline:
+/// `enum Color { Red, Green, Blue }`.
+pub fn unparse_enum_signature(e: &EnumDecl) -> String {
+    let mut out = String::new();
+    emit_decl_header(e.is_pub, "enum ", &e.name, &e.type_params, &mut out);
+    out.push_str(" { ");
+    for (i, case) in e.cases.iter().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(&case.name);
+    }
+    out.push_str(" }");
     out
 }
 

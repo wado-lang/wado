@@ -2,7 +2,9 @@ use std::fs;
 use std::path::Path;
 
 use serde_json::json;
-use wado_lsp::{DefinitionResult, DocumentHighlight, HighlightKind, Position, ReferenceLocation};
+use wado_lsp::{
+    DefinitionResult, DocumentHighlight, HighlightKind, HoverResult, Position, ReferenceLocation,
+};
 
 use crate::args::CliExit;
 use crate::compiler_host::FilesystemCompilerHost;
@@ -112,6 +114,291 @@ pub async fn run_definition(
     Ok(())
 }
 
+/// A synthetic-entry analysis context for a symbol-notation query.
+struct SymbolQuery {
+    parsed: wado_compiler::symbol_notation::SymbolNotation,
+    engine: wado_lsp::Engine,
+    host: FilesystemCompilerHost,
+    uri: String,
+}
+
+/// Parse notation + resolve the base directory, host, and synthetic entry URI.
+struct SymbolEnv {
+    parsed: wado_compiler::symbol_notation::SymbolNotation,
+    host: FilesystemCompilerHost,
+    base_dir: std::path::PathBuf,
+    uri: String,
+}
+
+fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
+    let parsed = wado_compiler::symbol_notation::parse(notation)
+        .map_err(|e| CliExit::error(format!("invalid symbol notation: {e}")))?;
+    let base_dir = fs::canonicalize(base).unwrap_or_else(|_| Path::new(base).to_path_buf());
+    let host = FilesystemCompilerHost::silent(base_dir.clone());
+    // Synthetic entry: never read from disk (opened with explicit text), but
+    // its directory anchors relative-module resolution at `base`.
+    let uri = format!("file://{}", base_dir.join("__wado_query__.wado").display());
+    Ok(SymbolEnv {
+        parsed,
+        host,
+        base_dir,
+        uri,
+    })
+}
+
+/// Open an engine on a synthetic entry that `use`s each module in `imports`.
+fn open_entry(uri: &str, imports: &[String]) -> wado_lsp::Engine {
+    let mut synthetic = String::new();
+    for (i, module) in imports.iter().enumerate() {
+        synthetic.push_str(&format!("use __wado_q{i} from \"{module}\";\n"));
+    }
+    let mut engine = wado_lsp::Engine::new();
+    engine.open_document(uri, synthetic);
+    engine
+}
+
+/// Build a single-module query context (the notation's module only). Used by
+/// `definition` / `hover` / `document-highlight`.
+fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
+    let env = symbol_env(notation, base)?;
+    let engine = open_entry(&env.uri, std::slice::from_ref(&env.parsed.module));
+    Ok(SymbolQuery {
+        parsed: env.parsed,
+        engine,
+        host: env.host,
+        uri: env.uri,
+    })
+}
+
+/// Build a workspace query context for `references`: the synthetic entry `use`s
+/// the target module plus every `.wado` under `base`, so use→def edges from
+/// sibling files are recorded. The combined load is all-or-nothing, so if it
+/// fails (one file the analyzer can't load — e.g. a compile-time-codegen module
+/// without a build cache), re-import only the target and the files that analyze
+/// on their own, dropping the offender.
+async fn prepare_references_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
+    let env = symbol_env(notation, base)?;
+    let target = env.parsed.module.clone();
+    let workspace = workspace_module_specs(&env.base_dir);
+
+    let mut engine = open_entry(&env.uri, &imports_with_target(&target, &workspace));
+    if !engine.analyzes(&env.uri, &env.host).await {
+        let mut loadable = Vec::new();
+        for spec in &workspace {
+            if *spec != target && file_analyzes(&env.base_dir, &env.host, spec).await {
+                loadable.push(spec.clone());
+            }
+        }
+        engine = open_entry(&env.uri, &imports_with_target(&target, &loadable));
+    }
+
+    Ok(SymbolQuery {
+        parsed: env.parsed,
+        engine,
+        host: env.host,
+        uri: env.uri,
+    })
+}
+
+/// `[target, ...extra]` with `target` first and any duplicate of it dropped.
+fn imports_with_target(target: &str, extra: &[String]) -> Vec<String> {
+    let mut imports = vec![target.to_string()];
+    imports.extend(extra.iter().filter(|s| s.as_str() != target).cloned());
+    imports
+}
+
+/// Whether `spec` analyzes on its own (imported into a throwaway entry).
+async fn file_analyzes(base_dir: &Path, host: &FilesystemCompilerHost, spec: &str) -> bool {
+    let uri = format!("file://{}", base_dir.join("__wado_probe__.wado").display());
+    let mut engine = wado_lsp::Engine::new();
+    engine.open_document(&uri, format!("use __p from \"{spec}\";\n"));
+    engine.analyzes(&uri, host).await
+}
+
+/// Relative module specs (`./sub/x.wado`) for every `.wado` file under `root`,
+/// sorted. Skips VCS/build directories and the synthetic query entry.
+fn workspace_module_specs(root: &Path) -> Vec<String> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if path.is_dir() {
+                if name.starts_with('.')
+                    || matches!(name.as_ref(), "build" | "target" | "node_modules")
+                {
+                    continue;
+                }
+                walk(root, &path, out);
+            } else if path.extension().is_some_and(|e| e == "wado")
+                && name != "__wado_query__.wado"
+                && let Ok(rel) = path.strip_prefix(root)
+            {
+                out.push(format!("./{}", rel.to_string_lossy().replace('\\', "/")));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(root, root, &mut out);
+    out.sort();
+    out
+}
+
+/// Report a failed symbol resolution on stderr. For a missing symbol, list the
+/// module's public symbols as suggestions.
+fn report_symbol_error(
+    parsed: &wado_compiler::symbol_notation::SymbolNotation,
+    reason: &wado_lsp::SymbolQueryError,
+) {
+    match reason {
+        wado_lsp::SymbolQueryError::NotFound { available } => {
+            let (subject, listing) = match &parsed.receiver {
+                Some(r) => (
+                    format!("no member '{}' on {}", parsed.member, r.type_name),
+                    format!("members of {}", r.type_name),
+                ),
+                None => (
+                    format!("no symbol '{}' in {}", parsed.member, parsed.module),
+                    format!("public symbols in {}", parsed.module),
+                ),
+            };
+            eprintln!("warning: {subject}");
+            if available.is_empty() {
+                eprintln!("note: none found");
+            } else {
+                eprintln!("note: {listing}:");
+                for name in available {
+                    eprintln!("  {name}");
+                }
+            }
+        }
+        other => eprintln!("warning: {other}"),
+    }
+}
+
+/// Print a by-symbol query result, or — on error — print an empty result and
+/// the failure reason (with suggestions). Shared by every `run_*_by_symbol`.
+fn emit_symbol_result<T>(
+    parsed: &wado_compiler::symbol_notation::SymbolNotation,
+    result: Result<T, wado_lsp::SymbolQueryError>,
+    on_ok: impl FnOnce(T),
+    on_empty: impl FnOnce(),
+) {
+    match result {
+        Ok(value) => on_ok(value),
+        Err(reason) => {
+            on_empty();
+            report_symbol_error(parsed, &reason);
+        }
+    }
+}
+
+/// Resolve a symbol notation (`MODULE#SYMBOL`) to its definition location.
+/// Mirrors [`run_definition`] output.
+pub async fn run_definition_by_symbol(
+    notation: &str,
+    base: &str,
+    public_only: bool,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let q = prepare_symbol_query(notation, base)?;
+    let result = q
+        .engine
+        .definition_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
+        .await;
+    emit_symbol_result(
+        &q.parsed,
+        result,
+        |def| {
+            if json_output {
+                print_definition_json(Some(&def));
+            } else {
+                print_definition_text(Some(&def));
+            }
+        },
+        || {
+            if json_output {
+                print_definition_json(None);
+            } else {
+                print_definition_text(None);
+            }
+        },
+    );
+    Ok(())
+}
+
+/// Find all references to a symbol notation. Mirrors [`run_references`] output.
+pub async fn run_references_by_symbol(
+    notation: &str,
+    base: &str,
+    include_declaration: bool,
+    public_only: bool,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    // References span the whole workspace, so load every `.wado` under `base`.
+    let q = prepare_references_query(notation, base).await?;
+    let result = q
+        .engine
+        .references_by_symbol(&q.uri, &q.parsed, include_declaration, public_only, &q.host)
+        .await;
+    emit_symbol_result(
+        &q.parsed,
+        result,
+        |refs| {
+            if json_output {
+                print_references_json(&refs);
+            } else {
+                print_references_text(&refs);
+            }
+        },
+        || {
+            if json_output {
+                print_references_json(&[]);
+            } else {
+                print_references_text(&[]);
+            }
+        },
+    );
+    Ok(())
+}
+
+/// Highlight occurrences of a symbol notation within its defining module.
+/// Mirrors [`run_document_highlight`] output, using the defining module's URI.
+pub async fn run_document_highlight_by_symbol(
+    notation: &str,
+    base: &str,
+    public_only: bool,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let q = prepare_symbol_query(notation, base)?;
+    let result = q
+        .engine
+        .document_highlight_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
+        .await;
+    emit_symbol_result(
+        &q.parsed,
+        result,
+        |(def_uri, highlights)| {
+            if json_output {
+                print_highlights_json(&highlights);
+            } else {
+                print_highlights_text(uri_to_display(&def_uri), &highlights);
+            }
+        },
+        || {
+            if json_output {
+                print_highlights_json(&[]);
+            } else {
+                print_highlights_text("", &[]);
+            }
+        },
+    );
+    Ok(())
+}
+
 pub async fn run_document_highlight(
     filename: &str,
     line: u32,
@@ -132,6 +419,63 @@ pub async fn run_document_highlight(
     }
 
     warn_on_compile_errors(&prepared.host, highlights.is_empty());
+    Ok(())
+}
+
+pub async fn run_hover(
+    filename: &str,
+    line: u32,
+    column: u32,
+    public_only: bool,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let prepared = prepare_query(filename)?;
+    let position = position_from_one_based(line, column);
+    let result = prepared
+        .engine
+        .hover_with(&prepared.uri, position, public_only, &prepared.host)
+        .await;
+
+    if json_output {
+        print_hover_json(result.as_ref());
+    } else {
+        print_hover_text(result.as_ref());
+    }
+
+    warn_on_compile_errors(&prepared.host, result.is_none());
+    Ok(())
+}
+
+/// Show the signature of a symbol named by notation. Mirrors [`run_hover`].
+pub async fn run_hover_by_symbol(
+    notation: &str,
+    base: &str,
+    public_only: bool,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let q = prepare_symbol_query(notation, base)?;
+    let result = q
+        .engine
+        .hover_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
+        .await;
+    emit_symbol_result(
+        &q.parsed,
+        result,
+        |hover| {
+            if json_output {
+                print_hover_json(Some(&hover));
+            } else {
+                print_hover_text(Some(&hover));
+            }
+        },
+        || {
+            if json_output {
+                print_hover_json(None);
+            } else {
+                print_hover_text(None);
+            }
+        },
+    );
     Ok(())
 }
 
@@ -267,6 +611,30 @@ fn print_definition_text(result: Option<&DefinitionResult>) {
         ),
         None => println!("No definition."),
     }
+}
+
+/// Strip the ```` ```wado ```` code fence from a hover value for terminal output.
+fn hover_plaintext(value: &str) -> String {
+    let v = value.trim();
+    let v = v.strip_prefix("```wado").unwrap_or(v);
+    let v = v.strip_prefix('\n').unwrap_or(v);
+    let v = v.strip_suffix("```").unwrap_or(v);
+    v.trim().to_string()
+}
+
+fn print_hover_text(result: Option<&HoverResult>) {
+    match result {
+        Some(h) => println!("{}", hover_plaintext(&h.contents.value)),
+        None => println!("No hover."),
+    }
+}
+
+fn print_hover_json(result: Option<&HoverResult>) {
+    let value = match result {
+        Some(h) => serde_json::to_value(h).unwrap_or(serde_json::Value::Null),
+        None => serde_json::Value::Null,
+    };
+    println!("{}", serde_json::to_string_pretty(&value).unwrap());
 }
 
 fn highlight_kind_str(kind: HighlightKind) -> &'static str {

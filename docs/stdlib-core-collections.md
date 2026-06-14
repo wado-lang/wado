@@ -72,7 +72,7 @@ Removes all key-value pairs from the map.
 
 ##### `fn new_literal(capacity: i32) -> TreeMap<String, V>`
 
-##### `fn insert_literal(&mut self, key: String, value: Self::Value)`
+##### `fn insert_literal(&mut self, key: String, value: Self::Value) with stores[value]`
 
 ##### `fn build(&self) -> TreeMap<String, V>`
 
@@ -122,7 +122,7 @@ Returns the number of elements in the set.
 
 Returns true if the set contains no elements.
 
-#### `pub fn insert(&mut self, value: T) -> bool`
+#### `pub fn insert(&mut self, value: T) -> bool with stores[value]`
 
 Inserts a value into the set.
 

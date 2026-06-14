@@ -2695,6 +2695,20 @@ impl Type {
         }
     }
 
+    /// Base name of the type's head — the named type it denotes, peeling
+    /// references and dropping generic arguments (`&List<T>` → `List`,
+    /// `Point` → `Point`). `None` for structural types (tuple, function).
+    /// Used to match a symbol-notation receiver against `impl` target types.
+    pub fn head_base_name(&self) -> Option<&str> {
+        let name = match self {
+            Type::Named(t) => t.name.as_str(),
+            Type::Generic(t) => t.name.as_str(),
+            Type::Reference(inner) | Type::MutReference(inner) => return inner.head_base_name(),
+            _ => return None,
+        };
+        Some(name.split('<').next().unwrap_or(name))
+    }
+
     /// Returns the source [`Span`] covering this type expression.
     ///
     /// `Function` and empty `Tuple` types have no top-level span field;
