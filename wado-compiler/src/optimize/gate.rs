@@ -44,9 +44,9 @@
 
 use cranelift_entity::EntityRef;
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir_arena::ExprKind;
+use crate::nir_arena::{ExprKind, StmtId};
 use crate::nir_engine::CachedAnalysis;
 use crate::nir_package::NirPackage;
 
@@ -145,21 +145,40 @@ impl CallGraph {
     }
 }
 
+/// A parked `ValueGraph` analysis plus the edits accumulated against it, for the
+/// incremental rebuild (WEP lever 1). `analysis` is valid for the body *before*
+/// the `dirty` root statements changed; the next value-graph pass either reuses
+/// it wholesale (`dirty` empty) or rebuilds incrementally from it
+/// ([`crate::nir_engine::Engine::with_incremental_analysis`]). `complete` is
+/// `false` once a non-journaling change (any [`FunctionGate::mark_changed`], i.e.
+/// a pass outside the journaled value-graph trio, or a neighbour change) touched
+/// the function — then `dirty` no longer covers the whole delta and the pass
+/// falls back to a full rebuild. Shared only among the identically-configured
+/// `cse` / `store_load_forward` / `condition_implication` passes.
+struct VgJournal {
+    analysis: CachedAnalysis,
+    dirty: IndexSet<StmtId>,
+    complete: bool,
+}
+
+/// What a journaled value-graph pass reports back for re-parking. `analysis` is
+/// the graph the pass's engine ended with (valid for the body the pass saw,
+/// before the pass's own edits, carrying checkpoints); `dirty` is the pass's own
+/// root-statement edits (`None` when not localizable — then the journal can't
+/// stay complete).
+pub struct VgOutcome {
+    pub changed: bool,
+    pub analysis: Option<CachedAnalysis>,
+    pub dirty: Option<IndexSet<StmtId>>,
+}
+
 /// Per-function dirty-set gate. See the module docs.
 pub struct FunctionGate {
     revision: Vec<u64>,
     watermarks: [Vec<u64>; GatedPass::COUNT],
     graph: CallGraph,
-    /// Parked per-function engine analysis (`ValueGraph` + alias sets), tagged
-    /// with the `revision` it was built at. A pass reuses it when the function
-    /// is unchanged since the park (`revision` matches); `revision` bumps on the
-    /// function's own change *and* any neighbour change, which over-covers the
-    /// analysis's real dependency (body + callee immutability), so a reuse is
-    /// never stale. Shared only among the identically-configured value-graph
-    /// passes `cse` / `store_load_forward` / `condition_implication` (no
-    /// `param_locals` seeding); `licm` seeds loop-entry params differently and
-    /// has no within-iteration sharing partner, so it stays uncached.
-    vg_cache: Vec<Option<(u64, CachedAnalysis)>>,
+    /// Parked per-function value-graph journal. See [`VgJournal`].
+    vg_cache: Vec<Option<VgJournal>>,
 }
 
 impl FunctionGate {
@@ -225,8 +244,28 @@ impl FunctionGate {
     }
 
     /// Record that `func`'s body changed: bump its revision and, conservatively,
-    /// its 1-hop call-graph neighbours (callers and callees).
+    /// its 1-hop call-graph neighbours (callers and callees). This is the
+    /// *non-journaling* change signal (any pass outside the value-graph trio),
+    /// so it also invalidates the value-graph journal of `func` and its
+    /// neighbours — the edit is not in any `dirty` set, so the parked graph can
+    /// no longer be incrementally rebuilt from it.
     pub fn mark_changed(&mut self, func: FunctionId) {
+        self.bump_revisions(func);
+        self.invalidate_journal(func.index());
+        let i = func.index();
+        for k in 0..self.graph.callers[i].len() {
+            let c = self.graph.callers[i][k].index();
+            self.invalidate_journal(c);
+        }
+        for k in 0..self.graph.callees[i].len() {
+            let c = self.graph.callees[i][k].index();
+            self.invalidate_journal(c);
+        }
+    }
+
+    /// Bump `func`'s revision and its 1-hop neighbours', without touching any
+    /// value-graph journal. The revision drives the `needs`/`seen` gating only.
+    fn bump_revisions(&mut self, func: FunctionId) {
         self.ensure(func.index() + 1);
         let i = func.index();
         self.revision[i] += 1;
@@ -235,6 +274,14 @@ impl FunctionGate {
         }
         for &c in &self.graph.callees[i] {
             self.revision[c.index()] += 1;
+        }
+    }
+
+    /// Mark a function's parked journal as no longer completely described by its
+    /// `dirty` set, forcing the next value-graph pass to full-rebuild.
+    fn invalidate_journal(&mut self, i: usize) {
+        if let Some(Some(j)) = self.vg_cache.get_mut(i) {
+            j.complete = false;
         }
     }
 
@@ -265,16 +312,18 @@ impl FunctionGate {
         any
     }
 
-    /// Like [`Self::run_gated`], for the value-graph passes that share the
-    /// [`vg_cache`](Self::vg_cache). For each dirty function it hands `f` the
-    /// parked analysis (if the function is unchanged since the park) and parks
-    /// the returned analysis back when `f` reports no change. A changed function
-    /// has its revision bumped, so its stale parked entry is never reused.
-    pub fn run_gated_cached(
+    /// Drive a journaled value-graph pass (`cse` / `store_load_forward` /
+    /// `condition_implication`). For each dirty function it hands `f` the parked
+    /// analysis plus the set of root statements changed since the analysis was
+    /// built: an empty set means reuse the graph as-is, a non-empty set means
+    /// rebuild incrementally, and `None` means full-rebuild. `f` reports back a
+    /// [`VgOutcome`] which is re-parked as the new journal so the next pass in
+    /// the trio can build on it.
+    pub fn run_gated_incremental(
         &mut self,
         pass: GatedPass,
         len: usize,
-        mut f: impl FnMut(FunctionId, Option<CachedAnalysis>) -> (bool, Option<CachedAnalysis>),
+        mut f: impl FnMut(FunctionId, Option<(CachedAnalysis, IndexSet<StmtId>)>) -> VgOutcome,
     ) -> bool {
         let mut any = false;
         for i in 0..len {
@@ -282,35 +331,66 @@ impl FunctionGate {
             if !self.needs(pass, fid) {
                 continue;
             }
-            let cached = self.take_analysis(fid);
-            let (changed, analysis) = f(fid, cached);
+            let prepared = self.prepare_incremental(i);
+            let outcome = f(fid, prepared);
             self.seen(pass, fid);
-            if changed {
-                self.mark_changed(fid);
+            if outcome.changed {
+                // Other gated passes must re-process this function; neighbours'
+                // journals are invalidated (their inputs may have shifted), but
+                // this function's journal is set precisely from the outcome.
+                self.bump_revisions(fid);
+                let idx = fid.index();
+                for k in 0..self.graph.callers[idx].len() {
+                    let c = self.graph.callers[idx][k].index();
+                    self.invalidate_journal(c);
+                }
+                for k in 0..self.graph.callees[idx].len() {
+                    let c = self.graph.callees[idx][k].index();
+                    self.invalidate_journal(c);
+                }
+                self.vg_cache[idx] = match (outcome.analysis, outcome.dirty) {
+                    (Some(analysis), Some(dirty)) => Some(VgJournal {
+                        analysis,
+                        dirty,
+                        complete: true,
+                    }),
+                    _ => None,
+                };
                 any = true;
-            } else if let Some(analysis) = analysis {
-                self.park_analysis(fid, analysis);
+            } else if let Some(analysis) = outcome.analysis {
+                self.ensure(i + 1);
+                self.vg_cache[i] = Some(VgJournal {
+                    analysis,
+                    dirty: IndexSet::default(),
+                    complete: true,
+                });
             }
         }
         any
     }
 
-    /// Take the parked analysis for `func` if it is still valid (parked at the
-    /// current revision). A stale entry is dropped.
-    fn take_analysis(&mut self, func: FunctionId) -> Option<CachedAnalysis> {
-        let i = func.index();
+    /// The parked analysis for function `i` and the edits to rebuild it for, or
+    /// `None` to full-rebuild. A complete journal with an empty `dirty` set is a
+    /// wholesale reuse; a non-empty `dirty` set goes incremental unless disabled
+    /// via `WADO_INCREMENTAL_VG=0`.
+    fn prepare_incremental(&mut self, i: usize) -> Option<(CachedAnalysis, IndexSet<StmtId>)> {
         match self.vg_cache.get_mut(i)?.take() {
-            Some((rev, analysis)) if rev == self.revision[i] => Some(analysis),
+            Some(j) if j.complete => {
+                if j.dirty.is_empty() || incremental_vg_enabled() {
+                    Some((j.analysis, j.dirty))
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
+}
 
-    /// Park `analysis` for `func`, tagged with its current revision.
-    fn park_analysis(&mut self, func: FunctionId, analysis: CachedAnalysis) {
-        self.ensure(func.index() + 1);
-        let i = func.index();
-        self.vg_cache[i] = Some((self.revision[i], analysis));
-    }
+/// Whether the incremental `ValueGraph` rebuild is enabled (default on; set
+/// `WADO_INCREMENTAL_VG=0` to force full rebuilds for measurement / bisection).
+fn incremental_vg_enabled() -> bool {
+    !matches!(std::env::var("WADO_INCREMENTAL_VG").as_deref(), Ok("0"))
 }
 
 #[cfg(test)]

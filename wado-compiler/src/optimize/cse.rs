@@ -35,7 +35,7 @@ use std::cell::Cell;
 
 use cranelift_entity::EntityRef;
 
-use super::gate::{FunctionGate, GatedPass};
+use super::gate::{FunctionGate, GatedPass, VgOutcome};
 use crate::nir::{NirBinaryOp, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
@@ -50,10 +50,14 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
-    gate.run_gated_cached(GatedPass::Cse, len, |fid, cached| {
+    gate.run_gated_incremental(GatedPass::Cse, len, |fid, prepared| {
         let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {
-            return (false, None);
+            return VgOutcome {
+                changed: false,
+                analysis: None,
+                dirty: None,
+            };
         }
         let rule = CseRule {
             applied: Cell::new(false),
@@ -66,30 +70,47 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let mut engine = if let Some(cached) = cached {
-            Engine::with_analysis(body, &mut buffers, locals, &type_table, cached)
-        } else {
-            let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+        let mut engine = match prepared {
+            Some((cached, dirty)) if dirty.is_empty() => {
+                Engine::with_analysis(body, &mut buffers, locals, &type_table, cached)
+            }
+            Some((cached, dirty)) => Engine::with_incremental_analysis(
                 body,
+                &mut buffers,
                 locals,
-                address_taken_locals,
-                stores_aliased_locals,
                 &type_table,
-                &first_param_types,
-                &call_immutability,
-            );
-            let mut engine = Engine::new(body, &mut buffers, locals);
-            engine.set_alias_sets(aliased, untrackable, mut_escaped);
-            engine.set_value_graph_type_table(&type_table);
-            engine
+                cached,
+                &dirty,
+            ),
+            None => {
+                let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+                    body,
+                    locals,
+                    address_taken_locals,
+                    stores_aliased_locals,
+                    &type_table,
+                    &first_param_types,
+                    &call_immutability,
+                );
+                let mut engine = Engine::new(body, &mut buffers, locals);
+                engine.set_alias_sets(aliased, untrackable, mut_escaped);
+                engine.set_value_graph_type_table(&type_table);
+                engine.set_record_checkpoints(true);
+                engine
+            }
         };
         let changed = engine.run(&[&rule]);
-        let parked = if changed {
-            None
+        let dirty = if changed {
+            engine.dirty_root_stmts()
         } else {
-            engine.into_analysis()
+            None
         };
-        (changed, parked)
+        let analysis = engine.into_analysis();
+        VgOutcome {
+            changed,
+            analysis,
+            dirty,
+        }
     })
 }
 

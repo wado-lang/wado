@@ -211,7 +211,53 @@ impl<'a> Engine<'a> {
             mut_escaped_locals: cached.mut_escaped_locals,
             param_locals: cached.param_locals,
             vg_type_table: Some(type_table),
-            vg_record_checkpoints: false,
+            vg_record_checkpoints: true,
+            dirty_nodes: Vec::new(),
+        };
+        engine.build_parents();
+        engine.build_uses();
+        engine.seed_post_order();
+        engine
+    }
+
+    /// Like [`Engine::with_analysis`], but the parked graph is stale by the
+    /// edits in `dirty` (root-block statements changed since it was built):
+    /// [`crate::nir_value_graph::builder::rebuild_incremental`] reuses its clean
+    /// prefix and re-walks only from the first disturbed statement, instead of a
+    /// full rebuild. Sound when `dirty` is the *complete* set of root statements
+    /// changed since `cached` was parked (the gate's journal enforces this); an
+    /// incomplete set would reuse a statement that actually changed.
+    pub fn with_incremental_analysis(
+        body: &'a mut Body,
+        buf: &'a mut EngineBuffers,
+        locals: &'a mut Vec<NirLocal>,
+        type_table: &'a crate::tir::TypeTable,
+        cached: CachedAnalysis,
+        dirty: &IndexSet<StmtId>,
+    ) -> Self {
+        let value_graph = crate::nir_value_graph::builder::rebuild_incremental(
+            cached.value_graph,
+            body,
+            dirty,
+            &cached.param_locals,
+            &cached.aliased_locals,
+            &cached.untrackable_locals,
+            &cached.mut_escaped_locals,
+            Some(type_table),
+        );
+        buf.reset_for(body);
+        let mut engine = Self {
+            body,
+            buf,
+            locals,
+            value_graph: Some(value_graph),
+            body_address_taken: cached.body_address_taken,
+            aliased_locals: cached.aliased_locals,
+            untrackable_locals: cached.untrackable_locals,
+            mut_escaped_locals: cached.mut_escaped_locals,
+            param_locals: cached.param_locals,
+            vg_type_table: Some(type_table),
+            vg_record_checkpoints: true,
             dirty_nodes: Vec::new(),
         };
         engine.build_parents();
@@ -371,6 +417,16 @@ impl<'a> Engine<'a> {
     /// value that has no pre-existing source literal.
     pub fn value_graph_type_table(&self) -> Option<&'a crate::tir::TypeTable> {
         self.vg_type_table
+    }
+
+    /// Record per-root-statement checkpoints on the lazily-built `ValueGraph`,
+    /// so a later session can rebuild it incrementally. Set on the incremental
+    /// path's fresh-build branch before the first value query.
+    pub fn set_record_checkpoints(&mut self, on: bool) {
+        if self.vg_record_checkpoints != on {
+            self.vg_record_checkpoints = on;
+            self.value_graph = None;
+        }
     }
 
     fn ensure_value_graph(&mut self) {

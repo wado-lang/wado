@@ -352,7 +352,128 @@ pub fn rebuild_incremental(
         b.record_root_checkpoint(s);
         b.walk_stmt(s);
     }
-    b.finish()
+    let res = b.finish();
+    if verify_incremental_enabled() {
+        let full = build(
+            body,
+            param_locals,
+            aliased,
+            untrackable,
+            mut_escaped,
+            type_table,
+            false,
+        );
+        verify_observably_identical(&res, &full, body);
+    }
+    res
+}
+
+/// Whether `WADO_VERIFY_INCREMENTAL_VG` is set, enabling the per-rebuild
+/// cross-check against a full build. Off by default (zero cost); used in CI /
+/// local verification runs over the whole E2E suite.
+fn verify_incremental_enabled() -> bool {
+    std::env::var_os("WADO_VERIFY_INCREMENTAL_VG").is_some()
+}
+
+/// Pre-order list of every live `ExprId` reachable from the body root. Dead
+/// nodes left by in-place rewrites are excluded, matching what a consumer can
+/// actually query.
+fn live_exprs(body: &Body) -> Vec<ExprId> {
+    let mut out = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    let mut kids = Vec::new();
+    while let Some(n) = stack.pop() {
+        if let NodeRef::Expr(e) = n {
+            out.push(e);
+        }
+        kids.clear();
+        body.for_each_child(n, |c| kids.push(c));
+        for &c in kids.iter().rev() {
+            stack.push(c);
+        }
+    }
+    out
+}
+
+/// The literal payload of a value kind, or `None` for a non-literal — the part
+/// of a value's identity a const-folding consumer reads beyond equality.
+fn literal_key(kind: &super::ValueKind) -> Option<super::ValueKind> {
+    use super::ValueKind::*;
+    matches!(
+        kind,
+        Int(_) | Float(_) | Bool(_) | Char(_) | String(_) | Null | Unit
+    )
+    .then(|| kind.clone())
+}
+
+/// Assert an incremental rebuild is observably identical to a full build: over
+/// every live expression, the value-equality partition matches (canonical
+/// renumbering, since absolute ids legitimately differ) and each value's
+/// literal payload matches. Also checks `loop_entry_values` agrees per live
+/// loop. Panics on divergence — a compiler-correctness check (P0).
+fn verify_observably_identical(incr: &ValueGraphBuild, full: &ValueGraphBuild, body: &Body) {
+    let live = live_exprs(body);
+    // Canonical signature: each value's first-seen order over `live` (so the two
+    // builds are comparable despite different absolute numbering), paired with
+    // its literal payload.
+    let canon = |b: &ValueGraphBuild| -> Vec<Option<(u32, Option<super::ValueKind>)>> {
+        let mut map: IndexMap<ValueId, u32> = IndexMap::default();
+        live.iter()
+            .map(|&e| {
+                b.value_of.get(&e).map(|&v| {
+                    let next = map.len() as u32;
+                    let c = *map.entry(v).or_insert(next);
+                    (c, literal_key(b.pool.kind(v)))
+                })
+            })
+            .collect()
+    };
+    assert_eq!(
+        canon(incr),
+        canon(full),
+        "incremental ValueGraph value_of diverged from a full rebuild"
+    );
+    // loop_entry_values: for every live loop, the per-local value partition must
+    // match. Dead loops (deleted by the edit) are excluded.
+    let live_loops: crate::hashmap::IndexSet<BlockId> = {
+        let mut s = crate::hashmap::IndexSet::default();
+        let mut stack = vec![NodeRef::Block(body.root)];
+        let mut kids = Vec::new();
+        while let Some(n) = stack.pop() {
+            if let NodeRef::Stmt(st) = n
+                && let StmtKind::Loop { body: lb } = &body.stmts[st].kind
+            {
+                s.insert(*lb);
+            }
+            kids.clear();
+            body.for_each_child(n, |c| kids.push(c));
+            for &c in kids.iter().rev() {
+                stack.push(c);
+            }
+        }
+        s
+    };
+    let loop_canon = |b: &ValueGraphBuild, lb: BlockId| -> Option<Vec<(u32, u32)>> {
+        let m = b.loop_entry_values.get(&lb)?;
+        let mut map: IndexMap<ValueId, u32> = IndexMap::default();
+        let mut pairs: Vec<(u32, u32)> = m
+            .iter()
+            .map(|(&local, &v)| {
+                let next = map.len() as u32;
+                let c = *map.entry(v).or_insert(next);
+                (local, c)
+            })
+            .collect();
+        pairs.sort_unstable();
+        Some(pairs)
+    };
+    for lb in live_loops {
+        assert_eq!(
+            loop_canon(incr, lb),
+            loop_canon(full, lb),
+            "incremental ValueGraph loop_entry_values diverged at {lb:?}"
+        );
+    }
 }
 
 struct Builder<'a> {
