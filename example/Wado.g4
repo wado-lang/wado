@@ -19,23 +19,30 @@ item
 
 itemKind
     : useDecl
-    | functionDecl
+    | implBlock
+    | testDecl
+    | 'export' 'async'? 'fn' funcSig
+    | 'pub'? pubItem
+    ;
+
+// Item kinds that take an optional `pub` (plus plain `fn`). The leading
+// `pub` is left-factored into `itemKind` so the dispatch is token-led.
+pubItem
+    : 'fn' funcSig
+    | globalDecl
+    | typeAliasDecl
     | structDecl
     | enumDecl
     | variantDecl
     | traitDecl
-    | implBlock
-    | globalDecl
-    | typeAliasDecl
-    | testDecl
     ;
 
 globalDecl
-    : 'pub'? 'global' IDENTIFIER ':' typeRef '=' expression ';'
+    : 'global' IDENTIFIER ':' typeRef '=' expression ';'
     ;
 
 typeAliasDecl
-    : 'pub'? 'type' IDENTIFIER genericParams? '=' typeRef ';'
+    : 'type' IDENTIFIER genericParams? '=' typeRef ';'
     ;
 
 // `test` is a contextual keyword; modeled as a literal here for simplicity.
@@ -56,8 +63,7 @@ attrArgs
     ;
 
 attrArg
-    : IDENTIFIER '=' literal
-    | IDENTIFIER
+    : IDENTIFIER ('=' literal)?
     | literal
     ;
 
@@ -79,8 +85,11 @@ importItem
     ;
 
 functionDecl
-    : ('pub' | 'export' 'async'?)? 'fn' IDENTIFIER genericParams? '(' paramList? ')'
-        returnType? withClause? (block | ';')
+    : ('pub' | 'export' 'async'?)? 'fn' funcSig
+    ;
+
+funcSig
+    : IDENTIFIER genericParams? '(' paramList? ')' returnType? withClause? (block | ';')
     ;
 
 paramList
@@ -110,7 +119,7 @@ withItem
     ;
 
 structDecl
-    : 'pub'? 'struct' IDENTIFIER genericParams? '{' fieldList? '}'
+    : 'struct' IDENTIFIER genericParams? '{' fieldList? '}'
     ;
 
 fieldList
@@ -122,7 +131,7 @@ fieldDecl
     ;
 
 enumDecl
-    : 'pub'? 'enum' IDENTIFIER '{' enumCaseList? '}'
+    : 'enum' IDENTIFIER '{' enumCaseList? '}'
     ;
 
 enumCaseList
@@ -130,7 +139,7 @@ enumCaseList
     ;
 
 variantDecl
-    : 'pub'? 'variant' IDENTIFIER genericParams? '{' variantCaseList? '}'
+    : 'variant' IDENTIFIER genericParams? '{' variantCaseList? '}'
     ;
 
 variantCaseList
@@ -142,7 +151,7 @@ variantCase
     ;
 
 traitDecl
-    : 'pub'? 'trait' IDENTIFIER genericParams? '{' traitMember* '}'
+    : 'trait' IDENTIFIER genericParams? '{' traitMember* '}'
     ;
 
 traitMember
@@ -156,9 +165,16 @@ implBlock
 
 implMember
     : 'type' IDENTIFIER '=' typeRef ';'
-    | 'pub'? 'const' IDENTIFIER ':' typeRef '=' expression ';'
-    | 'pub'? functionDecl
     | '..'
+    | 'export' 'async'? 'fn' funcSig
+    | 'pub'? implPubMember
+    ;
+
+// `const` / `fn` members share an optional `pub`, left-factored here so the
+// dispatch is token-led (`const` vs `fn`) instead of a tournament.
+implPubMember
+    : 'const' IDENTIFIER ':' typeRef '=' expression ';'
+    | 'fn' funcSig
     ;
 
 genericParams
@@ -320,9 +336,7 @@ postfix
 postfixOp
     : '(' argumentList? ')'
     | '::' typeArgs '(' argumentList? ')'
-    | '.' memberName ('::' typeArgs)? '(' argumentList? ')'
-    | '.' memberName
-    | '.' INTEGER
+    | '.' (memberName ('::' typeArgs)? ('(' argumentList? ')')? | INTEGER)
     | '[' expression ']'
     | 'matches' '{' pattern ('&&' expression)? '}'
     | '?'
@@ -376,7 +390,7 @@ mapEntry
 // keyword method name resolves there, e.g. `Instant::from(x)` — mirroring how
 // `.from` is already accepted after `.`.
 exprPath
-    : IDENTIFIER ('::' memberName | '::' typeArgs)*
+    : IDENTIFIER ('::' (typeArgs | memberName))*
     ;
 
 // Compile-time literals and macros: `#file`, `#include_str("...")`.
@@ -433,8 +447,7 @@ fieldInitList
     ;
 
 fieldInit
-    : IDENTIFIER ':' expression
-    | IDENTIFIER
+    : IDENTIFIER (':' expression)?
     | '..' expression
     ;
 
@@ -497,8 +510,7 @@ patternFieldList
     ;
 
 patternField
-    : IDENTIFIER ':' pattern
-    | IDENTIFIER
+    : IDENTIFIER (':' pattern)?
     ;
 
 literal
