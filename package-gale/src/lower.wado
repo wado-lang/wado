@@ -891,13 +891,18 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
         Group(mut g) => {
             let mut new_alts: List<AltBody> = [];
             for let alt of &g.alts {
-                let mut new_alt = *alt;
                 let mut new_ops: List<Op> = [];
                 for let inner_op of &alt.ops {
                     new_ops.push(deep_stamp_inner_self_refs_op(*inner_op, rule_name, rule_snake, prec));
                 }
-                new_alt.ops = new_ops;
-                new_alts.push(new_alt);
+                new_alts.push(AltBody {
+                    alt_index: alt.alt_index,
+                    case_name: alt.case_name,
+                    struct_name: alt.struct_name,
+                    ops: new_ops,
+                    fields: alt.fields,
+                    prefix_self_ref_min_prec: alt.prefix_self_ref_min_prec,
+                });
             }
             let mut new_scan_alts: List<ScanBody> = [];
             for let scan_alt of &g.scan_alts {
