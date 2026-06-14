@@ -7,7 +7,7 @@ use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, is_unit_type};
 use crate::hashmap::IndexMap;
 use crate::tir::TirTest;
-use crate::world_registry::{WorldExportInfo, WorldRegistry};
+use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
 
 /// Plan for the Component Model structure.
 ///
@@ -49,6 +49,12 @@ pub struct WorldExportPlan {
     /// freestanding world function export (the kiln generator's `generate`,
     /// test exports) emitted as a bare top-level function.
     pub from_interface_fq: Option<String>,
+    /// Use a synchronous canonical lift (no `CanonicalOption::Async`): the core
+    /// function returns the lowered value(s) directly instead of delivering them
+    /// via `task.return`. Set for `--lib` world exports, whose adapters are
+    /// synthesized as value-returning functions. The existing WASI worlds (CLI,
+    /// HTTP, kiln) keep the async lift, so this is `false` for them.
+    pub sync_lift: bool,
 }
 
 /// CM-level type at the world export boundary.
@@ -59,6 +65,11 @@ pub struct WorldExportPlan {
 /// [`Self::HandlerResult`].
 #[derive(Debug, Clone)]
 pub enum CmExportType {
+    /// A primitive value type at the boundary, carrying the Wado type name
+    /// (`"bool"`, `"u32"`, `"i64"`, `"f64"`, `"char"`, `"String"`, ...).
+    /// Codegen maps it to the matching `PrimitiveValType`. Used by `--lib`
+    /// world exports whose signatures are primitives-only.
+    Primitive(String),
     /// `result<>` — no value at the boundary.
     ///
     /// Produced when the export has no return type or its return type is
@@ -129,6 +140,7 @@ pub struct TestExportPlan {
 ///
 /// Canonical intrinsics are NOT collected here — they are discovered lazily
 /// during WIR translation via `WirContext::ensure_canonical`.
+#[allow(clippy::too_many_arguments)]
 pub fn build_component_plan(
     is_test_world: bool,
     target_world: &str,
@@ -137,6 +149,7 @@ pub fn build_component_plan(
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
+    lib_world: Option<&WorldInfo>,
 ) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
@@ -148,6 +161,7 @@ pub fn build_component_plan(
             export_binding_names,
             world_registry,
             cm_interface_registry,
+            lib_world,
         )
     };
 
@@ -193,8 +207,11 @@ fn build_world_export_plans(
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
+    lib_world: Option<&WorldInfo>,
 ) -> Vec<WorldExportPlan> {
-    let world = world_registry.get(target_world);
+    // The synthesized library world (`--lib`) takes priority over the static
+    // registry, which cannot hold a per-package world.
+    let world = lib_world.or_else(|| world_registry.get(target_world));
     let world_namespace_prefix = world.map(crate::world_registry::WorldInfo::namespace_prefix);
     let exports: Vec<WorldExportInfo> = world.map(|w| w.exports.clone()).unwrap_or_else(|| {
         // Fallback to a default run export for unknown worlds
@@ -242,6 +259,9 @@ fn build_world_export_plans(
                 is_async: export.is_async,
                 cm_params,
                 cm_result,
+                // Library exports use a synchronous lift; the WASI worlds keep
+                // the async/task-return lift.
+                sync_lift: lib_world.is_some(),
             }
         })
         .collect()
@@ -262,6 +282,26 @@ fn build_world_export_plans(
 /// originate in stdlib `lib/wasi/**/worlds.wado` and
 /// `lib/core/kiln/worlds.wado`, so any unresolved name indicates a bug in the
 /// stdlib bootstrap rather than user input.
+/// Whether `name` is a Wado primitive that maps directly to a Component Model
+/// primitive value type at the export boundary.
+fn is_cm_primitive_name(name: &str) -> bool {
+    matches!(
+        name,
+        "i8" | "i16"
+            | "i32"
+            | "i64"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "u64"
+            | "f32"
+            | "f64"
+            | "bool"
+            | "char"
+            | "String"
+    )
+}
+
 fn resolve_cm_export_type(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
@@ -289,6 +329,11 @@ fn resolve_cm_export_type(
                 world_namespace_prefix,
             )),
         };
+    }
+    if let Type::Named(named) = ty
+        && is_cm_primitive_name(&named.name)
+    {
+        return CmExportType::Primitive(named.name.clone());
     }
     if let Type::Named(named) = ty {
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)

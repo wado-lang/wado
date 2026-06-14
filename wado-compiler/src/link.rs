@@ -47,6 +47,7 @@ pub fn link(package: Package) -> FlatPackage {
         &package.export_binding_names,
         package.world_registry,
         package.cm_interface_registry,
+        package.lib_world_info.as_ref(),
     );
 
     // Flatten all per-module TIR into flat lists.

@@ -1631,6 +1631,171 @@ pub(super) fn synthesize_general_export_binding(
     binding
 }
 
+/// Synthesize a **synchronous** export binding for a `--lib` world export.
+///
+/// Unlike [`synthesize_general_export_binding`] (which lifts via an async
+/// `task.return`), the library lift is synchronous: the core function returns
+/// the lowered value directly. For milestone 2 (primitives-only) no lowering is
+/// needed — the adapter returns `user_fn(args)` verbatim, after lifting any
+/// flat params (e.g. `string` ptr/len) back to Wado values.
+///
+/// Generated TIR for `export fn id_u32(v: u32) -> u32`:
+/// ```text
+/// fn __cm_export__id_u32(v: u32) -> u32 {
+///     return id_u32(v);
+/// }
+/// ```
+pub(super) fn synthesize_sync_export_binding(
+    export_name: &str,
+    user_func: Rc<RefCell<TirFunction>>,
+    entry_source: &ModuleSource,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &Rc<RefCell<TypeTable>>,
+    world_params: &[(String, Type)],
+    cm_interface_registry: &CmInterfaceRegistry,
+    cm_package: &str,
+    interner: &RefCell<ModuleSourceInterner>,
+) -> Rc<RefCell<TirFunction>> {
+    let binding_name = export_binding_func_name(export_name);
+    let mut body_stmts: Vec<TirStmt> = Vec::new();
+    let mut locals: Vec<TirLocal> = Vec::new();
+
+    let user_func_ref = user_func.borrow();
+    let user_return_type = user_func_ref.return_type;
+    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
+    let lift_ctx = LiftContext {
+        cm_interface_registry,
+        type_table,
+        cm_package,
+        interner,
+    };
+
+    let (adapter_params, call_args, param_count) = if needs_lifting {
+        let tt = type_table.borrow();
+        let flat_param_types = compute_export_flat_param_types(world_params, tir_modules, &tt);
+        drop(tt);
+
+        let flat_params: Vec<TirParam> = flat_param_types
+            .iter()
+            .enumerate()
+            .map(|(i, &vt)| TirParam {
+                name: format!("__p{i}"),
+                type_id: cm_val_type_to_type_id(vt),
+                local_index: i as u32,
+                is_mut: false,
+                span: synth_span(),
+            })
+            .collect();
+
+        let flat_count = flat_params.len() as u32;
+        for p in &flat_params {
+            locals.push(param_local(&p.name, p.type_id, false));
+        }
+
+        let mut next_local_tmp = flat_count;
+        let flat_param_locals: Vec<u32> = (0..flat_count).collect();
+
+        let mut lifted_args = Vec::new();
+        let mut flat_offset = 0;
+        for (i, (_name, param_ty)) in world_params.iter().enumerate() {
+            let user_type_id = user_func_ref
+                .params
+                .get(i)
+                .map(|p| p.type_id)
+                .unwrap_or(TypeTable::I32);
+            let (lifted, consumed) = synthesize_lift_from_flat_params(
+                param_ty,
+                &flat_param_locals[flat_offset..],
+                &flat_param_types[flat_offset..],
+                user_type_id,
+                &mut next_local_tmp,
+                &mut body_stmts,
+                &mut locals,
+                tir_modules,
+                type_table,
+                lift_ctx,
+            );
+            lifted_args.push(lifted);
+            flat_offset += consumed;
+        }
+
+        (flat_params, lifted_args, next_local_tmp)
+    } else {
+        let params: Vec<TirParam> = user_func_ref
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| TirParam {
+                name: p.name.clone(),
+                type_id: p.type_id,
+                local_index: i as u32,
+                is_mut: false,
+                span: synth_span(),
+            })
+            .collect();
+
+        let count = params.len() as u32;
+        for p in &params {
+            locals.push(param_local(&p.name, p.type_id, false));
+        }
+
+        let args: Vec<TirExpr> = params
+            .iter()
+            .map(|p| local_ref(p.local_index, &p.name, p.type_id))
+            .collect();
+
+        (params, args, count)
+    };
+
+    let call_user_param_is_mut: Vec<bool> =
+        user_func.borrow().params.iter().map(|p| p.is_mut).collect();
+    let call_user = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
+            type_args: vec![],
+            args: call_args
+                .into_iter()
+                .zip(
+                    call_user_param_is_mut
+                        .into_iter()
+                        .chain(std::iter::repeat(false)),
+                )
+                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                .collect(),
+        },
+        user_return_type,
+        synth_span(),
+    );
+
+    let tt = type_table.borrow();
+    let is_unit_return = matches!(tt.get(user_return_type), ResolvedType::Unit);
+    drop(tt);
+
+    let adapter_return = if is_unit_return {
+        body_stmts.push(expr_stmt(call_user));
+        TypeTable::UNIT
+    } else {
+        body_stmts.push(return_stmt(Some(call_user)));
+        user_return_type
+    };
+
+    let body = block(body_stmts);
+    let binding = make_binding_function(
+        binding_name,
+        adapter_params,
+        adapter_return,
+        body,
+        param_count,
+        locals,
+    );
+    {
+        let mut b = binding.borrow_mut();
+        b.is_export = true;
+        b.is_cm_export = true;
+    }
+    binding
+}
+
 /// Synthesize an export binding for `export async fn` functions.
 ///
 /// The user function calls `task-return` internally via `task return expr` stmts

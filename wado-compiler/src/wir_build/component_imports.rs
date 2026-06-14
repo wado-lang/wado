@@ -224,6 +224,7 @@ fn collect_export_interface_fqs(
     use crate::wir_build::component_plan::CmExportType;
     match ty {
         CmExportType::Unit => {}
+        CmExportType::Primitive(_) => {}
         CmExportType::Named { interface_fq, .. } => {
             out.insert(interface_fq.clone());
         }

@@ -1360,11 +1360,11 @@ fn emit_canonical_intrinsics(
     // Worlds with one boundary export (HTTP service `handle`, kiln
     // `generate`, CLI `Command::run`) all share this single-task assumption;
     // the test world emits zero world exports so we fall back to `result<>`.
-    let task_return_type = component_plan
+    let task_return_type: ComponentValType = component_plan
         .world_exports
         .first()
-        .map(|export| cm_export_type_to_idx(ctx, &export.cm_result, result_unit_type))
-        .unwrap_or(result_unit_type);
+        .map(|export| cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type))
+        .unwrap_or(ComponentValType::Type(result_unit_type));
     for intrinsic in canonical_intrinsics {
         ctx.register_core_func(&intrinsic.import_name());
 
@@ -1499,7 +1499,7 @@ fn emit_canonical_intrinsics(
                 // must not appear in the option list (wasm-tools
                 // rejects it).
                 builder.task_return(
-                    Some(ComponentValType::Type(task_return_type)),
+                    Some(task_return_type),
                     [CanonicalOption::Memory(ctx.memory_idx())],
                 );
             }
@@ -1602,6 +1602,10 @@ fn cm_export_type_to_idx(
     use crate::wir_build::component_plan::CmExportType;
     match ty {
         CmExportType::Unit => result_unit_type,
+        CmExportType::Primitive(name) => panic!(
+            "primitive CM export type `{name}` has no defined-type index; \
+             use cm_export_type_to_valtype for primitive boundary types"
+        ),
         CmExportType::Named {
             interface_fq,
             cm_name,
@@ -1637,6 +1641,50 @@ fn cm_export_type_to_idx(
     }
 }
 
+/// Resolve a [`CmExportType`] to a [`ComponentValType`] for use in an export's
+/// function signature. Primitives map to `ComponentValType::Primitive`; all
+/// other shapes resolve through [`cm_export_type_to_idx`] to a defined-type
+/// index.
+fn cm_export_type_to_valtype(
+    ctx: &ComponentModelContext,
+    ty: &crate::wir_build::component_plan::CmExportType,
+    result_unit_type: u32,
+) -> ComponentValType {
+    use crate::wir_build::component_plan::CmExportType;
+    match ty {
+        CmExportType::Primitive(name) => cm_primitive_name_to_valtype(name),
+        other => ComponentValType::Type(cm_export_type_to_idx(ctx, other, result_unit_type)),
+    }
+}
+
+/// Kebab-case a world export name for the Component Model boundary: underscores
+/// become hyphens. Wado identifiers are `[a-z0-9_]`, so this yields a valid CM
+/// extern name. Already-kebab WASI names (`run`, `handle`) are unchanged.
+fn kebab_export_name(name: &str) -> String {
+    name.replace('_', "-")
+}
+
+/// Map a Wado primitive type name to its Component Model `PrimitiveValType`.
+fn cm_primitive_name_to_valtype(name: &str) -> ComponentValType {
+    let prim = match name {
+        "i8" => PrimitiveValType::S8,
+        "i16" => PrimitiveValType::S16,
+        "i32" => PrimitiveValType::S32,
+        "i64" => PrimitiveValType::S64,
+        "u8" => PrimitiveValType::U8,
+        "u16" => PrimitiveValType::U16,
+        "u32" => PrimitiveValType::U32,
+        "u64" => PrimitiveValType::U64,
+        "f32" => PrimitiveValType::F32,
+        "f64" => PrimitiveValType::F64,
+        "bool" => PrimitiveValType::Bool,
+        "char" => PrimitiveValType::Char,
+        "String" => PrimitiveValType::String,
+        _ => panic!("unsupported CM primitive type name: {name}"),
+    };
+    ComponentValType::Primitive(prim)
+}
+
 fn emit_world_exports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1644,6 +1692,12 @@ fn emit_world_exports(
     result_unit_type: u32,
 ) {
     for export in &component_plan.world_exports {
+        // The Component Model requires kebab-case extern names. Core export
+        // names allow underscores, so a `--lib` export `fn id_bool` is aliased
+        // from the core module by its underscore name but exported at the
+        // component boundary as `id-bool`. WASI world names (`run`, `handle`,
+        // `generate`) are already kebab-safe, so this is a no-op for them.
+        let cm_name = kebab_export_name(&export.name);
         let core_name = format!("{}-core", export.name);
         let func_type_name = format!("{}-func-type", export.name);
 
@@ -1663,40 +1717,44 @@ fn emit_world_exports(
             // convention emitted by `import_wasi_http_types` /
             // `emit_kiln_world_types`; the synthesized `result<own<resp>, error>`
             // lives under `{world_pkg}-handler-result`. See [`CmExportType`].
-            let param_idxs: Vec<(String, u32)> = export
+            let param_vals: Vec<(String, ComponentValType)> = export
                 .cm_params
                 .iter()
                 .map(|(name, cm_ty)| {
                     (
                         name.clone(),
-                        cm_export_type_to_idx(ctx, cm_ty, result_unit_type),
+                        cm_export_type_to_valtype(ctx, cm_ty, result_unit_type),
                     )
                 })
                 .collect();
-            let param_refs: Vec<(&str, ComponentValType)> = param_idxs
+            let param_refs: Vec<(&str, ComponentValType)> = param_vals
                 .iter()
-                .map(|(n, idx)| (n.as_str(), ComponentValType::Type(*idx)))
+                .map(|(n, val)| (n.as_str(), *val))
                 .collect();
-            let result_idx = cm_export_type_to_idx(ctx, &export.cm_result, result_unit_type);
+            let result_val = cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type);
             enc.function()
                 .async_(export.is_async)
                 .params(param_refs)
-                .result(Some(ComponentValType::Type(result_idx)));
+                .result(Some(result_val));
         }
 
-        ctx.register_comp_func(&export.name);
+        ctx.register_comp_func(&cm_name);
         // `realloc` is always supplied to the canon. The Wado runtime always
         // exports a `realloc` (the chosen allocator), and wasm-tools accepts
         // the option even on canons whose lift code never calls back into it
         // (verified by running the full e2e suite, including param-free CLI
         // `run` and `Result<(), ()>` exports).
-        let lift_opts = vec![
-            CanonicalOption::Async,
-            CanonicalOption::Memory(ctx.memory_idx()),
-            CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-        ];
+        // Library exports use a synchronous lift: the core function returns the
+        // lowered value(s) directly. The WASI worlds use an async lift driven by
+        // `task.return`. See `WorldExportPlan::sync_lift`.
+        let mut lift_opts = Vec::new();
+        if !export.sync_lift {
+            lift_opts.push(CanonicalOption::Async);
+        }
+        lift_opts.push(CanonicalOption::Memory(ctx.memory_idx()));
+        lift_opts.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));
         builder.lift_func(
-            Some(&export.name),
+            Some(&cm_name),
             ctx.core_func_idx(&core_name),
             func_type,
             lift_opts,
@@ -1707,9 +1765,9 @@ fn emit_world_exports(
         // functions (kiln `generate`) are exported bare here.
         if export.from_interface_fq.is_none() {
             builder.export(
-                &export.name,
+                &cm_name,
                 ComponentExportKind::Func,
-                ctx.comp_func_idx(&export.name),
+                ctx.comp_func_idx(&cm_name),
                 None,
             );
             ctx.skip_comp_func_idx();
@@ -3626,6 +3684,9 @@ fn append_interface_instance_exports(
     ) {
         match ty {
             CmExportType::Unit => {}
+            // Primitives are inline value types, not named CM types — nothing
+            // to re-export into an interface instance.
+            CmExportType::Primitive(_) => {}
             CmExportType::Named {
                 interface_fq,
                 cm_name,

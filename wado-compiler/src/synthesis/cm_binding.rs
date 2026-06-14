@@ -31,7 +31,8 @@ use crate::tir::{ResolvedType, TirFunction, TirModule, TypeTable};
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
     synthesize_async_export_binding, synthesize_general_export_binding,
-    synthesize_result_export_binding, synthesize_void_export_binding,
+    synthesize_result_export_binding, synthesize_sync_export_binding,
+    synthesize_void_export_binding,
 };
 pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
@@ -226,8 +227,12 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
 
     // ---- Export adapters ----
 
-    // Step 5: Synthesize export bindings for world exports (signature-driven)
-    let world_info = project.world_registry.get(&project.target_world).cloned();
+    // Step 5: Synthesize export bindings for world exports (signature-driven).
+    // Prefer the synthesized library world (`--lib`) over the static registry.
+    let world_info = project.active_world_info().cloned();
+    // Library world exports use a synchronous lift (the core function returns
+    // the value directly), unlike the async/task-return WASI worlds.
+    let is_lib_world = project.lib_world_info.is_some();
     if let Some(world_info) = world_info {
         let entry_type_table = project
             .tir_modules
@@ -393,6 +398,21 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &binding_cm_package,
                             &project.interner,
                         )
+                    } else if is_lib_world {
+                        // Library exports: synchronous lift. The core function
+                        // returns the lowered value directly (milestone 2:
+                        // primitives only).
+                        synthesize_sync_export_binding(
+                            &export.name,
+                            user_func_rc,
+                            &entry_source,
+                            &project.tir_modules,
+                            &entry_type_table,
+                            &export.params,
+                            project.cm_interface_registry,
+                            &binding_cm_package,
+                            &project.interner,
+                        )
                     } else {
                         // Check the user function's actual return type (signature-driven)
                         let user_returns_result = {
@@ -473,7 +493,9 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         // The builtin registry defines task_return with a single i32 param, but for
         // Result-returning exports the task-return call passes the full flattened type.
         // Store on Package so optimize_dce can use it when creating the import.
-        for export in &world_info.exports {
+        // Library exports use a synchronous lift and never call task.return, so
+        // skip this for them.
+        for export in world_info.exports.iter().filter(|_| !is_lib_world) {
             if let Some(return_type) = &export.return_type {
                 let tt = entry_type_table.borrow();
                 let flat_types =
