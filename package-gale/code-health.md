@@ -20,7 +20,6 @@ How to read:
 The biggest single lever: most twin-path bugs exist because the second copy missed a fix.
 
 - [ ] g4 frontend duplication: four balanced-delimiter scanners with conflicting failure conventions (-1 vs end-of-input), four comment-skipping implementations, duplicated postfix/alternatives parsing (`parse_postfix`/`parse_lexer_postfix`, `parse_alternatives`/`parse_lexer_alternatives`), duplicated `{ ID (, ID)* }` block scanners (tokens/channels — the hang fix landed in one, now both). (The `\u` escape resolver is now shared via `lexer::resolve_unicode_escape`; the simple escapes legitimately differ by context.)
-- [ ] `best_*` state-reset strings rendered in four places. `src/lexer_gen.wado:1352-1423`, `:1846-1900` (token numbering is now unified via `token_slot_order`).
 - [ ] `generator.wado` still copies the open → read → parse → merge → synthesize → check pipeline that `main.wado` now folds into `load_and_merge`. `src/generator.wado:55-88`
 - [ ] `try_expand_opaque` re-implements `build_sll_node`'s dispatch construction (where the at-end handling got lost); `dump.wado::render_prediction` hand-mirrors `gen_multi_alt_body_alt`'s grouping+sort+`build_prediction(…, MAX_LOOKAHEAD_DEPTH, …)` pipeline.
 - [ ] Test helpers copy-pasted per file: `assert_tree` ×33, `assert_parses` ×8 (+2 near-clones), `unparse_xml` ×3, hand-rolled `str_contains` ×5 (stdlib `String::contains` exists and is used elsewhere). Create a shared test-support module.
