@@ -40,7 +40,7 @@ Two registers, one grammar:
 - `MODULE` reuses the import specifier verbatim, so any module the loader accepts is nameable with no new escaping rules.
 - `::`/`.` match Wado source, so no second, conflicting operator vocabulary is introduced; the user's three kinds map to distinct separators.
 - `#` is spent on the module boundary, so instance methods use `.` rather than Ruby's `Type#method`; Ruby users may pause briefly.
-- The notation is purely textual; resolving it to an `AstId` and rendering an `AstId` back to it are follow-up work on `name.rs` and `wado query`.
+- The notation is purely textual. Resolving it to an `AstId` is implemented (`wado query`); the reverse — rendering an internal `name.rs` name back into this notation — remains follow-up.
 
 ## Implementation
 
@@ -58,8 +58,10 @@ name, so no entry file is needed — relative modules anchor at `--base` (defaul
   <notation> [--base <dir>]`. `hover` also works position-based
   (`--line`/`--column`), rendering the signature / type.
 
-Name-based results are bounded by what the synthetic entry loads: references
-across a whole project still need a project-wide context (a follow-up).
+Name-based results are bounded by what the analysis loads. `references` loads
+the whole `--base` workspace by default (every `.wado` under it) so it spans
+sibling files; `definition` / `hover` / `document-highlight` load only the
+target module's import graph.
 
 ## TODO
 
@@ -78,10 +80,11 @@ across a whole project still need a project-wide context (a follow-up).
       types by base name) → methods and associated constants, by scanning the
       module's `impl` blocks and `trait` declarations. A member miss suggests
       the type's members.
-- [ ] Include doc-comment summaries in `hover` output.
 - [x] `references` spans the whole workspace by default: the synthetic entry
       `use`s every `.wado` under `--base` (default cwd), so use→def edges from
       sibling files are recorded. (A broken file in the tree degrades the load;
       scope with `--base`.)
-- [ ] Convert between this notation and the internal `name.rs` canonical form.
-- [ ] Emit this notation in diagnostics and `wado doc` anchors.
+- [ ] Include doc-comment summaries in `hover` output.
+- [ ] `wado doc` anchors / type cross-links keyed by the notation.
+- [ ] Convert internal `name.rs` names back into this notation (so optimizer
+      remarks / profiler / dumps can print queryable names).
