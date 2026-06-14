@@ -690,10 +690,10 @@ fn gen_scan_lr_functions(
     f2.emit_begin(w);
     w.line(&`let mut pos = {atom_name}(tokens, pos{follow_sep(ctx.emit_follow())});`);
     w.line(&"if pos < 0 { return -1; }");
+    let side = LrDispatchSide { scan: true, fn_name: *fn_name, scan_fn_name: "", use_prec: false };
     if atn_loop_dec >= 0 {
-        gen_scan_lr_suffix_dispatch_atn(w, lr_alts, lr_dispatch, ctx, fn_name, atn_loop_dec);
+        gen_lr_suffix_dispatch_atn(w, &side, lr_alts, lr_dispatch, ctx, atn_loop_dec);
     } else {
-        let side = LrDispatchSide { scan: true, fn_name: *fn_name, scan_fn_name: "", use_prec: false };
         gen_lr_suffix_dispatch(w, &side, rule, lr_alts, lr_dispatch, ctx);
     }
     w.line(&"return pos;");
@@ -749,41 +749,49 @@ fn gen_scan_lr_suffix_helpers(
 }
 
 /// Scan-side twin of `gen_lr_suffix_dispatch`. Emits the precedence-aware
-/// LR-suffix loop with first-token dispatch. Identical structure to the parse
-/// side, with p.peek_kind() replaced by an inline bounds-checked read into
-/// `suffix_kind` and `result = fn(p, ...)?` replaced by `pos = fn(tokens, pos);
-/// if pos < 0 { return -1; }`.
-/// Scan-side twin of `gen_lr_suffix_dispatch_atn`: route the loop-entry
-/// decision through `atn_lr_loop_decision` using the module-level decoded ATN
-/// (`GALE_ATN_SIM`) and the scan caller stack (`GALE_SCAN_STACK`, maintained by
-/// the operand-scan brackets in `gen_scan_op_element`). No static scan gate —
-/// the decision is the commit (progress guard for termination).
-fn gen_scan_lr_suffix_dispatch_atn(
+/// ATN-routed LR-suffix loop, shared by the parse and scan sides via
+/// `side`. The loop-entry alternative comes from `atn_lr_loop_decision`
+/// over the module-level decoded ATN (`GALE_ATN_SIM`) and the side's
+/// caller stack (`p.atn_stack` / `GALE_SCAN_STACK`); a progress guard on
+/// the side's position terminates the loop. No static scan gate is
+/// emitted — the simulator's decision is the commit.
+fn gen_lr_suffix_dispatch_atn(
     w: &mut CodeWriter,
+    side: &LrDispatchSide,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     ctx: &mut GenContext,
-    fn_name: &String,
     decision: i32,
 ) {
     let valid = &lr_dispatch.valid_lr_alts;
+    let pos_expr = if side.scan { "pos" } else { "p.pos" };
     w.begin(&"loop");
-    w.line(
-        &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &GALE_SCAN_STACK, {decision}, tokens, pos, TK_EOF, min_prec);`,
-    );
-    w.line(&"let _lr_pos0 = pos;");
+    if side.scan {
+        w.line(
+            &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &GALE_SCAN_STACK, {decision}, tokens, pos, TK_EOF, min_prec);`,
+        );
+    } else {
+        w.line(
+            &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, {decision}, &p.tokens, p.pos, TK_EOF, min_prec);`,
+        );
+    }
+    w.line(&`let _lr_pos0 = {pos_expr};`);
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr_idx = lr_alts[valid[i]].alt_index;
-        let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
+        let suffix_fn = `{side.fn_name}_lr_{lr_idx}`;
         if is_first {
             w.begin(&`if _atn_alt == {i}`);
             is_first = false;
         } else {
             w.else_begin(&`else if _atn_alt == {i}`);
         }
-        w.line(&`pos = {suffix_fn}(tokens, pos{follow_sep(ctx.emit_follow())});`);
-        w.line(&"if pos < 0 { return -1; }");
+        if side.scan {
+            w.line(&`pos = {suffix_fn}(tokens, pos{follow_sep(ctx.emit_follow())});`);
+            w.line(&"if pos < 0 { return -1; }");
+        } else {
+            w.line(&`result = {suffix_fn}(p, result, start{follow_sep(ctx.emit_follow())})?;`);
+        }
     }
     if !is_first {
         w.else_begin(&"else");
@@ -792,7 +800,7 @@ fn gen_scan_lr_suffix_dispatch_atn(
     } else {
         w.line(&"break;");
     }
-    w.begin(&"if pos == _lr_pos0");
+    w.begin(&`if {pos_expr} == _lr_pos0`);
     w.line(&"break;");
     w.end();
     w.end();  // loop
@@ -2196,10 +2204,10 @@ fn gen_parse_fn_named(
             false;
         };
         let loop_dec = if atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
+        let side = LrDispatchSide { scan: false, fn_name: *fn_name, scan_fn_name: *scan_fn_name, use_prec: true };
         if atn_class && loop_dec >= 0 {
-            gen_lr_suffix_dispatch_atn(w, &type_name, lr_alts, lr_dispatch, ctx, fn_name, scan_fn_name, loop_dec);
+            gen_lr_suffix_dispatch_atn(w, &side, lr_alts, lr_dispatch, ctx, loop_dec);
         } else {
-            let side = LrDispatchSide { scan: false, fn_name: *fn_name, scan_fn_name: *scan_fn_name, use_prec: true };
             gen_lr_suffix_dispatch(w, &side, rule, lr_alts, lr_dispatch, ctx);
         }
         w.line(&`return Result::<{type_name}, ParseError>::Ok(result);`);
@@ -4659,6 +4667,71 @@ fn gen_rule_ref_group_scan_dispatch(
     w.end();
 }
 
+/// Emit the overlap-dispatch loop shared by the two SimpleCst consume
+/// store emitters: declare the `Option<type>` accumulator, peek the group
+/// kind, then for each first-token overlap group dispatch a lone alt's
+/// RuleRef directly or sub-dispatch an overlapping RuleRef group through
+/// the scan tournament, storing the chosen alt into `acc_var`. The caller
+/// has already dedup'd `acc_var`; this emits its declaration so the
+/// dedup/grp_kind/loop order matches the original inline emitters.
+fn gen_simplecst_overlap_loop(
+    w: &mut CodeWriter,
+    acc_var: &String,
+    type_name: &String,
+    groups: &List<List<i32>>,
+    first_sets: &List<List<String>>,
+    alts: &List<Alternative>,
+    g_op_alts: &List<AltBody>,
+    g_op_scan_alts: &List<ScanBody>,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+) {
+    w.line(&`let mut {*acc_var}: Option<{*type_name}> = null;`);
+
+    let grp_var = dedup_name(&"grp_kind", name_counts);
+    w.line(&`let {grp_var} = p.peek_kind();`);
+
+    for let mut g = 0; g < groups.len(); g += 1 {
+        let group = &groups[g];
+
+        let mut union_first: List<String> = [];
+        for let idx of group {
+            dedup_append_arr(&mut union_first, &first_sets[*idx]);
+        }
+
+        let cond = ctx.kind_check_str(&union_first, &grp_var);
+        if g == 0 {
+            w.begin(&`if {cond}`);
+        } else {
+            w.else_begin(&`else if {cond}`);
+        }
+
+        if group.len() == 1 {
+            let alt_index = group[0];
+            let body = &g_op_alts[alt_index];
+            let val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, type_name, &body.case_name);
+            w.line(&`{*acc_var} = Option::<{*type_name}>::Some({val});`);
+        } else {
+            let mut sorted_group = group.sorted();
+            sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
+
+            assert rule_ref_group_all_scannable(&sorted_group, alts, ctx), "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
+            gen_rule_ref_group_scan_dispatch(
+                w,
+                &sorted_group,
+                alts,
+                g_op_alts,
+                g_op_scan_alts,
+                acc_var,
+                type_name,
+                ctx,
+                name_counts,
+            );
+        }
+    }
+    w.end();
+}
+
 fn gen_consume_group_store_op(
     w: &mut CodeWriter,
     scst: &SimpleCstShape,
@@ -4698,50 +4771,18 @@ fn gen_consume_group_store_op(
         w.end_with(&";");
     } else {
         let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
-        w.line(&`let mut {opt_var}: Option<{type_name}> = null;`);
-
-        let grp_var = dedup_name(&"grp_kind", name_counts);
-        w.line(&`let {grp_var} = p.peek_kind();`);
-
-        for let mut g = 0; g < groups.len(); g += 1 {
-            let group = &groups[g];
-
-            let mut union_first: List<String> = [];
-            for let idx of group {
-                dedup_append_arr(&mut union_first, &first_sets[*idx]);
-            }
-
-            let cond = ctx.kind_check_str(&union_first, &grp_var);
-            if g == 0 {
-                w.begin(&`if {cond}`);
-            } else {
-                w.else_begin(&`else if {cond}`);
-            }
-
-            if group.len() == 1 {
-                let alt_index = group[0];
-                let body = &g_op_alts[alt_index];
-                let val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, &type_name, &body.case_name);
-                w.line(&`{opt_var} = Option::<{type_name}>::Some({val});`);
-            } else {
-                let mut sorted_group = group.sorted();
-                sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-
-                assert rule_ref_group_all_scannable(&sorted_group, alts, ctx), "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-                gen_rule_ref_group_scan_dispatch(
-                    w,
-                    &sorted_group,
-                    alts,
-                    g_op_alts,
-                    g_op_scan_alts,
-                    &opt_var,
-                    &type_name,
-                    ctx,
-                    name_counts,
-                );
-            }
-        }
-        w.end();
+        gen_simplecst_overlap_loop(
+            w,
+            &opt_var,
+            &type_name,
+            &groups,
+            &first_sets,
+            alts,
+            g_op_alts,
+            g_op_scan_alts,
+            ctx,
+            name_counts,
+        );
 
         w.begin(&`if let None = {opt_var}`);
         let first_alt_name = group_case_name(&alts[0]);
@@ -4780,50 +4821,18 @@ fn gen_consume_group_store_optional_op(
 
     // Use Option wrapper — None when no branch matches (standalone Group).
     let inner_var = dedup_name(&`{var_name}_inner`, name_counts);
-    w.line(&`let mut {inner_var}: Option<{type_name}> = null;`);
-
-    let grp_var = dedup_name(&"grp_kind", name_counts);
-    w.line(&`let {grp_var} = p.peek_kind();`);
-
-    for let mut g = 0; g < groups.len(); g += 1 {
-        let group = &groups[g];
-
-        let mut union_first: List<String> = [];
-        for let idx of group {
-            dedup_append_arr(&mut union_first, &first_sets[*idx]);
-        }
-
-        let cond = ctx.kind_check_str(&union_first, &grp_var);
-        if g == 0 {
-            w.begin(&`if {cond}`);
-        } else {
-            w.else_begin(&`else if {cond}`);
-        }
-
-        if group.len() == 1 {
-            let alt_index = group[0];
-            let body = &g_op_alts[alt_index];
-            let val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, &type_name, &body.case_name);
-            w.line(&`{inner_var} = Option::<{type_name}>::Some({val});`);
-        } else {
-            let mut sorted_group = group.sorted();
-            sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-
-            assert rule_ref_group_all_scannable(&sorted_group, alts, ctx), "rule-ref group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
-            gen_rule_ref_group_scan_dispatch(
-                w,
-                &sorted_group,
-                alts,
-                g_op_alts,
-                g_op_scan_alts,
-                &inner_var,
-                &type_name,
-                ctx,
-                name_counts,
-            );
-        }
-    }
-    w.end();  // if/else if chain
+    gen_simplecst_overlap_loop(
+        w,
+        &inner_var,
+        &type_name,
+        &groups,
+        &first_sets,
+        alts,
+        g_op_alts,
+        g_op_scan_alts,
+        ctx,
+        name_counts,
+    );
 
     w.line(&`let {var_name} = {inner_var};`);
 }
@@ -4838,6 +4847,95 @@ fn gen_consume_token_group(
     let var_name = dedup_name(&token_group_field_name(alts), name_counts);
     let kinds = collect_token_only_kinds(alts);
     w.line(&`let {var_name} = p.match_set([{kinds}])?;`);
+}
+
+/// Emit the wildcard-aware overlap-dispatch loop shared by the two
+/// General-group store emitters: declare the `Option<type>` accumulator,
+/// peek the group kind, then dispatch each first-token overlap group —
+/// suppressing the outer kind-check for wildcard-led groups so the inner
+/// scan-based dispatch is reached for any non-EOF lookahead — storing the
+/// chosen alt into `acc_var`. The caller has already dedup'd `acc_var`.
+fn gen_general_overlap_loop(
+    w: &mut CodeWriter,
+    acc_var: &String,
+    type_name: &String,
+    alt_struct_names: &List<String>,
+    groups: &List<List<i32>>,
+    first_sets: &List<List<String>>,
+    alts: &List<Alternative>,
+    g_op_alts: &List<AltBody>,
+    g_op_scan_alts: &List<ScanBody>,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+) {
+    w.line(&`let mut {*acc_var}: Option<{*type_name}> = null;`);
+
+    let grp_var = dedup_name(&"grp_kind", name_counts);
+    w.line(&`let {grp_var} = p.peek_kind();`);
+
+    for let mut g = 0; g < groups.len(); g += 1 {
+        let group = &groups[g];
+
+        // A group containing a wildcard alt matches any non-EOF
+        // lookahead (its first set is the universal token set even
+        // though `first_of_element` returns `[]`). Emitting a kind-check
+        // against the union of explicit first sets would skip the
+        // dispatch on any token outside that union, leaving the wildcard
+        // alt unreachable. Force the group's outer condition to `true`
+        // so the scan-based dispatch inside has the final say.
+        let mut group_has_wildcard = false;
+        for let idx of group {
+            if alt_is_wildcard_led(&alts[*idx]) {
+                group_has_wildcard = true;
+                break;
+            }
+        }
+
+        let mut union_first: List<String> = [];
+        if !group_has_wildcard {
+            for let idx of group {
+                dedup_append_arr(&mut union_first, &first_sets[*idx]);
+            }
+        }
+
+        let cond = ctx.kind_check_str(&union_first, &grp_var);
+        if g == 0 {
+            w.begin(&`if {cond}`);
+        } else {
+            w.else_begin(&`else if {cond}`);
+        }
+
+        if group.len() == 1 {
+            let alt_index = group[0];
+            gen_general_alt_parse_and_store(
+                w,
+                alts,
+                &g_op_alts[alt_index],
+                alt_index,
+                type_name,
+                alt_struct_names,
+                acc_var,
+                ctx,
+                name_counts,
+            );
+        } else {
+            let mut sorted_group = group.sorted();
+            sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
+            gen_general_group_dispatch(
+                w,
+                alts,
+                g_op_alts,
+                g_op_scan_alts,
+                &sorted_group,
+                type_name,
+                alt_struct_names,
+                acc_var,
+                ctx,
+                name_counts,
+            );
+        }
+    }
+    w.end();
 }
 
 /// Generate a general group store with Option wrapper (standalone Group in an alternative).
@@ -4894,75 +4992,19 @@ fn gen_general_group_store_op(
         w.end_with(&";");
     } else {
         let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
-        w.line(&`let mut {opt_var}: Option<{type_name}> = null;`);
-
-        let grp_var = dedup_name(&"grp_kind", name_counts);
-        w.line(&`let {grp_var} = p.peek_kind();`);
-
-        for let mut g = 0; g < groups.len(); g += 1 {
-            let group = &groups[g];
-
-            // A group containing a wildcard alt matches any non-EOF
-            // lookahead (its first set is the universal token set
-            // even though `first_of_element` returns `[]`). Emitting
-            // a kind-check against the union of explicit first sets
-            // would skip the dispatch on any token outside that
-            // union, leaving the wildcard alt unreachable. Force the
-            // group's outer condition to `true` so the scan-based
-            // dispatch inside has the final say.
-            let mut group_has_wildcard = false;
-            for let idx of group {
-                if alt_is_wildcard_led(&alts[*idx]) {
-                    group_has_wildcard = true;
-                    break;
-                }
-            }
-
-            let mut union_first: List<String> = [];
-            if !group_has_wildcard {
-                for let idx of group {
-                    dedup_append_arr(&mut union_first, &first_sets[*idx]);
-                }
-            }
-
-            let cond = ctx.kind_check_str(&union_first, &grp_var);
-            if g == 0 {
-                w.begin(&`if {cond}`);
-            } else {
-                w.else_begin(&`else if {cond}`);
-            }
-
-            if group.len() == 1 {
-                let alt_index = group[0];
-                gen_general_alt_parse_and_store(
-                    w,
-                    alts,
-                    &g_op_alts[alt_index],
-                    alt_index,
-                    &type_name,
-                    &gs.alt_struct_names,
-                    &opt_var,
-                    ctx,
-                    name_counts,
-                );
-            } else {
-                let mut sorted_group = group.sorted();
-                sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-                gen_general_group_dispatch(
-                    w,
-                    alts,
-                    g_op_alts,
-                    g_op_scan_alts,
-                    &sorted_group,
-                    &type_name,
-                    &gs.alt_struct_names,
-                    &opt_var,
-                    ctx,
-                    name_counts,
-                );
-            }
-        }
-        w.end();
+        gen_general_overlap_loop(
+            w,
+            &opt_var,
+            &type_name,
+            &gs.alt_struct_names,
+            &groups,
+            &first_sets,
+            alts,
+            g_op_alts,
+            g_op_scan_alts,
+            ctx,
+            name_counts,
+        );
 
         w.begin(&`if let None = {opt_var}`);
         w.line(&`p.fail("group alternative")?;`);
@@ -5002,70 +5044,19 @@ fn gen_general_group_store_optional_op(
     let groups = compute_overlap_groups_with_wildcard(alts, &first_sets);
 
     let inner_var = dedup_name(&`{var_name}_inner`, name_counts);
-    w.line(&`let mut {inner_var}: Option<{type_name}> = null;`);
-
-    let grp_var = dedup_name(&"grp_kind", name_counts);
-    w.line(&`let {grp_var} = p.peek_kind();`);
-
-    for let mut g = 0; g < groups.len(); g += 1 {
-        let group = &groups[g];
-
-        // See `gen_general_group_store_op`: a wildcard-led alt forces
-        // the surrounding group to act as a catch-all so the inner
-        // scan-based dispatch is reached for any non-EOF lookahead.
-        let mut group_has_wildcard = false;
-        for let idx of group {
-            if alt_is_wildcard_led(&alts[*idx]) {
-                group_has_wildcard = true;
-                break;
-            }
-        }
-
-        let mut union_first: List<String> = [];
-        if !group_has_wildcard {
-            for let idx of group {
-                dedup_append_arr(&mut union_first, &first_sets[*idx]);
-            }
-        }
-
-        let cond = ctx.kind_check_str(&union_first, &grp_var);
-        if g == 0 {
-            w.begin(&`if {cond}`);
-        } else {
-            w.else_begin(&`else if {cond}`);
-        }
-
-        if group.len() == 1 {
-            let alt_index = group[0];
-            gen_general_alt_parse_and_store(
-                w,
-                alts,
-                &g_op_alts[alt_index],
-                alt_index,
-                &type_name,
-                &gs.alt_struct_names,
-                &inner_var,
-                ctx,
-                name_counts,
-            );
-        } else {
-            let mut sorted_group = group.sorted();
-            sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
-            gen_general_group_dispatch(
-                w,
-                alts,
-                g_op_alts,
-                g_op_scan_alts,
-                &sorted_group,
-                &type_name,
-                &gs.alt_struct_names,
-                &inner_var,
-                ctx,
-                name_counts,
-            );
-        }
-    }
-    w.end();
+    gen_general_overlap_loop(
+        w,
+        &inner_var,
+        &type_name,
+        &gs.alt_struct_names,
+        &groups,
+        &first_sets,
+        alts,
+        g_op_alts,
+        g_op_scan_alts,
+        ctx,
+        name_counts,
+    );
 
     w.line(&`let {var_name} = {inner_var};`);
 }
@@ -5486,66 +5477,6 @@ fn project_lr_dispatch(
         suffix_first_sets.push(lr.suffix_first);
     }
     return [valid_lr_indices, lr_precs, suffix_first_sets];
-}
-
-/// LR loop dispatch for an ATN-class rule: route the enter-vs-exit decision
-/// through the runtime simulator (full context + precedence) instead of the
-/// static suffix-first dispatch. `atn_predict_with_stack` returns the
-/// loop-entry edge index — `0..valid_lr_alts.len()` selects the matching LR
-/// suffix helper (edges are built in `valid_lr_alts` order), and the trailing
-/// exit edge (or any out-of-range result) breaks the loop. Precedence is
-/// handled inside the simulator (via `min_prec`) and inside each suffix
-/// helper (the recursive operand's baked floor), so no static `prec >=
-/// min_prec` gate is emitted.
-///
-/// Unlike the static path, no per-suffix scan-twin gate is emitted: the scan
-/// helpers use the *static* dispatch, which has the very ATN-class bug we are
-/// routing around (it mis-scans the shared delimiter), so gating on them
-/// would re-introduce the wrong early break. The simulator's prediction is
-/// the commit decision, and the recursive operand re-enters this same
-/// ATN-routed `_parse_X`, so a predicted suffix parses through.
-fn gen_lr_suffix_dispatch_atn(
-    w: &mut CodeWriter,
-    type_name: &String,
-    lr_alts: &List<LrAlt>,
-    lr_dispatch: &LrDispatchData,
-    ctx: &mut GenContext,
-    fn_name: &String,
-    scan_fn_name: &String,
-    decision: i32,
-) {
-    let valid = &lr_dispatch.valid_lr_alts;
-    w.begin(&"loop");
-    w.line(
-        &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, {decision}, &p.tokens, p.pos, TK_EOF, min_prec);`,
-    );
-    // Progress guard: every LR suffix consumes at least its operator token,
-    // so a non-advancing iteration means the prediction's min-alt fallback
-    // returned an enter alt with nothing to parse — exit instead of spinning.
-    w.line(&"let _lr_pos0 = p.pos;");
-    let mut is_first = true;
-    for let mut i = 0; i < valid.len(); i += 1 {
-        let lr_idx = lr_alts[valid[i]].alt_index;
-        let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
-        if is_first {
-            w.begin(&`if _atn_alt == {i}`);
-            is_first = false;
-        } else {
-            w.else_begin(&`else if _atn_alt == {i}`);
-        }
-        w.line(&`result = {suffix_fn}(p, result, start{follow_sep(ctx.emit_follow())})?;`);
-    }
-    if !is_first {
-        w.else_begin(&"else");
-        w.line(&"break;");
-        w.end();
-    } else {
-        w.line(&"break;");
-    }
-    w.begin(&"if p.pos == _lr_pos0");
-    w.line(&"break;");
-    w.end();
-    w.end();  // loop
 }
 
 fn gen_prediction_code(
