@@ -348,13 +348,11 @@ pub async fn try_compile(
     // Load the nearest manifest once: it seeds both the host's `[dependencies]`
     // index and the Kiln pipeline's `[build-dependencies]` resolution.
     let manifest_pair = load_nearest_manifest(path);
-    let dep_index = manifest_pair
-        .as_ref()
-        .map(|(manifest, root)| wado_lsp::host::dependency_index_from(manifest, root, &base_path));
-    let mut host = FilesystemCompilerHost::with_log_level(base_path, flags.log_level);
-    if let Some(index) = dep_index {
-        host = host.with_dependency_index(index);
-    }
+    let host = attach_manifest_deps(
+        FilesystemCompilerHost::with_log_level(base_path.clone(), flags.log_level),
+        manifest_pair.as_ref(),
+        &base_path,
+    );
 
     let pipeline_outcome =
         match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {
@@ -394,6 +392,23 @@ pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, Cl
         .map_err(|_| CliExit::silent_failure(1))
 }
 
+/// Seed `host` with the `[dependencies]` index derived from `manifest_pair`
+/// (anchored at `base_path`), or return it unchanged when there is no
+/// manifest. Shared by `compile`, `check`, and the `query` adapter so every
+/// entry point attaches dependency resolution identically.
+pub(crate) fn attach_manifest_deps(
+    host: FilesystemCompilerHost,
+    manifest_pair: Option<&(wado_manifest::Manifest, std::path::PathBuf)>,
+    base_path: &Path,
+) -> FilesystemCompilerHost {
+    match manifest_pair {
+        Some((manifest, root)) => host.with_dependency_index(
+            wado_lsp::host::dependency_index_from(manifest, root, base_path),
+        ),
+        None => host,
+    }
+}
+
 /// Collect inline `with { generator: { ... } }` clauses from `entry_file`
 /// (and any sibling manifest's directory if one is found), then drive the
 /// Kiln pipeline via [`run_pipeline`]. Returns `Ok(PipelineOutcome::default())`
@@ -402,7 +417,7 @@ pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, Cl
 /// Errors from [`run_pipeline`] are surfaced unchanged; the caller decides
 /// whether to abort or continue (e.g. for consume-only mode, a stale-cache
 /// warning is not fatal).
-async fn maybe_run_pipeline(
+pub(crate) async fn maybe_run_pipeline(
     entry_file: &Path,
     host: &FilesystemCompilerHost,
     no_cache: bool,

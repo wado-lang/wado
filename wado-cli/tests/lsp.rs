@@ -2266,10 +2266,10 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     app
 }
 
-/// Once the Kiln artifacts exist on disk (here via `wado compile`),
-/// consume-only `wado query` must redirect the schema import to the
-/// generated module so symbols resolve — no stale-cache warning, and
-/// hover reports the generated signature.
+/// With the cache already warm from a prior `wado compile`, `wado query`
+/// still resolves the generated symbol: the pipeline re-runs cache-aware
+/// (no regeneration) and the redirect to the generated module fires — no
+/// stale-cache warning, hover reports the generated signature.
 #[test]
 fn query_resolves_kiln_generated_symbol_after_compile() {
     let tmp = tempfile::tempdir().unwrap();
@@ -2303,17 +2303,61 @@ fn query_resolves_kiln_generated_symbol_after_compile() {
         .stdout(predicate::str::contains("fn greeting() -> String"));
 }
 
-/// Without artifacts, consume-only cannot generate them, so the query
-/// surfaces a `KILN_STALE_CACHE` warning pointing the user at
-/// `wado compile` rather than silently producing a confusing parse error.
+/// Native `wado query` runs the generator itself (wasmtime), so it resolves
+/// a generated symbol even with **no prior `wado compile`** and no on-disk
+/// artifact — the whole point of running generators on the query path.
 #[test]
-fn query_warns_when_kiln_artifacts_absent() {
+fn query_runs_generator_without_prior_compile() {
     let tmp = tempfile::tempdir().unwrap();
     let app = kiln_consumer_fixture(tmp.path());
 
     wado_in(&app)
         .args(["query", "diagnostics", "src/main.wado"])
         .assert()
-        .stdout(predicate::str::contains("KILN_STALE_CACHE"))
-        .stdout(predicate::str::contains("wado compile"));
+        .success()
+        .stdout(predicate::str::contains("No diagnostics."))
+        .stdout(predicate::str::contains("KILN_STALE_CACHE").not());
+
+    // `greeting` resolves on line 7 (`println(greeting())`), column 13.
+    wado_in(&app)
+        .args([
+            "query",
+            "hover",
+            "--line",
+            "7",
+            "--column",
+            "13",
+            "src/main.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn greeting() -> String"));
+
+    // Running the generator wrote its output under the default cache dir,
+    // exactly as `wado compile` would.
+    assert!(
+        app.join("build/kiln").is_dir(),
+        "running the generator should have materialized build/kiln/"
+    );
+}
+
+/// When the generator cannot run (here: its source does not compile), the
+/// query must not crash — it degrades to consume-only on-disk discovery and
+/// surfaces a `KILN_STALE_CACHE` warning rather than panicking or hanging.
+#[test]
+fn query_degrades_when_generator_cannot_run() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = kiln_consumer_fixture(tmp.path());
+    // Corrupt the generator so the provider fails to compile it.
+    std::fs::write(
+        tmp.path().join("gen/src/generator.wado"),
+        "this is not valid wado source !!!\n",
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["query", "diagnostics", "src/main.wado"])
+        .assert()
+        .stderr(predicate::str::contains("kiln generators could not run"))
+        .stdout(predicate::str::contains("KILN_STALE_CACHE"));
 }

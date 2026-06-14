@@ -15,7 +15,7 @@ struct PreparedQuery {
     host: FilesystemCompilerHost,
 }
 
-fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
+async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
     let path = Path::new(filename);
     let source = fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
@@ -24,18 +24,52 @@ fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let host = FilesystemCompilerHost::silent(base_path);
-
-    let uri = format!(
-        "file://{}",
-        path.canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf())
-            .display()
+    let manifest_pair = crate::compile::load_nearest_manifest(path);
+    let host = crate::compile::attach_manifest_deps(
+        FilesystemCompilerHost::silent(base_path.clone()),
+        manifest_pair.as_ref(),
+        &base_path,
     );
+
+    // The loader sees the entry under its canonicalized path (this is what
+    // `Uri::to_filename` yields for `uri`), so run the kiln pipeline against
+    // the same path: the redirect index keys `decl_file` by the entry path,
+    // and a mismatch would silently miss.
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let uri = format!("file://{}", canonical.display());
+
     let mut engine = wado_lsp::Engine::new();
-    engine.open_document(&uri, source);
+    match run_generators_for(&canonical, &host).await {
+        Some(invocations) => engine.open_document_with_invocations(&uri, source, invocations),
+        None => engine.open_document(&uri, source),
+    }
 
     Ok(PreparedQuery { uri, engine, host })
+}
+
+/// Run any kiln generators declared in `entry_file` natively (wasmtime) and
+/// return the redirect index they produced, so a position/diagnostics query
+/// resolves generated symbols even when no on-disk artifact existed before.
+///
+/// Writes generator outputs to disk exactly as `wado compile` does — the
+/// pipeline is cache-aware, so a valid cache is reused rather than rebuilt.
+/// Returns `None` on any pipeline failure; the caller then opens the document
+/// without an override, degrading to consume-only on-disk discovery.
+async fn run_generators_for(
+    entry_file: &Path,
+    host: &FilesystemCompilerHost,
+) -> Option<wado_compiler::kiln::InvocationIndex> {
+    let manifest_pair = crate::compile::load_nearest_manifest(entry_file);
+    match crate::compile::maybe_run_pipeline(entry_file, host, false, manifest_pair).await {
+        Ok(outcome) => Some(outcome.invocations),
+        Err(e) => {
+            eprintln!(
+                "warning: kiln generators could not run ({e}); \
+                 falling back to on-disk generated output"
+            );
+            None
+        }
+    }
 }
 
 fn position_from_one_based(line: u32, column: u32) -> Position {
@@ -46,7 +80,7 @@ fn position_from_one_based(line: u32, column: u32) -> Position {
 }
 
 pub async fn run_diagnostics(filename: &str, json_output: bool) -> Result<(), CliExit> {
-    let prepared = prepare_query(filename)?;
+    let prepared = prepare_query(filename).await?;
     let diagnostics = prepared
         .engine
         .diagnostics(&prepared.uri, &prepared.host)
@@ -74,7 +108,7 @@ pub async fn run_references(
     include_declaration: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let prepared = prepare_query(filename)?;
+    let prepared = prepare_query(filename).await?;
     let position = position_from_one_based(line, column);
     let refs = prepared
         .engine
@@ -97,7 +131,7 @@ pub async fn run_definition(
     column: u32,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let prepared = prepare_query(filename)?;
+    let prepared = prepare_query(filename).await?;
     let position = position_from_one_based(line, column);
     let result = prepared
         .engine
@@ -156,6 +190,17 @@ fn open_entry(uri: &str, imports: &[String]) -> wado_lsp::Engine {
     engine.open_document(uri, synthetic);
     engine
 }
+
+// TODO(kiln, Tier 2): run generators for `--symbol` queries too. The
+// kiln `with` clause lives in the notation's *target* module, not the
+// synthetic entry, and when the loader imports it from the synthetic
+// entry the `decl_file` it keys the redirect by is the normalized
+// module string (`normalize_module_path(parsed.module)`, e.g.
+// `./main.wado` → `main.wado`), not a filesystem path. So `run_generators_for`
+// (which keys `decl_file` by the entry's path) cannot be reused as-is:
+// the index it produces must have its `decl_file` translated from the
+// target module's path to that normalized module string before injection.
+// Until then, `--symbol` queries over a kiln consumer stay consume-only.
 
 /// Build a single-module query context (the notation's module only). Used by
 /// `definition` / `hover` / `document-highlight`.
@@ -405,7 +450,7 @@ pub async fn run_document_highlight(
     column: u32,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let prepared = prepare_query(filename)?;
+    let prepared = prepare_query(filename).await?;
     let position = position_from_one_based(line, column);
     let highlights = prepared
         .engine
@@ -429,7 +474,7 @@ pub async fn run_hover(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let prepared = prepare_query(filename)?;
+    let prepared = prepare_query(filename).await?;
     let position = position_from_one_based(line, column);
     let result = prepared
         .engine
