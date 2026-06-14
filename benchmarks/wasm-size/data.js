@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781390546616,
+  "lastUpdate": 1781395913475,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32837,6 +32837,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/20ce9a8f19f72803a811f7ce0aa416309af88321"
         },
         "date": 1781390546061,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "076615382211b92a6b68b5b665d2376cb0d503e9",
+          "message": "Merge pull request #1370 from wado-lang/claude/exit-functions-e2e-tests-7qo0g5\n\nfix(cm): make all wasi:cli/exit functions work",
+          "timestamp": "2026-06-14T09:02:27+09:00",
+          "tree_id": "9f7218481236d4c63014e36d4f43fe995c00eb46",
+          "url": "https://github.com/wado-lang/wado/commit/076615382211b92a6b68b5b665d2376cb0d503e9"
+        },
+        "date": 1781395913012,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
