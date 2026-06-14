@@ -68,7 +68,7 @@ fn entry_host(entry_file: &Path) -> FilesystemCompilerHost {
 async fn run_generators_for(
     entry_file: &Path,
     host: &FilesystemCompilerHost,
-) -> Option<wado_compiler::kiln::InvocationIndex> {
+) -> Option<InvocationIndex> {
     let manifest_pair = crate::compile::load_nearest_manifest(entry_file);
     match crate::compile::maybe_run_pipeline(entry_file, host, false, manifest_pair).await {
         Ok(outcome) => Some(outcome.invocations),
@@ -177,6 +177,11 @@ struct SymbolEnv {
 fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     let parsed = wado_compiler::symbol_notation::parse(notation)
         .map_err(|e| CliExit::error(format!("invalid symbol notation: {e}")))?;
+    // Reject a module string that isn't a valid module path now, with a clean
+    // error — otherwise `normalize_module_path` (here and in the loader) would
+    // panic on it downstream.
+    wado_compiler::name::try_normalize_module_path(&parsed.module)
+        .map_err(|e| CliExit::error(format!("invalid module '{}': {e}", parsed.module)))?;
     let base_dir = fs::canonicalize(base).unwrap_or_else(|_| Path::new(base).to_path_buf());
     // Synthetic entry: never read from disk (opened with explicit text), but
     // its directory anchors relative-module resolution at `base`.

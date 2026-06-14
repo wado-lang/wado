@@ -2359,6 +2359,28 @@ fn query_symbol_runs_generator_for_target_module() {
         .stdout(predicate::str::contains("fn run"));
 }
 
+/// A `--symbol` notation whose module isn't a valid module path must fail
+/// with a clean error, not panic inside `normalize_module_path`.
+#[test]
+fn query_symbol_rejects_malformed_module() {
+    let output = wado()
+        .args(["query", "hover", "--symbol", "./a b.wado#run"])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let stderr = String::from_utf8(output).unwrap();
+    assert!(
+        !stderr.contains("panicked"),
+        "must not panic on a malformed --symbol module, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("invalid module") || stderr.contains("invalid symbol notation"),
+        "expected a clean error, got: {stderr}"
+    );
+}
+
 /// When the generator cannot run (here: its source does not compile), the
 /// query must not crash — it degrades to consume-only on-disk discovery and
 /// surfaces a `KILN_STALE_CACHE` warning rather than panicking or hanging.

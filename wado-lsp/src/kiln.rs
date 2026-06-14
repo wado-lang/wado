@@ -165,20 +165,34 @@ fn resolve_invocation(
         }
     };
 
-    let Some(entry) = metadata.outputs.iter().find(|o| o.entry) else {
+    if !metadata.outputs.iter().any(|o| o.entry) {
         return Err("no entry output recorded in metadata".to_string());
-    };
-    let Some(abs) = safe_join(manifest_root, &entry.path) else {
-        return Err(format!(
-            "output path {:?} is absolute, contains `..`, or escapes the workspace",
-            entry.path,
-        ));
-    };
-    if !abs.exists() {
-        return Err(format!("{} missing on disk", entry.path));
     }
 
-    let canonical = std::fs::canonicalize(&abs).unwrap_or(abs);
+    // Every recorded output must still exist within the workspace: the entry
+    // module typically imports its generated siblings by relative path, so a
+    // missing sibling would fail the import with an opaque error. Refusing the
+    // whole redirect here surfaces the actionable `re-run wado compile` hint
+    // instead. This is an existence (and path-sandbox) check only — not the
+    // freshness/hash validation consume-only deliberately skips.
+    let mut entry_abs: Option<PathBuf> = None;
+    for output in &metadata.outputs {
+        let Some(abs) = safe_join(manifest_root, &output.path) else {
+            return Err(format!(
+                "output path {:?} is absolute, contains `..`, or escapes the workspace",
+                output.path,
+            ));
+        };
+        if !abs.exists() {
+            return Err(format!("{} missing on disk", output.path));
+        }
+        if output.entry {
+            entry_abs = Some(abs);
+        }
+    }
+
+    let abs_entry = entry_abs.expect("entry output presence verified above");
+    let canonical = std::fs::canonicalize(&abs_entry).unwrap_or(abs_entry);
     Ok(path_to_kiln_uri(&canonical))
 }
 

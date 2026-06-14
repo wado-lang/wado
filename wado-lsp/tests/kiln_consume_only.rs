@@ -402,6 +402,43 @@ fn missing_output_is_cache_miss() {
     });
 }
 
+#[test]
+fn missing_sibling_output_is_cache_miss() {
+    futures::executor::block_on(async {
+        // The entry output exists, but metadata also records a non-entry
+        // sibling that is absent on disk. The entry module imports its
+        // generated siblings by relative path, so a missing sibling would
+        // fail the import with an opaque error; refuse the whole redirect and
+        // surface the actionable stale-cache hint instead.
+        let fixture = build_fixture(FixtureSpec::default());
+        let metadata_path = fixture
+            .root
+            .path()
+            .join("tests/generated")
+            .join(metadata_filename("grammars/calc.g4"));
+        let mut metadata: Metadata =
+            serde_json::from_str(&std::fs::read_to_string(&metadata_path).unwrap()).unwrap();
+        metadata.outputs.push(OutputEntry {
+            path: "tests/generated/helper.wado".to_string(),
+            hash: hex_sha256(b"sibling that was never written"),
+            entry: false,
+        });
+        std::fs::write(
+            &metadata_path,
+            serde_json::to_string_pretty(&metadata).unwrap(),
+        )
+        .unwrap();
+
+        let (engine, host) = engine_with(&fixture);
+        let diags = engine.diagnostics(&fixture.entry_uri, &host).await;
+
+        assert!(
+            has_warning(&diags, "KILN_STALE_CACHE"),
+            "a missing sibling output must be refused as cache miss, got {diags:#?}",
+        );
+    });
+}
+
 #[cfg(unix)]
 #[test]
 fn symlink_escape_is_cache_miss() {
