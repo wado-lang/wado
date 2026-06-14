@@ -570,28 +570,34 @@ impl Semantics {
         if !self.modules.contains_key(&module) {
             return Err(SymbolResolveError::ModuleNotLoaded);
         }
-        match &notation.receiver {
-            Some(receiver) => self.resolve_member(&module, receiver, &notation.member),
-            None => {
-                let symbol = self
-                    .symbols
-                    .lookup_in_module(&module, &notation.member)
-                    .ok_or(SymbolResolveError::SymbolNotFound)?;
-                let def_module = symbol.module_source().clone();
-                let ast_id = symbol.defined_at;
-                Ok(Definition {
-                    uri: self.uri_of(&def_module),
-                    module: def_module,
-                    ast_id,
-                    span: self.name_span_of(ast_id).or(symbol.span),
-                })
-            }
-        }
+        let Some(receiver) = &notation.receiver else {
+            // Free / module-level symbol.
+            let symbol = self
+                .symbols
+                .lookup_in_module(&module, &notation.member)
+                .ok_or(SymbolResolveError::SymbolNotFound)?;
+            let def_module = symbol.module_source().clone();
+            let ast_id = symbol.defined_at;
+            return Ok(Definition {
+                uri: self.uri_of(&def_module),
+                module: def_module,
+                ast_id,
+                span: self.name_span_of(ast_id).or(symbol.span),
+            });
+        };
+        self.resolve_member(&module, receiver, &notation.member)
     }
 
     /// Resolve `Type::member` / `Type.member` / `Type^Trait::member` to the
     /// method or associated constant's definition, scanning `impl` blocks and
     /// (for `Trait::member`) the `trait` declaration in `module`.
+    ///
+    /// Limitation: the receiver type is matched by **base name only** — generic
+    /// arguments in the notation (`List<String>`) are parsed but not used to
+    /// disambiguate. If a type has several instantiation-specific inherent
+    /// impls that each define `member` (`impl Foo<i32>` and `impl Foo<bool>`),
+    /// the first textual match wins. Trait disambiguation via `^Trait` is
+    /// honored; per-instantiation disambiguation is not yet supported.
     fn resolve_member(
         &self,
         module: &ModuleSource,
@@ -603,25 +609,15 @@ impl Semantics {
             .modules
             .get(module)
             .ok_or(SymbolResolveError::ModuleNotLoaded)?;
-        let want_type = base_type_name(&receiver.type_name);
-        let want_trait = receiver.trait_name.as_deref().map(base_type_name);
+        let want_type = crate::name::split_base_name(&receiver.type_name);
+        let want_trait = receiver
+            .trait_name
+            .as_deref()
+            .map(crate::name::split_base_name);
 
         for item in &ast.items {
             match item {
-                Item::Impl(b) => {
-                    if type_head_name(&b.ty).map(base_type_name) != Some(want_type) {
-                        continue;
-                    }
-                    let impl_trait = b
-                        .trait_type
-                        .as_ref()
-                        .and_then(type_head_name)
-                        .map(base_type_name);
-                    if let Some(wt) = want_trait
-                        && impl_trait != Some(wt)
-                    {
-                        continue;
-                    }
+                Item::Impl(b) if receiver_matches_impl(b, want_type, want_trait) => {
                     if let Some(m) = b.methods.iter().find(|m| m.name == member) {
                         return Ok(self.member_definition(module, m.id, m.name_span));
                     }
@@ -660,36 +656,25 @@ impl Semantics {
         let Some(ast) = self.modules.get(module) else {
             return names;
         };
-        let want_type = base_type_name(&receiver.type_name);
-        let want_trait = receiver.trait_name.as_deref().map(base_type_name);
+        let want_type = crate::name::split_base_name(&receiver.type_name);
+        let want_trait = receiver
+            .trait_name
+            .as_deref()
+            .map(crate::name::split_base_name);
         for item in &ast.items {
             match item {
-                Item::Impl(b) => {
-                    if type_head_name(&b.ty).map(base_type_name) != Some(want_type) {
-                        continue;
-                    }
-                    let impl_trait = b
-                        .trait_type
-                        .as_ref()
-                        .and_then(type_head_name)
-                        .map(base_type_name);
-                    if let Some(wt) = want_trait
-                        && impl_trait != Some(wt)
-                    {
-                        continue;
-                    }
+                Item::Impl(b) if receiver_matches_impl(b, want_type, want_trait) => {
                     let inherent = b.trait_type.is_none();
-                    let visible = |is_pub: bool| !public_only || !inherent || is_pub;
                     names.extend(
                         b.methods
                             .iter()
-                            .filter(|m| visible(m.is_pub))
+                            .filter(|m| member_visible(public_only, inherent, m.is_pub))
                             .map(|m| m.name.clone()),
                     );
                     names.extend(
                         b.constants
                             .iter()
-                            .filter(|c| visible(c.is_pub))
+                            .filter(|c| member_visible(public_only, inherent, c.is_pub))
                             .map(|c| c.name.clone()),
                     );
                 }
@@ -1311,23 +1296,27 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     }
 }
 
-/// Base name of a type-name string: everything before the first `<`
-/// (`List<String>` → `List`, `Point` → `Point`).
-fn base_type_name(name: &str) -> &str {
-    match name.find('<') {
-        Some(i) => &name[..i],
-        None => name,
+/// True when `b` is an `impl` on `want_type` and — if `want_trait` is set —
+/// implements that trait. Both type names are compared by base name (generic
+/// arguments are not matched; see `resolve_member`). Shared by member
+/// resolution and the member-suggestion list so they never disagree.
+fn receiver_matches_impl(
+    b: &crate::ast::ImplBlock,
+    want_type: &str,
+    want_trait: Option<&str>,
+) -> bool {
+    if b.ty.head_base_name() != Some(want_type) {
+        return false;
+    }
+    match want_trait {
+        Some(wt) => b.trait_type.as_ref().and_then(|t| t.head_base_name()) == Some(wt),
+        None => true,
     }
 }
 
-/// Head name of a [`Type`](crate::ast::Type) — the named type a method/impl
-/// targets, peeling references. `None` for structural types (tuples, fn types).
-fn type_head_name(ty: &crate::ast::Type) -> Option<&str> {
-    use crate::ast::Type;
-    match ty {
-        Type::Named(n) => Some(&n.name),
-        Type::Generic(g) => Some(&g.name),
-        Type::Reference(inner) | Type::MutReference(inner) => type_head_name(inner),
-        _ => None,
-    }
+/// Whether a type member is shown in the public-API view. Inherent-`impl`
+/// members need `pub`; trait-`impl` members are always shown (they are the
+/// trait's public surface). Shared with `unparse::unparse_impl_block_signature`.
+pub(crate) fn member_visible(public_only: bool, inherent: bool, is_pub: bool) -> bool {
+    !public_only || !inherent || is_pub
 }

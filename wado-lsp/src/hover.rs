@@ -108,7 +108,7 @@ fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: 
     };
     for item in &module.items {
         let Item::Impl(b) = item else { continue };
-        if impl_target_base(&b.ty) != Some(symbol.name.as_str()) {
+        if b.ty.head_base_name() != Some(symbol.name.as_str()) {
             continue;
         }
         let block = unparse::unparse_impl_block_signature(b, public_only);
@@ -117,20 +117,6 @@ fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: 
             out.push_str(&block);
         }
     }
-}
-
-/// Base name of an `impl` target type, peeling references and generics
-/// (`&List<T>` → `List`). `None` for structural types.
-fn impl_target_base(ty: &ast::Type) -> Option<&str> {
-    let name = match ty {
-        ast::Type::Named(n) => n.name.as_str(),
-        ast::Type::Generic(g) => g.name.as_str(),
-        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-            return impl_target_base(inner);
-        }
-        _ => return None,
-    };
-    Some(name.split('<').next().unwrap_or(name))
 }
 
 /// Hover for a method or free function reached by [`AstId`] (e.g. a symbol

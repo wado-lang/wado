@@ -2162,3 +2162,34 @@ fn query_references_by_symbol_spans_workspace() {
         .success()
         .stdout(predicate::str::contains("main.wado:2:26"));
 }
+
+#[test]
+fn query_references_by_symbol_method_include_declaration() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("geo.wado"),
+        "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("use.wado"),
+        "use { Point } from \"./geo.wado\";\nfn run() -> i32 { return Point::zero(); }\n",
+    )
+    .unwrap();
+
+    // The method declaration (geo.wado:2) must appear alongside the call site
+    // (use.wado:2) when --include-declaration is set, even though methods are
+    // not symbol-table entries.
+    wado_in(dir.path())
+        .args([
+            "query",
+            "references",
+            "--symbol",
+            "./geo.wado#Point::zero",
+            "--include-declaration",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("geo.wado:2:"))
+        .stdout(predicate::str::contains("use.wado:2:"));
+}

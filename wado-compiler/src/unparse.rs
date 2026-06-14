@@ -3654,18 +3654,6 @@ fn emit_decl_header(
     unparse_generic_params_into(type_params, out);
 }
 
-pub fn unparse_struct_header(s: &StructDecl) -> String {
-    let mut out = String::new();
-    emit_decl_header(s.is_pub, "struct ", &s.name, &s.type_params, &mut out);
-    out
-}
-
-pub fn unparse_enum_header(e: &EnumDecl) -> String {
-    let mut out = String::new();
-    emit_decl_header(e.is_pub, "enum ", &e.name, &e.type_params, &mut out);
-    out
-}
-
 pub fn unparse_variant_header(v: &VariantDecl) -> String {
     let mut out = String::new();
     emit_decl_header(v.is_pub, "variant ", &v.name, &v.type_params, &mut out);
@@ -3741,7 +3729,7 @@ pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
 /// drop the block.
 pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String {
     let inherent = b.trait_type.is_none();
-    let visible = |is_pub: bool| !public_only || !inherent || is_pub;
+    let visible = |is_pub: bool| crate::semantics::member_visible(public_only, inherent, is_pub);
 
     let mut lines: Vec<String> = Vec::new();
     for c in &b.constants {

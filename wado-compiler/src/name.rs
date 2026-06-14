@@ -398,7 +398,7 @@ pub struct LocalMethodName {
 /// rules: "Use utilities in name.rs to handle name mangling and
 /// monomorphization. Other components must not know the details of
 /// name formats.").
-fn split_base_name(name: &str) -> &str {
+pub(crate) fn split_base_name(name: &str) -> &str {
     match name.find('<') {
         Some(i) => &name[..i],
         None => name,

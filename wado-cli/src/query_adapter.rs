@@ -232,6 +232,23 @@ fn report_symbol_error(
     }
 }
 
+/// Print a by-symbol query result, or — on error — print an empty result and
+/// the failure reason (with suggestions). Shared by every `run_*_by_symbol`.
+fn emit_symbol_result<T>(
+    parsed: &wado_compiler::symbol_notation::SymbolNotation,
+    result: Result<T, wado_lsp::SymbolQueryError>,
+    on_ok: impl FnOnce(T),
+    on_empty: impl FnOnce(),
+) {
+    match result {
+        Ok(value) => on_ok(value),
+        Err(reason) => {
+            on_empty();
+            report_symbol_error(parsed, &reason);
+        }
+    }
+}
+
 /// Resolve a symbol notation (`MODULE#SYMBOL`) to its definition location.
 /// Mirrors [`run_definition`] output.
 pub async fn run_definition_by_symbol(
@@ -241,27 +258,28 @@ pub async fn run_definition_by_symbol(
     json_output: bool,
 ) -> Result<(), CliExit> {
     let q = prepare_symbol_query(notation, base, false)?;
-    match q
+    let result = q
         .engine
         .definition_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
-        .await
-    {
-        Ok(def) => {
+        .await;
+    emit_symbol_result(
+        &q.parsed,
+        result,
+        |def| {
             if json_output {
                 print_definition_json(Some(&def));
             } else {
                 print_definition_text(Some(&def));
             }
-        }
-        Err(reason) => {
+        },
+        || {
             if json_output {
                 print_definition_json(None);
             } else {
                 print_definition_text(None);
             }
-            report_symbol_error(&q.parsed, &reason);
-        }
-    }
+        },
+    );
     Ok(())
 }
 
@@ -275,27 +293,28 @@ pub async fn run_references_by_symbol(
 ) -> Result<(), CliExit> {
     // References span the whole workspace, so load every `.wado` under `base`.
     let q = prepare_symbol_query(notation, base, true)?;
-    match q
+    let result = q
         .engine
         .references_by_symbol(&q.uri, &q.parsed, include_declaration, public_only, &q.host)
-        .await
-    {
-        Ok(refs) => {
+        .await;
+    emit_symbol_result(
+        &q.parsed,
+        result,
+        |refs| {
             if json_output {
                 print_references_json(&refs);
             } else {
                 print_references_text(&refs);
             }
-        }
-        Err(reason) => {
+        },
+        || {
             if json_output {
                 print_references_json(&[]);
             } else {
                 print_references_text(&[]);
             }
-            report_symbol_error(&q.parsed, &reason);
-        }
-    }
+        },
+    );
     Ok(())
 }
 
@@ -308,27 +327,28 @@ pub async fn run_document_highlight_by_symbol(
     json_output: bool,
 ) -> Result<(), CliExit> {
     let q = prepare_symbol_query(notation, base, false)?;
-    match q
+    let result = q
         .engine
         .document_highlight_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
-        .await
-    {
-        Ok((def_uri, highlights)) => {
+        .await;
+    emit_symbol_result(
+        &q.parsed,
+        result,
+        |(def_uri, highlights)| {
             if json_output {
                 print_highlights_json(&highlights);
             } else {
                 print_highlights_text(uri_to_display(&def_uri), &highlights);
             }
-        }
-        Err(reason) => {
+        },
+        || {
             if json_output {
                 print_highlights_json(&[]);
             } else {
                 print_highlights_text("", &[]);
             }
-            report_symbol_error(&q.parsed, &reason);
-        }
-    }
+        },
+    );
     Ok(())
 }
 
@@ -387,27 +407,28 @@ pub async fn run_hover_by_symbol(
     json_output: bool,
 ) -> Result<(), CliExit> {
     let q = prepare_symbol_query(notation, base, false)?;
-    match q
+    let result = q
         .engine
         .hover_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
-        .await
-    {
-        Ok(hover) => {
+        .await;
+    emit_symbol_result(
+        &q.parsed,
+        result,
+        |hover| {
             if json_output {
                 print_hover_json(Some(&hover));
             } else {
                 print_hover_text(Some(&hover));
             }
-        }
-        Err(reason) => {
+        },
+        || {
             if json_output {
                 print_hover_json(None);
             } else {
                 print_hover_text(None);
             }
-            report_symbol_error(&q.parsed, &reason);
-        }
-    }
+        },
+    );
     Ok(())
 }
 
