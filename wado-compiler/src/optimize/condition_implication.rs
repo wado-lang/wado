@@ -143,18 +143,35 @@ impl GuardFact {
     ) -> Option<GuardFact> {
         let lhs_vn = engine.value(lhs)?;
         let rhs_vn = engine.value(rhs)?;
+        Some(Self::from_values(engine, lhs_vn, rhs_vn, is_strict))
+    }
+
+    /// Build a fact directly from the comparison operands' `ValueId`s, for
+    /// guards whose `<` sits behind a CSE temporary the value graph resolves
+    /// through (see [`lt_comparison`]).
+    fn from_values(
+        engine: &mut Engine,
+        lhs_vn: ValueId,
+        rhs_vn: ValueId,
+        is_strict: bool,
+    ) -> GuardFact {
         // `decompose_add_const` only accumulates non-negative constants,
         // so `max_offset >= 0` holds by construction.
         let (var_vn, max_offset) = decompose_add_const(engine, lhs_vn);
-        Some(GuardFact {
+        GuardFact {
             var_vn,
             max_offset,
             bound_vn: rhs_vn,
             is_strict,
-        })
+        }
     }
 
-    /// Whether this fact proves the condition `check_lhs >= check_rhs` false.
+    /// Whether this fact proves the bounds check guarded by `condition` dead.
+    ///
+    /// `condition` is the failing-path predicate, recognized in either the
+    /// direct `check_lhs >= check_rhs` form or the negated-`<` form an `assert`
+    /// expands to (see [`failure_ge_operands`]); both denote `check_lhs >=
+    /// check_rhs`.
     ///
     /// The check's left side must decompose to `var + j` with
     /// `0 <= j <= max_offset`; the guard then gives
@@ -167,16 +184,7 @@ impl GuardFact {
     /// - numeric: both bounds are integer constants and
     ///   `check >= bound - slack` (strict) / `check > bound` (non-strict).
     fn implies_false(&self, engine: &mut Engine, condition: ExprId) -> bool {
-        let ExprKind::Binary {
-            left,
-            op: NirBinaryOp::GtEq,
-            right,
-        } = &engine.body.exprs[condition].kind
-        else {
-            return false;
-        };
-        let (left, right) = (*left, *right);
-        let (Some(lhs_vn), Some(rhs_vn)) = (engine.value(left), engine.value(right)) else {
+        let Some((lhs_vn, rhs_vn)) = failure_ge_operands(engine, condition) else {
             return false;
         };
         let (base, offset) = decompose_add_const(engine, lhs_vn);
@@ -206,6 +214,87 @@ impl GuardFact {
             }
         }
     }
+}
+
+/// The `(lhs, rhs)` value-ids of the `lhs >= rhs` predicate whose truth makes
+/// a bounds check *fail*. Three surface shapes map to that one predicate:
+///
+/// - direct `lhs >= rhs` — the manual `if index >= used { panic }` form;
+/// - `!(lhs < rhs)` — the `assert index < used` expansion before CSE; and
+/// - `(lhs < rhs) == false` — its post-CSE spelling (CSE rewrites the boolean
+///   negation into an equality with the false/zero literal).
+///
+/// The `<` may sit behind a `__cond` temporary the value graph resolves
+/// through. Returning value-ids (not exprs) lets the caller's
+/// `Add`-decomposition and guard-fact comparison stay identical regardless of
+/// which shape produced it.
+fn failure_ge_operands(engine: &mut Engine, condition: ExprId) -> Option<(ValueId, ValueId)> {
+    enum Shape {
+        Ge(ExprId, ExprId),
+        NotLt(ExprId),
+        EqFalse(ExprId, ExprId),
+    }
+    // Copy the operand ids out first so the `exprs` borrow ends before the
+    // `&mut engine` value queries below.
+    let shape = match &engine.body.exprs[condition].kind {
+        ExprKind::Binary {
+            left,
+            op: NirBinaryOp::GtEq,
+            right,
+        } => Shape::Ge(*left, *right),
+        ExprKind::Unary {
+            op: NirUnaryOp::Not,
+            expr,
+        } => Shape::NotLt(*expr),
+        ExprKind::Binary {
+            left,
+            op: NirBinaryOp::Eq,
+            right,
+        } => Shape::EqFalse(*left, *right),
+        _ => return None,
+    };
+    match shape {
+        Shape::Ge(left, right) => Some((engine.value(left)?, engine.value(right)?)),
+        Shape::NotLt(inner) => negated_lt_operands(engine, inner),
+        Shape::EqFalse(left, right) => {
+            // `(x < y) == false`: negate whichever operand is the false/zero
+            // literal away.
+            if is_false_literal(engine, right) {
+                negated_lt_operands(engine, left)
+            } else if is_false_literal(engine, left) {
+                negated_lt_operands(engine, right)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// The `(lhs, rhs)` of a `<` comparison `expr` resolves to, i.e. the operands
+/// of the `lhs >= rhs` predicate that `!expr` denotes. The comparison may sit
+/// behind a `__cond` temporary the value graph resolves through.
+fn negated_lt_operands(engine: &mut Engine, expr: ExprId) -> Option<(ValueId, ValueId)> {
+    let vn = engine.value(expr)?;
+    match engine.value_kind(vn) {
+        ValueKind::Binary {
+            op: NirBinaryOp::Lt,
+            lhs,
+            rhs,
+        } => Some((*lhs, *rhs)),
+        _ => None,
+    }
+}
+
+/// Whether `expr` is the `false` / `0` literal (`b == 0` is the CSE spelling of
+/// `!b`).
+fn is_false_literal(engine: &mut Engine, expr: ExprId) -> bool {
+    let Some(vn) = engine.value(expr) else {
+        return false;
+    };
+    matches!(
+        engine.value_kind(vn),
+        ValueKind::Bool(false) | ValueKind::Int(0)
+    )
 }
 
 /// Decompose a value as `base + k` (`k >= 0` enforcement is the caller's):
@@ -272,16 +361,7 @@ fn is_plus_one_of(engine: &mut Engine, v: ValueId, base: ValueId) -> bool {
 /// mask may appear on either side of the `&`; copy chains are already
 /// resolved by the `ValueGraph`.
 fn is_bitmask_bounded(engine: &mut Engine, condition: ExprId) -> bool {
-    let ExprKind::Binary {
-        left,
-        op: NirBinaryOp::GtEq,
-        right,
-    } = &engine.body.exprs[condition].kind
-    else {
-        return false;
-    };
-    let (left, right) = (*left, *right);
-    let (Some(lhs_vn), Some(rhs_vn)) = (engine.value(left), engine.value(right)) else {
+    let Some((lhs_vn, rhs_vn)) = failure_ge_operands(engine, condition) else {
         return false;
     };
     let ValueKind::Binary {
@@ -359,13 +439,21 @@ enum StmtShape {
 fn process_loop(engine: &mut Engine, loop_body: BlockId) -> bool {
     let mut changed = false;
 
-    if let Some(guard) = extract_loop_guard(engine, loop_body) {
-        // Eliminate implied conditions in the loop body (skip the guard itself).
+    if let Some((guard, body_start)) = extract_loop_guard(engine, loop_body) {
+        // Eliminate implied conditions in the loop body. `body_start` is the
+        // index past the guard, so leading `let`s (e.g. a CSE-hoisted
+        // `let __c = i < n`) and the guard itself are excluded — the fact only
+        // holds after the guard.
         let mut condition_elim = ConditionEliminator {
             guard,
             dom_guards: vec![],
         };
-        for s in engine.body.blocks[loop_body].stmts.clone().iter().skip(1) {
+        for s in engine.body.blocks[loop_body]
+            .stmts
+            .clone()
+            .iter()
+            .skip(body_start)
+        {
             changed |= condition_elim.visit_stmt(engine, *s);
         }
     }
@@ -421,17 +509,30 @@ fn process_stmt_nested_loops(engine: &mut Engine, s: StmtId) -> bool {
     }
 }
 
-/// Extract a loop guard from the first statement of a loop body.
+/// Extract a loop guard, returning the fact and the index of the first
+/// body statement after it.
 ///
-/// Matches: `if !(var < bound) { break LABEL; }` → guard `var < bound`
-///      or: `if !(var <= bound) { break LABEL; }` → guard `var <= bound`
-fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<GuardFact> {
-    let first = *engine.body.blocks[loop_body].stmts.first()?;
+/// Matches `if !(var < bound) { break LABEL; }` → guard `var < bound` (and
+/// `<=` likewise). The guard is the loop body's first non-binding statement:
+/// for-loop desugaring (after CSE) may emit leading pure `let`s before it
+/// (e.g. `let __c = i < n`), and the guard condition may itself be such a
+/// temporary — both are resolved through the value graph.
+fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<(GuardFact, usize)> {
+    let stmts = engine.body.blocks[loop_body].stmts.clone();
+    // Leading `let`s bind pure values (no control flow), so the first
+    // `if … { break }` after them still dominates the rest of the body.
+    let guard_idx = stmts.iter().position(|s| {
+        !matches!(
+            engine.body.stmts[*s].kind,
+            StmtKind::Let { .. } | StmtKind::LetDestructure { .. }
+        )
+    })?;
+
     let StmtKind::If {
         condition,
         then_block,
         else_block: None,
-    } = &engine.body.stmts[first].kind
+    } = &engine.body.stmts[stmts[guard_idx]].kind
     else {
         return None;
     };
@@ -448,7 +549,8 @@ fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<GuardFa
     )
     .then_some(())?;
 
-    // condition must be `Not(Binary(var, Lt|LtEq, bound))`.
+    // condition must be `Not(<comparison>)`; the comparison may sit behind a
+    // CSE temporary.
     let ExprKind::Unary {
         op: NirUnaryOp::Not,
         expr: inner,
@@ -457,20 +559,31 @@ fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<GuardFa
         return None;
     };
     let inner = *inner;
-
-    let ExprKind::Binary { left, op, right } = &engine.body.exprs[inner].kind else {
-        return None;
-    };
-    let (is_strict, lhs, rhs) = match op {
-        NirBinaryOp::Lt => (true, *left, *right),
-        NirBinaryOp::LtEq => (false, *left, *right),
-        _ => return None,
-    };
+    let (lhs_vn, rhs_vn, is_strict) = lt_comparison(engine, inner)?;
     // Loop guards keep the plain-variable shape: the induction variable is
     // compared directly (`i < bound`), so any `Add` decomposition would
     // describe a different program object. Restrict to offset 0.
-    let fact = GuardFact::from_comparison(engine, lhs, rhs, is_strict)?;
-    (fact.max_offset == 0).then_some(fact)
+    let fact = GuardFact::from_values(engine, lhs_vn, rhs_vn, is_strict);
+    (fact.max_offset == 0).then_some((fact, guard_idx + 1))
+}
+
+/// The `(lhs, rhs, is_strict)` of the `<` / `<=` comparison `expr` resolves to,
+/// directly or through a `__cse` / `__cond` temporary the value graph resolves.
+fn lt_comparison(engine: &mut Engine, expr: ExprId) -> Option<(ValueId, ValueId, bool)> {
+    let vn = engine.value(expr)?;
+    match engine.value_kind(vn) {
+        ValueKind::Binary {
+            op: NirBinaryOp::Lt,
+            lhs,
+            rhs,
+        } => Some((*lhs, *rhs, true)),
+        ValueKind::Binary {
+            op: NirBinaryOp::LtEq,
+            lhs,
+            rhs,
+        } => Some((*lhs, *rhs, false)),
+        _ => None,
+    }
 }
 
 /// Extract a guard from an early-exit if-statement: after
