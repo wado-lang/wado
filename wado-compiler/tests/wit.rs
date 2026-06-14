@@ -235,15 +235,15 @@ fn future_and_stream_map_to_wit() {
     );
 }
 
-/// Golden test for `example/cm-catalog`: re-emit the value-type catalog from
+/// Golden test for `package-cm-catalog`: re-emit the value-type catalog from
 /// its source and assert it matches the committed `cm-catalog.wit`, so the
 /// published artifact cannot drift from the emitter. Covers the whole
 /// value-type surface (primitives, containers, all four `result` forms, named
 /// types, nested compositions) in one fixture.
 #[test]
 fn cm_catalog_matches_committed_wit() {
-    let source = include_str!("../../example/cm-catalog/src/lib.wado");
-    let expected = include_str!("../../example/cm-catalog/cm-catalog.wit");
+    let source = include_str!("../../package-cm-catalog/src/lib.wado");
+    let expected = include_str!("../../package-cm-catalog/cm-catalog.wit");
     let host = InMemoryHost::new();
     let sem = block_on(semantics(source, &host, Some("lib.wado")));
     assert!(sem.is_complete(), "catalog source did not analyze");

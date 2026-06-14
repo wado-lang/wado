@@ -32,7 +32,7 @@ Deferred:
 ## Regenerating the WIT
 
 ```sh
-wado wit example/cm-catalog/src/lib.wado > example/cm-catalog/cm-catalog.wit
+wado wit package-cm-catalog/src/lib.wado > package-cm-catalog/cm-catalog.wit
 ```
 
 `wado-compiler/tests/wit.rs` re-emits this from the source and asserts it
@@ -42,8 +42,11 @@ emitter.
 ## Note on compilation
 
 `wado wit` enumerates every `export fn`, so the WIT artifact is complete today.
-A `wado compile` round-trip (which would synthesize and run the lift/lower
-adapters for each export) needs a world whose exports are the catalog interface
-— the "world-less library" export path, which is not yet wired
-(see WEP `wep-2026-05-02-wit-interoperability.md`, "World-less libraries").
-Until then this package is consumed via `wado wit`, not `wado compile`.
+
+`wado compile --lib package-cm-catalog` synthesizes and emits the lift/lower
+adapters for each export under a library world named after the package. It
+currently compiles the primitive value types; containers, the four `result`
+forms, `string` returns, and user-defined named types (record/enum/variant/
+flags/newtype) are still being wired (the per-type status is the point of this
+catalog — it surfaces exactly which CM shapes the lift/lower path supports). See
+WEP `wep-2026-05-02-wit-interoperability.md` ("World-less libraries").
