@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781465720548,
+  "lastUpdate": 1781474855831,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33233,6 +33233,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a83dd9d7ad5d27c924dcb94437923fa193fede2b"
         },
         "date": 1781465719991,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "78e4e1bd3a2d52f719625ac4ed32820a876ff52f",
+          "message": "Merge pull request #1384 from wado-lang/claude/wado-wep-interop-tasks-sn31rw\n\nfeat(wit): wado wit producer hardening, package-cm-catalog, and wado compile --lib (M1–M2)",
+          "timestamp": "2026-06-15T06:57:57+09:00",
+          "tree_id": "d7d79087632f1edb503adff920655ff5112a40c8",
+          "url": "https://github.com/wado-lang/wado/commit/78e4e1bd3a2d52f719625ac4ed32820a876ff52f"
+        },
+        "date": 1781474855454,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
