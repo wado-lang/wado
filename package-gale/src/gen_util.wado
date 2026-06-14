@@ -305,6 +305,35 @@ pub fn is_general_group(alts: &List<Alternative>) -> bool {
     return !is_simple_cst_group(alts) && !is_token_only_group(alts);
 }
 
+// The five classes are mutually exclusive, so the single classification
+// here is the one source of truth the op-side and scan-side lowerings
+// (and the field/name helpers) all dispatch on.
+pub enum GroupClass {
+    Transparent,
+    SingleAlt,
+    TokenOnly,
+    SimpleCst,
+    General,
+}
+
+pub fn classify_group(alts: &List<Alternative>) -> GroupClass {
+    assert alts.len() > 0, "Group with no alts is not a valid lowering input";
+    if alts.len() == 1 {
+        assert alts[0].elements.len() > 0, "Group with empty alt is not a valid lowering input";
+        if alts[0].elements.len() == 1 {
+            return GroupClass::Transparent;
+        }
+        return GroupClass::SingleAlt;
+    }
+    if is_token_only_group(alts) {
+        return GroupClass::TokenOnly;
+    }
+    if is_simple_cst_group(alts) {
+        return GroupClass::SimpleCst;
+    }
+    return GroupClass::General;
+}
+
 /// Count how many general groups are in an element list.
 /// Matches the type gen's counting logic (looks through Repeat wrappers).
 pub fn count_general_groups(elements: &List<Element>) -> i32 {
@@ -700,33 +729,29 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
         return element_field_info(&lab.element);
     }
     if let Group(g) = elem {
-        if is_simple_cst_group(&g.alternatives) {
-            return [
+        match classify_group(&g.alternatives) {
+            SimpleCst => return [
                 group_field_base_name(&g.alternatives),
                 group_variant_type_name(&g.alternatives),
-            ];
-        }
-        if is_token_only_group(&g.alternatives) {
-            return [token_group_field_name(&g.alternatives), "Token"];
-        }
-        if is_single_alt_group(&g.alternatives) {
-            return [
+            ],
+            TokenOnly => return [token_group_field_name(&g.alternatives), "Token"],
+            SingleAlt => return [
                 single_alt_group_field_name(&g.alternatives[0]),
                 single_alt_group_type_name(&g.alternatives[0]),
-            ];
-        }
-        if is_general_group(&g.alternatives) {
+            ],
             // Post Phase 2-G every general-group reference flows through
             // the GIR `gen_op_group` / `gen_general_group_store*` chain
             // which consumes lower-baked `GeneralShape.variant_type` /
-            // `alt_struct_names`. The surface-IR `element_field_info`
-            // helper is reached only by legacy walker fallbacks; if a
-            // future regression routes a general Group here we want
-            // emit to fail loudly rather than silently re-derive the
-            // type name from a stale walker field.
-            panic(
+            // `alt_struct_names`. The surface-IR `element_field_info` helper
+            // is reached only by legacy walker fallbacks; if a future
+            // regression routes a general Group here we want emit to fail
+            // loudly rather than silently re-derive the type from a stale
+            // walker field.
+            General => panic(
                 "element_field_info: general Group reached the surface helper — route through `gen_op_group`/`gen_general_group_store*` instead",
-            );
+            ),
+            // Transparent: non-storable — falls through to the outer panic.
+            Transparent => {},
         }
     }
     // Every storable shape returns above. Reaching here means a
@@ -786,25 +811,23 @@ pub fn replay_element_names(elem: &Element, name_counts: &mut List<[String, i32]
         return;
     }
     if let Group(g) = elem {
-        if is_simple_cst_group(&g.alternatives) {
-            dedup_name(&group_field_base_name(&g.alternatives), name_counts);
-        } else if is_token_only_group(&g.alternatives) {
-            dedup_name(&token_group_field_name(&g.alternatives), name_counts);
-        } else if is_single_alt_group(&g.alternatives) {
-            dedup_name(&single_alt_group_field_name(&g.alternatives[0]), name_counts);
-        } else if is_general_group(&g.alternatives) {
+        match classify_group(&g.alternatives) {
+            SimpleCst => { dedup_name(&group_field_base_name(&g.alternatives), name_counts); },
+            TokenOnly => { dedup_name(&token_group_field_name(&g.alternatives), name_counts); },
+            SingleAlt => { dedup_name(&single_alt_group_field_name(&g.alternatives[0]), name_counts); },
             // Replay only runs over the skipped prefix of an alt
-            // (`gen_alt_body_skip` callers), which by construction
-            // consists of token-shaped leaves (TokenRef / Literal).
-            // A general Group in that prefix would mean the prediction
-            // tree consumed beyond the scannable leading prefix — not
-            // a path any committed grammar produces.
-            panic(
+            // (`gen_alt_body_skip` callers), which by construction consists
+            // of token-shaped leaves (TokenRef / Literal). A general Group
+            // in that prefix would mean the prediction tree consumed beyond
+            // the scannable leading prefix — not a path any committed
+            // grammar produces.
+            General => panic(
                 "replay_element_names: general Group reached the skip-replay walker — only token-shaped prefix elements should be replayed",
-            );
+            ),
+            // Transparent: non-storable, nothing to seed in `name_counts`.
+            // The inner ops are emitted normally afterwards via `body.ops`.
+            Transparent => {},
         }
-        // Non-storable group: nothing to seed in `name_counts`. The
-        // inner ops are emitted normally afterwards via `body.ops`.
         return;
     }
 }

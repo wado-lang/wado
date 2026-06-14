@@ -54,9 +54,8 @@ use {
     count_general_groups,
     single_alt_group_type_name,
     single_alt_group_field_name,
-    is_token_only_group,
-    is_simple_cst_group,
-    is_general_group,
+    GroupClass,
+    classify_group,
     token_group_field_name,
     group_variant_type_name,
     group_field_base_name,
@@ -1778,80 +1777,63 @@ fn lower_scan_element(
 /// multi-alt token-only groups dispatch on token kind.
 fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
     let alts = &g.alternatives;
-    assert alts.len() > 0, "Group with no alts is not a valid scan-lowering input";
-    if alts.len() == 1 {
-        let alt = &alts[0];
-        assert alt.elements.len() > 0, "Group with empty alt is not a valid scan-lowering input";
-        if alt.elements.len() == 1 {
-            // Transparent (scan side) — nested inner allowed. The
-            // group's only element inherits the surrounding follow.
-            return lower_scan_element(
-                &alt.elements[0],
-                ctx,
-                outer_follow,
-                FollowArg::NoFollow,
-                false,
-            );
-        }
-        // Single-alt (scan side) — nested elements allowed; each
-        // is lowered through the standard scan-element recursion.
-        let mut elements: List<ScanElement> = [];
-        for let mut i = 0; i < alt.elements.len(); i += 1 {
-            elements.push(lower_alt_scan_element(
-                &alt.elements,
-                i,
-                ctx,
-            ));
-        }
-        let mut visiting: List<String> = [];
-        let alt_first = ctx.first_of_alt(alt, &mut visiting);
-        let mut wildcard_indices: List<i32> = [];
-        if alt_is_wildcard_led(alt) {
-            wildcard_indices.push(0);
-        }
-        return ScanElement::Group(ScanGroupElement {
-            alts: [
-                ScanBody { elements },
-            ],
-            dispatch: empty_direct_dispatch(),
-            lenient: false,
-            alt_first_sets: [alt_first],
-            wildcard_alt_indices: wildcard_indices,
-        });
-    }
-    if is_token_only_group(alts) {
-        let mut bodies: List<ScanBody> = [];
-        let mut first_sets: List<List<String>> = [];
-        for let alt of alts {
-            let elem = &alt.elements[0];
-            bodies.push(ScanBody {
-                elements: [
-                    lower_scan_element(
-                        elem,
-                        ctx,
-                        outer_follow,
-                        FollowArg::NoFollow,
-                        false,
-                    ),
+    match classify_group(alts) {
+        // Transparent (scan side) — nested inner allowed. The group's
+        // only element inherits the surrounding follow.
+        Transparent => return lower_scan_element(
+            &alts[0].elements[0],
+            ctx,
+            outer_follow,
+            FollowArg::NoFollow,
+            false,
+        ),
+        SingleAlt => {
+            // Nested elements allowed; each is lowered through the
+            // standard scan-element recursion.
+            let alt = &alts[0];
+            let mut elements: List<ScanElement> = [];
+            for let mut i = 0; i < alt.elements.len(); i += 1 {
+                elements.push(lower_alt_scan_element(&alt.elements, i, ctx));
+            }
+            let mut visiting: List<String> = [];
+            let alt_first = ctx.first_of_alt(alt, &mut visiting);
+            let mut wildcard_indices: List<i32> = [];
+            if alt_is_wildcard_led(alt) {
+                wildcard_indices.push(0);
+            }
+            return ScanElement::Group(ScanGroupElement {
+                alts: [
+                    ScanBody { elements },
                 ],
+                dispatch: empty_direct_dispatch(),
+                lenient: false,
+                alt_first_sets: [alt_first],
+                wildcard_alt_indices: wildcard_indices,
             });
-            first_sets.push([token_only_kind(elem)]);
-        }
-        return ScanElement::Group(ScanGroupElement {
-            alts: bodies,
-            dispatch: build_direct_dispatch(&first_sets),
-            lenient: false,
-            alt_first_sets: first_sets,
-            wildcard_alt_indices: [] as List<i32>,
-        });
+        },
+        TokenOnly => {
+            let mut bodies: List<ScanBody> = [];
+            let mut first_sets: List<List<String>> = [];
+            for let alt of alts {
+                let elem = &alt.elements[0];
+                bodies.push(ScanBody {
+                    elements: [
+                        lower_scan_element(elem, ctx, outer_follow, FollowArg::NoFollow, false),
+                    ],
+                });
+                first_sets.push([token_only_kind(elem)]);
+            }
+            return ScanElement::Group(ScanGroupElement {
+                alts: bodies,
+                dispatch: build_direct_dispatch(&first_sets),
+                lenient: false,
+                alt_first_sets: first_sets,
+                wildcard_alt_indices: [] as List<i32>,
+            });
+        },
+        SimpleCst => return lower_simple_cst_scan_group(alts, ctx, outer_follow),
+        General => return lower_general_scan_group(alts, ctx, outer_follow),
     }
-    if is_simple_cst_group(alts) {
-        return lower_simple_cst_scan_group(alts, ctx, outer_follow);
-    }
-    if is_general_group(alts) {
-        return lower_general_scan_group(alts, ctx, outer_follow);
-    }
-    panic("Group shape (scan side) unrecognised by classifier");
 }
 
 fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
@@ -2458,46 +2440,34 @@ fn lower_group_op(
     outer_follow: &List<String>,
 ) -> Op {
     let alts = &g.alternatives;
-    assert alts.len() > 0, "Group with no alts is not a valid lowering input";
-    if alts.len() == 1 {
-        let alt = &alts[0];
-        assert alt.elements.len() > 0, "Group with empty alt is not a valid lowering input";
-        if alt.elements.len() == 1 {
-            // Transparent group `(e)` is positionally identical to `e` at
-            // the surrounding alt, so the caller-follow propagates verbatim.
-            return lower_transparent_group(
-                &alt.elements[0],
-                name_counts,
-                rule_name,
-                ctx,
-                group_counter,
-                outer_follow,
-            );
-        }
-        return lower_single_alt_group(
-            alt,
+    match classify_group(alts) {
+        // Transparent group `(e)` is positionally identical to `e` at the
+        // surrounding alt, so the caller-follow propagates verbatim.
+        Transparent => return lower_transparent_group(
+            &alts[0].elements[0],
             name_counts,
             rule_name,
             ctx,
             group_counter,
-        );
-    }
-    if is_token_only_group(alts) {
-        return lower_token_only_group(alts, name_counts, ctx);
-    }
-    if is_simple_cst_group(alts) {
-        return lower_simple_cst_group(alts, name_counts, ctx);
-    }
-    if is_general_group(alts) {
-        return lower_general_group(
+            outer_follow,
+        ),
+        SingleAlt => return lower_single_alt_group(
+            &alts[0],
+            name_counts,
+            rule_name,
+            ctx,
+            group_counter,
+        ),
+        TokenOnly => return lower_token_only_group(alts, name_counts, ctx),
+        SimpleCst => return lower_simple_cst_group(alts, name_counts, ctx),
+        General => return lower_general_group(
             alts,
             name_counts,
             rule_name,
             ctx,
             group_counter,
-        );
+        ),
     }
-    panic("Group shape unrecognised by classifier — should be impossible");
 }
 
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of
@@ -3629,31 +3599,20 @@ fn repeat_inner_base_name(elem: &Element, gc_speculative: i32) -> String {
 /// inner lowering will consume).
 fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String {
     let alts = &g.alternatives;
-    if alts.len() == 1 {
-        let alt = &alts[0];
-        if alt.elements.len() == 1 {
-            // Transparent (single-element single-alt) — peel through
-            // to the inner element and let it pick the name.
-            return repeat_inner_base_name(&alt.elements[0], gc_speculative);
-        }
-        return single_alt_group_field_name(alt);
+    match classify_group(alts) {
+        // Transparent — peel through to the inner element and let it
+        // pick the name.
+        Transparent => return repeat_inner_base_name(&alts[0].elements[0], gc_speculative),
+        SingleAlt => return single_alt_group_field_name(&alts[0]),
+        TokenOnly => return token_group_field_name(alts),
+        SimpleCst => return group_field_base_name(alts),
+        // The General group's CST type uses `group_<idx>` where `<idx>`
+        // is the per-rule `group_counter` value at the point the lowering
+        // visits it. The Repeat is the first visitor (computing its outer
+        // field name) but defers the actual increment to the subsequent
+        // inner-Op lowering, so we embed the same speculative value here.
+        General => return general_group_field_name(gc_speculative),
     }
-    if is_token_only_group(alts) {
-        return token_group_field_name(alts);
-    }
-    if is_simple_cst_group(alts) {
-        return group_field_base_name(alts);
-    }
-    if is_general_group(alts) {
-        // The General group's CST type uses `group_<idx>` where
-        // `<idx>` is the per-rule `group_counter` value at the
-        // point the lowering visits it. The Repeat is the first
-        // visitor (computing its outer field name) but defers the
-        // actual increment to the subsequent inner-Op lowering, so
-        // we just embed the same speculative value here.
-        return general_group_field_name(gc_speculative);
-    }
-    panic("Group shape unrecognised by classifier (Repeat inner base name)");
 }
 
 /// Lower a `Label` element by recursively lowering its inner
