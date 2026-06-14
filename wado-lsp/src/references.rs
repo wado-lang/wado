@@ -37,12 +37,23 @@ pub(crate) fn find_references(
     let Some(def_key) = cursor.def_key() else {
         return Vec::new();
     };
+    references_for_def(ctx, def_key, include_declaration)
+}
 
+/// Collect every reference to the definition `def_key`, optionally including
+/// the declaration site. Shared by the position-based [`find_references`] and
+/// the name-based `Engine::references_by_symbol`.
+#[must_use]
+pub(crate) fn references_for_def(
+    ctx: &QueryContext,
+    def_key: wado_compiler::ast::AstId,
+    include_declaration: bool,
+) -> Vec<ReferenceLocation> {
     let mut out = Vec::new();
     if include_declaration && let Some(loc) = declaration_location(ctx, def_key) {
         out.push(loc);
     }
-    for use_id in cursor.references_to_def() {
+    for use_id in ctx.sem.references_to(def_key) {
         if let Some(loc) = use_site_location(ctx, use_id) {
             out.push(loc);
         }

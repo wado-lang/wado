@@ -203,9 +203,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                 &usage,
             ));
         }
-        if !matches!(kind, QueryKind::Definition) {
+        if matches!(kind, QueryKind::Diagnostics) {
             return Err(CliExit::error_with_usage(
-                "--symbol is currently only supported for the `definition` kind",
+                "--symbol is not supported for the `diagnostics` kind",
                 &usage,
             ));
         }
@@ -263,7 +263,25 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
 pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
     if let Some(notation) = &opts.symbol {
         let base = opts.base.as_deref().unwrap_or(".");
-        return query_adapter::run_definition_by_symbol(notation, base, opts.json).await;
+        return match opts.kind {
+            QueryKind::Definition => {
+                query_adapter::run_definition_by_symbol(notation, base, opts.json).await
+            }
+            QueryKind::References => {
+                query_adapter::run_references_by_symbol(
+                    notation,
+                    base,
+                    opts.include_declaration,
+                    opts.json,
+                )
+                .await
+            }
+            QueryKind::DocumentHighlight => {
+                query_adapter::run_document_highlight_by_symbol(notation, base, opts.json).await
+            }
+            // Rejected during parse_args.
+            QueryKind::Diagnostics => unreachable!("--symbol rejected for diagnostics"),
+        };
     }
 
     // Position-based kinds always carry an input file (validated in parse_args).

@@ -52,17 +52,23 @@ name, so no entry file is needed — relative modules anchor at `--base` (defaul
 
 - `wado_compiler::symbol_notation` — the parser (`MODULE#SYMBOL`).
 - `Semantics::resolve_symbol_notation` — notation → `Definition`.
-- `Engine::definition_by_symbol` — drives it over a synthetic entry that
-  `use`s the module.
-- `wado query definition --symbol <notation> [--base <dir>]`.
+- `Engine::{definition,references,document_highlight}_by_symbol` — drive
+  resolution over a synthetic entry that `use`s the module.
+- `wado query {definition,references,document-highlight} --symbol <notation>
+  [--base <dir>]`.
+
+Name-based results are bounded by what the synthetic entry loads: references
+across a whole project still need a project-wide context (a follow-up).
 
 ## TODO
 
 - [x] Parse the notation (`wado_compiler::symbol_notation`).
-- [x] `wado query definition --symbol` for free / module-level symbols.
+- [x] `--symbol` locator for `definition` / `references` / `document-highlight`
+      on free / module-level symbols.
 - [ ] Resolve members (`Type::m`, `Type.m`, `Type^Trait::m`) — needs an
       impl/method index; today they return "not yet supported".
-- [ ] Extend the `--symbol` locator to `references` / `document-highlight`.
 - [ ] Add a `hover` kind: notation → signature / type + doc summary.
+- [ ] Project-wide context so `references` spans the whole workspace, not just
+      the notation's import graph.
 - [ ] Convert between this notation and the internal `name.rs` canonical form.
 - [ ] Emit this notation in diagnostics and `wado doc` anchors.

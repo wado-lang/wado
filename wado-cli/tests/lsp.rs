@@ -1932,3 +1932,65 @@ fn query_symbol_rejects_input_file() {
             "--symbol does not take an input file",
         ));
 }
+
+#[test]
+fn query_references_by_symbol() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\npub fn use_it() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+
+    // Call site of `helper` inside `use_it`: line 2, column 33 (1-based).
+    wado_in(dir.path())
+        .args(["query", "references", "--symbol", "./lib.wado#helper"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("lib.wado:2:33"));
+}
+
+#[test]
+fn query_references_by_symbol_include_declaration() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\npub fn use_it() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args([
+            "query",
+            "references",
+            "--symbol",
+            "./lib.wado#helper",
+            "--include-declaration",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("lib.wado:1:8"))
+        .stdout(predicate::str::contains("lib.wado:2:33"));
+}
+
+#[test]
+fn query_document_highlight_by_symbol() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\npub fn use_it() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args([
+            "query",
+            "document-highlight",
+            "--symbol",
+            "./lib.wado#helper",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("lib.wado:1:8: write"))
+        .stdout(predicate::str::contains("lib.wado:2:33: read"));
+}

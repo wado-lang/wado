@@ -14,6 +14,8 @@
 //! highlight pass therefore performs no AST walks of its own.
 
 use serde::{Deserialize, Serialize};
+use wado_compiler::ast::AstId;
+use wado_compiler::module_source::ModuleSource;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::span_to_range;
@@ -38,30 +40,42 @@ pub struct DocumentHighlight {
 
 #[must_use]
 pub(crate) fn document_highlight(ctx: &QueryContext, position: Position) -> Vec<DocumentHighlight> {
-    let entry = ctx.entry();
+    let entry = ctx.entry().clone();
     let Some(cursor) = ctx.cursor_at(position) else {
         return Vec::new();
     };
     let Some(def_key) = cursor.def_key() else {
         return Vec::new();
     };
+    highlights_for_def(ctx, def_key, &entry)
+}
 
+/// Highlight every occurrence of `def_key` that lives in `target_module`,
+/// classified Read/Write. Shared by the position-based [`document_highlight`]
+/// (target = entry module) and the name-based
+/// `Engine::document_highlight_by_symbol` (target = the symbol's own module).
+#[must_use]
+pub(crate) fn highlights_for_def(
+    ctx: &QueryContext,
+    def_key: AstId,
+    target_module: &ModuleSource,
+) -> Vec<DocumentHighlight> {
     let mut out = Vec::new();
 
-    if ctx.sem.module_of_id(def_key) == Some(entry)
+    if ctx.sem.module_of_id(def_key) == Some(target_module)
         && let Some(span) = ctx
             .sem
             .name_span_of(def_key)
             .or_else(|| ctx.sem.symbol_at(def_key).and_then(|s| s.span))
     {
         out.push(DocumentHighlight {
-            range: span_to_range(&span, Some(ctx.source), ctx.encoding),
+            range: span_to_range(&span, ctx.source_for_id(def_key), ctx.encoding),
             kind: HighlightKind::Write,
         });
     }
 
-    for use_id in cursor.references_to_def() {
-        if ctx.sem.module_of_id(use_id) != Some(entry) {
+    for use_id in ctx.sem.references_to(def_key) {
+        if ctx.sem.module_of_id(use_id) != Some(target_module) {
             continue;
         }
         let Some(span) = ctx.sem.span_of_id(use_id) else {
@@ -73,7 +87,7 @@ pub(crate) fn document_highlight(ctx: &QueryContext, position: Position) -> Vec<
             HighlightKind::Read
         };
         out.push(DocumentHighlight {
-            range: span_to_range(&span, Some(ctx.source), ctx.encoding),
+            range: span_to_range(&span, ctx.source_for_id(use_id), ctx.encoding),
             kind,
         });
     }

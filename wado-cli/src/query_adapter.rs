@@ -112,16 +112,18 @@ pub async fn run_definition(
     Ok(())
 }
 
-/// Resolve a symbol notation (`MODULE#SYMBOL`) to its definition location.
-///
-/// Builds a synthetic entry that `use`s the notation's module, anchored at
-/// `base` so relative modules resolve from there (`core:` / `wasi:` are
-/// location-independent). Mirrors [`run_definition`] output.
-pub async fn run_definition_by_symbol(
-    notation: &str,
-    base: &str,
-    json_output: bool,
-) -> Result<(), CliExit> {
+/// A synthetic-entry analysis context for a symbol-notation query.
+struct SymbolQuery {
+    parsed: wado_compiler::symbol_notation::SymbolNotation,
+    engine: wado_lsp::Engine,
+    host: FilesystemCompilerHost,
+    uri: String,
+}
+
+/// Parse the notation and build a synthetic entry that `use`s its module,
+/// anchored at `base` so relative modules resolve from there (`core:` /
+/// `wasi:` are location-independent).
+fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
     let parsed = wado_compiler::symbol_notation::parse(notation)
         .map_err(|e| CliExit::error(format!("invalid symbol notation: {e}")))?;
 
@@ -136,7 +138,52 @@ pub async fn run_definition_by_symbol(
     let mut engine = wado_lsp::Engine::new();
     engine.open_document(&uri, synthetic);
 
-    match engine.definition_by_symbol(&uri, &parsed, &host).await {
+    Ok(SymbolQuery {
+        parsed,
+        engine,
+        host,
+        uri,
+    })
+}
+
+/// Report a failed symbol resolution on stderr. For a missing symbol, list the
+/// module's public symbols as suggestions.
+fn report_symbol_error(
+    parsed: &wado_compiler::symbol_notation::SymbolNotation,
+    reason: &wado_lsp::SymbolQueryError,
+) {
+    match reason {
+        wado_lsp::SymbolQueryError::NotFound { available } => {
+            eprintln!(
+                "warning: no symbol '{}' in {}",
+                parsed.member, parsed.module
+            );
+            if available.is_empty() {
+                eprintln!("note: {} exports no public symbols", parsed.module);
+            } else {
+                eprintln!("note: public symbols in {}:", parsed.module);
+                for name in available {
+                    eprintln!("  {name}");
+                }
+            }
+        }
+        other => eprintln!("warning: {other}"),
+    }
+}
+
+/// Resolve a symbol notation (`MODULE#SYMBOL`) to its definition location.
+/// Mirrors [`run_definition`] output.
+pub async fn run_definition_by_symbol(
+    notation: &str,
+    base: &str,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let q = prepare_symbol_query(notation, base)?;
+    match q
+        .engine
+        .definition_by_symbol(&q.uri, &q.parsed, &q.host)
+        .await
+    {
         Ok(def) => {
             if json_output {
                 print_definition_json(Some(&def));
@@ -150,23 +197,71 @@ pub async fn run_definition_by_symbol(
             } else {
                 print_definition_text(None);
             }
-            match &reason {
-                wado_lsp::SymbolQueryError::NotFound { available } => {
-                    eprintln!(
-                        "warning: no symbol '{}' in {}",
-                        parsed.member, parsed.module
-                    );
-                    if available.is_empty() {
-                        eprintln!("note: {} exports no public symbols", parsed.module);
-                    } else {
-                        eprintln!("note: public symbols in {}:", parsed.module);
-                        for name in available {
-                            eprintln!("  {name}");
-                        }
-                    }
-                }
-                other => eprintln!("warning: {other}"),
+            report_symbol_error(&q.parsed, &reason);
+        }
+    }
+    Ok(())
+}
+
+/// Find all references to a symbol notation. Mirrors [`run_references`] output.
+pub async fn run_references_by_symbol(
+    notation: &str,
+    base: &str,
+    include_declaration: bool,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let q = prepare_symbol_query(notation, base)?;
+    match q
+        .engine
+        .references_by_symbol(&q.uri, &q.parsed, include_declaration, &q.host)
+        .await
+    {
+        Ok(refs) => {
+            if json_output {
+                print_references_json(&refs);
+            } else {
+                print_references_text(&refs);
             }
+        }
+        Err(reason) => {
+            if json_output {
+                print_references_json(&[]);
+            } else {
+                print_references_text(&[]);
+            }
+            report_symbol_error(&q.parsed, &reason);
+        }
+    }
+    Ok(())
+}
+
+/// Highlight occurrences of a symbol notation within its defining module.
+/// Mirrors [`run_document_highlight`] output, using the defining module's URI.
+pub async fn run_document_highlight_by_symbol(
+    notation: &str,
+    base: &str,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let q = prepare_symbol_query(notation, base)?;
+    match q
+        .engine
+        .document_highlight_by_symbol(&q.uri, &q.parsed, &q.host)
+        .await
+    {
+        Ok((def_uri, highlights)) => {
+            if json_output {
+                print_highlights_json(&highlights);
+            } else {
+                print_highlights_text(uri_to_display(&def_uri), &highlights);
+            }
+        }
+        Err(reason) => {
+            if json_output {
+                print_highlights_json(&[]);
+            } else {
+                print_highlights_text("", &[]);
+            }
+            report_symbol_error(&q.parsed, &reason);
         }
     }
     Ok(())

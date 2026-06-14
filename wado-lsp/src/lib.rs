@@ -282,42 +282,61 @@ impl Engine {
         .await
     }
 
-    /// Resolve a [symbol notation](wado_compiler::symbol_notation) to a
-    /// definition location, using `uri` as the analysis context.
+    /// Snapshot `uri` and resolve a [symbol
+    /// notation](wado_compiler::symbol_notation) to its [`Definition`].
     ///
-    /// `uri` must be an open document that loads the notation's module
-    /// (typically a synthetic entry that `use`s it). The notation's module is
-    /// resolved relative to that entry, so relative paths anchor at its
-    /// directory while `core:` / `wasi:` modules are location-independent.
-    ///
-    /// On [`SymbolQueryError::NotFound`] the error carries the module's public
-    /// symbol names, so callers can suggest valid targets.
+    /// Shared by the name-based query methods. `uri` must be an open document
+    /// that loads the notation's module (typically a synthetic entry that
+    /// `use`s it); the module resolves relative to that entry, so relative
+    /// paths anchor at its directory while `core:` / `wasi:` modules are
+    /// location-independent. On [`SymbolQueryError::NotFound`] the error
+    /// carries the module's public symbol names as suggestions.
+    async fn resolve_symbol_def<H: CompilerHost>(
+        &self,
+        uri: &str,
+        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        host: &H,
+    ) -> Result<(Rc<Snapshot>, wado_compiler::Definition), SymbolQueryError> {
+        use wado_compiler::SymbolResolveError;
+        let snapshot = self
+            .snapshot(uri, host)
+            .await
+            .ok_or(SymbolQueryError::Unavailable)?;
+        match snapshot.sem.resolve_symbol_notation(notation) {
+            Ok(def) => Ok((snapshot, def)),
+            Err(SymbolResolveError::ModuleNotLoaded) => Err(SymbolQueryError::ModuleNotFound),
+            Err(SymbolResolveError::MemberResolutionUnsupported) => {
+                Err(SymbolQueryError::Unsupported)
+            }
+            Err(SymbolResolveError::SymbolNotFound) => {
+                let module = snapshot.sem.resolve_notation_module(&notation.module);
+                Err(SymbolQueryError::NotFound {
+                    available: snapshot.sem.public_symbol_names(&module),
+                })
+            }
+        }
+    }
+
+    /// Build a [`QueryContext`] over `uri`'s cached snapshot. The caller owns
+    /// the `Rc<Snapshot>` so the borrow outlives the context.
+    fn query_ctx_over<'a>(&'a self, snapshot: &'a Snapshot, uri: &'a str) -> QueryContext<'a> {
+        QueryContext {
+            sem: &snapshot.sem,
+            source: self.documents.get(uri).map_or("", |d| d.text.as_str()),
+            uri,
+            encoding: self.position_encoding,
+        }
+    }
+
+    /// Resolve a symbol notation to a definition location.
     pub async fn definition_by_symbol<H: CompilerHost>(
         &self,
         uri: &str,
         notation: &wado_compiler::symbol_notation::SymbolNotation,
         host: &H,
     ) -> Result<DefinitionResult, SymbolQueryError> {
-        use wado_compiler::SymbolResolveError;
-        let Some(snapshot) = self.snapshot(uri, host).await else {
-            return Err(SymbolQueryError::Unavailable);
-        };
+        let (snapshot, def) = self.resolve_symbol_def(uri, notation, host).await?;
         let sem = &snapshot.sem;
-        let def = match sem.resolve_symbol_notation(notation) {
-            Ok(def) => def,
-            Err(SymbolResolveError::ModuleNotLoaded) => {
-                return Err(SymbolQueryError::ModuleNotFound);
-            }
-            Err(SymbolResolveError::MemberResolutionUnsupported) => {
-                return Err(SymbolQueryError::Unsupported);
-            }
-            Err(SymbolResolveError::SymbolNotFound) => {
-                let module = sem.resolve_notation_module(&notation.module);
-                return Err(SymbolQueryError::NotFound {
-                    available: sem.public_symbol_names(&module),
-                });
-            }
-        };
         let span = def.span.ok_or(SymbolQueryError::NoLocation)?;
         let entry = &sem.entry_module_source;
         let def_uri = match sem.symbol_at(def.ast_id) {
@@ -331,6 +350,42 @@ impl Engine {
             uri: def_uri,
             range: location::span_to_range(&span, None, self.position_encoding),
         })
+    }
+
+    /// Find every reference to a symbol named by notation, across the loaded
+    /// module graph. `include_declaration` adds the declaration site.
+    pub async fn references_by_symbol<H: CompilerHost>(
+        &self,
+        uri: &str,
+        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        include_declaration: bool,
+        host: &H,
+    ) -> Result<Vec<ReferenceLocation>, SymbolQueryError> {
+        let (snapshot, def) = self.resolve_symbol_def(uri, notation, host).await?;
+        let ctx = self.query_ctx_over(&snapshot, uri);
+        Ok(references::references_for_def(
+            &ctx,
+            def.ast_id,
+            include_declaration,
+        ))
+    }
+
+    /// Highlight every occurrence (Read/Write) of a symbol named by notation
+    /// inside its own defining module. Returns the defining module's URI
+    /// alongside the highlights (they all live in that one file).
+    pub async fn document_highlight_by_symbol<H: CompilerHost>(
+        &self,
+        uri: &str,
+        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        host: &H,
+    ) -> Result<(String, Vec<DocumentHighlight>), SymbolQueryError> {
+        let (snapshot, def) = self.resolve_symbol_def(uri, notation, host).await?;
+        let sem = &snapshot.sem;
+        let def_uri = location::module_uri(&sem.entry_module_source, &def.module, uri)
+            .ok_or(SymbolQueryError::NoLocation)?;
+        let ctx = self.query_ctx_over(&snapshot, uri);
+        let highlights = document_highlight::highlights_for_def(&ctx, def.ast_id, &def.module);
+        Ok((def_uri, highlights))
     }
 
     /// Compute hover information for the symbol at the given position.
