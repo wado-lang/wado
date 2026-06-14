@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781399029060,
+  "lastUpdate": 1781405359217,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -32925,6 +32925,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ed42f081e9b3b5db4b85e44e4b5f55823bc4ee68"
         },
         "date": 1781399028684,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ae5d3cd6a34933b7a1d976c9ad09651279f315f7",
+          "message": "Merge pull request #1375 from wado-lang/claude/unify-effect-operation-calls-2o8jke\n\nrefactor(elaborator): unify effect-op call resolution with the normal call path",
+          "timestamp": "2026-06-14T11:40:15+09:00",
+          "tree_id": "6e6303c564087b33fefd9226fff1d7b93c7b4e71",
+          "url": "https://github.com/wado-lang/wado/commit/ae5d3cd6a34933b7a1d976c9ad09651279f315f7"
+        },
+        "date": 1781405358859,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
