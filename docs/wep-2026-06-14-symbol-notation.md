@@ -79,7 +79,9 @@ across a whole project still need a project-wide context (a follow-up).
       module's `impl` blocks and `trait` declarations. A member miss suggests
       the type's members.
 - [ ] Include doc-comment summaries in `hover` output.
-- [ ] Project-wide context so `references` spans the whole workspace, not just
-      the notation's import graph.
+- [x] `references` spans the whole workspace by default: the synthetic entry
+      `use`s every `.wado` under `--base` (default cwd), so use→def edges from
+      sibling files are recorded. (A broken file in the tree degrades the load;
+      scope with `--base`.)
 - [ ] Convert between this notation and the internal `name.rs` canonical form.
 - [ ] Emit this notation in diagnostics and `wado doc` anchors.

@@ -125,7 +125,16 @@ struct SymbolQuery {
 /// Parse the notation and build a synthetic entry that `use`s its module,
 /// anchored at `base` so relative modules resolve from there (`core:` /
 /// `wasi:` are location-independent).
-fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
+///
+/// When `load_workspace`, the entry also `use`s every `.wado` file under
+/// `base`, so the resulting `Semantics` records use→def edges from the whole
+/// workspace — required for `references` to span more than the target module's
+/// own import graph.
+fn prepare_symbol_query(
+    notation: &str,
+    base: &str,
+    load_workspace: bool,
+) -> Result<SymbolQuery, CliExit> {
     let parsed = wado_compiler::symbol_notation::parse(notation)
         .map_err(|e| CliExit::error(format!("invalid symbol notation: {e}")))?;
 
@@ -135,7 +144,16 @@ fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliEx
     // its directory anchors relative-module resolution at `base`.
     let entry_path = base_dir.join("__wado_query__.wado");
     let uri = format!("file://{}", entry_path.display());
-    let synthetic = format!("use __wado_query_ns from \"{}\";\n", parsed.module);
+
+    let mut synthetic = format!("use __wado_query_ns from \"{}\";\n", parsed.module);
+    if load_workspace {
+        for (i, spec) in workspace_module_specs(&base_dir).into_iter().enumerate() {
+            if spec == parsed.module {
+                continue;
+            }
+            synthetic.push_str(&format!("use __wado_ws_{i} from \"{spec}\";\n"));
+        }
+    }
 
     let mut engine = wado_lsp::Engine::new();
     engine.open_document(&uri, synthetic);
@@ -146,6 +164,38 @@ fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliEx
         host,
         uri,
     })
+}
+
+/// Relative module specs (`./sub/x.wado`) for every `.wado` file under `root`,
+/// sorted. Skips VCS/build directories and the synthetic query entry.
+fn workspace_module_specs(root: &Path) -> Vec<String> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if path.is_dir() {
+                if name.starts_with('.')
+                    || matches!(name.as_ref(), "build" | "target" | "node_modules")
+                {
+                    continue;
+                }
+                walk(root, &path, out);
+            } else if path.extension().is_some_and(|e| e == "wado")
+                && name != "__wado_query__.wado"
+                && let Ok(rel) = path.strip_prefix(root)
+            {
+                out.push(format!("./{}", rel.to_string_lossy().replace('\\', "/")));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(root, root, &mut out);
+    out.sort();
+    out
 }
 
 /// Report a failed symbol resolution on stderr. For a missing symbol, list the
@@ -190,7 +240,7 @@ pub async fn run_definition_by_symbol(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let q = prepare_symbol_query(notation, base)?;
+    let q = prepare_symbol_query(notation, base, false)?;
     match q
         .engine
         .definition_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
@@ -223,7 +273,8 @@ pub async fn run_references_by_symbol(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let q = prepare_symbol_query(notation, base)?;
+    // References span the whole workspace, so load every `.wado` under `base`.
+    let q = prepare_symbol_query(notation, base, true)?;
     match q
         .engine
         .references_by_symbol(&q.uri, &q.parsed, include_declaration, public_only, &q.host)
@@ -256,7 +307,7 @@ pub async fn run_document_highlight_by_symbol(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let q = prepare_symbol_query(notation, base)?;
+    let q = prepare_symbol_query(notation, base, false)?;
     match q
         .engine
         .document_highlight_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
@@ -335,7 +386,7 @@ pub async fn run_hover_by_symbol(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let q = prepare_symbol_query(notation, base)?;
+    let q = prepare_symbol_query(notation, base, false)?;
     match q
         .engine
         .hover_by_symbol(&q.uri, &q.parsed, public_only, &q.host)

@@ -2139,3 +2139,26 @@ fn query_hover_type_all_view_shows_private() {
         .stdout(predicate::str::contains("struct Counter { n: i32 }"))
         .stdout(predicate::str::contains("fn helper(&self) -> i32"));
 }
+
+#[test]
+fn query_references_by_symbol_spans_workspace() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    // A sibling file that does not appear in lib.wado's own import graph.
+    std::fs::write(
+        dir.path().join("main.wado"),
+        "use { helper } from \"./lib.wado\";\nfn run() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+
+    // Default workspace context finds the call in main.wado (line 2, col 26).
+    wado_in(dir.path())
+        .args(["query", "references", "--symbol", "./lib.wado#helper"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("main.wado:2:26"));
+}
