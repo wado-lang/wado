@@ -1254,23 +1254,7 @@ fn is_self_ref_scan_call(se: &ScanElement, rule_name: &String) -> bool {
 /// helper call; otherwise a 120-keyword set inlined at every dispatch
 /// site bloats the generated wasm by hundreds of KB.
 fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> String {
-    let mut parts: List<String> = [];
-    for let mut d = 0; d < sig.len(); d += 1 {
-        let kinds = &sig[d];
-        let idx_expr = if d == 0 { `pos` } else { `pos + {d}` };
-        let check_expr = `tokens[{idx_expr}].kind`;
-        let guard = `{idx_expr} < tokens.len()`;
-        let check = ctx.kind_check_str(kinds, &check_expr);
-        parts.push(`{guard} && {check}`);
-    }
-    let mut result = String::with_capacity(128);
-    for let mut i = 0; i < parts.len(); i += 1 {
-        if i > 0 {
-            result.push_str(&" && ");
-        }
-        result.push_str(&parts[i]);
-    }
-    return result;
+    return join_lookahead_condition(ctx, sig, sig.len(), LookaheadAccess::Scan);
 }
 
 /// Op-driven scan element emitter — dispatches on `ScanElement`
@@ -4337,21 +4321,55 @@ fn subtract_sets(a: &List<String>, b: &List<String>) -> List<String> {
     return result;
 }
 
-fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> String {
-    let mut parts: List<String> = [];
-    for let mut d = 0; d < sig.len(); d += 1 {
-        let tokens = &sig[d];
-        let check_expr = if d == 0 { `p.peek_kind()` } else { `p.peek_at({d})` };
-        parts.push(ctx.kind_check_str(tokens, &check_expr));
-    }
+/// Token accessor flavour for `join_lookahead_condition` — the only
+/// thing that varies between the parse-side, scan-side, and entry
+/// (`kind`-prebound) lookahead-condition builders.
+enum LookaheadAccess {
+    /// Scan side: `tokens[pos + d].kind`, each depth bounds-guarded.
+    Scan,
+    /// Parse side: `p.peek_kind()` at d=0, `p.peek_at(d)` deeper.
+    Parse,
+    /// Parse entry: a `kind` local at d=0, `p.peek_at(d)` deeper.
+    ParseKind,
+}
+
+/// Shared core of the three lookahead-condition builders: AND-join a
+/// per-depth `kind_check_str` over `sig[0..depth]`, where `access`
+/// selects how the token at each depth is read (and, for `Scan`, adds a
+/// per-depth bounds guard).
+fn join_lookahead_condition(
+    ctx: &mut GenContext,
+    sig: &List<List<String>>,
+    depth: i32,
+    access: LookaheadAccess,
+) -> String {
     let mut result = String::with_capacity(128);
-    for let mut i = 0; i < parts.len(); i += 1 {
-        if i > 0 {
+    for let mut d = 0; d < depth; d += 1 {
+        if d > 0 {
             result.push_str(&" && ");
         }
-        result.push_str(&parts[i]);
+        let part = match access {
+            Scan => {
+                let idx_expr = if d == 0 { `pos` } else { `pos + {d}` };
+                let check = ctx.kind_check_str(&sig[d], &`tokens[{idx_expr}].kind`);
+                `{idx_expr} < tokens.len() && {check}`
+            },
+            Parse => {
+                let check_expr = if d == 0 { `p.peek_kind()` } else { `p.peek_at({d})` };
+                ctx.kind_check_str(&sig[d], &check_expr)
+            },
+            ParseKind => {
+                let check_expr = if d == 0 { `kind` } else { `p.peek_at({d})` };
+                ctx.kind_check_str(&sig[d], &check_expr)
+            },
+        };
+        result.push_str(&part);
     }
     return result;
+}
+
+fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> String {
+    return join_lookahead_condition(ctx, sig, sig.len(), LookaheadAccess::Parse);
 }
 
 fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
@@ -4495,17 +4513,19 @@ fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternativ
 ///
 /// `scan_alts` drives the scan via the op-driven walker against the
 /// lowered `ScanBody`.
-fn gen_rule_ref_group_scan_dispatch(
+/// Emit the longest-first scan tournament shared by the RuleRef-only and
+/// general overlapping-group dispatchers: scan every candidate except the
+/// last into a fresh `gd_winner` local (the last alt is the `else`
+/// fall-through), committing to the first that scans cleanly. Returns the
+/// winner local's name; the caller emits the per-winner parse as an
+/// `if gd_winner == k` chain.
+fn gen_scan_winner_tournament(
     w: &mut CodeWriter,
     sorted_group: &List<i32>,
-    alts: &List<Alternative>,
-    g_op_alts: &List<AltBody>,
     scan_alts: &List<ScanBody>,
-    opt_var: &String,
-    type_name: &String,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
-) {
+) -> String {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
     w.line(&`let mut {winner_var}: i32 = -1;`);
@@ -4527,37 +4547,69 @@ fn gen_rule_ref_group_scan_dispatch(
         w.end();
     }
     w.end();
+    return winner_var;
+}
+
+/// Emit a SimpleCst-group alt's RuleRef call — the optional ATN
+/// ret-pending marker plus `let {local} = _parse_{target}(p[, follow][, min_prec])?;`
+/// — and return the variant value expression
+/// `{type_name}::{case_name}({local})` for the caller to store (as an
+/// if-expression value or a `Some(...)` assignment). A SimpleCst group is
+/// RuleRef-only by construction, so a non-RuleCall op is a lowering bug.
+fn gen_simplecst_rulecall_value(
+    w: &mut CodeWriter,
+    op: &Op,
+    ctx: &mut GenContext,
+    type_name: &String,
+    case_name: &String,
+) -> String {
+    let rc = if let RuleCall(rc) = op {
+        rc;
+    } else {
+        panic("SimpleCst group alt op is not RuleCall");
+    };
+    let fn_name = `_parse_{rc.target_snake}`;
+    let local_var = rc.target_snake;
+    let call_args = if let Some(min_prec) = rc.min_prec_arg {
+        `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, {min_prec}`;
+    } else {
+        `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}`;
+    };
+    gen_atn_ret_pending(w, ctx, rc.atn_call_site);
+    w.line(&`let {local_var} = {fn_name}({call_args})?;`);
+    return `{*type_name}::{*case_name}({local_var})`;
+}
+
+fn gen_rule_ref_group_scan_dispatch(
+    w: &mut CodeWriter,
+    sorted_group: &List<i32>,
+    alts: &List<Alternative>,
+    g_op_alts: &List<AltBody>,
+    scan_alts: &List<ScanBody>,
+    opt_var: &String,
+    type_name: &String,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+) {
+    let winner_var = gen_scan_winner_tournament(w, sorted_group, scan_alts, ctx, name_counts);
+    let last = sorted_group.len() - 1;
 
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt_index = sorted_group[k];
         let is_last = k == last;
-        // Read the lowered `RuleCallOp` so `follow_arg` and
-        // `min_prec_arg` (baked at lower time) reach emit. The surface
-        // `RuleRef` carries only the source-level name.
-        if let RuleCall(rc) = &g_op_alts[alt_index].ops[0] {
-            let fn_name = `_parse_{rc.target_snake}`;
-            let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
-            let case_name = group_case_name(&alts[alt_index]);
-            let local_var = rc.target_snake;
-            let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                `p{follow_arg_str}, {min_prec}`;
-            } else {
-                `p{follow_arg_str}`;
-            };
 
-            if k == 0 && !is_last {
-                w.begin(&`if {winner_var} == {k}`);
-            } else if is_last {
-                w.else_begin(&"else");
-            } else {
-                w.else_begin(&`else if {winner_var} == {k}`);
-            }
-            gen_atn_ret_pending(w, ctx, rc.atn_call_site);
-            w.line(&`let {local_var} = {fn_name}({call_args})?;`);
-            w.line(&`{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
+        if k == 0 && !is_last {
+            w.begin(&`if {winner_var} == {k}`);
+        } else if is_last {
+            w.else_begin(&"else");
         } else {
-            panic("gen_rule_ref_group_scan_dispatch: SimpleCst alt op is not RuleCall");
+            w.else_begin(&`else if {winner_var} == {k}`);
         }
+        // Read the lowered `RuleCallOp` (via the shared helper) so
+        // `follow_arg` / `min_prec_arg` baked at lower time reach emit.
+        let case_name = group_case_name(&alts[alt_index]);
+        let val = gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx, type_name, &case_name);
+        w.line(&`{*opt_var} = Option::<{type_name}>::Some({val});`);
     }
     w.end();
 }
@@ -4595,20 +4647,8 @@ fn gen_consume_group_store_op(
                 w.else_begin(&"else");
             }
             let body = &g_op_alts[alt_index];
-            if let RuleCall(rc) = &body.ops[0] {
-                let fn_name = `_parse_{rc.target_snake}`;
-                let local_var = rc.target_snake;
-                let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                    `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, {min_prec}`;
-                } else {
-                    `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}`;
-                };
-                gen_atn_ret_pending(w, ctx, rc.atn_call_site);
-                w.line(&`let {local_var} = {fn_name}({call_args})?;`);
-                w.line(&`{type_name}::{body.case_name}({local_var})`);
-            } else {
-                panic("gen_consume_group_store_op: SimpleCst alt op is not RuleCall");
-            }
+            let val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, &type_name, &body.case_name);
+            w.line(&val);
         }
         w.end_with(&";");
     } else {
@@ -4636,20 +4676,8 @@ fn gen_consume_group_store_op(
             if group.len() == 1 {
                 let alt_index = group[0];
                 let body = &g_op_alts[alt_index];
-                if let RuleCall(rc) = &body.ops[0] {
-                    let fn_name = `_parse_{rc.target_snake}`;
-                    let local_var = rc.target_snake;
-                    let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                        `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, {min_prec}`;
-                    } else {
-                        `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}`;
-                    };
-                    gen_atn_ret_pending(w, ctx, rc.atn_call_site);
-                    w.line(&`let {local_var} = {fn_name}({call_args})?;`);
-                    w.line(&`{opt_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
-                } else {
-                    panic("gen_consume_group_store_op: SimpleCst alt op is not RuleCall");
-                }
+                let val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, &type_name, &body.case_name);
+                w.line(&`{opt_var} = Option::<{type_name}>::Some({val});`);
             } else {
                 let mut sorted_group = group.sorted();
                 sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
@@ -4730,20 +4758,8 @@ fn gen_consume_group_store_optional_op(
         if group.len() == 1 {
             let alt_index = group[0];
             let body = &g_op_alts[alt_index];
-            if let RuleCall(rc) = &body.ops[0] {
-                let fn_name = `_parse_{rc.target_snake}`;
-                let local_var = rc.target_snake;
-                let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                    `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, {min_prec}`;
-                } else {
-                    `p{follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}`;
-                };
-                gen_atn_ret_pending(w, ctx, rc.atn_call_site);
-                w.line(&`let {local_var} = {fn_name}({call_args})?;`);
-                w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
-            } else {
-                panic("gen_consume_group_store_optional_op: SimpleCst alt op is not RuleCall");
-            }
+            let val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, &type_name, &body.case_name);
+            w.line(&`{inner_var} = Option::<{type_name}>::Some({val});`);
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
@@ -5128,27 +5144,8 @@ fn gen_general_group_scan_dispatch(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    let winner_var = dedup_name(&"gd_winner", name_counts);
-    let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
-    w.line(&`let mut {winner_var}: i32 = -1;`);
-    w.begin(&`{dispatch_label}:`);
+    let winner_var = gen_scan_winner_tournament(w, sorted_group, g_op_scan_alts, ctx, name_counts);
     let last = sorted_group.len() - 1;
-    for let mut k = 0; k < sorted_group.len(); k += 1 {
-        if k == last {
-            break;
-        }
-        let alt_index = sorted_group[k];
-        let scan_label = dedup_name(&"gd_scan", name_counts);
-        w.begin(&`{scan_label}:`);
-        w.line(&"let tokens = &p.tokens;");
-        w.line(&"let mut pos: i32 = p.pos;");
-        let sb = &g_op_scan_alts[alt_index];
-        gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
-        w.line(&`{winner_var} = {k};`);
-        w.line(&`break {dispatch_label};`);
-        w.end();
-    }
-    w.end();
 
     // Each alt's parse emits `let inner_var = ::Alt_i(StructName { ... })`;
     // delegate to `gen_general_alt_parse_and_store` so the parse-side
@@ -6251,16 +6248,7 @@ fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
 }
 
 fn build_lookahead_condition(ctx: &mut GenContext, pos_sets: &List<List<String>>, depth: i32) -> String {
-    let mut cond = String::with_capacity(128);
-    for let mut d = 0; d < depth; d += 1 {
-        if d > 0 {
-            cond.push_str(&" && ");
-        }
-        let tokens = &pos_sets[d];
-        let check_expr = if d == 0 { "kind" } else { `p.peek_at({d})` };
-        cond.push_str(&ctx.kind_check_str(tokens, &check_expr));
-    }
-    return cond;
+    return join_lookahead_condition(ctx, pos_sets, depth, LookaheadAccess::ParseKind);
 }
 
 fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext) {
