@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781418592768,
+  "lastUpdate": 1781420987818,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33057,6 +33057,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f2c7859f77bb2646fea14e0f84b7a61c72f91c2b"
         },
         "date": 1781418592226,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "83df1e3b99e7b5e39ca850f26332f71addb0f7cb",
+          "message": "Merge pull request #1378 from wado-lang/claude/http-hardcoding-removal-fq4ecy\n\nrefactor(codegen): make wasi:http/types and wasi:http/client generic CM imports",
+          "timestamp": "2026-06-14T16:00:55+09:00",
+          "tree_id": "fbb069a7aceaede1f311626ca550fb00b5ce0d31",
+          "url": "https://github.com/wado-lang/wado/commit/83df1e3b99e7b5e39ca850f26332f71addb0f7cb"
+        },
+        "date": 1781420987260,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
