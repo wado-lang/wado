@@ -1283,25 +1283,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.get_builtin_return_type(builtin_name);
         }
 
-        // Handle WASI effect operations (e.g., Environment::get_arguments)
+        // Handle effect operations (WASI and user-defined alike, e.g.
+        // `MonotonicClock::now`, `Counter::next`) through the unified signature
+        // resolver — the same path that supplies the call's parameter types, so
+        // the return type matches what the call site holds (issue #1371). The
+        // elaborator routes these through `CalleeRef::local_namespace`, which
+        // produces `ModuleSource::Local { path: "<Interface>" }` — matched by
+        // `is_effect_like()`. Without this the call would fall through to the
+        // default `Unit` return type and the dispatch synthesis would have to
+        // patch up every Let / template that depends on the value.
         if callee_module.is_effect_like()
             && let Some(interface_name) = callee_module.interface_name()
-            && let Some(return_type) = self.get_wasi_effect_return_type(&interface_name, func_name)
-        {
-            return return_type;
-        }
-
-        // Handle user-defined effect operations (e.g., `Counter::next` where
-        // `effect Counter { fn next() -> i32; }` is declared in the project).
-        // The elaborator routes these through `CalleeRef::local_namespace`,
-        // which produces `ModuleSource::Local { path: "Counter" }` — also
-        // matched by `is_effect_like()`. Without this lookup the call would
-        // fall through to the default `Unit` return type and the dispatch
-        // synthesis would have to patch up every Let / template that depends
-        // on the value.
-        if callee_module.is_effect_like()
-            && let Some(interface_name) = callee_module.interface_name()
-            && let Some(return_type) = self.get_user_effect_return_type(&interface_name, func_name)
+            && let Some((_, Some(return_type))) =
+                self.resolve_effect_op_signature(&interface_name, func_name)
         {
             return return_type;
         }
@@ -1359,28 +1353,57 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::UNIT
     }
 
-    /// Get the return type of a WASI effect operation from the registry.
+    /// Resolve an effect operation's signature — its parameter types and
+    /// optional return type — for both WASI effects (`MonotonicClock::now`,
+    /// `Stdout::write_via_stream`) and user-defined effects (`Counter::next`).
     ///
-    /// The registry stores the CM-ABI return type (with any `AsyncCall<T>`
-    /// wrapper stripped at registration). For async imports the Wado
-    /// surface type is `AsyncCall<T>`, so re-wrap before returning.
-    /// Look up the declared return type of a user-defined effect's
-    /// operation, e.g. `Counter::next` for `effect Counter { fn next()
-    /// -> i32; }`. The effect must be a project-declared effect (in
-    /// `trait_env.effect_decl_index`); WASI effects flow through
-    /// `get_wasi_effect_return_type` instead.
-    /// Resolve a user/WASI effect operation's signature (parameter types and
-    /// optional return type) from its Wado `interface` declaration.
+    /// This is the single source of truth that `lookup_function_param_types`
+    /// and `lookup_function_return_type` both read from, so an effect-op call
+    /// inherits the normal call path's argument expected-type inference and
+    /// type-checking (issue #1371).
     ///
+    /// Parameter types come from the operation's Wado `interface` declaration,
+    /// resolved in the interface module's own import scope.
     /// `effect_decl_index` keys by canonical `(decl_module, name)`; the call
     /// site's import context disambiguates which interface a bare name refers to
-    /// (two modules can each declare `pub interface Logger`). Types are resolved
-    /// in the interface module's own import scope, so a type the interface
-    /// imports (e.g. `Instant` pulled into `Timezone` from `system_clock`)
-    /// resolves to the same `TypeId` the call site holds — not a fresh same-named
-    /// one. Surface types are preserved (`Mark`, `Result<(), ()>`), unlike the CM
-    /// registry's flattened form.
+    /// (two modules can each declare `pub interface Logger`). Resolving in that
+    /// scope means a type the interface imports (e.g. `Instant` pulled into
+    /// `Timezone` from `system_clock`) resolves to the same `TypeId` the call
+    /// site holds — not a fresh same-named one — and surface types are preserved
+    /// (`Mark`, `Result<(), ()>`), unlike the CM registry's flattened form, so
+    /// argument inference sees the declared shape.
+    ///
+    /// The return type comes from the CM interface registry for WASI effects
+    /// (`wasi_effect_return_type`): it yields the canonical CM-ABI types (and
+    /// re-wraps async imports in `AsyncCall<T>`) that codegen and the rest of
+    /// the stdlib already share, so the call's result type is identity-equal to
+    /// the declared types it feeds (e.g. `Stdout::write_via_stream`'s
+    /// `Future<Result<(), ErrorCode>>` flowing into `drop_cli_write_future`'s
+    /// parameter). User effects are absent from the registry and keep the
+    /// interface decl's surface return type.
+    ///
+    /// WASI *resource* operations (e.g. `Connector::connect`) reach this path
+    /// too — they are also `is_effect_like()` — but are declared as `resource`s,
+    /// not `interface`s, so the interface lookup misses and only the registry
+    /// return type applies (their parameters get no expected-type hint, as
+    /// before).
     fn resolve_effect_op_signature(
+        &mut self,
+        effect: &str,
+        operation: &str,
+    ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
+        let interface_sig = self.resolve_interface_op_signature(effect, operation);
+        let wasi_return = self.wasi_effect_return_type(effect, operation);
+        match interface_sig {
+            Some((params, decl_return)) => Some((params, wasi_return.or(decl_return))),
+            None => wasi_return.map(|rt| (Vec::new(), Some(rt))),
+        }
+    }
+
+    /// Resolve an effect operation's signature from its Wado `interface`
+    /// declaration, in the interface module's own import scope. Returns `None`
+    /// when `effect` does not name a loaded interface (e.g. a WASI resource).
+    fn resolve_interface_op_signature(
         &mut self,
         effect: &str,
         operation: &str,
@@ -1413,20 +1436,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ))
     }
 
-    pub(super) fn get_user_effect_return_type(
-        &mut self,
-        effect: &str,
-        operation: &str,
-    ) -> Option<TypeId> {
-        self.resolve_effect_op_signature(effect, operation)
-            .and_then(|(_, ret)| ret)
-    }
-
-    pub(super) fn get_wasi_effect_return_type(
-        &mut self,
-        effect: &str,
-        operation: &str,
-    ) -> Option<TypeId> {
+    /// Resolve a WASI effect operation's return type from the CM interface
+    /// registry. Returns `None` for user effects (absent from the registry) and
+    /// for void WASI operations. The registry stores the CM-ABI return type
+    /// (with any `AsyncCall<T>` wrapper stripped at registration), so async
+    /// imports are re-wrapped in `AsyncCall<T>` before returning.
+    fn wasi_effect_return_type(&mut self, effect: &str, operation: &str) -> Option<TypeId> {
         let func_key = format!("{effect}::{operation}");
         let func = self.tysys.cm_interface_registry.get_function(&func_key)?;
         let is_async = func.is_async;
@@ -1444,15 +1459,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         }
-    }
-
-    pub(super) fn get_effect_op_param_types(
-        &mut self,
-        effect: &str,
-        operation: &str,
-    ) -> Option<Vec<TypeId>> {
-        self.resolve_effect_op_signature(effect, operation)
-            .map(|(params, _)| params)
     }
 
     /// Resolve a WASI AST type to a `TypeId`
@@ -1767,7 +1773,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            if let Some(params) = self.get_effect_op_param_types(prefix, suffix) {
+            if let Some((params, _)) = self.resolve_effect_op_signature(prefix, suffix) {
                 return params;
             }
             return Vec::new();
