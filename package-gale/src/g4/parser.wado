@@ -1832,16 +1832,10 @@ pub fn parse_checked(input: String) -> Result<Grammar, ParseError> {
 }
 
 pub variant AssembleError {
-    /// `[path, message]` of the grammar that failed to parse.
     Parse([String, String]),
     Check(String),
 }
 
-/// Parse each `[path, content]` input, stamp its source path, merge the
-/// grammars, synthesize implicit tokens, and run the deferred reference
-/// check. The shared core behind the `gale gen` CLI (`main.wado`) and the
-/// Kiln generator (`generator.wado`); each caller supplies its own I/O and
-/// formats `AssembleError` into its own diagnostic surface.
 pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, AssembleError> {
     let mut grammars: List<Grammar> = [];
     for let inp of inputs {

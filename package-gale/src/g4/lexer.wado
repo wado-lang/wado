@@ -327,9 +327,6 @@ fn is_ident_char(c: char) -> bool {
     return is_ident_start(c) || '0' <= c <= '9';
 }
 
-/// Resolve a `\u` escape body (after the `u`): `\uXXXX` (up to four hex
-/// digits, stopping at the first non-hex char) or the `\u{XXXXXX}` brace
-/// form. Code points a Wado `char` cannot hold fall back to U+FFFD.
 pub fn resolve_unicode_escape(chars: &List<char>, pos: &mut i32) -> char {
     let mut val = 0;
     if *pos < chars.len() && chars[*pos] == '{' {

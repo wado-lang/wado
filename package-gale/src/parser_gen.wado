@@ -4519,8 +4519,6 @@ fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternativ
 ///
 /// `scan_alts` drives the scan via the op-driven walker against the
 /// lowered `ScanBody`.
-// Scans every candidate but the last (the `else` fall-through) into the
-// returned `gd_winner` local; the caller emits the per-winner parse chain.
 fn gen_scan_winner_tournament(
     w: &mut CodeWriter,
     sorted_group: &List<i32>,
@@ -4552,9 +4550,6 @@ fn gen_scan_winner_tournament(
     return winner_var;
 }
 
-// Emits the call and returns the `{type}::{case}({local})` value for the
-// caller to store. A SimpleCst group is RuleRef-only, so a non-RuleCall op
-// is a lowering bug.
 fn gen_simplecst_rulecall_value(
     w: &mut CodeWriter,
     op: &Op,
@@ -4604,8 +4599,6 @@ fn gen_rule_ref_group_scan_dispatch(
         } else {
             w.else_begin(&`else if {winner_var} == {k}`);
         }
-        // Read the lowered `RuleCallOp` (via the shared helper) so
-        // `follow_arg` / `min_prec_arg` baked at lower time reach emit.
         let case_name = group_case_name(&alts[alt_index]);
         let val = gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx, type_name, &case_name);
         w.line(&`{*opt_var} = Option::<{type_name}>::Some({val});`);
@@ -4791,8 +4784,7 @@ fn gen_consume_token_group(
 }
 
 // Caller pre-dedups `acc_var`; its declaration is emitted here so the
-// name-counter order is preserved. The inner wildcard handling is
-// load-bearing — see the comment at the group loop below.
+// name-counter order is preserved.
 fn gen_general_overlap_loop(
     w: &mut CodeWriter,
     acc_var: &String,
@@ -4876,7 +4868,6 @@ fn gen_general_overlap_loop(
     w.end();
 }
 
-/// Generate a general group store with Option wrapper (standalone Group in an alternative).
 fn gen_general_group_store_op(
     w: &mut CodeWriter,
     gs: &GeneralShape,

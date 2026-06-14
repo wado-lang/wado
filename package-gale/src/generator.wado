@@ -47,11 +47,8 @@ impl Deserialize for Options;
 /// `kiln::import_check::inject_kiln_request_adapter` (runs before
 /// analyze).
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
-    // Parse the primary grammar plus any supplementary grammars listed in
-    // `inputs` (e.g. a sibling lexer grammar for a split parser grammar),
-    // stamping the real Kiln-provided paths so the generated header's
-    // `sources = [...]` names the files that exist rather than a fabricated
-    // `<GrammarName>.g4`.
+    // Stamp the real Kiln paths; otherwise the generated header's
+    // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`.
     let mut inputs: List<[String, String]> = [[req.primary.path, req.primary.content]];
     for let supp of &req.inputs {
         inputs.push([supp.path, supp.content]);
