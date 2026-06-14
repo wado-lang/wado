@@ -19,7 +19,6 @@ How to read:
 
 The biggest single lever: most twin-path bugs exist because the second copy missed a fix.
 
-- [ ] Set-helper zoo: `first_contains` ≡ `first_set_contains` (both used in `lower.wado`), `sets_overlap` ≡ `first_sets_overlap`, `subtract_first` ≡ `subtract_sets`, `extend_dedup`/`dedup_append_arr`/`union_kind_arrays`. Three functions would cover all nine.
 - [ ] Two escape resolvers (`read_string_escape` vs `resolve_char` — both fixed in place but still separate, should be unified), four balanced-delimiter scanners with conflicting failure conventions (-1 vs end-of-input), four comment-skipping implementations, duplicated postfix/alternatives parsing (`parse_postfix`/`parse_lexer_postfix`, `parse_alternatives`/`parse_lexer_alternatives`), duplicated `{ ID (, ID)* }` block scanners (tokens/channels — the hang fix landed in one, now both).
 - [ ] `best_*` state-reset strings rendered in four places. `src/lexer_gen.wado:1352-1423`, `:1846-1900` (token numbering is now unified via `token_slot_order`).
 - [ ] `generator.wado` still copies the open → read → parse → merge → synthesize → check pipeline that `main.wado` now folds into `load_and_merge`. `src/generator.wado:55-88`

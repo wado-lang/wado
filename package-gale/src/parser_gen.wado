@@ -23,6 +23,7 @@ use {
     to_snake_case,
     first_contains,
     dedup_append_arr,
+    subtract_sets,
     dedup_name,
     peek_dedup_name,
     element_field_info,
@@ -4335,15 +4336,6 @@ fn compute_non_greedy_condition(
     return "false";
 }
 
-fn subtract_sets(a: &List<String>, b: &List<String>) -> List<String> {
-    let mut result: List<String> = [];
-    for let x of a {
-        if !b.contains(x) {
-            result.push(*x);
-        }
-    }
-    return result;
-}
 
 enum LookaheadAccess {
     Scan,

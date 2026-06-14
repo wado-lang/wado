@@ -626,6 +626,16 @@ pub fn dedup_append_arr(arr: &mut List<String>, source: &List<String>) {
     }
 }
 
+pub fn subtract_sets(a: &List<String>, b: &List<String>) -> List<String> {
+    let mut result: List<String> = [];
+    for let x of a {
+        if !first_contains(b, x) {
+            result.push(*x);
+        }
+    }
+    return result;
+}
+
 // Parser codegen names every consumed element so the surrounding struct
 // field can be populated. When the same base name appears more than
 // once in an alt (e.g. two `ID` tokens) the second occurrence gets a

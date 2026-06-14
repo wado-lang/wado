@@ -66,9 +66,10 @@ use {
     is_storable_group,
     first_contains,
     dedup_name,
+    subtract_sets,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { GenContext, is_nullable, union_kind_arrays, FOLLOW_MASK_MAX_K } from "./gen_context.wado";
+use { GenContext, is_nullable, union_kind_arrays, sets_overlap, FOLLOW_MASK_MAX_K } from "./gen_context.wado";
 use { strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use {
@@ -395,7 +396,7 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
             if let Optional = r.kind {
                 let body_is_rulecall = r.body matches { RuleCall(_) };
                 if body_is_rulecall && !r.caller_follow_first.is_empty() {
-                    let effective = subtract_first(&loop_first, &r.caller_follow_first);
+                    let effective = subtract_sets(&loop_first, &r.caller_follow_first);
                     if effective.len() >= 2 {
                         ctx.intern_kind_set(&effective);
                     }
@@ -422,7 +423,7 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
                 let mut union_first: List<String> = [];
                 for let fs of &g.alt_first_sets {
                     for let tk of fs {
-                        if !first_set_contains(&union_first, tk) {
+                        if !first_contains(&union_first, tk) {
                             union_first.push(*tk);
                         }
                     }
@@ -976,7 +977,7 @@ fn collect_lr_suffix_first_tokens_from_lowered(lr_alts: &List<LrAlt>) -> List<St
     let mut result: List<String> = [];
     for let lr of lr_alts {
         for let tk of &lr.suffix_first {
-            if !first_set_contains(&result, tk) {
+            if !first_contains(&result, tk) {
                 result.push(*tk);
             }
         }
@@ -1003,12 +1004,12 @@ fn compute_self_ref_prec_from_ops(
         let next_op = &ops[k + 1];
         let mut next_is_lr_op = false;
         if let Token(t) = next_op {
-            if first_set_contains(lr_suffix_first_tokens, &t.kind) {
+            if first_contains(lr_suffix_first_tokens, &t.kind) {
                 next_is_lr_op = true;
             }
         }
         if let Literal(l) = next_op {
-            if first_set_contains(lr_suffix_first_tokens, &l.kind) {
+            if first_contains(lr_suffix_first_tokens, &l.kind) {
                 next_is_lr_op = true;
             }
         }
@@ -1274,7 +1275,7 @@ fn compute_lr_conflict_min_prec(
         }
         let suffix_first = ctx.first_of_elements_from(&other.elements, 1);
         for let ft of &fixed_tokens {
-            if first_set_contains(&suffix_first, ft) {
+            if first_contains(&suffix_first, ft) {
                 let candidate = other_prec + 1;
                 if candidate > min_prec {
                     min_prec = candidate;
@@ -1317,24 +1318,6 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>) -> LrDispatchData {
         valid_lr_alts: valid_lr_alts,
         groups: groups,
     };
-}
-
-fn first_sets_overlap(a: &List<String>, b: &List<String>) -> bool {
-    for let tk of a {
-        if first_set_contains(b, tk) {
-            return true;
-        }
-    }
-    return false;
-}
-
-fn first_set_contains(set: &List<String>, token: &String) -> bool {
-    for let t of set {
-        if *t == *token {
-            return true;
-        }
-    }
-    return false;
 }
 
 /// Build a `Direct` dispatch from disjoint first sets. Each branch
@@ -1472,7 +1455,7 @@ fn join_kind_set(kinds: &List<String>) -> String {
 fn any_overlap(first_sets: &List<List<String>>) -> bool {
     for let mut i = 0; i < first_sets.len(); i += 1 {
         for let mut j = i + 1; j < first_sets.len(); j += 1 {
-            if first_sets_overlap(&first_sets[i], &first_sets[j]) {
+            if sets_overlap(&first_sets[i], &first_sets[j]) {
                 return true;
             }
         }
@@ -3324,19 +3307,6 @@ fn try_optional_scan_guard(inner: &Element, ctx: &mut GenContext) -> Option<Repe
         return null;
     }
     return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalScanGuard);
-}
-
-/// Token-by-token subtraction of `b` from `a`, preserving `a`'s
-/// order. Linear scan; kind-set sizes here are small (≤ a few
-/// dozen) so a linear `first_set_contains` is fine.
-fn subtract_first(a: &List<String>, b: &List<String>) -> List<String> {
-    let mut result: List<String> = [];
-    for let tk of a {
-        if !first_set_contains(b, tk) {
-            result.push(*tk);
-        }
-    }
-    return result;
 }
 
 /// Compute the `NonGreedy` strategy for a non-greedy Repeat (`e*?` /
