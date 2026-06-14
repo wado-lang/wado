@@ -581,7 +581,22 @@ impl<'a> Emitter<'a> {
 
     /// Map an AST type from a CM signature to its WIT type, recording any
     /// cross-interface named-type references in `uses` as `(source_fq, item)`.
+    /// Structural shapes route through the shared [`assemble`] rule; leaves
+    /// render here.
     fn map_ast_type(
+        &self,
+        ty: &crate::ast::Type,
+        current_fq: &str,
+        uses: &mut Vec<(String, String)>,
+    ) -> Result<Type, WitEmitError> {
+        match classify_ast(ty) {
+            CmShape::Leaf => self.map_ast_leaf(ty, current_fq, uses),
+            shape => assemble(shape, |child| self.map_ast_type(&child, current_fq, uses)),
+        }
+    }
+
+    /// Render an AST leaf: primitive, named CM type, or `&Resource` borrow.
+    fn map_ast_leaf(
         &self,
         ty: &crate::ast::Type,
         current_fq: &str,
@@ -589,99 +604,22 @@ impl<'a> Emitter<'a> {
     ) -> Result<Type, WitEmitError> {
         use crate::ast::Type as AstType;
         match ty {
-            AstType::Named(named) => {
-                if let Some(prim) = primitive_by_name(&named.name) {
-                    return Ok(prim);
-                }
-                let cm_name = self.cm_type_name(named, current_fq, uses);
-                Ok(Type::named(cm_name))
-            }
-            AstType::Generic(generic) => self.map_ast_generic(generic, current_fq, uses),
+            AstType::Named(named) => match primitive_by_name(&named.name) {
+                Some(prim) => Ok(prim),
+                None => Ok(Type::named(self.cm_type_name(named, current_fq, uses))),
+            },
+            // `&Resource` becomes `borrow<resource>`; other references are
+            // transparent (already peeled by `classify_ast`).
             AstType::Reference(inner) | AstType::MutReference(inner) => {
-                // `&Resource` becomes `borrow<resource>` in WIT.
                 if let AstType::Named(named) = inner.as_ref() {
-                    let cm_name = self.cm_type_name(named, current_fq, uses);
-                    return Ok(Type::borrow(cm_name));
+                    Ok(Type::borrow(self.cm_type_name(named, current_fq, uses)))
+                } else {
+                    self.map_ast_type(inner, current_fq, uses)
                 }
-                self.map_ast_type(inner, current_fq, uses)
             }
-            AstType::Tuple(elems) => {
-                let mut mapped = Vec::new();
-                for elem in elems {
-                    mapped.push(self.map_ast_type(elem, current_fq, uses)?);
-                }
-                Ok(Type::tuple(mapped))
-            }
-            AstType::NamespacedGeneric(_)
-            | AstType::Function(_)
-            | AstType::TypePackSpread(_, _)
-            | AstType::Error(_) => Err(WitEmitError::UnrepresentableType {
-                description: format!("CM signature type `{ty:?}` has no WIT form"),
-            }),
-        }
-    }
-
-    fn map_ast_generic(
-        &self,
-        generic: &crate::ast::GenericType,
-        current_fq: &str,
-        uses: &mut Vec<(String, String)>,
-    ) -> Result<Type, WitEmitError> {
-        let args = &generic.args;
-        match generic.name.as_str() {
-            "Option" if args.len() == 1 => {
-                Ok(Type::option(self.map_ast_type(&args[0], current_fq, uses)?))
-            }
-            "List" if args.len() == 1 => {
-                Ok(Type::list(self.map_ast_type(&args[0], current_fq, uses)?))
-            }
-            "Result" if args.len() == 2 => {
-                let ok = self.map_ast_result_arm(&args[0], current_fq, uses)?;
-                let err = self.map_ast_result_arm(&args[1], current_fq, uses)?;
-                Ok(match (ok, err) {
-                    (None, None) => Type::result_empty(),
-                    (Some(o), None) => Type::result_ok(o),
-                    (None, Some(e)) => Type::result_err(e),
-                    (Some(o), Some(e)) => Type::result_both(o, e),
-                })
-            }
-            "Tuple" => {
-                let mut mapped = Vec::new();
-                for arg in args {
-                    mapped.push(self.map_ast_type(arg, current_fq, uses)?);
-                }
-                Ok(Type::tuple(mapped))
-            }
-            "Stream" => match args.first() {
-                Some(elem) => Ok(Type::stream(Some(
-                    self.map_ast_type(elem, current_fq, uses)?,
-                ))),
-                None => Ok(Type::stream(None)),
-            },
-            "Future" => match args.first() {
-                Some(inner) => Ok(Type::future(Some(
-                    self.map_ast_type(inner, current_fq, uses)?,
-                ))),
-                None => Ok(Type::future(None)),
-            },
-            "AsyncCall" if args.len() == 1 => self.map_ast_type(&args[0], current_fq, uses),
             other => Err(WitEmitError::UnrepresentableType {
-                description: format!("generic `{other}` with {} argument(s)", args.len()),
+                description: format!("CM signature type `{other:?}` has no WIT form"),
             }),
-        }
-    }
-
-    /// Map one arm of a `Result<Ok, Err>`: unit becomes the empty arm.
-    fn map_ast_result_arm(
-        &self,
-        ty: &crate::ast::Type,
-        current_fq: &str,
-        uses: &mut Vec<(String, String)>,
-    ) -> Result<Option<Type>, WitEmitError> {
-        if is_ast_unit(ty) {
-            Ok(None)
-        } else {
-            Ok(Some(self.map_ast_type(ty, current_fq, uses)?))
         }
     }
 
@@ -772,85 +710,89 @@ impl<'a> Emitter<'a> {
     }
 
     /// Map a value-position Wado type to its WIT counterpart, recording any
-    /// referenced user types for later `TypeDef` emission.
+    /// referenced user types for later `TypeDef` emission. Structural shapes
+    /// route through the shared [`assemble`] rule; leaves render here.
     fn map_type(&mut self, type_id: TypeId) -> Result<Type, WitEmitError> {
-        match self.types.get(type_id) {
-            ResolvedType::Primitive(p) => map_primitive(*p),
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.map_type(*inner),
-            ResolvedType::BuiltinArray(inner) => Ok(Type::list(self.map_type(*inner)?)),
-            ResolvedType::Struct { name, .. } if name == "String" => Ok(Type::String),
-            ResolvedType::Struct { name, .. } => Ok(self.named(name, type_id)),
-            ResolvedType::Enum { name, .. }
-            | ResolvedType::Variant { name, .. }
-            | ResolvedType::Flags { name, .. }
-            | ResolvedType::Newtype { name, .. } => Ok(self.named(name, type_id)),
+        match self.classify_resolved(type_id) {
+            CmShape::Leaf => self.map_resolved_leaf(type_id),
+            shape => assemble(shape, |child| self.map_type(child)),
+        }
+    }
+
+    /// Classify a resolved type into its CM structural shape. `AsyncCall<T>`
+    /// is transparent; a `&Resource` is left as a leaf (rendered `borrow<R>`),
+    /// while other references are transparent at the value-semantics boundary.
+    fn classify_resolved(&self, id: TypeId) -> CmShape<TypeId> {
+        match self.types.get(id) {
+            ResolvedType::BuiltinArray(inner) => CmShape::List(*inner),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                if self.is_resource(*inner) {
+                    CmShape::Leaf
+                } else {
+                    self.classify_resolved(*inner)
+                }
+            }
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } => self.map_generic(name, type_args.clone()),
+            } => match name.as_str() {
+                "Option" if type_args.len() == 1 => CmShape::Option(type_args[0]),
+                "List" if type_args.len() == 1 => CmShape::List(type_args[0]),
+                "Tuple" => CmShape::Tuple(type_args.clone()),
+                "Result" if type_args.len() == 2 => CmShape::Result {
+                    ok: self.non_unit(type_args[0]),
+                    err: self.non_unit(type_args[1]),
+                },
+                "AsyncCall" if type_args.len() == 1 => self.classify_resolved(type_args[0]),
+                _ => CmShape::Leaf,
+            },
             ResolvedType::GenericResource {
                 name, type_args, ..
-            } => self.map_generic_resource(name, type_args.clone()),
+            } => match name.as_str() {
+                "Future" => CmShape::Future(type_args.first().copied()),
+                "Stream" => CmShape::Stream(type_args.first().copied()),
+                _ => CmShape::Leaf,
+            },
+            _ => CmShape::Leaf,
+        }
+    }
+
+    /// Render a resolved leaf: primitive, named type, or handle. An owned
+    /// resource becomes its bare WIT name (`own<R>`); a borrowed one becomes
+    /// `borrow<R>`.
+    fn map_resolved_leaf(&mut self, id: TypeId) -> Result<Type, WitEmitError> {
+        match self.types.get(id) {
+            ResolvedType::Primitive(p) => map_primitive(*p),
+            ResolvedType::Struct { name, .. } if name == "String" => Ok(Type::String),
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::Enum { name, .. }
+            | ResolvedType::Variant { name, .. }
+            | ResolvedType::Flags { name, .. }
+            | ResolvedType::Newtype { name, .. } => Ok(self.named(name, id)),
+            ResolvedType::Resource { name, .. } => Ok(Type::named(to_kebab(name))),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                let inner = *inner;
+                if let ResolvedType::Resource { name, .. } = self.types.get(inner) {
+                    Ok(Type::borrow(to_kebab(name)))
+                } else {
+                    self.map_type(inner)
+                }
+            }
             other => Err(WitEmitError::UnrepresentableType {
                 description: describe_type(other),
             }),
         }
     }
 
-    fn map_generic(&mut self, name: &str, args: Vec<TypeId>) -> Result<Type, WitEmitError> {
-        match name {
-            "Option" if args.len() == 1 => Ok(Type::option(self.map_type(args[0])?)),
-            "List" if args.len() == 1 => Ok(Type::list(self.map_type(args[0])?)),
-            "Result" if args.len() == 2 => {
-                let ok = self.map_result_arm(args[0])?;
-                let err = self.map_result_arm(args[1])?;
-                Ok(match (ok, err) {
-                    (None, None) => Type::result_empty(),
-                    (Some(o), None) => Type::result_ok(o),
-                    (None, Some(e)) => Type::result_err(e),
-                    (Some(o), Some(e)) => Type::result_both(o, e),
-                })
-            }
-            "Tuple" => {
-                let mut elems = Vec::new();
-                for a in args {
-                    elems.push(self.map_type(a)?);
-                }
-                Ok(Type::tuple(elems))
-            }
-            // `AsyncCall<T>` is a Wado-level wrapper over an async import; at the
-            // CM boundary it is transparent and maps to `T`.
-            "AsyncCall" if args.len() == 1 => self.map_type(args[0]),
-            _ => Err(WitEmitError::UnrepresentableType {
-                description: format!("generic `{name}` with {} type argument(s)", args.len()),
-            }),
-        }
+    fn is_resource(&self, id: TypeId) -> bool {
+        matches!(self.types.get(id), ResolvedType::Resource { .. })
     }
 
-    /// Map a `Result` arm: a unit arm becomes the absent (`_`) arm.
-    fn map_result_arm(&mut self, id: TypeId) -> Result<Option<Type>, WitEmitError> {
+    /// A `Result` arm: a unit arm is absent (`_`).
+    fn non_unit(&self, id: TypeId) -> Option<TypeId> {
         if matches!(self.types.get(id), ResolvedType::Unit) {
-            Ok(None)
+            None
         } else {
-            Ok(Some(self.map_type(id)?))
-        }
-    }
-
-    /// Map a generic resource (`future<T>`, `stream<T>`) to its WIT form.
-    fn map_generic_resource(
-        &mut self,
-        name: &str,
-        args: Vec<TypeId>,
-    ) -> Result<Type, WitEmitError> {
-        let inner = match args.first() {
-            Some(a) => Some(self.map_type(*a)?),
-            None => None,
-        };
-        match name {
-            "Future" => Ok(Type::future(inner)),
-            "Stream" => Ok(Type::stream(inner)),
-            _ => Err(WitEmitError::UnrepresentableType {
-                description: format!("generic resource `{name}` has no WIT representation"),
-            }),
+            Some(id)
         }
     }
 
@@ -860,6 +802,95 @@ impl<'a> Emitter<'a> {
             self.pending.entry(name.to_string()).or_insert(type_id);
         }
         Type::named(to_kebab(name))
+    }
+}
+
+/// A single-level structural classification of a CM-boundary type. Children
+/// stay in the originating front-end's native representation (`T` is `TypeId`
+/// for resolved types, `ast::Type` for CM-registry signatures) so the shared
+/// [`assemble`] rule can recurse back through the same mapper. `Leaf` covers
+/// primitives, named types, and handles — rendered by the front-end.
+enum CmShape<T> {
+    Option(T),
+    List(T),
+    Tuple(Vec<T>),
+    Result { ok: Option<T>, err: Option<T> },
+    Future(Option<T>),
+    Stream(Option<T>),
+    Leaf,
+}
+
+/// The one place the WIT structural constructors (`option` / `list` / `tuple`
+/// / `result` / `future` / `stream`) are built, so the resolved-type and
+/// CM-AST front-ends cannot drift in how a shape becomes WIT. `render` maps a
+/// child in the front-end's native representation.
+fn assemble<T>(
+    shape: CmShape<T>,
+    mut render: impl FnMut(T) -> Result<Type, WitEmitError>,
+) -> Result<Type, WitEmitError> {
+    Ok(match shape {
+        CmShape::Leaf => unreachable!("leaves are rendered by the front-end, not assembled"),
+        CmShape::Option(t) => Type::option(render(t)?),
+        CmShape::List(t) => Type::list(render(t)?),
+        CmShape::Tuple(ts) => {
+            let mut elems = Vec::with_capacity(ts.len());
+            for t in ts {
+                elems.push(render(t)?);
+            }
+            Type::tuple(elems)
+        }
+        CmShape::Result { ok, err } => {
+            let ok = ok.map(&mut render).transpose()?;
+            let err = err.map(&mut render).transpose()?;
+            match (ok, err) {
+                (None, None) => Type::result_empty(),
+                (Some(o), None) => Type::result_ok(o),
+                (None, Some(e)) => Type::result_err(e),
+                (Some(o), Some(e)) => Type::result_both(o, e),
+            }
+        }
+        CmShape::Future(t) => Type::future(t.map(&mut render).transpose()?),
+        CmShape::Stream(t) => Type::stream(t.map(&mut render).transpose()?),
+    })
+}
+
+/// Classify a CM-signature AST type into its structural shape. `AsyncCall<T>`
+/// is transparent; a `&Named` (a CM resource) is a leaf rendered `borrow<R>`,
+/// while other references are transparent.
+fn classify_ast(ty: &crate::ast::Type) -> CmShape<crate::ast::Type> {
+    use crate::ast::Type as AstType;
+    match ty {
+        AstType::Tuple(elems) => CmShape::Tuple(elems.clone()),
+        AstType::Reference(inner) | AstType::MutReference(inner) => {
+            if matches!(inner.as_ref(), AstType::Named(_)) {
+                CmShape::Leaf
+            } else {
+                classify_ast(inner)
+            }
+        }
+        AstType::Generic(g) => match g.name.as_str() {
+            "Option" if g.args.len() == 1 => CmShape::Option(g.args[0].clone()),
+            "List" if g.args.len() == 1 => CmShape::List(g.args[0].clone()),
+            "Tuple" => CmShape::Tuple(g.args.clone()),
+            "Result" if g.args.len() == 2 => CmShape::Result {
+                ok: non_unit_ast(&g.args[0]),
+                err: non_unit_ast(&g.args[1]),
+            },
+            "Future" => CmShape::Future(g.args.first().cloned()),
+            "Stream" => CmShape::Stream(g.args.first().cloned()),
+            "AsyncCall" if g.args.len() == 1 => classify_ast(&g.args[0]),
+            _ => CmShape::Leaf,
+        },
+        _ => CmShape::Leaf,
+    }
+}
+
+/// A `Result` arm in AST form: a unit arm is absent (`_`).
+fn non_unit_ast(ty: &crate::ast::Type) -> Option<crate::ast::Type> {
+    if is_ast_unit(ty) {
+        None
+    } else {
+        Some(ty.clone())
     }
 }
 
