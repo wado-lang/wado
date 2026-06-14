@@ -121,13 +121,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 continue;
             }
 
-            // Skip unsupported functions (for non-HTTP interfaces).
-            // HTTP functions are handled separately by import_http_types_for_service
-            // in the component builder, which has its own type support (ast_type_to_cm).
-            // The general is_function_supported check would reject HTTP [method] functions
-            // like Fields::append because their &Resource params aren't supported
-            // in the general type checker.
-            if func.package != "http" && !cm_interface_registry.is_function_supported(func) {
+            if !cm_interface_registry.is_function_supported(func) {
                 continue;
             }
 

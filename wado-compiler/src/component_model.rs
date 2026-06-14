@@ -3106,11 +3106,12 @@ fn is_return_type_supported_with_types(
                     })
                 }
                 "List" | "Option" => {
-                    // Recursively check that inner types are supported primitives
+                    // A list/option element is any supported value type (e.g.
+                    // `list<list<u8>>`, `list<tuple<field-name, field-value>>`).
                     generic
                         .args
                         .iter()
-                        .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
+                        .all(|arg| is_return_type_supported_with_types(arg, enums, resources, structs))
                 }
                 "Tuple" => {
                     // All tuple elements must be supported return types
@@ -3131,49 +3132,6 @@ fn is_return_type_supported_with_types(
                 .iter()
                 .all(|el| is_return_type_supported_with_types(el, enums, resources, structs))
         }
-        _ => false,
-    }
-}
-
-/// Check if a type is a supported primitive type (for inner types of List/Option/Tuple)
-fn is_primitive_type_supported_with_types(
-    ty: &Type,
-    enums: &IndexSet<&str>,
-    resources: &IndexSet<&str>,
-) -> bool {
-    match ty {
-        Type::Named(named) => {
-            let name = named.name.as_str();
-            // Unit type () is parsed as Named("()"), not Tuple([])
-            matches!(
-                name,
-                "i32"
-                    | "i64"
-                    | "u8"
-                    | "u16"
-                    | "u32"
-                    | "u64"
-                    | "f32"
-                    | "f64"
-                    | "bool"
-                    | "char"
-                    | "String"
-                    | "()"
-            ) || enums.contains(name)
-                || resources.contains(name)
-        }
-        // Handle Tuple<...> syntax
-        Type::Generic(generic) if generic.name == "Tuple" => {
-            // Tuples are allowed if all elements are primitives
-            generic
-                .args
-                .iter()
-                .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
-        }
-        // Handle [...] tuple syntax
-        Type::Tuple(elements) => elements
-            .iter()
-            .all(|el| is_primitive_type_supported_with_types(el, enums, resources)),
         _ => false,
     }
 }
