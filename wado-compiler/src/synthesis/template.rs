@@ -1128,6 +1128,19 @@ fn method_name_for_type(
             LocalMethodName::new(name, Some(trait_name.to_string()), method_name.to_string())
                 .with_struct_type_args(&arg_names)
         }
+        ResolvedType::BuiltinArray(elem) => {
+            // `Array<T>` dispatches under base name `Array` with the element
+            // type as its single struct type arg (matching `monomorphize` and
+            // `trait_query`); the `_` fallback would mangle the full
+            // `Array<i32>` and trip `LocalMethodName::new`'s no-`<` invariant.
+            let elem_name = tt_ref.mangle_type_name(elem);
+            LocalMethodName::new(
+                TypeTable::ARRAY_TYPE_NAME.to_string(),
+                Some(trait_name.to_string()),
+                method_name.to_string(),
+            )
+            .with_struct_type_args(&[elem_name])
+        }
         ResolvedType::Function {
             params,
             return_type,

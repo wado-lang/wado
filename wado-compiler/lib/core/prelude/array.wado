@@ -12,9 +12,10 @@
 // Every method is a thin wrapper over a `builtin::array_*` intrinsic, which
 // lowers directly to the matching `array.*` instruction.
 
-use { IndexValue, IndexAssign, IntoIterator } from "core:prelude/traits.wado";
+use { IndexValue, IndexAssign, IntoIterator, Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
 use { ArraySlice, ArrayIter, ArrayRefIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
+use { Formatter } from "core:prelude/format.wado";
 use { i32_clamp } from "core:internal";
 
 /// Fixed-length GC array — the builtin storage primitive. Declared
@@ -140,5 +141,87 @@ impl IndexValue<RangeInclusive<i32>> for Array<T> {
 
     fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T> with stores[self] {
         return self.slice(range.start, range.end + 1);
+    }
+}
+
+// Shared Inspect/Display rendering. `limit` is the resolved element cap
+// (negative = none); `marker` appends `, ...` when elements are dropped.
+fn write_array_inspect<T: Inspect>(arr: &Array<T>, f: &mut Formatter, marker: bool, limit: i32) {
+    f.write_char('[');
+    let mut shown = 0;
+    let mut truncated = false;
+    for let mut i = 0; i < arr.len(); i += 1 {
+        if limit >= 0 && shown >= limit {
+            truncated = true;
+            break;
+        }
+        if shown > 0 {
+            f.write_str(&", ");
+        }
+        arr[i].inspect(f);
+        shown += 1;
+    }
+    if marker && truncated {
+        if shown > 0 {
+            f.write_str(&", ...");
+        } else {
+            f.write_str(&"...");
+        }
+    }
+    f.write_char(']');
+}
+
+impl<T: Inspect> Inspect for Array<T> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
+        write_array_inspect(self, f, true, limit);
+    }
+}
+
+impl<T: Inspect> Display for Array<T> {
+    pub fn fmt(&self, f: &mut Formatter) {
+        // Display never applies the default cap; raw precision caps only if >= 0.
+        write_array_inspect(self, f, false, f.precision);
+    }
+}
+
+// Pretty-printed counterpart of `write_array_inspect`: `marker` appends a
+// `...` line when elements are dropped.
+fn write_array_inspect_alt<T: InspectAlt>(arr: &Array<T>, f: &mut Formatter, marker: bool, limit: i32) {
+    if arr.len() == 0 {
+        f.write_str(&"[]");
+        return;
+    }
+    f.open_brace("[");
+    let mut shown = 0;
+    let mut truncated = false;
+    for let mut i = 0; i < arr.len(); i += 1 {
+        if limit >= 0 && shown >= limit {
+            truncated = true;
+            break;
+        }
+        f.write_newline_indent();
+        arr[i].inspect_alt(f);
+        f.write_char(',');
+        shown += 1;
+    }
+    if marker && truncated {
+        f.write_newline_indent();
+        f.write_str(&"...");
+    }
+    f.close_brace("]");
+}
+
+impl<T: InspectAlt> InspectAlt for Array<T> {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
+        write_array_inspect_alt(self, f, true, limit);
+    }
+}
+
+impl<T: InspectAlt> DisplayAlt for Array<T> {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        // DisplayAlt never applies the default sequence cap (see Display).
+        write_array_inspect_alt(self, f, false, f.precision);
     }
 }
