@@ -580,21 +580,22 @@ fn compile_after_load<H: CompilerHost>(
     package.skip_validation = options.skip_validation;
     package.test_name_filters = options.test_name_filters;
     package.wasm_assets = wasm_assets;
-    package.codegen_flags = match codegen_flags::CodegenFlags::parse(&options.codegen_flags) {
-        Ok(flags) => flags,
-        Err(flag) => {
-            let _ = logger.error(compiler_host::Diagnostic {
-                severity: compiler_host::Severity::Error,
-                code: compiler_host::Code::UnsupportedFeature,
-                message: format!(
-                    "unknown codegen flag: `-f {flag}` (supported: `array-copy`, \
-                     `branch-hinting`, optionally prefixed with `no-`)"
-                ),
-                span: None,
-            });
-            return Err(Bail);
-        }
-    };
+    package.codegen_flags =
+        match codegen_flags::CodegenFlags::parse(&options.codegen_flags, options.opt_level) {
+            Ok(flags) => flags,
+            Err(flag) => {
+                let _ = logger.error(compiler_host::Diagnostic {
+                    severity: compiler_host::Severity::Error,
+                    code: compiler_host::Code::UnsupportedFeature,
+                    message: format!(
+                        "unknown codegen flag: `-f {flag}` (supported: `array-copy`, \
+                         `branch-hinting`, `bare-asserts`, optionally prefixed with `no-`)"
+                    ),
+                    span: None,
+                });
+                return Err(Bail);
+            }
+        };
 
     // Select allocator: find the function tagged with #[allocator("...")] matching the
     // chosen mode, set its export_name to "realloc", and clear export_name from all others.
@@ -1004,21 +1005,22 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 package.target_world = world.to_string();
             }
             package.wasm_assets.clone_from(&load_result.wasm_assets);
-            package.codegen_flags = match codegen_flags::CodegenFlags::parse(codegen_flags) {
-                Ok(flags) => flags,
-                Err(flag) => {
-                    let _ = logger.error(compiler_host::Diagnostic {
-                        severity: compiler_host::Severity::Error,
-                        code: compiler_host::Code::UnsupportedFeature,
-                        message: format!(
-                            "unknown codegen flag: `-f {flag}` (supported: `array-copy`, \
-                                 `branch-hinting`, optionally prefixed with `no-`)"
-                        ),
-                        span: None,
-                    });
-                    return Err(Bail);
-                }
-            };
+            package.codegen_flags =
+                match codegen_flags::CodegenFlags::parse(codegen_flags, opt_level) {
+                    Ok(flags) => flags,
+                    Err(flag) => {
+                        let _ = logger.error(compiler_host::Diagnostic {
+                            severity: compiler_host::Severity::Error,
+                            code: compiler_host::Code::UnsupportedFeature,
+                            message: format!(
+                                "unknown codegen flag: `-f {flag}` (supported: `array-copy`, \
+                                 `branch-hinting`, `bare-asserts`, optionally prefixed with `no-`)"
+                            ),
+                            span: None,
+                        });
+                        return Err(Bail);
+                    }
+                };
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()

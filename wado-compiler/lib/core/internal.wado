@@ -129,6 +129,14 @@ pub fn panic(message: String) -> ! {
     builtin::unreachable();
 }
 
+/// Assert-failure trap. Behaves exactly like `panic`, but is a distinct callee
+/// so the `-f bare-asserts` lowering can replace assertion failures with a bare
+/// `unreachable` trap (dropping the diagnostic) while leaving explicit
+/// `panic(...)` calls untouched. The `assert` desugar emits this, never `panic`.
+pub fn assert_failed(message: String) -> ! {
+    panic(message);
+}
+
 /// Traps unconditionally, marking unreachable code.
 pub fn unreachable() -> ! {
     builtin::unreachable();

@@ -17,6 +17,7 @@
 //!
 //! See `docs/wep-2026-05-11-nir.md`.
 
+pub mod bare_asserts;
 pub mod plan;
 pub mod translate;
 mod wide_int_literal;

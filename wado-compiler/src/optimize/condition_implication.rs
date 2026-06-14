@@ -643,7 +643,8 @@ fn set_false(engine: &mut Engine, cond: ExprId) {
     engine.replace_expr_kind(cond, ExprKind::BoolLiteral(false));
 }
 
-/// Check if a block consists of a panic call (bounds check failure path).
+/// Check if a block traps (bounds check failure path): a `panic`, or the bare
+/// `unreachable` that `-f bare-asserts` lowers an assertion failure into.
 fn is_panic_block(engine: &Engine, block: BlockId) -> bool {
     engine.body.blocks[block]
         .stmts
@@ -656,7 +657,7 @@ fn is_panic_block(engine: &Engine, block: BlockId) -> bool {
 
 fn is_panic_call(engine: &Engine, e: ExprId) -> bool {
     match &engine.body.exprs[e].kind {
-        ExprKind::Call { func, .. } => func.name.contains("panic"),
+        ExprKind::Call { func, .. } => func.name.contains("panic") || func.name == "unreachable",
         _ => false,
     }
 }

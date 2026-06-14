@@ -43,6 +43,22 @@ pub struct CodegenFlags {
     /// instruction selection, not hinting (it runs at `-O1+`, gated by the
     /// optimization level like any other rewrite).
     pub branch_hinting: bool,
+
+    /// Lower an assertion failure to a bare `unreachable` trap
+    /// (`if !cond { unreachable() }`) instead of the power-assert diagnostic.
+    ///
+    /// An `assert` always keeps checking and trapping — only the failure
+    /// *message* is dropped. The diagnostic formats the operands through the
+    /// whole `Formatter` / `Inspect` / `String` stack, which any program that
+    /// merely indexes a `List` (`list[i]` lowers to `assert i < used`) then
+    /// drags in. `-f bare-asserts` strips it, shrinking size-sensitive builds:
+    /// `lower::bare_asserts` replaces the `assert_failed(..)` cold block with a
+    /// trap and the now-dead formatting falls out at DCE.
+    ///
+    /// Off at `-O0`/`-O1`/`-O2`/`-O3`, **on by default at `-Os`** (see
+    /// [`CodegenFlags::for_opt_level`]); `-f no-bare-asserts` restores the
+    /// diagnostic, `-f bare-asserts` forces it at any level.
+    pub bare_asserts: bool,
 }
 
 impl Default for CodegenFlags {
@@ -50,25 +66,40 @@ impl Default for CodegenFlags {
         Self {
             array_copy: true,
             branch_hinting: true,
+            bare_asserts: false,
         }
     }
 }
 
 impl CodegenFlags {
+    /// The opt-level-dependent defaults, before any `-f` flag is applied.
+    ///
+    /// Identical to [`CodegenFlags::default`] except `-Os` flips
+    /// [`bare_asserts`](Self::bare_asserts) on: a size-optimized build drops the
+    /// power-assert diagnostic by default (an `-f no-bare-asserts` overrides it).
+    #[must_use]
+    pub fn for_opt_level(opt_level: crate::OptLevel) -> Self {
+        Self {
+            bare_asserts: matches!(opt_level, crate::OptLevel::Os),
+            ..Self::default()
+        }
+    }
+
     /// Parse raw `-f` flag strings into a [`CodegenFlags`], starting from the
-    /// defaults and applying each flag in order.
+    /// [`for_opt_level`](Self::for_opt_level) defaults and applying each flag in
+    /// order.
     ///
     /// Flags follow the clang-style convention: `name` enables a flag and
     /// `no-name` disables it (so `-f no-array-copy` overrides the on-by-default
     /// `array_copy`, and a later flag wins over an earlier one). An
     /// unrecognized flag yields `Err(flag)`, carrying the offending string so
     /// the caller can surface a diagnostic.
-    pub fn parse<I, S>(flags: I) -> Result<Self, String>
+    pub fn parse<I, S>(flags: I, opt_level: crate::OptLevel) -> Result<Self, String>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let mut result = Self::default();
+        let mut result = Self::for_opt_level(opt_level);
         for flag in flags {
             let flag = flag.as_ref();
             let (name, enabled) = match flag.strip_prefix("no-") {
@@ -78,6 +109,7 @@ impl CodegenFlags {
             match name {
                 "array-copy" => result.array_copy = enabled,
                 "branch-hinting" => result.branch_hinting = enabled,
+                "bare-asserts" => result.bare_asserts = enabled,
                 _ => return Err(flag.to_string()),
             }
         }
@@ -88,21 +120,49 @@ impl CodegenFlags {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::OptLevel;
+
+    /// Parse at `-O2` (the level whose opt-level defaults equal
+    /// [`CodegenFlags::default`]), so these cases isolate flag handling.
+    fn parse<'a, I: IntoIterator<Item = &'a str>>(flags: I) -> Result<CodegenFlags, String> {
+        CodegenFlags::parse(flags, OptLevel::O2)
+    }
 
     #[test]
     fn empty_flags_reproduce_the_defaults() {
-        assert_eq!(
-            CodegenFlags::parse(std::iter::empty::<&str>()),
-            Ok(CodegenFlags::default())
-        );
-        // array.copy and branch hinting are on by default.
+        assert_eq!(parse(std::iter::empty()), Ok(CodegenFlags::default()));
+        // array.copy and branch hinting are on by default; bare-asserts off.
         assert!(CodegenFlags::default().array_copy);
         assert!(CodegenFlags::default().branch_hinting);
+        assert!(!CodegenFlags::default().bare_asserts);
+    }
+
+    #[test]
+    fn os_enables_bare_asserts_by_default() {
+        // `-Os` flips bare-asserts on without an explicit flag; other levels
+        // leave it off.
+        assert!(CodegenFlags::for_opt_level(OptLevel::Os).bare_asserts);
+        assert!(!CodegenFlags::for_opt_level(OptLevel::O2).bare_asserts);
+        assert!(!CodegenFlags::for_opt_level(OptLevel::O0).bare_asserts);
+        // The opt-level default still folds the array.copy / branch-hinting ons.
+        assert!(CodegenFlags::for_opt_level(OptLevel::Os).array_copy);
+    }
+
+    #[test]
+    fn no_bare_asserts_overrides_the_os_default() {
+        let flags = CodegenFlags::parse(["no-bare-asserts"], OptLevel::Os).unwrap();
+        assert!(!flags.bare_asserts);
+    }
+
+    #[test]
+    fn bare_asserts_forces_it_on_below_os() {
+        let flags = CodegenFlags::parse(["bare-asserts"], OptLevel::O2).unwrap();
+        assert!(flags.bare_asserts);
     }
 
     #[test]
     fn no_branch_hinting_disables_the_default() {
-        let flags = CodegenFlags::parse(["no-branch-hinting"]).unwrap();
+        let flags = parse(["no-branch-hinting"]).unwrap();
         assert!(!flags.branch_hinting);
         // Other flags keep their defaults.
         assert!(flags.array_copy);
@@ -110,35 +170,24 @@ mod tests {
 
     #[test]
     fn no_prefix_disables_an_on_by_default_flag() {
-        let flags = CodegenFlags::parse(["no-array-copy"]).unwrap();
+        let flags = parse(["no-array-copy"]).unwrap();
         assert!(!flags.array_copy);
     }
 
     #[test]
     fn explicit_enable_still_works_and_last_wins() {
         // `-f array-copy` is redundant with the default but remains valid.
-        assert!(CodegenFlags::parse(["array-copy"]).unwrap().array_copy);
+        assert!(parse(["array-copy"]).unwrap().array_copy);
         // The last flag wins when both spellings appear.
-        assert!(
-            !CodegenFlags::parse(["array-copy", "no-array-copy"])
-                .unwrap()
-                .array_copy
-        );
-        assert!(
-            CodegenFlags::parse(["no-array-copy", "array-copy"])
-                .unwrap()
-                .array_copy
-        );
+        assert!(!parse(["array-copy", "no-array-copy"]).unwrap().array_copy);
+        assert!(parse(["no-array-copy", "array-copy"]).unwrap().array_copy);
     }
 
     #[test]
     fn unknown_flag_is_reported_verbatim() {
-        assert_eq!(CodegenFlags::parse(["bogus"]), Err("bogus".to_string()));
+        assert_eq!(parse(["bogus"]), Err("bogus".to_string()));
         // The `no-` prefix is stripped for matching but the error echoes the
         // original spelling so the user sees exactly what they typed.
-        assert_eq!(
-            CodegenFlags::parse(["no-bogus"]),
-            Err("no-bogus".to_string())
-        );
+        assert_eq!(parse(["no-bogus"]), Err("no-bogus".to_string()));
     }
 }
