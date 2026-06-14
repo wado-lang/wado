@@ -19,7 +19,6 @@ How to read:
 
 The biggest single lever: most twin-path bugs exist because the second copy missed a fix.
 
-- [ ] Parse-side/scan-side twin emitters in `parser_gen.wado` (~15 pairs, est. 800-1000 unifiable lines): `gen_lr_overlap_dispatch`/`gen_scan_lr_overlap_dispatch` (117/112 lines, ~90 shared), the LR suffix dispatch pairs, the consume/general group store pairs (where the missing panic crept in), three lookahead-condition builders, the save-and-rewind blocks, the 12-line RuleCall-dispatch emit block (×4).
 - [ ] Group-classifier chains duplicated op-side/scan-side in `lower.wado` (×4 pairs: `lower_group_op`/`lower_scan_group` etc.) — the SimpleCst follow contradiction lives here. Plus four hand-rolled deep walkers for self-ref stamping and five places that enumerate every `RepeatOp` field by hand (one claims to be the single point of change; it is not).
 - [ ] Verbatim cross-module copies: `compute_overlap_groups` (`lower.wado:1357-1397` ≡ `alt_grouping.wado:108-148`), `alt_sort_priority` (`lower.wado:1602-1623` with bare magic numbers vs `alt_grouping.wado:200-219` with the exported constants), `dedup_name`/counter helpers (`lower.wado:4035-4062` ≡ `gen_util.wado:603-632`; the "import churn" justification is stale — lower already imports ~20 symbols from gen_util).
 - [ ] Set-helper zoo: `first_contains` ≡ `first_set_contains` (both used in `lower.wado`), `sets_overlap` ≡ `first_sets_overlap`, `subtract_first` ≡ `subtract_sets`, `extend_dedup`/`dedup_append_arr`/`union_kind_arrays`. Three functions would cover all nine.
