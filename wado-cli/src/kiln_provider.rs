@@ -3,11 +3,14 @@
 //! Resolves a [`GeneratorModule`] into a [`ResolvedGenerator`] (wasm
 //! bytes + options descriptor + source-closure hash) for the Kiln
 //! driver. Supports [`GeneratorModule::LocalPath`] (`module:
-//! "./generator.wado"`, or a directory like `module: "../package-gale"`
-//! that resolves to the package's `[world]."core:kiln/generator"` entry)
-//! and [`GeneratorModule::BuildDep`] (`module:
+//! "./generator.wado"`) and [`GeneratorModule::BuildDep`] (`module:
 //! "gale"`, resolved against `[build-dependencies]` to the package's
-//! `core:kiln/generator` world entry). Spec-form generators (`module =
+//! `core:kiln/generator` world entry). A directory `module:` (e.g.
+//! `"../package-gale"`) is rewritten to its package's
+//! `[world]."core:kiln/generator"` entry by
+//! [`crate::compile::rewrite_local_dir_modules`] before resolution, so it
+//! reaches this provider as a plain `LocalPath` to the entry file.
+//! Spec-form generators (`module =
 //! "ns:name@ver"`) surface [`ProviderError::Unsupported`] — registry/git
 //! module sources are deferred to a follow-up.
 //!
@@ -137,8 +140,8 @@ impl CliGeneratorProvider {
         &self,
         path: &wado_compiler::kiln::InvocationPath,
     ) -> Result<(PathBuf, Vec<u8>, String, String), ProviderError> {
-        let resolved = self.resolve_path(path.as_str());
-        if !resolved.exists() {
+        let abs = self.resolve_path(path.as_str());
+        if !abs.exists() {
             return Err(ProviderError::Internal {
                 message: format!(
                     "kiln: generator path `{}` does not exist (relative to manifest root {})",
@@ -147,16 +150,21 @@ impl CliGeneratorProvider {
                 ),
             });
         }
-        // A directory `module:` points at a generator *package*: resolve its
-        // `[world]."core:kiln/generator"` entry from the package's `wado.toml`,
-        // mirroring how a bare `[build-dependencies]` name resolves. This lets
-        // `module: "../package-gale"` work the same as pointing `module`
-        // straight at `../package-gale/src/generator.wado`.
-        let abs = if resolved.is_dir() {
-            resolve_package_generator_entry(&resolved)?
-        } else {
-            resolved
-        };
+        // A directory module is resolved to its package's
+        // `[world]."core:kiln/generator"` entry up front by
+        // `compile::rewrite_local_dir_modules`, so a directory reaching the
+        // provider is a package that declared no such entry. Report that
+        // instead of letting `std::fs::read` surface a bare "Is a directory".
+        if abs.is_dir() {
+            return Err(ProviderError::Internal {
+                message: format!(
+                    "kiln: generator module `{}` is a directory but is not a generator package: \
+                     its `wado.toml` is missing or declares no [world].\"core:kiln/generator\" \
+                     entry. Point `module` at a generator package directory or a `.wado` file",
+                    path.as_str(),
+                ),
+            });
+        }
         let source = std::fs::read(&abs).map_err(|e| ProviderError::Internal {
             message: format!(
                 "kiln: failed to read generator source at `{}`: {e}",
@@ -308,34 +316,6 @@ impl CliGeneratorProvider {
 
         Ok(artifacts)
     }
-}
-
-/// Resolve a directory `module:` path to the generator package's
-/// `[world]."core:kiln/generator"` entry file. `dir` must contain a
-/// `wado.toml` that declares such a world entry; the returned path is
-/// `dir.join(<entry>)`. This is the filesystem counterpart of
-/// [`crate::compile::rewrite_build_dep_modules`] for path-addressed
-/// (rather than `[build-dependencies]`-named) generator packages.
-fn resolve_package_generator_entry(dir: &Path) -> Result<PathBuf, ProviderError> {
-    let manifest_path = dir.join("wado.toml");
-    let text = std::fs::read_to_string(&manifest_path).map_err(|e| ProviderError::Internal {
-        message: format!(
-            "kiln: generator module `{}` is a directory but its `wado.toml` could not be read: {e}",
-            dir.display()
-        ),
-    })?;
-    let manifest: wado_manifest::Manifest = text.parse().map_err(|e| ProviderError::Internal {
-        message: format!("kiln: failed to parse `{}`: {e}", manifest_path.display()),
-    })?;
-    let entry = manifest
-        .world_entry("core:kiln/generator")
-        .ok_or_else(|| ProviderError::Internal {
-            message: format!(
-                "kiln: generator package `{}` declares no [world].\"core:kiln/generator\" entry",
-                dir.display()
-            ),
-        })?;
-    Ok(dir.join(entry))
 }
 
 /// Convert the absolute paths the recording host captured into project-
@@ -694,62 +674,13 @@ mod tests {
     }
 
     #[test]
-    fn directory_module_resolves_package_generator_entry() {
-        // `module: "../package-gale"` (a directory) must resolve to the
-        // package's `[world]."core:kiln/generator"` entry, exactly as if
-        // the author had pointed `module` at that entry file directly.
+    fn directory_module_reaching_provider_surfaces_internal() {
+        // A directory is resolved to its package entry up front by
+        // `compile::rewrite_local_dir_modules`; one that still reaches the
+        // provider declared no `core:kiln/generator` entry, so the provider
+        // reports that instead of a bare "Is a directory" read error.
         let tmp = std::env::temp_dir().join(format!(
             "wado-kiln-provider-dir-module-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&tmp);
-        let pkg = tmp.join("gen-pkg");
-        std::fs::create_dir_all(pkg.join("src")).unwrap();
-        std::fs::write(
-            pkg.join("wado.toml"),
-            "[package]\nname = \"genpkg\"\nversion = \"0.1.0\"\n\n\
-             [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
-        )
-        .unwrap();
-        std::fs::write(
-            pkg.join("src/generator.wado"),
-            "\
-use { RawRequest, Response, Error, bind_request } from \"core:kiln\";\n\
-\n\
-pub struct Options {\n\
-    pub verbose: bool,\n\
-}\n\
-\n\
-export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
-    let req = match bind_request::<Options>(raw) {\n\
-        Ok(r) => r,\n\
-        Err(e) => return Result::Err(e),\n\
-    };\n\
-    let _ = req.options.verbose;\n\
-    return Result::Ok(Response { files: [] });\n\
-}\n",
-        )
-        .unwrap();
-
-        let provider = CliGeneratorProvider::new(tmp.clone());
-        let module = GeneratorModule::LocalPath(InvocationPath::normalize("./gen-pkg"));
-        let resolved = runtime()
-            .block_on(async { provider.resolve(&module).await })
-            .unwrap_or_else(|e| panic!("directory module resolve failed: {e:?}"));
-        assert!(resolved.wasm.starts_with(b"\0asm"), "wasm magic missing");
-        let descriptor = resolved
-            .descriptor
-            .as_ref()
-            .expect("Options struct present → descriptor must be Some");
-        assert_eq!(descriptor.fields[0].name, "verbose");
-
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    #[test]
-    fn directory_module_without_generator_world_surfaces_internal() {
-        let tmp = std::env::temp_dir().join(format!(
-            "wado-kiln-provider-dir-noworld-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&tmp);
@@ -769,7 +700,7 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
         match err {
             ProviderError::Internal { message } => {
                 assert!(
-                    message.contains("core:kiln/generator"),
+                    message.contains("is a directory") && message.contains("core:kiln/generator"),
                     "unexpected message: {message}"
                 );
             }

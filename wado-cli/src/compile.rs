@@ -428,6 +428,7 @@ async fn maybe_run_pipeline(
     }
     let mut inline = inline;
     rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
+    rewrite_local_dir_modules(&mut inline, &manifest_root);
     let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
     crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline, no_cache)
         .await
@@ -457,6 +458,37 @@ pub(crate) fn rewrite_build_dep_modules(
     }
 }
 
+/// Rewrite each inline invocation whose `module` is a `LocalPath` pointing
+/// at a *directory* (a generator package) into a `LocalPath` pointing at
+/// that package's `[world]."core:kiln/generator"` entry file. This collapses
+/// `module: "../pkg"` onto the same path-addressed identity — and therefore
+/// the same cache key — as `module: "../pkg/src/generator.wado"` and the
+/// `[build-dependencies]` name form, all of which resolve to one entry file.
+/// Resolved off the filesystem before the pipeline runs, mirroring
+/// [`rewrite_build_dep_modules`]. A directory without a resolvable generator
+/// world entry is left untouched for the provider to report.
+pub(crate) fn rewrite_local_dir_modules(
+    inline: &mut [wado_compiler::kiln::Invocation],
+    manifest_root: &Path,
+) {
+    use wado_compiler::kiln::{GeneratorModule, InvocationPath};
+    for inv in inline.iter_mut() {
+        let GeneratorModule::LocalPath(path) = &inv.module else {
+            continue;
+        };
+        let abs = manifest_root.join(path.as_str());
+        if !abs.is_dir() {
+            continue;
+        }
+        if let Some(entry) = package_generator_entry(&abs) {
+            inv.module = GeneratorModule::LocalPath(InvocationPath::normalize(&format!(
+                "{}/{entry}",
+                path.as_str()
+            )));
+        }
+    }
+}
+
 /// The generator entry of a path `[build-dependencies]` package, as a
 /// manifest-root-relative [`InvocationPath`]: `<dep-path>/<generator world
 /// entry>`. `None` when the dependency is absent, not a path dep, or declares
@@ -470,12 +502,23 @@ fn build_dep_generator_local_path(
     let DependencySource::Path { path, .. } = &dep.source else {
         return None;
     };
-    let dep_manifest_text = fs::read_to_string(manifest_root.join(path).join("wado.toml")).ok()?;
-    let dep_manifest: wado_manifest::Manifest = dep_manifest_text.parse().ok()?;
-    let entry = dep_manifest.world_entry("core:kiln/generator")?;
+    let entry = package_generator_entry(&manifest_root.join(path))?;
     Some(wado_compiler::kiln::InvocationPath::normalize(&format!(
         "{path}/{entry}"
     )))
+}
+
+/// Resolve a generator *package directory* (absolute) to its
+/// `[world]."core:kiln/generator"` entry, as a path relative to that
+/// directory. `None` when the directory has no readable `wado.toml` or the
+/// manifest declares no such world entry. The single source of truth for
+/// mapping a package to its generator entry, shared by the
+/// `[build-dependencies]`-name and directory-`module:` resolution paths so
+/// both spellings land on the same entry file.
+fn package_generator_entry(pkg_dir: &Path) -> Option<String> {
+    let manifest_text = fs::read_to_string(pkg_dir.join("wado.toml")).ok()?;
+    let manifest: wado_manifest::Manifest = manifest_text.parse().ok()?;
+    Some(manifest.world_entry("core:kiln/generator")?.to_string())
 }
 
 /// Empty in-memory `wado.toml` manifest used as a fallback when the
@@ -599,4 +642,105 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
         .map_err(|e| CliExit::error(format!("writing output file: {e}")))?;
     eprintln!("Generated: {}", output_path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod kiln_dir_module_tests {
+    use super::*;
+    use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
+
+    fn local_invocation(module_path: &str) -> Invocation {
+        Invocation {
+            decl_site: DeclSite {
+                module: "consumer.wado".to_string(),
+                synthetic_id: "kiln-test".to_string(),
+            },
+            module: GeneratorModule::LocalPath(InvocationPath::normalize(module_path)),
+            from: InvocationPath::normalize("./grammar.g4"),
+            inputs: Vec::new(),
+            output_dir: InvocationPath::normalize("build"),
+            options_canonical: Vec::new(),
+            raw_options: None,
+        }
+    }
+
+    fn write_pkg(root: &Path, name: &str, world_entry: Option<&str>) -> std::path::PathBuf {
+        let pkg = root.join(name);
+        std::fs::create_dir_all(pkg.join("src")).unwrap();
+        let mut manifest = format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n");
+        if let Some(entry) = world_entry {
+            manifest.push_str(&format!(
+                "\n[world]\n\"core:kiln/generator\" = \"{entry}\"\n"
+            ));
+        }
+        std::fs::write(pkg.join("wado.toml"), manifest).unwrap();
+        std::fs::write(pkg.join("src/generator.wado"), "// generator\n").unwrap();
+        pkg
+    }
+
+    fn unique_tmp(tag: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("wado-kiln-dir-{tag}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn package_generator_entry_reads_world_entry() {
+        let root = unique_tmp("entry");
+        let _ = std::fs::remove_dir_all(&root);
+        let pkg = write_pkg(&root, "gen-pkg", Some("src/generator.wado"));
+        assert_eq!(
+            package_generator_entry(&pkg).as_deref(),
+            Some("src/generator.wado")
+        );
+        let plain = write_pkg(&root, "plain-pkg", None);
+        assert_eq!(package_generator_entry(&plain), None);
+        assert_eq!(package_generator_entry(&root.join("absent")), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rewrite_local_dir_modules_resolves_directory_to_entry_file() {
+        let root = unique_tmp("rewrite");
+        let _ = std::fs::remove_dir_all(&root);
+        write_pkg(&root, "gen-pkg", Some("src/generator.wado"));
+
+        // A directory module is rewritten to its package generator entry,
+        // landing on the same path identity as a direct entry-file module.
+        let mut inline = vec![local_invocation("./gen-pkg")];
+        rewrite_local_dir_modules(&mut inline, &root);
+        match &inline[0].module {
+            GeneratorModule::LocalPath(p) => {
+                assert_eq!(p.as_str(), "gen-pkg/src/generator.wado")
+            }
+            other => panic!("expected LocalPath, got {other:?}"),
+        }
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rewrite_local_dir_modules_leaves_files_and_unresolvable_dirs() {
+        let root = unique_tmp("leave");
+        let _ = std::fs::remove_dir_all(&root);
+        // A package directory without a generator world entry is left alone
+        // (the provider reports the misconfiguration).
+        write_pkg(&root, "plain-pkg", None);
+        // A plain `.wado` file module must never be touched.
+        std::fs::write(root.join("gen.wado"), "// gen\n").unwrap();
+
+        let mut inline = vec![
+            local_invocation("./plain-pkg"),
+            local_invocation("./gen.wado"),
+        ];
+        rewrite_local_dir_modules(&mut inline, &root);
+        match &inline[0].module {
+            GeneratorModule::LocalPath(p) => assert_eq!(p.as_str(), "plain-pkg"),
+            other => panic!("expected untouched LocalPath, got {other:?}"),
+        }
+        match &inline[1].module {
+            GeneratorModule::LocalPath(p) => assert_eq!(p.as_str(), "gen.wado"),
+            other => panic!("expected untouched LocalPath, got {other:?}"),
+        }
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
