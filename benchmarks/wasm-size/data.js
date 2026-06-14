@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781425390144,
+  "lastUpdate": 1781435251486,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33145,6 +33145,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0739d9f26e1247494fb99e8ac42d6679554c0313"
         },
         "date": 1781425389816,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a6eb847d68fddd23a364a0d1833428955321ad60",
+          "message": "Merge pull request #1380 from wado-lang/claude/wado-symbol-notation-r5jokk\n\nfeat(query): symbol notation for `wado query` (definition / references / hover / document-highlight)",
+          "timestamp": "2026-06-14T19:58:37+09:00",
+          "tree_id": "39d681f4ee7569e3e26fa7b63644e1ee0fa94a81",
+          "url": "https://github.com/wado-lang/wado/commit/a6eb847d68fddd23a364a0d1833428955321ad60"
+        },
+        "date": 1781435250929,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
