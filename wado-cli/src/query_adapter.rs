@@ -2,7 +2,9 @@ use std::fs;
 use std::path::Path;
 
 use serde_json::json;
-use wado_lsp::{DefinitionResult, DocumentHighlight, HighlightKind, Position, ReferenceLocation};
+use wado_lsp::{
+    DefinitionResult, DocumentHighlight, HighlightKind, HoverResult, Position, ReferenceLocation,
+};
 
 use crate::args::CliExit;
 use crate::compiler_host::FilesystemCompilerHost;
@@ -290,6 +292,56 @@ pub async fn run_document_highlight(
     Ok(())
 }
 
+pub async fn run_hover(
+    filename: &str,
+    line: u32,
+    column: u32,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let prepared = prepare_query(filename)?;
+    let position = position_from_one_based(line, column);
+    let result = prepared
+        .engine
+        .hover(&prepared.uri, position, &prepared.host)
+        .await;
+
+    if json_output {
+        print_hover_json(result.as_ref());
+    } else {
+        print_hover_text(result.as_ref());
+    }
+
+    warn_on_compile_errors(&prepared.host, result.is_none());
+    Ok(())
+}
+
+/// Show the signature of a symbol named by notation. Mirrors [`run_hover`].
+pub async fn run_hover_by_symbol(
+    notation: &str,
+    base: &str,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let q = prepare_symbol_query(notation, base)?;
+    match q.engine.hover_by_symbol(&q.uri, &q.parsed, &q.host).await {
+        Ok(hover) => {
+            if json_output {
+                print_hover_json(Some(&hover));
+            } else {
+                print_hover_text(Some(&hover));
+            }
+        }
+        Err(reason) => {
+            if json_output {
+                print_hover_json(None);
+            } else {
+                print_hover_text(None);
+            }
+            report_symbol_error(&q.parsed, &reason);
+        }
+    }
+    Ok(())
+}
+
 /// An empty position-based result is ambiguous (cursor on nothing vs.
 /// symbol table never populated). Surface the underlying errors so the
 /// user doesn't need to re-run `wado query diagnostics` to find out.
@@ -422,6 +474,30 @@ fn print_definition_text(result: Option<&DefinitionResult>) {
         ),
         None => println!("No definition."),
     }
+}
+
+/// Strip the ```` ```wado ```` code fence from a hover value for terminal output.
+fn hover_plaintext(value: &str) -> String {
+    let v = value.trim();
+    let v = v.strip_prefix("```wado").unwrap_or(v);
+    let v = v.strip_prefix('\n').unwrap_or(v);
+    let v = v.strip_suffix("```").unwrap_or(v);
+    v.trim().to_string()
+}
+
+fn print_hover_text(result: Option<&HoverResult>) {
+    match result {
+        Some(h) => println!("{}", hover_plaintext(&h.contents.value)),
+        None => println!("No hover."),
+    }
+}
+
+fn print_hover_json(result: Option<&HoverResult>) {
+    let value = match result {
+        Some(h) => serde_json::to_value(h).unwrap_or(serde_json::Value::Null),
+        None => serde_json::Value::Null,
+    };
+    println!("{}", serde_json::to_string_pretty(&value).unwrap());
 }
 
 fn highlight_kind_str(kind: HighlightKind) -> &'static str {

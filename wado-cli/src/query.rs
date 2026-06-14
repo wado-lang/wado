@@ -11,6 +11,7 @@ enum QueryKind {
     References,
     DocumentHighlight,
     Definition,
+    Hover,
 }
 
 pub struct QueryOptions {
@@ -117,6 +118,11 @@ fn format_usage() -> String {
         "  definition           Jump to the definition of the symbol at --line/--column"
     )
     .unwrap();
+    writeln!(
+        buf,
+        "  hover                Show the signature of the symbol at --line/--column"
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
@@ -171,9 +177,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                     "references" => QueryKind::References,
                     "document-highlight" => QueryKind::DocumentHighlight,
                     "definition" => QueryKind::Definition,
+                    "hover" => QueryKind::Hover,
                     other => {
                         return Err(CliExit::error(format!(
-                            "unknown query kind '{other}'. Available: diagnostics, references, document-highlight, definition"
+                            "unknown query kind '{other}'. Available: diagnostics, references, document-highlight, definition, hover"
                         )));
                     }
                 });
@@ -232,7 +239,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
 
     if matches!(
         kind,
-        QueryKind::References | QueryKind::DocumentHighlight | QueryKind::Definition
+        QueryKind::References
+            | QueryKind::DocumentHighlight
+            | QueryKind::Definition
+            | QueryKind::Hover
     ) {
         if line.is_none() {
             return Err(CliExit::error_with_usage(
@@ -279,6 +289,7 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
             QueryKind::DocumentHighlight => {
                 query_adapter::run_document_highlight_by_symbol(notation, base, opts.json).await
             }
+            QueryKind::Hover => query_adapter::run_hover_by_symbol(notation, base, opts.json).await,
             // Rejected during parse_args.
             QueryKind::Diagnostics => unreachable!("--symbol rejected for diagnostics"),
         };
@@ -315,6 +326,10 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
                 opts.json,
             )
             .await
+        }
+        QueryKind::Hover => {
+            query_adapter::run_hover(input, opts.line.unwrap(), opts.column.unwrap(), opts.json)
+                .await
         }
     }
 }

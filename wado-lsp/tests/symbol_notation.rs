@@ -59,6 +59,17 @@ async fn highlights(
         .await
 }
 
+async fn hover(
+    lib_path: &str,
+    lib_src: &str,
+    module_spec: &str,
+    notation: &str,
+) -> Result<wado_lsp::HoverResult, SymbolQueryError> {
+    let (engine, host) = engine_for(&[(lib_path, lib_src)], module_spec);
+    let parsed = symbol_notation::parse(notation).expect("notation parses");
+    engine.hover_by_symbol(ENTRY_URI, &parsed, &host).await
+}
+
 #[test]
 fn free_function_in_local_module() {
     futures::executor::block_on(async {
@@ -176,6 +187,39 @@ fn document_highlight_classifies_occurrences() {
         assert_eq!(
             summary,
             vec![(0, 7, HighlightKind::Write), (1, 32, HighlightKind::Read),]
+        );
+    });
+}
+
+#[test]
+fn hover_renders_function_signature() {
+    futures::executor::block_on(async {
+        let lib = "pub fn add(a: i32, b: i32) -> i32 { return a + b; }\n";
+        let result = hover("./lib.wado", lib, "./lib.wado", "./lib.wado#add")
+            .await
+            .expect("resolves hover");
+        assert!(
+            result
+                .contents
+                .value
+                .contains("fn add(a: i32, b: i32) -> i32"),
+            "got: {}",
+            result.contents.value
+        );
+    });
+}
+
+#[test]
+fn hover_renders_struct_header() {
+    futures::executor::block_on(async {
+        let lib = "pub struct Point { x: i32, y: i32 }\n";
+        let result = hover("./geo.wado", lib, "./geo.wado", "./geo.wado#Point")
+            .await
+            .expect("resolves hover");
+        assert!(
+            result.contents.value.contains("struct Point"),
+            "got: {}",
+            result.contents.value
         );
     });
 }

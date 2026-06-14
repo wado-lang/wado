@@ -1510,7 +1510,7 @@ fn query_missing_kind() {
 #[test]
 fn query_unknown_kind() {
     wado()
-        .args(["query", "hover"])
+        .args(["query", "bogus"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("unknown query kind"));
@@ -1842,7 +1842,7 @@ fn query_references_requires_line_and_column() {
 #[test]
 fn query_unknown_kind_lists_available_kinds() {
     let output = wado()
-        .args(["query", "hover"])
+        .args(["query", "signature"])
         .assert()
         .failure()
         .get_output()
@@ -1851,7 +1851,7 @@ fn query_unknown_kind_lists_available_kinds() {
     let stderr = String::from_utf8(output).unwrap();
     assert_eq!(
         stderr,
-        "Error: unknown query kind 'hover'. Available: diagnostics, references, document-highlight, definition\n",
+        "Error: unknown query kind 'signature'. Available: diagnostics, references, document-highlight, definition, hover\n",
     );
 }
 
@@ -1993,4 +1993,60 @@ fn query_document_highlight_by_symbol() {
         .success()
         .stdout(predicate::str::contains("lib.wado:1:8: write"))
         .stdout(predicate::str::contains("lib.wado:2:33: read"));
+}
+
+#[test]
+fn query_hover_by_symbol_function() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn add(a: i32, b: i32) -> i32 { return a + b; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "hover", "--symbol", "./lib.wado#add"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn add(a: i32, b: i32) -> i32"));
+}
+
+#[test]
+fn query_hover_position_based() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("m.wado");
+    std::fs::write(&file, "fn add(a: i32, b: i32) -> i32 { return a + b; }\n").unwrap();
+
+    // Cursor on the `add` declaration (line 1, column 4, 1-based).
+    wado()
+        .args([
+            "query",
+            "hover",
+            "--line",
+            "1",
+            "--column",
+            "4",
+            file.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn add(a: i32, b: i32) -> i32"));
+}
+
+#[test]
+fn query_hover_by_symbol_unknown_lists_symbols() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn add(a: i32, b: i32) -> i32 { return a + b; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "hover", "--symbol", "./lib.wado#missing"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No hover."))
+        .stderr(predicate::str::contains("public symbols in ./lib.wado:"))
+        .stderr(predicate::str::contains("add"));
 }

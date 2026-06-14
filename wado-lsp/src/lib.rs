@@ -352,6 +352,21 @@ impl Engine {
         })
     }
 
+    /// Compute hover info (signature / type) for a symbol named by notation.
+    pub async fn hover_by_symbol<H: CompilerHost>(
+        &self,
+        uri: &str,
+        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        host: &H,
+    ) -> Result<HoverResult, SymbolQueryError> {
+        let (snapshot, def) = self.resolve_symbol_def(uri, notation, host).await?;
+        let sem = &snapshot.sem;
+        let symbol = sem
+            .symbol_at(def.ast_id)
+            .ok_or(SymbolQueryError::NoLocation)?;
+        hover::hover_for_item_symbol(sem, symbol).ok_or(SymbolQueryError::NoLocation)
+    }
+
     /// Find every reference to a symbol named by notation, across the loaded
     /// module graph. `include_declaration` adds the declaration site.
     pub async fn references_by_symbol<H: CompilerHost>(

@@ -52,10 +52,11 @@ name, so no entry file is needed — relative modules anchor at `--base` (defaul
 
 - `wado_compiler::symbol_notation` — the parser (`MODULE#SYMBOL`).
 - `Semantics::resolve_symbol_notation` — notation → `Definition`.
-- `Engine::{definition,references,document_highlight}_by_symbol` — drive
+- `Engine::{definition,references,document_highlight,hover}_by_symbol` — drive
   resolution over a synthetic entry that `use`s the module.
-- `wado query {definition,references,document-highlight} --symbol <notation>
-  [--base <dir>]`.
+- `wado query {definition,references,document-highlight,hover} --symbol
+  <notation> [--base <dir>]`. `hover` also works position-based
+  (`--line`/`--column`), rendering the signature / type.
 
 Name-based results are bounded by what the synthetic entry loads: references
 across a whole project still need a project-wide context (a follow-up).
@@ -64,10 +65,11 @@ across a whole project still need a project-wide context (a follow-up).
 
 - [x] Parse the notation (`wado_compiler::symbol_notation`).
 - [x] `--symbol` locator for `definition` / `references` / `document-highlight`
-      on free / module-level symbols.
+      / `hover` on free / module-level symbols.
+- [x] `hover` kind: notation (or position) → signature / type.
+- [ ] Include doc-comment summaries in `hover` output.
 - [ ] Resolve members (`Type::m`, `Type.m`, `Type^Trait::m`) — needs an
       impl/method index; today they return "not yet supported".
-- [ ] Add a `hover` kind: notation → signature / type + doc summary.
 - [ ] Project-wide context so `references` spans the whole workspace, not just
       the notation's import graph.
 - [ ] Convert between this notation and the internal `name.rs` canonical form.

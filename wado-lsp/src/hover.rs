@@ -56,6 +56,24 @@ pub(crate) fn find_hover(ctx: &QueryContext, position: Position) -> Option<Hover
     })
 }
 
+/// Hover for an item-level [`Symbol`] resolved by name (no cursor). Renders
+/// the signature; locals are not name-resolution targets so they yield `None`.
+/// The result carries no `range` — there is no request position to anchor it.
+#[must_use]
+pub(crate) fn hover_for_item_symbol(sem: &Semantics, symbol: &Symbol) -> Option<HoverResult> {
+    if matches!(symbol.kind, SymbolKind::Variable(_)) {
+        return None;
+    }
+    let signature = render_item_signature(sem, symbol)?;
+    Some(HoverResult {
+        contents: MarkupContent {
+            kind: MarkupKind::Markdown,
+            value: format!("```wado\n{signature}\n```"),
+        },
+        range: None,
+    })
+}
+
 /// Render a signature for the given item-level symbol.
 fn render_item_signature(sem: &Semantics, symbol: &Symbol) -> Option<String> {
     let module = sem.modules.get(symbol.module_source())?;
