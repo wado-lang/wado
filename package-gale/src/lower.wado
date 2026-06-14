@@ -44,7 +44,7 @@ use {
     RepeatKind,
     GroupElement,
 } from "./ir.wado";
-use { alt_is_wildcard_led } from "./alt_grouping.wado";
+use { alt_is_wildcard_led, compute_overlap_groups, alt_sort_priority } from "./alt_grouping.wado";
 use {
     rule_type_name,
     literal_const_name,
@@ -65,6 +65,7 @@ use {
     general_group_alt_struct_name,
     is_storable_group,
     first_contains,
+    dedup_name,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext, is_nullable, union_kind_arrays, FOLLOW_MASK_MAX_K } from "./gen_context.wado";
@@ -1318,53 +1319,6 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>) -> LrDispatchData {
     };
 }
 
-/// Union-find overlap grouping over per-alt first sets. Mirrors
-/// `alt_grouping::compute_overlap_groups` — alts whose first sets
-/// share at least one token end up in the same group; disjoint
-/// alts get their own singleton group. The output's iteration order
-/// matches the input order (first occurrence wins as group root).
-fn compute_overlap_groups(first_sets: &List<List<String>>) -> List<List<i32>> {
-    let n = first_sets.len();
-    let mut group_ids: List<i32> = [];
-    for let mut i = 0; i < n; i += 1 {
-        group_ids.push(i);
-    }
-    for let mut i = 0; i < n; i += 1 {
-        for let mut j = i + 1; j < n; j += 1 {
-            if first_sets_overlap(&first_sets[i], &first_sets[j]) {
-                let gi = group_ids[i];
-                let gj = group_ids[j];
-                if gi != gj {
-                    for let mut k = 0; k < n; k += 1 {
-                        if group_ids[k] == gj {
-                            group_ids[k] = gi;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    let mut seen_ids: List<i32> = [];
-    let mut groups: List<List<i32>> = [];
-    for let mut i = 0; i < n; i += 1 {
-        let gid = group_ids[i];
-        let mut found: i32 = -1;
-        for let mut s = 0; s < seen_ids.len(); s += 1 {
-            if seen_ids[s] == gid {
-                found = s;
-                break;
-            }
-        }
-        if found >= 0 {
-            groups[found].push(i);
-        } else {
-            seen_ids.push(gid);
-            groups.push([i]);
-        }
-    }
-    return groups;
-}
-
 fn first_sets_overlap(a: &List<String>, b: &List<String>) -> bool {
     for let tk of a {
         if first_set_contains(b, tk) {
@@ -1560,37 +1514,6 @@ fn sort_alts_by_element_count(indices: &mut List<i32>, alts: &List<Alternative>)
     }
 }
 
-/// Per-alt sorting priority, mirroring `alt_grouping::alt_sort_priority`.
-/// Higher = preferred at dispatch time. Single-element alts whose
-/// only element is a `RuleRef` get a higher tier than multi-element
-/// `RuleRef`-led alts so SQLite-style `tor (',' tor)* | join_clause`
-/// groupings still pick the rule-ref catch-all on tie.
-///
-/// Skips leading nullable elements so the classification matches on the
-/// first element that actually contributes to FIRST — `b? K_TOKEN_X` gets
-/// `MULTI_TOKEN_LED` (4) rather than `MULTI_RULE_REF_LED` (2).
-fn alt_sort_priority(alt: &Alternative) -> i32 {
-    if alt.elements.len() == 1 {
-        if let RuleRef(_) = alt.elements[0] {
-            return 3;
-        }
-        return 1;
-    }
-    for let elem of &alt.elements {
-        if is_nullable(elem) {
-            continue;
-        }
-        match *elem {
-            TokenRef(_) | Literal(_) => {
-                return 4;
-            },
-            _ => {
-                return 2;
-            },
-        }
-    }
-    return 2;
-}
 
 /// Whether the rule has at least one directly-left-recursive
 /// alternative. Mirrors `parser_gen::is_left_recursive`'s shallow
@@ -3880,40 +3803,3 @@ fn collect_excluded_kinds_from_group(g: &GroupElement) -> List<String> {
     return kinds;
 }
 
-/// Field-name deduplication mirroring `gen_util::dedup_name`. The
-/// first occurrence keeps the base name; subsequent occurrences get
-/// `<base>_<n>` for `n = 2, 3, ...`.
-///
-/// Re-implemented here (not imported from `parser_gen.wado`) because
-/// Phase 4's split will move every emit-side helper out of
-/// `parser_gen.wado`; sharing utilities cross-file before the split
-/// would just create import churn for a few lines of straightforward
-/// counting.
-fn dedup_name(base: &String, counts: &mut List<[String, i32]>) -> String {
-    let count = get_count(counts, base);
-    increment_count(counts, base);
-    if count > 0 {
-        return `{*base}_{count + 1}`;
-    }
-    return *base;
-}
-
-fn get_count(counts: &List<[String, i32]>, name: &String) -> i32 {
-    for let entry of counts {
-        if entry.0 == *name {
-            return entry.1;
-        }
-    }
-    return 0;
-}
-
-fn increment_count(counts: &mut List<[String, i32]>, name: &String) {
-    for let mut i = 0; i < counts.len(); i += 1 {
-        if counts[i].0 == *name {
-            let prev = counts[i].1;
-            counts[i] = [*name, prev + 1];
-            return;
-        }
-    }
-    counts.push([*name, 1]);
-}
