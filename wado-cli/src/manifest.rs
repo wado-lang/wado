@@ -114,35 +114,32 @@ pub fn resolve_lib_input(
     explicit_input: Option<String>,
     usage: &str,
 ) -> Result<(String, String), CliExit> {
-    let project = match explicit_input {
-        Some(input) => {
-            let path = Path::new(&input);
-            if !path.is_dir() {
-                return Err(CliExit::error(
-                    "`--lib` requires a package directory (or a wado.toml in the \
-                     current directory); a single .wado file has no [package] namespace",
+    let project = if let Some(input) = explicit_input {
+        let path = Path::new(&input);
+        if !path.is_dir() {
+            return Err(CliExit::error(
+                "`--lib` requires a package directory (or a wado.toml in the \
+                 current directory); a single .wado file has no [package] namespace",
+            ));
+        }
+        load_from_dir(path).map_err(|e| match e {
+            DiscoveryError::Io(io_err) if io_err.kind() == io::ErrorKind::NotFound => {
+                CliExit::error(format!("no wado.toml found in directory '{input}'"))
+            }
+            other => CliExit::error(other),
+        })?
+    } else {
+        let cwd = env::current_dir()
+            .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
+        match discover(&cwd) {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                return Err(CliExit::error_with_usage(
+                    "no input file specified and no wado.toml found",
+                    usage,
                 ));
             }
-            load_from_dir(path).map_err(|e| match e {
-                DiscoveryError::Io(io_err) if io_err.kind() == io::ErrorKind::NotFound => {
-                    CliExit::error(format!("no wado.toml found in directory '{input}'"))
-                }
-                other => CliExit::error(other),
-            })?
-        }
-        None => {
-            let cwd = env::current_dir()
-                .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
-            match discover(&cwd) {
-                Ok(Some(p)) => p,
-                Ok(None) => {
-                    return Err(CliExit::error_with_usage(
-                        "no input file specified and no wado.toml found",
-                        usage,
-                    ));
-                }
-                Err(e) => return Err(CliExit::error(e)),
-            }
+            Err(e) => return Err(CliExit::error(e)),
         }
     };
 
