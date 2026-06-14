@@ -114,13 +114,11 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
     let manifest_pair = crate::compile::load_nearest_manifest(path);
-    let dep_index = manifest_pair
-        .as_ref()
-        .map(|(manifest, root)| wado_lsp::host::dependency_index_from(manifest, root, &base_path));
-    let mut host = FilesystemCompilerHost::with_log_level(base_path, opts.log_level);
-    if let Some(index) = dep_index {
-        host = host.with_dependency_index(index);
-    }
+    let host = crate::compile::attach_manifest_deps(
+        FilesystemCompilerHost::with_log_level(base_path.clone(), opts.log_level),
+        manifest_pair.as_ref(),
+        &base_path,
+    );
 
     let manifest_root = manifest_pair
         .as_ref()

@@ -87,6 +87,19 @@ impl InvocationIndex {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// Iterate over recorded entries as `(decl_file, from, entry_uri)`.
+    ///
+    /// For tooling that runs generators against a file's real path but then
+    /// resolves that file under a different module identity (e.g. the
+    /// synthetic entry of a `wado query --symbol` request): read the entries
+    /// out, rewrite `decl_file` to the identity the loader will use, and
+    /// rebuild a fresh index with [`insert`](Self::insert).
+    pub fn entries(&self) -> impl Iterator<Item = (&str, &str, &str)> {
+        self.entries
+            .iter()
+            .map(|((decl, from), uri)| (decl.as_str(), from.as_str(), uri.as_str()))
+    }
 }
 
 /// Scan every `UseDecl` in `modules` for an inline

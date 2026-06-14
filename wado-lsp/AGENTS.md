@@ -37,7 +37,12 @@ Language service engine for the Wado compiler toolchain.
 `Rc<Snapshot>` built by composing `wado_compiler::parse` →
 `wado_compiler::load` → `wado_compiler::semantics_of`, with kiln
 invocation discovery (`kiln::prepare_invocations`) interleaved between
-parse and load.
+parse and load. A runtime-backed host that already ran the generators
+can instead supply a precomputed `InvocationIndex` via
+`open_document_with_invocations`; when present it is used verbatim and
+consume-only discovery is skipped (native `wado query` does this — see
+the Kiln WEP). `update_document` drops an injected index with the
+snapshot, so a changed document falls back to consume-only.
 The snapshot is built on first query and shared across back-to-back
 queries on the same document version; `update_document` /
 `close_document` invalidates it. The negotiated `PositionEncoding`
