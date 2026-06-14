@@ -1107,12 +1107,10 @@ fn method_name_for_type(
     tt: &Rc<RefCell<TypeTable>>,
 ) -> LocalMethodName {
     let tt_ref = tt.borrow();
-    // Generic containers (`GenericInstance`, `BuiltinArray`) dispatch by base
-    // name + struct type args — the same canonicalization the monomorphizer
-    // registers the impl under (`TypeTable::generic_dispatch_components`), so
-    // the call name matches. The `_` fallback below would instead mangle the
-    // full `Array<i32>` / `List<i32>` spelling and trip `LocalMethodName::new`'s
-    // no-`<` invariant.
+    // Generic containers dispatch by (base name, struct type args) via
+    // `generic_dispatch_components`. The `_` fallback below would instead mangle
+    // the full `Array<i32>` / `List<i32>` spelling and trip
+    // `LocalMethodName::new`'s no-`<` invariant.
     if let Some((name, type_args)) = tt_ref.generic_dispatch_components(type_id) {
         let arg_names: Vec<String> = type_args
             .iter()

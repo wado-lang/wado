@@ -1,8 +1,7 @@
-// Formatting an `Array<T>` directly via the template format traits.
-// `Array<T>` is `ResolvedType::BuiltinArray`, which the template synthesis
-// dispatch (`method_name_for_type`) once routed through its `_` fallback,
-// mangling the receiver as `Array<i32>` and tripping `LocalMethodName::new`'s
-// "no type params in the base struct name" invariant.
+// Formatting an `Array<T>` directly via the template format traits. `Array<T>`
+// is `ResolvedType::BuiltinArray`; the template dispatch must mangle it under
+// the base name `Array`, not the full `Array<i32>` (which trips
+// `LocalMethodName::new`'s no-type-params invariant).
 
 fn make(a: i32, b: i32, c: i32) -> Array<i32> {
     let mut arr: Array<i32> = Array::new(3);

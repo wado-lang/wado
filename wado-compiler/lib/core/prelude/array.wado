@@ -145,10 +145,9 @@ impl IndexValue<RangeInclusive<i32>> for Array<T> {
 }
 
 // Shared `[a, b, …]` Inspect/Display rendering for the GC-array-backed
-// sequences: `Array<T>` directly, and `List<T>` over its used prefix (which
-// passes `&self.repr` and `self.used`). `repr` is the backing array and `len`
-// its logical length; `limit` is the resolved element cap (negative = none),
-// and `marker` appends `, ...` when elements are dropped.
+// sequences (`Array<T>` itself; `List<T>` over its used prefix). `limit` is the
+// resolved element cap (negative = none); `marker` appends `, ...` when
+// elements are dropped.
 pub fn write_seq_inspect<T: Inspect>(repr: &Array<T>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
     f.write_char('[');
     let mut shown = 0;

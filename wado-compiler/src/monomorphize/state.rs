@@ -490,10 +490,7 @@ impl Monomorphizer {
         type_id: TypeId,
         type_table: &TypeTable,
     ) -> Option<(String, Vec<TypeId>)> {
-        // Generic containers (`GenericInstance`, and the raw GC array
-        // `Array<T>`) dispatch by base name + struct type args. Shared with the
-        // trait-method call sites so a call mangles to the same name this
-        // registers the impl under.
+        // Generic containers share their dispatch name with the call sites.
         if let Some(info) = type_table.generic_dispatch_components(type_id) {
             return Some(info);
         }

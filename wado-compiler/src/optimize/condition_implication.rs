@@ -167,11 +167,8 @@ impl GuardFact {
     }
 
     /// Whether this fact proves the bounds check guarded by `condition` dead.
-    ///
-    /// `condition` is the failing-path predicate, recognized in either the
-    /// direct `check_lhs >= check_rhs` form or the negated-`<` form an `assert`
-    /// expands to (see [`failure_ge_operands`]); both denote `check_lhs >=
-    /// check_rhs`.
+    /// `condition` denotes the failing predicate `check_lhs >= check_rhs`
+    /// (see [`failure_ge_operands`]).
     ///
     /// The check's left side must decompose to `var + j` with
     /// `0 <= j <= max_offset`; the guard then gives
@@ -259,7 +256,6 @@ fn ge_operands_of_value(engine: &mut Engine, value: ValueId) -> Option<(ValueId,
     };
     match shape {
         Shape::Ge(lhs, rhs) => Some((lhs, rhs)),
-        // `!(x < y)` ≡ `x >= y`.
         Shape::Not(inner) => strict_lt_operands(engine, inner),
         // `(x < y) == false` ≡ `!(x < y)`; the false literal may be on either side.
         Shape::Eq(lhs, rhs) => {
@@ -286,8 +282,7 @@ fn strict_lt_operands(engine: &mut Engine, value: ValueId) -> Option<(ValueId, V
     }
 }
 
-/// `(lhs, rhs, is_strict)` if `value` is a `<` (`true`) or `<=` (`false`)
-/// comparison.
+/// The operands and strictness (`true` = `<`) if `value` is a `<` / `<=`.
 fn lt_of_value(engine: &mut Engine, value: ValueId) -> Option<(ValueId, ValueId, bool)> {
     match engine.value_kind(value) {
         ValueKind::Binary {
@@ -534,10 +529,8 @@ fn process_stmt_nested_loops(engine: &mut Engine, s: StmtId) -> bool {
 /// (e.g. `let __c = i < n`), and the guard condition may itself be such a
 /// temporary — both are resolved through the value graph.
 fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<(GuardFact, usize)> {
-    // Leading `let`s bind pure values (no control flow), so the first
-    // `if … { break }` after them still dominates the rest of the body. The
-    // scan only reads statement kinds, so it borrows the body rather than
-    // cloning the whole stmt vector.
+    // Leading `let`s have no control flow, so the first `if … { break }` after
+    // them still dominates the body.
     let guard_idx = engine.body.blocks[loop_body].stmts.iter().position(|s| {
         !matches!(
             engine.body.stmts[*s].kind,
