@@ -2192,3 +2192,31 @@ fn query_references_by_symbol_method_include_declaration() {
         .stdout(predicate::str::contains("geo.wado:2:"))
         .stdout(predicate::str::contains("use.wado:2:"));
 }
+
+#[test]
+fn query_references_by_symbol_tolerates_unanalyzable_sibling() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("main.wado"),
+        "use { helper } from \"./lib.wado\";\nfn run() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+    // A sibling that fails to load (missing import) must not sink the whole
+    // workspace reference search.
+    std::fs::write(
+        dir.path().join("broken.wado"),
+        "use { nope } from \"./does_not_exist.wado\";\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "references", "--symbol", "./lib.wado#helper"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("main.wado:2:26"));
+}

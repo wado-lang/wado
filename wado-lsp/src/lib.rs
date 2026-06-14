@@ -184,6 +184,17 @@ impl Engine {
         self.documents.get(uri).map(|d| d.text.as_str())
     }
 
+    /// Whether `uri` analyzes to a non-empty module graph. `false` when the
+    /// loader/analysis hard-failed (e.g. a missing import, or a compile-time
+    /// codegen module the LSP path can't produce) — `build_semantics` returns
+    /// an empty `Semantics` in that case. Used to probe whether importing a
+    /// workspace file would sink a combined analysis.
+    pub async fn analyzes<H: CompilerHost>(&self, uri: &str, host: &H) -> bool {
+        self.snapshot(uri, host)
+            .await
+            .is_some_and(|s| !s.sem.modules.is_empty())
+    }
+
     /// Compute (or reuse) a [`Snapshot`] for the given document.
     ///
     /// On a cache hit returns the same `Rc` so call sites that issue

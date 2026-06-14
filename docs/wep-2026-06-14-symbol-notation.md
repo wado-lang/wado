@@ -82,8 +82,10 @@ target module's import graph.
       the type's members.
 - [x] `references` spans the whole workspace by default: the synthetic entry
       `use`s every `.wado` under `--base` (default cwd), so use→def edges from
-      sibling files are recorded. (A broken file in the tree degrades the load;
-      scope with `--base`.)
+      sibling files are recorded. The combined load is all-or-nothing, so if it
+      fails the query re-imports only the files that analyze on their own,
+      dropping any that can't load (e.g. a compile-time-codegen module without a
+      build cache).
 - [ ] Include doc-comment summaries in `hover` output.
 - [ ] `wado doc` anchors / type cross-links keyed by the notation.
 - [ ] Convert internal `name.rs` names back into this notation (so optimizer

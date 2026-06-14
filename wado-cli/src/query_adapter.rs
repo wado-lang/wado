@@ -122,48 +122,97 @@ struct SymbolQuery {
     uri: String,
 }
 
-/// Parse the notation and build a synthetic entry that `use`s its module,
-/// anchored at `base` so relative modules resolve from there (`core:` /
-/// `wasi:` are location-independent).
-///
-/// When `load_workspace`, the entry also `use`s every `.wado` file under
-/// `base`, so the resulting `Semantics` records use→def edges from the whole
-/// workspace — required for `references` to span more than the target module's
-/// own import graph.
-fn prepare_symbol_query(
-    notation: &str,
-    base: &str,
-    load_workspace: bool,
-) -> Result<SymbolQuery, CliExit> {
+/// Parse notation + resolve the base directory, host, and synthetic entry URI.
+struct SymbolEnv {
+    parsed: wado_compiler::symbol_notation::SymbolNotation,
+    host: FilesystemCompilerHost,
+    base_dir: std::path::PathBuf,
+    uri: String,
+}
+
+fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     let parsed = wado_compiler::symbol_notation::parse(notation)
         .map_err(|e| CliExit::error(format!("invalid symbol notation: {e}")))?;
-
     let base_dir = fs::canonicalize(base).unwrap_or_else(|_| Path::new(base).to_path_buf());
     let host = FilesystemCompilerHost::silent(base_dir.clone());
     // Synthetic entry: never read from disk (opened with explicit text), but
     // its directory anchors relative-module resolution at `base`.
-    let entry_path = base_dir.join("__wado_query__.wado");
-    let uri = format!("file://{}", entry_path.display());
-
-    let mut synthetic = format!("use __wado_query_ns from \"{}\";\n", parsed.module);
-    if load_workspace {
-        for (i, spec) in workspace_module_specs(&base_dir).into_iter().enumerate() {
-            if spec == parsed.module {
-                continue;
-            }
-            synthetic.push_str(&format!("use __wado_ws_{i} from \"{spec}\";\n"));
-        }
-    }
-
-    let mut engine = wado_lsp::Engine::new();
-    engine.open_document(&uri, synthetic);
-
-    Ok(SymbolQuery {
+    let uri = format!("file://{}", base_dir.join("__wado_query__.wado").display());
+    Ok(SymbolEnv {
         parsed,
-        engine,
         host,
+        base_dir,
         uri,
     })
+}
+
+/// Open an engine on a synthetic entry that `use`s each module in `imports`.
+fn open_entry(uri: &str, imports: &[String]) -> wado_lsp::Engine {
+    let mut synthetic = String::new();
+    for (i, module) in imports.iter().enumerate() {
+        synthetic.push_str(&format!("use __wado_q{i} from \"{module}\";\n"));
+    }
+    let mut engine = wado_lsp::Engine::new();
+    engine.open_document(uri, synthetic);
+    engine
+}
+
+/// Build a single-module query context (the notation's module only). Used by
+/// `definition` / `hover` / `document-highlight`.
+fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
+    let env = symbol_env(notation, base)?;
+    let engine = open_entry(&env.uri, std::slice::from_ref(&env.parsed.module));
+    Ok(SymbolQuery {
+        parsed: env.parsed,
+        engine,
+        host: env.host,
+        uri: env.uri,
+    })
+}
+
+/// Build a workspace query context for `references`: the synthetic entry `use`s
+/// the target module plus every `.wado` under `base`, so use→def edges from
+/// sibling files are recorded. The combined load is all-or-nothing, so if it
+/// fails (one file the analyzer can't load — e.g. a compile-time-codegen module
+/// without a build cache), re-import only the target and the files that analyze
+/// on their own, dropping the offender.
+async fn prepare_references_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
+    let env = symbol_env(notation, base)?;
+    let target = env.parsed.module.clone();
+    let workspace = workspace_module_specs(&env.base_dir);
+
+    let mut engine = open_entry(&env.uri, &imports_with_target(&target, &workspace));
+    if !engine.analyzes(&env.uri, &env.host).await {
+        let mut loadable = Vec::new();
+        for spec in &workspace {
+            if *spec != target && file_analyzes(&env.base_dir, &env.host, spec).await {
+                loadable.push(spec.clone());
+            }
+        }
+        engine = open_entry(&env.uri, &imports_with_target(&target, &loadable));
+    }
+
+    Ok(SymbolQuery {
+        parsed: env.parsed,
+        engine,
+        host: env.host,
+        uri: env.uri,
+    })
+}
+
+/// `[target, ...extra]` with `target` first and any duplicate of it dropped.
+fn imports_with_target(target: &str, extra: &[String]) -> Vec<String> {
+    let mut imports = vec![target.to_string()];
+    imports.extend(extra.iter().filter(|s| s.as_str() != target).cloned());
+    imports
+}
+
+/// Whether `spec` analyzes on its own (imported into a throwaway entry).
+async fn file_analyzes(base_dir: &Path, host: &FilesystemCompilerHost, spec: &str) -> bool {
+    let uri = format!("file://{}", base_dir.join("__wado_probe__.wado").display());
+    let mut engine = wado_lsp::Engine::new();
+    engine.open_document(&uri, format!("use __p from \"{spec}\";\n"));
+    engine.analyzes(&uri, host).await
 }
 
 /// Relative module specs (`./sub/x.wado`) for every `.wado` file under `root`,
@@ -255,7 +304,7 @@ pub async fn run_definition_by_symbol(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let q = prepare_symbol_query(notation, base, false)?;
+    let q = prepare_symbol_query(notation, base)?;
     let result = q
         .engine
         .definition_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
@@ -290,7 +339,7 @@ pub async fn run_references_by_symbol(
     json_output: bool,
 ) -> Result<(), CliExit> {
     // References span the whole workspace, so load every `.wado` under `base`.
-    let q = prepare_symbol_query(notation, base, true)?;
+    let q = prepare_references_query(notation, base).await?;
     let result = q
         .engine
         .references_by_symbol(&q.uri, &q.parsed, include_declaration, public_only, &q.host)
@@ -324,7 +373,7 @@ pub async fn run_document_highlight_by_symbol(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let q = prepare_symbol_query(notation, base, false)?;
+    let q = prepare_symbol_query(notation, base)?;
     let result = q
         .engine
         .document_highlight_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
@@ -404,7 +453,7 @@ pub async fn run_hover_by_symbol(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let q = prepare_symbol_query(notation, base, false)?;
+    let q = prepare_symbol_query(notation, base)?;
     let result = q
         .engine
         .hover_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
