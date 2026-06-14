@@ -17,22 +17,26 @@ struct PreparedQuery {
     host: FilesystemCompilerHost,
 }
 
+type ManifestPair = (wado_manifest::Manifest, std::path::PathBuf);
+
 async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
     let path = Path::new(filename);
     let source = fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
 
-    let host = entry_host(path);
-
-    // The loader sees the entry under its canonicalized path (this is what
-    // `Uri::to_filename` yields for `uri`), so run the kiln pipeline against
-    // the same path: the redirect index keys `decl_file` by the entry path,
-    // and a mismatch would silently miss.
+    // Derive every entry-relative fact — host base, manifest root, the kiln
+    // pipeline's entry, and the loader's `decl_file` (via `Uri::to_filename`
+    // of `uri`) — from one canonical path and one manifest load, the way
+    // `wado compile` does. Mixing a relative path for the host with the
+    // canonical path for the pipeline would seed the host's dependency index
+    // from a different manifest root than the pipeline uses.
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let manifest_pair = crate::compile::load_nearest_manifest(&canonical);
+    let host = entry_host(&canonical, manifest_pair.as_ref());
     let uri = format!("file://{}", canonical.display());
 
     let mut engine = wado_lsp::Engine::new();
-    match run_generators_for(&canonical, &host).await {
+    match run_generators_for(&canonical, &host, manifest_pair).await {
         Some(invocations) => engine.open_document_with_invocations(&uri, source, invocations),
         None => engine.open_document(&uri, source),
     }
@@ -43,16 +47,17 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
 /// Silent, dependency-seeded host based at `entry_file`'s directory — the
 /// base `load_source` joins a generator's relative inputs against. Mirrors
 /// how `wado compile` hosts an entry file, so generators resolve their inputs
-/// identically on the query path.
-fn entry_host(entry_file: &Path) -> FilesystemCompilerHost {
+/// identically on the query path. `manifest_pair` must be the one
+/// [`run_generators_for`] is given, so the host's dependency index and the
+/// pipeline share a single manifest root.
+fn entry_host(entry_file: &Path, manifest_pair: Option<&ManifestPair>) -> FilesystemCompilerHost {
     let base = entry_file
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let manifest_pair = crate::compile::load_nearest_manifest(entry_file);
     crate::compile::attach_manifest_deps(
         FilesystemCompilerHost::silent(base.clone()),
-        manifest_pair.as_ref(),
+        manifest_pair,
         &base,
     )
 }
@@ -68,8 +73,8 @@ fn entry_host(entry_file: &Path) -> FilesystemCompilerHost {
 async fn run_generators_for(
     entry_file: &Path,
     host: &FilesystemCompilerHost,
+    manifest_pair: Option<ManifestPair>,
 ) -> Option<InvocationIndex> {
-    let manifest_pair = crate::compile::load_nearest_manifest(entry_file);
     match crate::compile::maybe_run_pipeline(entry_file, host, false, manifest_pair).await {
         Ok(outcome) => Some(outcome.invocations),
         Err(e) => {
@@ -246,9 +251,11 @@ async fn symbol_invocations(env: &SymbolEnv) -> Option<InvocationIndex> {
     let target_abs = env.base_dir.join(&module_key).canonicalize().ok()?;
     // The generator's relative inputs resolve against its declaring file's
     // directory, so run it with a host based there — not `env.host`, which is
-    // based at `base_dir` to resolve the synthetic entry's imports.
-    let pipeline_host = entry_host(&target_abs);
-    let raw = run_generators_for(&target_abs, &pipeline_host).await?;
+    // based at `base_dir` to resolve the synthetic entry's imports. Host and
+    // pipeline share one manifest load, anchored at the target.
+    let manifest_pair = crate::compile::load_nearest_manifest(&target_abs);
+    let pipeline_host = entry_host(&target_abs, manifest_pair.as_ref());
+    let raw = run_generators_for(&target_abs, &pipeline_host, manifest_pair).await?;
     let target_decl = target_abs.to_string_lossy();
     let mut translated = InvocationIndex::new();
     for (decl, from, uri) in raw.entries() {
