@@ -41,7 +41,7 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query;
 use super::dae;
-use super::gate::{FunctionGate, FunctionId};
+use super::gate::{FunctionGate, FunctionId, GatedPass};
 
 type FnKey = dae::FnKey;
 
@@ -50,8 +50,8 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
     let type_table = project.type_table.borrow();
 
     let mut candidates: IndexSet<FnKey> = IndexSet::default();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
+    for fid in gate.dirty_funcs(GatedPass::Drve, project.functions.len()) {
+        let func = project.functions[fid.index()].borrow();
         if !is_eligible(&func, &pinned, &type_table) {
             continue;
         }

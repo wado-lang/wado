@@ -13,11 +13,12 @@ Stage 3 – 6 rule migrations onto the ValueGraph — culminating in the
 retirement of niri's per-local `field_env` (the ValueGraph now owns all
 field reaching-def; one `int128_cast` reinterpret assert is a +36-byte
 code-size residual deferred to `mod_ref.rs`). The interprocedural worklist
-(Stage 9) is the remaining required-path item. Full Layer-2 promotion (Skel
-pure-`ExprKind` retirement and saturation-driven engine) stays in this
-WEP as the terminal ideal but is gated behind measurement — see "Why
-Layer 2 promotion is deferred" and the "Optional acceleration" entries
-in the migration plan.
+(Stage 9) has landed: the interprocedural passes now pull their candidate set
+from the gate's dirty set rather than scanning every function. The required
+path is complete. Full Layer-2 promotion (Skel pure-`ExprKind` retirement and
+saturation-driven engine) stays in this WEP as the terminal ideal but is gated
+behind measurement — see "Why Layer 2 promotion is deferred" and the "Optional
+acceleration" entries in the migration plan.
 
 ## Context
 
@@ -230,6 +231,20 @@ WIR output stays byte-identical.
   - `condition_implication` unified into one `GuardFact` (facts go stale by
     construction — a mutation changes the operand's `ValueId`); `licm` hoists by
     pre-header `ValueId` stability.
+- [x] **Stage 9 — interprocedural worklist.** `inline` / `dae` / `drve` /
+      `sroa_param` / `value_copy_demote` pull their candidates from the gate's
+      dirty set (`FunctionGate::dirty_funcs`) instead of scanning every function;
+      `mark_changed` re-runs affected callers when a callee shrinks, with
+      `OptConfig::iterations` the quiescence bound. Terminal stages
+      (`multi_value_return`, `field_scalarize`, `const_object_globalization`,
+      `dce`) stay explicit. Propagation stays both-direction; it over-approximates
+      but measured byte-identical to a fresh-graph rebuild, so it costs no
+      optimization quality today. A directed (callee-shrink → callers) narrowing
+      is deferred: it drops the edges `inline` adds to the build-once call graph,
+      and a per-iteration rebuild does **not** recover them (the staleness is
+      intra-iteration — `inline` adds an edge and a callee changes within the
+      same round), so it would need immediate incremental edge maintenance —
+      fragile, for a net-neutral gain.
 
 ### Open
 
@@ -240,12 +255,6 @@ WIR output stays byte-identical.
 - [ ] **Stage 6 — induction-variable recognition** (`Opaque` tagged
       `{ base, step }`). Not needed yet — post-increment reads already appear
       as `Add(opaque_i, step)` — so it lands when a rule first wants it.
-- [ ] **Stage 9 — interprocedural worklist.** Move `inline` / `dae` / `drve` /
-      `sroa_param` / `value_copy_demote` onto a call-graph worklist that re-runs
-      affected callers when a callee shrinks; `OptConfig::iterations` becomes the
-      worklist convergence bound. Terminal stages (`multi_value_return`,
-      `field_scalarize`, `const_object_globalization`, `dce`) stay explicit. The
-      stub per-pass walkers are then deleted in bulk.
 
 ### Optional acceleration (measured-deferred)
 
@@ -311,6 +320,36 @@ is deferred".
   their walks).
 - Compile-time target: package-gale optimise phase ~1.5× faster than
   the current substrate-only baseline. Aspirational, not committed.
+
+### Measured: optimizer hot path (package-gale, dev build)
+
+A native sampling profile (`samply`) of `wado compile -O2` on package-gale
+is flat — no single function exceeds ~1.6% self-time — but the inclusive view
+is clear: `run_gated` (the gated intra passes) is ~48% of compile CPU, and
+inside it the dominant rebuildable cost is the per-function `ValueGraph` build
+(`builder::build` + `Engine::value` ~22%, plus flow joins `join_overlay` /
+`join_heap` / `flow_join` ~16%) and the alias-set computation (~14%) — all
+rebuilt from scratch per pass per function and discarded.
+
+Two findings shaped the next steps:
+
+- Sharing the per-function `ValueGraph` (+ alias sets) across `cse` /
+  `store_load_forward` / `condition_implication`, keyed by `FunctionGate`'s
+  revision, lands byte-output-identical and cuts the optimise phase ~7%
+  (`store_load_forward` 1.77s → 1.13s, `condition_implication` 1.65s → 1.24s).
+  `licm` seeds loop-entry params differently and has no within-iteration
+  sharing partner, so it stays uncached.
+- The `ValueGraph` build is **compute-bound, not allocation-bound**: pooling
+  the output maps (`value_of` / `pool` / `literal_source` / `loop_entry_values`)
+  across builds measured no improvement (`licm`, which always rebuilds,
+  unchanged). The cost is the walk + hash-cons + flow joins, not the map
+  allocation. Buffer pooling is a dead end here.
+
+So the remaining levers are (1) an incremental `ValueGraph` — re-walk only the
+mutated region of a changed function instead of rebuilding it whole (the cache
+only helps _unchanged_ functions), and (2) function-level parallelism (the
+per-function build / walk is independent). Both are prerequisites to the ~1.5×
+target; the full single-worklist promotion subsumes (1).
 
 ### Additional effect — if optional acceleration ever activates
 

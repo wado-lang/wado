@@ -20,7 +20,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use cranelift_entity::EntityRef;
 
 use super::arena_query;
-use super::gate::{FunctionGate, FunctionId};
+use super::gate::{FunctionGate, FunctionId, GatedPass};
 use crate::token::Span;
 
 // The inline threshold is based on expression count, which provides a more
@@ -660,8 +660,10 @@ pub fn inline_functions(
 
     let mut changed = false;
 
-    // Inline at call sites
-    for (caller_idx, func_rc) in project.functions.iter().enumerate() {
+    // Inline at call sites.
+    for fid in gate.dirty_funcs(GatedPass::Inline, project.functions.len()) {
+        let caller_idx = fid.index();
+        let func_rc = project.functions[caller_idx].clone();
         let mut func = func_rc.borrow_mut();
         let caller_module_source = func.module_source.clone();
         let func_name = func.name.clone();
