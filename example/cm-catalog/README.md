@@ -1,0 +1,49 @@
+# cm-catalog
+
+An enumeration of the Component Model value-type ABI surface as Wado `export`
+functions. Every export is an `identity` — it returns its argument unchanged —
+named after the type it carries, so the export exercises both lowering (the
+parameter) and lifting (the result) for exactly one type.
+
+The generated [`cm-catalog.wit`](./cm-catalog.wit) is the artifact: a
+self-describing WIT document listing every covered shape. It is meant to be
+published to a registry and reused by other toolchains as a fixed lift/lower
+test corpus.
+
+## Scope
+
+Covered (value types):
+
+- Primitives: `bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`, `string`.
+- Containers: `list`, `tuple`, `option`, and all four `result` forms
+  (`result<o, e>`, `result<o>`, `result<_, e>`, `result`).
+- Named types: `record` (including empty), `variant`, `enum`, `flags`, type
+  alias (newtype).
+- Nested compositions: `list<option<_>>`, `option<list<_>>`, `list<record>`,
+  `result<list<_>, _>`, and so on.
+
+Deferred:
+
+- Async types (`future`, `stream`) — identity is not meaningful for a
+  single-use value; they get their own catalog.
+- Handles (`own`/`borrow` of resources) — a handle is not duplicable, so
+  identity needs different boundary semantics.
+
+## Regenerating the WIT
+
+```sh
+wado wit example/cm-catalog/src/lib.wado > example/cm-catalog/cm-catalog.wit
+```
+
+`wado-compiler/tests/wit.rs` re-emits this from the source and asserts it
+matches the committed `cm-catalog.wit`, so the artifact cannot drift from the
+emitter.
+
+## Note on compilation
+
+`wado wit` enumerates every `export fn`, so the WIT artifact is complete today.
+A `wado compile` round-trip (which would synthesize and run the lift/lower
+adapters for each export) needs a world whose exports are the catalog interface
+— the "world-less library" export path, which is not yet wired
+(see WEP `wep-2026-05-02-wit-interoperability.md`, "World-less libraries").
+Until then this package is consumed via `wado wit`, not `wado compile`.

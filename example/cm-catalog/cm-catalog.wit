@@ -1,0 +1,64 @@
+package root:component;
+
+interface cm-catalog {
+  enum color {
+    red,
+    green,
+    blue,
+  }
+  record empty {  }
+  type meters = f64;
+  flags perms {
+    read,
+    write,
+    execute,
+  }
+  record point {
+    x: f64,
+    y: f64,
+  }
+  variant shape {
+    circle(f64),
+    rect(tuple<f64, f64>),
+    nothing,
+  }
+  id-bool: func(v: bool) -> bool;
+  id-u8: func(v: u8) -> u8;
+  id-u16: func(v: u16) -> u16;
+  id-u32: func(v: u32) -> u32;
+  id-u64: func(v: u64) -> u64;
+  id-s8: func(v: s8) -> s8;
+  id-s16: func(v: s16) -> s16;
+  id-s32: func(v: s32) -> s32;
+  id-s64: func(v: s64) -> s64;
+  id-f32: func(v: f32) -> f32;
+  id-f64: func(v: f64) -> f64;
+  id-char: func(v: char) -> char;
+  id-string: func(v: string) -> string;
+  id-list-u8: func(v: list<u8>) -> list<u8>;
+  id-list-string: func(v: list<string>) -> list<string>;
+  id-tuple-pair: func(v: tuple<u32, string>) -> tuple<u32, string>;
+  id-tuple-triple: func(v: tuple<u8, bool, char>) -> tuple<u8, bool, char>;
+  id-option-u32: func(v: option<u32>) -> option<u32>;
+  id-option-string: func(v: option<string>) -> option<string>;
+  id-result-both: func(v: result<u32, string>) -> result<u32, string>;
+  id-result-ok: func(v: result<u32>) -> result<u32>;
+  id-result-err: func(v: result<_, string>) -> result<_, string>;
+  id-result-unit: func(v: result) -> result;
+  id-record: func(v: point) -> point;
+  id-record-empty: func(v: empty) -> empty;
+  id-enum: func(v: color) -> color;
+  id-variant: func(v: shape) -> shape;
+  id-flags: func(v: perms) -> perms;
+  id-newtype: func(v: meters) -> meters;
+  id-list-option: func(v: list<option<u32>>) -> list<option<u32>>;
+  id-option-list: func(v: option<list<u8>>) -> option<list<u8>>;
+  id-list-record: func(v: list<point>) -> list<point>;
+  id-option-record: func(v: option<point>) -> option<point>;
+  id-list-tuple: func(v: list<tuple<u32, string>>) -> list<tuple<u32, string>>;
+  id-result-list: func(v: result<list<point>, string>) -> result<list<point>, string>;
+}
+
+world command {
+  export cm-catalog;
+}
