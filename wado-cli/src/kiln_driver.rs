@@ -11,7 +11,7 @@
 //!    [`wado_compiler::compiler_host::CompilerHost::run_generator`] and
 //!    writing the response to disk under the invocation's output
 //!    directory, with a canonical `#![generated]` header stamped on each
-//!    file — see [`execute`].
+//!    file that does not already carry one — see [`execute`].
 //! 3. Convert an [`InvocationRun`] into a [`crate::kiln_metadata::Metadata`]
 //!    record for persistence (`build_metadata`), check a recorded
 //!    `<primary>.kiln.json` for freshness against the current filesystem +
@@ -162,7 +162,8 @@ impl std::fmt::Display for ExecuteError {
 impl std::error::Error for ExecuteError {}
 
 /// Run one invocation: read its inputs, call the host's runner, write
-/// the generator's outputs to disk with a `#![generated]` header.
+/// the generator's outputs to disk, stamping a `#![generated]` header on
+/// any output that does not already carry one.
 ///
 /// `component_wasm` is the already-compiled generator component; the
 /// caller (higher-level compile flow) is responsible for producing it.
@@ -262,9 +263,20 @@ pub async fn execute_with_mode<H: CompilerHost>(
     for file in &response.files {
         let rel = validate_rel_output_path(&file.path)?;
         let full_path = output_dir_abs.join(&rel);
-        let mut bytes = Vec::with_capacity(header.len() + file.content.len());
-        bytes.extend_from_slice(header.as_bytes());
-        bytes.extend_from_slice(file.content.as_bytes());
+        // A generator may stamp its own `#![generated(...)]` header — Gale
+        // does, so its output is self-describing whether it runs through the
+        // Kiln pipeline or its standalone CLI. Respect that header instead of
+        // prepending a second one; only generators that emit no marker get the
+        // canonical header stamped here so tooling and stale-output GC still
+        // recognize the file.
+        let bytes = if has_generated_marker(&file.content) {
+            file.content.as_bytes().to_vec()
+        } else {
+            let mut bytes = Vec::with_capacity(header.len() + file.content.len());
+            bytes.extend_from_slice(header.as_bytes());
+            bytes.extend_from_slice(file.content.as_bytes());
+            bytes
+        };
 
         let normalized = InvocationPath::normalize(&format!(
             "{}/{}",
@@ -1568,6 +1580,45 @@ mod tests {
             let nested =
                 std::fs::read_to_string(tmp.path().join("build/kiln/proto/sub/mod.wado")).unwrap();
             assert!(nested.starts_with("#![generated("));
+        }
+
+        #[test]
+        fn respects_generator_provided_header() {
+            let tmp = tempfile::tempdir().unwrap();
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "lib.wado".to_string(),
+                    content:
+                        "#![generated(by = \"gale\", sources = [\"schema.proto\"])]\npub fn hello() {}\n"
+                            .to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let host = MockHost::new(
+                &[
+                    ("schema.proto", b"syntax = \"proto3\";"),
+                    ("dep.proto", b"import \"other.proto\";"),
+                ],
+                Ok(response),
+            );
+
+            let inv = sample_invocation();
+            runtime()
+                .block_on(async { execute(&inv, b"wasm-bytes", tmp.path(), &host).await })
+                .unwrap();
+
+            let lib =
+                std::fs::read_to_string(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
+            // The generator already stamped its own header; the driver must not
+            // prepend a second one or override the generator's `by`.
+            assert!(lib.starts_with("#![generated(by = \"gale\""));
+            assert_eq!(
+                lib.matches("#![generated").count(),
+                1,
+                "self-stamped header must appear exactly once, got:\n{lib}"
+            );
+            assert!(!lib.contains("ns:proto@1.0.0"));
         }
 
         #[test]
