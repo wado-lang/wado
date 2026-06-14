@@ -44,7 +44,7 @@ use {
     RepeatKind,
     GroupElement,
 } from "./ir.wado";
-use { alt_is_wildcard_led } from "./alt_grouping.wado";
+use { alt_is_wildcard_led, compute_overlap_groups, alt_sort_priority } from "./alt_grouping.wado";
 use {
     rule_type_name,
     literal_const_name,
@@ -54,9 +54,8 @@ use {
     count_general_groups,
     single_alt_group_type_name,
     single_alt_group_field_name,
-    is_token_only_group,
-    is_simple_cst_group,
-    is_general_group,
+    GroupClass,
+    classify_group,
     token_group_field_name,
     group_variant_type_name,
     group_field_base_name,
@@ -66,9 +65,11 @@ use {
     general_group_alt_struct_name,
     is_storable_group,
     first_contains,
+    dedup_name,
+    subtract_sets,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { GenContext, is_nullable, union_kind_arrays, FOLLOW_MASK_MAX_K } from "./gen_context.wado";
+use { GenContext, is_nullable, union_kind_arrays, sets_overlap, FOLLOW_MASK_MAX_K } from "./gen_context.wado";
 use { strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use {
@@ -395,7 +396,7 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
             if let Optional = r.kind {
                 let body_is_rulecall = r.body matches { RuleCall(_) };
                 if body_is_rulecall && !r.caller_follow_first.is_empty() {
-                    let effective = subtract_first(&loop_first, &r.caller_follow_first);
+                    let effective = subtract_sets(&loop_first, &r.caller_follow_first);
                     if effective.len() >= 2 {
                         ctx.intern_kind_set(&effective);
                     }
@@ -422,7 +423,7 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
                 let mut union_first: List<String> = [];
                 for let fs of &g.alt_first_sets {
                     for let tk of fs {
-                        if !first_set_contains(&union_first, tk) {
+                        if !first_contains(&union_first, tk) {
                             union_first.push(*tk);
                         }
                     }
@@ -791,14 +792,10 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rul
 /// as-is; the runtime `follow` is threaded independently of the
 /// precedence argument.
 fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
-    if let RuleCall(rc) = se {
+    if let RuleCall(mut rc) = se {
         if rc.target_snake == *rule_snake {
-            return ScanElement::RuleCall(ScanRuleCallElement {
-                target_snake: rc.target_snake,
-                follow_arg: rc.follow_arg,
-                min_prec_arg: Option::<i32>::Some(prec),
-                atn_call_site: rc.atn_call_site,
-            });
+            rc.min_prec_arg = Option::<i32>::Some(prec);
+            return ScanElement::RuleCall(rc);
         }
     }
     return se;
@@ -851,20 +848,14 @@ fn op_subtree_contains_self_ref(op: &Op, rule_name: &String) -> bool {
 
 fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
     return match op {
-        RuleCall(rc) => Op::RuleCall(RuleCallOp {
-            target_name: rc.target_name,
-            target_snake: rc.target_snake,
-            follow_arg: rc.follow_arg,
-            min_prec_arg: Option::<i32>::Some(prec),
-            field: rc.field,
-            dedup_base: rc.dedup_base,
-            atn_call_site: rc.atn_call_site,
-        }),
-        ListLabel(ll) => Op::ListLabel(ListLabelOp {
-            field: ll.field,
-            inner: rebind_self_ref_min_prec(ll.inner, prec),
-            dedup_base: ll.dedup_base,
-        }),
+        RuleCall(mut rc) => {
+            rc.min_prec_arg = Option::<i32>::Some(prec);
+            Op::RuleCall(rc);
+        },
+        ListLabel(mut ll) => {
+            ll.inner = rebind_self_ref_min_prec(ll.inner, prec);
+            Op::ListLabel(ll);
+        },
         Token(t) => Op::Token(t),
         Literal(l) => Op::Literal(l),
         Wildcard(wop) => Op::Wildcard(wop),
@@ -882,43 +873,22 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
 /// scan-side recursion (`rule_snake`-keyed) stays in sync.
 fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String, prec: i32) -> Op {
     return match op {
-        RuleCall(rc) => {
+        RuleCall(mut rc) => {
             if rc.target_name == *rule_name {
-                Op::RuleCall(RuleCallOp {
-                    target_name: rc.target_name,
-                    target_snake: rc.target_snake,
-                    follow_arg: rc.follow_arg,
-                    min_prec_arg: Option::<i32>::Some(prec),
-                    field: rc.field,
-                    dedup_base: rc.dedup_base,
-                    atn_call_site: rc.atn_call_site,
-                });
-            } else {
-                Op::RuleCall(rc);
+                rc.min_prec_arg = Option::<i32>::Some(prec);
             }
+            Op::RuleCall(rc);
         },
-        ListLabel(ll) => Op::ListLabel(ListLabelOp {
-            field: ll.field,
-            inner: deep_stamp_inner_self_refs_op(ll.inner, rule_name, rule_snake, prec),
-            dedup_base: ll.dedup_base,
-        }),
-        Repeat(r) => Op::Repeat(RepeatOp {
-            kind: r.kind,
-            body: deep_stamp_inner_self_refs_op(r.body, rule_name, rule_snake, prec),
-            scan_body: deep_stamp_inner_self_refs_scan(r.scan_body, rule_snake, prec),
-            strategy: r.strategy,
-            field: r.field,
-            caller_follow_first: r.caller_follow_first,
-            gate_caller_follow: r.gate_caller_follow,
-            caller_follow_second: r.caller_follow_second,
-            body_scannable: r.body_scannable,
-            body_has_field: r.body_has_field,
-            body_first_set: r.body_first_set,
-            body_is_single_alt_group: r.body_is_single_alt_group,
-            body_second_position_first: r.body_second_position_first,
-            body_shape: r.body_shape,
-        }),
-        Group(g) => {
+        ListLabel(mut ll) => {
+            ll.inner = deep_stamp_inner_self_refs_op(ll.inner, rule_name, rule_snake, prec);
+            Op::ListLabel(ll);
+        },
+        Repeat(mut r) => {
+            r.body = deep_stamp_inner_self_refs_op(r.body, rule_name, rule_snake, prec);
+            r.scan_body = deep_stamp_inner_self_refs_scan(r.scan_body, rule_snake, prec);
+            Op::Repeat(r);
+        },
+        Group(mut g) => {
             let mut new_alts: List<AltBody> = [];
             for let alt of &g.alts {
                 let mut new_ops: List<Op> = [];
@@ -942,13 +912,9 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
                 }
                 new_scan_alts.push(ScanBody { elements: new_elements });
             }
-            Op::Group(GroupOp {
-                shape: g.shape,
-                alts: new_alts,
-                scan_alts: new_scan_alts,
-                dispatch: g.dispatch,
-                scan_dispatch: g.scan_dispatch,
-            });
+            g.alts = new_alts;
+            g.scan_alts = new_scan_alts;
+            Op::Group(g);
         },
         // Leaves with no nested Op: pass through unchanged. Listed
         // explicitly so a new Op variant fails to compile here rather
@@ -966,26 +932,17 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
 /// must survive while only `min_prec_arg` is stamped.
 fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
     return match se {
-        RuleCall(rc) => {
+        RuleCall(mut rc) => {
             if rc.target_snake == *rule_snake {
-                ScanElement::RuleCall(ScanRuleCallElement {
-                    target_snake: rc.target_snake,
-                    follow_arg: rc.follow_arg,
-                    min_prec_arg: Option::<i32>::Some(prec),
-                    atn_call_site: rc.atn_call_site,
-                });
-            } else {
-                ScanElement::RuleCall(rc);
+                rc.min_prec_arg = Option::<i32>::Some(prec);
             }
+            ScanElement::RuleCall(rc);
         },
-        Repeat(r) => ScanElement::Repeat(ScanRepeatElement {
-            kind: r.kind,
-            body: deep_stamp_inner_self_refs_scan(r.body, rule_snake, prec),
-            inner_first: r.inner_first,
-            caller_follow_first: r.caller_follow_first,
-            gate_caller_follow: r.gate_caller_follow,
-        }),
-        Group(g) => {
+        Repeat(mut r) => {
+            r.body = deep_stamp_inner_self_refs_scan(r.body, rule_snake, prec);
+            ScanElement::Repeat(r);
+        },
+        Group(mut g) => {
             let mut new_alts: List<ScanBody> = [];
             for let scan_alt of &g.alts {
                 let mut new_elements: List<ScanElement> = [];
@@ -994,15 +951,10 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                 }
                 new_alts.push(ScanBody { elements: new_elements });
             }
-            ScanElement::Group(ScanGroupElement {
-                alts: new_alts,
-                dispatch: g.dispatch,
-                lenient: g.lenient,
-                alt_first_sets: g.alt_first_sets,
-                wildcard_alt_indices: g.wildcard_alt_indices,
-            });
+            g.alts = new_alts;
+            ScanElement::Group(g);
         },
-        OptionalLookahead(ole) => {
+        OptionalLookahead(mut ole) => {
             let mut new_bodies: List<ScanBody> = [];
             for let body of &ole.bodies {
                 let mut new_elements: List<ScanElement> = [];
@@ -1011,10 +963,8 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                 }
                 new_bodies.push(ScanBody { elements: new_elements });
             }
-            ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
-                sigs: ole.sigs,
-                bodies: new_bodies,
-            });
+            ole.bodies = new_bodies;
+            ScanElement::OptionalLookahead(ole);
         },
         // Leaves with no nested ScanElement: pass through unchanged.
         // Listed explicitly so that adding a new ScanElement variant
@@ -1032,7 +982,7 @@ fn collect_lr_suffix_first_tokens_from_lowered(lr_alts: &List<LrAlt>) -> List<St
     let mut result: List<String> = [];
     for let lr of lr_alts {
         for let tk of &lr.suffix_first {
-            if !first_set_contains(&result, tk) {
+            if !first_contains(&result, tk) {
                 result.push(*tk);
             }
         }
@@ -1059,12 +1009,12 @@ fn compute_self_ref_prec_from_ops(
         let next_op = &ops[k + 1];
         let mut next_is_lr_op = false;
         if let Token(t) = next_op {
-            if first_set_contains(lr_suffix_first_tokens, &t.kind) {
+            if first_contains(lr_suffix_first_tokens, &t.kind) {
                 next_is_lr_op = true;
             }
         }
         if let Literal(l) = next_op {
-            if first_set_contains(lr_suffix_first_tokens, &l.kind) {
+            if first_contains(lr_suffix_first_tokens, &l.kind) {
                 next_is_lr_op = true;
             }
         }
@@ -1330,7 +1280,7 @@ fn compute_lr_conflict_min_prec(
         }
         let suffix_first = ctx.first_of_elements_from(&other.elements, 1);
         for let ft of &fixed_tokens {
-            if first_set_contains(&suffix_first, ft) {
+            if first_contains(&suffix_first, ft) {
                 let candidate = other_prec + 1;
                 if candidate > min_prec {
                     min_prec = candidate;
@@ -1373,71 +1323,6 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>) -> LrDispatchData {
         valid_lr_alts: valid_lr_alts,
         groups: groups,
     };
-}
-
-/// Union-find overlap grouping over per-alt first sets. Mirrors
-/// `alt_grouping::compute_overlap_groups` — alts whose first sets
-/// share at least one token end up in the same group; disjoint
-/// alts get their own singleton group. The output's iteration order
-/// matches the input order (first occurrence wins as group root).
-fn compute_overlap_groups(first_sets: &List<List<String>>) -> List<List<i32>> {
-    let n = first_sets.len();
-    let mut group_ids: List<i32> = [];
-    for let mut i = 0; i < n; i += 1 {
-        group_ids.push(i);
-    }
-    for let mut i = 0; i < n; i += 1 {
-        for let mut j = i + 1; j < n; j += 1 {
-            if first_sets_overlap(&first_sets[i], &first_sets[j]) {
-                let gi = group_ids[i];
-                let gj = group_ids[j];
-                if gi != gj {
-                    for let mut k = 0; k < n; k += 1 {
-                        if group_ids[k] == gj {
-                            group_ids[k] = gi;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    let mut seen_ids: List<i32> = [];
-    let mut groups: List<List<i32>> = [];
-    for let mut i = 0; i < n; i += 1 {
-        let gid = group_ids[i];
-        let mut found: i32 = -1;
-        for let mut s = 0; s < seen_ids.len(); s += 1 {
-            if seen_ids[s] == gid {
-                found = s;
-                break;
-            }
-        }
-        if found >= 0 {
-            groups[found].push(i);
-        } else {
-            seen_ids.push(gid);
-            groups.push([i]);
-        }
-    }
-    return groups;
-}
-
-fn first_sets_overlap(a: &List<String>, b: &List<String>) -> bool {
-    for let tk of a {
-        if first_set_contains(b, tk) {
-            return true;
-        }
-    }
-    return false;
-}
-
-fn first_set_contains(set: &List<String>, token: &String) -> bool {
-    for let t of set {
-        if *t == *token {
-            return true;
-        }
-    }
-    return false;
 }
 
 /// Build a `Direct` dispatch from disjoint first sets. Each branch
@@ -1575,7 +1460,7 @@ fn join_kind_set(kinds: &List<String>) -> String {
 fn any_overlap(first_sets: &List<List<String>>) -> bool {
     for let mut i = 0; i < first_sets.len(); i += 1 {
         for let mut j = i + 1; j < first_sets.len(); j += 1 {
-            if first_sets_overlap(&first_sets[i], &first_sets[j]) {
+            if sets_overlap(&first_sets[i], &first_sets[j]) {
                 return true;
             }
         }
@@ -1617,37 +1502,6 @@ fn sort_alts_by_element_count(indices: &mut List<i32>, alts: &List<Alternative>)
     }
 }
 
-/// Per-alt sorting priority, mirroring `alt_grouping::alt_sort_priority`.
-/// Higher = preferred at dispatch time. Single-element alts whose
-/// only element is a `RuleRef` get a higher tier than multi-element
-/// `RuleRef`-led alts so SQLite-style `tor (',' tor)* | join_clause`
-/// groupings still pick the rule-ref catch-all on tie.
-///
-/// Skips leading nullable elements so the classification matches on the
-/// first element that actually contributes to FIRST — `b? K_TOKEN_X` gets
-/// `MULTI_TOKEN_LED` (4) rather than `MULTI_RULE_REF_LED` (2).
-fn alt_sort_priority(alt: &Alternative) -> i32 {
-    if alt.elements.len() == 1 {
-        if let RuleRef(_) = alt.elements[0] {
-            return 3;
-        }
-        return 1;
-    }
-    for let elem of &alt.elements {
-        if is_nullable(elem) {
-            continue;
-        }
-        match *elem {
-            TokenRef(_) | Literal(_) => {
-                return 4;
-            },
-            _ => {
-                return 2;
-            },
-        }
-    }
-    return 2;
-}
 
 /// Whether the rule has at least one directly-left-recursive
 /// alternative. Mirrors `parser_gen::is_left_recursive`'s shallow
@@ -1778,80 +1632,63 @@ fn lower_scan_element(
 /// multi-alt token-only groups dispatch on token kind.
 fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
     let alts = &g.alternatives;
-    assert alts.len() > 0, "Group with no alts is not a valid scan-lowering input";
-    if alts.len() == 1 {
-        let alt = &alts[0];
-        assert alt.elements.len() > 0, "Group with empty alt is not a valid scan-lowering input";
-        if alt.elements.len() == 1 {
-            // Transparent (scan side) — nested inner allowed. The
-            // group's only element inherits the surrounding follow.
+    match classify_group(alts) {
+        Transparent => {
             return lower_scan_element(
-                &alt.elements[0],
+                &alts[0].elements[0],
                 ctx,
                 outer_follow,
                 FollowArg::NoFollow,
                 false,
             );
-        }
-        // Single-alt (scan side) — nested elements allowed; each
-        // is lowered through the standard scan-element recursion.
-        let mut elements: List<ScanElement> = [];
-        for let mut i = 0; i < alt.elements.len(); i += 1 {
-            elements.push(lower_alt_scan_element(
-                &alt.elements,
-                i,
-                ctx,
-            ));
-        }
-        let mut visiting: List<String> = [];
-        let alt_first = ctx.first_of_alt(alt, &mut visiting);
-        let mut wildcard_indices: List<i32> = [];
-        if alt_is_wildcard_led(alt) {
-            wildcard_indices.push(0);
-        }
-        return ScanElement::Group(ScanGroupElement {
-            alts: [
-                ScanBody { elements },
-            ],
-            dispatch: empty_direct_dispatch(),
-            lenient: false,
-            alt_first_sets: [alt_first],
-            wildcard_alt_indices: wildcard_indices,
-        });
-    }
-    if is_token_only_group(alts) {
-        let mut bodies: List<ScanBody> = [];
-        let mut first_sets: List<List<String>> = [];
-        for let alt of alts {
-            let elem = &alt.elements[0];
-            bodies.push(ScanBody {
-                elements: [
-                    lower_scan_element(
-                        elem,
-                        ctx,
-                        outer_follow,
-                        FollowArg::NoFollow,
-                        false,
-                    ),
+        },
+        SingleAlt => {
+            let alt = &alts[0];
+            let mut elements: List<ScanElement> = [];
+            for let mut i = 0; i < alt.elements.len(); i += 1 {
+                elements.push(lower_alt_scan_element(&alt.elements, i, ctx));
+            }
+            let mut visiting: List<String> = [];
+            let alt_first = ctx.first_of_alt(alt, &mut visiting);
+            let mut wildcard_indices: List<i32> = [];
+            if alt_is_wildcard_led(alt) {
+                wildcard_indices.push(0);
+            }
+            return ScanElement::Group(ScanGroupElement {
+                alts: [
+                    ScanBody { elements },
                 ],
+                dispatch: empty_direct_dispatch(),
+                lenient: false,
+                alt_first_sets: [alt_first],
+                wildcard_alt_indices: wildcard_indices,
             });
-            first_sets.push([token_only_kind(elem)]);
-        }
-        return ScanElement::Group(ScanGroupElement {
-            alts: bodies,
-            dispatch: build_direct_dispatch(&first_sets),
-            lenient: false,
-            alt_first_sets: first_sets,
-            wildcard_alt_indices: [] as List<i32>,
-        });
+        },
+        TokenOnly => {
+            let mut bodies: List<ScanBody> = [];
+            let mut first_sets: List<List<String>> = [];
+            for let alt of alts {
+                let elem = &alt.elements[0];
+                bodies.push(ScanBody {
+                    elements: [lower_scan_element(elem, ctx, outer_follow, FollowArg::NoFollow, false)],
+                });
+                first_sets.push([token_only_kind(elem)]);
+            }
+            return ScanElement::Group(ScanGroupElement {
+                alts: bodies,
+                dispatch: build_direct_dispatch(&first_sets),
+                lenient: false,
+                alt_first_sets: first_sets,
+                wildcard_alt_indices: [] as List<i32>,
+            });
+        },
+        SimpleCst => {
+            return lower_simple_cst_scan_group(alts, ctx, outer_follow);
+        },
+        General => {
+            return lower_general_scan_group(alts, ctx, outer_follow);
+        },
     }
-    if is_simple_cst_group(alts) {
-        return lower_simple_cst_scan_group(alts, ctx, outer_follow);
-    }
-    if is_general_group(alts) {
-        return lower_general_scan_group(alts, ctx, outer_follow);
-    }
-    panic("Group shape (scan side) unrecognised by classifier");
 }
 
 fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
@@ -2458,46 +2295,42 @@ fn lower_group_op(
     outer_follow: &List<String>,
 ) -> Op {
     let alts = &g.alternatives;
-    assert alts.len() > 0, "Group with no alts is not a valid lowering input";
-    if alts.len() == 1 {
-        let alt = &alts[0];
-        assert alt.elements.len() > 0, "Group with empty alt is not a valid lowering input";
-        if alt.elements.len() == 1 {
-            // Transparent group `(e)` is positionally identical to `e` at
-            // the surrounding alt, so the caller-follow propagates verbatim.
+    match classify_group(alts) {
+        Transparent => {
             return lower_transparent_group(
-                &alt.elements[0],
+                &alts[0].elements[0],
                 name_counts,
                 rule_name,
                 ctx,
                 group_counter,
                 outer_follow,
             );
-        }
-        return lower_single_alt_group(
-            alt,
-            name_counts,
-            rule_name,
-            ctx,
-            group_counter,
-        );
+        },
+        SingleAlt => {
+            return lower_single_alt_group(
+                &alts[0],
+                name_counts,
+                rule_name,
+                ctx,
+                group_counter,
+            );
+        },
+        TokenOnly => {
+            return lower_token_only_group(alts, name_counts, ctx);
+        },
+        SimpleCst => {
+            return lower_simple_cst_group(alts, name_counts, ctx);
+        },
+        General => {
+            return lower_general_group(
+                alts,
+                name_counts,
+                rule_name,
+                ctx,
+                group_counter,
+            );
+        },
     }
-    if is_token_only_group(alts) {
-        return lower_token_only_group(alts, name_counts, ctx);
-    }
-    if is_simple_cst_group(alts) {
-        return lower_simple_cst_group(alts, name_counts, ctx);
-    }
-    if is_general_group(alts) {
-        return lower_general_group(
-            alts,
-            name_counts,
-            rule_name,
-            ctx,
-            group_counter,
-        );
-    }
-    panic("Group shape unrecognised by classifier — should be impossible");
 }
 
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of
@@ -3495,19 +3328,6 @@ fn try_optional_scan_guard(inner: &Element, ctx: &mut GenContext) -> Option<Repe
     return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalScanGuard);
 }
 
-/// Token-by-token subtraction of `b` from `a`, preserving `a`'s
-/// order. Linear scan; kind-set sizes here are small (≤ a few
-/// dozen) so a linear `first_set_contains` is fine.
-fn subtract_first(a: &List<String>, b: &List<String>) -> List<String> {
-    let mut result: List<String> = [];
-    for let tk of a {
-        if !first_set_contains(b, tk) {
-            result.push(*tk);
-        }
-    }
-    return result;
-}
-
 /// Compute the `NonGreedy` strategy for a non-greedy Repeat (`e*?` /
 /// `e+?` / `e??`). `exit_first` is the surrounding alt's
 /// `outer_follow` — the tokens that may legitimately appear after
@@ -3560,22 +3380,10 @@ fn patch_repeat_op_caller_follow(
     caller_follow_first: List<String>,
     caller_follow_second: List<String>,
 ) -> RepeatOp {
-    return RepeatOp {
-        kind: rep_op.kind,
-        body: rep_op.body,
-        scan_body: rep_op.scan_body,
-        strategy: rep_op.strategy,
-        field: rep_op.field,
-        caller_follow_first: caller_follow_first,
-        caller_follow_second: caller_follow_second,
-        body_scannable: rep_op.body_scannable,
-        body_has_field: rep_op.body_has_field,
-        body_first_set: rep_op.body_first_set,
-        body_is_single_alt_group: rep_op.body_is_single_alt_group,
-        body_second_position_first: rep_op.body_second_position_first,
-        body_shape: rep_op.body_shape,
-        gate_caller_follow: rep_op.gate_caller_follow,
-    };
+    let mut r = *rep_op;
+    r.caller_follow_first = caller_follow_first;
+    r.caller_follow_second = caller_follow_second;
+    return r;
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by
@@ -3629,31 +3437,26 @@ fn repeat_inner_base_name(elem: &Element, gc_speculative: i32) -> String {
 /// inner lowering will consume).
 fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String {
     let alts = &g.alternatives;
-    if alts.len() == 1 {
-        let alt = &alts[0];
-        if alt.elements.len() == 1 {
-            // Transparent (single-element single-alt) — peel through
-            // to the inner element and let it pick the name.
-            return repeat_inner_base_name(&alt.elements[0], gc_speculative);
-        }
-        return single_alt_group_field_name(alt);
+    match classify_group(alts) {
+        Transparent => {
+            return repeat_inner_base_name(&alts[0].elements[0], gc_speculative);
+        },
+        SingleAlt => {
+            return single_alt_group_field_name(&alts[0]);
+        },
+        TokenOnly => {
+            return token_group_field_name(alts);
+        },
+        SimpleCst => {
+            return group_field_base_name(alts);
+        },
+        // Repeat is the first visitor of its inner Group but defers the
+        // group_counter increment to the inner-Op lowering, so embed the
+        // same speculative value the increment will use.
+        General => {
+            return general_group_field_name(gc_speculative);
+        },
     }
-    if is_token_only_group(alts) {
-        return token_group_field_name(alts);
-    }
-    if is_simple_cst_group(alts) {
-        return group_field_base_name(alts);
-    }
-    if is_general_group(alts) {
-        // The General group's CST type uses `group_<idx>` where
-        // `<idx>` is the per-rule `group_counter` value at the
-        // point the lowering visits it. The Repeat is the first
-        // visitor (computing its outer field name) but defers the
-        // actual increment to the subsequent inner-Op lowering, so
-        // we just embed the same speculative value here.
-        return general_group_field_name(gc_speculative);
-    }
-    panic("Group shape unrecognised by classifier (Repeat inner base name)");
 }
 
 /// Lower a `Label` element by recursively lowering its inner
@@ -3944,81 +3747,66 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 ///   reason as the leaf arms.
 pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
     return match op {
-        Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field, dedup_base: *new_dedup_base }),
-        Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field, dedup_base: *new_dedup_base }),
-        RuleCall(r) => Op::RuleCall(RuleCallOp {
-            target_name: r.target_name,
-            target_snake: r.target_snake,
-            follow_arg: r.follow_arg,
-            min_prec_arg: r.min_prec_arg,
-            field: *new_field,
-            dedup_base: *new_dedup_base,
-            atn_call_site: r.atn_call_site,
-        }),
-        Wildcard(_) => Op::Wildcard(WildcardOp { field: *new_field, dedup_base: *new_dedup_base }),
-        Excluded(e) => Op::Excluded(ExcludedOp { kinds: e.kinds, field: *new_field, dedup_base: *new_dedup_base }),
-        Repeat(rep) => Op::Repeat(RepeatOp {
-            kind: rep.kind,
-            body: rep.body,
-            scan_body: rep.scan_body,
-            strategy: rep.strategy,
-            field: *new_field,
-            caller_follow_first: rep.caller_follow_first,
-            caller_follow_second: rep.caller_follow_second,
-            body_scannable: rep.body_scannable,
-            body_has_field: rep.body_has_field,
-            body_first_set: rep.body_first_set,
-            body_is_single_alt_group: rep.body_is_single_alt_group,
-            body_second_position_first: rep.body_second_position_first,
-            body_shape: rep.body_shape,
-            gate_caller_follow: rep.gate_caller_follow,
-        }),
-        Group(g) => Op::Group(GroupOp {
-            shape: rebind_group_shape(g.shape, new_field),
-            alts: g.alts,
-            scan_alts: g.scan_alts,
-            dispatch: g.dispatch,
-            scan_dispatch: g.scan_dispatch,
-        }),
-        ListLabel(ll) => rebind_list_label_op(ll, new_field, new_dedup_base),
+        Token(mut t) => {
+            t.field = *new_field;
+            t.dedup_base = *new_dedup_base;
+            Op::Token(t);
+        },
+        Literal(mut l) => {
+            l.field = *new_field;
+            l.dedup_base = *new_dedup_base;
+            Op::Literal(l);
+        },
+        RuleCall(mut r) => {
+            r.field = *new_field;
+            r.dedup_base = *new_dedup_base;
+            Op::RuleCall(r);
+        },
+        Wildcard(mut w) => {
+            w.field = *new_field;
+            w.dedup_base = *new_dedup_base;
+            Op::Wildcard(w);
+        },
+        Excluded(mut e) => {
+            e.field = *new_field;
+            e.dedup_base = *new_dedup_base;
+            Op::Excluded(e);
+        },
+        Repeat(mut rep) => {
+            rep.field = *new_field;
+            Op::Repeat(rep);
+        },
+        Group(mut g) => {
+            g.shape = rebind_group_shape(g.shape, new_field);
+            Op::Group(g);
+        },
+        ListLabel(mut ll) => {
+            ll.field = *new_field;
+            ll.dedup_base = *new_dedup_base;
+            Op::ListLabel(ll);
+        },
     };
-}
-
-fn rebind_list_label_op(ll: ListLabelOp, new_field: &String, new_dedup_base: &String) -> Op {
-    return Op::ListLabel(ListLabelOp {
-        inner: ll.inner,
-        field: *new_field,
-        dedup_base: *new_dedup_base,
-    });
 }
 
 fn rebind_group_shape(shape: GroupShape, new_field: &String) -> GroupShape {
     return match shape {
-        // Transparent groups inline their inner op; the label
-        // rebinds the inner op's field directly. The Group node
-        // itself has no field slot, so return the shape unchanged
-        // — the caller's `rebind_op_field` should have recursed
-        // into the inner op instead. Keep this as the unreachable
-        // arm rather than crashing: a label on a Transparent group
-        // is uncommon and emit's existing path handles it via the
-        // inner op's field.
         Transparent => GroupShape::Transparent,
-        TokenOnly(to) => GroupShape::TokenOnly(TokenOnlyShape { field: *new_field }),
-        SimpleCst(scst) => GroupShape::SimpleCst(SimpleCstShape {
-            type_name: scst.type_name,
-            field: *new_field,
-        }),
-        SingleAlt(sa) => GroupShape::SingleAlt(SingleAltShape {
-            struct_name: sa.struct_name,
-            field: *new_field,
-            owner_rule: sa.owner_rule,
-        }),
-        General(gen) => GroupShape::General(GeneralShape {
-            variant_type: gen.variant_type,
-            alt_struct_names: gen.alt_struct_names,
-            field: *new_field,
-            group_index: gen.group_index,
-        }),
+        TokenOnly(mut to) => {
+            to.field = *new_field;
+            GroupShape::TokenOnly(to);
+        },
+        SimpleCst(mut scst) => {
+            scst.field = *new_field;
+            GroupShape::SimpleCst(scst);
+        },
+        SingleAlt(mut sa) => {
+            sa.field = *new_field;
+            GroupShape::SingleAlt(sa);
+        },
+        General(mut gen) => {
+            gen.field = *new_field;
+            GroupShape::General(gen);
+        },
     };
 }
 
@@ -4054,42 +3842,4 @@ fn collect_excluded_kinds_from_group(g: &GroupElement) -> List<String> {
         }
     }
     return kinds;
-}
-
-/// Field-name deduplication mirroring `gen_util::dedup_name`. The
-/// first occurrence keeps the base name; subsequent occurrences get
-/// `<base>_<n>` for `n = 2, 3, ...`.
-///
-/// Re-implemented here (not imported from `parser_gen.wado`) because
-/// Phase 4's split will move every emit-side helper out of
-/// `parser_gen.wado`; sharing utilities cross-file before the split
-/// would just create import churn for a few lines of straightforward
-/// counting.
-fn dedup_name(base: &String, counts: &mut List<[String, i32]>) -> String {
-    let count = get_count(counts, base);
-    increment_count(counts, base);
-    if count > 0 {
-        return `{*base}_{count + 1}`;
-    }
-    return *base;
-}
-
-fn get_count(counts: &List<[String, i32]>, name: &String) -> i32 {
-    for let entry of counts {
-        if entry.0 == *name {
-            return entry.1;
-        }
-    }
-    return 0;
-}
-
-fn increment_count(counts: &mut List<[String, i32]>, name: &String) {
-    for let mut i = 0; i < counts.len(); i += 1 {
-        if counts[i].0 == *name {
-            let prev = counts[i].1;
-            counts[i] = [*name, prev + 1];
-            return;
-        }
-    }
-    counts.push([*name, 1]);
 }

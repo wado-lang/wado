@@ -6,6 +6,7 @@ use {
     is_general_group,
     single_alt_group_type_name,
     count_general_groups,
+    dedup_append_arr,
 } from "./gen_util.wado";
 use { Diagnostic, DiagnosticKind } from "./gir.wado";
 use { TreeMap } from "core:collections";
@@ -342,7 +343,7 @@ impl GenContext {
         if let Some(rule) = rule {
             for let alt of &rule.alternatives {
                 let af = self.first_of_alt(alt, visiting);
-                extend_dedup(&mut result, &af);
+                dedup_append_arr(&mut result, &af);
             }
         }
 
@@ -364,7 +365,7 @@ impl GenContext {
                 let mut result: List<String> = [];
                 for let alt of &g.alternatives {
                     let af = self.first_of_alt(alt, visiting);
-                    extend_dedup(&mut result, &af);
+                    dedup_append_arr(&mut result, &af);
                 }
                 result;
             },
@@ -385,7 +386,7 @@ impl GenContext {
 
         for let elem of &alt.elements {
             let elem_first = self.first_of_element(elem, visiting);
-            extend_dedup(&mut result, &elem_first);
+            dedup_append_arr(&mut result, &elem_first);
             if !is_nullable(elem) {
                 break;
             }
@@ -399,7 +400,7 @@ impl GenContext {
         for let mut i = start; i < elements.len(); i += 1 {
             let mut visiting: List<String> = [];
             let elem_first = self.first_of_element(&elements[i], &mut visiting);
-            extend_dedup(&mut result, &elem_first);
+            dedup_append_arr(&mut result, &elem_first);
             if !is_nullable(&elements[i]) {
                 break;
             }
@@ -595,7 +596,7 @@ impl GenContext {
         for let mut i = start; i < elements.len(); i += 1 {
             let mut fv: List<String> = [];
             let elem_first = self.first_of_element(&elements[i], &mut fv);
-            extend_dedup(&mut result, &elem_first);
+            dedup_append_arr(&mut result, &elem_first);
             let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(&elements[i], &mut nv) {
                 break;
@@ -1060,7 +1061,7 @@ impl GenContext {
         if let Some(rule) = rule {
             for let alt of &rule.alternatives {
                 let af = self.tail_greedy_first_of_elements(&alt.elements, visiting);
-                extend_dedup(&mut result, &af);
+                dedup_append_arr(&mut result, &af);
             }
         }
 
@@ -1084,7 +1085,7 @@ impl GenContext {
         while i >= 0 {
             let elem = &elements[i];
             let tg = self.tail_greedy_first_of_element(elem, visiting);
-            extend_dedup(&mut result, &tg);
+            dedup_append_arr(&mut result, &tg);
             let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(elem, &mut nv) {
                 break;
@@ -1123,7 +1124,7 @@ impl GenContext {
                 let mut acc: List<String> = [];
                 for let alt of &g.alternatives {
                     let inner = self.tail_greedy_first_of_elements(&alt.elements, visiting);
-                    extend_dedup(&mut acc, &inner);
+                    dedup_append_arr(&mut acc, &inner);
                 }
                 acc;
             },
@@ -1267,14 +1268,6 @@ pub fn is_simple_token_group(alts: &List<Alternative>) -> bool {
         return false;
     }
     return true;
-}
-
-fn extend_dedup(target: &mut List<String>, source: &List<String>) {
-    for let item of source {
-        if !target.contains(item) {
-            target.push(*item);
-        }
-    }
 }
 
 /// Canonicalise a K-prefix mask: sort each depth's token list so two

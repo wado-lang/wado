@@ -1424,25 +1424,56 @@ struct TryCall {
     match_length: i32,
 }
 
-/// Build the default "reset" extras for state variables that exist in the
-/// current lexer shape. Used for literal-token calls that have no rule flags
-/// of their own — they still need to reset the state written by the previous
-/// best match.
-fn default_extras(use_modes: bool, has_set_mode_rules: bool, has_more_rules: bool, has_channel_rules: bool) -> String {
-    let mut extras = String::with_capacity(64);
-    if use_modes {
-        extras.push_str(&" best_push_mode = -1; best_pop_mode = false;");
+fn best_state_extras(
+    push_mode: i32,
+    pop_mode: bool,
+    set_mode: i32,
+    more: bool,
+    channel: i32,
+    emit_modes: bool,
+    has_set_mode_rules: bool,
+    has_more_rules: bool,
+    has_channel_rules: bool,
+) -> String {
+    let mut s = String::with_capacity(64);
+    if emit_modes {
+        if push_mode >= 0 {
+            s.push_str(&` best_push_mode = {push_mode};`);
+        } else {
+            s.push_str(&" best_push_mode = -1;");
+        }
+        if pop_mode {
+            s.push_str(&" best_pop_mode = true;");
+        } else {
+            s.push_str(&" best_pop_mode = false;");
+        }
     }
     if has_set_mode_rules {
-        extras.push_str(&" best_set_mode = -1;");
+        if set_mode >= 0 {
+            s.push_str(&` best_set_mode = {set_mode};`);
+        } else {
+            s.push_str(&" best_set_mode = -1;");
+        }
     }
     if has_more_rules {
-        extras.push_str(&" best_more = false;");
+        if more {
+            s.push_str(&" best_more = true;");
+        } else {
+            s.push_str(&" best_more = false;");
+        }
     }
     if has_channel_rules {
-        extras.push_str(&" best_channel = 0;");
+        if channel != 0 {
+            s.push_str(&` best_channel = {channel};`);
+        } else {
+            s.push_str(&" best_channel = 0;");
+        }
     }
-    return extras;
+    return s;
+}
+
+fn default_extras(use_modes: bool, has_set_mode_rules: bool, has_more_rules: bool, has_channel_rules: bool) -> String {
+    return best_state_extras(-1, false, -1, false, 0, use_modes, has_set_mode_rules, has_more_rules, has_channel_rules);
 }
 
 /// Compute the first-char set for a lexer rule body's first element.
@@ -1466,40 +1497,17 @@ fn build_rule_try_call(
     } else {
         `TK_{rule.name}`;
     };
-    let mut extra = String::with_capacity(64);
-    if use_modes {
-        if rule.push_mode >= 0 {
-            extra.push_str(&` best_push_mode = {rule.push_mode};`);
-        } else {
-            extra.push_str(&" best_push_mode = -1;");
-        }
-        if rule.pop_mode {
-            extra.push_str(&" best_pop_mode = true;");
-        } else {
-            extra.push_str(&" best_pop_mode = false;");
-        }
-    }
-    if has_set_mode_rules {
-        if rule.set_mode >= 0 {
-            extra.push_str(&` best_set_mode = {rule.set_mode};`);
-        } else {
-            extra.push_str(&" best_set_mode = -1;");
-        }
-    }
-    if has_more_rules {
-        if rule.more {
-            extra.push_str(&" best_more = true;");
-        } else {
-            extra.push_str(&" best_more = false;");
-        }
-    }
-    if has_channel_rules {
-        if rule.channel != 0 {
-            extra.push_str(&` best_channel = {rule.channel};`);
-        } else {
-            extra.push_str(&" best_channel = 0;");
-        }
-    }
+    let extra = best_state_extras(
+        rule.push_mode,
+        rule.pop_mode,
+        rule.set_mode,
+        rule.more,
+        rule.channel,
+        use_modes,
+        has_set_mode_rules,
+        has_more_rules,
+        has_channel_rules,
+    );
     let mut chars: List<[char, char]> = [];
     let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci);
     // A catch-all rule (e.g., UNEXPECTED_CHAR: .) matches any single character.
@@ -1925,16 +1933,7 @@ fn gen_tokenize_fn(
                 for let lit of lit_tokens {
                     let fn_name = lit_try_fn_name(&lit.const_name);
                     w.line(&`end = {fn_name}(&lexer.chars, start);`);
-                    let mut lit_reset = String::from(" best_push_mode = -1; best_pop_mode = false;");
-                    if has_set_mode_rules {
-                        lit_reset.push_str(&" best_set_mode = -1;");
-                    }
-                    if has_more_rules {
-                        lit_reset.push_str(&" best_more = false;");
-                    }
-                    if has_channel_rules {
-                        lit_reset.push_str(&" best_channel = 0;");
-                    }
+                    let lit_reset = default_extras(true, has_set_mode_rules, has_more_rules, has_channel_rules);
                     w.line(
                         &`if end > best_end \{ best_end = end; best_kind = {lit.const_name};{lit_reset} \}`,
                     );
@@ -1948,38 +1947,17 @@ fn gen_tokenize_fn(
                     && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
                     let fn_name = lexer_try_fn_name(&rule.name);
                     w.line(&`end = {fn_name}(&lexer.chars, start);`);
-                    let mut extra = String::with_capacity(64);
-                    if rule.push_mode >= 0 {
-                        extra.push_str(&` best_push_mode = {rule.push_mode};`);
-                    } else {
-                        extra.push_str(&" best_push_mode = -1;");
-                    }
-                    if rule.pop_mode {
-                        extra.push_str(&" best_pop_mode = true;");
-                    } else {
-                        extra.push_str(&" best_pop_mode = false;");
-                    }
-                    if has_set_mode_rules {
-                        if rule.set_mode >= 0 {
-                            extra.push_str(&` best_set_mode = {rule.set_mode};`);
-                        } else {
-                            extra.push_str(&" best_set_mode = -1;");
-                        }
-                    }
-                    if has_more_rules {
-                        if rule.more {
-                            extra.push_str(&" best_more = true;");
-                        } else {
-                            extra.push_str(&" best_more = false;");
-                        }
-                    }
-                    if has_channel_rules {
-                        if rule.channel != 0 {
-                            extra.push_str(&` best_channel = {rule.channel};`);
-                        } else {
-                            extra.push_str(&" best_channel = 0;");
-                        }
-                    }
+                    let extra = best_state_extras(
+                        rule.push_mode,
+                        rule.pop_mode,
+                        rule.set_mode,
+                        rule.more,
+                        rule.channel,
+                        true,
+                        has_set_mode_rules,
+                        has_more_rules,
+                        has_channel_rules,
+                    );
                     // `type(X)` rewrites the emitted kind. The rule still has
                     // its own TK_<name> constant; the override only affects
                     // the emitted token.

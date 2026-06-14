@@ -125,35 +125,10 @@ impl G4Lexer {
         let ec = self.chars[self.pos];
         self.pos += 1;
         if ec == 'u' {
-            let mut val = 0;
-            if !self.at_end() && self.chars[self.pos] == '{' {
-                self.pos += 1;
-                while !self.at_end() && self.chars[self.pos] != '}' {
-                    if !self.chars[self.pos].is_hexdigit() {
-                        break;
-                    }
-                    val = val * 16 + hex_value(self.chars[self.pos]);
-                    self.pos += 1;
-                }
-                if !self.at_end() && self.chars[self.pos] == '}' {
-                    self.pos += 1;
-                }
-            } else {
-                // `\uXXXX`: read up to four hex digits, stopping early at the
-                // first non-hex char (so `\u41` is two digits, not four chars).
-                let mut hex_count = 0;
-                while hex_count < 4 && !self.at_end() && self.chars[self.pos].is_hexdigit() {
-                    val = val * 16 + hex_value(self.chars[self.pos]);
-                    self.pos += 1;
-                    hex_count += 1;
-                }
-            }
-            // Surrogates / out-of-range values cannot be a Wado char; fall
-            // back to U+FFFD rather than trapping (see code-health.md).
-            match char::from_i32(val) {
-                Some(ch) => text.push(ch),
-                None => text.push('\u{FFFD}'),
-            }
+            let mut p = self.pos;
+            let ch = resolve_unicode_escape(self.chars, &mut p);
+            self.pos = p;
+            text.push(ch);
         } else if ec == 'n' {
             text.push('\n');
         } else if ec == 'r' {
@@ -352,15 +327,30 @@ fn is_ident_char(c: char) -> bool {
     return is_ident_start(c) || '0' <= c <= '9';
 }
 
-fn hex_value(c: char) -> i32 {
-    if '0' <= c <= '9' {
-        return c as i32 - '0' as i32;
+pub fn resolve_unicode_escape(chars: &List<char>, pos: &mut i32) -> char {
+    let mut val = 0;
+    if *pos < chars.len() && chars[*pos] == '{' {
+        *pos += 1;
+        while *pos < chars.len() && chars[*pos] != '}' {
+            if !chars[*pos].is_hexdigit() {
+                break;
+            }
+            val = val * 16 + chars[*pos].hex_digit_value();
+            *pos += 1;
+        }
+        if *pos < chars.len() && chars[*pos] == '}' {
+            *pos += 1;
+        }
+    } else {
+        let mut n = 0;
+        while n < 4 && *pos < chars.len() && chars[*pos].is_hexdigit() {
+            val = val * 16 + chars[*pos].hex_digit_value();
+            *pos += 1;
+            n += 1;
+        }
     }
-    if 'a' <= c <= 'f' {
-        return c as i32 - 'a' as i32 + 10;
-    }
-    if 'A' <= c <= 'F' {
-        return c as i32 - 'A' as i32 + 10;
-    }
-    return 0;
+    return match char::from_i32(val) {
+        Some(ch) => ch,
+        None => '\u{FFFD}',
+    };
 }
