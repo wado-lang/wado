@@ -1,7 +1,7 @@
 use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
-use { parse } from "./g4/parser.wado";
-use { Grammar, merge_grammars, check_references, synthesize_implicit_tokens, normalize_caches } from "./ir.wado";
+use { assemble_grammar, AssembleError } from "./g4/parser.wado";
+use { Grammar, normalize_caches } from "./ir.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
 use { lower } from "./lower.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
@@ -107,7 +107,7 @@ fn load_and_merge(paths: &List<String>) -> Grammar with Stdout, Stderr, Preopens
     }
     let root = dirs[0].0;
 
-    let mut grammars: List<Grammar> = [];
+    let mut inputs: List<[String, String]> = [];
     for let path of paths {
         let open_result = root.open_at(
             PathFlags::none(),
@@ -128,27 +128,20 @@ fn load_and_merge(paths: &List<String>) -> Grammar with Stdout, Stderr, Preopens
                 exit(1);
             },
         };
-        let mut grammar = match parse(content) {
-            Ok(g) => g,
-            Err(e) => {
-                eprintln(`gale: {*path}: parse error: {e.message}`);
-                exit(1);
-            },
-        };
-        // Record the source path on the grammar so gen_header can emit it as
-        // provenance metadata (`#![generated(sources = [...])]`).
-        grammar.source_files.push(*path);
-        grammars.push(grammar);
+        inputs.push([*path, content]);
     }
 
-    let mut merged = merge_grammars(grammars);
-    // Must run before `check_references`. See `ir.wado` for rationale.
-    synthesize_implicit_tokens(&mut merged);
-    if let Err(e) = check_references(&merged) {
-        eprintln(`gale: {e.message}`);
-        exit(1);
-    }
-    return merged;
+    return match assemble_grammar(&inputs) {
+        Ok(g) => g,
+        Err(Parse(pe)) => {
+            eprintln(`gale: {pe.0}: parse error: {pe.1}`);
+            exit(1);
+        },
+        Err(Check(msg)) => {
+            eprintln(`gale: {msg}`);
+            exit(1);
+        },
+    };
 }
 
 /// Read a file to EOF.

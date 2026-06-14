@@ -18,8 +18,7 @@
 //! explicit form still compiles for packages that prefer it.
 
 use { Request, Response, Error, OutputFile, KilnHost, Diagnostic as KilnDiagnostic, DiagnosticLevel } from "core:kiln";
-use { parse } from "./g4/parser.wado";
-use { Grammar, merge_grammars, check_references, synthesize_implicit_tokens } from "./ir.wado";
+use { assemble_grammar, AssembleError } from "./g4/parser.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
 use { to_snake_case } from "./gen_util.wado";
 
@@ -49,53 +48,28 @@ impl Deserialize for Options;
 /// analyze).
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     // Parse the primary grammar plus any supplementary grammars listed in
-    // `inputs` (e.g. a sibling lexer grammar for a split parser grammar).
-    // `merge_grammars` handles the single-grammar case by returning the
-    // input unchanged, so the fast path stays fast.
-    let mut grammars: List<Grammar> = [];
-    match parse(req.primary.content) {
-        Ok(g) => grammars.push(g),
-        Err(e) => {
+    // `inputs` (e.g. a sibling lexer grammar for a split parser grammar),
+    // stamping the real Kiln-provided paths so the generated header's
+    // `sources = [...]` names the files that exist rather than a fabricated
+    // `<GrammarName>.g4`.
+    let mut inputs: List<[String, String]> = [[req.primary.path, req.primary.content]];
+    for let supp of &req.inputs {
+        inputs.push([supp.path, supp.content]);
+    }
+    let mut grammar = match assemble_grammar(&inputs) {
+        Ok(g) => g,
+        Err(Parse(pe)) => {
+            let which = if pe.0 == req.primary.path { "primary" } else { "supplementary" };
             return Result::Err(Error::InvalidSchema(
-                `gale: failed to parse primary grammar '{req.primary.path}': {e.message}`,
+                `gale: failed to parse {which} grammar '{pe.0}': {pe.1}`,
             ));
         },
-    }
-    for let supp of &req.inputs {
-        match parse(supp.content) {
-            Ok(g) => grammars.push(g),
-            Err(e) => {
-                return Result::Err(Error::InvalidSchema(
-                    `gale: failed to parse supplementary grammar '{supp.path}': {e.message}`,
-                ));
-            },
-        }
-    }
-
-    let mut grammar = merge_grammars(grammars);
-
-    // The pure g4 parser leaves `source_files` empty (it parses a string,
-    // not a path), so stamp the real Kiln-provided paths here — otherwise
-    // the generated header's `sources = [...]` fabricates `<GrammarName>.g4`,
-    // a file that does not exist.
-    let mut source_files: List<String> = [req.primary.path];
-    for let supp of &req.inputs {
-        source_files.push(supp.path);
-    }
-    grammar.source_files = source_files;
-
-    // Must run before `check_references`. See `ir.wado` for rationale.
-    synthesize_implicit_tokens(&mut grammar);
-
-    match check_references(&grammar) {
-        Ok(_) => {
-        },
-        Err(e) => {
+        Err(Check(msg)) => {
             return Result::Err(Error::InvalidSchema(
-                `gale: unresolved rule references in '{req.primary.path}': {e.message}`,
+                `gale: unresolved rule references in '{req.primary.path}': {msg}`,
             ));
         },
-    }
+    };
 
     let gen_opts = GenerateOptions { highlight: req.options.highlight, trace: req.options.trace };
     let generated = codegen_generate(&mut grammar, &gen_opts);
