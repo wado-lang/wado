@@ -65,13 +65,24 @@ pub(crate) fn hover_for_item_symbol(sem: &Semantics, symbol: &Symbol) -> Option<
         return None;
     }
     let signature = render_item_signature(sem, symbol)?;
-    Some(HoverResult {
+    Some(fenced_hover(signature))
+}
+
+/// Hover for a method or free function reached by [`AstId`] (e.g. a symbol
+/// notation `Type::m`), where there is no item-level [`Symbol`] to render.
+#[must_use]
+pub(crate) fn hover_for_function(f: &ast::Function) -> HoverResult {
+    fenced_hover(unparse::unparse_function_signature(f))
+}
+
+fn fenced_hover(signature: String) -> HoverResult {
+    HoverResult {
         contents: MarkupContent {
             kind: MarkupKind::Markdown,
             value: format!("```wado\n{signature}\n```"),
         },
         range: None,
-    })
+    }
 }
 
 /// Render a signature for the given item-level symbol.

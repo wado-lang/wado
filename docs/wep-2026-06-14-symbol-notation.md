@@ -70,9 +70,11 @@ across a whole project still need a project-wide context (a follow-up).
       is the Wado definition with the body omitted (struct fields / enum cases
       shown), rendered by the same `unparse::unparse_{struct,enum}_signature` /
       `unparse_function_signature` that `wado doc` uses.
+- [x] Resolve members: `Type::m` / `Type.m` / `Type^Trait::m` (and generic
+      types by base name) → methods and associated constants, by scanning the
+      module's `impl` blocks and `trait` declarations. A member miss suggests
+      the type's members.
 - [ ] Include doc-comment summaries in `hover` output.
-- [ ] Resolve members (`Type::m`, `Type.m`, `Type^Trait::m`) — needs an
-      impl/method index; today they return "not yet supported".
 - [ ] Project-wide context so `references` spans the whole workspace, not just
       the notation's import graph.
 - [ ] Convert between this notation and the internal `name.rs` canonical form.

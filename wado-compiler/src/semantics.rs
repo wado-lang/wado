@@ -158,11 +158,8 @@ pub struct Definition {
 pub enum SymbolResolveError {
     /// The notation's module is not loaded in this `Semantics`.
     ModuleNotLoaded,
-    /// The module is loaded but defines no symbol with that name.
+    /// The module is loaded but defines no matching symbol or member.
     SymbolNotFound,
-    /// The notation names a member on a type (`Type::m` / `Type.m`); method
-    /// and associated-item resolution is not implemented yet.
-    MemberResolutionUnsupported,
 }
 
 impl std::fmt::Display for SymbolResolveError {
@@ -170,9 +167,6 @@ impl std::fmt::Display for SymbolResolveError {
         match self {
             Self::ModuleNotLoaded => f.write_str("module not found or not loaded"),
             Self::SymbolNotFound => f.write_str("no such symbol in module"),
-            Self::MemberResolutionUnsupported => {
-                f.write_str("method/associated-item resolution is not yet supported")
-            }
         }
     }
 }
@@ -560,42 +554,147 @@ impl Semantics {
     /// Resolve a parsed [`SymbolNotation`](crate::symbol_notation::SymbolNotation)
     /// to a [`Definition`] within this analysis.
     ///
-    /// The notation's module is resolved against the entry module (so
-    /// relative paths anchor at the entry's directory; `core:` / `wasi:` are
+    /// The notation's module is resolved against the entry module (so relative
+    /// paths anchor at the entry's directory; `core:` / `wasi:` are
     /// location-independent) and must already be loaded in this `Semantics`.
-    /// Only free / module-level symbols are supported today — methods and
-    /// associated items (`Type::m`, `Type.m`) are not yet indexed as
-    /// navigable symbols and return
-    /// [`SymbolResolveError::MemberResolutionUnsupported`].
+    ///
+    /// - A free notation (`mod#name`) resolves a module-level symbol.
+    /// - A receiver notation (`mod#Type::m`, `mod#Type.m`, `mod#Type^Trait::m`)
+    ///   resolves a method or associated constant on `Type` — scanning the
+    ///   `impl` blocks (and `trait` declaration for `Trait::m`) in the module.
     pub fn resolve_symbol_notation(
         &self,
         notation: &crate::symbol_notation::SymbolNotation,
     ) -> Result<Definition, SymbolResolveError> {
-        if notation.receiver.is_some() {
-            return Err(SymbolResolveError::MemberResolutionUnsupported);
-        }
-        let from = self.entry_module_source.clone();
-        let module = crate::name::resolve_import_with_entry(
-            &mut self.interner.borrow_mut(),
-            &from,
-            &notation.module,
-            Some(&from),
-        );
+        let module = self.resolve_notation_module(&notation.module);
         if !self.modules.contains_key(&module) {
             return Err(SymbolResolveError::ModuleNotLoaded);
         }
-        let symbol = self
-            .symbols
-            .lookup_in_module(&module, &notation.member)
-            .ok_or(SymbolResolveError::SymbolNotFound)?;
-        let def_module = symbol.module_source().clone();
-        let ast_id = symbol.defined_at;
-        Ok(Definition {
-            uri: self.uri_of(&def_module),
-            module: def_module,
-            ast_id,
-            span: self.name_span_of(ast_id).or(symbol.span),
-        })
+        match &notation.receiver {
+            Some(receiver) => self.resolve_member(&module, receiver, &notation.member),
+            None => {
+                let symbol = self
+                    .symbols
+                    .lookup_in_module(&module, &notation.member)
+                    .ok_or(SymbolResolveError::SymbolNotFound)?;
+                let def_module = symbol.module_source().clone();
+                let ast_id = symbol.defined_at;
+                Ok(Definition {
+                    uri: self.uri_of(&def_module),
+                    module: def_module,
+                    ast_id,
+                    span: self.name_span_of(ast_id).or(symbol.span),
+                })
+            }
+        }
+    }
+
+    /// Resolve `Type::member` / `Type.member` / `Type^Trait::member` to the
+    /// method or associated constant's definition, scanning `impl` blocks and
+    /// (for `Trait::member`) the `trait` declaration in `module`.
+    fn resolve_member(
+        &self,
+        module: &ModuleSource,
+        receiver: &crate::symbol_notation::Receiver,
+        member: &str,
+    ) -> Result<Definition, SymbolResolveError> {
+        use crate::ast::Item;
+        let ast = self
+            .modules
+            .get(module)
+            .ok_or(SymbolResolveError::ModuleNotLoaded)?;
+        let want_type = base_type_name(&receiver.type_name);
+        let want_trait = receiver.trait_name.as_deref().map(base_type_name);
+
+        for item in &ast.items {
+            match item {
+                Item::Impl(b) => {
+                    if type_head_name(&b.ty).map(base_type_name) != Some(want_type) {
+                        continue;
+                    }
+                    let impl_trait = b
+                        .trait_type
+                        .as_ref()
+                        .and_then(type_head_name)
+                        .map(base_type_name);
+                    if let Some(wt) = want_trait
+                        && impl_trait != Some(wt)
+                    {
+                        continue;
+                    }
+                    if let Some(m) = b.methods.iter().find(|m| m.name == member) {
+                        return Ok(self.member_definition(module, m.id, m.name_span));
+                    }
+                    if let Some(c) = b.constants.iter().find(|c| c.name == member) {
+                        let span = self.name_span_of(c.id).unwrap_or(c.span);
+                        return Ok(self.member_definition(module, c.id, span));
+                    }
+                }
+                // `Trait::member` (no `^`) — a method declared on the trait itself.
+                Item::Trait(t) if want_trait.is_none() && t.name == want_type => {
+                    if let Some(m) = t.methods.iter().find(|m| m.name == member) {
+                        return Ok(self.member_definition(module, m.id, m.name_span));
+                    }
+                }
+                _ => {}
+            }
+        }
+        Err(SymbolResolveError::SymbolNotFound)
+    }
+
+    /// Names of the members (methods + associated constants) reachable on
+    /// `receiver`'s type in `module` — used to suggest targets when a
+    /// `Type::member` notation does not resolve. Sorted and deduplicated.
+    #[must_use]
+    pub fn type_member_names(
+        &self,
+        module: &ModuleSource,
+        receiver: &crate::symbol_notation::Receiver,
+    ) -> Vec<String> {
+        use crate::ast::Item;
+        let mut names: Vec<String> = Vec::new();
+        let Some(ast) = self.modules.get(module) else {
+            return names;
+        };
+        let want_type = base_type_name(&receiver.type_name);
+        let want_trait = receiver.trait_name.as_deref().map(base_type_name);
+        for item in &ast.items {
+            match item {
+                Item::Impl(b) => {
+                    if type_head_name(&b.ty).map(base_type_name) != Some(want_type) {
+                        continue;
+                    }
+                    let impl_trait = b
+                        .trait_type
+                        .as_ref()
+                        .and_then(type_head_name)
+                        .map(base_type_name);
+                    if let Some(wt) = want_trait
+                        && impl_trait != Some(wt)
+                    {
+                        continue;
+                    }
+                    names.extend(b.methods.iter().map(|m| m.name.clone()));
+                    names.extend(b.constants.iter().map(|c| c.name.clone()));
+                }
+                Item::Trait(t) if want_trait.is_none() && t.name == want_type => {
+                    names.extend(t.methods.iter().map(|m| m.name.clone()));
+                }
+                _ => {}
+            }
+        }
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    fn member_definition(&self, module: &ModuleSource, id: AstId, name_span: Span) -> Definition {
+        Definition {
+            uri: self.uri_of(module),
+            module: module.clone(),
+            ast_id: id,
+            span: Some(name_span),
+        }
     }
 
     /// Resolve the module half of a symbol notation to a [`ModuleSource`],
@@ -1191,5 +1290,26 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         tir_modules,
         liveness,
         is_complete: lower_ok && no_syntax_errors,
+    }
+}
+
+/// Base name of a type-name string: everything before the first `<`
+/// (`List<String>` → `List`, `Point` → `Point`).
+fn base_type_name(name: &str) -> &str {
+    match name.find('<') {
+        Some(i) => &name[..i],
+        None => name,
+    }
+}
+
+/// Head name of a [`Type`](crate::ast::Type) — the named type a method/impl
+/// targets, peeling references. `None` for structural types (tuples, fn types).
+fn type_head_name(ty: &crate::ast::Type) -> Option<&str> {
+    use crate::ast::Type;
+    match ty {
+        Type::Named(n) => Some(&n.name),
+        Type::Generic(g) => Some(&g.name),
+        Type::Reference(inner) | Type::MutReference(inner) => type_head_name(inner),
+        _ => None,
     }
 }

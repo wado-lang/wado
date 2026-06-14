@@ -247,13 +247,93 @@ fn hover_renders_enum_definition_with_cases() {
 }
 
 #[test]
-fn method_notation_is_unsupported_for_now() {
+fn resolves_associated_function() {
     futures::executor::block_on(async {
         let lib =
             "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n";
-        let err = resolve("./geo.wado", lib, "./geo.wado", "./geo.wado#Point::zero")
+        let result = resolve("./geo.wado", lib, "./geo.wado", "./geo.wado#Point::zero")
             .await
-            .expect_err("associated function resolution not yet supported");
-        assert_eq!(err, SymbolQueryError::Unsupported);
+            .expect("resolves associated function");
+        assert_eq!(result.uri, "file:///geo.wado");
+        // `zero` name span is on line 1 (the impl line).
+        assert_eq!(result.range.start.line, 1);
+    });
+}
+
+#[test]
+fn resolves_instance_method_with_dot() {
+    futures::executor::block_on(async {
+        let lib = concat!(
+            "pub struct Counter { n: i32 }\n",
+            "impl Counter { pub fn incr(&mut self) { self.n = self.n + 1; } }\n",
+        );
+        let result = resolve("./c.wado", lib, "./c.wado", "./c.wado#Counter.incr")
+            .await
+            .expect("resolves instance method via `.`");
+        assert_eq!(result.uri, "file:///c.wado");
+        assert_eq!(result.range.start.line, 1);
+    });
+}
+
+#[test]
+fn resolves_trait_impl_method() {
+    futures::executor::block_on(async {
+        let lib = concat!(
+            "pub struct P { x: i32 }\n",
+            "pub trait Show { fn show(&self) -> i32; }\n",
+            "impl Show for P { fn show(&self) -> i32 { return self.x; } }\n",
+        );
+        let result = resolve("./p.wado", lib, "./p.wado", "./p.wado#P^Show::show")
+            .await
+            .expect("resolves trait-impl method");
+        assert_eq!(result.uri, "file:///p.wado");
+        // The `impl Show for P` is on line 2.
+        assert_eq!(result.range.start.line, 2);
+    });
+}
+
+#[test]
+fn resolves_method_on_generic_type() {
+    futures::executor::block_on(async {
+        let lib = concat!(
+            "pub struct Wrapper<T> { value: T }\n",
+            "impl<T> Wrapper<T> { pub fn len(&self) -> i32 { return 0; } }\n",
+        );
+        let result = resolve("./b.wado", lib, "./b.wado", "./b.wado#Wrapper<i32>::len")
+            .await
+            .expect("resolves method on generic type by base name");
+        assert_eq!(result.uri, "file:///b.wado");
+        assert_eq!(result.range.start.line, 1);
+    });
+}
+
+#[test]
+fn hover_renders_method_signature() {
+    futures::executor::block_on(async {
+        let lib =
+            "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n";
+        let result = hover("./geo.wado", lib, "./geo.wado", "./geo.wado#Point::zero")
+            .await
+            .expect("resolves method hover");
+        assert!(
+            result.contents.value.contains("fn zero() -> i32"),
+            "got: {}",
+            result.contents.value
+        );
+    });
+}
+
+#[test]
+fn unknown_method_errors() {
+    futures::executor::block_on(async {
+        let lib =
+            "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n";
+        let err = resolve("./geo.wado", lib, "./geo.wado", "./geo.wado#Point::nope")
+            .await
+            .expect_err("missing method is an error");
+        assert!(
+            matches!(err, SymbolQueryError::NotFound { .. }),
+            "got: {err:?}"
+        );
     });
 }

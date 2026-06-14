@@ -43,12 +43,9 @@ pub enum SymbolQueryError {
     Unavailable,
     /// The notation's module is not loaded in the analysis context.
     ModuleNotFound,
-    /// No symbol with that name; `available` lists the module's public
-    /// symbol names as suggestions.
+    /// No matching symbol or member; `available` lists suggestions (the
+    /// module's public symbols, or the type's members for a `Type::m` miss).
     NotFound { available: Vec<String> },
-    /// The notation names a member on a type (`Type::m` / `Type.m`); method
-    /// and associated-item resolution is not implemented yet.
-    Unsupported,
     /// The resolved symbol has no usable source location / URI.
     NoLocation,
 }
@@ -59,9 +56,6 @@ impl std::fmt::Display for SymbolQueryError {
             Self::Unavailable => f.write_str("could not analyze the query context"),
             Self::ModuleNotFound => f.write_str("module not found or not loaded"),
             Self::NotFound { .. } => f.write_str("no such symbol in module"),
-            Self::Unsupported => {
-                f.write_str("method/associated-item resolution is not yet supported")
-            }
             Self::NoLocation => f.write_str("symbol has no resolvable source location"),
         }
     }
@@ -305,14 +299,13 @@ impl Engine {
         match snapshot.sem.resolve_symbol_notation(notation) {
             Ok(def) => Ok((snapshot, def)),
             Err(SymbolResolveError::ModuleNotLoaded) => Err(SymbolQueryError::ModuleNotFound),
-            Err(SymbolResolveError::MemberResolutionUnsupported) => {
-                Err(SymbolQueryError::Unsupported)
-            }
             Err(SymbolResolveError::SymbolNotFound) => {
                 let module = snapshot.sem.resolve_notation_module(&notation.module);
-                Err(SymbolQueryError::NotFound {
-                    available: snapshot.sem.public_symbol_names(&module),
-                })
+                let available = match &notation.receiver {
+                    Some(receiver) => snapshot.sem.type_member_names(&module, receiver),
+                    None => snapshot.sem.public_symbol_names(&module),
+                };
+                Err(SymbolQueryError::NotFound { available })
             }
         }
     }
@@ -361,10 +354,15 @@ impl Engine {
     ) -> Result<HoverResult, SymbolQueryError> {
         let (snapshot, def) = self.resolve_symbol_def(uri, notation, host).await?;
         let sem = &snapshot.sem;
-        let symbol = sem
-            .symbol_at(def.ast_id)
-            .ok_or(SymbolQueryError::NoLocation)?;
-        hover::hover_for_item_symbol(sem, symbol).ok_or(SymbolQueryError::NoLocation)
+        // Module-level symbols render from the symbol table; methods and free
+        // functions reached by AstId (e.g. `Type::m`) render from the AST.
+        if let Some(symbol) = sem.symbol_at(def.ast_id) {
+            return hover::hover_for_item_symbol(sem, symbol).ok_or(SymbolQueryError::NoLocation);
+        }
+        if let Some(function) = sem.function_at(def.ast_id) {
+            return Ok(hover::hover_for_function(function));
+        }
+        Err(SymbolQueryError::NoLocation)
     }
 
     /// Find every reference to a symbol named by notation, across the loaded

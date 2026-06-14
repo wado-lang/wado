@@ -2050,3 +2050,55 @@ fn query_hover_by_symbol_unknown_lists_symbols() {
         .stderr(predicate::str::contains("public symbols in ./lib.wado:"))
         .stderr(predicate::str::contains("add"));
 }
+
+#[test]
+fn query_definition_by_symbol_method() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("geo.wado"),
+        "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+
+    // `zero` is declared on line 2 (the impl line).
+    wado_in(dir.path())
+        .args(["query", "definition", "--symbol", "./geo.wado#Point::zero"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("geo.wado:2:"));
+}
+
+#[test]
+fn query_hover_by_symbol_method() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("geo.wado"),
+        "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "hover", "--symbol", "./geo.wado#Point::zero"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn zero() -> i32"));
+}
+
+#[test]
+fn query_by_symbol_unknown_member_lists_type_members() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("geo.wado"),
+        "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "definition", "--symbol", "./geo.wado#Point::nope"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No definition."))
+        .stderr(predicate::str::contains("no member 'nope' on Point"))
+        .stderr(predicate::str::contains("members of Point:"))
+        .stderr(predicate::str::contains("zero"));
+}
