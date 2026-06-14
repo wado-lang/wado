@@ -15,11 +15,13 @@ enum QueryKind {
 
 pub struct QueryOptions {
     kind: QueryKind,
-    input: String,
+    input: Option<String>,
     json: bool,
     line: Option<u32>,
     column: Option<u32>,
     include_declaration: bool,
+    symbol: Option<String>,
+    base: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -28,6 +30,8 @@ enum Opt {
     Line,
     Column,
     IncludeDeclaration,
+    Symbol,
+    Base,
     Help,
 }
 
@@ -37,6 +41,8 @@ impl Opt {
         Self::Line,
         Self::Column,
         Self::IncludeDeclaration,
+        Self::Symbol,
+        Self::Base,
         Self::Help,
     ];
 
@@ -47,6 +53,18 @@ impl Opt {
                 short: None,
                 value: None,
                 desc: "Output as JSON",
+            },
+            Self::Symbol => args::OptSpec {
+                long: Some("symbol"),
+                short: None,
+                value: Some("<notation>"),
+                desc: "Locate by symbol notation (e.g. core:json#parse) instead of a position",
+            },
+            Self::Base => args::OptSpec {
+                long: Some("base"),
+                short: None,
+                value: Some("<dir>"),
+                desc: "Base directory for relative modules in --symbol (default: .)",
             },
             Self::Line => args::OptSpec {
                 long: Some("line"),
@@ -74,6 +92,11 @@ impl Opt {
 fn format_usage() -> String {
     let mut buf = String::new();
     writeln!(buf, "Usage: wado query <kind> [options] <file.wado>").unwrap();
+    writeln!(
+        buf,
+        "       wado query definition --symbol <notation> [--base <dir>]"
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Query compiler information about a source file.").unwrap();
     writeln!(buf).unwrap();
@@ -120,6 +143,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
     let mut line: Option<u32> = None;
     let mut column: Option<u32> = None;
     let mut include_declaration = false;
+    let mut symbol: Option<String> = None;
+    let mut base: Option<String> = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -134,6 +159,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                     column = Some(parse_position_value("--column", val)?);
                 }
                 Opt::IncludeDeclaration => include_declaration = true,
+                Opt::Symbol => symbol = Some(args::require_string(&mut parser)?),
+                Opt::Base => base = Some(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -160,7 +187,48 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
     }
 
     let kind = kind.ok_or_else(|| CliExit::error_with_usage("missing query kind", &usage))?;
-    let input = input.ok_or_else(|| CliExit::error_with_usage("missing input file", &usage))?;
+
+    // The `--symbol` locator names its own module, so it takes no input file
+    // and no position; it is the alternative to `--line`/`--column`.
+    if symbol.is_some() {
+        if input.is_some() {
+            return Err(CliExit::error_with_usage(
+                "--symbol does not take an input file",
+                &usage,
+            ));
+        }
+        if line.is_some() || column.is_some() {
+            return Err(CliExit::error_with_usage(
+                "--symbol cannot be combined with --line/--column",
+                &usage,
+            ));
+        }
+        if !matches!(kind, QueryKind::Definition) {
+            return Err(CliExit::error_with_usage(
+                "--symbol is currently only supported for the `definition` kind",
+                &usage,
+            ));
+        }
+        return Ok(QueryOptions {
+            kind,
+            input,
+            json,
+            line,
+            column,
+            include_declaration,
+            symbol,
+            base,
+        });
+    }
+
+    if base.is_some() {
+        return Err(CliExit::error_with_usage(
+            "--base is only valid together with --symbol",
+            &usage,
+        ));
+    }
+
+    let input = Some(input.ok_or_else(|| CliExit::error_with_usage("missing input file", &usage))?);
 
     if matches!(
         kind,
@@ -187,15 +255,24 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
         line,
         column,
         include_declaration,
+        symbol,
+        base,
     })
 }
 
 pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
+    if let Some(notation) = &opts.symbol {
+        let base = opts.base.as_deref().unwrap_or(".");
+        return query_adapter::run_definition_by_symbol(notation, base, opts.json).await;
+    }
+
+    // Position-based kinds always carry an input file (validated in parse_args).
+    let input = opts.input.as_deref().unwrap_or_default();
     match opts.kind {
-        QueryKind::Diagnostics => query_adapter::run_diagnostics(&opts.input, opts.json).await,
+        QueryKind::Diagnostics => query_adapter::run_diagnostics(input, opts.json).await,
         QueryKind::References => {
             query_adapter::run_references(
-                &opts.input,
+                input,
                 opts.line.unwrap(),
                 opts.column.unwrap(),
                 opts.include_declaration,
@@ -205,7 +282,7 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
         }
         QueryKind::DocumentHighlight => {
             query_adapter::run_document_highlight(
-                &opts.input,
+                input,
                 opts.line.unwrap(),
                 opts.column.unwrap(),
                 opts.json,
@@ -214,7 +291,7 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
         }
         QueryKind::Definition => {
             query_adapter::run_definition(
-                &opts.input,
+                input,
                 opts.line.unwrap(),
                 opts.column.unwrap(),
                 opts.json,

@@ -11,7 +11,7 @@ use predicates::prelude::*;
 use serde_json::{Value, json};
 
 mod common;
-use common::{project_root, wado, wado_bin};
+use common::{project_root, wado, wado_bin, wado_in};
 
 /// Cap on `read_message` so a regression that stops the LSP from
 /// responding fails the test in seconds rather than hanging until the
@@ -1853,4 +1853,82 @@ fn query_unknown_kind_lists_available_kinds() {
         stderr,
         "Error: unknown query kind 'hover'. Available: diagnostics, references, document-highlight, definition\n",
     );
+}
+
+#[test]
+fn query_definition_by_symbol_relative_module() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+
+    // `helper` name starts at column 8 (1-based) on line 1.
+    wado_in(dir.path())
+        .args(["query", "definition", "--symbol", "./lib.wado#helper"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("lib.wado:1:8"));
+}
+
+#[test]
+fn query_definition_by_symbol_with_base() {
+    let dir = tempfile::tempdir().unwrap();
+    let sub = dir.path().join("src");
+    std::fs::create_dir(&sub).unwrap();
+    std::fs::write(
+        sub.join("geo.wado"),
+        "pub struct Point { x: i32, y: i32 }\n",
+    )
+    .unwrap();
+
+    wado()
+        .args([
+            "query",
+            "definition",
+            "--symbol",
+            "./geo.wado#Point",
+            "--base",
+            sub.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("geo.wado:1:12"));
+}
+
+#[test]
+fn query_definition_by_symbol_unknown_symbol() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "definition", "--symbol", "./lib.wado#nope"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No definition."))
+        .stderr(predicate::str::contains("no symbol 'nope'"))
+        .stderr(predicate::str::contains("public symbols in ./lib.wado:"))
+        .stderr(predicate::str::contains("helper"));
+}
+
+#[test]
+fn query_symbol_rejects_input_file() {
+    wado()
+        .args([
+            "query",
+            "definition",
+            "--symbol",
+            "core:cli#println",
+            "example/hello.wado",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--symbol does not take an input file",
+        ));
 }

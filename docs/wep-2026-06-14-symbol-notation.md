@@ -42,8 +42,27 @@ Two registers, one grammar:
 - `#` is spent on the module boundary, so instance methods use `.` rather than Ruby's `Type#method`; Ruby users may pause briefly.
 - The notation is purely textual; resolving it to an `AstId` and rendering an `AstId` back to it are follow-up work on `name.rs` and `wado query`.
 
+## Implementation
+
+The notation is a textual locator orthogonal to the position locator
+(`--line`/`--column`): every `wado query` kind can, in principle, accept either.
+Resolution loads the module named in the notation and looks the symbol up by
+name, so no entry file is needed — relative modules anchor at `--base` (default
+`.`), while `core:` / `wasi:` are location-independent.
+
+- `wado_compiler::symbol_notation` — the parser (`MODULE#SYMBOL`).
+- `Semantics::resolve_symbol_notation` — notation → `Definition`.
+- `Engine::definition_by_symbol` — drives it over a synthetic entry that
+  `use`s the module.
+- `wado query definition --symbol <notation> [--base <dir>]`.
+
 ## TODO
 
+- [x] Parse the notation (`wado_compiler::symbol_notation`).
+- [x] `wado query definition --symbol` for free / module-level symbols.
+- [ ] Resolve members (`Type::m`, `Type.m`, `Type^Trait::m`) — needs an
+      impl/method index; today they return "not yet supported".
+- [ ] Extend the `--symbol` locator to `references` / `document-highlight`.
+- [ ] Add a `hover` kind: notation → signature / type + doc summary.
 - [ ] Convert between this notation and the internal `name.rs` canonical form.
-- [ ] Accept a symbol notation argument in `wado query` for name-based lookup.
 - [ ] Emit this notation in diagnostics and `wado doc` anchors.

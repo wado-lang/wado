@@ -153,6 +153,32 @@ pub struct Definition {
     pub uri: Option<String>,
 }
 
+/// Why [`Semantics::resolve_symbol_notation`] could not resolve a notation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SymbolResolveError {
+    /// The notation's module is not loaded in this `Semantics`.
+    ModuleNotLoaded,
+    /// The module is loaded but defines no symbol with that name.
+    SymbolNotFound,
+    /// The notation names a member on a type (`Type::m` / `Type.m`); method
+    /// and associated-item resolution is not implemented yet.
+    MemberResolutionUnsupported,
+}
+
+impl std::fmt::Display for SymbolResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ModuleNotLoaded => f.write_str("module not found or not loaded"),
+            Self::SymbolNotFound => f.write_str("no such symbol in module"),
+            Self::MemberResolutionUnsupported => {
+                f.write_str("method/associated-item resolution is not yet supported")
+            }
+        }
+    }
+}
+
+impl std::error::Error for SymbolResolveError {}
+
 impl Semantics {
     /// True when every analysis phase ran to completion without bailing.
     ///
@@ -529,6 +555,94 @@ impl Semantics {
             ast_id: sym.defined_at,
             span: sym.span,
         })
+    }
+
+    /// Resolve a parsed [`SymbolNotation`](crate::symbol_notation::SymbolNotation)
+    /// to a [`Definition`] within this analysis.
+    ///
+    /// The notation's module is resolved against the entry module (so
+    /// relative paths anchor at the entry's directory; `core:` / `wasi:` are
+    /// location-independent) and must already be loaded in this `Semantics`.
+    /// Only free / module-level symbols are supported today — methods and
+    /// associated items (`Type::m`, `Type.m`) are not yet indexed as
+    /// navigable symbols and return
+    /// [`SymbolResolveError::MemberResolutionUnsupported`].
+    pub fn resolve_symbol_notation(
+        &self,
+        notation: &crate::symbol_notation::SymbolNotation,
+    ) -> Result<Definition, SymbolResolveError> {
+        if notation.receiver.is_some() {
+            return Err(SymbolResolveError::MemberResolutionUnsupported);
+        }
+        let from = self.entry_module_source.clone();
+        let module = crate::name::resolve_import_with_entry(
+            &mut self.interner.borrow_mut(),
+            &from,
+            &notation.module,
+            Some(&from),
+        );
+        if !self.modules.contains_key(&module) {
+            return Err(SymbolResolveError::ModuleNotLoaded);
+        }
+        let symbol = self
+            .symbols
+            .lookup_in_module(&module, &notation.member)
+            .ok_or(SymbolResolveError::SymbolNotFound)?;
+        let def_module = symbol.module_source().clone();
+        let ast_id = symbol.defined_at;
+        Ok(Definition {
+            uri: self.uri_of(&def_module),
+            module: def_module,
+            ast_id,
+            span: self.name_span_of(ast_id).or(symbol.span),
+        })
+    }
+
+    /// Resolve the module half of a symbol notation to a [`ModuleSource`],
+    /// anchored at the entry module (relative paths from its directory;
+    /// `core:` / `wasi:` location-independent).
+    #[must_use]
+    pub fn resolve_notation_module(&self, module_spec: &str) -> ModuleSource {
+        let from = self.entry_module_source.clone();
+        crate::name::resolve_import_with_entry(
+            &mut self.interner.borrow_mut(),
+            &from,
+            module_spec,
+            Some(&from),
+        )
+    }
+
+    /// Public, module-level symbol names declared in `module` — `pub` items
+    /// plus `pub use` re-exports — sorted and deduplicated. Used to suggest
+    /// valid targets when a symbol notation does not resolve.
+    #[must_use]
+    pub fn public_symbol_names(&self, module: &ModuleSource) -> Vec<String> {
+        use crate::ast::Item;
+        let mut names: Vec<String> = Vec::new();
+        if let Some(ast) = self.modules.get(module) {
+            for item in &ast.items {
+                let (is_pub, name) = match item {
+                    Item::Function(d) => (d.is_pub, &d.name),
+                    Item::Struct(d) => (d.is_pub, &d.name),
+                    Item::Enum(d) => (d.is_pub, &d.name),
+                    Item::Variant(d) => (d.is_pub, &d.name),
+                    Item::Flags(d) => (d.is_pub, &d.name),
+                    Item::Newtype(d) => (d.is_pub, &d.name),
+                    Item::Trait(d) => (d.is_pub, &d.name),
+                    Item::Resource(d) => (d.is_pub, &d.name),
+                    Item::Global(d) => (d.is_pub, &d.name),
+                    Item::Interface(d) => (d.is_pub, &d.name),
+                    _ => continue,
+                };
+                if is_pub {
+                    names.push(name.clone());
+                }
+            }
+        }
+        names.extend(self.symbols.reexport_names(module));
+        names.sort();
+        names.dedup();
+        names
     }
 
     /// Module that owns the node `id`, resolved through the per-parse

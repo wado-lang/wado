@@ -43,6 +43,7 @@ pub mod test_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod niri;
 pub mod symbol;
+pub mod symbol_notation;
 pub mod syntax;
 pub mod synthesis;
 pub mod tir;
@@ -71,8 +72,8 @@ pub use compiler_host::{
 pub use logger::{Bail, Logger};
 pub use remarks::{Remark, collect_value_copy_remarks};
 pub use semantics::{
-    Cursor, Definition, Semantics, lex_error_diagnostic, parse_error_diagnostic, semantics,
-    semantics_of,
+    Cursor, Definition, Semantics, SymbolResolveError, lex_error_diagnostic,
+    parse_error_diagnostic, semantics, semantics_of,
 };
 
 #[cfg(test)]

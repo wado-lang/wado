@@ -112,6 +112,66 @@ pub async fn run_definition(
     Ok(())
 }
 
+/// Resolve a symbol notation (`MODULE#SYMBOL`) to its definition location.
+///
+/// Builds a synthetic entry that `use`s the notation's module, anchored at
+/// `base` so relative modules resolve from there (`core:` / `wasi:` are
+/// location-independent). Mirrors [`run_definition`] output.
+pub async fn run_definition_by_symbol(
+    notation: &str,
+    base: &str,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let parsed = wado_compiler::symbol_notation::parse(notation)
+        .map_err(|e| CliExit::error(format!("invalid symbol notation: {e}")))?;
+
+    let base_dir = fs::canonicalize(base).unwrap_or_else(|_| Path::new(base).to_path_buf());
+    let host = FilesystemCompilerHost::silent(base_dir.clone());
+    // Synthetic entry: never read from disk (opened with explicit text), but
+    // its directory anchors relative-module resolution at `base`.
+    let entry_path = base_dir.join("__wado_query__.wado");
+    let uri = format!("file://{}", entry_path.display());
+    let synthetic = format!("use __wado_query_ns from \"{}\";\n", parsed.module);
+
+    let mut engine = wado_lsp::Engine::new();
+    engine.open_document(&uri, synthetic);
+
+    match engine.definition_by_symbol(&uri, &parsed, &host).await {
+        Ok(def) => {
+            if json_output {
+                print_definition_json(Some(&def));
+            } else {
+                print_definition_text(Some(&def));
+            }
+        }
+        Err(reason) => {
+            if json_output {
+                print_definition_json(None);
+            } else {
+                print_definition_text(None);
+            }
+            match &reason {
+                wado_lsp::SymbolQueryError::NotFound { available } => {
+                    eprintln!(
+                        "warning: no symbol '{}' in {}",
+                        parsed.member, parsed.module
+                    );
+                    if available.is_empty() {
+                        eprintln!("note: {} exports no public symbols", parsed.module);
+                    } else {
+                        eprintln!("note: public symbols in {}:", parsed.module);
+                        for name in available {
+                            eprintln!("  {name}");
+                        }
+                    }
+                }
+                other => eprintln!("warning: {other}"),
+            }
+        }
+    }
+    Ok(())
+}
+
 pub async fn run_document_highlight(
     filename: &str,
     line: u32,

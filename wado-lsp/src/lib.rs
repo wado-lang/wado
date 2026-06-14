@@ -36,6 +36,39 @@ pub use references::ReferenceLocation;
 pub use text::PositionEncoding;
 pub use uri::{Uri, UriScheme};
 
+/// Why [`Engine::definition_by_symbol`] could not resolve a notation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SymbolQueryError {
+    /// The query context could not be analyzed (loader failure, etc.).
+    Unavailable,
+    /// The notation's module is not loaded in the analysis context.
+    ModuleNotFound,
+    /// No symbol with that name; `available` lists the module's public
+    /// symbol names as suggestions.
+    NotFound { available: Vec<String> },
+    /// The notation names a member on a type (`Type::m` / `Type.m`); method
+    /// and associated-item resolution is not implemented yet.
+    Unsupported,
+    /// The resolved symbol has no usable source location / URI.
+    NoLocation,
+}
+
+impl std::fmt::Display for SymbolQueryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unavailable => f.write_str("could not analyze the query context"),
+            Self::ModuleNotFound => f.write_str("module not found or not loaded"),
+            Self::NotFound { .. } => f.write_str("no such symbol in module"),
+            Self::Unsupported => {
+                f.write_str("method/associated-item resolution is not yet supported")
+            }
+            Self::NoLocation => f.write_str("symbol has no resolvable source location"),
+        }
+    }
+}
+
+impl std::error::Error for SymbolQueryError {}
+
 /// Language service engine backing both the `wado-lsp` binary and direct
 /// library consumers.
 ///
@@ -247,6 +280,57 @@ impl Engine {
             definition::find_definition(ctx, position)
         })
         .await
+    }
+
+    /// Resolve a [symbol notation](wado_compiler::symbol_notation) to a
+    /// definition location, using `uri` as the analysis context.
+    ///
+    /// `uri` must be an open document that loads the notation's module
+    /// (typically a synthetic entry that `use`s it). The notation's module is
+    /// resolved relative to that entry, so relative paths anchor at its
+    /// directory while `core:` / `wasi:` modules are location-independent.
+    ///
+    /// On [`SymbolQueryError::NotFound`] the error carries the module's public
+    /// symbol names, so callers can suggest valid targets.
+    pub async fn definition_by_symbol<H: CompilerHost>(
+        &self,
+        uri: &str,
+        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        host: &H,
+    ) -> Result<DefinitionResult, SymbolQueryError> {
+        use wado_compiler::SymbolResolveError;
+        let Some(snapshot) = self.snapshot(uri, host).await else {
+            return Err(SymbolQueryError::Unavailable);
+        };
+        let sem = &snapshot.sem;
+        let def = match sem.resolve_symbol_notation(notation) {
+            Ok(def) => def,
+            Err(SymbolResolveError::ModuleNotLoaded) => {
+                return Err(SymbolQueryError::ModuleNotFound);
+            }
+            Err(SymbolResolveError::MemberResolutionUnsupported) => {
+                return Err(SymbolQueryError::Unsupported);
+            }
+            Err(SymbolResolveError::SymbolNotFound) => {
+                let module = sem.resolve_notation_module(&notation.module);
+                return Err(SymbolQueryError::NotFound {
+                    available: sem.public_symbol_names(&module),
+                });
+            }
+        };
+        let span = def.span.ok_or(SymbolQueryError::NoLocation)?;
+        let entry = &sem.entry_module_source;
+        let def_uri = match sem.symbol_at(def.ast_id) {
+            Some(symbol) => location::symbol_uri(entry, symbol, uri),
+            None => sem
+                .module_of_id(def.ast_id)
+                .and_then(|m| location::module_uri(entry, m, uri)),
+        }
+        .ok_or(SymbolQueryError::NoLocation)?;
+        Ok(DefinitionResult {
+            uri: def_uri,
+            range: location::span_to_range(&span, None, self.position_encoding),
+        })
     }
 
     /// Compute hover information for the symbol at the given position.
