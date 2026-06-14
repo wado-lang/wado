@@ -186,13 +186,6 @@ impl ComponentModelContext {
             .unwrap_or_else(|| panic!("unknown component function: {name}"))
     }
 
-    /// Register an additional name for an existing component-level function.
-    /// This does NOT consume a new component function index.
-    pub fn alias_comp_func(&mut self, existing_name: &str, alias_name: &str) {
-        let idx = self.comp_func_idx(existing_name);
-        self.comp_func_names.insert(alias_name.to_string(), idx);
-    }
-
     /// Check if a component-level function exists
     pub fn has_comp_func(&self, name: &str) -> bool {
         self.comp_func_names.contains_key(name)

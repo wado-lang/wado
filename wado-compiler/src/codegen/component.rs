@@ -235,26 +235,6 @@ pub fn build_component(
     // Lower WASI functions
     lower_wasi_functions(project, &mut builder, &mut ctx);
 
-    // Lower HTTP types functions
-    if ctx.has_comp_func("http-fields-constructor") {
-        ctx.register_core_func("http-fields-constructor");
-        builder.lower_func(
-            Some("http-fields-constructor"),
-            ctx.comp_func_idx("http-fields-constructor"),
-            [],
-        );
-
-        ctx.register_core_func("http-response-new");
-        builder.lower_func(
-            Some("http-response-new"),
-            ctx.comp_func_idx("http-response-new"),
-            [
-                CanonicalOption::Memory(ctx.memory_idx()),
-                CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-            ],
-        );
-    }
-
     // Collect available WASI functions
     let mut available_wasi_funcs: IndexSet<String> = IndexSet::default();
     for interface in project.cm_interface_registry.interfaces() {
@@ -283,31 +263,6 @@ pub fn build_component(
             ctx.core_func_idx(local_name),
         ));
     }
-    // The HTTP request-construction core funcs are exported from the core
-    // instance whenever a resource-defining interface that registered them is
-    // imported.
-    let imports_resource_defining = wir_package
-        .import_plan
-        .iter()
-        .any(|e| e.kind == crate::wir::ImportKind::ResourceDefiningInterface);
-    if imports_resource_defining && ctx.has_core_func("http-fields-constructor") {
-        wasi_exports.push((
-            "http-fields-constructor".to_string(),
-            ExportKind::Func,
-            ctx.core_func_idx("http-fields-constructor"),
-        ));
-        wasi_exports.push((
-            "http-response-new".to_string(),
-            ExportKind::Func,
-            ctx.core_func_idx("http-response-new"),
-        ));
-        wasi_exports.push((
-            "wasi:http/Response::new".to_string(),
-            ExportKind::Func,
-            ctx.core_func_idx("http-response-new"),
-        ));
-    }
-
     let wasi_exports_refs: Vec<_> = wasi_exports
         .iter()
         .map(|(name, kind, idx)| (name.as_str(), *kind, *idx))
@@ -2651,32 +2606,10 @@ fn import_resource_defining_interface(
         ComponentExportKind::Type,
     );
 
-    // Alias constructor/static functions needed for lowering
-    let fields_cm = project
-        .cm_interface_registry
-        .get_resource_cm_name("Fields")
-        .unwrap();
-    let response_cm = project
-        .cm_interface_registry
-        .get_resource_cm_name("Response")
-        .unwrap();
-    let constructor_fields = format!("[constructor]{fields_cm}");
-    let static_response_new = format!("[static]{response_cm}.new");
-
-    ctx.register_comp_func("http-fields-constructor");
-    builder.alias_export(
-        ctx.instance_idx(&types_instance),
-        &constructor_fields,
-        ComponentExportKind::Func,
-    );
-    ctx.register_comp_func("http-response-new");
-    builder.alias_export(
-        ctx.instance_idx(&types_instance),
-        &static_response_new,
-        ComponentExportKind::Func,
-    );
-    ctx.alias_comp_func("http-fields-constructor", "wasi:http/Fields::new");
-
+    // Alias the used constructors/methods/statics of this interface's resources.
+    // Each is registered under its local alias name and lowered generically by
+    // `lower_wasi_functions` (which derives the canonical options from the
+    // signature), so there is no per-constructor special case.
     {
         let http_resource_names: IndexSet<&str> = http_resources
             .iter()
@@ -2686,11 +2619,6 @@ fn import_resource_defining_interface(
             .iter()
             .filter(|f| {
                 if !http_resource_names.contains(f.interface_name.as_str()) {
-                    return false;
-                }
-                // Fields::new and Response::new are aliased separately above.
-                if f.wasi_func_name == constructor_fields || f.wasi_func_name == static_response_new
-                {
                     return false;
                 }
                 let is_resource_func = f.wasi_func_name.starts_with("[constructor]")
@@ -3623,7 +3551,19 @@ fn lower_wasi_functions(
                 options.push(CanonicalOption::Async);
             }
 
-            let needs_memory = func.needs_memory_with_registry(project.cm_interface_registry);
+            // Memory/realloc are needed when a param must be lowered through
+            // linear memory or the result is returned via an outptr (more than
+            // `MAX_FLAT_RESULTS` core values, e.g. a tuple or composite return).
+            let returns_via_outptr = func.return_type.as_ref().is_some_and(|ty| {
+                let resolved = project.cm_interface_registry.resolve_type(ty);
+                crate::component_model::return_type_requires_outptr(&resolved)
+                    || crate::component_model::cm_named_type_return_needs_outptr(
+                        &resolved,
+                        project.cm_interface_registry,
+                    )
+            });
+            let needs_memory =
+                func.needs_memory_with_registry(project.cm_interface_registry) || returns_via_outptr;
             let needs_realloc = needs_memory;
 
             if needs_memory {
