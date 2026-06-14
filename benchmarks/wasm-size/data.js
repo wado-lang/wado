@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781435251486,
+  "lastUpdate": 1781465720548,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33189,6 +33189,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a6eb847d68fddd23a364a0d1833428955321ad60"
         },
         "date": 1781435250929,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8816,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15796,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a83dd9d7ad5d27c924dcb94437923fa193fede2b",
+          "message": "Merge pull request #1382 from wado-lang/claude/wado-query-kiln-generator-vqhoks\n\nfeat(query): run kiln generators so wado query resolves generated symbols",
+          "timestamp": "2026-06-15T04:26:12+09:00",
+          "tree_id": "e5512cf957492a0bba13582d1f9de1f824a7bb37",
+          "url": "https://github.com/wado-lang/wado/commit/a83dd9d7ad5d27c924dcb94437923fa193fede2b"
+        },
+        "date": 1781465719991,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
