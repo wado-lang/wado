@@ -737,19 +737,26 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
     }
     if let Group(g) = elem {
         match classify_group(&g.alternatives) {
-            SimpleCst => return [
-                group_field_base_name(&g.alternatives),
-                group_variant_type_name(&g.alternatives),
-            ],
-            TokenOnly => return [token_group_field_name(&g.alternatives), "Token"],
-            SingleAlt => return [
-                single_alt_group_field_name(&g.alternatives[0]),
-                single_alt_group_type_name(&g.alternatives[0]),
-            ],
+            SimpleCst => {
+                return [
+                    group_field_base_name(&g.alternatives),
+                    group_variant_type_name(&g.alternatives),
+                ];
+            },
+            TokenOnly => {
+                return [token_group_field_name(&g.alternatives), "Token"];
+            },
+            SingleAlt => {
+                return [
+                    single_alt_group_field_name(&g.alternatives[0]),
+                    single_alt_group_type_name(&g.alternatives[0]),
+                ];
+            },
             General => panic(
                 "element_field_info: general Group reached the surface helper — route through `gen_op_group`/`gen_general_group_store*` instead",
             ),
-            Transparent => {},
+            Transparent => {
+            },
         }
     }
     panic(
@@ -805,13 +812,20 @@ pub fn replay_element_names(elem: &Element, name_counts: &mut List<[String, i32]
     }
     if let Group(g) = elem {
         match classify_group(&g.alternatives) {
-            SimpleCst => { dedup_name(&group_field_base_name(&g.alternatives), name_counts); },
-            TokenOnly => { dedup_name(&token_group_field_name(&g.alternatives), name_counts); },
-            SingleAlt => { dedup_name(&single_alt_group_field_name(&g.alternatives[0]), name_counts); },
+            SimpleCst => {
+                dedup_name(&group_field_base_name(&g.alternatives), name_counts);
+            },
+            TokenOnly => {
+                dedup_name(&token_group_field_name(&g.alternatives), name_counts);
+            },
+            SingleAlt => {
+                dedup_name(&single_alt_group_field_name(&g.alternatives[0]), name_counts);
+            },
             General => panic(
                 "replay_element_names: general Group reached the skip-replay walker — only token-shaped prefix elements should be replayed",
             ),
-            Transparent => {},
+            Transparent => {
+            },
         }
         return;
     }

@@ -49,7 +49,9 @@ impl Deserialize for Options;
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     // Stamp the real Kiln paths; otherwise the generated header's
     // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`.
-    let mut inputs: List<[String, String]> = [[req.primary.path, req.primary.content]];
+    let mut inputs: List<[String, String]> = [
+        [req.primary.path, req.primary.content],
+    ];
     for let supp of &req.inputs {
         inputs.push([supp.path, supp.content]);
     }

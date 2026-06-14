@@ -806,7 +806,7 @@ struct LrDispatchSide {
     scan: bool,
     fn_name: String,
     scan_fn_name: String,  // parse side only
-    use_prec: bool,        // parse side only
+    use_prec: bool,  // parse side only
 }
 
 fn gen_lr_branch_call(w: &mut CodeWriter, side: &LrDispatchSide, lr_idx: i32, prec: i32, emit_follow: bool) {
@@ -4358,15 +4358,15 @@ fn join_lookahead_condition(
             Scan => {
                 let idx_expr = if d == 0 { `pos` } else { `pos + {d}` };
                 let check = ctx.kind_check_str(&sig[d], &`tokens[{idx_expr}].kind`);
-                `{idx_expr} < tokens.len() && {check}`
+                `{idx_expr} < tokens.len() && {check}`;
             },
             Parse => {
                 let check_expr = if d == 0 { `p.peek_kind()` } else { `p.peek_at({d})` };
-                ctx.kind_check_str(&sig[d], &check_expr)
+                ctx.kind_check_str(&sig[d], &check_expr);
             },
             ParseKind => {
                 let check_expr = if d == 0 { `kind` } else { `p.peek_at({d})` };
-                ctx.kind_check_str(&sig[d], &check_expr)
+                ctx.kind_check_str(&sig[d], &check_expr);
             },
         };
         result.push_str(&part);

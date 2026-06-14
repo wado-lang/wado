@@ -850,11 +850,11 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
     return match op {
         RuleCall(mut rc) => {
             rc.min_prec_arg = Option::<i32>::Some(prec);
-            Op::RuleCall(rc)
+            Op::RuleCall(rc);
         },
         ListLabel(mut ll) => {
             ll.inner = rebind_self_ref_min_prec(ll.inner, prec);
-            Op::ListLabel(ll)
+            Op::ListLabel(ll);
         },
         Token(t) => Op::Token(t),
         Literal(l) => Op::Literal(l),
@@ -877,16 +877,16 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
             if rc.target_name == *rule_name {
                 rc.min_prec_arg = Option::<i32>::Some(prec);
             }
-            Op::RuleCall(rc)
+            Op::RuleCall(rc);
         },
         ListLabel(mut ll) => {
             ll.inner = deep_stamp_inner_self_refs_op(ll.inner, rule_name, rule_snake, prec);
-            Op::ListLabel(ll)
+            Op::ListLabel(ll);
         },
         Repeat(mut r) => {
             r.body = deep_stamp_inner_self_refs_op(r.body, rule_name, rule_snake, prec);
             r.scan_body = deep_stamp_inner_self_refs_scan(r.scan_body, rule_snake, prec);
-            Op::Repeat(r)
+            Op::Repeat(r);
         },
         Group(mut g) => {
             let mut new_alts: List<AltBody> = [];
@@ -914,7 +914,7 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
             }
             g.alts = new_alts;
             g.scan_alts = new_scan_alts;
-            Op::Group(g)
+            Op::Group(g);
         },
         // Leaves with no nested Op: pass through unchanged. Listed
         // explicitly so a new Op variant fails to compile here rather
@@ -936,11 +936,11 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
             if rc.target_snake == *rule_snake {
                 rc.min_prec_arg = Option::<i32>::Some(prec);
             }
-            ScanElement::RuleCall(rc)
+            ScanElement::RuleCall(rc);
         },
         Repeat(mut r) => {
             r.body = deep_stamp_inner_self_refs_scan(r.body, rule_snake, prec);
-            ScanElement::Repeat(r)
+            ScanElement::Repeat(r);
         },
         Group(mut g) => {
             let mut new_alts: List<ScanBody> = [];
@@ -952,7 +952,7 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                 new_alts.push(ScanBody { elements: new_elements });
             }
             g.alts = new_alts;
-            ScanElement::Group(g)
+            ScanElement::Group(g);
         },
         OptionalLookahead(mut ole) => {
             let mut new_bodies: List<ScanBody> = [];
@@ -964,7 +964,7 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                 new_bodies.push(ScanBody { elements: new_elements });
             }
             ole.bodies = new_bodies;
-            ScanElement::OptionalLookahead(ole)
+            ScanElement::OptionalLookahead(ole);
         },
         // Leaves with no nested ScanElement: pass through unchanged.
         // Listed explicitly so that adding a new ScanElement variant
@@ -1633,13 +1633,15 @@ fn lower_scan_element(
 fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
     let alts = &g.alternatives;
     match classify_group(alts) {
-        Transparent => return lower_scan_element(
-            &alts[0].elements[0],
-            ctx,
-            outer_follow,
-            FollowArg::NoFollow,
-            false,
-        ),
+        Transparent => {
+            return lower_scan_element(
+                &alts[0].elements[0],
+                ctx,
+                outer_follow,
+                FollowArg::NoFollow,
+                false,
+            );
+        },
         SingleAlt => {
             let alt = &alts[0];
             let mut elements: List<ScanElement> = [];
@@ -1668,9 +1670,7 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
             for let alt of alts {
                 let elem = &alt.elements[0];
                 bodies.push(ScanBody {
-                    elements: [
-                        lower_scan_element(elem, ctx, outer_follow, FollowArg::NoFollow, false),
-                    ],
+                    elements: [lower_scan_element(elem, ctx, outer_follow, FollowArg::NoFollow, false)],
                 });
                 first_sets.push([token_only_kind(elem)]);
             }
@@ -1682,8 +1682,12 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
                 wildcard_alt_indices: [] as List<i32>,
             });
         },
-        SimpleCst => return lower_simple_cst_scan_group(alts, ctx, outer_follow),
-        General => return lower_general_scan_group(alts, ctx, outer_follow),
+        SimpleCst => {
+            return lower_simple_cst_scan_group(alts, ctx, outer_follow);
+        },
+        General => {
+            return lower_general_scan_group(alts, ctx, outer_follow);
+        },
     }
 }
 
@@ -2292,30 +2296,40 @@ fn lower_group_op(
 ) -> Op {
     let alts = &g.alternatives;
     match classify_group(alts) {
-        Transparent => return lower_transparent_group(
-            &alts[0].elements[0],
-            name_counts,
-            rule_name,
-            ctx,
-            group_counter,
-            outer_follow,
-        ),
-        SingleAlt => return lower_single_alt_group(
-            &alts[0],
-            name_counts,
-            rule_name,
-            ctx,
-            group_counter,
-        ),
-        TokenOnly => return lower_token_only_group(alts, name_counts, ctx),
-        SimpleCst => return lower_simple_cst_group(alts, name_counts, ctx),
-        General => return lower_general_group(
-            alts,
-            name_counts,
-            rule_name,
-            ctx,
-            group_counter,
-        ),
+        Transparent => {
+            return lower_transparent_group(
+                &alts[0].elements[0],
+                name_counts,
+                rule_name,
+                ctx,
+                group_counter,
+                outer_follow,
+            );
+        },
+        SingleAlt => {
+            return lower_single_alt_group(
+                &alts[0],
+                name_counts,
+                rule_name,
+                ctx,
+                group_counter,
+            );
+        },
+        TokenOnly => {
+            return lower_token_only_group(alts, name_counts, ctx);
+        },
+        SimpleCst => {
+            return lower_simple_cst_group(alts, name_counts, ctx);
+        },
+        General => {
+            return lower_general_group(
+                alts,
+                name_counts,
+                rule_name,
+                ctx,
+                group_counter,
+            );
+        },
     }
 }
 
@@ -3424,14 +3438,24 @@ fn repeat_inner_base_name(elem: &Element, gc_speculative: i32) -> String {
 fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String {
     let alts = &g.alternatives;
     match classify_group(alts) {
-        Transparent => return repeat_inner_base_name(&alts[0].elements[0], gc_speculative),
-        SingleAlt => return single_alt_group_field_name(&alts[0]),
-        TokenOnly => return token_group_field_name(alts),
-        SimpleCst => return group_field_base_name(alts),
+        Transparent => {
+            return repeat_inner_base_name(&alts[0].elements[0], gc_speculative);
+        },
+        SingleAlt => {
+            return single_alt_group_field_name(&alts[0]);
+        },
+        TokenOnly => {
+            return token_group_field_name(alts);
+        },
+        SimpleCst => {
+            return group_field_base_name(alts);
+        },
         // Repeat is the first visitor of its inner Group but defers the
         // group_counter increment to the inner-Op lowering, so embed the
         // same speculative value the increment will use.
-        General => return general_group_field_name(gc_speculative),
+        General => {
+            return general_group_field_name(gc_speculative);
+        },
     }
 }
 
@@ -3723,24 +3747,66 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 ///   reason as the leaf arms.
 pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
     return match op {
-        Token(mut t) => { t.field = *new_field; t.dedup_base = *new_dedup_base; Op::Token(t) },
-        Literal(mut l) => { l.field = *new_field; l.dedup_base = *new_dedup_base; Op::Literal(l) },
-        RuleCall(mut r) => { r.field = *new_field; r.dedup_base = *new_dedup_base; Op::RuleCall(r) },
-        Wildcard(mut w) => { w.field = *new_field; w.dedup_base = *new_dedup_base; Op::Wildcard(w) },
-        Excluded(mut e) => { e.field = *new_field; e.dedup_base = *new_dedup_base; Op::Excluded(e) },
-        Repeat(mut rep) => { rep.field = *new_field; Op::Repeat(rep) },
-        Group(mut g) => { g.shape = rebind_group_shape(g.shape, new_field); Op::Group(g) },
-        ListLabel(mut ll) => { ll.field = *new_field; ll.dedup_base = *new_dedup_base; Op::ListLabel(ll) },
+        Token(mut t) => {
+            t.field = *new_field;
+            t.dedup_base = *new_dedup_base;
+            Op::Token(t);
+        },
+        Literal(mut l) => {
+            l.field = *new_field;
+            l.dedup_base = *new_dedup_base;
+            Op::Literal(l);
+        },
+        RuleCall(mut r) => {
+            r.field = *new_field;
+            r.dedup_base = *new_dedup_base;
+            Op::RuleCall(r);
+        },
+        Wildcard(mut w) => {
+            w.field = *new_field;
+            w.dedup_base = *new_dedup_base;
+            Op::Wildcard(w);
+        },
+        Excluded(mut e) => {
+            e.field = *new_field;
+            e.dedup_base = *new_dedup_base;
+            Op::Excluded(e);
+        },
+        Repeat(mut rep) => {
+            rep.field = *new_field;
+            Op::Repeat(rep);
+        },
+        Group(mut g) => {
+            g.shape = rebind_group_shape(g.shape, new_field);
+            Op::Group(g);
+        },
+        ListLabel(mut ll) => {
+            ll.field = *new_field;
+            ll.dedup_base = *new_dedup_base;
+            Op::ListLabel(ll);
+        },
     };
 }
 
 fn rebind_group_shape(shape: GroupShape, new_field: &String) -> GroupShape {
     return match shape {
         Transparent => GroupShape::Transparent,
-        TokenOnly(mut to) => { to.field = *new_field; GroupShape::TokenOnly(to) },
-        SimpleCst(mut scst) => { scst.field = *new_field; GroupShape::SimpleCst(scst) },
-        SingleAlt(mut sa) => { sa.field = *new_field; GroupShape::SingleAlt(sa) },
-        General(mut gen) => { gen.field = *new_field; GroupShape::General(gen) },
+        TokenOnly(mut to) => {
+            to.field = *new_field;
+            GroupShape::TokenOnly(to);
+        },
+        SimpleCst(mut scst) => {
+            scst.field = *new_field;
+            GroupShape::SimpleCst(scst);
+        },
+        SingleAlt(mut sa) => {
+            sa.field = *new_field;
+            GroupShape::SingleAlt(sa);
+        },
+        General(mut gen) => {
+            gen.field = *new_field;
+            GroupShape::General(gen);
+        },
     };
 }
 
@@ -3777,4 +3843,3 @@ fn collect_excluded_kinds_from_group(g: &GroupElement) -> List<String> {
     }
     return kinds;
 }
-

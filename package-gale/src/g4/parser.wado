@@ -1844,15 +1844,20 @@ pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, Asse
                 g.source_files.push(inp.0);
                 grammars.push(g);
             },
-            Err(e) => return Result::Err(AssembleError::Parse([inp.0, e.message])),
+            Err(e) => {
+                return Result::Err(AssembleError::Parse([inp.0, e.message]));
+            },
         }
     }
     let mut merged = merge_grammars(grammars);
     // Must run before `check_references`. See `ir.wado` for rationale.
     synthesize_implicit_tokens(&mut merged);
     match check_references(&merged) {
-        Ok(_) => {},
-        Err(e) => return Result::Err(AssembleError::Check(e.message)),
+        Ok(_) => {
+        },
+        Err(e) => {
+            return Result::Err(AssembleError::Check(e.message));
+        },
     }
     return Result::Ok(merged);
 }
