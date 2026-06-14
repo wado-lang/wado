@@ -5,9 +5,10 @@
 // the shared types from `core:prelude/slice.wado`.
 
 
-use { Ordering, Eq, Ord, IndexValue, IndexAssign, IntoIterator, FromIterator, Display } from "core:prelude/traits.wado";
+use { Ordering, Eq, Ord, IndexValue, IndexAssign, IntoIterator, FromIterator, Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { Formatter } from "core:prelude/format.wado";
+use { write_seq_inspect, write_seq_inspect_alt } from "core:prelude/array.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { ArraySlice, ArrayIter, ArrayRefIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
 use { panic, i32_min, i32_max, i32_clamp } from "core:internal";
@@ -558,5 +559,31 @@ impl SequenceLiteralBuilder for List<T> {
 impl Default for List<T> {
     pub fn default() -> List<T> {
         return [] as List<T>;
+    }
+}
+
+impl<T: Inspect> Inspect for List<T> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        write_seq_inspect(&self.repr, self.used, f, true, f.resolved_seq_limit());
+    }
+}
+
+impl<T: Inspect> Display for List<T> {
+    pub fn fmt(&self, f: &mut Formatter) {
+        // Display never applies the default cap; raw precision caps only if >= 0.
+        write_seq_inspect(&self.repr, self.used, f, false, f.precision);
+    }
+}
+
+impl<T: InspectAlt> InspectAlt for List<T> {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        write_seq_inspect_alt(&self.repr, self.used, f, true, f.resolved_seq_limit());
+    }
+}
+
+impl<T: InspectAlt> DisplayAlt for List<T> {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        // DisplayAlt never applies the default sequence cap (see Display).
+        write_seq_inspect_alt(&self.repr, self.used, f, false, f.precision);
     }
 }

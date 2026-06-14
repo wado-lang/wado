@@ -144,13 +144,16 @@ impl IndexValue<RangeInclusive<i32>> for Array<T> {
     }
 }
 
-// Shared Inspect/Display rendering. `limit` is the resolved element cap
-// (negative = none); `marker` appends `, ...` when elements are dropped.
-fn write_array_inspect<T: Inspect>(arr: &Array<T>, f: &mut Formatter, marker: bool, limit: i32) {
+// Shared `[a, b, …]` Inspect/Display rendering for the GC-array-backed
+// sequences: `Array<T>` directly, and `List<T>` over its used prefix (which
+// passes `&self.repr` and `self.used`). `repr` is the backing array and `len`
+// its logical length; `limit` is the resolved element cap (negative = none),
+// and `marker` appends `, ...` when elements are dropped.
+pub fn write_seq_inspect<T: Inspect>(repr: &Array<T>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
     f.write_char('[');
     let mut shown = 0;
     let mut truncated = false;
-    for let mut i = 0; i < arr.len(); i += 1 {
+    for let mut i = 0; i < len; i += 1 {
         if limit >= 0 && shown >= limit {
             truncated = true;
             break;
@@ -158,7 +161,7 @@ fn write_array_inspect<T: Inspect>(arr: &Array<T>, f: &mut Formatter, marker: bo
         if shown > 0 {
             f.write_str(&", ");
         }
-        arr[i].inspect(f);
+        repr[i].inspect(f);
         shown += 1;
     }
     if marker && truncated {
@@ -171,37 +174,23 @@ fn write_array_inspect<T: Inspect>(arr: &Array<T>, f: &mut Formatter, marker: bo
     f.write_char(']');
 }
 
-impl<T: Inspect> Inspect for Array<T> {
-    pub fn inspect(&self, f: &mut Formatter) {
-        let limit = f.resolved_seq_limit();
-        write_array_inspect(self, f, true, limit);
-    }
-}
-
-impl<T: Inspect> Display for Array<T> {
-    pub fn fmt(&self, f: &mut Formatter) {
-        // Display never applies the default cap; raw precision caps only if >= 0.
-        write_array_inspect(self, f, false, f.precision);
-    }
-}
-
-// Pretty-printed counterpart of `write_array_inspect`: `marker` appends a
-// `...` line when elements are dropped.
-fn write_array_inspect_alt<T: InspectAlt>(arr: &Array<T>, f: &mut Formatter, marker: bool, limit: i32) {
-    if arr.len() == 0 {
+/// Pretty-printed counterpart of [`write_seq_inspect`]: each element on its own
+/// indented line; `marker` appends a `...` line when elements are dropped.
+pub fn write_seq_inspect_alt<T: InspectAlt>(repr: &Array<T>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
+    if len == 0 {
         f.write_str(&"[]");
         return;
     }
     f.open_brace("[");
     let mut shown = 0;
     let mut truncated = false;
-    for let mut i = 0; i < arr.len(); i += 1 {
+    for let mut i = 0; i < len; i += 1 {
         if limit >= 0 && shown >= limit {
             truncated = true;
             break;
         }
         f.write_newline_indent();
-        arr[i].inspect_alt(f);
+        repr[i].inspect_alt(f);
         f.write_char(',');
         shown += 1;
     }
@@ -212,16 +201,28 @@ fn write_array_inspect_alt<T: InspectAlt>(arr: &Array<T>, f: &mut Formatter, mar
     f.close_brace("]");
 }
 
+impl<T: Inspect> Inspect for Array<T> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        write_seq_inspect(self, builtin::array_len(self), f, true, f.resolved_seq_limit());
+    }
+}
+
+impl<T: Inspect> Display for Array<T> {
+    pub fn fmt(&self, f: &mut Formatter) {
+        // Display never applies the default cap; raw precision caps only if >= 0.
+        write_seq_inspect(self, builtin::array_len(self), f, false, f.precision);
+    }
+}
+
 impl<T: InspectAlt> InspectAlt for Array<T> {
     pub fn inspect_alt(&self, f: &mut Formatter) {
-        let limit = f.resolved_seq_limit();
-        write_array_inspect_alt(self, f, true, limit);
+        write_seq_inspect_alt(self, builtin::array_len(self), f, true, f.resolved_seq_limit());
     }
 }
 
 impl<T: InspectAlt> DisplayAlt for Array<T> {
     pub fn fmt_alt(&self, f: &mut Formatter) {
         // DisplayAlt never applies the default sequence cap (see Display).
-        write_array_inspect_alt(self, f, false, f.precision);
+        write_seq_inspect_alt(self, builtin::array_len(self), f, false, f.precision);
     }
 }
