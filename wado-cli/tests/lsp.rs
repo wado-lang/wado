@@ -2341,6 +2341,24 @@ fn query_runs_generator_without_prior_compile() {
     );
 }
 
+/// Tier 2: a `--symbol` query whose target module consumes a generator.
+/// The kiln `with` clause lives in `src/main.wado`, not the synthetic query
+/// entry, so `run` resolves only if the generator ran for the target module
+/// and the redirect was re-keyed to the module identity the loader uses.
+#[test]
+fn query_symbol_runs_generator_for_target_module() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = kiln_consumer_fixture(tmp.path());
+
+    // `--base` defaults to the working directory (the app), and the notation
+    // addresses the consumer module that carries the inline generator clause.
+    wado_in(&app)
+        .args(["query", "hover", "--symbol", "./src/main.wado#run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn run"));
+}
+
 /// When the generator cannot run (here: its source does not compile), the
 /// query must not crash — it degrades to consume-only on-disk discovery and
 /// surfaces a `KILN_STALE_CACHE` warning rather than panicking or hanging.

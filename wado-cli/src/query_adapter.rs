@@ -6,6 +6,8 @@ use wado_lsp::{
     DefinitionResult, DocumentHighlight, HighlightKind, HoverResult, Position, ReferenceLocation,
 };
 
+use wado_compiler::kiln::InvocationIndex;
+
 use crate::args::CliExit;
 use crate::compiler_host::FilesystemCompilerHost;
 
@@ -20,16 +22,7 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
     let source = fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
 
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
-    let manifest_pair = crate::compile::load_nearest_manifest(path);
-    let host = crate::compile::attach_manifest_deps(
-        FilesystemCompilerHost::silent(base_path.clone()),
-        manifest_pair.as_ref(),
-        &base_path,
-    );
+    let host = entry_host(path);
 
     // The loader sees the entry under its canonicalized path (this is what
     // `Uri::to_filename` yields for `uri`), so run the kiln pipeline against
@@ -45,6 +38,23 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
     }
 
     Ok(PreparedQuery { uri, engine, host })
+}
+
+/// Silent, dependency-seeded host based at `entry_file`'s directory — the
+/// base `load_source` joins a generator's relative inputs against. Mirrors
+/// how `wado compile` hosts an entry file, so generators resolve their inputs
+/// identically on the query path.
+fn entry_host(entry_file: &Path) -> FilesystemCompilerHost {
+    let base = entry_file
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
+    let manifest_pair = crate::compile::load_nearest_manifest(entry_file);
+    crate::compile::attach_manifest_deps(
+        FilesystemCompilerHost::silent(base.clone()),
+        manifest_pair.as_ref(),
+        &base,
+    )
 }
 
 /// Run any kiln generators declared in `entry_file` natively (wasmtime) and
@@ -168,10 +178,16 @@ fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     let parsed = wado_compiler::symbol_notation::parse(notation)
         .map_err(|e| CliExit::error(format!("invalid symbol notation: {e}")))?;
     let base_dir = fs::canonicalize(base).unwrap_or_else(|_| Path::new(base).to_path_buf());
-    let host = FilesystemCompilerHost::silent(base_dir.clone());
     // Synthetic entry: never read from disk (opened with explicit text), but
     // its directory anchors relative-module resolution at `base`.
-    let uri = format!("file://{}", base_dir.join("__wado_query__.wado").display());
+    let entry_path = base_dir.join("__wado_query__.wado");
+    let manifest_pair = crate::compile::load_nearest_manifest(&entry_path);
+    let host = crate::compile::attach_manifest_deps(
+        FilesystemCompilerHost::silent(base_dir.clone()),
+        manifest_pair.as_ref(),
+        &base_dir,
+    );
+    let uri = format!("file://{}", entry_path.display());
     Ok(SymbolEnv {
         parsed,
         host,
@@ -180,33 +196,77 @@ fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     })
 }
 
-/// Open an engine on a synthetic entry that `use`s each module in `imports`.
-fn open_entry(uri: &str, imports: &[String]) -> wado_lsp::Engine {
+/// Open an engine on a synthetic entry that `use`s each module in `imports`,
+/// optionally with a precomputed kiln redirect index (see [`symbol_invocations`]).
+fn open_entry(
+    uri: &str,
+    imports: &[String],
+    invocations: Option<InvocationIndex>,
+) -> wado_lsp::Engine {
     let mut synthetic = String::new();
     for (i, module) in imports.iter().enumerate() {
         synthetic.push_str(&format!("use __wado_q{i} from \"{module}\";\n"));
     }
     let mut engine = wado_lsp::Engine::new();
-    engine.open_document(uri, synthetic);
+    match invocations {
+        Some(index) => engine.open_document_with_invocations(uri, synthetic, index),
+        None => engine.open_document(uri, synthetic),
+    }
     engine
 }
 
-// TODO(kiln, Tier 2): run generators for `--symbol` queries too. The
-// kiln `with` clause lives in the notation's *target* module, not the
-// synthetic entry, and when the loader imports it from the synthetic
-// entry the `decl_file` it keys the redirect by is the normalized
-// module string (`normalize_module_path(parsed.module)`, e.g.
-// `./main.wado` → `main.wado`), not a filesystem path. So `run_generators_for`
-// (which keys `decl_file` by the entry's path) cannot be reused as-is:
-// the index it produces must have its `decl_file` translated from the
-// target module's path to that normalized module string before injection.
-// Until then, `--symbol` queries over a kiln consumer stay consume-only.
+/// Run the generators declared in the notation's target module and return a
+/// redirect index keyed the way the loader sees that module when the synthetic
+/// entry imports it.
+///
+/// The kiln `with` clause lives in the *target* module, not the synthetic
+/// entry. When the synthetic `EntryPoint` imports `./main.wado`, the loader
+/// keys the redirect's `decl_file` by the normalized module string
+/// (`normalize_module_path("./main.wado")` → `main.wado`), not a filesystem
+/// path — but [`run_generators_for`] keys it by the target's path. So re-key
+/// every entry from the target's path to that module string before injection.
+///
+/// `None` when the module is not a local on-disk file (e.g. `core:` / `wasi:`
+/// / a dependency name) or the pipeline could not run, so the query degrades
+/// to consume-only.
+async fn symbol_invocations(env: &SymbolEnv) -> Option<InvocationIndex> {
+    // `module_key` is the loader's `decl_file` for the target when the
+    // synthetic entry imports it (same `normalize_module_path` the loader
+    // applies to the import string). `target_abs` is the clean on-disk path
+    // the pipeline runs against — canonicalize so an embedded `./` from the
+    // module string can't corrupt the generator's relative input resolution.
+    // `canonicalize` failing also rules out non-file modules (`core:` /
+    // `wasi:` / a dependency name), so the query stays consume-only for them.
+    let module_key = wado_compiler::name::normalize_module_path(&env.parsed.module);
+    let target_abs = env.base_dir.join(&module_key).canonicalize().ok()?;
+    // The generator's relative inputs resolve against its declaring file's
+    // directory, so run it with a host based there — not `env.host`, which is
+    // based at `base_dir` to resolve the synthetic entry's imports.
+    let pipeline_host = entry_host(&target_abs);
+    let raw = run_generators_for(&target_abs, &pipeline_host).await?;
+    let target_decl = target_abs.to_string_lossy();
+    let mut translated = InvocationIndex::new();
+    for (decl, from, uri) in raw.entries() {
+        let decl = if decl == target_decl {
+            module_key.as_str()
+        } else {
+            decl
+        };
+        translated.insert(decl, from, uri);
+    }
+    Some(translated)
+}
 
 /// Build a single-module query context (the notation's module only). Used by
 /// `definition` / `hover` / `document-highlight`.
-fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
+async fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
     let env = symbol_env(notation, base)?;
-    let engine = open_entry(&env.uri, std::slice::from_ref(&env.parsed.module));
+    let invocations = symbol_invocations(&env).await;
+    let engine = open_entry(
+        &env.uri,
+        std::slice::from_ref(&env.parsed.module),
+        invocations,
+    );
     Ok(SymbolQuery {
         parsed: env.parsed,
         engine,
@@ -223,10 +283,15 @@ fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliEx
 /// on their own, dropping the offender.
 async fn prepare_references_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
     let env = symbol_env(notation, base)?;
+    let invocations = symbol_invocations(&env).await;
     let target = env.parsed.module.clone();
     let workspace = workspace_module_specs(&env.base_dir);
 
-    let mut engine = open_entry(&env.uri, &imports_with_target(&target, &workspace));
+    let mut engine = open_entry(
+        &env.uri,
+        &imports_with_target(&target, &workspace),
+        invocations.clone(),
+    );
     if !engine.analyzes(&env.uri, &env.host).await {
         let mut loadable = Vec::new();
         for spec in &workspace {
@@ -234,7 +299,11 @@ async fn prepare_references_query(notation: &str, base: &str) -> Result<SymbolQu
                 loadable.push(spec.clone());
             }
         }
-        engine = open_entry(&env.uri, &imports_with_target(&target, &loadable));
+        engine = open_entry(
+            &env.uri,
+            &imports_with_target(&target, &loadable),
+            invocations,
+        );
     }
 
     Ok(SymbolQuery {
@@ -349,7 +418,7 @@ pub async fn run_definition_by_symbol(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let q = prepare_symbol_query(notation, base)?;
+    let q = prepare_symbol_query(notation, base).await?;
     let result = q
         .engine
         .definition_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
@@ -418,7 +487,7 @@ pub async fn run_document_highlight_by_symbol(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let q = prepare_symbol_query(notation, base)?;
+    let q = prepare_symbol_query(notation, base).await?;
     let result = q
         .engine
         .document_highlight_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
@@ -498,7 +567,7 @@ pub async fn run_hover_by_symbol(
     public_only: bool,
     json_output: bool,
 ) -> Result<(), CliExit> {
-    let q = prepare_symbol_query(notation, base)?;
+    let q = prepare_symbol_query(notation, base).await?;
     let result = q
         .engine
         .hover_by_symbol(&q.uri, &q.parsed, public_only, &q.host)
