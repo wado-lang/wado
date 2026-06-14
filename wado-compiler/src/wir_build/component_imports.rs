@@ -42,6 +42,14 @@ pub fn resolve_import_plan(
         }
     };
 
+    let mut export_referenced_interfaces: IndexSet<String> = IndexSet::default();
+    for export in &project.component_plan.world_exports {
+        for (_, cm_ty) in &export.cm_params {
+            collect_export_interface_fqs(cm_ty, &mut export_referenced_interfaces);
+        }
+        collect_export_interface_fqs(&export.cm_result, &mut export_referenced_interfaces);
+    }
+
     // No blanket "kiln forbids WASI" early-return: the kiln-generator world
     // forbids WASI *interfaces*, and `optimize/dce.rs` keeps `used_wasi_functions`
     // empty for it, so the interface phases below yield nothing. But its
@@ -83,13 +91,17 @@ pub fn resolve_import_plan(
             .next()
             .is_some();
         if defines_resources && interface_info.resource_type.is_some() {
+            // Import when a function of this interface is used, or when a world
+            // export's signature references its types (e.g. a handler returning
+            // `Result<Response, ErrorCode>` that constructs no request/response
+            // itself still needs the response/error-code types).
             let has_used_function = interface_info.functions.iter().any(|func| {
                 registry.is_function_supported(func)
                     && project
                         .used_wasi_functions
                         .contains(&format!("{}::{}", func.interface_name, func.method_name))
             });
-            if has_used_function {
+            if has_used_function || export_referenced_interfaces.contains(&interface_info.path) {
                 push(
                     &mut entries,
                     interface_info.path.clone(),
@@ -201,6 +213,26 @@ pub fn resolve_import_plan(
     }
 
     entries
+}
+
+/// Collect the CM interface FQs a world export's boundary type references, so a
+/// resource-defining interface is imported when an export's signature needs its
+/// types even if no function of it is called.
+fn collect_export_interface_fqs(
+    ty: &crate::wir_build::component_plan::CmExportType,
+    out: &mut IndexSet<String>,
+) {
+    use crate::wir_build::component_plan::CmExportType;
+    match ty {
+        CmExportType::Unit => {}
+        CmExportType::Named { interface_fq, .. } => {
+            out.insert(interface_fq.clone());
+        }
+        CmExportType::HandlerResult { ok, err } => {
+            collect_export_interface_fqs(ok, out);
+            collect_export_interface_fqs(err, out);
+        }
+    }
 }
 
 /// The flat sorted FQ list, for the WIT producer's world import refs.
