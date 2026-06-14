@@ -9,7 +9,10 @@ use crate::ast::{
 use crate::comment::{CommentKind, TriviaMap};
 use crate::stdlib;
 use crate::token::Span;
-use crate::unparse::{get_item_id, unparse_type_into};
+use crate::unparse::{
+    get_item_id, unparse_enum_signature, unparse_function_signature, unparse_struct_signature,
+    unparse_type_into,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocModule {
@@ -296,7 +299,7 @@ fn build_doc_struct(s: &StructDecl, impls: &[&ImplBlock], trivia: &TriviaMap) ->
     let (methods, trait_impls) = collect_impl_methods_for_type(&s.name, impls, trivia);
 
     DocStruct {
-        signature: render_struct_signature(s),
+        signature: unparse_struct_signature(s, true),
         doc: extract_doc_comment_with_attrs(trivia, s.id, &s.span, &s.attrs),
         fields,
         has_private_fields,
@@ -355,7 +358,7 @@ fn build_doc_enum(e: &EnumDecl, trivia: &TriviaMap) -> DocEnum {
         })
         .collect();
     DocEnum {
-        signature: render_enum_signature(e),
+        signature: unparse_enum_signature(e),
         cases,
         doc: extract_doc_comment_with_attrs(trivia, e.id, &e.span, &e.attrs),
     }
@@ -470,7 +473,7 @@ fn build_doc_resource(r: &crate::ast::ResourceDecl, trivia: &TriviaMap) -> DocRe
 
 fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
     DocFunction {
-        signature: render_fn_signature(f),
+        signature: unparse_function_signature(f),
         doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
     }
 }
@@ -641,93 +644,6 @@ fn render_interface_method_signature(m: &crate::ast::InterfaceMethod) -> String 
         sig.push_str(" -> ");
         sig.push_str(&render_type(ret));
     }
-    sig
-}
-
-fn render_fn_signature(f: &Function) -> String {
-    let mut sig = String::new();
-    if f.is_pub {
-        sig.push_str("pub ");
-    }
-    if f.is_export {
-        sig.push_str("export ");
-    }
-    if f.is_async {
-        sig.push_str("async ");
-    }
-    sig.push_str("fn ");
-    sig.push_str(&f.name);
-    sig.push_str(&render_generic_params(&f.type_params));
-    sig.push('(');
-    for (i, param) in f.params.iter().enumerate() {
-        if i > 0 {
-            sig.push_str(", ");
-        }
-        sig.push_str(&render_param(param));
-    }
-    sig.push(')');
-    if let Some(ret) = &f.return_type {
-        sig.push_str(" -> ");
-        sig.push_str(&render_type(ret));
-    }
-    if !f.effects.is_empty() {
-        sig.push_str(" with ");
-        sig.push_str(&f.effects.join(", "));
-    }
-    sig
-}
-
-fn render_struct_signature(s: &StructDecl) -> String {
-    let mut sig = String::new();
-    if s.is_pub {
-        sig.push_str("pub ");
-    }
-    sig.push_str("struct ");
-    sig.push_str(&s.name);
-    sig.push_str(&render_generic_params(&s.type_params));
-    sig.push_str(" { ");
-
-    // Mirror `build_doc_struct`: `__`-prefixed fields are hidden in docs.
-    let is_hidden = |f: &StructField| !f.is_pub || f.name.starts_with("__");
-    let has_private = s.fields.iter().any(is_hidden);
-    let pub_fields: Vec<&StructField> = s.fields.iter().filter(|f| !is_hidden(f)).collect();
-
-    for (i, field) in pub_fields.iter().enumerate() {
-        if i > 0 {
-            sig.push_str(", ");
-        }
-        sig.push_str(&field.name);
-        sig.push_str(": ");
-        sig.push_str(&render_type(&field.ty));
-    }
-
-    if has_private {
-        if !pub_fields.is_empty() {
-            sig.push_str(", ");
-        }
-        sig.push_str("..");
-    }
-
-    sig.push_str(" }");
-    sig
-}
-
-fn render_enum_signature(e: &EnumDecl) -> String {
-    let mut sig = String::new();
-    if e.is_pub {
-        sig.push_str("pub ");
-    }
-    sig.push_str("enum ");
-    sig.push_str(&e.name);
-    sig.push_str(&render_generic_params(&e.type_params));
-    sig.push_str(" { ");
-    for (i, case) in e.cases.iter().enumerate() {
-        if i > 0 {
-            sig.push_str(", ");
-        }
-        sig.push_str(&case.name);
-    }
-    sig.push_str(" }");
     sig
 }
 

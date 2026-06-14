@@ -333,8 +333,10 @@ fn find_let_in_expr(expr: &Expr, target: AstId, name: &str) -> Option<String> {
 fn item_info(item: &Item, name: &str) -> Option<String> {
     match item {
         Item::Function(f) if f.name == name => Some(unparse::unparse_function_signature(f)),
-        Item::Struct(s) if s.name == name => Some(unparse::unparse_struct_header(s)),
-        Item::Enum(e) if e.name == name => Some(unparse::unparse_enum_header(e)),
+        // Hover shows the definition as written (all fields/cases), like the
+        // `wado doc` signature but without the public-only filtering.
+        Item::Struct(s) if s.name == name => Some(unparse::unparse_struct_signature(s, false)),
+        Item::Enum(e) if e.name == name => Some(unparse::unparse_enum_signature(e)),
         Item::Variant(v) if v.name == name => Some(unparse::unparse_variant_header(v)),
         Item::Flags(fl) if fl.name == name => Some(unparse::unparse_flags_header(fl)),
         Item::Trait(t) if t.name == name => Some(unparse::unparse_trait_header(t)),

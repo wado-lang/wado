@@ -3684,6 +3684,52 @@ pub fn unparse_trait_header(t: &TraitDecl) -> String {
     out
 }
 
+/// Render a struct as its full declaration with the field list inline:
+/// `struct Point { x: i32, y: i32 }`. With `public_only`, non-public and
+/// `__`-prefixed fields are hidden and summarized with `..` (for `wado doc`);
+/// otherwise every field is shown as written (for editor hover).
+pub fn unparse_struct_signature(s: &StructDecl, public_only: bool) -> String {
+    let mut out = String::new();
+    emit_decl_header(s.is_pub, "struct ", &s.name, &s.type_params, &mut out);
+    out.push_str(" { ");
+    let hidden = |f: &StructField| public_only && (!f.is_pub || f.name.starts_with("__"));
+    let has_hidden = s.fields.iter().any(hidden);
+    let mut first = true;
+    for field in s.fields.iter().filter(|f| !hidden(f)) {
+        if !first {
+            out.push_str(", ");
+        }
+        first = false;
+        out.push_str(&field.name);
+        out.push_str(": ");
+        unparse_type_into(&field.ty, &mut out);
+    }
+    if has_hidden {
+        if !first {
+            out.push_str(", ");
+        }
+        out.push_str("..");
+    }
+    out.push_str(" }");
+    out
+}
+
+/// Render an enum as its full declaration with the case list inline:
+/// `enum Color { Red, Green, Blue }`.
+pub fn unparse_enum_signature(e: &EnumDecl) -> String {
+    let mut out = String::new();
+    emit_decl_header(e.is_pub, "enum ", &e.name, &e.type_params, &mut out);
+    out.push_str(" { ");
+    for (i, case) in e.cases.iter().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(&case.name);
+    }
+    out.push_str(" }");
+    out
+}
+
 pub fn unparse_newtype_signature(n: &Newtype) -> String {
     let mut out = String::new();
     emit_decl_header(n.is_pub, "type ", &n.name, &n.type_params, &mut out);

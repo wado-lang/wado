@@ -210,14 +210,36 @@ fn hover_renders_function_signature() {
 }
 
 #[test]
-fn hover_renders_struct_header() {
+fn hover_renders_struct_definition_with_fields() {
     futures::executor::block_on(async {
         let lib = "pub struct Point { x: i32, y: i32 }\n";
         let result = hover("./geo.wado", lib, "./geo.wado", "./geo.wado#Point")
             .await
             .expect("resolves hover");
+        // Hover shows the definition as written, including fields.
         assert!(
-            result.contents.value.contains("struct Point"),
+            result
+                .contents
+                .value
+                .contains("struct Point { x: i32, y: i32 }"),
+            "got: {}",
+            result.contents.value
+        );
+    });
+}
+
+#[test]
+fn hover_renders_enum_definition_with_cases() {
+    futures::executor::block_on(async {
+        let lib = "pub enum Color { Red, Green, Blue }\n";
+        let result = hover("./c.wado", lib, "./c.wado", "./c.wado#Color")
+            .await
+            .expect("resolves hover");
+        assert!(
+            result
+                .contents
+                .value
+                .contains("enum Color { Red, Green, Blue }"),
             "got: {}",
             result.contents.value
         );

@@ -66,7 +66,10 @@ across a whole project still need a project-wide context (a follow-up).
 - [x] Parse the notation (`wado_compiler::symbol_notation`).
 - [x] `--symbol` locator for `definition` / `references` / `document-highlight`
       / `hover` on free / module-level symbols.
-- [x] `hover` kind: notation (or position) → signature / type.
+- [x] `hover` kind: notation (or position) → signature / type. The signature
+      is the Wado definition with the body omitted (struct fields / enum cases
+      shown), rendered by the same `unparse::unparse_{struct,enum}_signature` /
+      `unparse_function_signature` that `wado doc` uses.
 - [ ] Include doc-comment summaries in `hover` output.
 - [ ] Resolve members (`Type::m`, `Type.m`, `Type^Trait::m`) — needs an
       impl/method index; today they return "not yet supported".
