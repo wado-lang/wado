@@ -2161,6 +2161,32 @@ impl CmInterfaceRegistry {
 
 use wasm_encoder::{ComponentValType, InstanceType, PrimitiveValType, TypeBounds};
 
+/// Map a Wado primitive type name to its Component Model [`PrimitiveValType`].
+///
+/// Single source of truth for the Wado-primitive → CM-primitive table. Both the
+/// plan builder (which only needs the recognized set) and codegen (which needs
+/// the rendered valtype) delegate here, so the recognized and renderable sets
+/// cannot diverge. Returns `None` for any non-primitive name.
+pub fn wado_primitive_name_to_cm(name: &str) -> Option<PrimitiveValType> {
+    let prim = match name {
+        "i8" => PrimitiveValType::S8,
+        "i16" => PrimitiveValType::S16,
+        "i32" => PrimitiveValType::S32,
+        "i64" => PrimitiveValType::S64,
+        "u8" => PrimitiveValType::U8,
+        "u16" => PrimitiveValType::U16,
+        "u32" => PrimitiveValType::U32,
+        "u64" => PrimitiveValType::U64,
+        "f32" => PrimitiveValType::F32,
+        "f64" => PrimitiveValType::F64,
+        "bool" => PrimitiveValType::Bool,
+        "char" => PrimitiveValType::Char,
+        "String" => PrimitiveValType::String,
+        _ => return None,
+    };
+    Some(prim)
+}
+
 /// Helper for generating CM types within an [`InstanceType`] from registry metadata.
 ///
 /// Tracks type indices and deduplicates types (borrow, list, result, etc.)

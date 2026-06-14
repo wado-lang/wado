@@ -67,18 +67,94 @@ pub enum EntryPointKind {
     Command,
     /// `wasi:http/service` — for `wado serve`.
     Service,
+    /// The library world — for `wado compile --lib`. Its entry comes from
+    /// `[package].lib` (not the `[world]` table) and the world FQ is derived
+    /// from `[package]` identity rather than being a fixed WASI world.
+    Lib,
 }
 
 impl EntryPointKind {
     /// The fully-qualified CM world name this entry point targets, used to look
-    /// it up in the manifest's `[world]` table.
+    /// it up in the manifest's `[world]` table. `Lib` has no fixed world FQ
+    /// (it is derived from `[package]`), so it returns `None`.
     #[must_use]
-    pub const fn world_fq(self) -> &'static str {
+    pub const fn world_fq(self) -> Option<&'static str> {
         match self {
-            EntryPointKind::Command => "wasi:cli/command",
-            EntryPointKind::Service => "wasi:http/service",
+            EntryPointKind::Command => Some("wasi:cli/command"),
+            EntryPointKind::Service => Some("wasi:http/service"),
+            EntryPointKind::Lib => None,
         }
     }
+}
+
+/// The library world FQ derived from a `[package]`, in the standard
+/// `namespace:name/name@version` shape. `[package].namespace` is required for
+/// `--lib`; this returns an error message when it is missing.
+pub fn lib_world_fq(pkg: &wado_manifest::Package) -> Result<String, CliExit> {
+    let namespace = pkg
+        .namespace
+        .as_deref()
+        .ok_or_else(|| CliExit::error("`--lib` requires `[package].namespace` in wado.toml"))?;
+    Ok(format!(
+        "{namespace}:{name}/{name}@{version}",
+        name = pkg.name,
+        version = pkg.version,
+    ))
+}
+
+/// Resolve the `--lib` entry point and library world FQ.
+///
+/// `--lib` requires a manifest (directory input or a `wado.toml` discovered
+/// from the cwd); a bare `.wado` file argument is rejected because the package
+/// namespace — required to form the world FQ — lives only in `[package]`. The
+/// entry comes from `[package].lib`, not the `[world]` table.
+///
+/// Returns `(entry_path, world_fq)`.
+pub fn resolve_lib_input(
+    explicit_input: Option<String>,
+    usage: &str,
+) -> Result<(String, String), CliExit> {
+    let project = if let Some(input) = explicit_input {
+        let path = Path::new(&input);
+        if !path.is_dir() {
+            return Err(CliExit::error(
+                "`--lib` requires a package directory (or a wado.toml in the \
+                 current directory); a single .wado file has no [package] namespace",
+            ));
+        }
+        load_from_dir(path).map_err(|e| match e {
+            DiscoveryError::Io(io_err) if io_err.kind() == io::ErrorKind::NotFound => {
+                CliExit::error(format!("no wado.toml found in directory '{input}'"))
+            }
+            other => CliExit::error(other),
+        })?
+    } else {
+        let cwd = env::current_dir()
+            .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
+        match discover(&cwd) {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                return Err(CliExit::error_with_usage(
+                    "no input file specified and no wado.toml found",
+                    usage,
+                ));
+            }
+            Err(e) => return Err(CliExit::error(e)),
+        }
+    };
+
+    let pkg = project
+        .manifest
+        .package
+        .as_ref()
+        .ok_or_else(|| CliExit::error("`--lib` requires a `[package]` section in wado.toml"))?;
+    let world_fq = lib_world_fq(pkg)?;
+    let lib_rel = pkg
+        .lib
+        .as_deref()
+        .ok_or_else(|| CliExit::error("`--lib` requires `[package].lib` in wado.toml"))?;
+    let entry = project.root.join(lib_rel);
+    Ok((entry.to_string_lossy().into_owned(), world_fq))
 }
 
 /// Resolve an entry point path from a manifest.
@@ -87,7 +163,7 @@ impl EntryPointKind {
 /// manifest's `[world]` table has no entry for the targeted world.
 #[must_use]
 pub fn resolve_entry_point(project: &ProjectManifest, kind: EntryPointKind) -> Option<PathBuf> {
-    let relative = project.manifest.world_entry(kind.world_fq())?;
+    let relative = project.manifest.world_entry(kind.world_fq()?)?;
     Some(project.root.join(relative))
 }
 
@@ -113,7 +189,7 @@ fn entry_point_or_error(
     resolve_entry_point(project, kind).ok_or_else(|| {
         CliExit::error(format!(
             "wado.toml found but [world].\"{}\" is not set",
-            kind.world_fq()
+            kind.world_fq().unwrap_or("<library>")
         ))
     })
 }
@@ -335,6 +411,87 @@ version = "0.1.0"
         let resolved =
             resolve_input(Some(file_arg.clone()), EntryPointKind::Command, "usage").unwrap();
         assert_eq!(resolved, file_arg);
+    }
+
+    #[test]
+    fn lib_world_fq_from_package() {
+        let toml = r#"
+[package]
+namespace = "wado"
+name = "cm-catalog-min"
+version = "0.1.0"
+lib = "src/lib.wado"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let fq = lib_world_fq(m.package.as_ref().unwrap()).unwrap();
+        assert_eq!(fq, "wado:cm-catalog-min/cm-catalog-min@0.1.0");
+    }
+
+    #[test]
+    fn lib_world_fq_requires_namespace() {
+        let toml = r#"
+[package]
+name = "no-ns"
+version = "0.1.0"
+lib = "src/lib.wado"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let err = lib_world_fq(m.package.as_ref().unwrap()).unwrap_err();
+        assert!(
+            err.message.contains("[package].namespace"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn resolve_lib_input_resolves_entry_and_world() {
+        let tmp = tempfile::tempdir().unwrap();
+        let toml = r#"
+[package]
+namespace = "wado"
+name = "mylib"
+version = "0.2.0"
+lib = "src/lib.wado"
+"#;
+        fs::write(tmp.path().join("wado.toml"), toml).unwrap();
+
+        let (entry, world) =
+            resolve_lib_input(Some(tmp.path().to_string_lossy().into_owned()), "usage").unwrap();
+        assert_eq!(
+            entry,
+            tmp.path()
+                .join("src/lib.wado")
+                .to_string_lossy()
+                .into_owned()
+        );
+        assert_eq!(world, "wado:mylib/mylib@0.2.0");
+    }
+
+    #[test]
+    fn resolve_lib_input_requires_lib_field() {
+        let tmp = tempfile::tempdir().unwrap();
+        let toml = r#"
+[package]
+namespace = "wado"
+name = "mylib"
+version = "0.2.0"
+"#;
+        fs::write(tmp.path().join("wado.toml"), toml).unwrap();
+
+        let err = resolve_lib_input(Some(tmp.path().to_string_lossy().into_owned()), "usage")
+            .unwrap_err();
+        assert!(err.message.contains("[package].lib"), "{}", err.message);
+    }
+
+    #[test]
+    fn resolve_lib_input_rejects_single_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("lib.wado");
+        fs::write(&file, "").unwrap();
+        let err =
+            resolve_lib_input(Some(file.to_string_lossy().into_owned()), "usage").unwrap_err();
+        assert!(err.message.contains("package directory"), "{}", err.message);
     }
 
     #[test]

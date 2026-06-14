@@ -214,6 +214,12 @@ pub struct CompilerOptions {
     /// default; the CLI's `--no-unused` flag turns it off. Gates only the
     /// diagnostic emission, never the liveness analysis itself.
     pub unused_diagnostics: bool,
+    /// Library world FQ (`namespace:name/name@version`) for `wado compile
+    /// --lib`. When `Some`, the compiler synthesizes a library world from the
+    /// entry module's `export fn`s — one Component Model export per function —
+    /// instead of conforming to a fixed WASI world. Sets `target_world` to this
+    /// FQ and bypasses the static world-registry lookup.
+    pub lib_world: Option<String>,
 }
 
 impl Default for CompilerOptions {
@@ -231,6 +237,7 @@ impl Default for CompilerOptions {
             test_name_filters: Vec::new(),
             codegen_flags: Vec::new(),
             unused_diagnostics: true,
+            lib_world: None,
         }
     }
 }
@@ -331,6 +338,49 @@ fn emit_unused_diagnostics<H: CompilerHost>(
             Code::TestOnlyGlobal,
             "is only used by tests",
         );
+    }
+}
+
+/// Synthesize a library [`WorldInfo`] (`--lib`) from the entry module's
+/// `export fn` signatures: one direct world export per exported function.
+///
+/// Milestone 2 is functions-only and primitives-only, so each export is a
+/// direct world function (`from_interface_fq = None`). Parameter and return
+/// types are taken straight from the AST signature.
+fn synthesize_lib_world_info(
+    fq: &str,
+    entry_module: Option<&ast::Module>,
+) -> world_registry::WorldInfo {
+    use crate::ast::Item;
+    use crate::world_registry::{WorldExportInfo, WorldInfo};
+
+    let exports = entry_module
+        .map(|module| {
+            module
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Function(func) if func.is_export => Some(WorldExportInfo {
+                        name: func.name.clone(),
+                        is_async: func.is_async,
+                        params: func
+                            .params
+                            .iter()
+                            .map(|p| (p.name.clone(), p.ty.clone()))
+                            .collect(),
+                        return_type: func.return_type.clone(),
+                        from_interface_fq: None,
+                    }),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    WorldInfo {
+        fq_name: fq.to_string(),
+        exports,
+        imports: Vec::new(),
     }
 }
 
@@ -518,6 +568,15 @@ fn compile_after_load<H: CompilerHost>(
         None
     };
 
+    // Synthesize the library world (`--lib`) from the entry module's
+    // `export fn` signatures before `sem.modules` is dropped by the
+    // destructure below. Each `export fn` becomes one direct world export
+    // (functions-only, primitives — milestone 2).
+    let lib_world_info = options
+        .lib_world
+        .as_ref()
+        .map(|fq| synthesize_lib_world_info(fq, sem.modules.get(&sem.entry_module_source)));
+
     let semantics::Semantics {
         entry_module_source,
         symbols,
@@ -578,6 +637,12 @@ fn compile_after_load<H: CompilerHost>(
     if let Some(world) = options.target_world {
         package.target_world = world;
     }
+    // The library world (`--lib`) overrides the target world FQ and is carried
+    // owned on the package (the static registry cannot hold it).
+    if let Some(lib_world) = lib_world_info {
+        package.target_world = lib_world.fq_name.clone();
+        package.lib_world_info = Some(lib_world);
+    }
     package.skip_validation = options.skip_validation;
     package.test_name_filters = options.test_name_filters;
     package.wasm_assets = wasm_assets;
@@ -611,7 +676,8 @@ fn compile_after_load<H: CompilerHost>(
                 .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
             if package.is_test_world() {
                 "debug".to_string()
-            } else if is_http_service {
+            } else if is_http_service || package.is_lib_world() {
+                // A library is consumed by a long-running host; reclaim memory.
                 "freelist".to_string()
             } else {
                 "bump".to_string()
@@ -640,8 +706,12 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    // Validate target world (test world is handled specially, not in registry)
-    if !package.is_test_world() && package.world_registry.get(&package.target_world).is_none() {
+    // Validate target world (test and library worlds are handled specially,
+    // not in the static registry)
+    if !package.is_test_world()
+        && !package.is_lib_world()
+        && package.world_registry.get(&package.target_world).is_none()
+    {
         let _ = logger.error(compiler_host::Diagnostic {
             severity: compiler_host::Severity::Error,
             code: compiler_host::Code::UnsupportedFeature,
@@ -1411,3 +1481,38 @@ impl std::fmt::Display for CompileError {
 }
 
 impl std::error::Error for CompileError {}
+
+#[cfg(test)]
+mod lib_world_tests {
+    use super::synthesize_lib_world_info;
+
+    #[test]
+    fn synthesizes_one_export_per_export_fn() {
+        let src = r#"
+export fn id_u32(v: u32) -> u32 { return v; }
+fn helper(x: u32) -> u32 { return x; }
+export fn id_bool(v: bool) -> bool { return v; }
+"#;
+        let module = super::parse(src).ast;
+        let world = synthesize_lib_world_info("wado:mylib/mylib@0.1.0", Some(&module));
+
+        assert_eq!(world.fq_name, "wado:mylib/mylib@0.1.0");
+        assert!(world.imports.is_empty());
+        // Only the two `export fn`s become world exports; `helper` is excluded.
+        let names: Vec<&str> = world.exports.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["id_u32", "id_bool"]);
+
+        let id_u32 = &world.exports[0];
+        assert!(!id_u32.is_async);
+        assert!(id_u32.from_interface_fq.is_none());
+        assert_eq!(id_u32.params.len(), 1);
+        assert_eq!(id_u32.params[0].0, "v");
+        assert!(id_u32.return_type.is_some());
+    }
+
+    #[test]
+    fn empty_when_no_entry_module() {
+        let world = synthesize_lib_world_info("wado:x/x@0.1.0", None);
+        assert!(world.exports.is_empty());
+    }
+}

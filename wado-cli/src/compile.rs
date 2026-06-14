@@ -82,6 +82,10 @@ pub struct CompileOptions {
     pub allocator: Option<String>,
     pub no_cache: bool,
     pub codegen_flags: Vec<String>,
+    /// Library world FQ (`namespace:name/name@version`) for `--lib`. When set,
+    /// the compiler synthesizes a library world from the entry module's
+    /// `export fn`s and exports each one as a Component Model function.
+    pub lib_world: Option<String>,
 }
 
 /// Compile-time options shared by `compile`/`run`/`serve`/`test`.
@@ -111,6 +115,8 @@ pub struct CompileFlags {
     /// Forwarded verbatim to `CompilerOptions::codegen_flags`; the compiler
     /// validates them.
     pub codegen_flags: Vec<String>,
+    /// Library world FQ for `--lib`. Forwarded to `CompilerOptions::lib_world`.
+    pub lib_world: Option<String>,
 }
 
 impl CompileOptions {
@@ -127,6 +133,7 @@ impl CompileOptions {
             no_cache: self.no_cache,
             test_name_filters: Vec::new(),
             codegen_flags: self.codegen_flags.clone(),
+            lib_world: self.lib_world.clone(),
         }
     }
 }
@@ -137,6 +144,7 @@ enum Opt {
     Format,
     WatToStdout,
     World,
+    Lib,
     OptLevel,
     InlineThreshold,
     OptIterations,
@@ -154,6 +162,7 @@ impl Opt {
         Self::Format,
         Self::WatToStdout,
         Self::World,
+        Self::Lib,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
@@ -186,6 +195,12 @@ impl Opt {
                 desc: "Output WAT to stdout (shorthand for --format wat -o /dev/stdout)",
             },
             Self::World => args::WORLD_SPEC,
+            Self::Lib => args::OptSpec {
+                long: Some("lib"),
+                short: None,
+                value: None,
+                desc: "Compile as a Component Model library, exporting every `export fn`\n(entry from [package].lib; requires [package].namespace)",
+            },
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
@@ -229,6 +244,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut allocator: Option<String> = None;
     let mut codegen_flags: Vec<String> = Vec::new();
     let mut no_cache = false;
+    let mut lib = false;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
@@ -241,6 +257,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 }
                 Opt::WatToStdout => wat_to_stdout = true,
                 Opt::World => target_world = Some(args::require_string(&mut parser)?),
+                Opt::Lib => lib = true,
                 Opt::OptLevel => opt_level = parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
@@ -271,12 +288,27 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         }
     }
 
-    // `--lib` is abolished pending a world model that fits libraries; every
-    // `wado compile` resolves the command entry point.
-    let entry_kind = manifest::EntryPointKind::Command;
+    if lib && target_world.is_some() {
+        return Err(CliExit::error(
+            "`--lib` and `--world` are mutually exclusive",
+        ));
+    }
+
+    let (input, lib_world) = if lib {
+        let (entry, world_fq) = manifest::resolve_lib_input(input, &usage)?;
+        // The library defaults to the freelist allocator (long-lived host),
+        // still overridable by an explicit `--allocator`.
+        if allocator.is_none() {
+            allocator = Some("freelist".to_string());
+        }
+        (entry, Some(world_fq))
+    } else {
+        let entry = manifest::resolve_input(input, manifest::EntryPointKind::Command, &usage)?;
+        (entry, None)
+    };
 
     Ok(CompileOptions {
-        input: manifest::resolve_input(input, entry_kind, &usage)?,
+        input,
         output,
         format,
         opt_level,
@@ -289,6 +321,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         allocator,
         no_cache,
         codegen_flags,
+        lib_world,
     })
 }
 
@@ -376,6 +409,7 @@ pub async fn try_compile(
         invocations: pipeline_outcome.invocations,
         test_name_filters: flags.test_name_filters.clone(),
         codegen_flags: flags.codegen_flags.clone(),
+        lib_world: flags.lib_world.clone(),
         ..Default::default()
     };
 

@@ -11,7 +11,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
-use crate::world_registry::{self, WorldRegistry};
+use crate::world_registry::{self, WorldInfo, WorldRegistry};
 use std::sync::Arc;
 
 /// A Wado package in per-module form.
@@ -57,6 +57,12 @@ pub struct Package {
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
     pub target_world: String,
+    /// Synthesized library world for `wado compile --lib`. `Package::world_registry`
+    /// is a `&'static` stdlib singleton that cannot hold a per-package world, so
+    /// the library world is carried here (owned) and consumers prefer it over the
+    /// static registry via [`Self::active_world_info`]. Mirrors how the synthetic
+    /// `test` world is special-cased.
+    pub lib_world_info: Option<WorldInfo>,
     /// `--test-name` substring filters (test world only). When non-empty, only
     /// `test "name"` blocks whose name contains one of these strings are kept
     /// as component exports; the rest are dropped before adapter synthesis so
@@ -153,6 +159,7 @@ impl Package {
             codegen_flags: crate::codegen_flags::CodegenFlags::default(),
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),
+            lib_world_info: None,
             test_name_filters: Vec::new(),
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
@@ -177,6 +184,24 @@ impl Package {
     /// else (including world exports like `run`) is subject to DCE.
     pub fn is_test_world(&self) -> bool {
         self.target_world == world_registry::TEST_WORLD
+    }
+
+    /// Whether this package targets a synthesized library world (`wado compile
+    /// --lib`). Single source of truth for the fact; gates the freelist
+    /// allocator default, the synchronous CM lift, and the static-registry
+    /// validation bypass.
+    pub fn is_lib_world(&self) -> bool {
+        self.lib_world_info.is_some()
+    }
+
+    /// The active world for export synthesis and component planning.
+    ///
+    /// Prefers the synthesized library world (`--lib`) over the `&'static`
+    /// stdlib registry, since the latter cannot hold a per-package world.
+    pub fn active_world_info(&self) -> Option<&WorldInfo> {
+        self.lib_world_info
+            .as_ref()
+            .or_else(|| self.world_registry.get(&self.target_world))
     }
 
     /// Check if any function from the given WASI interface is used.

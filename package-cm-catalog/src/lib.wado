@@ -1,0 +1,166 @@
+//! CM type catalog: one `identity` export per Component Model value type.
+//!
+//! Each function returns its argument unchanged, so the export exercises both
+//! lowering (the parameter) and lifting (the result) for that exact type. The
+//! function name encodes the type so the generated WIT is a self-describing
+//! enumeration of the value-type ABI surface.
+//!
+//! Scope: value types only. Async (`future`/`stream`) and handles
+//! (`own`/`borrow` of resources) are intentionally omitted — identity is not
+//! meaningful for a single-use future or a non-duplicable handle, and they get
+//! their own catalog once their boundary semantics are settled.
+
+// --- Named types referenced by the identity exports below ---
+
+pub struct Point {
+    x: f64,
+    y: f64,
+}
+
+pub struct Empty {
+}
+
+pub enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+pub variant Shape {
+    Circle(f64),
+    Rect([f64, f64]),
+    Nothing,
+}
+
+pub flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+pub type Meters = f64;
+
+// --- Primitives ---
+
+export fn id_bool(v: bool) -> bool {
+    return v;
+}
+export fn id_u8(v: u8) -> u8 {
+    return v;
+}
+export fn id_u16(v: u16) -> u16 {
+    return v;
+}
+export fn id_u32(v: u32) -> u32 {
+    return v;
+}
+export fn id_u64(v: u64) -> u64 {
+    return v;
+}
+export fn id_s8(v: i8) -> i8 {
+    return v;
+}
+export fn id_s16(v: i16) -> i16 {
+    return v;
+}
+export fn id_s32(v: i32) -> i32 {
+    return v;
+}
+export fn id_s64(v: i64) -> i64 {
+    return v;
+}
+export fn id_f32(v: f32) -> f32 {
+    return v;
+}
+export fn id_f64(v: f64) -> f64 {
+    return v;
+}
+export fn id_char(v: char) -> char {
+    return v;
+}
+export fn id_string(v: String) -> String {
+    return v;
+}
+
+// --- Built-in containers ---
+
+export fn id_list_u8(v: List<u8>) -> List<u8> {
+    return v;
+}
+export fn id_list_string(v: List<String>) -> List<String> {
+    return v;
+}
+export fn id_tuple_pair(v: [u32, String]) -> [u32, String] {
+    return v;
+}
+export fn id_tuple_triple(v: [u8, bool, char]) -> [u8, bool, char] {
+    return v;
+}
+export fn id_option_u32(v: Option<u32>) -> Option<u32> {
+    return v;
+}
+export fn id_option_string(v: Option<String>) -> Option<String> {
+    return v;
+}
+
+// `result` in all four WIT forms: both arms, ok-only, err-only, neither.
+export fn id_result_both(v: Result<u32, String>) -> Result<u32, String> {
+    return v;
+}
+export fn id_result_ok(v: Result<u32, ()>) -> Result<u32, ()> {
+    return v;
+}
+export fn id_result_err(v: Result<(), String>) -> Result<(), String> {
+    return v;
+}
+export fn id_result_unit(v: Result<(), ()>) -> Result<(), ()> {
+    return v;
+}
+
+// --- Named value types ---
+
+export fn id_record(v: Point) -> Point {
+    return v;
+}
+export fn id_record_empty(v: Empty) -> Empty {
+    return v;
+}
+export fn id_enum(v: Color) -> Color {
+    return v;
+}
+export fn id_variant(v: Shape) -> Shape {
+    return v;
+}
+export fn id_flags(v: Perms) -> Perms {
+    return v;
+}
+export fn id_newtype(v: Meters) -> Meters {
+    return v;
+}
+
+// --- Nested compositions ---
+
+export fn id_list_option(v: List<Option<u32>>) -> List<Option<u32>> {
+    return v;
+}
+export fn id_option_list(v: Option<List<u8>>) -> Option<List<u8>> {
+    return v;
+}
+export fn id_list_record(v: List<Point>) -> List<Point> {
+    return v;
+}
+export fn id_option_record(v: Option<Point>) -> Option<Point> {
+    return v;
+}
+export fn id_list_tuple(v: List<[u32, String]>) -> List<[u32, String]> {
+    return v;
+}
+export fn id_result_list(v: Result<List<Point>, String>) -> Result<List<Point>, String> {
+    return v;
+}
+
+// --- Association list (the CM map idiom: `list<tuple<k, v>>`) ---
+
+export fn id_assoc_array(v: List<[String, u32]>) -> List<[String, u32]> {
+    return v;
+}

@@ -121,6 +121,20 @@ fn compile_world() {
 }
 
 #[test]
+fn compile_lib_and_world_mutually_exclusive() {
+    let parser = Parser::from_args(&["--lib", "--world", "test", "pkgdir"]);
+    assert_err(compile::parse_args(parser), "mutually exclusive");
+}
+
+#[test]
+fn compile_lib_rejects_single_file() {
+    // `--lib` requires a package directory (for the [package] namespace), not a
+    // bare .wado file.
+    let parser = Parser::from_args(&["--lib", "input.wado"]);
+    assert_err(compile::parse_args(parser), "package directory");
+}
+
+#[test]
 fn compile_log_level() {
     let parser = Parser::from_args(&["--log-level", "debug", "input.wado"]);
     let opts = compile::parse_args(parser).unwrap();

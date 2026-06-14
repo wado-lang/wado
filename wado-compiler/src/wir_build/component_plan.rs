@@ -7,7 +7,7 @@ use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, is_unit_type};
 use crate::hashmap::IndexMap;
 use crate::tir::TirTest;
-use crate::world_registry::{WorldExportInfo, WorldRegistry};
+use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
 
 /// Plan for the Component Model structure.
 ///
@@ -28,8 +28,14 @@ pub struct ComponentPlan {
 /// A world export to create at the component boundary.
 #[derive(Debug, Clone)]
 pub struct WorldExportPlan {
-    /// Export function name (e.g., "run", "handle")
+    /// Export function name (e.g., "run", "handle"). Used as-is for the core
+    /// module alias (`{name}-core`).
     pub name: String,
+    /// Kebab-case CM extern name for the component boundary (underscores → hyphens).
+    /// Computed once here so codegen emits the plan as-is rather than owning the
+    /// underscore→kebab transform. WASI names (`run`, `handle`, `generate`) are
+    /// already kebab-safe, so this equals `name` for them.
+    pub cm_export_name: String,
     /// Core function name in the Wasm module (e.g., `"__cm_export__run"` if adapter exists, or `"run"`)
     pub core_func_name: String,
     /// Whether this is an async export
@@ -49,6 +55,12 @@ pub struct WorldExportPlan {
     /// freestanding world function export (the kiln generator's `generate`,
     /// test exports) emitted as a bare top-level function.
     pub from_interface_fq: Option<String>,
+    /// Use a synchronous canonical lift (no `CanonicalOption::Async`): the core
+    /// function returns the lowered value(s) directly instead of delivering them
+    /// via `task.return`. Set for `--lib` world exports, whose adapters are
+    /// synthesized as value-returning functions. The existing WASI worlds (CLI,
+    /// HTTP, kiln) keep the async lift, so this is `false` for them.
+    pub sync_lift: bool,
 }
 
 /// CM-level type at the world export boundary.
@@ -59,6 +71,11 @@ pub struct WorldExportPlan {
 /// [`Self::HandlerResult`].
 #[derive(Debug, Clone)]
 pub enum CmExportType {
+    /// A primitive value type at the boundary, carrying the Wado type name
+    /// (`"bool"`, `"u32"`, `"i64"`, `"f64"`, `"char"`, `"String"`, ...).
+    /// Codegen maps it to the matching `PrimitiveValType`. Used by `--lib`
+    /// world exports whose signatures are primitives-only.
+    Primitive(String),
     /// `result<>` — no value at the boundary.
     ///
     /// Produced when the export has no return type or its return type is
@@ -129,6 +146,7 @@ pub struct TestExportPlan {
 ///
 /// Canonical intrinsics are NOT collected here — they are discovered lazily
 /// during WIR translation via `WirContext::ensure_canonical`.
+#[allow(clippy::too_many_arguments)]
 pub fn build_component_plan(
     is_test_world: bool,
     target_world: &str,
@@ -137,6 +155,8 @@ pub fn build_component_plan(
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
+    lib_world: Option<&WorldInfo>,
+    is_lib_world: bool,
 ) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
@@ -148,6 +168,8 @@ pub fn build_component_plan(
             export_binding_names,
             world_registry,
             cm_interface_registry,
+            lib_world,
+            is_lib_world,
         )
     };
 
@@ -193,8 +215,12 @@ fn build_world_export_plans(
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
+    lib_world: Option<&WorldInfo>,
+    is_lib_world: bool,
 ) -> Vec<WorldExportPlan> {
-    let world = world_registry.get(target_world);
+    // The synthesized library world (`--lib`) takes priority over the static
+    // registry, which cannot hold a per-package world.
+    let world = lib_world.or_else(|| world_registry.get(target_world));
     let world_namespace_prefix = world.map(crate::world_registry::WorldInfo::namespace_prefix);
     let exports: Vec<WorldExportInfo> = world.map(|w| w.exports.clone()).unwrap_or_else(|| {
         // Fallback to a default run export for unknown worlds
@@ -237,11 +263,15 @@ fn build_world_export_plans(
 
             WorldExportPlan {
                 from_interface_fq: export.from_interface_fq.clone(),
+                cm_export_name: kebab_export_name(&export.name),
                 name: export.name,
                 core_func_name,
                 is_async: export.is_async,
                 cm_params,
                 cm_result,
+                // Library exports use a synchronous lift; the WASI worlds keep
+                // the async/task-return lift.
+                sync_lift: is_lib_world,
             }
         })
         .collect()
@@ -262,6 +292,12 @@ fn build_world_export_plans(
 /// originate in stdlib `lib/wasi/**/worlds.wado` and
 /// `lib/core/kiln/worlds.wado`, so any unresolved name indicates a bug in the
 /// stdlib bootstrap rather than user input.
+/// Whether `name` is a Wado primitive that maps directly to a Component Model
+/// primitive value type at the export boundary.
+fn is_cm_primitive_name(name: &str) -> bool {
+    crate::component_model::wado_primitive_name_to_cm(name).is_some()
+}
+
 fn resolve_cm_export_type(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
@@ -289,6 +325,11 @@ fn resolve_cm_export_type(
                 world_namespace_prefix,
             )),
         };
+    }
+    if let Type::Named(named) = ty
+        && is_cm_primitive_name(&named.name)
+    {
+        return CmExportType::Primitive(named.name.clone());
     }
     if let Type::Named(named) = ty {
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)
@@ -334,6 +375,13 @@ fn resolve_cm_export_type(
         };
     }
     panic!("unsupported world export type shape: {ty:?}");
+}
+
+/// Kebab-case a world export name for the Component Model boundary: underscores
+/// become hyphens. Wado identifiers are `[a-z0-9_]`, so this yields a valid CM
+/// extern name. Already-kebab WASI names (`run`, `handle`) are unchanged.
+fn kebab_export_name(name: &str) -> String {
+    name.replace('_', "-")
 }
 
 /// Convert a test function name (e.g., `__test_0_my_name`) to a valid kebab-case
