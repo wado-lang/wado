@@ -139,6 +139,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
             .map(|(m, _)| m)
             .unwrap_or_else(crate::compile::empty_manifest);
         crate::compile::rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
+        crate::compile::rewrite_local_dir_modules(&mut inline, &manifest_root);
         let provider = CliGeneratorProvider::new(manifest_root.clone());
         crate::kiln_driver::check_pipeline(&manifest, &manifest_root, &host, &provider, inline)
             .await

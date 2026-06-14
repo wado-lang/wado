@@ -5,7 +5,12 @@
 //! driver. Supports [`GeneratorModule::LocalPath`] (`module:
 //! "./generator.wado"`) and [`GeneratorModule::BuildDep`] (`module:
 //! "gale"`, resolved against `[build-dependencies]` to the package's
-//! `core:kiln/generator` world entry). Spec-form generators (`module =
+//! `core:kiln/generator` world entry). A directory `module:` (e.g.
+//! `"../package-gale"`) is rewritten to its package's
+//! `[world]."core:kiln/generator"` entry by
+//! [`crate::compile::rewrite_local_dir_modules`] before resolution, so it
+//! reaches this provider as a plain `LocalPath` to the entry file.
+//! Spec-form generators (`module =
 //! "ns:name@ver"`) surface [`ProviderError::Unsupported`] — registry/git
 //! module sources are deferred to a follow-up.
 //!
@@ -142,6 +147,21 @@ impl CliGeneratorProvider {
                     "kiln: generator path `{}` does not exist (relative to manifest root {})",
                     path.as_str(),
                     self.manifest_root.display(),
+                ),
+            });
+        }
+        // A directory module is resolved to its package's
+        // `[world]."core:kiln/generator"` entry up front by
+        // `compile::rewrite_local_dir_modules`, so a directory reaching the
+        // provider is a package that declared no such entry. Report that
+        // instead of letting `std::fs::read` surface a bare "Is a directory".
+        if abs.is_dir() {
+            return Err(ProviderError::Internal {
+                message: format!(
+                    "kiln: generator module `{}` is a directory but is not a generator package: \
+                     its `wado.toml` is missing or declares no [world].\"core:kiln/generator\" \
+                     entry. Point `module` at a generator package directory or a `.wado` file",
+                    path.as_str(),
                 ),
             });
         }
@@ -651,6 +671,42 @@ mod tests {
             }
             _ => panic!("expected Unsupported"),
         }
+    }
+
+    #[test]
+    fn directory_module_reaching_provider_surfaces_internal() {
+        // A directory is resolved to its package entry up front by
+        // `compile::rewrite_local_dir_modules`; one that still reaches the
+        // provider declared no `core:kiln/generator` entry, so the provider
+        // reports that instead of a bare "Is a directory" read error.
+        let tmp = std::env::temp_dir().join(format!(
+            "wado-kiln-provider-dir-module-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let pkg = tmp.join("plain-pkg");
+        std::fs::create_dir_all(&pkg).unwrap();
+        std::fs::write(
+            pkg.join("wado.toml"),
+            "[package]\nname = \"plain\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+
+        let provider = CliGeneratorProvider::new(tmp.clone());
+        let module = GeneratorModule::LocalPath(InvocationPath::normalize("./plain-pkg"));
+        let err = runtime()
+            .block_on(async { provider.resolve(&module).await })
+            .unwrap_err();
+        match err {
+            ProviderError::Internal { message } => {
+                assert!(
+                    message.contains("is a directory") && message.contains("core:kiln/generator"),
+                    "unexpected message: {message}"
+                );
+            }
+            _ => panic!("expected Internal, got {err:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
