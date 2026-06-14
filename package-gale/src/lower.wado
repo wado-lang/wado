@@ -790,14 +790,10 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rul
 /// as-is; the runtime `follow` is threaded independently of the
 /// precedence argument.
 fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
-    if let RuleCall(rc) = se {
+    if let RuleCall(mut rc) = se {
         if rc.target_snake == *rule_snake {
-            return ScanElement::RuleCall(ScanRuleCallElement {
-                target_snake: rc.target_snake,
-                follow_arg: rc.follow_arg,
-                min_prec_arg: Option::<i32>::Some(prec),
-                atn_call_site: rc.atn_call_site,
-            });
+            rc.min_prec_arg = Option::<i32>::Some(prec);
+            return ScanElement::RuleCall(rc);
         }
     }
     return se;
@@ -850,20 +846,14 @@ fn op_subtree_contains_self_ref(op: &Op, rule_name: &String) -> bool {
 
 fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
     return match op {
-        RuleCall(rc) => Op::RuleCall(RuleCallOp {
-            target_name: rc.target_name,
-            target_snake: rc.target_snake,
-            follow_arg: rc.follow_arg,
-            min_prec_arg: Option::<i32>::Some(prec),
-            field: rc.field,
-            dedup_base: rc.dedup_base,
-            atn_call_site: rc.atn_call_site,
-        }),
-        ListLabel(ll) => Op::ListLabel(ListLabelOp {
-            field: ll.field,
-            inner: rebind_self_ref_min_prec(ll.inner, prec),
-            dedup_base: ll.dedup_base,
-        }),
+        RuleCall(mut rc) => {
+            rc.min_prec_arg = Option::<i32>::Some(prec);
+            Op::RuleCall(rc)
+        },
+        ListLabel(mut ll) => {
+            ll.inner = rebind_self_ref_min_prec(ll.inner, prec);
+            Op::ListLabel(ll)
+        },
         Token(t) => Op::Token(t),
         Literal(l) => Op::Literal(l),
         Wildcard(wop) => Op::Wildcard(wop),
@@ -881,57 +871,31 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
 /// scan-side recursion (`rule_snake`-keyed) stays in sync.
 fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String, prec: i32) -> Op {
     return match op {
-        RuleCall(rc) => {
+        RuleCall(mut rc) => {
             if rc.target_name == *rule_name {
-                Op::RuleCall(RuleCallOp {
-                    target_name: rc.target_name,
-                    target_snake: rc.target_snake,
-                    follow_arg: rc.follow_arg,
-                    min_prec_arg: Option::<i32>::Some(prec),
-                    field: rc.field,
-                    dedup_base: rc.dedup_base,
-                    atn_call_site: rc.atn_call_site,
-                });
-            } else {
-                Op::RuleCall(rc);
+                rc.min_prec_arg = Option::<i32>::Some(prec);
             }
+            Op::RuleCall(rc)
         },
-        ListLabel(ll) => Op::ListLabel(ListLabelOp {
-            field: ll.field,
-            inner: deep_stamp_inner_self_refs_op(ll.inner, rule_name, rule_snake, prec),
-            dedup_base: ll.dedup_base,
-        }),
-        Repeat(r) => Op::Repeat(RepeatOp {
-            kind: r.kind,
-            body: deep_stamp_inner_self_refs_op(r.body, rule_name, rule_snake, prec),
-            scan_body: deep_stamp_inner_self_refs_scan(r.scan_body, rule_snake, prec),
-            strategy: r.strategy,
-            field: r.field,
-            caller_follow_first: r.caller_follow_first,
-            gate_caller_follow: r.gate_caller_follow,
-            caller_follow_second: r.caller_follow_second,
-            body_scannable: r.body_scannable,
-            body_has_field: r.body_has_field,
-            body_first_set: r.body_first_set,
-            body_is_single_alt_group: r.body_is_single_alt_group,
-            body_second_position_first: r.body_second_position_first,
-            body_shape: r.body_shape,
-        }),
-        Group(g) => {
+        ListLabel(mut ll) => {
+            ll.inner = deep_stamp_inner_self_refs_op(ll.inner, rule_name, rule_snake, prec);
+            Op::ListLabel(ll)
+        },
+        Repeat(mut r) => {
+            r.body = deep_stamp_inner_self_refs_op(r.body, rule_name, rule_snake, prec);
+            r.scan_body = deep_stamp_inner_self_refs_scan(r.scan_body, rule_snake, prec);
+            Op::Repeat(r)
+        },
+        Group(mut g) => {
             let mut new_alts: List<AltBody> = [];
             for let alt of &g.alts {
+                let mut new_alt = *alt;
                 let mut new_ops: List<Op> = [];
                 for let inner_op of &alt.ops {
                     new_ops.push(deep_stamp_inner_self_refs_op(*inner_op, rule_name, rule_snake, prec));
                 }
-                new_alts.push(AltBody {
-                    alt_index: alt.alt_index,
-                    case_name: alt.case_name,
-                    struct_name: alt.struct_name,
-                    ops: new_ops,
-                    fields: alt.fields,
-                    prefix_self_ref_min_prec: alt.prefix_self_ref_min_prec,
-                });
+                new_alt.ops = new_ops;
+                new_alts.push(new_alt);
             }
             let mut new_scan_alts: List<ScanBody> = [];
             for let scan_alt of &g.scan_alts {
@@ -941,13 +905,9 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
                 }
                 new_scan_alts.push(ScanBody { elements: new_elements });
             }
-            Op::Group(GroupOp {
-                shape: g.shape,
-                alts: new_alts,
-                scan_alts: new_scan_alts,
-                dispatch: g.dispatch,
-                scan_dispatch: g.scan_dispatch,
-            });
+            g.alts = new_alts;
+            g.scan_alts = new_scan_alts;
+            Op::Group(g)
         },
         // Leaves with no nested Op: pass through unchanged. Listed
         // explicitly so a new Op variant fails to compile here rather
@@ -965,26 +925,17 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
 /// must survive while only `min_prec_arg` is stamped.
 fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
     return match se {
-        RuleCall(rc) => {
+        RuleCall(mut rc) => {
             if rc.target_snake == *rule_snake {
-                ScanElement::RuleCall(ScanRuleCallElement {
-                    target_snake: rc.target_snake,
-                    follow_arg: rc.follow_arg,
-                    min_prec_arg: Option::<i32>::Some(prec),
-                    atn_call_site: rc.atn_call_site,
-                });
-            } else {
-                ScanElement::RuleCall(rc);
+                rc.min_prec_arg = Option::<i32>::Some(prec);
             }
+            ScanElement::RuleCall(rc)
         },
-        Repeat(r) => ScanElement::Repeat(ScanRepeatElement {
-            kind: r.kind,
-            body: deep_stamp_inner_self_refs_scan(r.body, rule_snake, prec),
-            inner_first: r.inner_first,
-            caller_follow_first: r.caller_follow_first,
-            gate_caller_follow: r.gate_caller_follow,
-        }),
-        Group(g) => {
+        Repeat(mut r) => {
+            r.body = deep_stamp_inner_self_refs_scan(r.body, rule_snake, prec);
+            ScanElement::Repeat(r)
+        },
+        Group(mut g) => {
             let mut new_alts: List<ScanBody> = [];
             for let scan_alt of &g.alts {
                 let mut new_elements: List<ScanElement> = [];
@@ -993,15 +944,10 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                 }
                 new_alts.push(ScanBody { elements: new_elements });
             }
-            ScanElement::Group(ScanGroupElement {
-                alts: new_alts,
-                dispatch: g.dispatch,
-                lenient: g.lenient,
-                alt_first_sets: g.alt_first_sets,
-                wildcard_alt_indices: g.wildcard_alt_indices,
-            });
+            g.alts = new_alts;
+            ScanElement::Group(g)
         },
-        OptionalLookahead(ole) => {
+        OptionalLookahead(mut ole) => {
             let mut new_bodies: List<ScanBody> = [];
             for let body of &ole.bodies {
                 let mut new_elements: List<ScanElement> = [];
@@ -1010,10 +956,8 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                 }
                 new_bodies.push(ScanBody { elements: new_elements });
             }
-            ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
-                sigs: ole.sigs,
-                bodies: new_bodies,
-            });
+            ole.bodies = new_bodies;
+            ScanElement::OptionalLookahead(ole)
         },
         // Leaves with no nested ScanElement: pass through unchanged.
         // Listed explicitly so that adding a new ScanElement variant
@@ -3530,22 +3474,10 @@ fn patch_repeat_op_caller_follow(
     caller_follow_first: List<String>,
     caller_follow_second: List<String>,
 ) -> RepeatOp {
-    return RepeatOp {
-        kind: rep_op.kind,
-        body: rep_op.body,
-        scan_body: rep_op.scan_body,
-        strategy: rep_op.strategy,
-        field: rep_op.field,
-        caller_follow_first: caller_follow_first,
-        caller_follow_second: caller_follow_second,
-        body_scannable: rep_op.body_scannable,
-        body_has_field: rep_op.body_has_field,
-        body_first_set: rep_op.body_first_set,
-        body_is_single_alt_group: rep_op.body_is_single_alt_group,
-        body_second_position_first: rep_op.body_second_position_first,
-        body_shape: rep_op.body_shape,
-        gate_caller_follow: rep_op.gate_caller_follow,
-    };
+    let mut r = *rep_op;
+    r.caller_follow_first = caller_follow_first;
+    r.caller_follow_second = caller_follow_second;
+    return r;
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by
@@ -3903,81 +3835,27 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 ///   reason as the leaf arms.
 pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
     return match op {
-        Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field, dedup_base: *new_dedup_base }),
-        Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field, dedup_base: *new_dedup_base }),
-        RuleCall(r) => Op::RuleCall(RuleCallOp {
-            target_name: r.target_name,
-            target_snake: r.target_snake,
-            follow_arg: r.follow_arg,
-            min_prec_arg: r.min_prec_arg,
-            field: *new_field,
-            dedup_base: *new_dedup_base,
-            atn_call_site: r.atn_call_site,
-        }),
-        Wildcard(_) => Op::Wildcard(WildcardOp { field: *new_field, dedup_base: *new_dedup_base }),
-        Excluded(e) => Op::Excluded(ExcludedOp { kinds: e.kinds, field: *new_field, dedup_base: *new_dedup_base }),
-        Repeat(rep) => Op::Repeat(RepeatOp {
-            kind: rep.kind,
-            body: rep.body,
-            scan_body: rep.scan_body,
-            strategy: rep.strategy,
-            field: *new_field,
-            caller_follow_first: rep.caller_follow_first,
-            caller_follow_second: rep.caller_follow_second,
-            body_scannable: rep.body_scannable,
-            body_has_field: rep.body_has_field,
-            body_first_set: rep.body_first_set,
-            body_is_single_alt_group: rep.body_is_single_alt_group,
-            body_second_position_first: rep.body_second_position_first,
-            body_shape: rep.body_shape,
-            gate_caller_follow: rep.gate_caller_follow,
-        }),
-        Group(g) => Op::Group(GroupOp {
-            shape: rebind_group_shape(g.shape, new_field),
-            alts: g.alts,
-            scan_alts: g.scan_alts,
-            dispatch: g.dispatch,
-            scan_dispatch: g.scan_dispatch,
-        }),
-        ListLabel(ll) => rebind_list_label_op(ll, new_field, new_dedup_base),
+        Token(mut t) => { t.field = *new_field; t.dedup_base = *new_dedup_base; Op::Token(t) },
+        Literal(mut l) => { l.field = *new_field; l.dedup_base = *new_dedup_base; Op::Literal(l) },
+        RuleCall(mut r) => { r.field = *new_field; r.dedup_base = *new_dedup_base; Op::RuleCall(r) },
+        Wildcard(mut w) => { w.field = *new_field; w.dedup_base = *new_dedup_base; Op::Wildcard(w) },
+        Excluded(mut e) => { e.field = *new_field; e.dedup_base = *new_dedup_base; Op::Excluded(e) },
+        Repeat(mut rep) => { rep.field = *new_field; Op::Repeat(rep) },
+        Group(mut g) => { g.shape = rebind_group_shape(g.shape, new_field); Op::Group(g) },
+        ListLabel(mut ll) => { ll.field = *new_field; ll.dedup_base = *new_dedup_base; Op::ListLabel(ll) },
     };
-}
-
-fn rebind_list_label_op(ll: ListLabelOp, new_field: &String, new_dedup_base: &String) -> Op {
-    return Op::ListLabel(ListLabelOp {
-        inner: ll.inner,
-        field: *new_field,
-        dedup_base: *new_dedup_base,
-    });
 }
 
 fn rebind_group_shape(shape: GroupShape, new_field: &String) -> GroupShape {
     return match shape {
-        // Transparent groups inline their inner op; the label
-        // rebinds the inner op's field directly. The Group node
-        // itself has no field slot, so return the shape unchanged
-        // — the caller's `rebind_op_field` should have recursed
-        // into the inner op instead. Keep this as the unreachable
-        // arm rather than crashing: a label on a Transparent group
-        // is uncommon and emit's existing path handles it via the
-        // inner op's field.
+        // Transparent groups inline their inner op; the label rebinds the
+        // inner op's field directly, so the shape is returned unchanged —
+        // the caller's `rebind_op_field` recurses into the inner op instead.
         Transparent => GroupShape::Transparent,
-        TokenOnly(to) => GroupShape::TokenOnly(TokenOnlyShape { field: *new_field }),
-        SimpleCst(scst) => GroupShape::SimpleCst(SimpleCstShape {
-            type_name: scst.type_name,
-            field: *new_field,
-        }),
-        SingleAlt(sa) => GroupShape::SingleAlt(SingleAltShape {
-            struct_name: sa.struct_name,
-            field: *new_field,
-            owner_rule: sa.owner_rule,
-        }),
-        General(gen) => GroupShape::General(GeneralShape {
-            variant_type: gen.variant_type,
-            alt_struct_names: gen.alt_struct_names,
-            field: *new_field,
-            group_index: gen.group_index,
-        }),
+        TokenOnly(mut to) => { to.field = *new_field; GroupShape::TokenOnly(to) },
+        SimpleCst(mut scst) => { scst.field = *new_field; GroupShape::SimpleCst(scst) },
+        SingleAlt(mut sa) => { sa.field = *new_field; GroupShape::SingleAlt(sa) },
+        General(mut gen) => { gen.field = *new_field; GroupShape::General(gen) },
     };
 }
 
