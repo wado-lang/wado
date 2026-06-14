@@ -32,6 +32,17 @@ use super::types::{
     variant_test,
 };
 
+/// Join two CM flat slot types like `component_model::join_val_types` (mismatch
+/// widens to `i64`), so a lowered flat arg matches the core import's signature.
+fn join_flat_slot(a: Option<TypeId>, b: Option<TypeId>) -> TypeId {
+    match (a, b) {
+        (Some(a), Some(b)) if a == b => a,
+        (Some(_), Some(_)) => TypeTable::I64,
+        (Some(t), None) | (None, Some(t)) => t,
+        (None, None) => TypeTable::I32,
+    }
+}
+
 /// Zero constant matching a CM flat slot type (i32/i64/f32/f64).
 fn flat_slot_zero(tid: TypeId) -> TirExpr {
     if tid == TypeTable::I64 {
@@ -823,6 +834,23 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 type_table,
             );
         }
+        // The core `Result` is not a CM-registry variant, so it never matches
+        // the variant arm above and needs its own flattener.
+        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+            synthesize_flatten_result_to_flat_args(
+                &g.args[0],
+                &g.args[1],
+                value,
+                prefix,
+                next_local,
+                stmts,
+                locals,
+                flat_args,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
+        }
         // CM record → its fields' flat args via `flatten_cm_record_fields`,
         // in declared order; anything else — primitive, handle, or a plain
         // Wado GC struct (no `source_interface`) — passes through. A single
@@ -1055,6 +1083,197 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     // Push inner locals as flat args
     for (i, (il, it)) in inner_locals.iter().enumerate() {
         flat_args.push(local_ref(*il, &format!("{prefix}_inner{i}"), *it));
+    }
+}
+
+/// Flatten a `Result<T, E>` GC value to flat CM ABI args. Unlike `Option`, reads
+/// the discriminant with `variant_tag` (`struct.get`) — a `Result` is never null.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn synthesize_flatten_result_to_flat_args(
+    ok_type: &Type,
+    err_type: &Type,
+    value: TirExpr,
+    prefix: &str,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    flat_args: &mut Vec<TirExpr>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) {
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let vt = value.type_id;
+    let val_local = alloc_local(next_local, locals, vt);
+    stmts.push(let_stmt(&format!("{prefix}_resval"), val_local, vt, value));
+
+    // Discriminant: 0 = Ok, 1 = Err.
+    let disc_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        &format!("{prefix}_disc"),
+        disc_local,
+        TypeTable::I32,
+        variant_tag(local_ref(val_local, &format!("{prefix}_resval"), vt)),
+    ));
+    flat_args.push(local_ref(
+        disc_local,
+        &format!("{prefix}_disc"),
+        TypeTable::I32,
+    ));
+
+    let ok_flat = flatten_param_type(ok_type, cm_interface_registry, &names);
+    let err_flat = flatten_param_type(err_type, cm_interface_registry, &names);
+    let max_len = ok_flat.len().max(err_flat.len());
+    if max_len == 0 {
+        return;
+    }
+
+    let mut payload_locals: Vec<(u32, TypeId)> = Vec::new();
+    for i in 0..max_len {
+        let slot_ty = join_flat_slot(ok_flat.get(i).copied(), err_flat.get(i).copied());
+        let local = alloc_local(next_local, locals, slot_ty);
+        stmts.push(let_mut_stmt(
+            &format!("{prefix}_p{i}"),
+            local,
+            slot_ty,
+            flat_slot_zero(slot_ty),
+        ));
+        payload_locals.push((local, slot_ty));
+    }
+
+    let span = synth_span();
+    let ok_arm = flatten_result_case_arm(
+        names.ok_name.clone(),
+        ok_type,
+        vt,
+        &payload_locals,
+        prefix,
+        next_local,
+        locals,
+        cm_interface_registry,
+        wasi_package,
+        type_table,
+    );
+    let err_arm = flatten_result_case_arm(
+        names.err_name,
+        err_type,
+        vt,
+        &payload_locals,
+        prefix,
+        next_local,
+        locals,
+        cm_interface_registry,
+        wasi_package,
+        type_table,
+    );
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(local_ref(val_local, &format!("{prefix}_resval"), vt)),
+            arms: vec![ok_arm, err_arm],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
+
+    for (i, (pl, pt)) in payload_locals.iter().enumerate() {
+        flat_args.push(local_ref(*pl, &format!("{prefix}_p{i}"), *pt));
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn flatten_result_case_arm(
+    case_name: String,
+    payload_type: &Type,
+    enum_type: TypeId,
+    payload_locals: &[(u32, TypeId)],
+    prefix: &str,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) -> TirMatchArm {
+    let span = synth_span();
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+
+    // Empty flat list ⇒ unit payload: a binding-free arm.
+    if flatten_param_type(payload_type, cm_interface_registry, &names).is_empty() {
+        return TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type,
+                variant_name: case_name,
+                bindings: Vec::new(),
+                payload_type: TypeTable::UNIT,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+                TypeTable::UNIT,
+                span,
+            ),
+            span,
+        };
+    }
+
+    let payload_type_id = {
+        let mut tt = type_table.borrow_mut();
+        cm_type_to_type_id(payload_type, &mut tt, cm_interface_registry, wasi_package)
+    };
+    let binding_local = alloc_local(next_local, locals, payload_type_id);
+    let binding_name = format!("__result_payload_{binding_local}");
+    let payload_expr = local_ref(binding_local, &binding_name, payload_type_id);
+
+    let mut case_stmts = Vec::new();
+    let mut case_flat = Vec::new();
+    synthesize_flatten_value_to_flat_args(
+        payload_type,
+        payload_expr,
+        &format!("{prefix}_c{case_name}"),
+        next_local,
+        &mut case_stmts,
+        locals,
+        &mut case_flat,
+        cm_interface_registry,
+        wasi_package,
+        type_table,
+    );
+    for (i, flat_val) in case_flat.into_iter().enumerate() {
+        if i < payload_locals.len() {
+            let (pl, pt) = payload_locals[i];
+            // Cast a narrower case flat into the (possibly wider) joined slot.
+            let v = if flat_val.type_id == pt {
+                flat_val
+            } else {
+                cast(flat_val, pt)
+            };
+            case_stmts.push(expr_stmt(assign(
+                local_ref(pl, &format!("{prefix}_p{i}"), pt),
+                v,
+            )));
+        }
+    }
+
+    TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type,
+            variant_name: case_name,
+            bindings: vec![TirPattern::Binding {
+                name: binding_name,
+                local_index: binding_local,
+                type_id: payload_type_id,
+            }],
+            payload_type: payload_type_id,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(crate::tir::TirBlock::new(case_stmts, span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
     }
 }
 

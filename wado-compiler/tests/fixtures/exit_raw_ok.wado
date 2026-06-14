@@ -1,0 +1,15 @@
+// Result<(), ()> lowers to a bare CM discriminant; ctor type args inferred.
+use { println, Stdout } from "core:cli";
+use { Exit } from "wasi:cli";
+
+export fn run() with Stdout, Exit {
+    println("before");
+    Exit::exit(Result::Ok(()));
+}
+
+__DATA__
+{
+    "stdout": "before\n",
+    "exit_code": 0,
+    "trapped": false
+}

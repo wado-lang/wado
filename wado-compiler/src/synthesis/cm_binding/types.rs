@@ -410,6 +410,9 @@ pub fn flatten_param_type(
                 return vec![TypeTable::I32, TypeTable::I32];
             }
             match named.name.as_str() {
+                // Unit (here spelled `Named("()")`, e.g. a `Result<(), ()>` arg)
+                // has no flat slots — match `flatten_cm_param_type`'s `"()" => {}`.
+                "()" => Vec::new(),
                 "i32" | "u32" | "bool" | "char" | "i8" | "u8" | "i16" | "u16" => {
                     vec![TypeTable::I32]
                 }

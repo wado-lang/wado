@@ -614,7 +614,11 @@ pub type CliWasiState = WasiState;
 /// Set up a linker for all test worlds (WASI + HTTP + TLS)
 pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
-    wasmtime_wasi::p3::add_to_linker(&mut linker)?;
+    // `wasi:cli/exit#exit-with-code` is `@unstable(feature = cli-exit-with-code)`
+    // upstream, omitted by the default LinkOptions (mirrors `wado-cli`).
+    let mut options = wasmtime_wasi::p3::bindings::LinkOptions::default();
+    options.cli_exit_with_code(true);
+    wasmtime_wasi::p3::add_to_linker_with_options(&mut linker, &options)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     timezone_host::add_to_linker(&mut linker)?;
@@ -873,6 +877,9 @@ pub struct WasmRunResult {
     pub stderr: String,
     /// Whether the component trapped (e.g., from unreachable)
     pub trapped: bool,
+    /// Set on a clean `wasi:cli/exit` (recorded here, not as a trap); `None`
+    /// otherwise.
+    pub exit_code: Option<i32>,
 }
 
 /// Run a compiled Wasm component and capture its output
@@ -902,6 +909,16 @@ pub fn run_wasm_with_options(
         indexmap::IndexMap::new(),
         indexmap::IndexMap::new(),
     )
+}
+
+/// wasmtime returns `wasi:cli/exit` as `Err(I32Exit(code))` (not a process
+/// exit); downcast it to a clean exit code rather than reporting a trap.
+fn classify_run_error(e: wasmtime::Error) -> (bool, Option<i32>, String) {
+    if let Some(wasmtime_wasi::I32Exit(code)) = e.downcast_ref::<wasmtime_wasi::I32Exit>() {
+        (false, Some(*code), String::new())
+    } else {
+        (true, None, format!("{e:#}"))
+    }
 }
 
 /// Run a compiled Wasm component with full options including outgoing HTTP and TLS mocks.
@@ -959,13 +976,12 @@ pub fn run_wasm_with_full_options(
             &mut store, &component, &linker,
         )
         .await?;
-        let (trapped, trap_msg) = match store
+        let (trapped, exit_code, trap_msg) = match store
             .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
             .await
         {
-            Ok(Ok(result)) => (result.is_err(), String::new()),
-            Ok(Err(e)) => (true, format!("{e:#}")),
-            Err(e) => (true, format!("{e:#}")),
+            Ok(Ok(result)) => (result.is_err(), None, String::new()),
+            Ok(Err(e)) | Err(e) => classify_run_error(e),
         };
 
         let stdout = String::from_utf8(stdout_clone.contents().to_vec())?;
@@ -981,6 +997,7 @@ pub fn run_wasm_with_full_options(
             stdout,
             stderr,
             trapped,
+            exit_code,
         })
     })
 }

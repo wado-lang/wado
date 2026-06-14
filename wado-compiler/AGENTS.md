@@ -58,6 +58,7 @@ The target world is indicated by the top-level key in the JSON:
 | `warnings_contains`     | `string[]`           | Substrings each appearing in some compile-time warning      |
 | `warnings_not_contains` | `string[]`           | Substrings appearing in no compile-time warning (FP guard)  |
 | `trapped`               | `bool`               | Whether the program should trap                             |
+| `exit_code`             | `number`             | Expected `wasi:cli/exit` status code (CLI world)            |
 | `compile_error`         | `string`             | Expected compile error (substring match)                    |
 | `skip_os`               | `bool`               | Skip this test under `-Os` (e.g. tests relying on names)    |
 | `preopened_dirs`        | `[string, string][]` | Preopened dirs `[template, guest_path]` (see note below)    |

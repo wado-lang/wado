@@ -35,8 +35,9 @@ use crate::synthesis::common::{
 use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum};
 use super::lower::{
     flatten_cm_record_fields, synthesize_flatten_option_to_flat_args,
-    synthesize_flatten_value_to_flat_args, synthesize_lower, synthesize_lower_option_to_memory,
-    synthesize_lower_tuple, synthesize_lower_wasi_variant_to_memory,
+    synthesize_flatten_result_to_flat_args, synthesize_flatten_value_to_flat_args,
+    synthesize_lower, synthesize_lower_option_to_memory, synthesize_lower_tuple,
+    synthesize_lower_wasi_variant_to_memory,
 };
 use super::types::{
     LiftContext, binary_add, cm_param_align, cm_param_size, cm_param_store_plan,
@@ -576,6 +577,27 @@ pub(super) fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
+            Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+                let result_type_id = {
+                    let mut tt = type_table.borrow_mut();
+                    cm_type_to_type_id(
+                        param_type,
+                        &mut tt,
+                        cm_interface_registry,
+                        &func_info.package,
+                    )
+                };
+                params.push(TirParam {
+                    name: param_name.clone(),
+                    type_id: result_type_id,
+                    local_index: next_local,
+                    is_mut: false,
+                    span: synth_span(),
+                });
+                locals.push(TirLocal::synth(next_local, result_type_id, false));
+                next_local += 1;
+                param_mapping.push((start, 1));
+            }
             // All other types: create flat params matching CM ABI
             _ => {
                 for (j, flat_ty) in flat_tys.iter().enumerate() {
@@ -976,6 +998,29 @@ pub(super) fn synthesize_adapter(
                         type_table,
                     );
                 }
+            }
+            Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+                // The async params-to-memory lowering for `Result` is unbuilt
+                // (no async CM import needs it yet); fail loud instead.
+                assert!(
+                    !func_info.is_async,
+                    "CM import '{}#{}' takes a `Result` parameter on an async \
+                     function; async Result-param lowering is not yet implemented",
+                    func_info.interface_name, func_info.method_name
+                );
+                synthesize_flatten_result_to_flat_args(
+                    &g.args[0],
+                    &g.args[1],
+                    local_ref(param_local, param_name, params[start_idx].type_id),
+                    &format!("__{param_name}"),
+                    &mut next_local,
+                    &mut body_stmts,
+                    &mut locals,
+                    &mut flat_args,
+                    cm_interface_registry,
+                    &func_info.package,
+                    type_table,
+                );
             }
             // All other types: flat params passed through directly
             _ => {

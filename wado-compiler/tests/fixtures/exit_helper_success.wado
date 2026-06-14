@@ -1,0 +1,15 @@
+// The host maps Ok(()) to exit code 0.
+use { println, Stdout } from "core:cli";
+use { exit_success, Exit } from "core:cli";
+
+export fn run() with Stdout, Exit {
+    println("before");
+    exit_success();
+}
+
+__DATA__
+{
+    "stdout": "before\n",
+    "exit_code": 0,
+    "trapped": false
+}
