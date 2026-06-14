@@ -25,7 +25,6 @@ The biggest single lever: most twin-path bugs exist because the second copy miss
 - [ ] `try_expand_opaque` re-implements `build_sll_node`'s dispatch construction (where the at-end handling got lost); `dump.wado::render_prediction` hand-mirrors `gen_multi_alt_body_alt`'s grouping+sort+`build_prediction(…, MAX_LOOKAHEAD_DEPTH, …)` pipeline.
 - [ ] Test helpers copy-pasted per file: `assert_tree` ×33, `assert_parses` ×8 (+2 near-clones), `unparse_xml` ×3, hand-rolled `str_contains` ×5 (stdlib `String::contains` exists and is used elsewhere). Create a shared test-support module.
 - [ ] Extractor emitter boilerplate ×6 (~80% identical bodies). `scripts/extract_antlr4_descriptors.wado:659-998`, `:1841-1857`
-- [ ] Name-dedup machinery re-implemented in `visitor_gen.wado` (`get_name_count`/`increment_name_count` + inline `dedup_name`) instead of importing `gen_util`. `src/visitor_gen.wado:236-240`, `:392-410`
 - [ ] Architectural duplication: `codegen.wado` reads pre-classified GIR shapes, but `visitor_gen.wado` re-derives the same field names from the surface IR with its own group-counter logic — numbering drift produces non-compiling field names. `src/codegen.wado:347-369` vs `src/visitor_gen.wado`
 
 ## Test coverage gaps
