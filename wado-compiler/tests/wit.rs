@@ -185,3 +185,52 @@ fn string_and_list_and_option_map_to_wit() {
     let mut resolve = wit_parser::Resolve::new();
     resolve.push_str("emitted.wit", &text).expect("valid WIT");
 }
+
+#[test]
+fn newtype_emits_alias_to_base_not_itself() {
+    // Regression: a newtype must alias its base type, never `type x = x`.
+    let text = emit(
+        "type Meters = f64;\n\
+         export fn id(v: Meters) -> Meters { return v; }",
+    );
+    assert!(text.contains("type meters = f64;"), "\n{text}");
+    assert!(!text.contains("type meters = meters;"), "\n{text}");
+    let mut resolve = wit_parser::Resolve::new();
+    resolve.push_str("newtype.wit", &text).expect("valid WIT");
+}
+
+#[test]
+fn result_unit_arms_collapse_to_wit_forms() {
+    // A unit arm becomes the absent (`_`) arm, matching WIT's result sugar.
+    let ok_only = emit("export fn id(v: Result<u32, ()>) -> Result<u32, ()> { return v; }");
+    assert!(
+        ok_only.contains("id: func(v: result<u32>) -> result<u32>;"),
+        "\n{ok_only}"
+    );
+    let err_only = emit("export fn id(v: Result<(), String>) -> Result<(), String> { return v; }");
+    assert!(
+        err_only.contains("id: func(v: result<_, string>) -> result<_, string>;"),
+        "\n{err_only}"
+    );
+    let both = emit("export fn id(v: Result<u32, String>) -> Result<u32, String> { return v; }");
+    assert!(
+        both.contains("id: func(v: result<u32, string>) -> result<u32, string>;"),
+        "\n{both}"
+    );
+    let mut resolve = wit_parser::Resolve::new();
+    resolve.push_str("result.wit", &both).expect("valid WIT");
+}
+
+#[test]
+fn future_and_stream_map_to_wit() {
+    let fut = emit("export fn id(v: Future<u32>) -> Future<u32> { return v; }");
+    assert!(
+        fut.contains("id: func(v: future<u32>) -> future<u32>;"),
+        "\n{fut}"
+    );
+    let st = emit("export fn id(v: Stream<u8>) -> Stream<u8> { return v; }");
+    assert!(
+        st.contains("id: func(v: stream<u8>) -> stream<u8>;"),
+        "\n{st}"
+    );
+}

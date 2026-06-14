@@ -741,7 +741,13 @@ impl<'a> Emitter<'a> {
             return Ok(Some(TypeDef::flags(kebab, members)));
         }
         if let Some(nt) = self.decls.newtypes.get(name).copied() {
-            let base = self.map_type(nt.type_id)?;
+            // `nt.type_id` is the newtype itself; emit an alias to its base, not
+            // a self-referential `type x = x`.
+            let base_id = match self.types.get(nt.type_id) {
+                ResolvedType::Newtype { base_type, .. } => *base_type,
+                _ => nt.type_id,
+            };
+            let base = self.map_type(base_id)?;
             return Ok(Some(TypeDef::type_(kebab, base)));
         }
         Err(WitEmitError::UnrepresentableType {
@@ -781,6 +787,9 @@ impl<'a> Emitter<'a> {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => self.map_generic(name, type_args.clone()),
+            ResolvedType::GenericResource {
+                name, type_args, ..
+            } => self.map_generic_resource(name, type_args.clone()),
             other => Err(WitEmitError::UnrepresentableType {
                 description: describe_type(other),
             }),
@@ -792,9 +801,14 @@ impl<'a> Emitter<'a> {
             "Option" if args.len() == 1 => Ok(Type::option(self.map_type(args[0])?)),
             "List" if args.len() == 1 => Ok(Type::list(self.map_type(args[0])?)),
             "Result" if args.len() == 2 => {
-                let ok = self.map_type(args[0])?;
-                let err = self.map_type(args[1])?;
-                Ok(Type::result_both(ok, err))
+                let ok = self.map_result_arm(args[0])?;
+                let err = self.map_result_arm(args[1])?;
+                Ok(match (ok, err) {
+                    (None, None) => Type::result_empty(),
+                    (Some(o), None) => Type::result_ok(o),
+                    (None, Some(e)) => Type::result_err(e),
+                    (Some(o), Some(e)) => Type::result_both(o, e),
+                })
             }
             "Tuple" => {
                 let mut elems = Vec::new();
@@ -803,8 +817,39 @@ impl<'a> Emitter<'a> {
                 }
                 Ok(Type::tuple(elems))
             }
+            // `AsyncCall<T>` is a Wado-level wrapper over an async import; at the
+            // CM boundary it is transparent and maps to `T`.
+            "AsyncCall" if args.len() == 1 => self.map_type(args[0]),
             _ => Err(WitEmitError::UnrepresentableType {
                 description: format!("generic `{name}` with {} type argument(s)", args.len()),
+            }),
+        }
+    }
+
+    /// Map a `Result` arm: a unit arm becomes the absent (`_`) arm.
+    fn map_result_arm(&mut self, id: TypeId) -> Result<Option<Type>, WitEmitError> {
+        if matches!(self.types.get(id), ResolvedType::Unit) {
+            Ok(None)
+        } else {
+            Ok(Some(self.map_type(id)?))
+        }
+    }
+
+    /// Map a generic resource (`future<T>`, `stream<T>`) to its WIT form.
+    fn map_generic_resource(
+        &mut self,
+        name: &str,
+        args: Vec<TypeId>,
+    ) -> Result<Type, WitEmitError> {
+        let inner = match args.first() {
+            Some(a) => Some(self.map_type(*a)?),
+            None => None,
+        };
+        match name {
+            "Future" => Ok(Type::future(inner)),
+            "Stream" => Ok(Type::stream(inner)),
+            _ => Err(WitEmitError::UnrepresentableType {
+                description: format!("generic resource `{name}` has no WIT representation"),
             }),
         }
     }
