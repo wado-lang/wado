@@ -351,6 +351,63 @@ only helps _unchanged_ functions), and (2) function-level parallelism (the
 per-function build / walk is independent). Both are prerequisites to the ~1.5×
 target; the full single-worklist promotion subsumes (1).
 
+### Incremental ValueGraph (lever 1)
+
+The `vg_cache` reuses a parked graph only when the function is byte-for-byte
+unchanged since the park. The hot functions change every iteration, so they
+always full-rebuild. Lever 1 reuses the parked graph's _unchanged prefix_ and
+re-walks only the region a mutation actually disturbed.
+
+What makes it sound: the consumers (`cse` / `store_load_forward` /
+`condition_implication`) only ever test `value(a) == value(b)` — the
+_equivalence relation_ over `ValueId`s, never the absolute numbering. A partial
+re-walk that mints fresh `Opaque`s for the re-walked suffix is correct as long
+as it reproduces the from-scratch equivalence classes. Restoring the exact
+entry flow-state (`current_value` / `heap_state` / `ref_targets`) before the
+first disturbed statement guarantees that: a re-walked read of a prefix-defined
+local reads the prefix's `ValueId`, so cross-boundary equalities hold.
+
+Mechanism:
+
+- Edit journal. Every mutation between two builds must be known, or a reuse
+  could skip a statement that actually changed. Engine-API edits
+  (`replace_expr_kind` / `set_block_stmts` / `alloc_*`) journal the touched
+  node; at session teardown each is mapped (via the parent map) to its enclosing
+  root-block `StmtId` and unioned into the function's dirty set. A pass that
+  mutates the arena directly (the flow-sensitive walkers) marks the journal
+  _incomplete_ instead. The dirty unit is the `StmtId`, not a slot index, so it
+  survives the slot shifts a `set_block_stmts` causes.
+- Checkpoints. The build records, per root-block statement, the entry
+  `FlowSnapshot`; the parked graph carries them.
+- Partial rebuild. Walk the live root statements. A statement is reused (its
+  parked `value_of` entries kept, flow advanced to its parked exit) while it is
+  not in the dirty set and its entry snapshot equals the parked one; otherwise
+  it is re-walked. A re-walk diverges the flow, so following statements compare
+  snapshots and resume reuse once flow reconverges.
+
+Soundness gate: incremental rebuild runs only when the journal is _complete_
+over the whole delta since the park (every mutation journaled). Any direct-arena
+mutation, or a root-block-structure edit the mapping can't localize, drops to a
+full rebuild — the same one-sided safety as the dirty-set gate (imprecision
+costs a redundant full rebuild, never correctness). A `WADO_VERIFY_INCREMENTAL_VG`
+mode builds both ways and asserts the observable queries (`value_of` equivalence
+classes, `loop_entry_values`, `literal_source`) agree, run across the E2E suite;
+the terminal bar stays byte-identical WIR on the full suite + `package-gale`.
+
+Status: in progress on this WEP's required path.
+
+- [x] Stage A — edit journal on the engine: every edit-API mutation records its
+      node, mapped at teardown to the enclosing root-block `StmtId`
+      (`Engine::dirty_root_stmts`), or `None` when a root-list edit can't be
+      localized. Behavior-invariant.
+- [ ] Stage B — per-root-statement checkpoints on the build (the complete
+      flow-sensitive state: `current_value`, heap incl. the `next` counter,
+      `ref_targets`, `field_store`) + a partial rebuild that reuses the clean
+      prefix and re-walks from the first dirty statement to the end, gated on a
+      complete journal, with the `WADO_VERIFY_INCREMENTAL_VG` harness.
+- [ ] Stage C — deepen checkpoint granularity into nested blocks where
+      measurement on `package-gale` shows root-statement granularity too coarse.
+
 ### Additional effect — if optional acceleration ever activates
 
 - Phase-ordering hazards dissolve: rules co-exist under saturation; the

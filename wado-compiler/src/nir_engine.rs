@@ -141,6 +141,13 @@ pub struct Engine<'a> {
     /// arithmetic. `None` (the default) disables folding. Set via
     /// [`Engine::set_value_graph_type_table`] before the first value query.
     vg_type_table: Option<&'a crate::tir::TypeTable>,
+    /// Nodes this session mutated through the edit API, in edit order. The
+    /// incremental `ValueGraph` rebuild (WEP lever 1) maps each to its enclosing
+    /// root-block statement so the next build re-walks only the disturbed
+    /// region; see [`Engine::dirty_root_stmts`]. Recording is unconditional and
+    /// cheap (a push per edit); a session that never queries it pays only the
+    /// `Vec`. Reset per session — the `Engine` is reconstructed each pass.
+    dirty_nodes: Vec<NodeRef>,
 }
 
 impl<'a> Engine<'a> {
@@ -166,6 +173,7 @@ impl<'a> Engine<'a> {
             mut_escaped_locals: IndexSet::default(),
             param_locals: Vec::new(),
             vg_type_table: None,
+            dirty_nodes: Vec::new(),
         };
         engine.build_parents();
         engine.build_uses();
@@ -197,6 +205,7 @@ impl<'a> Engine<'a> {
             mut_escaped_locals: cached.mut_escaped_locals,
             param_locals: cached.param_locals,
             vg_type_table: Some(type_table),
+            dirty_nodes: Vec::new(),
         };
         engine.build_parents();
         engine.build_uses();
@@ -540,6 +549,54 @@ impl<'a> Engine<'a> {
         matches!(&self.body.exprs[parent].kind, ExprKind::Assign { target, .. } if *target == mention)
     }
 
+    /// The nodes this session mutated through the edit API, in edit order.
+    /// Every change to the live tree enters through `replace_expr_kind` or
+    /// `set_block_stmts` (fresh `alloc_*` subtrees are spliced in by one of
+    /// those two), so this slice localizes the whole delta. The incremental
+    /// `ValueGraph` rebuild consumes it via [`Engine::dirty_root_stmts`].
+    pub fn dirty_nodes(&self) -> &[NodeRef] {
+        &self.dirty_nodes
+    }
+
+    /// The root-block statements whose subtree this session disturbed, or
+    /// `None` when an edit can't be localized to one existing root statement
+    /// (the root block's own statement list changed, or a recorded node no
+    /// longer reaches the root). `None` is the signal to fall back to a full
+    /// `ValueGraph` rebuild; a returned set is exactly the statements the
+    /// incremental rebuild must re-walk (everything else is reused).
+    ///
+    /// Each dirty node climbs the parent map to the statement directly under
+    /// `body.root`. A node whose climb reaches the root block itself (an edit
+    /// to the top-level statement list) or dead-ends before it cannot be
+    /// pinned to a single root statement, so the whole result is `None`.
+    pub fn dirty_root_stmts(&self) -> Option<IndexSet<StmtId>> {
+        let root = self.body.root;
+        let mut out: IndexSet<StmtId> = IndexSet::default();
+        for &n in &self.dirty_nodes {
+            // The dirty node is the root block itself: the statement list
+            // changed, which the StmtId-keyed scheme can't localize.
+            if n == NodeRef::Block(root) {
+                return None;
+            }
+            let mut cur = n;
+            loop {
+                match self.parent_of(cur) {
+                    Some(NodeRef::Block(b)) if b == root => {
+                        // `cur` is a top-level statement of the root block.
+                        let NodeRef::Stmt(s) = cur else {
+                            return None;
+                        };
+                        out.insert(s);
+                        break;
+                    }
+                    Some(p) => cur = p,
+                    None => return None,
+                }
+            }
+        }
+        Some(out)
+    }
+
     fn set_parent(&mut self, child: NodeRef, parent: Option<NodeRef>) {
         match child {
             NodeRef::Expr(id) => self.buf.expr_parent[id.index()] = parent,
@@ -555,6 +612,7 @@ impl<'a> Engine<'a> {
     /// kind's id children, and re-enqueues the affected neighbourhood — the
     /// node's parent (its context may now reduce) and the new children.
     pub fn replace_expr_kind(&mut self, id: ExprId, new_kind: ExprKind) {
+        self.dirty_nodes.push(NodeRef::Expr(id));
         // Drop the old `Local` mention, if any, from the use index.
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
@@ -623,6 +681,7 @@ impl<'a> Engine<'a> {
     /// tree). Use index entries for any `Let` in a dropped statement are left
     /// in place — they name a now-dead def and are simply never consulted.
     pub fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
+        self.dirty_nodes.push(NodeRef::Block(block));
         self.body.blocks[block].stmts = stmts;
         let kids = self.body.blocks[block].stmts.clone();
         for s in &kids {
@@ -1418,6 +1477,97 @@ mod tests {
             assert!(matches!(eng.body.exprs[lx].kind, ExprKind::Unit));
             assert_eq!(eng.local_reads(0), &[add]);
         }
+    }
+
+    #[test]
+    fn edit_api_records_dirty_nodes() {
+        // `{ let x = (1 + 2) * 4; return x; }`; folding records the edited
+        // `Binary` exprs, and nothing else, in edit order.
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let two = lit(b, 2);
+            let inner = bin(b, one, NirBinaryOp::Add, two);
+            let four = lit(b, 4);
+            let outer = bin(b, inner, NirBinaryOp::Mul, four);
+            let let_stmt = let_x(b, outer, false);
+            vec![let_stmt]
+        });
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        assert!(eng.dirty_nodes().is_empty());
+        eng.run(&[&FoldAddMulConst]);
+        // Two `Binary` folds fired; both are recorded as expr edits.
+        assert!(!eng.dirty_nodes().is_empty());
+        assert!(
+            eng.dirty_nodes()
+                .iter()
+                .all(|n| matches!(n, NodeRef::Expr(_)))
+        );
+    }
+
+    #[test]
+    fn dirty_root_stmts_localizes_nested_edit_to_its_root_statement() {
+        // `{ let x = (1 + 2) * 4; return x; }`; the fold edits exprs nested in
+        // the `let`, which localize to the `let` statement only.
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let two = lit(b, 2);
+            let inner = bin(b, one, NirBinaryOp::Add, two);
+            let four = lit(b, 4);
+            let outer = bin(b, inner, NirBinaryOp::Mul, four);
+            let let_stmt = let_x(b, outer, false);
+            let ret = ret_x(b);
+            vec![let_stmt, ret]
+        });
+        let root = body.root;
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        let let_stmt = eng.body.blocks[root].stmts[0];
+        eng.run(&[&FoldAddMulConst]);
+        let dirty = eng.dirty_root_stmts().expect("localizable");
+        assert_eq!(dirty.len(), 1);
+        assert!(dirty.contains(&let_stmt));
+    }
+
+    #[test]
+    fn dirty_root_stmts_is_none_on_root_block_edit() {
+        // Dropping a root-block statement edits the root block itself, which
+        // cannot be localized to a single statement.
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let two = lit(b, 2);
+            let add = bin(b, one, NirBinaryOp::Add, two);
+            let let_stmt = let_x(b, add, false);
+            let unit = e(b, ExprKind::Unit);
+            let unit_stmt = s(b, StmtKind::Expr(unit));
+            vec![let_stmt, unit_stmt]
+        });
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        eng.run(&[&DropUnitStmts]);
+        assert!(eng.dirty_root_stmts().is_none());
+    }
+
+    #[test]
+    fn set_block_stmts_records_block_edit() {
+        let mut body = mk_body(|b| {
+            let one = lit(b, 1);
+            let two = lit(b, 2);
+            let add = bin(b, one, NirBinaryOp::Add, two);
+            let let_stmt = let_x(b, add, false);
+            let unit = e(b, ExprKind::Unit);
+            let unit_stmt = s(b, StmtKind::Expr(unit));
+            vec![let_stmt, unit_stmt]
+        });
+        let root = body.root;
+        let mut __buf_eng = EngineBuffers::default();
+        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
+        eng.run(&[&DropUnitStmts]);
+        assert!(eng.dirty_nodes().iter().any(|n| *n == NodeRef::Block(root)));
     }
 
     #[test]
