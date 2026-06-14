@@ -763,8 +763,7 @@ impl<'a> Builder<'a> {
                 // run side effects before the tail (e.g. `{ cold_path(); e }`);
                 // giving them `e`'s value would let CSE drop those effects, so
                 // they stay opaque.
-                let stmts = self.body.blocks[block].stmts.clone();
-                let tail = if let [only] = stmts[..]
+                let tail = if let [only] = self.body.blocks[block].stmts[..]
                     && let StmtKind::Expr(e) = &self.body.stmts[only].kind
                 {
                     Some(*e)

@@ -60,6 +60,16 @@ impl Formatter {
     /// Default sequence Inspect cap: chars for `String`, elements for `List`.
     pub const DEFAULT_SEQ_LIMIT: i32 = 256;
 
+    /// The element/char cap a sequence Inspect should apply: the explicit
+    /// precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
+    /// (`PRECISION_INFINITE`) means uncapped.
+    pub fn resolved_seq_limit(&self) -> i32 {
+        if self.precision == Formatter::PRECISION_DEFAULT {
+            return Formatter::DEFAULT_SEQ_LIMIT;
+        }
+        return self.precision;
+    }
+
     /// Create a Formatter with the default spec, writing into the given buffer.
     pub fn new(buf: &mut String) -> Formatter with stores[buf] {
         return Formatter {
@@ -312,7 +322,7 @@ impl Inspect for String {
         // Caps to N chars and appends `...` outside the quotes when truncated
         // (the marker doesn't count toward N). PRECISION_DEFAULT uses the
         // default cap; negatives below it mean no cap.
-        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
+        let limit = f.resolved_seq_limit();
         f.write_char('"');
         let mut count = 0;
         let mut truncated = false;
@@ -377,7 +387,7 @@ fn write_array_inspect<T: Inspect>(arr: &List<T>, f: &mut Formatter, marker: boo
 
 impl<T: Inspect> Inspect for List<T> {
     pub fn inspect(&self, f: &mut Formatter) {
-        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
+        let limit = f.resolved_seq_limit();
         write_array_inspect(self, f, true, limit);
     }
 }
@@ -440,7 +450,7 @@ fn write_array_inspect_alt<T: InspectAlt>(arr: &List<T>, f: &mut Formatter, mark
 
 impl<T: InspectAlt> InspectAlt for List<T> {
     pub fn inspect_alt(&self, f: &mut Formatter) {
-        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
+        let limit = f.resolved_seq_limit();
         write_array_inspect_alt(self, f, true, limit);
     }
 }

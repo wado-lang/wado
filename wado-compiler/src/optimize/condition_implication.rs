@@ -270,17 +270,14 @@ fn failure_ge_operands(engine: &mut Engine, condition: ExprId) -> Option<(ValueI
     }
 }
 
-/// The `(lhs, rhs)` of a `<` comparison `expr` resolves to, i.e. the operands
-/// of the `lhs >= rhs` predicate that `!expr` denotes. The comparison may sit
-/// behind a `__cond` temporary the value graph resolves through.
+/// The `(lhs, rhs)` of the strict `<` comparison `expr` resolves to — the
+/// operands of the `lhs >= rhs` predicate that `!expr` denotes. Only `<`
+/// negates to `>=` (`!(x <= y)` is `x > y`, a different predicate), so a `<=`
+/// resolution is rejected. The comparison may sit behind a `__cond` temporary
+/// the value graph resolves through (see [`lt_comparison`]).
 fn negated_lt_operands(engine: &mut Engine, expr: ExprId) -> Option<(ValueId, ValueId)> {
-    let vn = engine.value(expr)?;
-    match engine.value_kind(vn) {
-        ValueKind::Binary {
-            op: NirBinaryOp::Lt,
-            lhs,
-            rhs,
-        } => Some((*lhs, *rhs)),
+    match lt_comparison(engine, expr)? {
+        (lhs, rhs, true) => Some((lhs, rhs)),
         _ => None,
     }
 }
@@ -518,21 +515,23 @@ fn process_stmt_nested_loops(engine: &mut Engine, s: StmtId) -> bool {
 /// (e.g. `let __c = i < n`), and the guard condition may itself be such a
 /// temporary — both are resolved through the value graph.
 fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<(GuardFact, usize)> {
-    let stmts = engine.body.blocks[loop_body].stmts.clone();
     // Leading `let`s bind pure values (no control flow), so the first
-    // `if … { break }` after them still dominates the rest of the body.
-    let guard_idx = stmts.iter().position(|s| {
+    // `if … { break }` after them still dominates the rest of the body. The
+    // scan only reads statement kinds, so it borrows the body rather than
+    // cloning the whole stmt vector.
+    let guard_idx = engine.body.blocks[loop_body].stmts.iter().position(|s| {
         !matches!(
             engine.body.stmts[*s].kind,
             StmtKind::Let { .. } | StmtKind::LetDestructure { .. }
         )
     })?;
+    let guard = engine.body.blocks[loop_body].stmts[guard_idx];
 
     let StmtKind::If {
         condition,
         then_block,
         else_block: None,
-    } = &engine.body.stmts[stmts[guard_idx]].kind
+    } = &engine.body.stmts[guard].kind
     else {
         return None;
     };

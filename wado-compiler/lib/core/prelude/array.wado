@@ -173,7 +173,7 @@ fn write_array_inspect<T: Inspect>(arr: &Array<T>, f: &mut Formatter, marker: bo
 
 impl<T: Inspect> Inspect for Array<T> {
     pub fn inspect(&self, f: &mut Formatter) {
-        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
+        let limit = f.resolved_seq_limit();
         write_array_inspect(self, f, true, limit);
     }
 }
@@ -214,7 +214,7 @@ fn write_array_inspect_alt<T: InspectAlt>(arr: &Array<T>, f: &mut Formatter, mar
 
 impl<T: InspectAlt> InspectAlt for Array<T> {
     pub fn inspect_alt(&self, f: &mut Formatter) {
-        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
+        let limit = f.resolved_seq_limit();
         write_array_inspect_alt(self, f, true, limit);
     }
 }

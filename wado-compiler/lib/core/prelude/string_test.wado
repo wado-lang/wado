@@ -965,6 +965,19 @@ test "split_whitespace empty" {
     assert parts.len() == 0;
 }
 
+test "split_whitespace covers all ASCII whitespace incl. VT and FF" {
+    // is_ascii_whitespace_byte follows char::is_ascii_whitespace (POSIX
+    // isspace), so vertical tab (0x0B) and form feed (0x0C) separate too.
+    let parts: List<String> = "a\u{0B}b\u{0C}c\td\ne\rf".split_whitespace().collect();
+    assert parts.len() == 6;
+    assert parts[0] == "a";
+    assert parts[1] == "b";
+    assert parts[2] == "c";
+    assert parts[3] == "d";
+    assert parts[4] == "e";
+    assert parts[5] == "f";
+}
+
 test "lines" {
     let ls: List<String> = "hello\nworld\n".lines().collect();
     assert ls.len() == 2;

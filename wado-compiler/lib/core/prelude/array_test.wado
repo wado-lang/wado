@@ -167,3 +167,25 @@ test "pretty-print array" {
   3,
 ]";
 }
+
+test "inspect truncates at precision limit" {
+    let mut a: Array<i32> = Array::new(4);
+    a[0] = 1;
+    a[1] = 2;
+    a[2] = 3;
+    a[3] = 4;
+    assert `{a:.2?}` == "[1, 2, ...]";
+}
+
+test "pretty-print truncates at precision limit" {
+    let mut a: Array<i32> = Array::new(4);
+    a[0] = 1;
+    a[1] = 2;
+    a[2] = 3;
+    a[3] = 4;
+    assert `{a:#.2?}` == "[
+  1,
+  2,
+  ...
+]";
+}
