@@ -2365,9 +2365,8 @@ fn generate_cm_imports(
         }
     }
 
-    // Resource-defining interfaces (resources + their members + getter, e.g.
-    // wasi:http/types) — emitted before the resource-using phase so their
-    // resource and composite types are available to interfaces that consume them.
+    // Before the resource-using phase, so the resources/composites it interns
+    // are available to interfaces that consume them.
     for fq in import_plan
         .iter()
         .filter(|e| e.kind == ImportKind::ResourceDefiningInterface)
@@ -2377,8 +2376,6 @@ fn generate_cm_imports(
         import_resource_defining_interface(project, builder, ctx, &fq);
     }
 
-    // Import interfaces with resource types (including resource-using interfaces
-    // such as the HTTP client, which consume the resources/composites above).
     import_interfaces_with_resources(builder, ctx, project, import_plan);
 }
 
@@ -2618,10 +2615,8 @@ fn import_resource_defining_interface(
         ComponentExportKind::Type,
     );
 
-    // Alias the used constructors/methods/statics of this interface's resources.
-    // Each is registered under its local alias name and lowered generically by
-    // `lower_wasi_functions` (which derives the canonical options from the
-    // signature), so there is no per-constructor special case.
+    // Used constructors/methods/statics, aliased under their local names and
+    // lowered generically by `lower_wasi_functions` — no per-constructor case.
     {
         let http_resource_names: IndexSet<&str> = http_resources
             .iter()
@@ -3267,7 +3262,8 @@ fn import_resource_using_interfaces(
         // resource-defining interface's resources/error composite (e.g. the HTTP
         // client) consumes that interface's `{pkg}-*` types by outer alias rather
         // than building them instance-locally; resolve those through the interner.
-        if resource_using_references_defining_interface(project, import_plan, &interface_info.path) {
+        if resource_using_references_defining_interface(project, import_plan, &interface_info.path)
+        {
             import_resource_using_composite_interface(builder, ctx, project, &interface_info.path);
             continue;
         }

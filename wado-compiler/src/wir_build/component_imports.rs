@@ -197,9 +197,8 @@ pub fn resolve_import_plan(
         if !needed {
             continue;
         }
-        // An interface that defines its own resources is encoded by the
-        // resource-defining pass (already pushed in Phase 1, deduped by FQ); only
-        // a pure getter is pushed here.
+        // A resource-defining interface was already pushed in Phase 1 (deduped
+        // by FQ); only a pure getter is newly pushed here.
         push(
             &mut entries,
             interface_info.path.clone(),
