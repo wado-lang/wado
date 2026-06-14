@@ -1501,6 +1501,27 @@ impl CmInterfaceRegistry {
             .or_else(|| self.find_kiln_enum_source(&named.name))
     }
 
+    /// Resolve a named type to a source interface within `namespace_prefix`
+    /// (e.g. `"core:kiln/"`, `"wasi:http/"`). Used to scope a world export's
+    /// type to the world's own package, so a name that also exists in another
+    /// package (e.g. `Response` in both `wasi:http` and `core:kiln`) resolves
+    /// to the world's own. Returns `None` for an empty prefix or no unique match.
+    pub fn resolve_cm_source_with_prefix<'a>(
+        &'a self,
+        named: &crate::ast::NamedType,
+        namespace_prefix: &str,
+    ) -> Option<&'a str> {
+        if namespace_prefix.is_empty() {
+            return None;
+        }
+        find_unique_source_with_prefix(&self.newtypes, namespace_prefix, &named.name)
+            .or_else(|| find_unique_source_with_prefix(&self.resources, namespace_prefix, &named.name))
+            .or_else(|| find_unique_source_with_prefix(&self.structs, namespace_prefix, &named.name))
+            .or_else(|| find_unique_source_with_prefix(&self.variants, namespace_prefix, &named.name))
+            .or_else(|| find_unique_source_with_prefix(&self.enums, namespace_prefix, &named.name))
+            .or_else(|| find_unique_source_with_prefix(&self.flags, namespace_prefix, &named.name))
+    }
+
     // -- Legacy unscoped lookups -------------------------------------------
 
     /// Get a newtype by name, when unambiguous across interfaces.

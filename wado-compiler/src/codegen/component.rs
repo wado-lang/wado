@@ -1021,8 +1021,8 @@ fn build_transmission_future_type_for(
 /// - Alias each exported type from the instance into the component's
 ///   local type index space so `emit_world_exports` and the canon
 ///   `task-return` routing can reference them by `ctx.type_idx(...)`.
-/// - Also register a component-local `kiln-handler-result` =
-///   `result<response, error>` (anonymous `result` doesn't need naming).
+/// - Also intern the component-local `result<response, error>` handler type,
+///   which the export lift and `task-return` routing resolve by structure.
 fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentModelContext) {
     let string_vt = ComponentValType::Primitive(PrimitiveValType::String);
     let bool_vt = ComponentValType::Primitive(PrimitiveValType::Bool);
@@ -1184,18 +1184,17 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
         ctx.register_type(local_name);
     }
 
-    // `result<response, error>` — anonymous, component-local. Used by
-    // the canon `task-return` and by `emit_world_exports`.
-    ctx.register_type("kiln-handler-result");
-    {
-        let response_idx = ctx.type_idx("kiln-response");
-        let error_idx = ctx.type_idx("kiln-error");
-        let (_, enc) = builder.ty(Some("kiln-handler-result"));
-        enc.defined_type().result(
-            Some(ComponentValType::Type(response_idx)),
-            Some(ComponentValType::Type(error_idx)),
-        );
-    }
+    let response_idx = ctx.type_idx("kiln-response");
+    let error_idx = ctx.type_idx("kiln-error");
+    intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Result {
+            ok: Some(Box::new(CmTypeKey::Leaf(response_idx))),
+            err: Some(Box::new(CmTypeKey::Leaf(error_idx))),
+        },
+        None,
+    );
 }
 
 /// Intern a defined CM type by its structural [`CmTypeKey`], emitting it once.
@@ -1402,12 +1401,7 @@ fn emit_canonical_intrinsics(
         .world_exports
         .first()
         .map(|export| {
-            cm_export_type_to_idx(
-                ctx,
-                &export.cm_result,
-                component_plan.world_package.as_deref(),
-                result_unit_type,
-            )
+            cm_export_type_to_idx(ctx, &export.cm_result, result_unit_type)
         })
         .unwrap_or(result_unit_type);
     for intrinsic in canonical_intrinsics {
@@ -1530,8 +1524,8 @@ fn emit_canonical_intrinsics(
             CanonicalIntrinsic::TaskReturn => {
                 // The `task.return` result shape is the active world
                 // export's CM-resolved return type — `result<response,
-                // error>` for the kiln generator, `http-handler-result`
-                // for HTTP service, `result<>` for CLI and the test
+                // error>` for the kiln generator and HTTP service,
+                // `result<>` for CLI and the test
                 // world. Computed once at function entry from
                 // `component_plan.world_exports[0].cm_result` so the
                 // code path here is uniform across worlds. The flat
@@ -1629,14 +1623,14 @@ fn resolve_future_type(
 /// Resolve a plan-level [`CmExportType`] to a component type index registered
 /// in `ctx`.
 ///
-/// The naming convention `{pkg}-{cm_name}` mirrors what
-/// `import_wasi_http_types` and `emit_kiln_world_types` register for resource
-/// own-handles and named variants. `HandlerResult` resolves to the per-world
-/// `{world_package}-handler-result` synthesised by the same helpers.
+/// `Named` follows the `{pkg}-{cm_name}` convention that `import_http_types_for_service`
+/// and `emit_kiln_world_types` register for resource own-handles and named
+/// variants. `HandlerResult` resolves through the structural type interner from
+/// its `ok`/`err` arms, so it shares the type those helpers interned without a
+/// per-world name.
 fn cm_export_type_to_idx(
     ctx: &ComponentModelContext,
     ty: &crate::wir_build::component_plan::CmExportType,
-    world_package: Option<&str>,
     result_unit_type: u32,
 ) -> u32 {
     use crate::wir_build::component_plan::CmExportType;
@@ -1658,15 +1652,21 @@ fn cm_export_type_to_idx(
             let key = format!("{pkg}-{cm_name}");
             ctx.type_idx(&key)
         }
-        CmExportType::HandlerResult { .. } => {
-            // The lift signature resolves through the `{pkg}-handler-result`
-            // alias; the `ok`/`err` arms are used only for re-export enumeration.
-            // The plan only emits this for worlds with a known package.
-            let pkg = world_package.expect(
-                "HandlerResult emitted for a world with no package: stdlib bootstrap regression",
-            );
-            let key = format!("{pkg}-handler-result");
-            ctx.type_idx(&key)
+        CmExportType::HandlerResult { ok, err } => {
+            let arm = |a: &CmExportType| match a {
+                CmExportType::Unit => None,
+                _ => Some(Box::new(CmTypeKey::Leaf(cm_export_type_to_idx(
+                    ctx,
+                    a,
+                    result_unit_type,
+                )))),
+            };
+            let key = CmTypeKey::Result {
+                ok: arm(ok),
+                err: arm(err),
+            };
+            ctx.intern_lookup(&key)
+                .unwrap_or_else(|| panic!("handler-result type not interned: {key:?}"))
         }
     }
 }
@@ -1677,7 +1677,6 @@ fn emit_world_exports(
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
     result_unit_type: u32,
 ) {
-    let world_package = component_plan.world_package.as_deref();
     for export in &component_plan.world_exports {
         let core_name = format!("{}-core", export.name);
         let func_type_name = format!("{}-func-type", export.name);
@@ -1704,7 +1703,7 @@ fn emit_world_exports(
                 .map(|(name, cm_ty)| {
                     (
                         name.clone(),
-                        cm_export_type_to_idx(ctx, cm_ty, world_package, result_unit_type),
+                        cm_export_type_to_idx(ctx, cm_ty, result_unit_type),
                     )
                 })
                 .collect();
@@ -1712,8 +1711,7 @@ fn emit_world_exports(
                 .iter()
                 .map(|(n, idx)| (n.as_str(), ComponentValType::Type(*idx)))
                 .collect();
-            let result_idx =
-                cm_export_type_to_idx(ctx, &export.cm_result, world_package, result_unit_type);
+            let result_idx = cm_export_type_to_idx(ctx, &export.cm_result, result_unit_type);
             enc.function()
                 .async_(export.is_async)
                 .params(param_refs)
@@ -2421,12 +2419,18 @@ fn generate_cm_imports(
         let types_fq = http_types_fq
             .as_deref()
             .expect("HttpClient in import plan without HttpTypes: types must be imported first");
-        let pkg = crate::world_registry::fq_name_package(types_fq);
-        debug_assert!(
-            ctx.has_type(&format!("{pkg}-handler-result")),
-            "HttpClient in import plan without HttpTypes: types interface must be imported first",
-        );
         import_http_client(builder, ctx, project, &client_entry.fq, types_fq);
+    }
+}
+
+fn http_handler_result_key(ctx: &ComponentModelContext, pkg: &str) -> CmTypeKey {
+    CmTypeKey::Result {
+        ok: Some(Box::new(CmTypeKey::Leaf(
+            ctx.type_idx(&format!("{pkg}-response")),
+        ))),
+        err: Some(Box::new(CmTypeKey::Leaf(
+            ctx.type_idx(&format!("{pkg}-error-code")),
+        ))),
     }
 }
 
@@ -2727,17 +2731,8 @@ fn import_http_types_for_service(
         );
     }
 
-    let response_type_idx = ctx.type_idx(&format!("{pkg}-response"));
-    let error_code_type_idx = ctx.type_idx(&format!("{pkg}-error-code"));
-    intern_cm_type(
-        builder,
-        ctx,
-        &CmTypeKey::Result {
-            ok: Some(Box::new(CmTypeKey::Leaf(response_type_idx))),
-            err: Some(Box::new(CmTypeKey::Leaf(error_code_type_idx))),
-        },
-        Some(&format!("{pkg}-handler-result")),
-    );
+    let handler_result_key = http_handler_result_key(ctx, &pkg);
+    intern_cm_type(builder, ctx, &handler_result_key, None);
 }
 
 fn import_http_client(
@@ -2751,7 +2746,9 @@ fn import_http_client(
     // (types) instance.
     let pkg = crate::world_registry::fq_name_package(types_fq).to_string();
     let request_type_idx = ctx.type_idx(&format!("{pkg}-request"));
-    let handler_result_type_idx = ctx.type_idx(&format!("{pkg}-handler-result"));
+    let handler_result_type_idx = ctx
+        .intern_lookup(&http_handler_result_key(ctx, &pkg))
+        .expect("HttpClient in import plan without HttpTypes: types must be imported first");
 
     let client_iface = project
         .cm_interface_registry
