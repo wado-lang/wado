@@ -86,7 +86,7 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(28)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<./sub/cross_module_struct_field_type_lib.wado/Inner>" = fn(ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(29)
+type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<./sub/cross_module_struct_field_type_lib.wado/Inner>" = fn(ref "Array<./sub/cross_module_struct_field_type_lib.wado/Inner>", i32, ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(29)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(30)
 
@@ -307,27 +307,23 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
     }
 }
 
-fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<./sub/cross_module_struct_field_type_lib.wado/Inner>"(arr, f, marker, limit) {
+fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<./sub/cross_module_struct_field_type_lib.wado/Inner>"(repr, len, f, marker, limit) {
     let shown: i32;
     let truncated: bool;
     let i: i32;
     let s_11: ref "core:prelude/string.wado//String";
     let s_15: ref "core:prelude/string.wado//String";
     let s_17: ref "core:prelude/string.wado//String";
-    let _licm_used_20: i32;
-    let _licm_repr_21: ref "Array<./sub/cross_module_struct_field_type_lib.wado/Inner>";
-    let _licm_arith_22: bool;
+    let _licm_arith_20: bool;
     "core:prelude/string.wado/String::push"(f.buf, 91);
     shown = 0;
     truncated = 0;
     i = 0;
-    _licm_used_20 = arr.used;
-    _licm_repr_21 = arr.repr;
-    _licm_arith_22 = limit >= 0;
+    _licm_arith_20 = limit >= 0;
     b11: block {
         l12: loop {
-            break_if b11 i >= _licm_used_20;
-            if (if _licm_arith_22 -> i32 {
+            break_if b11 i >= len;
+            if (if _licm_arith_20 -> i32 {
                 shown >= limit;
             } else {
                 0;
@@ -339,7 +335,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<./sub/
                 s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
                 "core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
-            "./sub/cross_module_struct_field_type_lib.wado/Inner^Inspect::inspect"(builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_21, i), f);
+            "./sub/cross_module_struct_field_type_lib.wado/Inner^Inspect::inspect"(builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(repr, i), f);
             shown = shown + 1;
             i = i + 1;
             continue l12;
@@ -547,8 +543,6 @@ fn "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Inspect::inspect"(self
     let s_5: ref "core:prelude/string.wado//String";
     let s_7: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
-    let self_10: ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>";
-    let limit: i32;
     let s_14: ref "core:prelude/string.wado//String";
     s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Wrapper { "), used: 10 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_3);
@@ -559,13 +553,12 @@ fn "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Inspect::inspect"(self
     "core:prelude/string.wado/String::push_str"(f.buf, s_7);
     s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("items: "), used: 7 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-    self_10 = self.items;
-    limit = (if f.precision == -2 -> i32 {
-        256;
-    } else {
-        f.precision;
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<./sub/cross_module_struct_field_type_lib.wado/Inner>"(self.items.repr, self.items.used, f, 1, __inline_Formatter__resolved_seq_limit_5: block -> i32 {
+        if f.precision == -2 {
+            break __inline_Formatter__resolved_seq_limit_5: 256;
+        }
+        break __inline_Formatter__resolved_seq_limit_5: f.precision;
     });
-    "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<./sub/cross_module_struct_field_type_lib.wado/Inner>"(self_10, f, 1, limit);
     s_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_14);
 }
@@ -673,28 +666,29 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let limit: i32;
     let count: i32;
     let truncated: bool;
-    let self_10: ref "core:prelude/string.wado//StrCharIter";
+    let self_11: ref "core:prelude/string.wado//StrCharIter";
     let s: ref "core:prelude/string.wado//String";
-    let _licm_buf_38: ref "core:prelude/string.wado//String";
-    let _licm_arith_39: bool;
-    limit = (if f.precision == -2 -> i32 {
-        256;
-    } else {
-        f.precision;
-    });
+    let _licm_buf_39: ref "core:prelude/string.wado//String";
+    let _licm_arith_40: bool;
+    limit = __inline_Formatter__resolved_seq_limit_0: block -> i32 {
+        if f.precision == -2 {
+            break __inline_Formatter__resolved_seq_limit_0: 256;
+        }
+        break __inline_Formatter__resolved_seq_limit_0: f.precision;
+    };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    self_10 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
-    _licm_buf_38 = f.buf;
-    _licm_arith_39 = limit >= 0;
+    self_11 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
+    _licm_buf_39 = f.buf;
+    _licm_arith_40 = limit >= 0;
     b57: block {
         l58: loop {
             let __sroa___match_7_discriminant: i32;
             let __sroa___match_7_payload_0: char;
-            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self_10);
+            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self_11);
             if __sroa___match_7_discriminant == 0 {
-                if (if _licm_arith_39 -> i32 {
+                if (if _licm_arith_40 -> i32 {
                     count >= limit;
                 } else {
                     0;
@@ -703,22 +697,22 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     break b57;
                 }
                 if __sroa___match_7_payload_0 == 34 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 34);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 34);
                 } else if __sroa___match_7_payload_0 == 92 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
                 } else if __sroa___match_7_payload_0 == 10 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 110);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 110);
                 } else if __sroa___match_7_payload_0 == 13 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 114);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 114);
                 } else if __sroa___match_7_payload_0 == 9 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 116);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 116);
                 } else {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, __sroa___match_7_payload_0);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, __sroa___match_7_payload_0);
                 }
                 count = count + 1;
             } else {

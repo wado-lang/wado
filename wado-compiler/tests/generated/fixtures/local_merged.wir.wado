@@ -620,28 +620,29 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let limit: i32;
     let count: i32;
     let truncated: bool;
-    let self_10: ref "core:prelude/string.wado//StrCharIter";
+    let self_11: ref "core:prelude/string.wado//StrCharIter";
     let s: ref "core:prelude/string.wado//String";
-    let _licm_buf_38: ref "core:prelude/string.wado//String";
-    let _licm_arith_39: bool;
-    limit = (if f.precision == -2 -> i32 {
-        256;
-    } else {
-        f.precision;
-    });
+    let _licm_buf_39: ref "core:prelude/string.wado//String";
+    let _licm_arith_40: bool;
+    limit = __inline_Formatter__resolved_seq_limit_0: block -> i32 {
+        if f.precision == -2 {
+            break __inline_Formatter__resolved_seq_limit_0: 256;
+        }
+        break __inline_Formatter__resolved_seq_limit_0: f.precision;
+    };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    self_10 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
-    _licm_buf_38 = f.buf;
-    _licm_arith_39 = limit >= 0;
+    self_11 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
+    _licm_buf_39 = f.buf;
+    _licm_arith_40 = limit >= 0;
     b49: block {
         l50: loop {
             let __sroa___match_7_discriminant: i32;
             let __sroa___match_7_payload_0: char;
-            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self_10);
+            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self_11);
             if __sroa___match_7_discriminant == 0 {
-                if (if _licm_arith_39 -> i32 {
+                if (if _licm_arith_40 -> i32 {
                     count >= limit;
                 } else {
                     0;
@@ -650,22 +651,22 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     break b49;
                 }
                 if __sroa___match_7_payload_0 == 34 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 34);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 34);
                 } else if __sroa___match_7_payload_0 == 92 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
                 } else if __sroa___match_7_payload_0 == 10 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 110);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 110);
                 } else if __sroa___match_7_payload_0 == 13 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 114);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 114);
                 } else if __sroa___match_7_payload_0 == 9 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, 116);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, 116);
                 } else {
-                    "core:prelude/string.wado/String::push"(_licm_buf_38, __sroa___match_7_payload_0);
+                    "core:prelude/string.wado/String::push"(_licm_buf_39, __sroa___match_7_payload_0);
                 }
                 count = count + 1;
             } else {

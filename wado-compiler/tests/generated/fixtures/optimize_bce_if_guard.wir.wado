@@ -123,18 +123,20 @@ fn "wado-compiler/tests/fixtures/optimize_bce_if_guard.wado/sliding_sum"(input) 
     let n: i32;
     let sum: i32;
     let i: i32;
-    let index_8: i32;
-    let index_10: i32;
-    let _licm_repr_12: ref Array<i32>;
+    let index_13: i32;
+    let index_20: i32;
+    let __cse_26: bool;
+    let _licm_repr_28: ref Array<i32>;
     n = input.used;
     sum = 0;
     i = 0;
-    _licm_repr_12 = input.repr;
+    _licm_repr_28 = input.repr;
     b0: block {
         l1: loop {
-            break_if b0 i >= n;
+            __cse_26 = i < n;
+            break_if b0 __cse_26 == 0;
             if (i + 2) < n {
-                sum = sum + ((builtin::array_get<i32>(_licm_repr_12, i) + index_8 = i + 1; builtin::array_get<i32>(_licm_repr_12, index_8)) + index_10 = i + 2; builtin::array_get<i32>(_licm_repr_12, index_10));
+                sum = sum + ((builtin::array_get<i32>(_licm_repr_28, i) + index_13 = i + 1; builtin::array_get<i32>(_licm_repr_28, index_13)) + index_20 = i + 2; builtin::array_get<i32>(_licm_repr_28, index_20));
             }
             i = i + 1;
             continue l1;

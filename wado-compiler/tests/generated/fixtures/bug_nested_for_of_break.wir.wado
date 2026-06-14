@@ -157,18 +157,20 @@ fn "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/loop_entry_decisio
     let __iter_5: ref "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>";
     let t: ref "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition";
     let __match_7: ref null "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//Transition";
-    let self_11: ref "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>";
+    let self_16: ref "core:prelude//List<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>";
     let repr: ref "Array<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>";
     let end: i32;
-    let _licm_used_16: i32;
-    let _licm_repr_17: ref "Array<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/State>";
+    let __cse_21: bool;
+    let _licm_used_22: i32;
+    let _licm_repr_23: ref "Array<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/State>";
     i = 0;
-    _licm_used_16 = states.used;
-    _licm_repr_17 = states.repr;
+    _licm_used_22 = states.used;
+    _licm_repr_23 = states.repr;
     b0: block {
         l1: loop {
-            break_if b0 i >= _licm_used_16;
-            st = builtin::array_get<ref "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//State">(_licm_repr_17, i);
+            __cse_21 = i < _licm_used_22;
+            break_if b0 __cse_21 == 0;
+            st = builtin::array_get<ref "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado//State">(_licm_repr_23, i);
             if (if (if st.kind == 9 -> i32 {
                 st.rule == rule;
             } else {
@@ -179,9 +181,9 @@ fn "wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/loop_entry_decisio
                 0;
             }) {
                 has_prec = 0;
-                self_11 = st.transitions;
-                repr = self_11.repr;
-                end = self_11.used;
+                self_16 = st.transitions;
+                repr = self_16.repr;
+                end = self_16.used;
                 __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/bug_nested_for_of_break.wado/Transition>" { repr: repr, index: 0, end: end };
                 b5: block {
                     l6: loop {

@@ -1636,8 +1636,9 @@ fn "core:cbor/CborDeserializer::read_bignum_mag"(self) {
     let b: u64;
     let pr: i32;
     let __pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
-    let _licm_repr_23: ref Array<u8>;
-    let _licm_arith_24: i32;
+    let __cse_27: bool;
+    let _licm_repr_29: ref Array<u8>;
+    let _licm_arith_30: i32;
     let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<u8,u8,u64,bool>,core:serde/DeserializeError>";
     __match_scrut_0 = "core:cbor/CborDeserializer::read_head"(self);
     __pattern_temp_0 = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<u8,u8,u64,bool>,core:serde/DeserializeError>::Ok"(__match_scrut_0)) -> ref "tuple//[u8, u8, u64, bool]" {
@@ -1671,13 +1672,14 @@ fn "core:cbor/CborDeserializer::read_bignum_mag"(self) {
     hi = 0_i64;
     lo = 0_i64;
     i = 0;
-    _licm_repr_23 = bytes.repr;
-    _licm_arith_24 = n - 1;
+    _licm_repr_29 = bytes.repr;
+    _licm_arith_30 = n - 1;
     b129: block {
         l130: loop {
-            break_if b129 i >= n;
-            b = builtin::i64_extend_i32_u(builtin::array_get<u8>(_licm_repr_23, i));
-            pr = _licm_arith_24 - i;
+            __cse_27 = i < n;
+            break_if b129 __cse_27 == 0;
+            b = builtin::i64_extend_i32_u(builtin::array_get<u8>(_licm_repr_29, i));
+            pr = _licm_arith_30 - i;
             if pr < 8 {
                 lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
             } else {

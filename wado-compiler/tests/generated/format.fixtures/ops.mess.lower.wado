@@ -3038,7 +3038,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
 pub fn "ByteArray^InspectAlt::inspect_alt"(self: &Array<u8>, f: &mut Formatter) {
-    self."ByteArray^Inspect::inspect"(f);
+    self."Array<u8>^Inspect::inspect"(f);
 }
 
 pub fn "ByteList^InspectAlt::inspect_alt"(self: &List<u8>, f: &mut Formatter) {
@@ -3088,7 +3088,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
 pub fn "ByteArray^Display::fmt"(self: &Array<u8>, f: &mut Formatter) {
-    self."ByteArray^Inspect::inspect"(f);
+    self."Array<u8>^Inspect::inspect"(f);
 }
 
 pub fn "ByteList^Display::fmt"(self: &List<u8>, f: &mut Formatter) {
@@ -3164,7 +3164,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
 }
 
 pub fn "ByteArray^DisplayAlt::fmt_alt"(self: &Array<u8>, f: &mut Formatter) {
-    self."ByteArray^InspectAlt::inspect_alt"(f);
+    self."Array<u8>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "ByteList^DisplayAlt::fmt_alt"(self: &List<u8>, f: &mut Formatter) {
@@ -3968,6 +3968,7 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     let is_neg: bool = (bits < 0);
     let exp_mask: i64 = 0x7FF0000000000000;
     if ((bits & exp_mask) == exp_mask) {
+        core::builtin::cold_path();
         let mantissa_mask: i64 = 0x000FFFFFFFFFFFFF;
         if ((bits & mantissa_mask) != 0) {
             return [true, false, SpecialKind::NaN];
@@ -4024,6 +4025,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let remaining: i32 = (len - i);
     let c0: u8 = s.String::get_byte_unchecked(i);
     if (((c0 == 'i' as u8) || (c0 == 'I' as u8)) && (remaining >= 3)) {
+        core::builtin::cold_path();
         let c1: u8 = s.String::get_byte_unchecked((i + 1));
         let c2: u8 = s.String::get_byte_unchecked((i + 2));
         if (((c1 == 'n' as u8) || (c1 == 'N' as u8)) && ((c2 == 'f' as u8) || (c2 == 'F' as u8))) {
@@ -4044,6 +4046,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         return null;
     }
     if (((c0 == 'n' as u8) || (c0 == 'N' as u8)) && (remaining == 3)) {
+        core::builtin::cold_path();
         let c1: u8 = s.String::get_byte_unchecked((i + 1));
         let c2: u8 = s.String::get_byte_unchecked((i + 2));
         if (((c1 == 'a' as u8) || (c1 == 'A' as u8)) && ((c2 == 'n' as u8) || (c2 == 'N' as u8))) {
@@ -10391,7 +10394,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 581 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 579 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"negative length");
                 __r.String::push_str(&"\ncondition: byte_len >= 0\n");
@@ -10416,7 +10419,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 582 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 580 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"not on a UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_len)\n");
@@ -10542,8 +10545,7 @@ pub fn String::trim_ascii_start(self: &String) -> String {
         if !(start < self.used) {
             break;
         }
-        let c: char = core::builtin::array_get_u8(&self.repr, start) as char;
-        if Box<char> { value: c }.char::is_ascii_whitespace() {
+        if "core::prelude/string.wado::is_ascii_whitespace_byte"(core::builtin::array_get_u8(&self.repr, start)) {
             start = (start + 1);
         } else {
             break;
@@ -10558,8 +10560,7 @@ pub fn String::trim_ascii_end(self: &String) -> String {
         if !(end > 0) {
             break;
         }
-        let c: char = core::builtin::array_get_u8(&self.repr, (end - 1)) as char;
-        if Box<char> { value: c }.char::is_ascii_whitespace() {
+        if "core::prelude/string.wado::is_ascii_whitespace_byte"(core::builtin::array_get_u8(&self.repr, (end - 1))) {
             end = (end - 1);
         } else {
             break;
@@ -10699,7 +10700,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 825 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 821 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range out of bounds");
                 __r.String::push_str(&"\ncondition: 0 <= start && start <= end && end <= self.used\n");
@@ -10757,7 +10758,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 826 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 822 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range not on UTF-8 character boundaries");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n");
@@ -10967,7 +10968,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 962 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 958 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11026,7 +11027,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1003 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 999 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert_str index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11073,7 +11074,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1031 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1027 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"index out of bounds");
                 __r.String::push_str(&"\ncondition: byte_index >= 0 && byte_index < self.used\n");
@@ -11114,7 +11115,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1032 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1028 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"remove index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11760,7 +11761,7 @@ pub fn "StrSplitNIter^Iterator::skip"(self: &StrSplitNIter, n: i32) -> IterSkip<
 }
 
 fn is_ascii_whitespace_byte(b: u8) -> bool {
-    return (((((b == 0x20) || (b == 0x09)) || (b == 0x0A)) || (b == 0x0D)) || (b == 0x0C));
+    return Box<char> { value: b as char }.char::is_ascii_whitespace();
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::next"(self: &mut StrSplitWhitespaceIter) -> Option<String> {
@@ -12667,50 +12668,65 @@ pub fn "Utf8Scalar^Inspect::inspect"(self: &Utf8Scalar, f: &mut Formatter) {
 
 pub fn "StrUtf8ByteIter^Inspect::inspect"(self: &StrUtf8ByteIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrUtf8ByteIter { ");
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"index: ");
     Box<i32> { value: self.index }."i32^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrCharIter^Inspect::inspect"(self: &StrCharIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrCharIter { ");
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"byte_index: ");
     Box<i32> { value: self.byte_index }."i32^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrSplitIter^Inspect::inspect"(self: &StrSplitIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrSplitIter { ");
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
+    f.Formatter::write_str(&"sep_repr: ");
+    self.sep_repr."Array<u8>^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"sep_len: ");
     Box<i32> { value: self.sep_len }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrSplitNIter^Inspect::inspect"(self: &StrSplitNIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrSplitNIter { ");
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
+    f.Formatter::write_str(&"sep_repr: ");
+    self.sep_repr."Array<u8>^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"sep_len: ");
     Box<i32> { value: self.sep_len }."i32^Inspect::inspect"(f);
@@ -12720,23 +12736,27 @@ pub fn "StrSplitNIter^Inspect::inspect"(self: &StrSplitNIter, f: &mut Formatter)
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrSplitWhitespaceIter^Inspect::inspect"(self: &StrSplitWhitespaceIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrSplitWhitespaceIter { ");
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrLinesIter^Inspect::inspect"(self: &StrLinesIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrLinesIter { ");
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
@@ -12745,18 +12765,19 @@ pub fn "StrLinesIter^Inspect::inspect"(self: &StrLinesIter, f: &mut Formatter) {
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
 pub fn "StrCharIndicesIter^Inspect::inspect"(self: &StrCharIndicesIter, f: &mut Formatter) {
     f.Formatter::write_str(&"StrCharIndicesIter { ");
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"byte_index: ");
     Box<i32> { value: self.byte_index }."i32^Inspect::inspect"(f);
-    f.Formatter::write_str(&", ..");
     f.Formatter::write_str(&" }");
 }
 
@@ -12818,6 +12839,10 @@ pub fn "Utf8Scalar^InspectAlt::inspect_alt"(self: &Utf8Scalar, f: &mut Formatter
 pub fn "StrUtf8ByteIter^InspectAlt::inspect_alt"(self: &StrUtf8ByteIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrUtf8ByteIter {");
     f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
@@ -12825,13 +12850,15 @@ pub fn "StrUtf8ByteIter^InspectAlt::inspect_alt"(self: &StrUtf8ByteIter, f: &mut
     f.Formatter::write_str(&"index: ");
     Box<i32> { value: self.index }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrCharIter^InspectAlt::inspect_alt"(self: &StrCharIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrCharIter {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12840,13 +12867,15 @@ pub fn "StrCharIter^InspectAlt::inspect_alt"(self: &StrCharIter, f: &mut Formatt
     f.Formatter::write_str(&"byte_index: ");
     Box<i32> { value: self.byte_index }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrSplitIter^InspectAlt::inspect_alt"(self: &StrSplitIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrSplitIter {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12854,6 +12883,10 @@ pub fn "StrSplitIter^InspectAlt::inspect_alt"(self: &StrSplitIter, f: &mut Forma
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"sep_repr: ");
+    self.sep_repr."Array<u8>^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"sep_len: ");
@@ -12863,13 +12896,15 @@ pub fn "StrSplitIter^InspectAlt::inspect_alt"(self: &StrSplitIter, f: &mut Forma
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrSplitNIter^InspectAlt::inspect_alt"(self: &StrSplitNIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrSplitNIter {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12877,6 +12912,10 @@ pub fn "StrSplitNIter^InspectAlt::inspect_alt"(self: &StrSplitNIter, f: &mut For
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"sep_repr: ");
+    self.sep_repr."Array<u8>^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"sep_len: ");
@@ -12890,13 +12929,15 @@ pub fn "StrSplitNIter^InspectAlt::inspect_alt"(self: &StrSplitNIter, f: &mut For
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrSplitWhitespaceIter^InspectAlt::inspect_alt"(self: &StrSplitWhitespaceIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrSplitWhitespaceIter {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12905,13 +12946,15 @@ pub fn "StrSplitWhitespaceIter^InspectAlt::inspect_alt"(self: &StrSplitWhitespac
     f.Formatter::write_str(&"pos: ");
     Box<i32> { value: self.pos }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrLinesIter^InspectAlt::inspect_alt"(self: &StrLinesIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrLinesIter {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12924,13 +12967,15 @@ pub fn "StrLinesIter^InspectAlt::inspect_alt"(self: &StrLinesIter, f: &mut Forma
     f.Formatter::write_str(&"finished: ");
     Box<bool> { value: self.finished }."bool^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
 pub fn "StrCharIndicesIter^InspectAlt::inspect_alt"(self: &StrCharIndicesIter, f: &mut Formatter) {
     f.Formatter::open_brace("StrCharIndicesIter {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"repr: ");
+    self.repr."Array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"used: ");
     Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
@@ -12939,8 +12984,6 @@ pub fn "StrCharIndicesIter^InspectAlt::inspect_alt"(self: &StrCharIndicesIter, f
     f.Formatter::write_str(&"byte_index: ");
     Box<i32> { value: self.byte_index }."i32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"..");
     f.Formatter::close_brace("}");
 }
 
@@ -15163,6 +15206,13 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn Formatter::resolved_seq_limit(self: &Formatter) -> i32 {
+    if (self.precision == -2) {
+        return 256;
+    }
+    return self.precision;
+}
+
 pub fn Formatter::new(buf: &mut String) -> Formatter with stores[buf] {
     return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -2, indent: 0, buf: buf };
 }
@@ -15423,11 +15473,7 @@ pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {
 }
 
 pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
-    let limit: i32 = if (f.precision == -2) {
-        256;
-    } else {
-        f.precision;
-    };
+    let limit: i32 = f.Formatter::resolved_seq_limit();
     f.Formatter::write_char('"');
     let mut count: i32 = 0;
     let mut truncated: bool = false;
@@ -15937,9 +15983,35 @@ pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<R
 }
 
 fn "List<u64>^IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64 {
-    if (index >= self.used) {
-        core::builtin::cold_path();
-        core::internal::panic("index out of bounds");
+    __assert_0: {
+        let __v0: i32 = index;
+        let __v1: i32 = self.used;
+        let __cond: bool = (__v0 < __v1);
+        if !__cond {
+            core::builtin::cold_path();
+            core::internal::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(173);
+                __r.String::push_str(&"Assertion failed in ");
+                __r.String::push_str(&"List::index_value");
+                __r.String::push_str(&" at ");
+                __r.String::push_str(&"core:prelude/list.wado");
+                __r.String::push_str(&":");
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 303 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&": ");
+                __r.String::push_str(&"index out of bounds");
+                __r.String::push_str(&"\ncondition: index < self.used\n");
+                __r.String::push_str(&"index: ");
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&"\n");
+                __r.String::push_str(&"self.used: ");
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v1 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&"\n");
+                break __tmpl: __r;
+            });
+        }
     }
     return core::builtin::array_get::<u64>(&self.repr, index);
 }
@@ -15962,12 +16034,11 @@ pub fn "ArraySlice<u8>^InspectAlt::inspect_alt"(self: &ArraySlice<u8>, f: &mut F
 }
 
 pub fn "List<u8>^InspectAlt::inspect_alt"(self: &List<u8>, f: &mut Formatter) {
-    let limit: i32 = if (f.precision == -2) {
-        256;
-    } else {
-        f.precision;
-    };
-    "core::prelude/format.wado::core/prelude/format.wado/write_array_inspect_alt<u8>"(self, f, true, limit);
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect_alt<u8>"(&self.repr, self.used, f, true, f.Formatter::resolved_seq_limit());
+}
+
+pub fn "Array<u8>^InspectAlt::inspect_alt"(self: &Array<u8>, f: &mut Formatter) {
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect_alt<u8>"(self, core::builtin::array_len(self), f, true, f.Formatter::resolved_seq_limit());
 }
 
 pub fn "ArraySlice<u8>^Inspect::inspect"(self: &ArraySlice<u8>, f: &mut Formatter) {
@@ -15984,12 +16055,11 @@ pub fn "ArraySlice<u8>^Inspect::inspect"(self: &ArraySlice<u8>, f: &mut Formatte
 }
 
 pub fn "List<u8>^Inspect::inspect"(self: &List<u8>, f: &mut Formatter) {
-    let limit: i32 = if (f.precision == -2) {
-        256;
-    } else {
-        f.precision;
-    };
-    "core::prelude/format.wado::core/prelude/format.wado/write_array_inspect<u8>"(self, f, true, limit);
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(&self.repr, self.used, f, true, f.Formatter::resolved_seq_limit());
+}
+
+pub fn "Array<u8>^Inspect::inspect"(self: &Array<u8>, f: &mut Formatter) {
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(self, core::builtin::array_len(self), f, true, f.Formatter::resolved_seq_limit());
 }
 
 pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
@@ -16033,13 +16103,13 @@ fn "core/builtin/array_new<u8>"(len: i32) -> Array<u8>;
 
 fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
-fn "core/prelude/format.wado/write_array_inspect<u8>"(arr: &List<u8>, f: &mut Formatter, marker: bool, limit: i32) {
+pub fn "core/prelude/array.wado/write_seq_inspect<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
     f.Formatter::write_char('[');
     let mut shown: i32 = 0;
     let mut truncated: bool = false;
     let mut i: i32 = 0;
     loop {
-        if !(i < arr."List<u8>::len"()) {
+        if !(i < len) {
             break;
         }
         __for_0_body: {
@@ -16050,7 +16120,7 @@ fn "core/prelude/format.wado/write_array_inspect<u8>"(arr: &List<u8>, f: &mut Fo
             if (shown > 0) {
                 f.Formatter::write_str(&", ");
             }
-            Box<u8> { value: arr."List<u8>^IndexValue<i32>::index_value"(i) }."u8^Inspect::inspect"(f);
+            Box<u8> { value: repr."Array<u8>^IndexValue<i32>::index_value"(i) }."u8^Inspect::inspect"(f);
             shown = (shown + 1);
         }
         i = (i + 1);
@@ -16071,8 +16141,8 @@ pub fn "&Array<u8>^Inspect::inspect"(self: &&Array<u8>, f: &mut Formatter) {
     *inner."Array<u8>^Inspect::inspect"(f);
 }
 
-fn "core/prelude/format.wado/write_array_inspect_alt<u8>"(arr: &List<u8>, f: &mut Formatter, marker: bool, limit: i32) {
-    if arr."List<u8>::is_empty"() {
+pub fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
+    if (len == 0) {
         f.Formatter::write_str(&"[]");
         return;
     }
@@ -16081,7 +16151,7 @@ fn "core/prelude/format.wado/write_array_inspect_alt<u8>"(arr: &List<u8>, f: &mu
     let mut truncated: bool = false;
     let mut i: i32 = 0;
     loop {
-        if !(i < arr."List<u8>::len"()) {
+        if !(i < len) {
             break;
         }
         __for_0_body: {
@@ -16090,7 +16160,7 @@ fn "core/prelude/format.wado/write_array_inspect_alt<u8>"(arr: &List<u8>, f: &mu
                 break;
             }
             f.Formatter::write_newline_indent();
-            Box<u8> { value: arr."List<u8>^IndexValue<i32>::index_value"(i) }."u8^InspectAlt::inspect_alt"(f);
+            Box<u8> { value: repr."Array<u8>^IndexValue<i32>::index_value"(i) }."u8^InspectAlt::inspect_alt"(f);
             f.Formatter::write_char(',');
             shown = (shown + 1);
         }
@@ -16190,16 +16260,8 @@ pub fn "List<u64>::grow"(self: &mut List<u64>) {
     self.repr = new_repr;
 }
 
-pub fn "List<u8>::is_empty"(self: &List<u8>) -> bool {
-    return (self.used == 0);
-}
-
-fn "List<u8>^IndexValue<i32>::index_value"(self: &List<u8>, index: i32) -> u8 {
-    if (index >= self.used) {
-        core::builtin::cold_path();
-        core::internal::panic("index out of bounds");
-    }
-    return "core::builtin::core/builtin/array_get<u8>"(&self.repr, index);
+fn "Array<u8>^IndexValue<i32>::index_value"(self: &Array<u8>, index: i32) -> u8 {
+    return "core::builtin::core/builtin/array_get<u8>"(self, index);
 }
 
 pub fn __initialize_module() {

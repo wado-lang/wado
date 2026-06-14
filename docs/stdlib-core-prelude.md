@@ -2473,6 +2473,12 @@ Current indentation level for pretty-printing (used by InspectAlt)
 
 Reference to the output buffer
 
+#### `pub fn resolved_seq_limit(&self) -> i32`
+
+The element/char cap a sequence Inspect should apply: the explicit
+precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
+(`PRECISION_INFINITE`) means uncapped.
+
 #### `pub fn new(buf: &mut String) -> Formatter`
 
 Create a Formatter with the default spec, writing into the given buffer.
@@ -3943,6 +3949,22 @@ byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 #### `impl Default for List<T>`
 
 ##### `pub fn default() -> List<T>`
+
+#### `impl Inspect for List<T>`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl Display for List<T>`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for List<T>`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl DisplayAlt for List<T>`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ### `pub struct RangeExclusive<T: Ord>`
 

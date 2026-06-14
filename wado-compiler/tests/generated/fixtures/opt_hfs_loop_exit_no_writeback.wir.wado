@@ -127,28 +127,33 @@ global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/process"(state) {
     let index: i32;
-    let _licm_limit_3: i32;
-    let _licm_data_4: ref "core:prelude//List<i32>";
-    let _licm_used_5: i32;
-    let _licm_repr_6: ref Array<i32>;
-    let __hfs_counter_7: i32;
-    _licm_limit_3 = state.limit;
-    _licm_data_4 = state.data;
-    _licm_used_5 = _licm_data_4.used;
-    _licm_repr_6 = _licm_data_4.repr;
-    __hfs_counter_7 = state.counter;
+    let __cond: bool;
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
+    let _licm_limit_8: i32;
+    let _licm_data_9: ref "core:prelude//List<i32>";
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref Array<i32>;
+    let __hfs_counter_12: i32;
+    _licm_limit_8 = state.limit;
+    _licm_data_9 = state.data;
+    _licm_used_10 = _licm_data_9.used;
+    _licm_repr_11 = _licm_data_9.repr;
+    __hfs_counter_12 = state.counter;
     b0: block {
         l1: loop {
-            if __hfs_counter_7 >= _licm_limit_3 {
-                state.counter = __hfs_counter_7;
+            if __hfs_counter_12 >= _licm_limit_8 {
+                state.counter = __hfs_counter_12;
                 break b0;
             }
-            state.total = state.total + index = __hfs_counter_7; if @unlikely(index >= _licm_used_5) {
+            state.total = state.total + index = __hfs_counter_12; __cond = index < _licm_used_10; if @unlikely(__cond == 0) {
                 cold_path;
-                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 303 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+condition: index < self.used
+"), used: 30 }); "core:prelude/string.wado/String::push"(__local_5, 105); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 100); "core:prelude/string.wado/String::push"(__local_5, 101); "core:prelude/string.wado/String::push"(__local_5, 120); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: index }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.used: "), used: 11 }); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: _licm_used_10 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
                 unreachable;
-            }; builtin::array_get<i32>(_licm_repr_6, index);
-            __hfs_counter_7 = __hfs_counter_7 + 1;
+            }; builtin::array_get<i32>(_licm_repr_11, index);
+            __hfs_counter_12 = __hfs_counter_12 + 1;
             continue l1;
         };
     };
