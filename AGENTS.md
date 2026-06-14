@@ -42,9 +42,10 @@ mise run report-wasm-size  # hello_world, pi_approx, zlib, and so on
 
 ## General Rules
 
-- Documentation and comments must be written in English.
+- Write all documentation and comments in English, and keep them concise — cut filler and low-information words.
+  - Comments: add one only when the intent can't be read from the code. Never use comments as section dividers or to restate what the code already says.
+  - Docs: lead with the information; drop throat-clearing, restating the obvious, and redundant phrasing.
 - Avoid ad-hoc workarounds. Write proper code based on a sound design.
-- Do not use comment sections to separate or organize code.
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. Stop, write a minimal reproducible e2e fixture, and fix it before continuing if it blocks the current task.
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
