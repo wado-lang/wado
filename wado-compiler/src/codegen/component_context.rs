@@ -6,12 +6,31 @@
 
 use crate::hashmap::IndexMap;
 
+/// Structural key for a defined Component Model type, so a given structure
+/// resolves to one interned type index regardless of how many producers ask for
+/// it (e.g. the world-export lift and the `Client` import both need
+/// `result<own<response>, error-code>`). A [`CmTypeKey::Leaf`] references an
+/// already-emitted index and never emits.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum CmTypeKey {
+    Leaf(u32),
+    Own(Box<CmTypeKey>),
+    Option(Box<CmTypeKey>),
+    Result {
+        ok: Option<Box<CmTypeKey>>,
+        err: Option<Box<CmTypeKey>>,
+    },
+    Future(Box<CmTypeKey>),
+}
+
 /// Tracks component-level indices for types, instances, and core functions.
 /// Used alongside wasm-encoder's `ComponentBuilder` to eliminate magic numbers.
 pub struct ComponentModelContext {
     // Component type indices
     type_names: IndexMap<String, u32>,
     next_type_idx: u32,
+
+    cm_type_interner: IndexMap<CmTypeKey, u32>,
 
     // Component instance indices
     instance_names: IndexMap<String, u32>,
@@ -43,6 +62,7 @@ impl ComponentModelContext {
         Self {
             type_names: IndexMap::default(),
             next_type_idx: 0,
+            cm_type_interner: IndexMap::default(),
             instance_names: IndexMap::default(),
             next_instance_idx: 0,
             core_func_names: IndexMap::default(),
@@ -63,6 +83,21 @@ impl ComponentModelContext {
         self.type_names.insert(name.to_string(), idx);
         self.next_type_idx += 1;
         idx
+    }
+
+    /// Reserve a component type index without binding a name.
+    pub fn register_anon_type(&mut self) -> u32 {
+        let idx = self.next_type_idx;
+        self.next_type_idx += 1;
+        idx
+    }
+
+    pub fn intern_lookup(&self, key: &CmTypeKey) -> Option<u32> {
+        self.cm_type_interner.get(key).copied()
+    }
+
+    pub fn intern_record(&mut self, key: CmTypeKey, idx: u32) {
+        self.cm_type_interner.insert(key, idx);
     }
 
     /// Get component type index by name
@@ -149,13 +184,6 @@ impl ComponentModelContext {
             .comp_func_names
             .get(name)
             .unwrap_or_else(|| panic!("unknown component function: {name}"))
-    }
-
-    /// Register an additional name for an existing component-level function.
-    /// This does NOT consume a new component function index.
-    pub fn alias_comp_func(&mut self, existing_name: &str, alias_name: &str) {
-        let idx = self.comp_func_idx(existing_name);
-        self.comp_func_names.insert(alias_name.to_string(), idx);
     }
 
     /// Check if a component-level function exists

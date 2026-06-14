@@ -10,7 +10,7 @@
 //! - Canonical lifting for world exports
 //! - HTTP handler export
 
-use super::component_context::ComponentModelContext;
+use super::component_context::{CmTypeKey, ComponentModelContext};
 use super::postprocess;
 use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmInstanceTypeGen, CmVariantCase};
@@ -192,13 +192,22 @@ pub fn build_component(
         });
 
     let (trailers_future_type, transmission_future_types) = if needs_trailers_future {
-        let (t, http_ft) = build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type);
+        // The trailers/transmission futures belong to the resource-defining
+        // interface that declares them (the HTTP types interface); derive its
+        // package from the plan rather than hardcoding it.
+        let pkg = wir_package
+            .import_plan
+            .iter()
+            .find(|e| e.kind == crate::wir::ImportKind::ResourceDefiningInterface)
+            .map(|e| crate::world_registry::fq_name_package(&e.fq).to_string())
+            .expect("trailers future needs a resource-defining interface in the plan");
+        let (t, defining_ft) =
+            build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type, &pkg);
         let mut map: IndexMap<String, u32> = IndexMap::default();
-        // HTTP build creates http-error-code based transmission future
-        map.insert("http".to_string(), http_ft);
+        map.insert(pkg.clone(), defining_ft);
         // Build additional transmission types for other error-code sources
         for source in &transmission_sources {
-            if source != "http" && !map.contains_key(source.as_str()) {
+            if *source != pkg && !map.contains_key(source.as_str()) {
                 let ft = build_transmission_future_type_for(&mut builder, &mut ctx, source);
                 map.insert(source.clone(), ft);
             }
@@ -221,6 +230,7 @@ pub fn build_component(
 
     // Canonical intrinsics
     emit_canonical_intrinsics(
+        project,
         &mut builder,
         &mut ctx,
         &all_canonical_intrinsics,
@@ -234,26 +244,6 @@ pub fn build_component(
 
     // Lower WASI functions
     lower_wasi_functions(project, &mut builder, &mut ctx);
-
-    // Lower HTTP types functions
-    if ctx.has_comp_func("http-fields-constructor") {
-        ctx.register_core_func("http-fields-constructor");
-        builder.lower_func(
-            Some("http-fields-constructor"),
-            ctx.comp_func_idx("http-fields-constructor"),
-            [],
-        );
-
-        ctx.register_core_func("http-response-new");
-        builder.lower_func(
-            Some("http-response-new"),
-            ctx.comp_func_idx("http-response-new"),
-            [
-                CanonicalOption::Memory(ctx.memory_idx()),
-                CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
-            ],
-        );
-    }
 
     // Collect available WASI functions
     let mut available_wasi_funcs: IndexSet<String> = IndexSet::default();
@@ -283,32 +273,6 @@ pub fn build_component(
             ctx.core_func_idx(local_name),
         ));
     }
-    // The HTTP request-construction core funcs are exported from the core
-    // instance whenever `wasi:http/types` is imported — the plan's `HttpTypes`
-    // condition (handler export or the Client effect), read here rather than
-    // re-derived from project queries.
-    let imports_http_types = wir_package
-        .import_plan
-        .iter()
-        .any(|e| e.kind == crate::wir::ImportKind::HttpTypes);
-    if imports_http_types && ctx.has_core_func("http-fields-constructor") {
-        wasi_exports.push((
-            "http-fields-constructor".to_string(),
-            ExportKind::Func,
-            ctx.core_func_idx("http-fields-constructor"),
-        ));
-        wasi_exports.push((
-            "http-response-new".to_string(),
-            ExportKind::Func,
-            ctx.core_func_idx("http-response-new"),
-        ));
-        wasi_exports.push((
-            "wasi:http/Response::new".to_string(),
-            ExportKind::Func,
-            ctx.core_func_idx("http-response-new"),
-        ));
-    }
-
     let wasi_exports_refs: Vec<_> = wasi_exports
         .iter()
         .map(|(name, kind, idx)| (name.as_str(), *kind, *idx))
@@ -985,24 +949,21 @@ fn build_transmission_future_type_for(
         ctx.type_idx("error-code")
     };
 
-    let result_key = format!("{source}-transmission-result");
-    ctx.register_type(&result_key);
-    {
-        let (_, enc) = builder.ty(Some(&result_key));
-        enc.defined_type()
-            .result(None, Some(ComponentValType::Type(error_code_idx)));
-    }
-
-    let future_key = format!("{source}-transmission-future");
-    ctx.register_type(&future_key);
-    {
-        let result_idx = ctx.type_idx(&result_key);
-        let (_, enc) = builder.ty(Some(&future_key));
-        enc.defined_type()
-            .future(Some(ComponentValType::Type(result_idx)));
-    }
-
-    ctx.type_idx(&future_key)
+    let result = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Result {
+            ok: None,
+            err: Some(Box::new(CmTypeKey::Leaf(error_code_idx))),
+        },
+        Some(&format!("{source}-transmission-result")),
+    );
+    intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Future(Box::new(CmTypeKey::Leaf(result))),
+        Some(&format!("{source}-transmission-future")),
+    )
 }
 
 /// Emit the `core:kiln/types` record/variant surface via an imported
@@ -1024,8 +985,8 @@ fn build_transmission_future_type_for(
 /// - Alias each exported type from the instance into the component's
 ///   local type index space so `emit_world_exports` and the canon
 ///   `task-return` routing can reference them by `ctx.type_idx(...)`.
-/// - Also register a component-local `kiln-handler-result` =
-///   `result<response, error>` (anonymous `result` doesn't need naming).
+/// - Also intern the component-local `result<response, error>` handler type,
+///   which the export lift and `task-return` routing resolve by structure.
 fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentModelContext) {
     let string_vt = ComponentValType::Primitive(PrimitiveValType::String);
     let bool_vt = ComponentValType::Primitive(PrimitiveValType::Bool);
@@ -1187,83 +1148,149 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
         ctx.register_type(local_name);
     }
 
-    // `result<response, error>` — anonymous, component-local. Used by
-    // the canon `task-return` and by `emit_world_exports`.
-    ctx.register_type("kiln-handler-result");
-    {
-        let response_idx = ctx.type_idx("kiln-response");
-        let error_idx = ctx.type_idx("kiln-error");
-        let (_, enc) = builder.ty(Some("kiln-handler-result"));
-        enc.defined_type().result(
-            Some(ComponentValType::Type(response_idx)),
-            Some(ComponentValType::Type(error_idx)),
-        );
+    let response_idx = ctx.type_idx("kiln-response");
+    let error_idx = ctx.type_idx("kiln-error");
+    intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Result {
+            ok: Some(Box::new(CmTypeKey::Leaf(response_idx))),
+            err: Some(Box::new(CmTypeKey::Leaf(error_idx))),
+        },
+        None,
+    );
+}
+
+/// Intern a defined CM type by its structural [`CmTypeKey`], emitting it once.
+/// Repeated calls with an equal key return the cached index without re-emitting.
+/// `debug_name`, when given, names the emitted type and registers the name so
+/// existing `ctx.type_idx(name)` lookups still resolve.
+fn intern_cm_type(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    key: &CmTypeKey,
+    debug_name: Option<&str>,
+) -> u32 {
+    if let CmTypeKey::Leaf(idx) = key {
+        return *idx;
     }
+    if let Some(idx) = ctx.intern_lookup(key) {
+        return idx;
+    }
+    let resolved = match key {
+        CmTypeKey::Leaf(_) => unreachable!("Leaf handled above"),
+        CmTypeKey::Own(inner) => ResolvedCmType::Own(intern_cm_type(builder, ctx, inner, None)),
+        CmTypeKey::Option(inner) => {
+            ResolvedCmType::Option(intern_cm_type(builder, ctx, inner, None))
+        }
+        CmTypeKey::Future(inner) => {
+            ResolvedCmType::Future(intern_cm_type(builder, ctx, inner, None))
+        }
+        CmTypeKey::Result { ok, err } => {
+            let ok = ok.as_ref().map(|k| intern_cm_type(builder, ctx, k, None));
+            let err = err.as_ref().map(|k| intern_cm_type(builder, ctx, k, None));
+            ResolvedCmType::Result { ok, err }
+        }
+    };
+
+    let idx = match debug_name {
+        Some(name) => ctx.register_type(name),
+        None => ctx.register_anon_type(),
+    };
+    let (_, enc) = builder.ty(debug_name);
+    match resolved {
+        ResolvedCmType::Own(resource) => {
+            enc.defined_type().own(resource);
+        }
+        ResolvedCmType::Option(inner) => {
+            enc.defined_type().option(ComponentValType::Type(inner));
+        }
+        ResolvedCmType::Future(inner) => {
+            enc.defined_type()
+                .future(Some(ComponentValType::Type(inner)));
+        }
+        ResolvedCmType::Result { ok, err } => {
+            enc.defined_type().result(
+                ok.map(ComponentValType::Type),
+                err.map(ComponentValType::Type),
+            );
+        }
+    }
+    ctx.intern_record(key.clone(), idx);
+    idx
+}
+
+enum ResolvedCmType {
+    Own(u32),
+    Option(u32),
+    Future(u32),
+    Result { ok: Option<u32>, err: Option<u32> },
 }
 
 fn build_future_intrinsic_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     stream_u8_type: u32,
+    pkg: &str,
 ) -> (u32, u32) {
-    ctx.register_type("http-fields");
-    {
-        let fields_resource_idx = ctx.type_idx("http-fields-resource");
-        let (_, enc) = builder.ty(Some("http-fields"));
-        enc.defined_type().own(fields_resource_idx);
-    }
+    let fields_resource_idx = ctx.type_idx(&format!("{pkg}-fields-resource"));
+    let error_code = CmTypeKey::Leaf(ctx.type_idx(&format!("{pkg}-error-code")));
 
-    ctx.register_type("http-option-stream-u8");
-    {
-        let (_, enc) = builder.ty(Some("http-option-stream-u8"));
-        enc.defined_type()
-            .option(ComponentValType::Type(stream_u8_type));
-    }
+    let fields = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Own(Box::new(CmTypeKey::Leaf(fields_resource_idx))),
+        Some(&format!("{pkg}-fields")),
+    );
 
-    ctx.register_type("http-option-fields");
-    {
-        let fields_idx = ctx.type_idx("http-fields");
-        let (_, enc) = builder.ty(Some("http-option-fields"));
-        enc.defined_type()
-            .option(ComponentValType::Type(fields_idx));
-    }
+    intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Option(Box::new(CmTypeKey::Leaf(stream_u8_type))),
+        Some(&format!("{pkg}-option-stream-u8")),
+    );
 
-    ctx.register_type("http-trailers-result");
-    {
-        let option_fields_idx = ctx.type_idx("http-option-fields");
-        let error_code_idx = ctx.type_idx("http-error-code");
-        let (_, enc) = builder.ty(Some("http-trailers-result"));
-        enc.defined_type().result(
-            Some(ComponentValType::Type(option_fields_idx)),
-            Some(ComponentValType::Type(error_code_idx)),
-        );
-    }
+    let option_fields = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Option(Box::new(CmTypeKey::Leaf(fields))),
+        Some(&format!("{pkg}-option-fields")),
+    );
 
-    let trailers_future_type = ctx.register_type("http-trailers-future");
-    {
-        let trailers_result_idx = ctx.type_idx("http-trailers-result");
-        let (_, enc) = builder.ty(Some("http-trailers-future"));
-        enc.defined_type()
-            .future(Some(ComponentValType::Type(trailers_result_idx)));
-    }
+    let trailers_result = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Result {
+            ok: Some(Box::new(CmTypeKey::Leaf(option_fields))),
+            err: Some(Box::new(error_code.clone())),
+        },
+        Some(&format!("{pkg}-trailers-result")),
+    );
 
-    ctx.register_type("http-transmission-result");
-    {
-        let error_code_idx = ctx.type_idx("http-error-code");
-        let (_, enc) = builder.ty(Some("http-transmission-result"));
-        enc.defined_type()
-            .result(None, Some(ComponentValType::Type(error_code_idx)));
-    }
+    let trailers_future_type = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Future(Box::new(CmTypeKey::Leaf(trailers_result))),
+        Some(&format!("{pkg}-trailers-future")),
+    );
 
-    ctx.register_type("http-transmission-future");
-    {
-        let transmission_result_idx = ctx.type_idx("http-transmission-result");
-        let (_, enc) = builder.ty(Some("http-transmission-future"));
-        enc.defined_type()
-            .future(Some(ComponentValType::Type(transmission_result_idx)));
-    }
+    let transmission_result = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Result {
+            ok: None,
+            err: Some(Box::new(error_code)),
+        },
+        Some(&format!("{pkg}-transmission-result")),
+    );
 
-    let transmission_future_type = ctx.type_idx("http-transmission-future");
+    let transmission_future_type = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Future(Box::new(CmTypeKey::Leaf(transmission_result))),
+        Some(&format!("{pkg}-transmission-future")),
+    );
+
     (trailers_future_type, transmission_future_type)
 }
 
@@ -1318,6 +1345,7 @@ fn cm_scalar_to_primitive(scalar: CmScalarType) -> PrimitiveValType {
 }
 
 fn emit_canonical_intrinsics(
+    project: &NirPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     canonical_intrinsics: &[CanonicalIntrinsic],
@@ -1335,14 +1363,7 @@ fn emit_canonical_intrinsics(
     let task_return_type = component_plan
         .world_exports
         .first()
-        .map(|export| {
-            cm_export_type_to_idx(
-                ctx,
-                &export.cm_result,
-                component_plan.world_package.as_deref(),
-                result_unit_type,
-            )
-        })
+        .map(|export| cm_export_type_to_idx(ctx, &export.cm_result, result_unit_type))
         .unwrap_or(result_unit_type);
     for intrinsic in canonical_intrinsics {
         ctx.register_core_func(&intrinsic.import_name());
@@ -1464,8 +1485,8 @@ fn emit_canonical_intrinsics(
             CanonicalIntrinsic::TaskReturn => {
                 // The `task.return` result shape is the active world
                 // export's CM-resolved return type — `result<response,
-                // error>` for the kiln generator, `http-handler-result`
-                // for HTTP service, `result<>` for CLI and the test
+                // error>` for the kiln generator and HTTP service,
+                // `result<>` for CLI and the test
                 // world. Computed once at function entry from
                 // `component_plan.world_exports[0].cm_result` so the
                 // code path here is uniform across worlds. The flat
@@ -1521,16 +1542,21 @@ fn emit_canonical_intrinsics(
                 builder.error_context_drop();
             }
             CanonicalIntrinsic::ResourceDrop(cm_name) => {
-                // The imported resource type is aliased into the component's
-                // local type space by `generate_cm_imports` (which runs first):
-                // HTTP resources as `http-<cm>-resource`, others as
-                // `resource:<cm>`.
-                let http_key = format!("http-{cm_name}-resource");
-                let generic_key = format!("resource:{cm_name}");
-                let type_idx = if ctx.has_type(&http_key) {
-                    ctx.type_idx(&http_key)
-                } else {
-                    ctx.type_idx(&generic_key)
+                // A resource-defining interface aliases its resource type as
+                // `{pkg}-<cm>-resource`; other interfaces use `resource:<cm>`.
+                let defining_key = project
+                    .cm_interface_registry
+                    .resource_source_by_cm_name(cm_name)
+                    .map(|src| {
+                        format!(
+                            "{}-{cm_name}-resource",
+                            crate::world_registry::fq_name_package(src)
+                        )
+                    })
+                    .filter(|key| ctx.has_type(key));
+                let type_idx = match defining_key {
+                    Some(key) => ctx.type_idx(&key),
+                    None => ctx.type_idx(&format!("resource:{cm_name}")),
                 };
                 builder.resource_drop(type_idx);
             }
@@ -1563,14 +1589,14 @@ fn resolve_future_type(
 /// Resolve a plan-level [`CmExportType`] to a component type index registered
 /// in `ctx`.
 ///
-/// The naming convention `{pkg}-{cm_name}` mirrors what
-/// `import_wasi_http_types` and `emit_kiln_world_types` register for resource
-/// own-handles and named variants. `HandlerResult` resolves to the per-world
-/// `{world_package}-handler-result` synthesised by the same helpers.
+/// `Named` follows the `{pkg}-{cm_name}` convention that `import_http_types_for_service`
+/// and `emit_kiln_world_types` register for resource own-handles and named
+/// variants. `HandlerResult` resolves through the structural type interner from
+/// its `ok`/`err` arms, so it shares the type those helpers interned without a
+/// per-world name.
 fn cm_export_type_to_idx(
     ctx: &ComponentModelContext,
     ty: &crate::wir_build::component_plan::CmExportType,
-    world_package: Option<&str>,
     result_unit_type: u32,
 ) -> u32 {
     use crate::wir_build::component_plan::CmExportType;
@@ -1592,15 +1618,21 @@ fn cm_export_type_to_idx(
             let key = format!("{pkg}-{cm_name}");
             ctx.type_idx(&key)
         }
-        CmExportType::HandlerResult { .. } => {
-            // The lift signature resolves through the `{pkg}-handler-result`
-            // alias; the `ok`/`err` arms are used only for re-export enumeration.
-            // The plan only emits this for worlds with a known package.
-            let pkg = world_package.expect(
-                "HandlerResult emitted for a world with no package: stdlib bootstrap regression",
-            );
-            let key = format!("{pkg}-handler-result");
-            ctx.type_idx(&key)
+        CmExportType::HandlerResult { ok, err } => {
+            let arm = |a: &CmExportType| match a {
+                CmExportType::Unit => None,
+                _ => Some(Box::new(CmTypeKey::Leaf(cm_export_type_to_idx(
+                    ctx,
+                    a,
+                    result_unit_type,
+                )))),
+            };
+            let key = CmTypeKey::Result {
+                ok: arm(ok),
+                err: arm(err),
+            };
+            ctx.intern_lookup(&key)
+                .unwrap_or_else(|| panic!("handler-result type not interned: {key:?}"))
         }
     }
 }
@@ -1611,7 +1643,6 @@ fn emit_world_exports(
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
     result_unit_type: u32,
 ) {
-    let world_package = component_plan.world_package.as_deref();
     for export in &component_plan.world_exports {
         let core_name = format!("{}-core", export.name);
         let func_type_name = format!("{}-func-type", export.name);
@@ -1638,7 +1669,7 @@ fn emit_world_exports(
                 .map(|(name, cm_ty)| {
                     (
                         name.clone(),
-                        cm_export_type_to_idx(ctx, cm_ty, world_package, result_unit_type),
+                        cm_export_type_to_idx(ctx, cm_ty, result_unit_type),
                     )
                 })
                 .collect();
@@ -1646,8 +1677,7 @@ fn emit_world_exports(
                 .iter()
                 .map(|(n, idx)| (n.as_str(), ComponentValType::Type(*idx)))
                 .collect();
-            let result_idx =
-                cm_export_type_to_idx(ctx, &export.cm_result, world_package, result_unit_type);
+            let result_idx = cm_export_type_to_idx(ctx, &export.cm_result, result_unit_type);
             enc.function()
                 .async_(export.is_async)
                 .params(param_refs)
@@ -2335,36 +2365,32 @@ fn generate_cm_imports(
         }
     }
 
-    // Import interfaces with resource types
-    import_interfaces_with_resources(builder, ctx, project, import_plan);
-
-    // HTTP types/client imports, keyed off the plan's FQ. `HttpClient` implies
-    // `HttpTypes`, asserted below.
-    let http_types_fq = import_plan
+    // Before the resource-using phase, so the resources/composites it interns
+    // are available to interfaces that consume them.
+    for fq in import_plan
         .iter()
-        .find(|e| e.kind == ImportKind::HttpTypes)
-        .map(|e| e.fq.clone());
-    if let Some(types_fq) = &http_types_fq {
-        import_http_types_for_service(project, builder, ctx, types_fq);
+        .filter(|e| e.kind == ImportKind::ResourceDefiningInterface)
+        .map(|e| e.fq.clone())
+        .collect::<Vec<_>>()
+    {
+        import_resource_defining_interface(project, builder, ctx, &fq);
     }
 
-    if let Some(client_entry) = import_plan
-        .iter()
-        .find(|e| e.kind == ImportKind::HttpClient)
-    {
-        let types_fq = http_types_fq
-            .as_deref()
-            .expect("HttpClient in import plan without HttpTypes: types must be imported first");
-        let pkg = crate::world_registry::fq_name_package(types_fq);
-        debug_assert!(
-            ctx.has_type(&format!("{pkg}-handler-result")),
-            "HttpClient in import plan without HttpTypes: types interface must be imported first",
-        );
-        import_http_client(builder, ctx, project, &client_entry.fq, types_fq);
+    import_interfaces_with_resources(builder, ctx, project, import_plan);
+}
+
+fn handler_result_key(ctx: &ComponentModelContext, pkg: &str) -> CmTypeKey {
+    CmTypeKey::Result {
+        ok: Some(Box::new(CmTypeKey::Leaf(
+            ctx.type_idx(&format!("{pkg}-response")),
+        ))),
+        err: Some(Box::new(CmTypeKey::Leaf(
+            ctx.type_idx(&format!("{pkg}-error-code")),
+        ))),
     }
 }
 
-fn import_http_types_for_service(
+fn import_resource_defining_interface(
     project: &NirPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -2589,32 +2615,8 @@ fn import_http_types_for_service(
         ComponentExportKind::Type,
     );
 
-    // Alias constructor/static functions needed for lowering
-    let fields_cm = project
-        .cm_interface_registry
-        .get_resource_cm_name("Fields")
-        .unwrap();
-    let response_cm = project
-        .cm_interface_registry
-        .get_resource_cm_name("Response")
-        .unwrap();
-    let constructor_fields = format!("[constructor]{fields_cm}");
-    let static_response_new = format!("[static]{response_cm}.new");
-
-    ctx.register_comp_func("http-fields-constructor");
-    builder.alias_export(
-        ctx.instance_idx(&types_instance),
-        &constructor_fields,
-        ComponentExportKind::Func,
-    );
-    ctx.register_comp_func("http-response-new");
-    builder.alias_export(
-        ctx.instance_idx(&types_instance),
-        &static_response_new,
-        ComponentExportKind::Func,
-    );
-    ctx.alias_comp_func("http-fields-constructor", "wasi:http/Fields::new");
-
+    // Used constructors/methods/statics, aliased under their local names and
+    // lowered generically by `lower_wasi_functions` — no per-constructor case.
     {
         let http_resource_names: IndexSet<&str> = http_resources
             .iter()
@@ -2626,15 +2628,11 @@ fn import_http_types_for_service(
                 if !http_resource_names.contains(f.interface_name.as_str()) {
                     return false;
                 }
-                // Fields::new and Response::new are aliased separately above.
-                if f.wasi_func_name == constructor_fields || f.wasi_func_name == static_response_new
-                {
-                    return false;
-                }
                 let is_resource_func = f.wasi_func_name.starts_with("[constructor]")
                     || f.wasi_func_name.starts_with("[method]")
                     || f.wasi_func_name.starts_with("[static]");
                 is_resource_func
+                    && project.cm_interface_registry.is_function_supported(f)
                     && project
                         .used_wasi_functions
                         .contains(&format!("{}::{}", f.interface_name, f.method_name))
@@ -2652,110 +2650,221 @@ fn import_http_types_for_service(
     }
 
     for (_, cm_name) in &http_resources {
-        let resource_local = format!("{pkg}-{cm_name}-resource");
-        let own_local = format!("{pkg}-{cm_name}");
-        let resource_idx = ctx.type_idx(&resource_local);
-        ctx.register_type(&own_local);
-        let (_, enc) = builder.ty(Some(&own_local));
-        enc.defined_type().own(resource_idx);
+        let resource_idx = ctx.type_idx(&format!("{pkg}-{cm_name}-resource"));
+        intern_cm_type(
+            builder,
+            ctx,
+            &CmTypeKey::Own(Box::new(CmTypeKey::Leaf(resource_idx))),
+            Some(&format!("{pkg}-{cm_name}")),
+        );
     }
 
-    let response_type_idx = ctx.type_idx(&format!("{pkg}-response"));
-    let error_code_type_idx = ctx.type_idx(&format!("{pkg}-error-code"));
-    let handler_result_name = format!("{pkg}-handler-result");
-    ctx.register_type(&handler_result_name);
-    {
-        let (_, enc) = builder.ty(Some(&handler_result_name));
-        enc.defined_type().result(
-            Some(ComponentValType::Type(response_type_idx)),
-            Some(ComponentValType::Type(error_code_type_idx)),
-        );
+    // Intern the `result<own<response>, error-code>` handler composite when this
+    // interface provides both arms (the handler/world-export shape). The export
+    // lift and any client interface resolve it by structure.
+    if ctx.has_type(&format!("{pkg}-response")) && ctx.has_type(&format!("{pkg}-error-code")) {
+        let key = handler_result_key(ctx, &pkg);
+        intern_cm_type(builder, ctx, &key, None);
     }
 }
 
-fn import_http_client(
+/// Resolve a function signature type to a component-level type index, reusing
+/// the resource own-handles and composites a resource-defining interface already
+/// emitted (`{pkg}-{cm}`, `{pkg}-error-code`, and the interned `result<...>`).
+/// Used by composite resource-using interfaces (e.g. the HTTP client) whose
+/// signatures reference another interface's resources and error composite.
+fn component_type_idx_for_signature_type(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    client_fq: &str,
-    types_fq: &str,
-) {
-    // The client's funcs use request / handler-result, aliased from the outer
-    // (types) instance.
-    let pkg = crate::world_registry::fq_name_package(types_fq).to_string();
-    let request_type_idx = ctx.type_idx(&format!("{pkg}-request"));
-    let handler_result_type_idx = ctx.type_idx(&format!("{pkg}-handler-result"));
+    ty: &Type,
+) -> u32 {
+    let registry = project.cm_interface_registry;
+    match ty {
+        Type::Generic(g) if g.name == "AsyncCall" && g.args.len() == 1 => {
+            component_type_idx_for_signature_type(builder, ctx, project, &g.args[0])
+        }
+        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+            let ok = component_type_idx_for_signature_type(builder, ctx, project, &g.args[0]);
+            let err = component_type_idx_for_signature_type(builder, ctx, project, &g.args[1]);
+            intern_cm_type(
+                builder,
+                ctx,
+                &CmTypeKey::Result {
+                    ok: Some(Box::new(CmTypeKey::Leaf(ok))),
+                    err: Some(Box::new(CmTypeKey::Leaf(err))),
+                },
+                None,
+            )
+        }
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            component_type_idx_for_signature_type(builder, ctx, project, inner)
+        }
+        Type::Named(named) => {
+            if let Some(source) = registry.get_resource_source_interface(&named.name)
+                && let Some(cm) = registry.get_resource_cm_name_by_source(source, &named.name)
+            {
+                let pkg = crate::world_registry::fq_name_package(source);
+                return ctx.type_idx(&format!("{pkg}-{cm}"));
+            }
+            // A non-resource named type (e.g. the error composite's `error-code`
+            // variant) resolves to the `{pkg}-{cm}` component type the
+            // resource-defining pass aliased to the outer scope. `type_idx`
+            // fails loudly if the type was not exposed there.
+            let source = named.source_interface.as_deref().unwrap_or_else(|| {
+                panic!(
+                    "composite signature type `{}` has no source interface",
+                    named.name
+                )
+            });
+            let pkg = crate::world_registry::fq_name_package(source);
+            let cm = registry
+                .get_variant_cm_name_by_source(source, &named.name)
+                .or_else(|| registry.get_enum_cm_name_by_source(source, &named.name))
+                .or_else(|| registry.get_struct_cm_name_by_source(source, &named.name))
+                .or_else(|| registry.get_flags_cm_name_by_source(source, &named.name))
+                .unwrap_or_else(|| {
+                    panic!("composite signature type `{}` has no CM name", named.name)
+                });
+            ctx.type_idx(&format!("{pkg}-{cm}"))
+        }
+        other => panic!("unsupported composite signature type: {other:?}"),
+    }
+}
 
-    let client_iface = project
+/// Import a function-bearing interface whose signatures reference the resources
+/// and error composite of a resource-defining interface (e.g. `wasi:http/client`,
+/// whose `send` is `own<request> -> result<own<response>, error-code>`). Each
+/// param/result type is resolved to a component-level type the resource-defining
+/// pass already emitted, then outer-aliased into this interface's instance.
+fn import_resource_using_composite_interface(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    iface_fq: &str,
+) {
+    let iface = project
         .cm_interface_registry
         .interfaces()
-        .find(|i| i.path == client_fq)
-        .expect("client interface not found in registry");
-    let client_funcs = client_iface.functions;
+        .find(|i| i.path == iface_fq)
+        .expect("composite resource-using interface not found in registry");
+    let funcs: Vec<CmFunctionInfo> = iface
+        .functions
+        .iter()
+        .filter(|f| {
+            project.cm_interface_registry.is_function_supported(f)
+                && project
+                    .used_wasi_functions
+                    .contains(&format!("{}::{}", f.interface_name, f.method_name))
+        })
+        .cloned()
+        .collect();
+    if funcs.is_empty() {
+        return;
+    }
 
-    let client_instance_type_name = format!("{pkg}-client-instance-type");
-    let instance_type_idx = ctx.register_type(&client_instance_type_name);
-    {
-        let (_, enc) = builder.ty(Some(&client_instance_type_name));
-        let mut instance_type = InstanceType::new();
-
-        // Alias outer types needed by client functions.
-        // local index 0 = request (param type), 1 = handler-result (return type)
-        instance_type.alias(Alias::Outer {
-            kind: ComponentOuterAliasKind::Type,
-            count: 1,
-            index: request_type_idx,
-        });
-        instance_type.alias(Alias::Outer {
-            kind: ComponentOuterAliasKind::Type,
-            count: 1,
-            index: handler_result_type_idx,
-        });
-
-        // Emit each function from registry metadata.
-        // Client functions use the same param/result types as the HTTP handler
-        // (own<request> → result<own<response>, error-code>).
-        // local_type_idx starts at 2: 0=request alias, 1=result alias
-        for (func_type_idx, func) in (2_u32..).zip(client_funcs.iter()) {
-            let mut func_encoder = instance_type.ty().function();
-            if func.is_async {
-                func_encoder
-                    .async_(true)
-                    .params([("request", ComponentValType::Type(0))])
-                    .result(Some(ComponentValType::Type(1)));
-            } else {
-                func_encoder
-                    .params([("request", ComponentValType::Type(0))])
-                    .result(Some(ComponentValType::Type(1)));
+    struct ResolvedSig {
+        wasi_name: String,
+        is_async: bool,
+        params: Vec<(String, u32)>,
+        result: Option<u32>,
+    }
+    let sigs: Vec<ResolvedSig> = funcs
+        .iter()
+        .map(|f| {
+            let params = f
+                .params
+                .iter()
+                .map(|(_, cm_name, ty)| {
+                    let resolved = project.cm_interface_registry.resolve_type(ty);
+                    (
+                        cm_name.clone(),
+                        component_type_idx_for_signature_type(builder, ctx, project, &resolved),
+                    )
+                })
+                .collect();
+            let result = f.return_type.as_ref().map(|ty| {
+                let resolved = project.cm_interface_registry.resolve_type(ty);
+                component_type_idx_for_signature_type(builder, ctx, project, &resolved)
+            });
+            ResolvedSig {
+                wasi_name: f.wasi_func_name.clone(),
+                is_async: f.is_async,
+                params,
+                result,
             }
+        })
+        .collect();
 
-            instance_type.export(
-                &func.wasi_func_name,
-                wasm_encoder::ComponentTypeRef::Func(func_type_idx),
-            );
+    let instance_type_name = format!("{}-{}-instance-type", iface.package, iface.interface);
+    let instance_type_idx = ctx.register_type(&instance_type_name);
+    {
+        let (_, enc) = builder.ty(Some(&instance_type_name));
+        let mut instance_type = InstanceType::new();
+        let mut alias_local: IndexMap<u32, u32> = IndexMap::default();
+        let mut next_local = 0u32;
+        let mut alias = |it: &mut InstanceType, comp_idx: u32| -> u32 {
+            if let Some(&l) = alias_local.get(&comp_idx) {
+                return l;
+            }
+            it.alias(Alias::Outer {
+                kind: ComponentOuterAliasKind::Type,
+                count: 1,
+                index: comp_idx,
+            });
+            let l = next_local;
+            next_local += 1;
+            alias_local.insert(comp_idx, l);
+            l
+        };
+        for sig in &sigs {
+            for (_, comp_idx) in &sig.params {
+                alias(&mut instance_type, *comp_idx);
+            }
+            if let Some(comp_idx) = sig.result {
+                alias(&mut instance_type, comp_idx);
+            }
         }
 
+        let mut deferred: Vec<(String, u32)> = Vec::new();
+        for sig in &sigs {
+            let params: Vec<(&str, ComponentValType)> = sig
+                .params
+                .iter()
+                .map(|(n, ci)| (n.as_str(), ComponentValType::Type(alias_local[ci])))
+                .collect();
+            let result = sig
+                .result
+                .map(|ci| ComponentValType::Type(alias_local[&ci]));
+            let mut fe = instance_type.ty().function();
+            if sig.is_async {
+                fe.async_(true).params(params).result(result);
+            } else {
+                fe.params(params).result(result);
+            }
+            let func_type_local = next_local;
+            next_local += 1;
+            deferred.push((sig.wasi_name.clone(), func_type_local));
+        }
+        for (name, idx) in &deferred {
+            instance_type.export(name, wasm_encoder::ComponentTypeRef::Func(*idx));
+        }
         enc.instance(&instance_type);
     }
 
-    let client_instance = format!("{pkg}-client");
-    ctx.register_instance(&client_instance);
+    let instance_key = format!("{}-{}", iface.package, iface.interface);
+    ctx.register_instance(&instance_key);
     builder.import(
-        client_fq,
+        iface_fq,
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
     );
 
-    // Alias each function from the instance
-    for func in &client_funcs {
-        let local_name = project
-            .cm_interface_registry
-            .get_local_name(client_fq, &func.wasi_func_name)
-            .cloned()
-            .unwrap_or_else(|| format!("wasi:http/Client::{}", func.method_name));
+    for f in &funcs {
+        let local_name = f.local_alias_name();
         ctx.register_comp_func(&local_name);
         builder.alias_export(
-            ctx.instance_idx(&client_instance),
-            &func.wasi_func_name,
+            ctx.instance_idx(&instance_key),
+            &f.wasi_func_name,
             ComponentExportKind::Func,
         );
     }
@@ -3082,6 +3191,43 @@ fn import_interfaces_with_resources(
     import_resource_using_interfaces(builder, ctx, project, import_plan);
 }
 
+/// Whether a resource-using interface's used signatures reference resources
+/// defined by a `ResourceDefiningInterface` (rather than a plain resource
+/// source). Such interfaces consume that interface's `{pkg}-*` own-handles and
+/// error composite, so they go through `import_resource_using_composite_interface`.
+fn resource_using_references_defining_interface(
+    project: &NirPackage,
+    import_plan: &[crate::wir::ImportEntry],
+    iface_fq: &str,
+) -> bool {
+    let registry = project.cm_interface_registry;
+    let Some(iface) = registry.interfaces().find(|i| i.path == iface_fq) else {
+        return false;
+    };
+    let mut resources: Vec<String> = Vec::new();
+    for func in &iface.functions {
+        let key = format!("{}::{}", func.interface_name, func.method_name);
+        if !project.used_wasi_functions.contains(&key) || !registry.is_function_supported(func) {
+            continue;
+        }
+        if let Some(ret) = &func.return_type {
+            collect_resources_in_type(ret, registry, &mut resources);
+        }
+        for (_, _, ty) in &func.params {
+            collect_resources_in_type(ty, registry, &mut resources);
+        }
+    }
+    resources.iter().any(|r| {
+        registry
+            .get_resource_source_interface(r)
+            .is_some_and(|src| {
+                import_plan.iter().any(|e| {
+                    e.fq == src && e.kind == crate::wir::ImportKind::ResourceDefiningInterface
+                })
+            })
+    })
+}
+
 /// Import interfaces that reference resources from other interfaces but don't define resources
 /// themselves (e.g., wasi:filesystem/preopens which uses `descriptor` from wasi:filesystem/types).
 ///
@@ -3109,6 +3255,16 @@ fn import_resource_using_interfaces(
             .iter()
             .any(|e| e.fq == interface_info.path && e.kind == ImportKind::ResourceUsingInterface)
         {
+            continue;
+        }
+
+        // A resource-using interface whose signatures reference a
+        // resource-defining interface's resources/error composite (e.g. the HTTP
+        // client) consumes that interface's `{pkg}-*` types by outer alias rather
+        // than building them instance-locally; resolve those through the interner.
+        if resource_using_references_defining_interface(project, import_plan, &interface_info.path)
+        {
+            import_resource_using_composite_interface(builder, ctx, project, &interface_info.path);
             continue;
         }
 
@@ -3415,7 +3571,19 @@ fn lower_wasi_functions(
                 options.push(CanonicalOption::Async);
             }
 
-            let needs_memory = func.needs_memory_with_registry(project.cm_interface_registry);
+            // Memory/realloc are needed when a param must be lowered through
+            // linear memory or the result is returned via an outptr (more than
+            // `MAX_FLAT_RESULTS` core values, e.g. a tuple or composite return).
+            let returns_via_outptr = func.return_type.as_ref().is_some_and(|ty| {
+                let resolved = project.cm_interface_registry.resolve_type(ty);
+                crate::component_model::return_type_requires_outptr(&resolved)
+                    || crate::component_model::cm_named_type_return_needs_outptr(
+                        &resolved,
+                        project.cm_interface_registry,
+                    )
+            });
+            let needs_memory = func.needs_memory_with_registry(project.cm_interface_registry)
+                || returns_via_outptr;
             let needs_realloc = needs_memory;
 
             if needs_memory {
@@ -3525,4 +3693,71 @@ fn append_interface_instance_exports(
 
     instances.append_to_component(component_bytes);
     exports.append_to_component(component_bytes);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intern_cm_type_dedups_equal_keys() {
+        let mut builder = ComponentBuilder::default();
+        let mut ctx = ComponentModelContext::new();
+
+        let leaf = ctx.register_type("leaf");
+        {
+            let (_, enc) = builder.ty(Some("leaf"));
+            enc.defined_type().result(None, None);
+        }
+
+        let key = CmTypeKey::Result {
+            ok: None,
+            err: Some(Box::new(CmTypeKey::Leaf(leaf))),
+        };
+        let first = intern_cm_type(&mut builder, &mut ctx, &key, Some("composite"));
+        let reserved_after_first = ctx.register_anon_type();
+        let second = intern_cm_type(&mut builder, &mut ctx, &key, Some("composite"));
+
+        assert_eq!(first, second, "equal keys resolve to one type index");
+        assert_eq!(
+            reserved_after_first,
+            first + 1,
+            "re-interning consumes no new type index"
+        );
+    }
+
+    #[test]
+    fn intern_cm_type_leaf_is_passthrough() {
+        let mut builder = ComponentBuilder::default();
+        let mut ctx = ComponentModelContext::new();
+        let before = ctx.register_anon_type();
+        let got = intern_cm_type(&mut builder, &mut ctx, &CmTypeKey::Leaf(7), None);
+        let after = ctx.register_anon_type();
+        assert_eq!(got, 7, "Leaf returns its index");
+        assert_eq!(after, before + 1, "Leaf consumes no type index");
+    }
+
+    #[test]
+    fn intern_cm_type_distinct_keys_distinct_indices() {
+        let mut builder = ComponentBuilder::default();
+        let mut ctx = ComponentModelContext::new();
+        let leaf = ctx.register_type("leaf");
+        {
+            let (_, enc) = builder.ty(Some("leaf"));
+            enc.defined_type().result(None, None);
+        }
+        let own = intern_cm_type(
+            &mut builder,
+            &mut ctx,
+            &CmTypeKey::Own(Box::new(CmTypeKey::Leaf(leaf))),
+            Some("own"),
+        );
+        let opt = intern_cm_type(
+            &mut builder,
+            &mut ctx,
+            &CmTypeKey::Option(Box::new(CmTypeKey::Leaf(leaf))),
+            Some("opt"),
+        );
+        assert_ne!(own, opt, "different structures get different indices");
+    }
 }

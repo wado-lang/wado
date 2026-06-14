@@ -48,10 +48,12 @@ pub enum ImportKind {
     /// accessor appears in `used_wasi_functions`), the same gate codegen applied
     /// inline before this became plan-driven.
     ResourceGetter,
-    /// `wasi:http/types`.
-    HttpTypes,
-    /// `wasi:http/client`.
-    HttpClient,
+    /// An interface that both defines its own resources and exposes an
+    /// `option<resource>` getter method over one of them (e.g. `wasi:http/types`,
+    /// whose `Request::get-options` returns `option<request-options>`). The
+    /// combined shape — resources plus a getter — is encoded as one instance by
+    /// codegen's dedicated resource-defining pass.
+    ResourceDefiningInterface,
 }
 
 /// One entry of the WIR-level import plan: a CM interface FQ and its category.
