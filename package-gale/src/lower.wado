@@ -1722,8 +1722,6 @@ fn lower_scan_element(
 fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
     let alts = &g.alternatives;
     match classify_group(alts) {
-        // Transparent (scan side) — nested inner allowed. The group's
-        // only element inherits the surrounding follow.
         Transparent => return lower_scan_element(
             &alts[0].elements[0],
             ctx,
@@ -1732,8 +1730,6 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
             false,
         ),
         SingleAlt => {
-            // Nested elements allowed; each is lowered through the
-            // standard scan-element recursion.
             let alt = &alts[0];
             let mut elements: List<ScanElement> = [];
             for let mut i = 0; i < alt.elements.len(); i += 1 {
@@ -2385,8 +2381,6 @@ fn lower_group_op(
 ) -> Op {
     let alts = &g.alternatives;
     match classify_group(alts) {
-        // Transparent group `(e)` is positionally identical to `e` at the
-        // surrounding alt, so the caller-follow propagates verbatim.
         Transparent => return lower_transparent_group(
             &alts[0].elements[0],
             name_counts,
@@ -3532,17 +3526,13 @@ fn repeat_inner_base_name(elem: &Element, gc_speculative: i32) -> String {
 fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String {
     let alts = &g.alternatives;
     match classify_group(alts) {
-        // Transparent — peel through to the inner element and let it
-        // pick the name.
         Transparent => return repeat_inner_base_name(&alts[0].elements[0], gc_speculative),
         SingleAlt => return single_alt_group_field_name(&alts[0]),
         TokenOnly => return token_group_field_name(alts),
         SimpleCst => return group_field_base_name(alts),
-        // The General group's CST type uses `group_<idx>` where `<idx>`
-        // is the per-rule `group_counter` value at the point the lowering
-        // visits it. The Repeat is the first visitor (computing its outer
-        // field name) but defers the actual increment to the subsequent
-        // inner-Op lowering, so we embed the same speculative value here.
+        // Repeat is the first visitor of its inner Group but defers the
+        // group_counter increment to the inner-Op lowering, so embed the
+        // same speculative value the increment will use.
         General => return general_group_field_name(gc_speculative),
     }
 }
@@ -3848,9 +3838,6 @@ pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> O
 
 fn rebind_group_shape(shape: GroupShape, new_field: &String) -> GroupShape {
     return match shape {
-        // Transparent groups inline their inner op; the label rebinds the
-        // inner op's field directly, so the shape is returned unchanged —
-        // the caller's `rebind_op_field` recurses into the inner op instead.
         Transparent => GroupShape::Transparent,
         TokenOnly(mut to) => { to.field = *new_field; GroupShape::TokenOnly(to) },
         SimpleCst(mut scst) => { scst.field = *new_field; GroupShape::SimpleCst(scst) },

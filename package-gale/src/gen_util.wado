@@ -305,9 +305,6 @@ pub fn is_general_group(alts: &List<Alternative>) -> bool {
     return !is_simple_cst_group(alts) && !is_token_only_group(alts);
 }
 
-// The five classes are mutually exclusive, so the single classification
-// here is the one source of truth the op-side and scan-side lowerings
-// (and the field/name helpers) all dispatch on.
 pub enum GroupClass {
     Transparent,
     SingleAlt,
@@ -739,26 +736,12 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
                 single_alt_group_field_name(&g.alternatives[0]),
                 single_alt_group_type_name(&g.alternatives[0]),
             ],
-            // Post Phase 2-G every general-group reference flows through
-            // the GIR `gen_op_group` / `gen_general_group_store*` chain
-            // which consumes lower-baked `GeneralShape.variant_type` /
-            // `alt_struct_names`. The surface-IR `element_field_info` helper
-            // is reached only by legacy walker fallbacks; if a future
-            // regression routes a general Group here we want emit to fail
-            // loudly rather than silently re-derive the type from a stale
-            // walker field.
             General => panic(
                 "element_field_info: general Group reached the surface helper — route through `gen_op_group`/`gen_general_group_store*` instead",
             ),
-            // Transparent: non-storable — falls through to the outer panic.
             Transparent => {},
         }
     }
-    // Every storable shape returns above. Reaching here means a
-    // non-storable (e.g. transparent) group or an unhandled element shape
-    // was routed into the field-info helper; a placeholder
-    // `["_", "Token"]` would generate a wrongly-named/typed field, so fail
-    // loudly instead.
     panic(
         "element_field_info: element has no storable field shape — caller routed a non-storable element into the field-info helper",
     );
@@ -815,17 +798,9 @@ pub fn replay_element_names(elem: &Element, name_counts: &mut List<[String, i32]
             SimpleCst => { dedup_name(&group_field_base_name(&g.alternatives), name_counts); },
             TokenOnly => { dedup_name(&token_group_field_name(&g.alternatives), name_counts); },
             SingleAlt => { dedup_name(&single_alt_group_field_name(&g.alternatives[0]), name_counts); },
-            // Replay only runs over the skipped prefix of an alt
-            // (`gen_alt_body_skip` callers), which by construction consists
-            // of token-shaped leaves (TokenRef / Literal). A general Group
-            // in that prefix would mean the prediction tree consumed beyond
-            // the scannable leading prefix — not a path any committed
-            // grammar produces.
             General => panic(
                 "replay_element_names: general Group reached the skip-replay walker — only token-shaped prefix elements should be replayed",
             ),
-            // Transparent: non-storable, nothing to seed in `name_counts`.
-            // The inner ops are emitted normally afterwards via `body.ops`.
             Transparent => {},
         }
         return;
