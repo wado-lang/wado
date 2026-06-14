@@ -321,6 +321,36 @@ is deferred".
 - Compile-time target: package-gale optimise phase ~1.5× faster than
   the current substrate-only baseline. Aspirational, not committed.
 
+### Measured: optimizer hot path (package-gale, dev build)
+
+A native sampling profile (`samply`) of `wado compile -O2` on package-gale
+is flat — no single function exceeds ~1.6% self-time — but the inclusive view
+is clear: `run_gated` (the gated intra passes) is ~48% of compile CPU, and
+inside it the dominant rebuildable cost is the per-function `ValueGraph` build
+(`builder::build` + `Engine::value` ~22%, plus flow joins `join_overlay` /
+`join_heap` / `flow_join` ~16%) and the alias-set computation (~14%) — all
+rebuilt from scratch per pass per function and discarded.
+
+Two findings shaped the next steps:
+
+- Sharing the per-function `ValueGraph` (+ alias sets) across `cse` /
+  `store_load_forward` / `condition_implication`, keyed by `FunctionGate`'s
+  revision, lands byte-output-identical and cuts the optimise phase ~7%
+  (`store_load_forward` 1.77s → 1.13s, `condition_implication` 1.65s → 1.24s).
+  `licm` seeds loop-entry params differently and has no within-iteration
+  sharing partner, so it stays uncached.
+- The `ValueGraph` build is **compute-bound, not allocation-bound**: pooling
+  the output maps (`value_of` / `pool` / `literal_source` / `loop_entry_values`)
+  across builds measured no improvement (`licm`, which always rebuilds,
+  unchanged). The cost is the walk + hash-cons + flow joins, not the map
+  allocation. Buffer pooling is a dead end here.
+
+So the remaining levers are (1) an incremental `ValueGraph` — re-walk only the
+mutated region of a changed function instead of rebuilding it whole (the cache
+only helps _unchanged_ functions), and (2) function-level parallelism (the
+per-function build / walk is independent). Both are prerequisites to the ~1.5×
+target; the full single-worklist promotion subsumes (1).
+
 ### Additional effect — if optional acceleration ever activates
 
 - Phase-ordering hazards dissolve: rules co-exist under saturation; the
