@@ -10,7 +10,7 @@
 //! - Canonical lifting for world exports
 //! - HTTP handler export
 
-use super::component_context::ComponentModelContext;
+use super::component_context::{CmTypeKey, ComponentModelContext};
 use super::postprocess;
 use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmInstanceTypeGen, CmVariantCase};
@@ -1201,69 +1201,138 @@ fn emit_kiln_world_types(builder: &mut ComponentBuilder, ctx: &mut ComponentMode
     }
 }
 
+/// Intern a defined CM type by its structural [`CmTypeKey`], emitting it once.
+/// Repeated calls with an equal key return the cached index without re-emitting.
+/// `debug_name`, when given, names the emitted type and registers the name so
+/// existing `ctx.type_idx(name)` lookups still resolve.
+fn intern_cm_type(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    key: &CmTypeKey,
+    debug_name: Option<&str>,
+) -> u32 {
+    if let CmTypeKey::Leaf(idx) = key {
+        return *idx;
+    }
+    if let Some(idx) = ctx.intern_lookup(key) {
+        return idx;
+    }
+    let resolved = match key {
+        CmTypeKey::Leaf(_) => unreachable!("Leaf handled above"),
+        CmTypeKey::Own(inner) => {
+            ResolvedCmType::Own(intern_cm_type(builder, ctx, inner, None))
+        }
+        CmTypeKey::Option(inner) => {
+            ResolvedCmType::Option(intern_cm_type(builder, ctx, inner, None))
+        }
+        CmTypeKey::Future(inner) => {
+            ResolvedCmType::Future(intern_cm_type(builder, ctx, inner, None))
+        }
+        CmTypeKey::Result { ok, err } => {
+            let ok = ok.as_ref().map(|k| intern_cm_type(builder, ctx, k, None));
+            let err = err.as_ref().map(|k| intern_cm_type(builder, ctx, k, None));
+            ResolvedCmType::Result { ok, err }
+        }
+    };
+
+    let idx = match debug_name {
+        Some(name) => ctx.register_type(name),
+        None => ctx.register_anon_type(),
+    };
+    let (_, enc) = builder.ty(debug_name);
+    match resolved {
+        ResolvedCmType::Own(resource) => {
+            enc.defined_type().own(resource);
+        }
+        ResolvedCmType::Option(inner) => {
+            enc.defined_type()
+                .option(ComponentValType::Type(inner));
+        }
+        ResolvedCmType::Future(inner) => {
+            enc.defined_type()
+                .future(Some(ComponentValType::Type(inner)));
+        }
+        ResolvedCmType::Result { ok, err } => {
+            enc.defined_type().result(
+                ok.map(ComponentValType::Type),
+                err.map(ComponentValType::Type),
+            );
+        }
+    }
+    ctx.intern_record(key.clone(), idx);
+    idx
+}
+
+enum ResolvedCmType {
+    Own(u32),
+    Option(u32),
+    Future(u32),
+    Result { ok: Option<u32>, err: Option<u32> },
+}
+
 fn build_future_intrinsic_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     stream_u8_type: u32,
 ) -> (u32, u32) {
-    ctx.register_type("http-fields");
-    {
-        let fields_resource_idx = ctx.type_idx("http-fields-resource");
-        let (_, enc) = builder.ty(Some("http-fields"));
-        enc.defined_type().own(fields_resource_idx);
-    }
+    let fields_resource_idx = ctx.type_idx("http-fields-resource");
+    let error_code = CmTypeKey::Leaf(ctx.type_idx("http-error-code"));
 
-    ctx.register_type("http-option-stream-u8");
-    {
-        let (_, enc) = builder.ty(Some("http-option-stream-u8"));
-        enc.defined_type()
-            .option(ComponentValType::Type(stream_u8_type));
-    }
+    let fields = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Own(Box::new(CmTypeKey::Leaf(fields_resource_idx))),
+        Some("http-fields"),
+    );
 
-    ctx.register_type("http-option-fields");
-    {
-        let fields_idx = ctx.type_idx("http-fields");
-        let (_, enc) = builder.ty(Some("http-option-fields"));
-        enc.defined_type()
-            .option(ComponentValType::Type(fields_idx));
-    }
+    intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Option(Box::new(CmTypeKey::Leaf(stream_u8_type))),
+        Some("http-option-stream-u8"),
+    );
 
-    ctx.register_type("http-trailers-result");
-    {
-        let option_fields_idx = ctx.type_idx("http-option-fields");
-        let error_code_idx = ctx.type_idx("http-error-code");
-        let (_, enc) = builder.ty(Some("http-trailers-result"));
-        enc.defined_type().result(
-            Some(ComponentValType::Type(option_fields_idx)),
-            Some(ComponentValType::Type(error_code_idx)),
-        );
-    }
+    let option_fields = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Option(Box::new(CmTypeKey::Leaf(fields))),
+        Some("http-option-fields"),
+    );
 
-    let trailers_future_type = ctx.register_type("http-trailers-future");
-    {
-        let trailers_result_idx = ctx.type_idx("http-trailers-result");
-        let (_, enc) = builder.ty(Some("http-trailers-future"));
-        enc.defined_type()
-            .future(Some(ComponentValType::Type(trailers_result_idx)));
-    }
+    let trailers_result = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Result {
+            ok: Some(Box::new(CmTypeKey::Leaf(option_fields))),
+            err: Some(Box::new(error_code.clone())),
+        },
+        Some("http-trailers-result"),
+    );
 
-    ctx.register_type("http-transmission-result");
-    {
-        let error_code_idx = ctx.type_idx("http-error-code");
-        let (_, enc) = builder.ty(Some("http-transmission-result"));
-        enc.defined_type()
-            .result(None, Some(ComponentValType::Type(error_code_idx)));
-    }
+    let trailers_future_type = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Future(Box::new(CmTypeKey::Leaf(trailers_result))),
+        Some("http-trailers-future"),
+    );
 
-    ctx.register_type("http-transmission-future");
-    {
-        let transmission_result_idx = ctx.type_idx("http-transmission-result");
-        let (_, enc) = builder.ty(Some("http-transmission-future"));
-        enc.defined_type()
-            .future(Some(ComponentValType::Type(transmission_result_idx)));
-    }
+    let transmission_result = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Result {
+            ok: None,
+            err: Some(Box::new(error_code)),
+        },
+        Some("http-transmission-result"),
+    );
 
-    let transmission_future_type = ctx.type_idx("http-transmission-future");
+    let transmission_future_type = intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Future(Box::new(CmTypeKey::Leaf(transmission_result))),
+        Some("http-transmission-future"),
+    );
+
     (trailers_future_type, transmission_future_type)
 }
 
@@ -2662,15 +2731,15 @@ fn import_http_types_for_service(
 
     let response_type_idx = ctx.type_idx(&format!("{pkg}-response"));
     let error_code_type_idx = ctx.type_idx(&format!("{pkg}-error-code"));
-    let handler_result_name = format!("{pkg}-handler-result");
-    ctx.register_type(&handler_result_name);
-    {
-        let (_, enc) = builder.ty(Some(&handler_result_name));
-        enc.defined_type().result(
-            Some(ComponentValType::Type(response_type_idx)),
-            Some(ComponentValType::Type(error_code_type_idx)),
-        );
-    }
+    intern_cm_type(
+        builder,
+        ctx,
+        &CmTypeKey::Result {
+            ok: Some(Box::new(CmTypeKey::Leaf(response_type_idx))),
+            err: Some(Box::new(CmTypeKey::Leaf(error_code_type_idx))),
+        },
+        Some(&format!("{pkg}-handler-result")),
+    );
 }
 
 fn import_http_client(
@@ -3525,4 +3594,71 @@ fn append_interface_instance_exports(
 
     instances.append_to_component(component_bytes);
     exports.append_to_component(component_bytes);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intern_cm_type_dedups_equal_keys() {
+        let mut builder = ComponentBuilder::default();
+        let mut ctx = ComponentModelContext::new();
+
+        let leaf = ctx.register_type("leaf");
+        {
+            let (_, enc) = builder.ty(Some("leaf"));
+            enc.defined_type().result(None, None);
+        }
+
+        let key = CmTypeKey::Result {
+            ok: None,
+            err: Some(Box::new(CmTypeKey::Leaf(leaf))),
+        };
+        let first = intern_cm_type(&mut builder, &mut ctx, &key, Some("composite"));
+        let reserved_after_first = ctx.register_anon_type();
+        let second = intern_cm_type(&mut builder, &mut ctx, &key, Some("composite"));
+
+        assert_eq!(first, second, "equal keys resolve to one type index");
+        assert_eq!(
+            reserved_after_first,
+            first + 1,
+            "re-interning consumes no new type index"
+        );
+    }
+
+    #[test]
+    fn intern_cm_type_leaf_is_passthrough() {
+        let mut builder = ComponentBuilder::default();
+        let mut ctx = ComponentModelContext::new();
+        let before = ctx.register_anon_type();
+        let got = intern_cm_type(&mut builder, &mut ctx, &CmTypeKey::Leaf(7), None);
+        let after = ctx.register_anon_type();
+        assert_eq!(got, 7, "Leaf returns its index");
+        assert_eq!(after, before + 1, "Leaf consumes no type index");
+    }
+
+    #[test]
+    fn intern_cm_type_distinct_keys_distinct_indices() {
+        let mut builder = ComponentBuilder::default();
+        let mut ctx = ComponentModelContext::new();
+        let leaf = ctx.register_type("leaf");
+        {
+            let (_, enc) = builder.ty(Some("leaf"));
+            enc.defined_type().result(None, None);
+        }
+        let own = intern_cm_type(
+            &mut builder,
+            &mut ctx,
+            &CmTypeKey::Own(Box::new(CmTypeKey::Leaf(leaf))),
+            Some("own"),
+        );
+        let opt = intern_cm_type(
+            &mut builder,
+            &mut ctx,
+            &CmTypeKey::Option(Box::new(CmTypeKey::Leaf(leaf))),
+            Some("opt"),
+        );
+        assert_ne!(own, opt, "different structures get different indices");
+    }
 }
