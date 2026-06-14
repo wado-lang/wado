@@ -1283,25 +1283,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.get_builtin_return_type(builtin_name);
         }
 
-        // Handle WASI effect operations (e.g., Environment::get_arguments)
+        // Effect operations are routed here as `CalleeRef::local_namespace`, so
+        // `ModuleSource::Local { path }` matches `is_effect_like()`.
         if callee_module.is_effect_like()
             && let Some(interface_name) = callee_module.interface_name()
-            && let Some(return_type) = self.get_wasi_effect_return_type(&interface_name, func_name)
-        {
-            return return_type;
-        }
-
-        // Handle user-defined effect operations (e.g., `Counter::next` where
-        // `effect Counter { fn next() -> i32; }` is declared in the project).
-        // The elaborator routes these through `CalleeRef::local_namespace`,
-        // which produces `ModuleSource::Local { path: "Counter" }` — also
-        // matched by `is_effect_like()`. Without this lookup the call would
-        // fall through to the default `Unit` return type and the dispatch
-        // synthesis would have to patch up every Let / template that depends
-        // on the value.
-        if callee_module.is_effect_like()
-            && let Some(interface_name) = callee_module.interface_name()
-            && let Some(return_type) = self.get_user_effect_return_type(&interface_name, func_name)
+            && let Some((_, Some(return_type))) =
+                self.resolve_effect_op_signature(&interface_name, func_name)
         {
             return return_type;
         }
@@ -1359,27 +1346,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::UNIT
     }
 
-    /// Get the return type of a WASI effect operation from the registry.
-    ///
-    /// The registry stores the CM-ABI return type (with any `AsyncCall<T>`
-    /// wrapper stripped at registration). For async imports the Wado
-    /// surface type is `AsyncCall<T>`, so re-wrap before returning.
-    /// Look up the declared return type of a user-defined effect's
-    /// operation, e.g. `Counter::next` for `effect Counter { fn next()
-    /// -> i32; }`. The effect must be a project-declared effect (in
-    /// `trait_env.effect_decl_index`); WASI effects flow through
-    /// `get_wasi_effect_return_type` instead.
-    /// Resolve a user/WASI effect operation's signature (parameter types and
-    /// optional return type) from its Wado `interface` declaration.
-    ///
-    /// `effect_decl_index` keys by canonical `(decl_module, name)`; the call
-    /// site's import context disambiguates which interface a bare name refers to
-    /// (two modules can each declare `pub interface Logger`). Types are resolved
-    /// in the interface module's own import scope, so a type the interface
-    /// imports (e.g. `Instant` pulled into `Timezone` from `system_clock`)
-    /// resolves to the same `TypeId` the call site holds — not a fresh same-named
-    /// one. Surface types are preserved (`Mark`, `Result<(), ()>`), unlike the CM
-    /// registry's flattened form.
+    /// Resolve an effect operation's `(param types, return type)` — the single
+    /// source of truth shared by `lookup_function_param_types` and
+    /// `lookup_function_return_type` (issue #1371). An operation is a method on
+    /// an `interface` (WASI/user effect) or a `resource` (WASI handle); both
+    /// store methods as `InterfaceMethod`s. Types resolve in the declaring
+    /// module's import scope so they share identity with the call site.
     fn resolve_effect_op_signature(
         &mut self,
         effect: &str,
@@ -1390,13 +1362,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .effect_decl_index
-            .get(&canonical_key)?
+            .get(&canonical_key)
+            .or_else(|| self.tysys.trait_env.resource_decl_index.get(&canonical_key))?
             .clone();
         let module = self.loaded_modules.get(&module_source)?;
-        let crate::ast::Item::Interface(decl) = module.items.get(item_idx)? else {
-            return None;
+        let methods = match module.items.get(item_idx)? {
+            crate::ast::Item::Interface(decl) => &decl.methods,
+            crate::ast::Item::Resource(decl) => &decl.methods,
+            _ => return None,
         };
-        let method = decl.methods.iter().find(|m| m.name == operation)?;
+        let method = methods.iter().find(|m| m.name == operation)?;
         let param_asts: Vec<Type> = method.params.iter().map(|p| p.ty.clone()).collect();
         let return_ast = method.return_type.clone();
         let (imported_type_sources, import_original_names) =
@@ -1411,312 +1386,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (params, ret)
             },
         ))
-    }
-
-    pub(super) fn get_user_effect_return_type(
-        &mut self,
-        effect: &str,
-        operation: &str,
-    ) -> Option<TypeId> {
-        self.resolve_effect_op_signature(effect, operation)
-            .and_then(|(_, ret)| ret)
-    }
-
-    pub(super) fn get_wasi_effect_return_type(
-        &mut self,
-        effect: &str,
-        operation: &str,
-    ) -> Option<TypeId> {
-        let func_key = format!("{effect}::{operation}");
-        let func = self.tysys.cm_interface_registry.get_function(&func_key)?;
-        let is_async = func.is_async;
-        let package = func.package.clone();
-
-        let inner = match func.return_type.clone() {
-            Some(ty) => self.resolve_wasi_type_scoped(&ty, Some(&package)),
-            None => TypeTable::UNIT,
-        };
-
-        if is_async {
-            Some(self.tysys.type_table.borrow_mut().make_async_call(inner))
-        } else if func.return_type.is_some() {
-            Some(inner)
-        } else {
-            None
-        }
-    }
-
-    pub(super) fn get_effect_op_param_types(
-        &mut self,
-        effect: &str,
-        operation: &str,
-    ) -> Option<Vec<TypeId>> {
-        self.resolve_effect_op_signature(effect, operation)
-            .map(|(params, _)| params)
-    }
-
-    /// Resolve a WASI AST type to a `TypeId`
-    /// Resolve a WASI AST type to a `TypeId`, with optional WASI package scope.
-    pub(super) fn resolve_wasi_type_scoped(
-        &mut self,
-        ty: &Type,
-        wasi_package: Option<&str>,
-    ) -> TypeId {
-        let string_struct_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .struct_name(crate::compiler_item::CompilerItem::String)
-            .to_string();
-        let list_struct_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .struct_name(crate::compiler_item::CompilerItem::List)
-            .to_string();
-        if let Type::Named(named) = ty
-            && named.name == string_struct_name
-        {
-            return self.get_string_struct_type();
-        }
-        match ty {
-            Type::Named(named) => match named.name.as_str() {
-                "i8" => TypeTable::I8,
-                "i16" => TypeTable::I16,
-                "i32" => TypeTable::I32,
-                "i64" => TypeTable::I64,
-                "u8" => TypeTable::U8,
-                "u16" => TypeTable::U16,
-                "u32" => TypeTable::U32,
-                "u64" => TypeTable::U64,
-                "f32" => TypeTable::F32,
-                "f64" => TypeTable::F64,
-                "bool" => TypeTable::BOOL,
-                "v128" => TypeTable::V128,
-                "()" => TypeTable::UNIT,
-                // Type aliases from WASI (e.g., Mark, Instant, Duration)
-                _ => {
-                    // First check if it's a registered newtype in newtypes
-                    if let Some(newtype_id) = self.lookup_newtype(&named.name) {
-                        return newtype_id;
-                    }
-                    // Otherwise, try to resolve via WASI registry's newtypes.
-                    // Scoped to `wasi:` to keep this elaborator path WASI-only.
-                    let aliased = self
-                        .tysys
-                        .cm_interface_registry
-                        .find_wasi_newtype_source(&named.name)
-                        .and_then(|src| {
-                            self.tysys
-                                .cm_interface_registry
-                                .get_newtype_by_source(src, &named.name)
-                        })
-                        .cloned();
-                    if let Some(aliased) = aliased {
-                        // Create a newtype for this WASI newtype
-                        let base_type = self.resolve_wasi_type_scoped(&aliased, wasi_package);
-                        let newtype_id = self.tysys.type_table.borrow_mut().make_newtype(
-                            named.name.clone(),
-                            ModuleSource::wasi_clocks(),
-                            base_type,
-                        );
-                        // Cache the newtype for future lookups
-                        self.sem
-                            .decls
-                            .local_newtypes
-                            .insert(named.name.clone(), newtype_id);
-                        newtype_id
-                    } else if self
-                        .tysys
-                        .cm_interface_registry
-                        .find_wasi_resource_source(&named.name)
-                        .is_some()
-                    {
-                        // WASI resource type - create a proper Resource TypeId so that
-                        // method calls on the returned handle resolve correctly.
-                        // Look up the actual module source from all_resource_types.
-                        let module_source = self
-                            .tysys
-                            .all_resource_types
-                            .iter()
-                            .find_map(|(ms, map)| {
-                                if map.contains_key(&named.name) {
-                                    Some(ms.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .unwrap_or_else(ModuleSource::wasi_filesystem);
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_resource(named.name.clone(), module_source)
-                    } else if let Some(pkg) = wasi_package {
-                        // Scoped lookup: use type table's package-aware search
-                        let tt = self.tysys.type_table.borrow();
-                        if let Some(tid) = tt.find_named_type_by_cm_package(&named.name, pkg) {
-                            tid
-                        } else {
-                            drop(tt);
-                            // Fallback: enum → struct → i32. Scoped to wasi:
-                            // via find_wasi_*_source so same-named core:*
-                            // types cannot leak in.
-                            if self
-                                .tysys
-                                .cm_interface_registry
-                                .find_wasi_enum_source(&named.name)
-                                .is_some()
-                            {
-                                let module_source = self
-                                    .tysys
-                                    .all_enum_cases
-                                    .iter()
-                                    .find_map(|(ms, map)| {
-                                        map.contains_key(&named.name).then(|| ms.clone())
-                                    })
-                                    .unwrap_or_else(ModuleSource::wasi_cli);
-                                self.tysys
-                                    .type_table
-                                    .borrow_mut()
-                                    .make_enum(named.name.clone(), module_source)
-                            } else if self
-                                .tysys
-                                .cm_interface_registry
-                                .find_wasi_struct_source(&named.name)
-                                .is_some()
-                            {
-                                let module_source = self
-                                    .tysys
-                                    .all_struct_fields
-                                    .iter()
-                                    .find_map(|(ms, map)| {
-                                        map.contains_key(&named.name).then(|| ms.clone())
-                                    })
-                                    .unwrap_or_else(ModuleSource::wasi_clocks);
-                                self.tysys
-                                    .type_table
-                                    .borrow_mut()
-                                    .make_struct(named.name.clone(), module_source)
-                            } else {
-                                TypeTable::I32
-                            }
-                        }
-                    } else if self
-                        .tysys
-                        .cm_interface_registry
-                        .find_wasi_enum_source(&named.name)
-                        .is_some()
-                    {
-                        // WASI enum type - look up the module source from all_enum_cases
-                        let module_source = self
-                            .tysys
-                            .all_enum_cases
-                            .iter()
-                            .find_map(|(ms, map)| {
-                                if map.contains_key(&named.name) {
-                                    Some(ms.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .unwrap_or_else(ModuleSource::wasi_cli);
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_enum(named.name.clone(), module_source)
-                    } else if self
-                        .tysys
-                        .cm_interface_registry
-                        .find_wasi_struct_source(&named.name)
-                        .is_some()
-                    {
-                        // WASI struct (record) type - look up module source from all_struct_fields
-                        let module_source = self
-                            .tysys
-                            .all_struct_fields
-                            .iter()
-                            .find_map(|(ms, map)| {
-                                if map.contains_key(&named.name) {
-                                    Some(ms.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .unwrap_or_else(ModuleSource::wasi_clocks);
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_struct(named.name.clone(), module_source)
-                    } else {
-                        // Unknown type - represent as i32 handle
-                        TypeTable::I32
-                    }
-                }
-            },
-            Type::Generic(generic)
-                if generic.name == list_struct_name && generic.args.len() == 1 =>
-            {
-                let elem_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                self.tysys.type_table.borrow_mut().make_list(elem_type)
-            }
-            Type::Generic(generic) => match generic.name.as_str() {
-                "Option" if generic.args.len() == 1 => {
-                    let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.tysys.type_table.borrow_mut().make_option(inner_type)
-                }
-                "Stream" if generic.args.len() == 1 => {
-                    let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.tysys.type_table.borrow_mut().make_stream(inner_type)
-                }
-                "Future" if generic.args.len() == 1 => {
-                    let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.tysys.type_table.borrow_mut().make_future(inner_type)
-                }
-                "AsyncCall" if generic.args.len() == 1 => {
-                    let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_async_call(inner_type)
-                }
-                "Result" if generic.args.len() == 2 => {
-                    let ok_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    let err_type = self.resolve_wasi_type_scoped(&generic.args[1], wasi_package);
-                    // Look up the module source where Result variant is defined
-                    let module_source = self
-                        .tysys
-                        .all_variant_cases
-                        .iter()
-                        .find_map(|(ms, map)| {
-                            if map.contains_key("Result") {
-                                Some(ms.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_else(ModuleSource::prelude);
-                    self.tysys.type_table.borrow_mut().make_generic_instance(
-                        "Result".to_string(),
-                        module_source,
-                        vec![ok_type, err_type],
-                    )
-                }
-                _ => TypeTable::UNIT,
-            },
-            Type::Tuple(types) => {
-                if types.is_empty() {
-                    return TypeTable::UNIT;
-                }
-                let resolved: Vec<TypeId> = types
-                    .iter()
-                    .map(|t| self.resolve_wasi_type_scoped(t, wasi_package))
-                    .collect();
-                self.tysys.type_table.borrow_mut().make_tuple(resolved)
-            }
-            _ => TypeTable::UNIT,
-        }
     }
 
     /// Get the String struct type (from core:prelude/string.wado)
@@ -1767,7 +1436,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            if let Some(params) = self.get_effect_op_param_types(prefix, suffix) {
+            if let Some((params, _)) = self.resolve_effect_op_signature(prefix, suffix) {
                 return params;
             }
             return Vec::new();
