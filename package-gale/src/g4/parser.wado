@@ -35,7 +35,7 @@ use {
     synthesize_implicit_tokens,
 } from "../ir.wado";
 use { G4Token } from "./token.wado";
-use { tokenize_chars } from "./lexer.wado";
+use { tokenize_chars, resolve_unicode_escape } from "./lexer.wado";
 
 pub struct G4Parser {
     tokens: List<Token>,
@@ -1562,39 +1562,6 @@ fn resolve_char(chars: &List<char>, pos: &mut i32) -> char {
         '-' => '-',
         'u' => resolve_unicode_escape(chars, pos),
         _ => ec,
-    };
-}
-
-/// Resolve the body of a `\u` escape after the `u` has been consumed.
-/// Handles `\uXXXX` (up to four hex digits, stopping at the first non-hex
-/// char) and the `\u{XXXXXX}` brace form (ANTLR4 lexicon.md). Code points a
-/// Wado `char` cannot hold — surrogates and values past U+10FFFF — fall
-/// back to U+FFFD rather than trapping.
-fn resolve_unicode_escape(chars: &List<char>, pos: &mut i32) -> char {
-    let mut val = 0;
-    if *pos < chars.len() && chars[*pos] == '{' {
-        *pos += 1;
-        while *pos < chars.len() && chars[*pos] != '}' {
-            if !chars[*pos].is_hexdigit() {
-                break;
-            }
-            val = val * 16 + chars[*pos].hex_digit_value();
-            *pos += 1;
-        }
-        if *pos < chars.len() && chars[*pos] == '}' {
-            *pos += 1;
-        }
-    } else {
-        let mut n = 0;
-        while n < 4 && *pos < chars.len() && chars[*pos].is_hexdigit() {
-            val = val * 16 + chars[*pos].hex_digit_value();
-            *pos += 1;
-            n += 1;
-        }
-    }
-    return match char::from_i32(val) {
-        Some(ch) => ch,
-        None => '\u{FFFD}',
     };
 }
 
