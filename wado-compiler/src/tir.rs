@@ -701,6 +701,31 @@ impl TypeTable {
     /// so those scattered sites cannot drift out of agreement.
     pub const ARRAY_TYPE_NAME: &'static str = "Array";
 
+    /// The `(base name, struct type args)` a generic-container type dispatches
+    /// under — the canonicalization a trait-method call site
+    /// (`synthesis::template::method_name_for_type`) and the monomorphizer's
+    /// registration info (`get_struct_info_from_type`) must agree on, or a call
+    /// mangles to a name no impl was registered under.
+    ///
+    /// - `GenericInstance` keeps its own base name and type args.
+    /// - the raw GC array `Array<T>` (`BuiltinArray`) dispatches as
+    ///   [`ARRAY_TYPE_NAME`](Self::ARRAY_TYPE_NAME) with the element as its
+    ///   single type arg (its methods live in `impl Array<T>`).
+    ///
+    /// `None` for every other type, whose dispatch name is derived differently
+    /// (primitives, plain structs, type params, functions, references, …).
+    pub fn generic_dispatch_components(&self, type_id: TypeId) -> Option<(String, Vec<TypeId>)> {
+        match self.get(type_id) {
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => Some((name.clone(), type_args.clone())),
+            ResolvedType::BuiltinArray(elem) => {
+                Some((Self::ARRAY_TYPE_NAME.to_string(), vec![*elem]))
+            }
+            _ => None,
+        }
+    }
+
     /// Check if a name and `module_source` identify a built-in tuple type.
     pub fn is_tuple_type(name: &str, module_source: &ModuleSource) -> bool {
         name == Self::TUPLE_TYPE_NAME && module_source.is_core()

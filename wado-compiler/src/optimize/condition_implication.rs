@@ -217,79 +217,98 @@ impl GuardFact {
 }
 
 /// The `(lhs, rhs)` value-ids of the `lhs >= rhs` predicate whose truth makes
-/// a bounds check *fail*. Three surface shapes map to that one predicate:
+/// the bounds check guarded by `condition` *fail*.
 ///
-/// - direct `lhs >= rhs` — the manual `if index >= used { panic }` form;
-/// - `!(lhs < rhs)` — the `assert index < used` expansion before CSE; and
-/// - `(lhs < rhs) == false` — its post-CSE spelling (CSE rewrites the boolean
-///   negation into an equality with the false/zero literal).
-///
-/// The `<` may sit behind a `__cond` temporary the value graph resolves
-/// through. Returning value-ids (not exprs) lets the caller's
-/// `Add`-decomposition and guard-fact comparison stay identical regardless of
-/// which shape produced it.
+/// Matching is on the condition's *interned boolean value*, not its surface
+/// syntax: `engine.value(condition)` resolves through copy temporaries, and
+/// [`ge_operands_of_value`] recognizes the predicate however the optimizer
+/// spelled it — `lhs >= rhs`, `!(lhs < rhs)`, or the post-CSE `(lhs < rhs) ==
+/// false`. A new equivalent spelling only needs an arm there, not a new
+/// expr-shape matcher at every call site.
 fn failure_ge_operands(engine: &mut Engine, condition: ExprId) -> Option<(ValueId, ValueId)> {
+    let value = engine.value(condition)?;
+    ge_operands_of_value(engine, value)
+}
+
+/// [`failure_ge_operands`] over an already-resolved boolean value.
+fn ge_operands_of_value(engine: &mut Engine, value: ValueId) -> Option<(ValueId, ValueId)> {
+    // Copy each shape's operands out so the `value_kind` borrow ends before the
+    // recursive `&mut engine` queries below.
     enum Shape {
-        Ge(ExprId, ExprId),
-        NotLt(ExprId),
-        EqFalse(ExprId, ExprId),
+        Ge(ValueId, ValueId),
+        Not(ValueId),
+        Eq(ValueId, ValueId),
+        Other,
     }
-    // Copy the operand ids out first so the `exprs` borrow ends before the
-    // `&mut engine` value queries below.
-    let shape = match &engine.body.exprs[condition].kind {
-        ExprKind::Binary {
-            left,
+    let shape = match engine.value_kind(value) {
+        ValueKind::Binary {
             op: NirBinaryOp::GtEq,
-            right,
-        } => Shape::Ge(*left, *right),
-        ExprKind::Unary {
+            lhs,
+            rhs,
+        } => Shape::Ge(*lhs, *rhs),
+        ValueKind::Unary {
             op: NirUnaryOp::Not,
-            expr,
-        } => Shape::NotLt(*expr),
-        ExprKind::Binary {
-            left,
+            operand,
+        } => Shape::Not(*operand),
+        ValueKind::Binary {
             op: NirBinaryOp::Eq,
-            right,
-        } => Shape::EqFalse(*left, *right),
-        _ => return None,
+            lhs,
+            rhs,
+        } => Shape::Eq(*lhs, *rhs),
+        _ => Shape::Other,
     };
     match shape {
-        Shape::Ge(left, right) => Some((engine.value(left)?, engine.value(right)?)),
-        Shape::NotLt(inner) => negated_lt_operands(engine, inner),
-        Shape::EqFalse(left, right) => {
-            // `(x < y) == false`: negate whichever operand is the false/zero
-            // literal away.
-            if is_false_literal(engine, right) {
-                negated_lt_operands(engine, left)
-            } else if is_false_literal(engine, left) {
-                negated_lt_operands(engine, right)
+        Shape::Ge(lhs, rhs) => Some((lhs, rhs)),
+        // `!(x < y)` ≡ `x >= y`.
+        Shape::Not(inner) => strict_lt_operands(engine, inner),
+        // `(x < y) == false` ≡ `!(x < y)`; the false literal may be on either side.
+        Shape::Eq(lhs, rhs) => {
+            if is_false_value(engine, rhs) {
+                strict_lt_operands(engine, lhs)
+            } else if is_false_value(engine, lhs) {
+                strict_lt_operands(engine, rhs)
             } else {
                 None
             }
         }
+        Shape::Other => None,
     }
 }
 
-/// The `(lhs, rhs)` of the strict `<` comparison `expr` resolves to — the
-/// operands of the `lhs >= rhs` predicate that `!expr` denotes. Only `<`
-/// negates to `>=` (`!(x <= y)` is `x > y`, a different predicate), so a `<=`
-/// resolution is rejected. The comparison may sit behind a `__cond` temporary
-/// the value graph resolves through (see [`lt_comparison`]).
-fn negated_lt_operands(engine: &mut Engine, expr: ExprId) -> Option<(ValueId, ValueId)> {
-    match lt_comparison(engine, expr)? {
+/// The `(lhs, rhs)` of the strict `<` comparison `value` denotes — the operands
+/// of the `lhs >= rhs` predicate that `!value` denotes. Only `<` negates to
+/// `>=` (`!(x <= y)` is `x > y`, a different predicate), so a `<=` resolution
+/// is rejected.
+fn strict_lt_operands(engine: &mut Engine, value: ValueId) -> Option<(ValueId, ValueId)> {
+    match lt_of_value(engine, value)? {
         (lhs, rhs, true) => Some((lhs, rhs)),
         _ => None,
     }
 }
 
-/// Whether `expr` is the `false` / `0` literal (`b == 0` is the CSE spelling of
-/// `!b`).
-fn is_false_literal(engine: &mut Engine, expr: ExprId) -> bool {
-    let Some(vn) = engine.value(expr) else {
-        return false;
-    };
+/// `(lhs, rhs, is_strict)` if `value` is a `<` (`true`) or `<=` (`false`)
+/// comparison.
+fn lt_of_value(engine: &mut Engine, value: ValueId) -> Option<(ValueId, ValueId, bool)> {
+    match engine.value_kind(value) {
+        ValueKind::Binary {
+            op: NirBinaryOp::Lt,
+            lhs,
+            rhs,
+        } => Some((*lhs, *rhs, true)),
+        ValueKind::Binary {
+            op: NirBinaryOp::LtEq,
+            lhs,
+            rhs,
+        } => Some((*lhs, *rhs, false)),
+        _ => None,
+    }
+}
+
+/// Whether `value` is the `false` / `0` literal (`b == 0` is the CSE spelling
+/// of `!b`).
+fn is_false_value(engine: &mut Engine, value: ValueId) -> bool {
     matches!(
-        engine.value_kind(vn),
+        engine.value_kind(value),
         ValueKind::Bool(false) | ValueKind::Int(0)
     )
 }
@@ -569,20 +588,8 @@ fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<(GuardF
 /// The `(lhs, rhs, is_strict)` of the `<` / `<=` comparison `expr` resolves to,
 /// directly or through a `__cse` / `__cond` temporary the value graph resolves.
 fn lt_comparison(engine: &mut Engine, expr: ExprId) -> Option<(ValueId, ValueId, bool)> {
-    let vn = engine.value(expr)?;
-    match engine.value_kind(vn) {
-        ValueKind::Binary {
-            op: NirBinaryOp::Lt,
-            lhs,
-            rhs,
-        } => Some((*lhs, *rhs, true)),
-        ValueKind::Binary {
-            op: NirBinaryOp::LtEq,
-            lhs,
-            rhs,
-        } => Some((*lhs, *rhs, false)),
-        _ => None,
-    }
+    let value = engine.value(expr)?;
+    lt_of_value(engine, value)
 }
 
 /// Extract a guard from an early-exit if-statement: after

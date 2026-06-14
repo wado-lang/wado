@@ -1107,6 +1107,20 @@ fn method_name_for_type(
     tt: &Rc<RefCell<TypeTable>>,
 ) -> LocalMethodName {
     let tt_ref = tt.borrow();
+    // Generic containers (`GenericInstance`, `BuiltinArray`) dispatch by base
+    // name + struct type args — the same canonicalization the monomorphizer
+    // registers the impl under (`TypeTable::generic_dispatch_components`), so
+    // the call name matches. The `_` fallback below would instead mangle the
+    // full `Array<i32>` / `List<i32>` spelling and trip `LocalMethodName::new`'s
+    // no-`<` invariant.
+    if let Some((name, type_args)) = tt_ref.generic_dispatch_components(type_id) {
+        let arg_names: Vec<String> = type_args
+            .iter()
+            .map(|t| tt_ref.mangle_type_name(*t))
+            .collect();
+        return LocalMethodName::new(name, Some(trait_name.to_string()), method_name.to_string())
+            .with_struct_type_args(&arg_names);
+    }
     let resolved = tt_ref.get(type_id).clone();
     match resolved {
         ResolvedType::TypeParam { ref name, .. } | ResolvedType::TypePack { ref name, .. } => {
@@ -1117,29 +1131,6 @@ fn method_name_for_type(
             );
             info.is_type_param_receiver = true;
             info
-        }
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } => {
-            let arg_names: Vec<String> = type_args
-                .iter()
-                .map(|t| tt_ref.mangle_type_name(*t))
-                .collect();
-            LocalMethodName::new(name, Some(trait_name.to_string()), method_name.to_string())
-                .with_struct_type_args(&arg_names)
-        }
-        ResolvedType::BuiltinArray(elem) => {
-            // `Array<T>` dispatches under base name `Array` with the element
-            // type as its single struct type arg (matching `monomorphize` and
-            // `trait_query`); the `_` fallback would mangle the full
-            // `Array<i32>` and trip `LocalMethodName::new`'s no-`<` invariant.
-            let elem_name = tt_ref.mangle_type_name(elem);
-            LocalMethodName::new(
-                TypeTable::ARRAY_TYPE_NAME.to_string(),
-                Some(trait_name.to_string()),
-                method_name.to_string(),
-            )
-            .with_struct_type_args(&[elem_name])
         }
         ResolvedType::Function {
             params,
