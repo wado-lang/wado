@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781535734213,
+  "lastUpdate": 1781561015130,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33365,6 +33365,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/de67f5088fc0de84eaa6aaa0af7c6ab77682af83"
         },
         "date": 1781535733852,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 396125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "094b81e7b2b78e95301669dc06ee93715b099c5f",
+          "message": "Merge pull request #1386 from wado-lang/dependabot/npm_and_yarn/wado-vscode/npm_and_yarn-6ec3e26c6e\n\nchore(deps-dev): bump tmp from 0.2.6 to 0.2.7 in /wado-vscode in the npm_and_yarn group across 1 directory",
+          "timestamp": "2026-06-16T06:53:36+09:00",
+          "tree_id": "5b586f76ce5897569e5e291b8502a4bd52c05eb8",
+          "url": "https://github.com/wado-lang/wado/commit/094b81e7b2b78e95301669dc06ee93715b099c5f"
+        },
+        "date": 1781561014565,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
