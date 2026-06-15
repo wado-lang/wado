@@ -1816,6 +1816,17 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
+/// Emit the ATN return-state bookkeeping a rule entry performs around its
+/// inner call: consume the pending return state the call site stamped, reset
+/// it, and push it onto the simulator's caller stack for full-context
+/// prediction (popped via `p.atn_stack.pop()` on every exit). Only emitted for
+/// grammars that need the ATN.
+fn emit_atn_enter(w: &mut CodeWriter) {
+    w.line(&"let _atn_ret = p.atn_ret_pending;");
+    w.line(&"p.atn_ret_pending = -1;");
+    w.line(&"p.atn_stack.push(_atn_ret);");
+}
+
 /// Emit a thin entry wrapper named `outer_name` that delegates to
 /// `inner_name` and, on failure, records `rule_display` onto the
 /// propagating `ParseError`'s rule stack. Every cross-rule call site and
@@ -1873,9 +1884,7 @@ fn gen_rule_entry_wrapper(
         // Compact form: the type-independent `Err` / rule-stack tail is shared
         // by `_gale_rule`. The ATN return-state stack still wraps the call.
         if needs_atn {
-            w.line(&"let _atn_ret = p.atn_ret_pending;");
-            w.line(&"p.atn_ret_pending = -1;");
-            w.line(&"p.atn_stack.push(_atn_ret);");
+            emit_atn_enter(w);
             w.line(&`let r = {call};`);
             w.line(&"p.atn_stack.pop();");
             w.line(&`return _gale_rule(r, {lit});`);
@@ -1890,16 +1899,8 @@ fn gen_rule_entry_wrapper(
     // `e.message` and the success path can log `ok`.
     w.line(&`trace_enter(p, &{lit});`);
     w.line(&"p.trace_depth += 1;");
-    // Maintain the caller stack of ATN return states the simulator reads
-    // for full-context prediction. The calling site set `p.atn_ret_pending`
-    // to this invocation's exact return state (or left it -1 for an
-    // unstamped call / the start rule); consume it here, reset it, and push
-    // it. Popped on every exit (success and failure) below. Only emitted for
-    // grammars that need the ATN.
     if needs_atn {
-        w.line(&"let _atn_ret = p.atn_ret_pending;");
-        w.line(&"p.atn_ret_pending = -1;");
-        w.line(&"p.atn_stack.push(_atn_ret);");
+        emit_atn_enter(w);
     }
     w.line(&`let r = {call};`);
     if needs_atn {
@@ -1996,6 +1997,25 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
 /// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
 /// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
 /// path needs no per-(rule, mask) specialisation.
+/// Whether a multi-alt rule body references `start` (`p.peek().span.start`).
+/// `start` is read only by an inlined alt body that builds the result node:
+/// the non-overlap dispatch (`gen_multi_alt_body`) inlines every alt, and a
+/// singleton overlap group inlines its one alt (`gen_multi_alt_body_alt`'s
+/// `group.len() == 1` arm). A pure prediction dispatch (every group has >1 alt)
+/// only forwards to `_alt_<n>` helpers, which capture their own `start`. Keep
+/// this in step with those two inline emit sites.
+fn rule_body_needs_start(has_overlaps: bool, groups: &List<List<i32>>) -> bool {
+    if !has_overlaps {
+        return true;
+    }
+    for let g of groups {
+        if g.len() == 1 {
+            return true;
+        }
+    }
+    return false;
+}
+
 fn gen_parse_fn_named(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -2114,17 +2134,7 @@ fn gen_parse_fn_named(
         }
     }
 
-    // `start` is referenced only by an inlined alt body — the non-overlap
-    // dispatch (`gen_multi_alt_body`) or a singleton overlap group (the
-    // `group.len() == 1` arm of `gen_multi_alt_body_alt`). A pure prediction
-    // dispatch (every group has >1 alt) only forwards to `_alt_<n>` helpers,
-    // so emit `let start` only when an inline body will use it.
-    let mut needs_start = !has_overlaps;
-    for let g of &groups {
-        if g.len() == 1 {
-            needs_start = true;
-        }
-    }
+    let needs_start = rule_body_needs_start(has_overlaps, &groups);
 
     let has_lr = match lowered_rule {
         LeftRecursive(_) => true,
