@@ -14,8 +14,10 @@
 //! model for non-literal multi-use values is a later step; constants are always
 //! cheaper to rematerialize than to share, so they need no cost decision.
 //!
-//! Exercised by unit tests until the first union-producing pure-value pass is
-//! migrated onto the live graph and wires this in as the consumer.
+//! [`materialize_literal`] is the shared materialization primitive, used in
+//! production by `store_load_forward`. [`ExtractLiteralRule`] (the worklist
+//! rule form) is exercised by unit tests until the first union-producing
+//! pure-value pass wires it into a combined session.
 #![allow(dead_code)]
 
 use crate::nir_arena::{ExprId, ExprKind, NodeRef};
