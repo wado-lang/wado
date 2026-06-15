@@ -876,19 +876,19 @@ impl Parser {
 
 fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         let gp_0 = pos;
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break sg_0_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break sg_0_0; }
                 pos += 1;
                 break sg_0;
             }
             pos = gp_0;
             sg_0_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_INT { break sg_0_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_INT { break sg_0_1; }
                 pos += 1;
                 break sg_0;
             }
@@ -909,13 +909,13 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
         sg_1: {
             pos = gp_1;
             sg_1_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break sg_1_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break sg_1_0; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_INT { break sg_1_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_INT { break sg_1_1; }
                 pos += 1;
                 break sg_1;
             }

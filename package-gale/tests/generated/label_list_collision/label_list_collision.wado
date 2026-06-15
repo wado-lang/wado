@@ -769,15 +769,15 @@ impl Parser {
 
 fn scan_stream(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_TAG { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens[pos].kind == TK_TAG {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_TAG {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_TAG { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
@@ -793,7 +793,7 @@ fn _parse_stream__inner(p: &mut Parser) -> Result<StreamNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_TAG { break rep_scan; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG { break rep_scan; }
             pos += 1;
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;

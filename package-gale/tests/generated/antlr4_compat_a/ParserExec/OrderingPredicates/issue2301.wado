@@ -940,16 +940,16 @@ impl Parser {
 
 fn scan_constant(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DUMMY { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_DUMMY { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_expr_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos].kind == TK_LIT_DUMMY && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_DUMMY && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_constant(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -959,18 +959,18 @@ fn scan_expr_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
 
 fn scan_expr_lr_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_AT { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_AT { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_X { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_X { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_expr_lr_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_AT { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_AT { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_Y { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Y { return -1; }
     pos += 1;
     return pos;
 }
@@ -979,10 +979,10 @@ fn scan_expr(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     let mut pos = scan_expr_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
-        let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+        let suffix_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
         if suffix_kind == TK_AT {
             if suffix_kind == TK_AT {
-                let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };
+                let second_kind = if pos + 1 < tokens.len() { tokens.get_unchecked(pos + 1).kind } else { TK_EOF };
                 if second_kind == TK_X {
                     if 2 >= min_prec {
                         let lr_saved_pos = pos;

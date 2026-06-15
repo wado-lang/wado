@@ -1193,13 +1193,13 @@ impl Parser {
 
 fn scan_sexpr(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) {
         let sp = pos;
         pos = scan_item(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
@@ -1207,7 +1207,7 @@ fn scan_sexpr(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn scan_item(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_1(alt_kind) {
             pos = start;
@@ -1221,15 +1221,15 @@ fn scan_item(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             let mut best: i32 = -1;
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { break try_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LPAREN { break try_2; }
                 pos += 1;
                 pos = scan_item(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_DOT { break try_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_DOT { break try_2; }
                 pos += 1;
                 pos = scan_item(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { break try_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_RPAREN { break try_2; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -1250,21 +1250,21 @@ fn scan_item(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn scan_list_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LPAREN { return -1; }
     pos += 1;
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) {
         let sp = pos;
         pos = scan_item(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_RPAREN { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_atom(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
+    if pos < tokens.len() && _gale_kind_set_1(tokens.get_unchecked(pos).kind) {
         return pos + 1;
     }
     return -1;
@@ -1330,15 +1330,15 @@ fn _parse_item__inner_alt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
 
 fn _parse_item__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LPAREN { return -1; }
     pos += 1;
     pos = scan_item(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_DOT { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_DOT { return -1; }
     pos += 1;
     pos = scan_item(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_RPAREN { return -1; }
     pos += 1;
     return pos;
 }

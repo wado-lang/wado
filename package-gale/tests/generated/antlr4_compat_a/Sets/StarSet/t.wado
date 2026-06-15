@@ -756,19 +756,19 @@ impl Parser {
 
 fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) {
         let sp = pos;
         let gp_0 = pos;
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { break sg_0_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_A { break sg_0_0; }
                 pos += 1;
                 break sg_0;
             }
             pos = gp_0;
             sg_0_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_B { break sg_0_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_B { break sg_0_1; }
                 pos += 1;
                 break sg_0;
             }
@@ -777,7 +777,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_C { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_C { return -1; }
     pos += 1;
     return pos;
 }
@@ -794,13 +794,13 @@ fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
             sg_1: {
                 pos = gp_1;
                 sg_1_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { break sg_1_0; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_A { break sg_1_0; }
                     pos += 1;
                     break sg_1;
                 }
                 pos = gp_1;
                 sg_1_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_B { break sg_1_1; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_B { break sg_1_1; }
                     pos += 1;
                     break sg_1;
                 }

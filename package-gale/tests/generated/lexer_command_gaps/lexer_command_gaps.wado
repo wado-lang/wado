@@ -953,25 +953,25 @@ impl Parser {
 
 fn scan_text(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) {
         let sp = pos;
         let gp_0 = pos;
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_WORD { break sg_0_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_WORD { break sg_0_0; }
                 pos += 1;
                 break sg_0;
             }
             pos = gp_0;
             sg_0_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_NUMBER { break sg_0_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_NUMBER { break sg_0_1; }
                 pos += 1;
                 break sg_0;
             }
             pos = gp_0;
             sg_0_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_PRAGMA { break sg_0_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_PRAGMA { break sg_0_2; }
                 pos += 1;
                 break sg_0;
             }
@@ -980,7 +980,7 @@ fn scan_text(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
@@ -997,19 +997,19 @@ fn _parse_text__inner(p: &mut Parser) -> Result<TextNode, ParseError> {
             sg_1: {
                 pos = gp_1;
                 sg_1_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_WORD { break sg_1_0; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_WORD { break sg_1_0; }
                     pos += 1;
                     break sg_1;
                 }
                 pos = gp_1;
                 sg_1_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_NUMBER { break sg_1_1; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_NUMBER { break sg_1_1; }
                     pos += 1;
                     break sg_1;
                 }
                 pos = gp_1;
                 sg_1_2: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_PRAGMA { break sg_1_2; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_PRAGMA { break sg_1_2; }
                     pos += 1;
                     break sg_1;
                 }

@@ -942,12 +942,12 @@ impl Parser {
 fn scan_expression_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_NOT {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_NOT { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_NOT { break try_0; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
@@ -957,7 +957,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
         } else if alt_kind == TK_IDENTIFIER {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_IDENTIFIER { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_IDENTIFIER { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -973,7 +973,7 @@ fn scan_expression_lr_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     let mut pos = pos;
     sg_0_done: {
         sg_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_AND { break sg_0; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_AND { break sg_0; }
             pos += 1;
             pos = scan_expression(tokens, pos, follow, 3);
             if pos < 0 { break sg_0; }
@@ -981,11 +981,11 @@ fn scan_expression_lr_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
         }
         return -1;
     }
-    while pos < tokens.len() && tokens[pos].kind == TK_AND && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_AND && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_1_done: {
             sg_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_AND { break sg_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_AND { break sg_1; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, follow, 3);
                 if pos < 0 { break sg_1; }
@@ -1003,7 +1003,7 @@ fn scan_expression_lr_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     let mut pos = pos;
     sg_2_done: {
         sg_2: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_OR { break sg_2; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OR { break sg_2; }
             pos += 1;
             pos = scan_expression(tokens, pos, follow, 2);
             if pos < 0 { break sg_2; }
@@ -1011,11 +1011,11 @@ fn scan_expression_lr_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
         }
         return -1;
     }
-    while pos < tokens.len() && tokens[pos].kind == TK_OR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_OR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_3_done: {
             sg_3: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_OR { break sg_3; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OR { break sg_3; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, follow, 2);
                 if pos < 0 { break sg_3; }
@@ -1033,7 +1033,7 @@ fn scan_expression(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &E
     let mut pos = scan_expression_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
-        let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+        let suffix_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
         if suffix_kind == TK_AND {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
@@ -1097,7 +1097,7 @@ fn _parse_expression__inner_lr_1(p: &mut Parser, left: ExpressionNode, start: i3
                 let mut pos: i32 = p.pos;
                 sg_4_done: {
                     sg_4: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_AND { break sg_4; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_AND { break sg_4; }
                         pos += 1;
                         pos = scan_expression(tokens, pos, follow, 3);
                         if pos < 0 { break sg_4; }
@@ -1140,7 +1140,7 @@ fn _parse_expression__inner_lr_2(p: &mut Parser, left: ExpressionNode, start: i3
                 let mut pos: i32 = p.pos;
                 sg_5_done: {
                     sg_5: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_OR { break sg_5; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OR { break sg_5; }
                         pos += 1;
                         pos = scan_expression(tokens, pos, follow, 2);
                         if pos < 0 { break sg_5; }

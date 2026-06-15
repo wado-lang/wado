@@ -838,7 +838,7 @@ impl Parser {
 fn scan_s(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
@@ -866,23 +866,23 @@ fn scan_s(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_INT { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_INT { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_INT { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_INT { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -897,9 +897,9 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn scan_b(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
@@ -977,9 +977,9 @@ fn _parse_a__inner_alt_0(p: &mut Parser) -> Result<ANode, ParseError> {
 
 fn _parse_a__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_INT { return -1; }
     pos += 1;
     return pos;
 }
@@ -997,9 +997,9 @@ fn _parse_a__inner_alt_1(p: &mut Parser) -> Result<ANode, ParseError> {
 
 fn _parse_a__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_INT { return -1; }
     pos += 1;
     return pos;
 }

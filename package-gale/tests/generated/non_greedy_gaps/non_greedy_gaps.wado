@@ -930,7 +930,7 @@ fn scan_file(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         }
         return -1;
     }
-    while pos < tokens.len() && tokens[pos].kind == TK_LIT_PUBLIC {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_PUBLIC {
         let sp = pos;
         sg_1_done: {
             sg_1: {
@@ -943,22 +943,22 @@ fn scan_file(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_constant(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PUBLIC { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_PUBLIC { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STATIC { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_STATIC { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_FINAL { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_FINAL { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_INT { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_INT { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }

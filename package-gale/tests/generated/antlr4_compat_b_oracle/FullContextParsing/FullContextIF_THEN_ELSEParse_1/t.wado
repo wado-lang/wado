@@ -1002,15 +1002,15 @@ impl Parser {
 
 fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) {
         let sp = pos;
         pos = scan_stat(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RBRACE { return -1; }
     pos += 1;
     return pos;
 }
@@ -1018,26 +1018,26 @@ fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
 fn scan_stat(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_IF {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_IF { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_IF { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_THEN { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_THEN { break try_0; }
                 pos += 1;
                 pos = scan_stat(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos].kind == TK_LIT_ELSE && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_ELSE && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     sg_0_done: {
                         sg_0: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_ELSE { break sg_0; }
+                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_ELSE { break sg_0; }
                             pos += 1;
-                            if pos >= tokens.len() || tokens[pos].kind != TK_ID { break sg_0; }
+                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break sg_0; }
                             pos += 1;
                             break sg_0_done;
                         }
@@ -1051,7 +1051,7 @@ fn scan_stat(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
         } else if alt_kind == TK_LIT_RETURN {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RETURN { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RETURN { break try_1; }
                 pos += 1;
                 break scan_alts;
             }

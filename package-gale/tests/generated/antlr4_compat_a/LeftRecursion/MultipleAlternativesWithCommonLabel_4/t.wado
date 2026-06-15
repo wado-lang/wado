@@ -934,12 +934,12 @@ fn scan_s(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn scan_e_atom(tokens: &List<Token>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_INT {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_INT { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_INT { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -947,11 +947,11 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_LPAREN {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LPAREN { break try_1; }
                 pos += 1;
                 pos = scan_e(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RPAREN { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -959,7 +959,7 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_ID {
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_2; }
                 pos += 1;
                 break scan_alts;
             }
@@ -973,7 +973,7 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32) -> i32 {
 
 fn scan_e_lr_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_STAR { return -1; }
     pos += 1;
     pos = scan_e(tokens, pos, 5);
     if pos < 0 { return -1; }
@@ -982,7 +982,7 @@ fn scan_e_lr_0(tokens: &List<Token>, pos: i32) -> i32 {
 
 fn scan_e_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_PLUS { return -1; }
     pos += 1;
     pos = scan_e(tokens, pos, 4);
     if pos < 0 { return -1; }
@@ -991,14 +991,14 @@ fn scan_e_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
 
 fn scan_e_lr_4(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_INC { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_INC { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_e_lr_5(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_DEC { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_DEC { return -1; }
     pos += 1;
     return pos;
 }
@@ -1007,7 +1007,7 @@ fn scan_e(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_e_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
-        let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+        let suffix_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
         if suffix_kind == TK_LIT_STAR {
             if 4 >= min_prec {
                 let lr_saved_pos = pos;

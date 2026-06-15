@@ -1991,7 +1991,7 @@ fn scan_stat(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     pos = scan_expr(tokens, pos, 0);
     GALE_SCAN_STACK.pop();
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_SEMI { return -1; }
     pos += 1;
     return pos;
 }
@@ -1999,12 +1999,12 @@ fn scan_stat(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn scan_expr_atom(tokens: &List<Token>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2012,13 +2012,13 @@ fn scan_expr_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_BETWEEN {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BETWEEN { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_BETWEEN { break try_1; }
                 pos += 1;
                 GALE_SCAN_STACK.push(20);
                 pos = scan_expr(tokens, pos, 0);
                 GALE_SCAN_STACK.pop();
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_AND { break try_1; }
                 pos += 1;
                 GALE_SCAN_STACK.push(24);
                 pos = scan_expr(tokens, pos, 0);
@@ -2036,7 +2036,7 @@ fn scan_expr_atom(tokens: &List<Token>, pos: i32) -> i32 {
 
 fn scan_expr_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_AND { return -1; }
     pos += 1;
     GALE_SCAN_STACK.push(32);
     pos = scan_expr(tokens, pos, 3);
@@ -2047,7 +2047,7 @@ fn scan_expr_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
 
 fn scan_expr_lr_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_OR { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_OR { return -1; }
     pos += 1;
     GALE_SCAN_STACK.push(37);
     pos = scan_expr(tokens, pos, 2);

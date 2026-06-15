@@ -589,7 +589,7 @@ fn gen_scan_function_named(
         // by making scan_X functions reachable. Behaviourally identical to
         // the longest-match tournament: every alt consumes exactly one
         // token, so longest-match and first-success-wins both pick whatever
-        // alt's token equals `tokens[pos].kind`.
+        // alt's token equals `tokens.get_unchecked(pos).kind`.
         let mut firsts: List<String> = [];
         for let alt of &rule.alternatives {
             let t = single_token_first(&alt.elements[0]);
@@ -597,7 +597,7 @@ fn gen_scan_function_named(
                 firsts.push(t);
             }
         }
-        let check = ctx.kind_check_str(&firsts, &"tokens[pos].kind");
+        let check = ctx.kind_check_str(&firsts, &"tokens.get_unchecked(pos).kind");
         w.begin(&`if pos < tokens.len() && {check}`);
         w.line(&"return pos + 1;");
         w.end();
@@ -834,7 +834,7 @@ fn gen_lr_suffix_dispatch(
 
     w.begin(&"loop");
     if side.scan {
-        w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
+        w.line(&"let suffix_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };");
     } else {
         w.line(&"let suffix_kind = p.peek_kind();");
     }
@@ -972,7 +972,7 @@ fn gen_lr_overlap_dispatch(
             w.else_begin(&`else if suffix_kind == {*shared_tk}`);
         }
         let second_accessor = if side.scan {
-            w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };");
+            w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens.get_unchecked(pos + 1).kind } else { TK_EOF };");
             "second_kind";
         } else {
             "p.peek_at(1)";
@@ -1125,7 +1125,7 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &
 
     w.line(&"let start = pos;");
     w.line(&"let mut pos = pos;");
-    w.line(&"let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
+    w.line(&"let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };");
 
     w.begin(&"scan_alts:");
 
@@ -1272,7 +1272,7 @@ fn is_self_ref_scan_call(se: &ScanElement, rule_name: &String) -> bool {
 }
 
 /// Scan-side twin of `gen_lookahead_condition`. Uses
-/// `tokens[pos + d].kind` (guarded by `pos + d < tokens.len()`) instead
+/// `tokens.get_unchecked(pos + d).kind` (guarded by `pos + d < tokens.len()`) instead
 /// of `p.peek_at(d)`. Multi-token sets route through
 /// `ctx.kind_check_str` so they collapse to a `_gale_kind_set_<id>(...)`
 /// helper call; otherwise a 120-keyword set inlined at every dispatch
@@ -1293,7 +1293,7 @@ fn gen_scan_op_element(
     min_prec_override: i32 = 0,
 ) {
     if let Token(t) = se {
-        w.line(&`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ {*fail_stmt} \}`);
+        w.line(&`if pos >= tokens.len() || tokens.get_unchecked(pos).kind != {t.kind} \{ {*fail_stmt} \}`);
         w.line(&"pos += 1;");
         return;
     }
@@ -1330,14 +1330,14 @@ fn gen_scan_op_element(
         return;
     }
     if let Wildcard = se {
-        w.line(&`if pos >= tokens.len() || tokens[pos].kind == TK_EOF \{ {*fail_stmt} \}`);
+        w.line(&`if pos >= tokens.len() || tokens.get_unchecked(pos).kind == TK_EOF \{ {*fail_stmt} \}`);
         w.line(&"pos += 1;");
         return;
     }
     if let Excluded(e) = se {
         let mut check_parts: List<String> = [];
         for let k of &e.kinds {
-            check_parts.push(`tokens[pos].kind == {*k}`);
+            check_parts.push(`tokens.get_unchecked(pos).kind == {*k}`);
         }
         let mut check = String::with_capacity(64);
         for let mut i = 0; i < check_parts.len(); i += 1 {
@@ -1346,7 +1346,7 @@ fn gen_scan_op_element(
             }
             check.push_str(&check_parts[i]);
         }
-        w.line(&`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ {*fail_stmt} \}`);
+        w.line(&`if pos >= tokens.len() || tokens.get_unchecked(pos).kind == TK_EOF || {check} \{ {*fail_stmt} \}`);
         w.line(&"pos += 1;");
         return;
     }
@@ -1370,7 +1370,7 @@ fn gen_scan_op_element(
 /// failed iteration means "skip", not abort.
 fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext) {
     if let Token(t) = se {
-        w.line(&`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
+        w.line(&`if pos >= tokens.len() || tokens.get_unchecked(pos).kind != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
         return;
     }
     if let RuleCall(rc) = se {
@@ -1389,13 +1389,13 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         return;
     }
     if let Wildcard = se {
-        w.line(&"if pos >= tokens.len() || tokens[pos].kind == TK_EOF { pos = -1; } else { pos += 1; }");
+        w.line(&"if pos >= tokens.len() || tokens.get_unchecked(pos).kind == TK_EOF { pos = -1; } else { pos += 1; }");
         return;
     }
     if let Excluded(e) = se {
         let mut check_parts: List<String> = [];
         for let k of &e.kinds {
-            check_parts.push(`tokens[pos].kind == {*k}`);
+            check_parts.push(`tokens.get_unchecked(pos).kind == {*k}`);
         }
         let mut check = String::with_capacity(64);
         for let mut i = 0; i < check_parts.len(); i += 1 {
@@ -1404,7 +1404,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
             }
             check.push_str(&check_parts[i]);
         }
-        w.line(&`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
+        w.line(&`if pos >= tokens.len() || tokens.get_unchecked(pos).kind == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
         return;
     }
     if let Group(ge) = se {
@@ -1458,7 +1458,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if effective_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&effective_first, &"tokens[pos].kind");
+        let check = ctx.kind_check_str(&effective_first, &"tokens.get_unchecked(pos).kind");
         // Caller-FOLLOW gate wins: `if pos < len && peek matches first AND
         // NOT caller_follow_gate { try iter }`. When `caller_follow_gate` is
         // empty (no `follow`), the guard collapses to the regular shape.
@@ -1478,7 +1478,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if loop_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, &"tokens[pos].kind");
+        let check = ctx.kind_check_str(&loop_first, &"tokens.get_unchecked(pos).kind");
         let guard = if caller_follow_gate.is_empty() {
             `pos < tokens.len() && {check}`;
         } else {
@@ -1498,7 +1498,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if loop_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, &"tokens[pos].kind");
+        let check = ctx.kind_check_str(&loop_first, &"tokens.get_unchecked(pos).kind");
         // Plus's subsequent iters get the K-prefix gate; the mandatory
         // first iter ran above.
         let guard = if caller_follow_gate.is_empty() {
@@ -1597,7 +1597,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     let gate_emitted = lenient && !has_wildcard && union_first.len() > 0;
     if gate_emitted {
         let sgk_var = `sgk_{gc}`;
-        w.line(&`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
+        w.line(&`let {sgk_var} = if pos < tokens.len() \{ tokens.get_unchecked(pos).kind \} else \{ TK_EOF \};`);
         let gate = ctx.kind_check_str(&union_first, &sgk_var);
         w.begin(&`if {gate}`);
     }
@@ -4357,7 +4357,7 @@ fn join_lookahead_condition(
         let part = match access {
             Scan => {
                 let idx_expr = if d == 0 { `pos` } else { `pos + {d}` };
-                let check = ctx.kind_check_str(&sig[d], &`tokens[{idx_expr}].kind`);
+                let check = ctx.kind_check_str(&sig[d], &`tokens.get_unchecked({idx_expr}).kind`);
                 `{idx_expr} < tokens.len() && {check}`;
             },
             Parse => {

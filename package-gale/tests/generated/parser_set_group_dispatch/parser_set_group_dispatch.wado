@@ -781,27 +781,27 @@ impl Parser {
 
 fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_A { return -1; }
     pos += 1;
     let gp_0 = pos;
     sg_0: {
         pos = gp_0;
         sg_0_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_B { break sg_0_0; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_B { break sg_0_0; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_C { break sg_0_1; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_C { break sg_0_1; }
             pos += 1;
             break sg_0;
         }
         return -1;
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_D { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_D { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }

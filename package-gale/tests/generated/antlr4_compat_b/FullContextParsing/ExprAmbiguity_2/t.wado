@@ -901,15 +901,15 @@ fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn scan_expr(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         let gp_0 = pos;
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break sg_0_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_STAR { break sg_0_0; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0_0; }
@@ -917,7 +917,7 @@ fn scan_expr(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
             }
             pos = gp_0;
             sg_0_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break sg_0_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_PLUS { break sg_0_1; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0_1; }
@@ -960,12 +960,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
             let gp_1 = pos;
-            let sgk_1 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+            let sgk_1 = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
             if _gale_kind_set_0(sgk_1) {
                 sg_1: {
                     pos = gp_1;
                     sg_1_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break sg_1_0; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_STAR { break sg_1_0; }
                         pos += 1;
                         pos = scan_expr(tokens, pos, follow, 0);
                         if pos < 0 { break sg_1_0; }
@@ -973,7 +973,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     }
                     pos = gp_1;
                     sg_1_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break sg_1_1; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_PLUS { break sg_1_1; }
                         pos += 1;
                         pos = scan_expr(tokens, pos, follow, 0);
                         if pos < 0 { break sg_1_1; }

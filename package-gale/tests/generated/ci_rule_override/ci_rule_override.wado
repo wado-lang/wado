@@ -829,43 +829,43 @@ fn scan_line(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     sg_0: {
         pos = gp_0;
         sg_0_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_KEYWORD { break sg_0_0; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_KEYWORD { break sg_0_0; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { break sg_0_1; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_IDENT { break sg_0_1; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_2: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_EXACT { break sg_0_2; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EXACT { break sg_0_2; }
             pos += 1;
             break sg_0;
         }
         return -1;
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) {
         let sp = pos;
         let gp_1 = pos;
         sg_1: {
             pos = gp_1;
             sg_1_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_KEYWORD { break sg_1_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_KEYWORD { break sg_1_0; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { break sg_1_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_IDENT { break sg_1_1; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_EXACT { break sg_1_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EXACT { break sg_1_2; }
                 pos += 1;
                 break sg_1;
             }
@@ -874,7 +874,7 @@ fn scan_line(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
@@ -893,19 +893,19 @@ fn _parse_line__inner(p: &mut Parser) -> Result<LineNode, ParseError> {
                 sg_2: {
                     pos = gp_2;
                     sg_2_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_KEYWORD { break sg_2_0; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_KEYWORD { break sg_2_0; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { break sg_2_1; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_IDENT { break sg_2_1; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_2: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_EXACT { break sg_2_2; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EXACT { break sg_2_2; }
                         pos += 1;
                         break sg_2;
                     }

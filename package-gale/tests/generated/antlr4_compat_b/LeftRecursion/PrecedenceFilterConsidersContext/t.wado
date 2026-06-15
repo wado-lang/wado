@@ -768,13 +768,13 @@ impl Parser {
 
 fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos].kind == TK_LIT_A {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_A {
         let sp = pos;
         pos = scan_statement(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
@@ -790,7 +790,7 @@ fn scan_statement_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_letter_a(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_B { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_B { return -1; }
     pos += 1;
     return pos;
 }
@@ -799,7 +799,7 @@ fn scan_statement(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_statement_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
-        let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+        let suffix_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
         if suffix_kind == TK_LIT_A {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
@@ -817,7 +817,7 @@ fn scan_statement(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn scan_letter_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_A { return -1; }
     pos += 1;
     return pos;
 }

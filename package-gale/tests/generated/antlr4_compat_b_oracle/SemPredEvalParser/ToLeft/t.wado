@@ -883,7 +883,7 @@ fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
     let mut pos = pos;
     pos = scan_a(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos].kind == TK_ID && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_ID && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_a(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -893,7 +893,7 @@ fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && tokens[pos].kind == TK_ID {
+    if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_ID {
         return pos + 1;
     }
     return -1;

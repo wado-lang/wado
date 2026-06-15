@@ -867,11 +867,11 @@ fn scan_start(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_animal(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind == TK_AND {
+    if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_AND {
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_AND { break sg_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_AND { break sg_0; }
                 pos += 1;
                 pos = scan_ac_class(tokens, pos, 0);
                 if pos < 0 { break sg_0; }
@@ -883,7 +883,7 @@ fn scan_start(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     }
     pos = scan_service(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
@@ -894,13 +894,13 @@ fn scan_animal(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     sg_1: {
         pos = gp_1;
         sg_1_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_DOG { break sg_1_0; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_DOG { break sg_1_0; }
             pos += 1;
             break sg_1;
         }
         pos = gp_1;
         sg_1_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_CAT { break sg_1_1; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_CAT { break sg_1_1; }
             pos += 1;
             break sg_1;
         }
@@ -915,13 +915,13 @@ fn scan_service(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     sg_2: {
         pos = gp_2;
         sg_2_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_HARDWARE { break sg_2_0; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_HARDWARE { break sg_2_0; }
             pos += 1;
             break sg_2;
         }
         pos = gp_2;
         sg_2_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_SOFTWARE { break sg_2_1; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SOFTWARE { break sg_2_1; }
             pos += 1;
             break sg_2;
         }

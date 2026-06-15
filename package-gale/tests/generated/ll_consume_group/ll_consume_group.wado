@@ -811,12 +811,12 @@ impl Parser {
 fn scan_r(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_A {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_A { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_A { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -825,21 +825,21 @@ fn scan_r(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             let mut best: i32 = -1;
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_X { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_X { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_2; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_Y { break try_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Y { break try_2; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_2; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -867,11 +867,11 @@ fn _parse_r__inner_alt_1(p: &mut Parser) -> Result<RNode, ParseError> {
 
 fn _parse_r__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_X { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_X { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
@@ -891,11 +891,11 @@ fn _parse_r__inner_alt_2(p: &mut Parser) -> Result<RNode, ParseError> {
 
 fn _parse_r__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_Y { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Y { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }

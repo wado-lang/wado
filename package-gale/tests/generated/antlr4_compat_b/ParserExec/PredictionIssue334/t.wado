@@ -907,11 +907,11 @@ fn scan_file_(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     let mut pos = pos;
     pos = scan_item(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos].kind == TK_SEMICOLON {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_SEMICOLON {
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_SEMICOLON { break sg_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SEMICOLON { break sg_0; }
                 pos += 1;
                 pos = scan_item(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0; }
@@ -922,23 +922,23 @@ fn scan_file_(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && tokens[pos].kind == TK_SEMICOLON {
+    if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_SEMICOLON {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_SEMICOLON { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SEMICOLON { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_item(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_A { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_A { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos].kind == TK_B && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_B && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_B { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_B { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
     return pos;
@@ -955,7 +955,7 @@ fn _parse_file___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             let mut pos: i32 = p.pos;
             sg_1_done: {
                 sg_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_SEMICOLON { break sg_1; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SEMICOLON { break sg_1; }
                     pos += 1;
                     pos = scan_item(tokens, pos, follow, 0);
                     if pos < 0 { break sg_1; }

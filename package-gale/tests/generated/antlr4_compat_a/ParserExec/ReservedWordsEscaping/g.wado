@@ -940,7 +940,7 @@ fn scan_root(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     let mut pos = pos;
     pos = scan_continue(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_continue(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -952,14 +952,14 @@ fn scan_root(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
 fn scan_continue_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_FOR {
             pos = start;
             try_0: {
                 pos = scan_for(tokens, pos, &follow_prepend(&FOLLOW_MASK_0, follow), 0);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos].kind == TK_FOR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_FOR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_for(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -970,18 +970,18 @@ fn scan_continue_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
         } else if alt_kind == TK_BREAK {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_BREAK { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_BREAK { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_BREAK { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_BREAK { break try_1; }
                 pos += 1;
-                while pos < tokens.len() && tokens[pos].kind == TK_BREAK {
+                while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_BREAK {
                     let sp = pos;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_BREAK { pos = -1; } else { pos += 1; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_BREAK { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
                 let gp_0 = pos;
-                let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+                let sgk_0 = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
                 if _gale_kind_set_1(sgk_0) {
                     sg_0: {
                         pos = gp_0;
@@ -992,7 +992,7 @@ fn scan_continue_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
                         }
                         pos = gp_0;
                         sg_0_1: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_IF { break sg_0_1; }
+                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_IF { break sg_0_1; }
                             pos += 1;
                             break sg_0;
                         }
@@ -1005,11 +1005,11 @@ fn scan_continue_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
         } else if alt_kind == TK_IF {
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_IF { break try_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_IF { break try_2; }
                 pos += 1;
-                while pos < tokens.len() && tokens[pos].kind == TK_IF && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_IF && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_IF { pos = -1; } else { pos += 1; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_IF { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -1025,7 +1025,7 @@ fn scan_continue_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
 
 fn scan_continue_lr_3(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_CONTINUE_ { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_CONTINUE_ { return -1; }
     pos += 1;
     return pos;
 }
@@ -1034,7 +1034,7 @@ fn scan_continue(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMP
     let mut pos = scan_continue_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
-        let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+        let suffix_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
         if suffix_kind == TK_CONTINUE_ {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
@@ -1059,7 +1059,7 @@ fn scan_args(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
 
 fn scan_for(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_FOR { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_FOR { return -1; }
     pos += 1;
     return pos;
 }
@@ -1137,7 +1137,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 rep_scan: {
                     let tokens = &p.tokens;
                     let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_BREAK { break rep_scan; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_BREAK { break rep_scan; }
                     pos += 1;
                     if pos <= p.pos { break rep_scan; }
                     rep_scan_pos = pos;
@@ -1180,7 +1180,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || tokens[pos].kind != TK_IF { break rep_scan; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_IF { break rep_scan; }
                 pos += 1;
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;

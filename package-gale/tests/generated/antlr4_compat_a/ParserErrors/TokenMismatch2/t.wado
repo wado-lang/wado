@@ -915,35 +915,35 @@ impl Parser {
 
 fn scan_stat(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && tokens[pos].kind == TK_LIT_LPAREN && pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_ID && pos + 2 < tokens.len() && tokens[pos + 2].kind == TK_LIT_RPAREN {
+    if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_LPAREN && pos + 1 < tokens.len() && tokens.get_unchecked(pos + 1).kind == TK_ID && pos + 2 < tokens.len() && tokens.get_unchecked(pos + 2).kind == TK_LIT_RPAREN {
         sol_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break sol_0; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LPAREN { break sol_0; }
             pos += 1;
             pos = scan_expr(tokens, pos, 0);
             if pos < 0 { break sol_0; }
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break sol_0; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RPAREN { break sol_0; }
             pos += 1;
         }
-    } else if pos < tokens.len() && tokens[pos].kind == TK_LIT_LPAREN && pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_LIT_RPAREN {
+    } else if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_LPAREN && pos + 1 < tokens.len() && tokens.get_unchecked(pos + 1).kind == TK_LIT_RPAREN {
         sol_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break sol_1; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LPAREN { break sol_1; }
             pos += 1;
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break sol_1; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RPAREN { break sol_1; }
             pos += 1;
         }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_expr(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_EQ { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_STR { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_STR { return -1; }
     pos += 1;
     return pos;
 }

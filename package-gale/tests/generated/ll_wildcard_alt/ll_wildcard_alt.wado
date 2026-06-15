@@ -856,13 +856,13 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         }
         pos = gp_0;
         sg_0_1: {
-            if pos >= tokens.len() || tokens[pos].kind == TK_EOF { break sg_0_1; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind == TK_EOF { break sg_0_1; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
     }
-    while pos < tokens.len() && tokens[pos].kind == TK_ID {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_ID {
         let sp = pos;
         let gp_1 = pos;
         sg_1: {
@@ -874,7 +874,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
             pos = gp_1;
             sg_1_1: {
-                if pos >= tokens.len() || tokens[pos].kind == TK_EOF { break sg_1_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind == TK_EOF { break sg_1_1; }
                 pos += 1;
                 break sg_1;
             }
@@ -883,20 +883,20 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_assign(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_EQ { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_INT { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_SEMI { return -1; }
     pos += 1;
     return pos;
 }
@@ -921,7 +921,7 @@ fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
                     }
                     pos = gp_2;
                     sg_2_1: {
-                        if pos >= tokens.len() || tokens[pos].kind == TK_EOF { break sg_2_1; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind == TK_EOF { break sg_2_1; }
                         pos += 1;
                         break sg_2;
                     }

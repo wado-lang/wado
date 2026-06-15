@@ -851,9 +851,9 @@ impl Parser {
 
 fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos].kind == TK_ID && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_ID && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_ID { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -869,7 +869,7 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos].kind != TK_ID { break rep_scan; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break rep_scan; }
             pos += 1;
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;

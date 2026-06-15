@@ -836,7 +836,7 @@ impl Parser {
 fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
-    let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let sgk_0 = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     if _gale_kind_set_0(sgk_0) {
         sg_0: {
             pos = gp_0;
@@ -854,7 +854,7 @@ fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
             pos = gp_0;
         }
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         let gp_1 = pos;
         sg_1: {
@@ -880,14 +880,14 @@ fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_A { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_b(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_B { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_B { return -1; }
     pos += 1;
     return pos;
 }
@@ -904,7 +904,7 @@ fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
                 let gp_2 = pos;
-                let sgk_2 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+                let sgk_2 = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
                 if _gale_kind_set_0(sgk_2) {
                     sg_2: {
                         pos = gp_2;

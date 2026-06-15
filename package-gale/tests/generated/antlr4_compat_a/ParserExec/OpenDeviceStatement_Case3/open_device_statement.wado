@@ -984,44 +984,44 @@ fn scan_program(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
     let mut pos = pos;
     pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos].kind == TK_LIT_OPEN {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_OPEN {
         let sp = pos;
         pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_DOT { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_OPEN { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_OPEN { return -1; }
     pos += 1;
     sg_0_done: {
         sg_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DEVICE { break sg_0; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_DEVICE { break sg_0; }
             pos += 1;
-            if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+            if pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                 let sp = pos;
                 let gp_1 = pos;
                 sg_1: {
                     pos = gp_1;
                     sg_1_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_OPT1 { break sg_1_0; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT1 { break sg_1_0; }
                         pos += 1;
                         break sg_1;
                     }
                     pos = gp_1;
                     sg_1_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_OPT2 { break sg_1_1; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT2 { break sg_1_1; }
                         pos += 1;
                         break sg_1;
                     }
                     pos = gp_1;
                     sg_1_2: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_OPT3 { break sg_1_2; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT3 { break sg_1_2; }
                         pos += 1;
                         break sg_1;
                     }
@@ -1033,31 +1033,31 @@ fn scan_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
         }
         return -1;
     }
-    while pos < tokens.len() && tokens[pos].kind == TK_LIT_DEVICE && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_DEVICE && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_2_done: {
             sg_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DEVICE { break sg_2; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_DEVICE { break sg_2; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     let gp_3 = pos;
                     sg_3: {
                         pos = gp_3;
                         sg_3_0: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_OPT1 { break sg_3_0; }
+                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT1 { break sg_3_0; }
                             pos += 1;
                             break sg_3;
                         }
                         pos = gp_3;
                         sg_3_1: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_OPT2 { break sg_3_1; }
+                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT2 { break sg_3_1; }
                             pos += 1;
                             break sg_3;
                         }
                         pos = gp_3;
                         sg_3_2: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_OPT3 { break sg_3_2; }
+                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT3 { break sg_3_2; }
                             pos += 1;
                             break sg_3;
                         }
@@ -1134,27 +1134,27 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 let mut pos: i32 = p.pos;
                 sg_4_done: {
                     sg_4: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DEVICE { break sg_4; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_DEVICE { break sg_4; }
                         pos += 1;
-                        if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                        if pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                             let sp = pos;
                             let gp_5 = pos;
                             sg_5: {
                                 pos = gp_5;
                                 sg_5_0: {
-                                    if pos >= tokens.len() || tokens[pos].kind != TK_OPT1 { break sg_5_0; }
+                                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT1 { break sg_5_0; }
                                     pos += 1;
                                     break sg_5;
                                 }
                                 pos = gp_5;
                                 sg_5_1: {
-                                    if pos >= tokens.len() || tokens[pos].kind != TK_OPT2 { break sg_5_1; }
+                                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT2 { break sg_5_1; }
                                     pos += 1;
                                     break sg_5;
                                 }
                                 pos = gp_5;
                                 sg_5_2: {
-                                    if pos >= tokens.len() || tokens[pos].kind != TK_OPT3 { break sg_5_2; }
+                                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT3 { break sg_5_2; }
                                     pos += 1;
                                     break sg_5;
                                 }
@@ -1181,19 +1181,19 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             sg_6: {
                 pos = gp_6;
                 sg_6_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_OPT1 { break sg_6_0; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT1 { break sg_6_0; }
                     pos += 1;
                     break sg_6;
                 }
                 pos = gp_6;
                 sg_6_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_OPT2 { break sg_6_1; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT2 { break sg_6_1; }
                     pos += 1;
                     break sg_6;
                 }
                 pos = gp_6;
                 sg_6_2: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_OPT3 { break sg_6_2; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_OPT3 { break sg_6_2; }
                     pos += 1;
                     break sg_6;
                 }

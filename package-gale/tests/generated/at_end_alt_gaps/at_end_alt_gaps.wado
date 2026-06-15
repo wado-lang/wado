@@ -888,13 +888,13 @@ fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_entry(tokens, pos, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) {
         let sp = pos;
         pos = scan_entry(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
@@ -902,16 +902,16 @@ fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn scan_entry(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_LPAREN {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LPAREN { break try_0; }
                 pos += 1;
                 pos = scan_typespec(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RPAREN { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -919,15 +919,15 @@ fn scan_entry(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if alt_kind == TK_LIT_NEW {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_NEW { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_NEW { break try_1; }
                 pos += 1;
                 pos = scan_typespec(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LBRACKET { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_INT { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_INT { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RBRACKET { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -942,23 +942,23 @@ fn scan_entry(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn scan_typespec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LBRACKET { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RBRACKET { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -1076,11 +1076,11 @@ fn _parse_typespec__inner_alt_1(p: &mut Parser) -> Result<TypespecNode, ParseErr
 
 fn _parse_typespec__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RBRACKET { return -1; }
     pos += 1;
     return pos;
 }
@@ -1096,7 +1096,7 @@ fn _parse_typespec__inner_alt_0(p: &mut Parser) -> Result<TypespecNode, ParseErr
 
 fn _parse_typespec__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }

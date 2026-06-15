@@ -941,14 +941,14 @@ fn scan_r(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
     if pos < 0 { return -1; }
     pos = scan_c(tokens, pos, &FOLLOW_MASK_1, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_N { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_N { return -1; }
     pos += 1;
     pos = scan_m(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -958,31 +958,31 @@ fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
 fn scan_m(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_K {
             let mut best: i32 = -1;
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_K { break try_0; }
                 pos += 1;
                 sg_0_done: {
                     sg_0: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_0; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_X { break sg_0; }
                         pos += 1;
-                        if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_0; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Y { break sg_0; }
                         pos += 1;
                         break sg_0_done;
                     }
                     break try_0;
                 }
-                while pos < tokens.len() && tokens[pos].kind == TK_X && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_X && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     sg_1_done: {
                         sg_1: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_1; }
+                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_X { break sg_1; }
                             pos += 1;
-                            if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_1; }
+                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Y { break sg_1; }
                             pos += 1;
                             break sg_1_done;
                         }
@@ -995,9 +995,9 @@ fn scan_m(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
             }
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_K { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_Z { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Z { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -1012,11 +1012,11 @@ fn scan_m(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn scan_c(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_X { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_X { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_Y { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Y { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_W { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_W { return -1; }
     pos += 1;
     return pos;
 }
@@ -1077,9 +1077,9 @@ fn _parse_m__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
                 let mut pos: i32 = p.pos;
                 sg_2_done: {
                     sg_2: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_2; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_X { break sg_2; }
                         pos += 1;
-                        if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_2; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Y { break sg_2; }
                         pos += 1;
                         break sg_2_done;
                     }
@@ -1108,25 +1108,25 @@ fn _parse_m__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_m__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_K { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_K { return -1; }
     pos += 1;
     sg_3_done: {
         sg_3: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_3; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_X { break sg_3; }
             pos += 1;
-            if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_3; }
+            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Y { break sg_3; }
             pos += 1;
             break sg_3_done;
         }
         return -1;
     }
-    while pos < tokens.len() && tokens[pos].kind == TK_X && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_X && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_4_done: {
             sg_4: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_4; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_X { break sg_4; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_4; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Y { break sg_4; }
                 pos += 1;
                 break sg_4_done;
             }
@@ -1151,9 +1151,9 @@ fn _parse_m__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_m__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_K { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_K { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_Z { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Z { return -1; }
     pos += 1;
     return pos;
 }
@@ -1175,9 +1175,9 @@ fn _parse_m__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                         let mut pos: i32 = p.pos;
                         sg_5_done: {
                             sg_5: {
-                                if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_5; }
+                                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_X { break sg_5; }
                                 pos += 1;
-                                if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_5; }
+                                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_Y { break sg_5; }
                                 pos += 1;
                                 break sg_5_done;
                             }

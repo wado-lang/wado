@@ -907,40 +907,40 @@ impl Parser {
 
 fn scan_if_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_IF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_IF { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
     let gp_0 = pos;
-    let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let sgk_0 = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     if _gale_kind_set_0(sgk_0) {
         sg_0: {
             pos = gp_0;
             sg_0_0: {
                 sg_1_done: {
                     sg_1: {
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_THEN { break sg_1; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_THEN { break sg_1; }
                         pos += 1;
-                        while pos < tokens.len() && tokens[pos].kind == TK_LIT_A {
+                        while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_A {
                             let sp = pos;
                             pos = scan_executable_statement(tokens, pos, &EMPTY_FOLLOW, 0);
                             if pos < 0 { pos = sp; break; }
                             if pos == sp { break; }
                         }
-                        while pos < tokens.len() && tokens[pos].kind == TK_LIT_ELSE {
+                        while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_ELSE {
                             let sp = pos;
                             pos = scan_else_if_statement(tokens, pos, &EMPTY_FOLLOW, 0);
                             if pos < 0 { pos = sp; break; }
                             if pos == sp { break; }
                         }
-                        if pos < tokens.len() && tokens[pos].kind == TK_LIT_A {
+                        if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_A {
                             let sp = pos;
                             pos = scan_else_statement(tokens, pos, &EMPTY_FOLLOW, 0);
                             if pos < 0 { pos = sp; }
                         }
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_END { break sg_1; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_END { break sg_1; }
                         pos += 1;
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_IF { break sg_1; }
+                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_IF { break sg_1; }
                         pos += 1;
                         break sg_1_done;
                     }
@@ -962,15 +962,15 @@ fn scan_if_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
 
 fn scan_else_if_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_ELSE { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_ELSE { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_IF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_IF { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, &FOLLOW_MASK_1, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_THEN { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_THEN { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens[pos].kind == TK_LIT_A && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_A && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_executable_statement(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -981,21 +981,21 @@ fn scan_else_if_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32
 
 fn scan_expression(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_A { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_executable_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_A { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_else_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_A { return -1; }
     pos += 1;
     return pos;
 }

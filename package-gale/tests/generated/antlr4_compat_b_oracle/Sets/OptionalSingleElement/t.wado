@@ -749,12 +749,12 @@ impl Parser {
 
 fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && tokens[pos].kind == TK_A {
+    if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_A {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_A { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_A { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_C { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_C { return -1; }
     pos += 1;
     return pos;
 }

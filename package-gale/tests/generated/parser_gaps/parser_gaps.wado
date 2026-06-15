@@ -973,13 +973,13 @@ impl Parser {
 
 fn scan_program(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) {
         let sp = pos;
         pos = scan_stmt(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
@@ -987,7 +987,7 @@ fn scan_program(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn scan_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIST {
             pos = start;
@@ -1022,17 +1022,17 @@ fn scan_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn scan_list_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIST { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIST { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ITEM { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ITEM { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
+    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_COMMA {
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_COMMA { break sg_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_ITEM { break sg_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ITEM { break sg_0; }
                 pos += 1;
                 break sg_0_done;
             }
@@ -1041,7 +1041,7 @@ fn scan_list_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
@@ -1049,16 +1049,16 @@ fn scan_list_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn scan_not_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_NOT {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_NOT { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_NOT { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind == TK_EOF || tokens[pos].kind == TK_ITEM { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind == TK_EOF || tokens.get_unchecked(pos).kind == TK_ITEM { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { break try_0; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SEMI { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1066,11 +1066,11 @@ fn scan_not_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if alt_kind == TK_SET {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_SET { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SET { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind == TK_EOF || tokens[pos].kind == TK_ITEM || tokens[pos].kind == TK_NUMBER { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind == TK_EOF || tokens.get_unchecked(pos).kind == TK_ITEM || tokens.get_unchecked(pos).kind == TK_NUMBER { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { break try_1; }
+                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SEMI { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1084,11 +1084,11 @@ fn scan_not_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn scan_any_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ANY { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ANY { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind == TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind == TK_EOF { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
@@ -1188,9 +1188,9 @@ fn _parse_list_stmt__inner(p: &mut Parser) -> Result<ListStmtNode, ParseError> {
             let mut pos: i32 = p.pos;
             sg_1_done: {
                 sg_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_1; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_COMMA { break sg_1; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_ITEM { break sg_1; }
+                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ITEM { break sg_1; }
                     pos += 1;
                     break sg_1_done;
                 }

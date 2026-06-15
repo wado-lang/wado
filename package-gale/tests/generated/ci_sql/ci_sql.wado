@@ -806,11 +806,11 @@ impl Parser {
 
 fn scan_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_IF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_IF { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_IDENT { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
