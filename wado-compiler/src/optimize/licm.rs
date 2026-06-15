@@ -180,7 +180,14 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
-        engine.run(&[&rule])
+        let licm_changed = engine.run(&[&rule]);
+        // Condition implication shares licm's session: licm hoists only
+        // loop-invariant, move-safe code, so values are preserved and the
+        // ValueGraph stays valid. cond-impl runs after licm here — the same
+        // document order as the standalone passes — so it still sees the hoisted
+        // body, reusing licm's build instead of rebuilding its own.
+        let cond_changed = super::condition_implication::eliminate_at_root(&mut engine);
+        licm_changed || cond_changed
     })
 }
 

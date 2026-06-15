@@ -90,7 +90,6 @@ mod tmpl_hoist;
 mod value_copy_demote;
 mod value_copy_elide;
 
-use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::{fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
@@ -642,7 +641,6 @@ fn run_optimization_passes(
         // post-globalization `const_fold_post_global` keep their own engine
         // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
         gated!("nir/licm", apply_licm);
-        gated!("nir/condition_implication", eliminate_implied_conditions);
         gated!("nir/tmpl_hoist", hoist_template_buffers);
         profiler.span_end(&format!("nir/iteration {}", i + 1));
         if trace_loop {

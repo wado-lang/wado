@@ -32,85 +32,10 @@
 //! every later query (no node is re-queried after being rewritten and no new
 //! nodes are allocated).
 
-use std::cell::Cell;
-
-use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
-use crate::nir_package::NirPackage;
+use crate::nir_engine::Engine;
 use crate::nir_value_graph::{ValueId, ValueKind};
-
-use cranelift_entity::EntityRef;
-
-use super::gate::{FunctionGate, GatedPass};
-
-pub fn eliminate_implied_conditions(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let type_table = project.type_table.borrow();
-    let first_param_types = super::alias::first_param_types(project);
-    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated_cached(GatedPass::ConditionImplication, len, |fid, cached| {
-        let mut func = project.functions[fid.index()].borrow_mut();
-        if func.body.is_none() {
-            return (false, None);
-        }
-        let rule = ConditionImplicationRule {
-            applied: Cell::new(false),
-        };
-        let NirFunction {
-            body,
-            locals,
-            address_taken_locals,
-            stores_aliased_locals,
-            ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
-        let mut engine = if let Some(cached) = cached {
-            Engine::with_analysis(body, &mut buffers, locals, &type_table, cached)
-        } else {
-            let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
-                body,
-                locals,
-                address_taken_locals,
-                stores_aliased_locals,
-                &type_table,
-                &first_param_types,
-                &call_immutability,
-            );
-            let mut engine = Engine::new(body, &mut buffers, locals);
-            engine.set_alias_sets(aliased, untrackable, mut_escaped);
-            engine.set_value_graph_type_table(&type_table);
-            engine
-        };
-        let changed = engine.run(&[&rule]);
-        let parked = if changed {
-            None
-        } else {
-            engine.into_analysis()
-        };
-        (changed, parked)
-    })
-}
-
-/// Standalone-session rule whose single `apply_block` performs the whole-
-/// function condition-implication walk at the body root.
-pub(super) struct ConditionImplicationRule {
-    applied: Cell<bool>,
-}
-
-impl Rule for ConditionImplicationRule {
-    fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
-        if engine.parent_of(NodeRef::Block(block)).is_some() {
-            return false;
-        }
-        if self.applied.replace(true) {
-            return false;
-        }
-        let root = engine.body.root;
-        process_block(engine, root)
-    }
-}
 
 /// A guard fact: `var + max_offset < bound`, with the variable and bound
 /// captured as `ValueGraph` identities at the guard's program point.
@@ -392,6 +317,15 @@ fn is_bitmask_bounded(engine: &mut Engine, condition: ExprId) -> bool {
         return false;
     };
     mask >= 0 && bound > mask
+}
+
+/// Run condition implication at the body root on an existing engine session.
+/// The combined `licm` session reuses its (value-preserving) ValueGraph, so
+/// cond-impl needs no separate build; it runs after licm in document order, so
+/// it still sees the hoisted body.
+pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
+    let root = engine.body.root;
+    process_block(engine, root)
 }
 
 fn process_block(engine: &mut Engine, block: BlockId) -> bool {

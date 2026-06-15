@@ -66,7 +66,6 @@ pub enum GatedPass {
     Sroa,
     Cse,
     Licm,
-    ConditionImplication,
     TmplHoist,
     ContainerSroa,
     Inline,
@@ -77,7 +76,7 @@ pub enum GatedPass {
 }
 
 impl GatedPass {
-    const COUNT: usize = 14;
+    const COUNT: usize = 13;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.
@@ -154,10 +153,10 @@ pub struct FunctionGate {
     /// is unchanged since the park (`revision` matches); `revision` bumps on the
     /// function's own change *and* any neighbour change, which over-covers the
     /// analysis's real dependency (body + callee immutability), so a reuse is
-    /// never stale. Shared only among the identically-configured value-graph
-    /// passes `cse` / `store_load_forward` / `condition_implication` (no
-    /// `param_locals` seeding); `licm` seeds loop-entry params differently and
-    /// has no within-iteration sharing partner, so it stays uncached.
+    /// never stale. Used by the `cse` pass, which runs `store_load_forward` in
+    /// the same session (no `param_locals` seeding). `licm` seeds loop-entry
+    /// params and runs `condition_implication` in its own session; it uses
+    /// `run_gated` (uncached) since it has no cross-pass sharing partner.
     vg_cache: Vec<Option<(u64, CachedAnalysis)>>,
 }
 
@@ -330,7 +329,6 @@ mod tests {
             GatedPass::Sroa,
             GatedPass::Cse,
             GatedPass::Licm,
-            GatedPass::ConditionImplication,
             GatedPass::TmplHoist,
             GatedPass::ContainerSroa,
             GatedPass::Inline,
@@ -347,7 +345,6 @@ mod tests {
                 | GatedPass::Sroa
                 | GatedPass::Cse
                 | GatedPass::Licm
-                | GatedPass::ConditionImplication
                 | GatedPass::TmplHoist
                 | GatedPass::ContainerSroa
                 | GatedPass::Inline
