@@ -1169,13 +1169,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|n| format!("`{n}`"))
                         .collect::<Vec<_>>()
                         .join(", ");
-                    let _ = self.logger.error(TypeError::CannotInferType {
-                        message: format!(
-                            "cannot infer type parameter {params} of method `{method_name}`; \
-                             add a turbofish (`{method_name}::<...>()`) or a type annotation"
-                        ),
-                        span,
-                    });
+                    let message = format!(
+                        "cannot infer type parameter {params} of method `{method_name}`; \
+                         add a turbofish (`{method_name}::<...>()`) or a type annotation"
+                    );
+
+                    // Defer instead of erroring when no expected type is in
+                    // hand yet and the receiver/args are hole-free (so this
+                    // call's recorded mangled name stays hole-free): mint an
+                    // inference hole for each unresolved parameter and let the
+                    // holey result flow up to a later expected-type boundary
+                    // (e.g. `p.get().unwrap()` solves `get`'s `T` at `unwrap`).
+                    // An unsolved hole raises `message` in
+                    // `finalize_infer_holes`, so genuinely uninferable calls
+                    // still report the same diagnostic.
+                    let can_defer = expected_return_type.is_none()
+                        && !self.type_has_infer_hole(receiver_type)
+                        && args.iter().all(|a| !self.type_has_infer_hole(a.type_id));
+                    if can_defer {
+                        let slots: Vec<usize> = method_type_params
+                            .iter()
+                            .zip(inferred.iter())
+                            .enumerate()
+                            .filter(|&(_, (param, &tid))| {
+                                let has_fn_bound =
+                                    param.bounds.iter().any(|b| b.fn_signature.is_some());
+                                !has_fn_bound
+                                    && matches!(
+                                        self.tysys.type_table.borrow().get(tid),
+                                        ResolvedType::TypeParam { .. }
+                                            | ResolvedType::TypePack { .. }
+                                    )
+                                    && !scope_params.contains(&tid)
+                            })
+                            .map(|(i, _)| i)
+                            .collect();
+                        for i in slots {
+                            inferred[i] = self.mint_infer_hole(span, message.clone());
+                        }
+                        return inferred;
+                    }
+
+                    let _ = self
+                        .logger
+                        .error(TypeError::CannotInferType { message, span });
                 }
                 return vec![];
             }

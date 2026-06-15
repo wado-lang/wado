@@ -117,8 +117,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
-        // Get the base (non-ref) type for method lookup and struct name extraction
-        let base_type_id = self.tysys.get_base_type(receiver.type_id);
+        // Get the base (non-ref) type for method lookup and struct name extraction.
+        // `mut` because deferred-inference may concretise the receiver below
+        // (after an inference hole flowing in from a generic receiver call is
+        // solved against this call's expected type).
+        let mut base_type_id = self.tysys.get_base_type(receiver.type_id);
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
@@ -658,6 +661,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !subst_ctx.is_empty() {
             return_type =
                 subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
+        }
+
+        // Deferred-inference solve point. When the receiver was an uninferred
+        // generic call (e.g. `p.get()` in `p.get().unwrap()`), an inference
+        // hole reached this call's receiver/return type. With this call's
+        // expected type now in hand, solve the hole and concretise the
+        // receiver/return *before* the mangling + recording below, which embed
+        // the receiver type in mangled names a later TypeId sweep could not
+        // fix. The deferred inner call's own facts carry the hole only in
+        // TypeId fields (its name is hole-free) and are concretised by the
+        // module-end sweep.
+        if let Some(expected) = expected_type
+            && (self.type_has_infer_hole(return_type) || self.type_has_infer_hole(receiver.type_id))
+        {
+            self.solve_infer_holes_against(return_type, expected);
+            receiver.type_id = self.apply_infer_holes(receiver.type_id);
+            return_type = self.apply_infer_holes(return_type);
+            base_type_id = self.tysys.get_base_type(receiver.type_id);
+        }
+
+        // If an inference hole still rides the receiver, this call's mangled
+        // name (computed below from the receiver type) would embed it. A later
+        // `TypeId` sweep cannot rewrite a name string, so taint the hole: it
+        // must resolve to a clean "cannot infer" error rather than risk a stale
+        // mangled name reaching codegen. This makes deep chains whose
+        // intermediate calls don't pin the parameter (e.g.
+        // `gen().filter(..).unwrap()`) a clean error instead of a miscompile;
+        // the single-level chain (`gen().unwrap()`) is solved above first.
+        if self.type_has_infer_hole(receiver.type_id) {
+            let receiver_ty = receiver.type_id;
+            self.taint_infer_holes_in(receiver_ty);
         }
 
         // Re-coerce literal-number args and typecheck each arg against the substituted

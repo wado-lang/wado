@@ -1,0 +1,263 @@
+//! Deferred type-argument inference via inference holes.
+//!
+//! When a generic call's type parameter appears only in its return type and
+//! the call site has no expected type yet (e.g. the receiver position of
+//! `p.get().unwrap()`), the parameter cannot be inferred at the call. Instead
+//! of erroring immediately, the elaborator mints an *inference hole* — a
+//! reserved-index `TypeParam` standing in for the unknown — and lets the
+//! holey type flow up the expression tree. When the hole later meets a
+//! concrete expected type (the enclosing `.unwrap()`'s `i32` annotation), it
+//! is solved. At the end of the module walk, solved holes are substituted
+//! into every recorded fact; an unsolved hole raises a clean "cannot infer"
+//! error and is pinned to `error` so nothing leaks to a later phase.
+//!
+//! Holes are `TypeParam`s with `index >= HOLE_INDEX_BASE`, so they reuse the
+//! existing substitution / unification machinery and never collide with real
+//! type parameters. A call is deferred only when its receiver and arguments
+//! are hole-free, which guarantees the mangled names recorded for it carry no
+//! hole — so a plain `TypeId` substitution sweep fully concretises every
+//! recorded fact without any name re-mangling.
+
+use crate::compiler_host::CompilerHost;
+use crate::hashmap::IndexMap;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::token::Span;
+
+use super::Elaborator;
+use super::infer::unify;
+use super::types::TypeError;
+
+/// Reserved start of the inference-hole `TypeParam` index space. Real type
+/// parameters are indexed densely from 0, far below this, so the two never
+/// overlap.
+pub(super) const HOLE_INDEX_BASE: u32 = 0x8000_0000;
+
+/// Per-module registry of inference holes and their (eventual) solutions.
+#[derive(Default)]
+pub(crate) struct InferHoleTable {
+    /// Monotonic counter for fresh hole indices (added to [`HOLE_INDEX_BASE`]).
+    next: u32,
+    /// Hole `TypeId` → solution (`None` until solved).
+    solutions: IndexMap<TypeId, Option<TypeId>>,
+    /// Hole `TypeId` → diagnostic raised if it is never solved.
+    diags: IndexMap<TypeId, (Span, String)>,
+    /// Holes that reached a recorded *mangled name* (e.g. a method call on a
+    /// still-holey receiver). A name is a string a later `TypeId` sweep cannot
+    /// rewrite, so a tainted hole must resolve to a clean "cannot infer" error
+    /// even if a sibling use later solved it — otherwise a stale mangled name
+    /// could reach codegen.
+    tainted: crate::hashmap::IndexSet<TypeId>,
+}
+
+impl InferHoleTable {
+    pub(super) fn is_empty(&self) -> bool {
+        self.solutions.is_empty()
+    }
+}
+
+impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Mint a fresh inference hole, remembering the diagnostic to raise if it
+    /// is never solved (mirrors the immediate "cannot infer" error so the
+    /// user-facing message is unchanged, only deferred).
+    pub(super) fn mint_infer_hole(&mut self, span: Span, message: String) -> TypeId {
+        let index = HOLE_INDEX_BASE + self.infer_holes.next;
+        self.infer_holes.next += 1;
+        let name = format!("?{index}");
+        let hole = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_type_param(name, index);
+        self.infer_holes.solutions.insert(hole, None);
+        self.infer_holes.diags.insert(hole, (span, message));
+        hole
+    }
+
+    /// Whether `ty` contains any inference hole.
+    pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
+        if self.infer_holes.is_empty() {
+            return false;
+        }
+        self.tysys
+            .type_table
+            .borrow()
+            .contains_infer_hole(ty, HOLE_INDEX_BASE)
+    }
+
+    /// Solve holes appearing in `holey` by unifying it against the concrete
+    /// `expected`, recording each newly discovered binding. A binding is only
+    /// taken when it is itself hole-free (a hole must resolve to a concrete
+    /// type, never to another hole).
+    pub(super) fn solve_infer_holes_against(&mut self, holey: TypeId, expected: TypeId) {
+        if !self.type_has_infer_hole(holey) {
+            return;
+        }
+        let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
+        unify(&self.tysys.type_table, holey, expected, &mut bindings);
+        if bindings.is_empty() {
+            return;
+        }
+        let tt = self.tysys.type_table.borrow();
+        for (hole, concrete) in bindings {
+            if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole)
+                && !tt.contains_infer_hole(concrete, HOLE_INDEX_BASE)
+            {
+                *slot = Some(concrete);
+            }
+        }
+    }
+
+    /// Mark every inference hole appearing in `ty` as tainted: it reached a
+    /// recorded mangled name and must error rather than be silently swept.
+    pub(super) fn taint_infer_holes_in(&mut self, ty: TypeId) {
+        if !self.type_has_infer_hole(ty) {
+            return;
+        }
+        let holes: Vec<TypeId> = {
+            let tt = self.tysys.type_table.borrow();
+            self.infer_holes
+                .solutions
+                .keys()
+                .copied()
+                .filter(|&hole| tt.contains_type_id(ty, hole))
+                .collect()
+        };
+        for hole in holes {
+            self.infer_holes.tainted.insert(hole);
+        }
+    }
+
+    /// Substitute already-solved holes into `ty` for in-flight concretisation
+    /// (used before a recording site that embeds a mangled name derived from
+    /// the type, where a later sweep could not fix the string).
+    pub(super) fn apply_infer_holes(&mut self, ty: TypeId) -> TypeId {
+        if !self.type_has_infer_hole(ty) {
+            return ty;
+        }
+        let subst = self.solved_hole_subst(false);
+        if subst.is_empty() {
+            return ty;
+        }
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(ty, &subst)
+    }
+
+    /// Build the `hole-index → replacement` map. With `pin_unsolved`, unsolved
+    /// holes map to `error` (used at finalize so nothing leaks); otherwise only
+    /// solved holes are included.
+    fn solved_hole_subst(&self, pin_unsolved: bool) -> IndexMap<u32, TypeId> {
+        let tt = self.tysys.type_table.borrow();
+        self.infer_holes
+            .solutions
+            .iter()
+            .filter_map(|(hole, sol)| {
+                let index = match tt.get(*hole) {
+                    ResolvedType::TypeParam { index, .. } => *index,
+                    _ => return None,
+                };
+                // A tainted hole is treated as unsolved: its solution (if any)
+                // is unsafe because a mangled name already embedded the hole.
+                let effective = if self.infer_holes.tainted.contains(hole) {
+                    None
+                } else {
+                    *sol
+                };
+                match effective {
+                    Some(concrete) => Some((index, concrete)),
+                    None if pin_unsolved => Some((index, TypeTable::ERROR)),
+                    None => None,
+                }
+            })
+            .collect()
+    }
+
+    /// End-of-module finalize: raise diagnostics for unsolved holes and
+    /// substitute every hole (solved → concrete, unsolved → `error`) into all
+    /// recorded facts that can carry one.
+    pub(super) fn finalize_infer_holes(&mut self) {
+        if self.infer_holes.is_empty() {
+            return;
+        }
+        let diags = std::mem::take(&mut self.infer_holes.diags);
+        let mut seen: std::collections::HashSet<(Span, String)> = std::collections::HashSet::new();
+        for (hole, (span, message)) in diags {
+            let unsolved = self.infer_holes.tainted.contains(&hole)
+                || self
+                    .infer_holes
+                    .solutions
+                    .get(&hole)
+                    .is_some_and(Option::is_none);
+            // Several holes minted for one call share a message; emit it once.
+            if unsolved && seen.insert((span, message.clone())) {
+                let _ = self
+                    .logger
+                    .error(TypeError::CannotInferType { message, span });
+            }
+        }
+        let subst = self.solved_hole_subst(true);
+        self.sweep_recorded_facts(&subst);
+        self.infer_holes = InferHoleTable::default();
+    }
+
+    /// Substitute holes through every recorded fact map that can carry a
+    /// `TypeId`. Because deferral only fires for hole-free receivers/args and
+    /// enclosing calls are concretised before they record, no recorded
+    /// *mangled name* embeds a hole — a `TypeId` substitution alone suffices.
+    fn sweep_recorded_facts(&mut self, subst: &IndexMap<u32, TypeId>) {
+        if subst.is_empty() {
+            return;
+        }
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let types = &mut self.sem.types;
+
+        let sub = |tt: &mut TypeTable, t: TypeId| tt.substitute_type_params(t, subst);
+        let sub_vec = |tt: &mut TypeTable, v: &mut Vec<TypeId>| {
+            for t in v.iter_mut() {
+                *t = tt.substitute_type_params(*t, subst);
+            }
+        };
+
+        for t in types.expression_types.values_mut() {
+            *t = sub(&mut tt, *t);
+        }
+        for t in types.local_types.values_mut() {
+            *t = sub(&mut tt, *t);
+        }
+        for t in types.let_annotated_types.values_mut() {
+            *t = sub(&mut tt, *t);
+        }
+        for t in types.fn_return_types.values_mut() {
+            *t = sub(&mut tt, *t);
+        }
+        for v in types.call_param_types.values_mut() {
+            sub_vec(&mut tt, v);
+        }
+        for v in types.fn_param_types.values_mut() {
+            sub_vec(&mut tt, v);
+        }
+        for v in types.struct_field_types.values_mut() {
+            sub_vec(&mut tt, v);
+        }
+        for gi in types.generic_instantiations.values_mut() {
+            sub_vec(&mut tt, &mut gi.type_args);
+            gi.instance_type = sub(&mut tt, gi.instance_type);
+        }
+        for md in types.method_dispatch.values_mut() {
+            md.return_type = sub(&mut tt, md.return_type);
+            sub_vec(&mut tt, &mut md.method_type_args);
+            if let Some(mi) = md.function_ref.monomorph_info.as_mut() {
+                sub_vec(&mut tt, &mut mi.impl_type_args);
+                sub_vec(&mut tt, &mut mi.method_type_args);
+            }
+        }
+        for sd in types.static_method_dispatch.values_mut() {
+            sub_vec(&mut tt, &mut sd.type_args);
+            if let Some(mi) = sd.function_ref.monomorph_info.as_mut() {
+                sub_vec(&mut tt, &mut mi.impl_type_args);
+                sub_vec(&mut tt, &mut mi.method_type_args);
+            }
+        }
+    }
+}

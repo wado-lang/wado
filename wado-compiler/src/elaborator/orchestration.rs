@@ -1372,6 +1372,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // body walk captures here, so they are always recorded.
                 capture_tuple_overlays: true,
                 suppress_reference_recording: false,
+                infer_holes: super::infer_hole::InferHoleTable::default(),
             };
 
             // Set file context so diagnostics emitted during resolution

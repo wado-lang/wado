@@ -2054,6 +2054,62 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` (recursively) contains an inference-hole `TypeParam` —
+    /// one whose `index` is at or above `base`. Inference holes are minted
+    /// with reserved high indices (see `elaborator::infer_hole`) so they
+    /// never collide with real type parameters and are distinguishable here.
+    pub fn contains_infer_hole(&self, id: TypeId, base: u32) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                *index >= base
+            }
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_infer_hole(*inner, base),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|p| self.contains_infer_hole(*p, base))
+                    || self.contains_infer_hole(*return_type, base)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().any(|t| self.contains_infer_hole(*t, base))
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether `id` (recursively) contains the exact type `target`. Used to
+    /// find which inference holes ride a given type.
+    pub fn contains_type_id(&self, id: TypeId, target: TypeId) -> bool {
+        if id == target {
+            return true;
+        }
+        match self.get(id) {
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_type_id(*inner, target),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|p| self.contains_type_id(*p, target))
+                    || self.contains_type_id(*return_type, target)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().any(|t| self.contains_type_id(*t, target))
+            }
+            _ => false,
+        }
+    }
+
     /// Get a human-readable name for a type
     pub fn type_name(&self, id: TypeId) -> String {
         match self.get(id) {

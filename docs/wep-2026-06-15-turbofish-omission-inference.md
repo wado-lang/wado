@@ -24,6 +24,7 @@ available.
 - [x] partial turbofish (explicit prefix, inferred tail)
 - [x] associated-type-bound-driven inference
 - [x] backward inference through the `?` operator (this WEP, below)
+- [x] method-chain receiver — `let x: i32 = p.get().unwrap();` (this WEP, below)
 
 ### Remaining gaps
 
@@ -31,15 +32,21 @@ Each is the same shape: an inner generic call whose type parameter appears
 _only_ in its return type is resolved with no expected type, so it cannot be
 inferred and demands a turbofish.
 
-- [ ] method-chain receiver — `let x: i32 = p.get().unwrap();`
-      (`p.get(): Option<T>`, `T` uninferable)
 - [ ] `match` scrutinee — `match none_of() { Some(x) => x, None => 0 }`
-- [ ] binary-op operand — `make() + 1`
-- [ ] `as`-cast operand — `def() as Meters`
+      (needs arm-body → scrutinee constraints, not just an expected type)
+- [ ] binary-op operand — `make() + 1` (needs sibling-operand unification)
+- [ ] deep method chains whose _intermediate_ call does not pin the parameter —
+      `gen().filter(..).unwrap()` — currently a clean "cannot infer" error
+      (see the taint rule below), not yet inferred
 
-`collect()` into a non-`List` (e.g. `TreeMap`) looks similar but is a separate
-concern: `collect` is hard-typed to `List<Self::Item>`, so it is a missing
-generic-`collect` / `FromIterator` feature, not an inference gap.
+Two look similar but are out of scope:
+
+- `def() as Meters` — Rust does not infer an operand's type _through_ an `as`
+  cast either (the source type must be known independently), so erroring here
+  is Rust-compatible, not a gap.
+- `collect()` into a non-`List` (e.g. `TreeMap`) — `collect` is hard-typed to
+  `List<Self::Item>`, a missing generic-`collect` / `FromIterator` feature, not
+  an inference gap.
 
 ## Decision
 
@@ -54,46 +61,65 @@ so the wrapper is reconstructible without knowing anything method-specific.
 
 Fixture: `tests/fixtures/infer_type_arg_through_question_mark.wado`.
 
-### Deferred: the other backward-flow gaps
+### Shipped: deferred inference via inference holes
 
-The method-chain / `match` / binary-op / `as`-cast gaps cannot reuse the `?`
-trick, because there the relationship between the inner result and the outer
-expected type is not fixed:
+The method-chain case (`let x: i32 = p.get().unwrap()`) cannot reuse the `?`
+trick: the relationship between `get`'s result and the LHS `i32` runs through
+`.unwrap()`, whose effect on types is only known once the receiver type is —
+exactly what we are inferring. Re-resolving the receiver to break the cycle is
+unsafe (the eager, single-pass elaborator allocates locals in walk order for
+parity with `reify`; a second walk shifts that order). The fix is a small
+deferred-inference layer (`elaborator::infer_hole`), built so that the recorded
+facts a later phase consumes never embed an unknown.
 
-- The outer operator (`.unwrap()`, an arm body, `+`, `as`) determines the
-  inner expected type, but identifying that operator's effect on types
-  requires the inner type — which is exactly what we are trying to infer.
-  Resolving the inner expression first to break the cycle then needs a second,
-  expected-aware pass.
-- Re-resolving the inner expression is unsafe: the elaborator is eager and
-  single-pass, and `annotate` allocates locals in walk order for parity with
-  `reify`. A second walk shifts that order.
-- The premature "cannot infer" diagnostic is emitted _during_ the inner
-  resolution, so even a post-hoc patch of the recorded type arguments would
-  still surface the error.
+The pieces:
 
-A sound fix is therefore a deferred-constraint layer, not a local patch:
+1. Inference hole. A hole is a `TypeParam` minted with a reserved high index
+   (`HOLE_INDEX_BASE`), so it reuses the existing unification / substitution
+   machinery and never collides with a real type parameter. `reify` reads
+   recorded facts rather than re-inferring, so concretising those facts after
+   the fact is enough.
+2. Deferral. When a generic _method_ call's type parameter stays unbound and no
+   expected type is in hand — and the receiver/args are hole-free —
+   `infer_method_type_args` mints a hole instead of erroring and lets the holey
+   type flow up. The hole-free-receiver guard guarantees the call's recorded
+   _mangled name_ carries no hole, so its facts are fixable by a `TypeId`
+   substitution alone.
+3. Solve before record. At an enclosing call with an expected type
+   (`.unwrap()`'s `i32`), `resolve_method_call_with` unifies the holey return
+   against the expected, then concretises the receiver/return _before_ the
+   mangling + recording below — which embed the receiver type in name strings a
+   later sweep could not fix.
+4. Taint guard. If a hole still rides the receiver when a call records (its
+   intermediate did not pin the parameter, e.g. `gen().filter(..).unwrap()`, or
+   a holey binding is reused), the hole is _tainted_: it resolves to a clean
+   "cannot infer" error rather than risk a stale mangled name reaching codegen.
+5. Module-end finalize. `finalize_infer_holes` raises "cannot infer" for every
+   unsolved / tainted hole (same message as the immediate diagnostic, only
+   deferred) and substitutes all holes (solved → concrete, otherwise → `error`)
+   through every recorded fact map that can carry a `TypeId`.
 
-1. Resolve the inner generic call to a _partial_ type carrying an inference
-   variable for the unbound parameter, and record the unbound parameter as a
-   pending obligation instead of erroring immediately.
-2. Let the enclosing expression (method call, match, binary op, cast) add a
-   constraint relating the inner result to the now-known expected type.
-3. Solve pending obligations at a well-defined point; emit "cannot infer" only
-   for obligations still unsolved.
+Fixture: `tests/fixtures/infer_type_arg_through_method_chain.wado`.
 
-This is a meaningful change to the elaborator's resolution model and is tracked
-here rather than attempted piecemeal — a compiler miscompilation is P0, so the
-backward-flow cases wait for the deferred layer rather than ad-hoc per-operator
-back-propagation.
+### Deferred: match scrutinee and binary-op operand
+
+`match none_of() { … }` and `make() + 1` still demand a turbofish or an
+intermediate annotated `let`. Unlike the method-chain case, their constraint
+does not come from a single enclosing expected type: the `match` scrutinee's
+parameter is pinned by how the arm-bound variable is _used_ in the arm bodies,
+and the binary-op operand by unification with its sibling. Both need a richer
+constraint source than the current solve points and are left for a follow-up
+that builds on the same hole infrastructure.
 
 ## Consequences
 
-- The most common real-world omission, `let v: T = call()?`, works today.
-- The method-chain case (`.unwrap()` / `.expect()` after a generic call) and the
-  `match` / binary-op / `as` cases still require a turbofish or an intermediate
-  annotated `let`; both are documented workarounds until the deferred layer
-  lands.
+- The most common real-world omissions work today: `let v: T = call()?` and a
+  single-level method chain `let v: T = call().unwrap()` (and `.expect(..)`,
+  including a call result passed directly as a typed argument).
+- The `match` scrutinee and binary-op operand cases still require a turbofish or
+  an intermediate annotated `let`, as do deep chains whose intermediate call
+  does not pin the parameter; these are documented workarounds until the
+  follow-up extends the hole infrastructure to those constraint sources.
 - Stdlib turbofishes such as `seq.next_element::<Value>()?` are _not_ removable
   by the `?` fix: they bind to a `let` with no annotation, so the turbofish is
   the only place the element type is named. They remain correct as written.

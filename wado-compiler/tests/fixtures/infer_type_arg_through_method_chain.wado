@@ -1,0 +1,58 @@
+// Deferred type inference through a method chain. When a generic call's type
+// parameter appears only in its return type and the call sits in receiver
+// position (no expected type yet), the parameter is inferred from an enclosing
+// call's expected type — `let x: i32 = p.get().unwrap()` infers `get`'s `T`
+// from the `i32` annotation, just like Rust.
+//
+// The elaborator mints an inference hole for `get`'s `T`, lets `Option<hole>`
+// flow into `.unwrap()`, and solves the hole against the LHS `i32` before the
+// chain's facts are finalized (see `elaborator::infer_hole`).
+
+trait Producer {
+    fn make() -> Self;
+}
+impl Producer for i32 {
+    fn make() -> i32 { return 7; }
+}
+impl Producer for String {
+    fn make() -> String { return "hi"; }
+}
+
+struct Source {}
+impl Source {
+    // `T` appears only in the Ok/Some payload — nothing at the call constrains
+    // it, so it must be inferred from a later expected type.
+    fn opt<T: Producer>(&self) -> Option<T> {
+        return Option::Some(T::make());
+    }
+    fn res<T: Producer>(&self) -> Result<T, String> {
+        return Result::Ok(T::make());
+    }
+}
+
+fn take_i32(n: i32) -> i32 {
+    return n;
+}
+
+test "unwrap chain infers the receiver call's type param from the LHS" {
+    let s = Source {};
+    let n: i32 = s.opt().unwrap();
+    assert n == 7;
+    let t: String = s.opt().unwrap();
+    assert t == "hi";
+}
+
+test "expect chain infers, and result-returning receiver too" {
+    let s = Source {};
+    let n: i32 = s.res().expect("value");
+    assert n == 7;
+}
+
+test "argument position drives the chain's expected type" {
+    let s = Source {};
+    // `take_i32`'s parameter type pins `unwrap`'s result, hence `opt`'s `T`.
+    assert take_i32(s.opt().unwrap()) == 7;
+}
+
+__DATA__
+{"test": {}}
