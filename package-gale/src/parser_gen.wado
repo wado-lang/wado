@@ -1875,11 +1875,7 @@ fn gen_rule_entry_wrapper(
     // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
     // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
-    let call = if takes_min_prec {
-        `{*inner_name}(p{fsep}, min_prec)`
-    } else {
-        `{*inner_name}(p{fsep})`
-    };
+    let call = if takes_min_prec { `{*inner_name}(p{fsep}, min_prec)` } else { `{*inner_name}(p{fsep})` };
     if !trace {
         // Compact form: shared `_gale_rule` tail; ATN stack still wraps the call.
         if needs_atn {

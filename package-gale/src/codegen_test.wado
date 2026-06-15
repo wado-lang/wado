@@ -932,7 +932,10 @@ b : 'y' ;
     // closure, select error), so each `parse_<rule>` is a one-line forward.
     assert str_contains(&output, &"return _gale_run(input, |p: &mut Parser| _parse_a(p));");
     assert str_contains(&output, &"return _gale_run(input, |p: &mut Parser| _parse_b(p));");
-    assert str_contains(&output, &"fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError>");
+    assert str_contains(
+        &output,
+        &"fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError>",
+    );
     assert str_contains(&output, &"let mut parser = _gale_new_parser(input);");
     assert str_contains(&output, &"_gale_pick_error(&parser, _e)");
     assert str_contains(&output, &"fn _gale_new_parser(input: &String) -> Parser");

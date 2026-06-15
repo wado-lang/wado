@@ -1842,12 +1842,7 @@ fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<
     }
 }
 
-fn gen_group_calls(
-    w: &mut CodeWriter,
-    calls: &List<TryCall>,
-    indices: &List<i32>,
-    needs_extras: bool,
-) {
+fn gen_group_calls(w: &mut CodeWriter, calls: &List<TryCall>, indices: &List<i32>, needs_extras: bool) {
     // Uniform `try_*` call per candidate (keep the longest match). Single-char
     // literals are not hand-inlined — the wado compiler folds the tiny bodies.
     for let call_idx of indices {
