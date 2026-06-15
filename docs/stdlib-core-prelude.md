@@ -2473,19 +2473,13 @@ Current indentation level for pretty-printing (used by InspectAlt)
 
 Reference to the output buffer
 
-<<<<<<< HEAD
 #### `pub fn resolved_seq_limit(&self) -> i32`
 
 The element/char cap a sequence Inspect should apply: the explicit
 precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
 (`PRECISION_INFINITE`) means uncapped.
 
-#### `pub fn new(buf: &mut String) -> Formatter`
-||||||| f2c7859f7
-#### `pub fn new(buf: &mut String) -> Formatter`
-=======
 #### `pub fn new(buf: &mut String) -> Formatter with stores[buf]`
->>>>>>> origin/main
 
 Create a Formatter with the default spec, writing into the given buffer.
 
@@ -3800,6 +3794,16 @@ Returns the first element, or None if empty.
 #### `pub fn last(&self) -> Option<T>`
 
 #### `pub fn get(&self, index: i32) -> Option<T>`
+
+#### `pub fn get_unchecked(&self, index: i32) -> T`
+
+Element at `index` without the `[]` operator's power-assert bounds check.
+The backing Wasm `array.get` still traps on out-of-bounds (no memory
+unsafety), it just skips building the rich diagnostic — so the caller
+must have already established `0 <= index < len()`. Use only on a proven
+hot path where the assert's cold diagnostic would bloat the stack frame
+(e.g. a generated recursive-descent parser's token lookahead); prefer
+`[]` or `get` everywhere else.
 
 #### `pub fn insert(&mut self, index: i32, value: T) with stores[value]`
 
