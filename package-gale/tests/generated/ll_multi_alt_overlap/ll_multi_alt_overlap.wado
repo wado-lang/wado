@@ -686,13 +686,13 @@ fn try_Y(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
+    if !(chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { break rep_0; }
+            if !(chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -996,12 +996,7 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_r(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RNode, ParseError> {
-    let r = _parse_r__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("r");
-        return Result::<RNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_r__inner(p, follow), "r");
 }
 
 fn _parse_a__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
@@ -1088,12 +1083,7 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
-    let r = _parse_a__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("a");
-        return Result::<ANode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_a__inner(p, follow), "a");
 }
 
 fn _parse_b__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BNode, ParseError> {
@@ -1106,12 +1096,24 @@ fn _parse_b__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_b(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BNode, ParseError> {
-    let r = _parse_b__inner(p, follow);
+    return _gale_rule(_parse_b__inner(p, follow), "b");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("b");
-        return Result::<BNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -1130,30 +1132,15 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_r(input: &String) -> Result<RNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_r(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_r(p));
 }
 
 pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_a(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ANode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_a(p));
 }
 
 pub fn parse_b(input: &String) -> Result<BNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_b(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<BNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_b(p));
 }
 
 pub fn parse(input: &String) -> Result<RNode, ParseError> {

@@ -644,13 +644,13 @@ impl Lexer {
 fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z') { return -1; }
+    if !('a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z') { break rep_0; }
+            if !('a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -663,13 +663,13 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 fn try_INT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || '0' <= chars[pos] <= '9') { return -1; }
+    if !('0' <= chars[pos] <= '9') { return -1; }
     pos += 1;
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if !(false || '0' <= chars[pos] <= '9') { break rep_1; }
+            if !('0' <= chars[pos] <= '9') { break rep_1; }
             pos += 1;
             continue;
         }
@@ -697,13 +697,13 @@ fn try_NEWLINE(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\t') { return -1; }
+    if !(chars[pos] == ' ' || chars[pos] == '\t') { return -1; }
     pos += 1;
     loop {
         let rep_saved_3 = pos;
         rep_3: {
             if pos >= chars.len() { break rep_3; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\t') { break rep_3; }
+            if !(chars[pos] == ' ' || chars[pos] == '\t') { break rep_3; }
             pos += 1;
             continue;
         }
@@ -766,60 +766,46 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == '\t' || first_char == ' ' {
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char == '\n' || first_char == '\r' {
+            end = try_NEWLINE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
         } else if first_char == '(' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LPAREN; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
+            end = try_lit_lparen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
         } else if first_char == ')' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RPAREN; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
+            end = try_lit_rparen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
         } else if first_char == '*' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_STAR; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
+            end = try_lit_star(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
         } else if first_char == '+' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PLUS; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
+            end = try_lit_plus(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
         } else if first_char == '-' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_MINUS; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
+            end = try_lit_minus(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
         } else if first_char == '/' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SLASH; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
+            end = try_lit_slash(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
         } else if first_char == '=' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_EQ; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
+            end = try_lit_eq(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
         } else if 'a' <= first_char <= 'z' {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
         } else if 'A' <= first_char <= 'Z' {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
         } else if '0' <= first_char <= '9' {
             end = try_INT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_INT; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
         } else {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
             end = try_INT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_INT; }
-            end = try_NEWLINE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
@@ -1178,12 +1164,7 @@ fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
 }
 
 fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
-    let r = _parse_prog__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("prog");
-        return Result::<ProgNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_prog__inner(p), "prog");
 }
 
 fn _parse_stat__inner_alt_1(p: &mut Parser) -> Result<StatNode, ParseError> {
@@ -1279,12 +1260,7 @@ fn _parse_stat__inner(p: &mut Parser) -> Result<StatNode, ParseError> {
 }
 
 fn _parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
-    let r = _parse_stat__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("stat");
-        return Result::<StatNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_stat__inner(p), "stat");
 }
 
 fn _parse_expr__inner_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
@@ -1375,12 +1351,24 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, Par
 }
 
 fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
-    let r = _parse_expr__inner(p, min_prec);
+    return _gale_rule(_parse_expr__inner(p, min_prec), "expr");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("expr");
-        return Result::<ExprNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -1399,30 +1387,15 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_prog(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ProgNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_prog(p));
 }
 
 pub fn parse_stat(input: &String) -> Result<StatNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_stat(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<StatNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_stat(p));
 }
 
 pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_expr(&mut parser, 0);
-    if let Err(_e) = _result {
-        return Result::<ExprNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_expr(p));
 }
 
 pub fn parse(input: &String) -> Result<ProgNode, ParseError> {

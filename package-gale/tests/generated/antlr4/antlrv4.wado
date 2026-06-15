@@ -1773,7 +1773,7 @@ fn try_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
         let rep_saved_4 = pos;
         rep_4: {
             if pos >= chars.len() { break rep_4; }
-            if false || chars[pos] == '\r' || chars[pos] == '\n' { break rep_4; }
+            if chars[pos] == '\r' || chars[pos] == '\n' { break rep_4; }
             pos += 1;
             continue;
         }
@@ -1797,13 +1797,13 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
         alts_5_1: {
             pos = alts_saved_5;
             if pos >= chars.len() { break alts_5_1; }
-            if !(false || '1' <= chars[pos] <= '9') { break alts_5_1; }
+            if !('1' <= chars[pos] <= '9') { break alts_5_1; }
             pos += 1;
             loop {
                 let rep_saved_6 = pos;
                 rep_6: {
                     if pos >= chars.len() { break rep_6; }
-                    if !(false || '0' <= chars[pos] <= '9') { break rep_6; }
+                    if !('0' <= chars[pos] <= '9') { break rep_6; }
                     pos += 1;
                     continue;
                 }
@@ -1835,7 +1835,7 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                 alts_9_0: {
                     pos = alts_saved_9;
                     if pos >= chars.len() { break alts_9_0; }
-                    if !(false || chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_9_0; }
+                    if !(chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_9_0; }
                     pos += 1;
                     alts_ok_9 = true;
                 }
@@ -1848,25 +1848,25 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                         let mut opt_ok_10 = false;
                         rep_10: {
                             if pos >= chars.len() { break rep_10; }
-                            if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_10; }
+                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_10; }
                             pos += 1;
                             let opt_saved_11 = pos;
                             let mut opt_ok_11 = false;
                             rep_11: {
                                 if pos >= chars.len() { break rep_11; }
-                                if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_11; }
+                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_11; }
                                 pos += 1;
                                 let opt_saved_12 = pos;
                                 let mut opt_ok_12 = false;
                                 rep_12: {
                                     if pos >= chars.len() { break rep_12; }
-                                    if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_12; }
+                                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_12; }
                                     pos += 1;
                                     let opt_saved_13 = pos;
                                     let mut opt_ok_13 = false;
                                     rep_13: {
                                         if pos >= chars.len() { break rep_13; }
-                                        if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_13; }
+                                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_13; }
                                         pos += 1;
                                         opt_ok_13 = true;
                                     }
@@ -1905,7 +1905,7 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                 alts_8_1: {
                     pos = alts_saved_8;
                     if pos >= chars.len() { break alts_8_1; }
-                    if false || chars[pos] == '\'' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\\' { break alts_8_1; }
+                    if chars[pos] == '\'' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\\' { break alts_8_1; }
                     pos += 1;
                     alts_ok_8 = true;
                 }
@@ -1939,7 +1939,7 @@ fn try_UNTERMINATED_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                 alts_16_0: {
                     pos = alts_saved_16;
                     if pos >= chars.len() { break alts_16_0; }
-                    if !(false || chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_16_0; }
+                    if !(chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_16_0; }
                     pos += 1;
                     alts_ok_16 = true;
                 }
@@ -1952,25 +1952,25 @@ fn try_UNTERMINATED_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                         let mut opt_ok_17 = false;
                         rep_17: {
                             if pos >= chars.len() { break rep_17; }
-                            if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_17; }
+                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_17; }
                             pos += 1;
                             let opt_saved_18 = pos;
                             let mut opt_ok_18 = false;
                             rep_18: {
                                 if pos >= chars.len() { break rep_18; }
-                                if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_18; }
+                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_18; }
                                 pos += 1;
                                 let opt_saved_19 = pos;
                                 let mut opt_ok_19 = false;
                                 rep_19: {
                                     if pos >= chars.len() { break rep_19; }
-                                    if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_19; }
+                                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_19; }
                                     pos += 1;
                                     let opt_saved_20 = pos;
                                     let mut opt_ok_20 = false;
                                     rep_20: {
                                         if pos >= chars.len() { break rep_20; }
-                                        if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_20; }
+                                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_20; }
                                         pos += 1;
                                         opt_ok_20 = true;
                                     }
@@ -2009,7 +2009,7 @@ fn try_UNTERMINATED_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                 alts_15_1: {
                     pos = alts_saved_15;
                     if pos >= chars.len() { break alts_15_1; }
-                    if false || chars[pos] == '\'' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\\' { break alts_15_1; }
+                    if chars[pos] == '\'' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\\' { break alts_15_1; }
                     pos += 1;
                     alts_ok_15 = true;
                 }
@@ -2096,7 +2096,7 @@ fn try_NESTED_ACTION(chars: &List<char>, start: i32) -> i32 {
                             alts_25_0: {
                                 pos = alts_saved_25;
                                 if pos >= chars.len() { break alts_25_0; }
-                                if !(false || chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_25_0; }
+                                if !(chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_25_0; }
                                 pos += 1;
                                 alts_ok_25 = true;
                             }
@@ -2109,25 +2109,25 @@ fn try_NESTED_ACTION(chars: &List<char>, start: i32) -> i32 {
                                     let mut opt_ok_26 = false;
                                     rep_26: {
                                         if pos >= chars.len() { break rep_26; }
-                                        if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_26; }
+                                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_26; }
                                         pos += 1;
                                         let opt_saved_27 = pos;
                                         let mut opt_ok_27 = false;
                                         rep_27: {
                                             if pos >= chars.len() { break rep_27; }
-                                            if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_27; }
+                                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_27; }
                                             pos += 1;
                                             let opt_saved_28 = pos;
                                             let mut opt_ok_28 = false;
                                             rep_28: {
                                                 if pos >= chars.len() { break rep_28; }
-                                                if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_28; }
+                                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_28; }
                                                 pos += 1;
                                                 let opt_saved_29 = pos;
                                                 let mut opt_ok_29 = false;
                                                 rep_29: {
                                                     if pos >= chars.len() { break rep_29; }
-                                                    if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_29; }
+                                                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_29; }
                                                     pos += 1;
                                                     opt_ok_29 = true;
                                                 }
@@ -2166,7 +2166,7 @@ fn try_NESTED_ACTION(chars: &List<char>, start: i32) -> i32 {
                             alts_24_1: {
                                 pos = alts_saved_24;
                                 if pos >= chars.len() { break alts_24_1; }
-                                if false || chars[pos] == '"' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\\' { break alts_24_1; }
+                                if chars[pos] == '"' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\\' { break alts_24_1; }
                                 pos += 1;
                                 alts_ok_24 = true;
                             }
@@ -2211,7 +2211,7 @@ fn try_NESTED_ACTION(chars: &List<char>, start: i32) -> i32 {
                                 alts_32_0: {
                                     pos = alts_saved_32;
                                     if pos >= chars.len() { break alts_32_0; }
-                                    if !(false || chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_32_0; }
+                                    if !(chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_32_0; }
                                     pos += 1;
                                     alts_ok_32 = true;
                                 }
@@ -2224,25 +2224,25 @@ fn try_NESTED_ACTION(chars: &List<char>, start: i32) -> i32 {
                                         let mut opt_ok_33 = false;
                                         rep_33: {
                                             if pos >= chars.len() { break rep_33; }
-                                            if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_33; }
+                                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_33; }
                                             pos += 1;
                                             let opt_saved_34 = pos;
                                             let mut opt_ok_34 = false;
                                             rep_34: {
                                                 if pos >= chars.len() { break rep_34; }
-                                                if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_34; }
+                                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_34; }
                                                 pos += 1;
                                                 let opt_saved_35 = pos;
                                                 let mut opt_ok_35 = false;
                                                 rep_35: {
                                                     if pos >= chars.len() { break rep_35; }
-                                                    if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_35; }
+                                                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_35; }
                                                     pos += 1;
                                                     let opt_saved_36 = pos;
                                                     let mut opt_ok_36 = false;
                                                     rep_36: {
                                                         if pos >= chars.len() { break rep_36; }
-                                                        if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_36; }
+                                                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_36; }
                                                         pos += 1;
                                                         opt_ok_36 = true;
                                                     }
@@ -2317,7 +2317,7 @@ fn try_NESTED_ACTION(chars: &List<char>, start: i32) -> i32 {
                                     alts_39_0: {
                                         pos = alts_saved_39;
                                         if pos >= chars.len() { break alts_39_0; }
-                                        if !(false || chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_39_0; }
+                                        if !(chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_39_0; }
                                         pos += 1;
                                         alts_ok_39 = true;
                                     }
@@ -2330,25 +2330,25 @@ fn try_NESTED_ACTION(chars: &List<char>, start: i32) -> i32 {
                                             let mut opt_ok_40 = false;
                                             rep_40: {
                                                 if pos >= chars.len() { break rep_40; }
-                                                if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_40; }
+                                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_40; }
                                                 pos += 1;
                                                 let opt_saved_41 = pos;
                                                 let mut opt_ok_41 = false;
                                                 rep_41: {
                                                     if pos >= chars.len() { break rep_41; }
-                                                    if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_41; }
+                                                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_41; }
                                                     pos += 1;
                                                     let opt_saved_42 = pos;
                                                     let mut opt_ok_42 = false;
                                                     rep_42: {
                                                         if pos >= chars.len() { break rep_42; }
-                                                        if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_42; }
+                                                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_42; }
                                                         pos += 1;
                                                         let opt_saved_43 = pos;
                                                         let mut opt_ok_43 = false;
                                                         rep_43: {
                                                             if pos >= chars.len() { break rep_43; }
-                                                            if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_43; }
+                                                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_43; }
                                                             pos += 1;
                                                             opt_ok_43 = true;
                                                         }
@@ -2387,7 +2387,7 @@ fn try_NESTED_ACTION(chars: &List<char>, start: i32) -> i32 {
                                     alts_38_1: {
                                         pos = alts_saved_38;
                                         if pos >= chars.len() { break alts_38_1; }
-                                        if false || chars[pos] == '"' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\\' { break alts_38_1; }
+                                        if chars[pos] == '"' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\\' { break alts_38_1; }
                                         pos += 1;
                                         alts_ok_38 = true;
                                     }
@@ -2433,7 +2433,7 @@ fn try_NESTED_ACTION(chars: &List<char>, start: i32) -> i32 {
                                         let rep_saved_45 = pos;
                                         rep_45: {
                                             if pos >= chars.len() { break rep_45; }
-                                            if false || chars[pos] == '\r' || chars[pos] == '\n' { break rep_45; }
+                                            if chars[pos] == '\r' || chars[pos] == '\n' { break rep_45; }
                                             pos += 1;
                                             continue;
                                         }
@@ -3295,13 +3295,13 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{c}') { return -1; }
+    if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{c}') { return -1; }
     pos += 1;
     loop {
         let rep_saved_55 = pos;
         rep_55: {
             if pos >= chars.len() { break rep_55; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{c}') { break rep_55; }
+            if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{c}') { break rep_55; }
             pos += 1;
             continue;
         }
@@ -3354,7 +3354,7 @@ fn try_ARGUMENT_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
             alts_58_0: {
                 pos = alts_saved_58;
                 if pos >= chars.len() { break alts_58_0; }
-                if !(false || chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_58_0; }
+                if !(chars[pos] == 'b' || chars[pos] == 't' || chars[pos] == 'n' || chars[pos] == 'f' || chars[pos] == 'r' || chars[pos] == '"' || chars[pos] == '\'' || chars[pos] == '\\') { break alts_58_0; }
                 pos += 1;
                 alts_ok_58 = true;
             }
@@ -3367,25 +3367,25 @@ fn try_ARGUMENT_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
                     let mut opt_ok_59 = false;
                     rep_59: {
                         if pos >= chars.len() { break rep_59; }
-                        if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_59; }
+                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_59; }
                         pos += 1;
                         let opt_saved_60 = pos;
                         let mut opt_ok_60 = false;
                         rep_60: {
                             if pos >= chars.len() { break rep_60; }
-                            if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_60; }
+                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_60; }
                             pos += 1;
                             let opt_saved_61 = pos;
                             let mut opt_ok_61 = false;
                             rep_61: {
                                 if pos >= chars.len() { break rep_61; }
-                                if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_61; }
+                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_61; }
                                 pos += 1;
                                 let opt_saved_62 = pos;
                                 let mut opt_ok_62 = false;
                                 rep_62: {
                                     if pos >= chars.len() { break rep_62; }
-                                    if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_62; }
+                                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_62; }
                                     pos += 1;
                                     opt_ok_62 = true;
                                 }
@@ -3424,7 +3424,7 @@ fn try_ARGUMENT_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
             alts_57_1: {
                 pos = alts_saved_57;
                 if pos >= chars.len() { break alts_57_1; }
-                if false || chars[pos] == '"' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\\' { break alts_57_1; }
+                if chars[pos] == '"' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\\' { break alts_57_1; }
                 pos += 1;
                 alts_ok_57 = true;
             }
@@ -3468,7 +3468,7 @@ fn try_LEXER_CHAR_SET_BODY(chars: &List<char>, start: i32) -> i32 {
     alts_64_0: {
         pos = alts_saved_64;
         if pos >= chars.len() { break alts_64_0; }
-        if false || chars[pos] == ']' || chars[pos] == '\\' { break alts_64_0; }
+        if chars[pos] == ']' || chars[pos] == '\\' { break alts_64_0; }
         pos += 1;
         alts_ok_64 = true;
     }
@@ -3491,7 +3491,7 @@ fn try_LEXER_CHAR_SET_BODY(chars: &List<char>, start: i32) -> i32 {
             alts_65_0: {
                 pos = alts_saved_65;
                 if pos >= chars.len() { break alts_65_0; }
-                if false || chars[pos] == ']' || chars[pos] == '\\' { break alts_65_0; }
+                if chars[pos] == ']' || chars[pos] == '\\' { break alts_65_0; }
                 pos += 1;
                 alts_ok_65 = true;
             }
@@ -5767,12 +5767,7 @@ fn _parse_grammar_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_grammar_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<GrammarSpecNode, ParseError> {
-    let r = _parse_grammar_spec__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("grammarSpec");
-        return Result::<GrammarSpecNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_grammar_spec__inner(p, follow), "grammarSpec");
 }
 
 fn _parse_grammar_decl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<GrammarDeclNode, ParseError> {
@@ -5789,12 +5784,7 @@ fn _parse_grammar_decl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_grammar_decl(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<GrammarDeclNode, ParseError> {
-    let r = _parse_grammar_decl__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("grammarDecl");
-        return Result::<GrammarDeclNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_grammar_decl__inner(p, follow), "grammarDecl");
 }
 
 fn _parse_grammar_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<GrammarTypeNode, ParseError> {
@@ -5833,12 +5823,7 @@ fn _parse_grammar_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_grammar_type(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<GrammarTypeNode, ParseError> {
-    let r = _parse_grammar_type__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("grammarType");
-        return Result::<GrammarTypeNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_grammar_type__inner(p, follow), "grammarType");
 }
 
 fn _parse_prequel_construct__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PrequelConstructNode, ParseError> {
@@ -5887,12 +5872,7 @@ fn _parse_prequel_construct__inner(p: &mut Parser, follow: &List<List<i32>> = &E
 }
 
 fn _parse_prequel_construct(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PrequelConstructNode, ParseError> {
-    let r = _parse_prequel_construct__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("prequelConstruct");
-        return Result::<PrequelConstructNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_prequel_construct__inner(p, follow), "prequelConstruct");
 }
 
 fn _parse_options_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<OptionsSpecNode, ParseError> {
@@ -5936,12 +5916,7 @@ fn _parse_options_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_options_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<OptionsSpecNode, ParseError> {
-    let r = _parse_options_spec__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("optionsSpec");
-        return Result::<OptionsSpecNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_options_spec__inner(p, follow), "optionsSpec");
 }
 
 fn _parse_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<OptionNode, ParseError> {
@@ -5958,12 +5933,7 @@ fn _parse_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_option(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<OptionNode, ParseError> {
-    let r = _parse_option__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("option");
-        return Result::<OptionNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_option__inner(p, follow), "option");
 }
 
 fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<OptionValueNode, ParseError> {
@@ -6035,12 +6005,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_option_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<OptionValueNode, ParseError> {
-    let r = _parse_option_value__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("optionValue");
-        return Result::<OptionValueNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_option_value__inner(p, follow), "optionValue");
 }
 
 fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarsNode, ParseError> {
@@ -6086,12 +6051,7 @@ fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &E
 }
 
 fn _parse_delegate_grammars(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarsNode, ParseError> {
-    let r = _parse_delegate_grammars__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("delegateGrammars");
-        return Result::<DelegateGrammarsNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_delegate_grammars__inner(p, follow), "delegateGrammars");
 }
 
 fn _parse_delegate_grammar__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarNode, ParseError> {
@@ -6170,12 +6130,7 @@ fn _parse_delegate_grammar__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
 }
 
 fn _parse_delegate_grammar(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarNode, ParseError> {
-    let r = _parse_delegate_grammar__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("delegateGrammar");
-        return Result::<DelegateGrammarNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_delegate_grammar__inner(p, follow), "delegateGrammar");
 }
 
 fn _parse_tokens_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TokensSpecNode, ParseError> {
@@ -6197,12 +6152,7 @@ fn _parse_tokens_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_tokens_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TokensSpecNode, ParseError> {
-    let r = _parse_tokens_spec__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("tokensSpec");
-        return Result::<TokensSpecNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_tokens_spec__inner(p, follow), "tokensSpec");
 }
 
 fn _parse_channels_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ChannelsSpecNode, ParseError> {
@@ -6224,12 +6174,7 @@ fn _parse_channels_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 }
 
 fn _parse_channels_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ChannelsSpecNode, ParseError> {
-    let r = _parse_channels_spec__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("channelsSpec");
-        return Result::<ChannelsSpecNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_channels_spec__inner(p, follow), "channelsSpec");
 }
 
 fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<IdListNode, ParseError> {
@@ -6281,12 +6226,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_id_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<IdListNode, ParseError> {
-    let r = _parse_id_list__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("idList");
-        return Result::<IdListNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_id_list__inner(p, follow), "idList");
 }
 
 fn _parse_action___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ActionNode, ParseError> {
@@ -6325,12 +6265,7 @@ fn _parse_action___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_action_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ActionNode, ParseError> {
-    let r = _parse_action___inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("action_");
-        return Result::<ActionNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_action___inner(p, follow), "action_");
 }
 
 fn _parse_action_scope_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ActionScopeNameNode, ParseError> {
@@ -6365,12 +6300,7 @@ fn _parse_action_scope_name__inner(p: &mut Parser, follow: &List<List<i32>> = &E
 }
 
 fn _parse_action_scope_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ActionScopeNameNode, ParseError> {
-    let r = _parse_action_scope_name__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("actionScopeName");
-        return Result::<ActionScopeNameNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_action_scope_name__inner(p, follow), "actionScopeName");
 }
 
 fn _parse_action_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ActionBlockNode, ParseError> {
@@ -6383,12 +6313,7 @@ fn _parse_action_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_action_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ActionBlockNode, ParseError> {
-    let r = _parse_action_block__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("actionBlock");
-        return Result::<ActionBlockNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_action_block__inner(p, follow), "actionBlock");
 }
 
 fn _parse_arg_action_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ArgActionBlockNode, ParseError> {
@@ -6409,12 +6334,7 @@ fn _parse_arg_action_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
 }
 
 fn _parse_arg_action_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ArgActionBlockNode, ParseError> {
-    let r = _parse_arg_action_block__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("argActionBlock");
-        return Result::<ArgActionBlockNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_arg_action_block__inner(p, follow), "argActionBlock");
 }
 
 fn _parse_mode_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ModeSpecNode, ParseError> {
@@ -6455,12 +6375,7 @@ fn _parse_mode_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_mode_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ModeSpecNode, ParseError> {
-    let r = _parse_mode_spec__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("modeSpec");
-        return Result::<ModeSpecNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_mode_spec__inner(p, follow), "modeSpec");
 }
 
 fn _parse_rules__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RulesNode, ParseError> {
@@ -6495,12 +6410,7 @@ fn _parse_rules__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_rules(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RulesNode, ParseError> {
-    let r = _parse_rules__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("rules");
-        return Result::<RulesNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_rules__inner(p, follow), "rules");
 }
 
 fn _parse_rule_spec__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleSpecNode, ParseError> {
@@ -6559,12 +6469,7 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_rule_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleSpecNode, ParseError> {
-    let r = _parse_rule_spec__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("ruleSpec");
-        return Result::<RuleSpecNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_rule_spec__inner(p, follow), "ruleSpec");
 }
 
 fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ParserRuleSpecNode, ParseError> {
@@ -6643,12 +6548,7 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
 }
 
 fn _parse_parser_rule_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ParserRuleSpecNode, ParseError> {
-    let r = _parse_parser_rule_spec__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("parserRuleSpec");
-        return Result::<ParserRuleSpecNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_parser_rule_spec__inner(p, follow), "parserRuleSpec");
 }
 
 fn _parse_exception_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExceptionGroupNode, ParseError> {
@@ -6692,12 +6592,7 @@ fn _parse_exception_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
 }
 
 fn _parse_exception_group(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExceptionGroupNode, ParseError> {
-    let r = _parse_exception_group__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("exceptionGroup");
-        return Result::<ExceptionGroupNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_exception_group__inner(p, follow), "exceptionGroup");
 }
 
 fn _parse_exception_handler__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExceptionHandlerNode, ParseError> {
@@ -6714,12 +6609,7 @@ fn _parse_exception_handler__inner(p: &mut Parser, follow: &List<List<i32>> = &E
 }
 
 fn _parse_exception_handler(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExceptionHandlerNode, ParseError> {
-    let r = _parse_exception_handler__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("exceptionHandler");
-        return Result::<ExceptionHandlerNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_exception_handler__inner(p, follow), "exceptionHandler");
 }
 
 fn _parse_finally_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FinallyClauseNode, ParseError> {
@@ -6734,12 +6624,7 @@ fn _parse_finally_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_finally_clause(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FinallyClauseNode, ParseError> {
-    let r = _parse_finally_clause__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("finallyClause");
-        return Result::<FinallyClauseNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_finally_clause__inner(p, follow), "finallyClause");
 }
 
 fn _parse_rule_prequel__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RulePrequelNode, ParseError> {
@@ -6767,12 +6652,7 @@ fn _parse_rule_prequel__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_rule_prequel(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RulePrequelNode, ParseError> {
-    let r = _parse_rule_prequel__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("rulePrequel");
-        return Result::<RulePrequelNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_rule_prequel__inner(p, follow), "rulePrequel");
 }
 
 fn _parse_rule_returns__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleReturnsNode, ParseError> {
@@ -6787,12 +6667,7 @@ fn _parse_rule_returns__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_rule_returns(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleReturnsNode, ParseError> {
-    let r = _parse_rule_returns__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("ruleReturns");
-        return Result::<RuleReturnsNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_rule_returns__inner(p, follow), "ruleReturns");
 }
 
 fn _parse_throws_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ThrowsSpecNode, ParseError> {
@@ -6837,12 +6712,7 @@ fn _parse_throws_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_throws_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ThrowsSpecNode, ParseError> {
-    let r = _parse_throws_spec__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("throwsSpec");
-        return Result::<ThrowsSpecNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_throws_spec__inner(p, follow), "throwsSpec");
 }
 
 fn _parse_locals_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LocalsSpecNode, ParseError> {
@@ -6857,12 +6727,7 @@ fn _parse_locals_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_locals_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LocalsSpecNode, ParseError> {
-    let r = _parse_locals_spec__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("localsSpec");
-        return Result::<LocalsSpecNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_locals_spec__inner(p, follow), "localsSpec");
 }
 
 fn _parse_rule_action__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleActionNode, ParseError> {
@@ -6879,12 +6744,7 @@ fn _parse_rule_action__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_rule_action(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleActionNode, ParseError> {
-    let r = _parse_rule_action__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("ruleAction");
-        return Result::<RuleActionNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_rule_action__inner(p, follow), "ruleAction");
 }
 
 fn _parse_rule_modifiers__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleModifiersNode, ParseError> {
@@ -6923,12 +6783,7 @@ fn _parse_rule_modifiers__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_rule_modifiers(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleModifiersNode, ParseError> {
-    let r = _parse_rule_modifiers__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("ruleModifiers");
-        return Result::<RuleModifiersNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_rule_modifiers__inner(p, follow), "ruleModifiers");
 }
 
 fn _parse_rule_modifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleModifierNode, ParseError> {
@@ -6949,12 +6804,7 @@ fn _parse_rule_modifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 }
 
 fn _parse_rule_modifier(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleModifierNode, ParseError> {
-    let r = _parse_rule_modifier__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("ruleModifier");
-        return Result::<RuleModifierNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_rule_modifier__inner(p, follow), "ruleModifier");
 }
 
 fn _parse_rule_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleBlockNode, ParseError> {
@@ -6967,12 +6817,7 @@ fn _parse_rule_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_rule_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleBlockNode, ParseError> {
-    let r = _parse_rule_block__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("ruleBlock");
-        return Result::<RuleBlockNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_rule_block__inner(p, follow), "ruleBlock");
 }
 
 fn _parse_rule_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleAltListNode, ParseError> {
@@ -7015,12 +6860,7 @@ fn _parse_rule_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 }
 
 fn _parse_rule_alt_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleAltListNode, ParseError> {
-    let r = _parse_rule_alt_list__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("ruleAltList");
-        return Result::<RuleAltListNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_rule_alt_list__inner(p, follow), "ruleAltList");
 }
 
 fn _parse_labeled_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LabeledAltNode, ParseError> {
@@ -7045,12 +6885,7 @@ fn _parse_labeled_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_labeled_alt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LabeledAltNode, ParseError> {
-    let r = _parse_labeled_alt__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("labeledAlt");
-        return Result::<LabeledAltNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_labeled_alt__inner(p, follow), "labeledAlt");
 }
 
 fn _parse_lexer_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerRuleSpecNode, ParseError> {
@@ -7083,12 +6918,7 @@ fn _parse_lexer_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
 }
 
 fn _parse_lexer_rule_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerRuleSpecNode, ParseError> {
-    let r = _parse_lexer_rule_spec__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerRuleSpec");
-        return Result::<LexerRuleSpecNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_rule_spec__inner(p, follow), "lexerRuleSpec");
 }
 
 fn _parse_lexer_rule_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerRuleBlockNode, ParseError> {
@@ -7101,12 +6931,7 @@ fn _parse_lexer_rule_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
 }
 
 fn _parse_lexer_rule_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerRuleBlockNode, ParseError> {
-    let r = _parse_lexer_rule_block__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerRuleBlock");
-        return Result::<LexerRuleBlockNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_rule_block__inner(p, follow), "lexerRuleBlock");
 }
 
 fn _parse_lexer_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerAltListNode, ParseError> {
@@ -7149,12 +6974,7 @@ fn _parse_lexer_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_lexer_alt_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerAltListNode, ParseError> {
-    let r = _parse_lexer_alt_list__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerAltList");
-        return Result::<LexerAltListNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_alt_list__inner(p, follow), "lexerAltList");
 }
 
 fn _parse_lexer_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerAltNode, ParseError> {
@@ -7189,12 +7009,7 @@ fn _parse_lexer_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_lexer_alt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerAltNode, ParseError> {
-    let r = _parse_lexer_alt__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerAlt");
-        return Result::<LexerAltNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_alt__inner(p, follow), "lexerAlt");
 }
 
 fn _parse_lexer_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerElementsNode, ParseError> {
@@ -7246,12 +7061,7 @@ fn _parse_lexer_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_lexer_elements(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerElementsNode, ParseError> {
-    let r = _parse_lexer_elements__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerElements");
-        return Result::<LexerElementsNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_elements__inner(p, follow), "lexerElements");
 }
 
 fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerElementNode, ParseError> {
@@ -7313,12 +7123,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 }
 
 fn _parse_lexer_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerElementNode, ParseError> {
-    let r = _parse_lexer_element__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerElement");
-        return Result::<LexerElementNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_element__inner(p, follow), "lexerElement");
 }
 
 fn _parse_lexer_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerBlockNode, ParseError> {
@@ -7335,12 +7140,7 @@ fn _parse_lexer_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_lexer_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerBlockNode, ParseError> {
-    let r = _parse_lexer_block__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerBlock");
-        return Result::<LexerBlockNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_block__inner(p, follow), "lexerBlock");
 }
 
 fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandsNode, ParseError> {
@@ -7385,12 +7185,7 @@ fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_lexer_commands(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandsNode, ParseError> {
-    let r = _parse_lexer_commands__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerCommands");
-        return Result::<LexerCommandsNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_commands__inner(p, follow), "lexerCommands");
 }
 
 fn _parse_lexer_command__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandNode, ParseError> {
@@ -7473,12 +7268,7 @@ fn _parse_lexer_command__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 }
 
 fn _parse_lexer_command(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandNode, ParseError> {
-    let r = _parse_lexer_command__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerCommand");
-        return Result::<LexerCommandNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_command__inner(p, follow), "lexerCommand");
 }
 
 fn _parse_lexer_command_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandNameNode, ParseError> {
@@ -7506,12 +7296,7 @@ fn _parse_lexer_command_name__inner(p: &mut Parser, follow: &List<List<i32>> = &
 }
 
 fn _parse_lexer_command_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandNameNode, ParseError> {
-    let r = _parse_lexer_command_name__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerCommandName");
-        return Result::<LexerCommandNameNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_command_name__inner(p, follow), "lexerCommandName");
 }
 
 fn _parse_lexer_command_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandExprNode, ParseError> {
@@ -7539,12 +7324,7 @@ fn _parse_lexer_command_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &
 }
 
 fn _parse_lexer_command_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandExprNode, ParseError> {
-    let r = _parse_lexer_command_expr__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerCommandExpr");
-        return Result::<LexerCommandExprNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_command_expr__inner(p, follow), "lexerCommandExpr");
 }
 
 fn _parse_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AltListNode, ParseError> {
@@ -7587,12 +7367,7 @@ fn _parse_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_alt_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AltListNode, ParseError> {
-    let r = _parse_alt_list__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("altList");
-        return Result::<AltListNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_alt_list__inner(p, follow), "altList");
 }
 
 fn _parse_alternative__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AlternativeNode, ParseError> {
@@ -7651,12 +7426,7 @@ fn _parse_alternative__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_alternative(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AlternativeNode, ParseError> {
-    let r = _parse_alternative__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("alternative");
-        return Result::<AlternativeNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_alternative__inner(p, follow), "alternative");
 }
 
 fn _parse_element__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementNode, ParseError> {
@@ -7793,12 +7563,7 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementNode, ParseError> {
-    let r = _parse_element__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("element");
-        return Result::<ElementNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_element__inner(p, follow), "element");
 }
 
 fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionsNode, ParseError> {
@@ -7844,12 +7609,7 @@ fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &E
 }
 
 fn _parse_predicate_options(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionsNode, ParseError> {
-    let r = _parse_predicate_options__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("predicateOptions");
-        return Result::<PredicateOptionsNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_predicate_options__inner(p, follow), "predicateOptions");
 }
 
 fn _parse_predicate_option__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionNode, ParseError> {
@@ -7969,12 +7729,7 @@ fn _parse_predicate_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
 }
 
 fn _parse_predicate_option(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionNode, ParseError> {
-    let r = _parse_predicate_option__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("predicateOption");
-        return Result::<PredicateOptionNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_predicate_option__inner(p, follow), "predicateOption");
 }
 
 fn _parse_labeled_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LabeledElementNode, ParseError> {
@@ -8000,12 +7755,7 @@ fn _parse_labeled_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
 }
 
 fn _parse_labeled_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LabeledElementNode, ParseError> {
-    let r = _parse_labeled_element__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("labeledElement");
-        return Result::<LabeledElementNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_labeled_element__inner(p, follow), "labeledElement");
 }
 
 fn _parse_ebnf__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<EbnfNode, ParseError> {
@@ -8027,12 +7777,7 @@ fn _parse_ebnf__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_ebnf(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<EbnfNode, ParseError> {
-    let r = _parse_ebnf__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("ebnf");
-        return Result::<EbnfNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_ebnf__inner(p, follow), "ebnf");
 }
 
 fn _parse_block_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BlockSuffixNode, ParseError> {
@@ -8045,12 +7790,7 @@ fn _parse_block_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_block_suffix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BlockSuffixNode, ParseError> {
-    let r = _parse_block_suffix__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("blockSuffix");
-        return Result::<BlockSuffixNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_block_suffix__inner(p, follow), "blockSuffix");
 }
 
 fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<EbnfSuffixNode, ParseError> {
@@ -8112,12 +7852,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_ebnf_suffix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<EbnfSuffixNode, ParseError> {
-    let r = _parse_ebnf_suffix__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("ebnfSuffix");
-        return Result::<EbnfSuffixNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_ebnf_suffix__inner(p, follow), "ebnfSuffix");
 }
 
 fn _parse_lexer_atom__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerAtomNode, ParseError> {
@@ -8195,12 +7930,7 @@ fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_lexer_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerAtomNode, ParseError> {
-    let r = _parse_lexer_atom__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("lexerAtom");
-        return Result::<LexerAtomNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_lexer_atom__inner(p, follow), "lexerAtom");
 }
 
 fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AtomNode, ParseError> {
@@ -8242,12 +7972,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AtomNode, ParseError> {
-    let r = _parse_atom__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("atom");
-        return Result::<AtomNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_atom__inner(p, follow), "atom");
 }
 
 fn _parse_wildcard__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<WildcardNode, ParseError> {
@@ -8269,12 +7994,7 @@ fn _parse_wildcard__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_wildcard(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<WildcardNode, ParseError> {
-    let r = _parse_wildcard__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("wildcard");
-        return Result::<WildcardNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_wildcard__inner(p, follow), "wildcard");
 }
 
 fn _parse_not_set__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<NotSetNode, ParseError> {
@@ -8346,12 +8066,7 @@ fn _parse_not_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_not_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<NotSetNode, ParseError> {
-    let r = _parse_not_set__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("notSet");
-        return Result::<NotSetNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_not_set__inner(p, follow), "notSet");
 }
 
 fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BlockSetNode, ParseError> {
@@ -8397,12 +8112,7 @@ fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_block_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BlockSetNode, ParseError> {
-    let r = _parse_block_set__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("blockSet");
-        return Result::<BlockSetNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_block_set__inner(p, follow), "blockSet");
 }
 
 fn _parse_set_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SetElementNode, ParseError> {
@@ -8510,12 +8220,7 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_set_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SetElementNode, ParseError> {
-    let r = _parse_set_element__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("setElement");
-        return Result::<SetElementNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_set_element__inner(p, follow), "setElement");
 }
 
 fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BlockNode, ParseError> {
@@ -8591,12 +8296,7 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BlockNode, ParseError> {
-    let r = _parse_block__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("block");
-        return Result::<BlockNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_block__inner(p, follow), "block");
 }
 
 fn _parse_ruleref__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RulerefNode, ParseError> {
@@ -8627,12 +8327,7 @@ fn _parse_ruleref__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_ruleref(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RulerefNode, ParseError> {
-    let r = _parse_ruleref__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("ruleref");
-        return Result::<RulerefNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_ruleref__inner(p, follow), "ruleref");
 }
 
 fn _parse_character_range__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<CharacterRangeNode, ParseError> {
@@ -8649,12 +8344,7 @@ fn _parse_character_range__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
 }
 
 fn _parse_character_range(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<CharacterRangeNode, ParseError> {
-    let r = _parse_character_range__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("characterRange");
-        return Result::<CharacterRangeNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_character_range__inner(p, follow), "characterRange");
 }
 
 fn _parse_terminal_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TerminalDefNode, ParseError> {
@@ -8700,12 +8390,7 @@ fn _parse_terminal_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_terminal_def(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TerminalDefNode, ParseError> {
-    let r = _parse_terminal_def__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("terminalDef");
-        return Result::<TerminalDefNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_terminal_def__inner(p, follow), "terminalDef");
 }
 
 fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionsNode, ParseError> {
@@ -8751,12 +8436,7 @@ fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
 }
 
 fn _parse_element_options(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionsNode, ParseError> {
-    let r = _parse_element_options__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("elementOptions");
-        return Result::<ElementOptionsNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_element_options__inner(p, follow), "elementOptions");
 }
 
 fn _parse_element_option__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionNode, ParseError> {
@@ -8876,12 +8556,7 @@ fn _parse_element_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_element_option(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionNode, ParseError> {
-    let r = _parse_element_option__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("elementOption");
-        return Result::<ElementOptionNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_element_option__inner(p, follow), "elementOption");
 }
 
 fn _parse_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<IdentifierNode, ParseError> {
@@ -8902,12 +8577,7 @@ fn _parse_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_identifier(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<IdentifierNode, ParseError> {
-    let r = _parse_identifier__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("identifier");
-        return Result::<IdentifierNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_identifier__inner(p, follow), "identifier");
 }
 
 fn _parse_qualified_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<QualifiedIdentifierNode, ParseError> {
@@ -8950,12 +8620,24 @@ fn _parse_qualified_identifier__inner(p: &mut Parser, follow: &List<List<i32>> =
 }
 
 fn _parse_qualified_identifier(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<QualifiedIdentifierNode, ParseError> {
-    let r = _parse_qualified_identifier__inner(p, follow);
+    return _gale_rule(_parse_qualified_identifier__inner(p, follow), "qualifiedIdentifier");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("qualifiedIdentifier");
-        return Result::<QualifiedIdentifierNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -8974,606 +8656,271 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_grammar_spec(input: &String) -> Result<GrammarSpecNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_grammar_spec(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<GrammarSpecNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_grammar_spec(p));
 }
 
 pub fn parse_grammar_decl(input: &String) -> Result<GrammarDeclNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_grammar_decl(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<GrammarDeclNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_grammar_decl(p));
 }
 
 pub fn parse_grammar_type(input: &String) -> Result<GrammarTypeNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_grammar_type(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<GrammarTypeNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_grammar_type(p));
 }
 
 pub fn parse_prequel_construct(input: &String) -> Result<PrequelConstructNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_prequel_construct(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<PrequelConstructNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_prequel_construct(p));
 }
 
 pub fn parse_options_spec(input: &String) -> Result<OptionsSpecNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_options_spec(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<OptionsSpecNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_options_spec(p));
 }
 
 pub fn parse_option(input: &String) -> Result<OptionNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_option(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<OptionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_option(p));
 }
 
 pub fn parse_option_value(input: &String) -> Result<OptionValueNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_option_value(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<OptionValueNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_option_value(p));
 }
 
 pub fn parse_delegate_grammars(input: &String) -> Result<DelegateGrammarsNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_delegate_grammars(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<DelegateGrammarsNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_delegate_grammars(p));
 }
 
 pub fn parse_delegate_grammar(input: &String) -> Result<DelegateGrammarNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_delegate_grammar(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<DelegateGrammarNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_delegate_grammar(p));
 }
 
 pub fn parse_tokens_spec(input: &String) -> Result<TokensSpecNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_tokens_spec(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<TokensSpecNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_tokens_spec(p));
 }
 
 pub fn parse_channels_spec(input: &String) -> Result<ChannelsSpecNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_channels_spec(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ChannelsSpecNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_channels_spec(p));
 }
 
 pub fn parse_id_list(input: &String) -> Result<IdListNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_id_list(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<IdListNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_id_list(p));
 }
 
 pub fn parse_action_(input: &String) -> Result<ActionNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_action_(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ActionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_action_(p));
 }
 
 pub fn parse_action_scope_name(input: &String) -> Result<ActionScopeNameNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_action_scope_name(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ActionScopeNameNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_action_scope_name(p));
 }
 
 pub fn parse_action_block(input: &String) -> Result<ActionBlockNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_action_block(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ActionBlockNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_action_block(p));
 }
 
 pub fn parse_arg_action_block(input: &String) -> Result<ArgActionBlockNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_arg_action_block(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ArgActionBlockNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_arg_action_block(p));
 }
 
 pub fn parse_mode_spec(input: &String) -> Result<ModeSpecNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_mode_spec(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ModeSpecNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_mode_spec(p));
 }
 
 pub fn parse_rules(input: &String) -> Result<RulesNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_rules(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RulesNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_rules(p));
 }
 
 pub fn parse_rule_spec(input: &String) -> Result<RuleSpecNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_rule_spec(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RuleSpecNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_rule_spec(p));
 }
 
 pub fn parse_parser_rule_spec(input: &String) -> Result<ParserRuleSpecNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_parser_rule_spec(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ParserRuleSpecNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_parser_rule_spec(p));
 }
 
 pub fn parse_exception_group(input: &String) -> Result<ExceptionGroupNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_exception_group(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ExceptionGroupNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_exception_group(p));
 }
 
 pub fn parse_exception_handler(input: &String) -> Result<ExceptionHandlerNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_exception_handler(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ExceptionHandlerNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_exception_handler(p));
 }
 
 pub fn parse_finally_clause(input: &String) -> Result<FinallyClauseNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_finally_clause(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<FinallyClauseNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_finally_clause(p));
 }
 
 pub fn parse_rule_prequel(input: &String) -> Result<RulePrequelNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_rule_prequel(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RulePrequelNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_rule_prequel(p));
 }
 
 pub fn parse_rule_returns(input: &String) -> Result<RuleReturnsNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_rule_returns(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RuleReturnsNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_rule_returns(p));
 }
 
 pub fn parse_throws_spec(input: &String) -> Result<ThrowsSpecNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_throws_spec(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ThrowsSpecNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_throws_spec(p));
 }
 
 pub fn parse_locals_spec(input: &String) -> Result<LocalsSpecNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_locals_spec(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LocalsSpecNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_locals_spec(p));
 }
 
 pub fn parse_rule_action(input: &String) -> Result<RuleActionNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_rule_action(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RuleActionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_rule_action(p));
 }
 
 pub fn parse_rule_modifiers(input: &String) -> Result<RuleModifiersNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_rule_modifiers(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RuleModifiersNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_rule_modifiers(p));
 }
 
 pub fn parse_rule_modifier(input: &String) -> Result<RuleModifierNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_rule_modifier(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RuleModifierNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_rule_modifier(p));
 }
 
 pub fn parse_rule_block(input: &String) -> Result<RuleBlockNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_rule_block(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RuleBlockNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_rule_block(p));
 }
 
 pub fn parse_rule_alt_list(input: &String) -> Result<RuleAltListNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_rule_alt_list(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RuleAltListNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_rule_alt_list(p));
 }
 
 pub fn parse_labeled_alt(input: &String) -> Result<LabeledAltNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_labeled_alt(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LabeledAltNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_labeled_alt(p));
 }
 
 pub fn parse_lexer_rule_spec(input: &String) -> Result<LexerRuleSpecNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_rule_spec(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerRuleSpecNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_rule_spec(p));
 }
 
 pub fn parse_lexer_rule_block(input: &String) -> Result<LexerRuleBlockNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_rule_block(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerRuleBlockNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_rule_block(p));
 }
 
 pub fn parse_lexer_alt_list(input: &String) -> Result<LexerAltListNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_alt_list(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerAltListNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_alt_list(p));
 }
 
 pub fn parse_lexer_alt(input: &String) -> Result<LexerAltNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_alt(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerAltNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_alt(p));
 }
 
 pub fn parse_lexer_elements(input: &String) -> Result<LexerElementsNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_elements(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerElementsNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_elements(p));
 }
 
 pub fn parse_lexer_element(input: &String) -> Result<LexerElementNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_element(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerElementNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_element(p));
 }
 
 pub fn parse_lexer_block(input: &String) -> Result<LexerBlockNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_block(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerBlockNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_block(p));
 }
 
 pub fn parse_lexer_commands(input: &String) -> Result<LexerCommandsNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_commands(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerCommandsNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_commands(p));
 }
 
 pub fn parse_lexer_command(input: &String) -> Result<LexerCommandNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_command(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerCommandNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_command(p));
 }
 
 pub fn parse_lexer_command_name(input: &String) -> Result<LexerCommandNameNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_command_name(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerCommandNameNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_command_name(p));
 }
 
 pub fn parse_lexer_command_expr(input: &String) -> Result<LexerCommandExprNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_command_expr(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerCommandExprNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_command_expr(p));
 }
 
 pub fn parse_alt_list(input: &String) -> Result<AltListNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_alt_list(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<AltListNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_alt_list(p));
 }
 
 pub fn parse_alternative(input: &String) -> Result<AlternativeNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_alternative(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<AlternativeNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_alternative(p));
 }
 
 pub fn parse_element(input: &String) -> Result<ElementNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_element(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ElementNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_element(p));
 }
 
 pub fn parse_predicate_options(input: &String) -> Result<PredicateOptionsNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_predicate_options(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<PredicateOptionsNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_predicate_options(p));
 }
 
 pub fn parse_predicate_option(input: &String) -> Result<PredicateOptionNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_predicate_option(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<PredicateOptionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_predicate_option(p));
 }
 
 pub fn parse_labeled_element(input: &String) -> Result<LabeledElementNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_labeled_element(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LabeledElementNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_labeled_element(p));
 }
 
 pub fn parse_ebnf(input: &String) -> Result<EbnfNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_ebnf(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<EbnfNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_ebnf(p));
 }
 
 pub fn parse_block_suffix(input: &String) -> Result<BlockSuffixNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_block_suffix(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<BlockSuffixNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_block_suffix(p));
 }
 
 pub fn parse_ebnf_suffix(input: &String) -> Result<EbnfSuffixNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_ebnf_suffix(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<EbnfSuffixNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_ebnf_suffix(p));
 }
 
 pub fn parse_lexer_atom(input: &String) -> Result<LexerAtomNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_lexer_atom(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<LexerAtomNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_lexer_atom(p));
 }
 
 pub fn parse_atom(input: &String) -> Result<AtomNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_atom(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<AtomNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_atom(p));
 }
 
 pub fn parse_wildcard(input: &String) -> Result<WildcardNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_wildcard(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<WildcardNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_wildcard(p));
 }
 
 pub fn parse_not_set(input: &String) -> Result<NotSetNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_not_set(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<NotSetNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_not_set(p));
 }
 
 pub fn parse_block_set(input: &String) -> Result<BlockSetNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_block_set(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<BlockSetNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_block_set(p));
 }
 
 pub fn parse_set_element(input: &String) -> Result<SetElementNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_set_element(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<SetElementNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_set_element(p));
 }
 
 pub fn parse_block(input: &String) -> Result<BlockNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_block(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<BlockNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_block(p));
 }
 
 pub fn parse_ruleref(input: &String) -> Result<RulerefNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_ruleref(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RulerefNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_ruleref(p));
 }
 
 pub fn parse_character_range(input: &String) -> Result<CharacterRangeNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_character_range(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<CharacterRangeNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_character_range(p));
 }
 
 pub fn parse_terminal_def(input: &String) -> Result<TerminalDefNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_terminal_def(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<TerminalDefNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_terminal_def(p));
 }
 
 pub fn parse_element_options(input: &String) -> Result<ElementOptionsNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_element_options(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ElementOptionsNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_element_options(p));
 }
 
 pub fn parse_element_option(input: &String) -> Result<ElementOptionNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_element_option(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ElementOptionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_element_option(p));
 }
 
 pub fn parse_identifier(input: &String) -> Result<IdentifierNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_identifier(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<IdentifierNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_identifier(p));
 }
 
 pub fn parse_qualified_identifier(input: &String) -> Result<QualifiedIdentifierNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_qualified_identifier(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<QualifiedIdentifierNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_qualified_identifier(p));
 }
 
 pub fn parse(input: &String) -> Result<GrammarSpecNode, ParseError> {

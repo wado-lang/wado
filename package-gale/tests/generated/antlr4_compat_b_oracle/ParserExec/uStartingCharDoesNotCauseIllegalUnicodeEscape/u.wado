@@ -572,7 +572,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == 'u' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_U; }
+            end = try_lit_u(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_U; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
@@ -749,12 +750,24 @@ fn _parse_u__inner(p: &mut Parser) -> Result<UNode, ParseError> {
 }
 
 fn _parse_u(p: &mut Parser) -> Result<UNode, ParseError> {
-    let r = _parse_u__inner(p);
+    return _gale_rule(_parse_u__inner(p), "u");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("u");
-        return Result::<UNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -773,12 +786,7 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_u(input: &String) -> Result<UNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_u(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<UNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_u(p));
 }
 
 pub fn parse(input: &String) -> Result<UNode, ParseError> {

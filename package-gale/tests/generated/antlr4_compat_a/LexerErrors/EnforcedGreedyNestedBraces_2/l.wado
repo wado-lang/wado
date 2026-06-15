@@ -572,7 +572,7 @@ fn try_ACTION(chars: &List<char>, start: i32) -> i32 {
                 alts_1_1: {
                     pos = alts_saved_1;
                     if pos >= chars.len() { break alts_1_1; }
-                    if false || chars[pos] == '{' || chars[pos] == '}' { break alts_1_1; }
+                    if chars[pos] == '{' || chars[pos] == '}' { break alts_1_1; }
                     pos += 1;
                     alts_ok_1 = true;
                 }
@@ -591,13 +591,13 @@ fn try_ACTION(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
+    if !(chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
     pos += 1;
     loop {
         let rep_saved_2 = pos;
         rep_2: {
             if pos >= chars.len() { break rep_2; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { break rep_2; }
+            if !(chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { break rep_2; }
             pos += 1;
             continue;
         }

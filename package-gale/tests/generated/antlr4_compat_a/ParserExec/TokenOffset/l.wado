@@ -1183,7 +1183,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '1' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_1; }
+            end = try_lit_1(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_1; }
             end = try_lit_10(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_10; }
             end = try_lit_11(&lexer.chars, start);
@@ -1205,7 +1206,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_lit_19(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_19; }
         } else if first_char == '2' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_2; }
+            end = try_lit_2(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_2; }
             end = try_lit_20(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_20; }
             end = try_lit_21(&lexer.chars, start);
@@ -1227,7 +1229,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_lit_29(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_29; }
         } else if first_char == '3' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_3; }
+            end = try_lit_3(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_3; }
             end = try_lit_30(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_30; }
             end = try_lit_31(&lexer.chars, start);
@@ -1249,7 +1252,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_lit_39(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_39; }
         } else if first_char == '4' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_4; }
+            end = try_lit_4(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_4; }
             end = try_lit_40(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_40; }
             end = try_lit_41(&lexer.chars, start);
@@ -1271,7 +1275,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_lit_49(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_49; }
         } else if first_char == '5' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_5; }
+            end = try_lit_5(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_5; }
             end = try_lit_50(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_50; }
             end = try_lit_51(&lexer.chars, start);
@@ -1293,7 +1298,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_lit_59(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_59; }
         } else if first_char == '6' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_6; }
+            end = try_lit_6(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_6; }
             end = try_lit_60(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_60; }
             end = try_lit_61(&lexer.chars, start);
@@ -1309,11 +1315,14 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_lit_66(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_66; }
         } else if first_char == '7' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_7; }
+            end = try_lit_7(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_7; }
         } else if first_char == '8' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_8; }
+            end = try_lit_8(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_8; }
         } else if first_char == '9' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_9; }
+            end = try_lit_9(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_9; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
@@ -2776,12 +2785,24 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
-    let r = _parse_a__inner(p, follow);
+    return _gale_rule(_parse_a__inner(p, follow), "a");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("a");
-        return Result::<ANode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -2800,12 +2821,7 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_a(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ANode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_a(p));
 }
 
 pub fn parse(input: &String) -> Result<ANode, ParseError> {

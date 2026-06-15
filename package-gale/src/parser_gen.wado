@@ -122,15 +122,6 @@ fn follow_arg_sep(emit_follow: bool, arg: &FollowArg) -> String {
     return "";
 }
 
-/// `", &EMPTY_FOLLOW"` (entry-stub default) when the grammar emits
-/// FOLLOW machinery, else `""`.
-fn empty_follow_sep(emit_follow: bool) -> String {
-    if emit_follow {
-        return ", &EMPTY_FOLLOW";
-    }
-    return "";
-}
-
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
     // by name and order. emit still consumes surface IR for the body
@@ -153,7 +144,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // caller's continuation at runtime via the `follow` argument (see
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
-    gen_parse_entry(w, lowered, ctx.emit_follow());
+    gen_parse_entry(w, lowered, ctx.is_trace());
 }
 
 fn join_kinds(kinds: &List<String>) -> String {
@@ -1871,10 +1862,35 @@ fn gen_rule_entry_wrapper(
     f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
     let lit = escape_string(rule_display);
-    if trace {
-        w.line(&`trace_enter(p, &{lit});`);
-        w.line(&"p.trace_depth += 1;");
+    // Forward the runtime FOLLOW continuation and precedence threshold to the
+    // inner body so its tail-greedy gate sees the caller's continuation.
+    let fsep = if emit_follow { ", follow" } else { "" };
+    let call = if takes_min_prec {
+        `{*inner_name}(p{fsep}, min_prec)`
+    } else {
+        `{*inner_name}(p{fsep})`
+    };
+    if !trace {
+        // Compact form: the type-independent `Err` / rule-stack tail is shared
+        // by `_gale_rule`. The ATN return-state stack still wraps the call.
+        if needs_atn {
+            w.line(&"let _atn_ret = p.atn_ret_pending;");
+            w.line(&"p.atn_ret_pending = -1;");
+            w.line(&"p.atn_stack.push(_atn_ret);");
+            w.line(&`let r = {call};`);
+            w.line(&"p.atn_stack.pop();");
+            w.line(&`return _gale_rule(r, {lit});`);
+        } else {
+            w.line(&`return _gale_rule({call}, {lit});`);
+        }
+        w.end();
+        w.blank();
+        return;
     }
+    // Trace form: keep the body fully expanded so the `Err` branch can log
+    // `e.message` and the success path can log `ok`.
+    w.line(&`trace_enter(p, &{lit});`);
+    w.line(&"p.trace_depth += 1;");
     // Maintain the caller stack of ATN return states the simulator reads
     // for full-context prediction. The calling site set `p.atn_ret_pending`
     // to this invocation's exact return state (or left it -1 for an
@@ -1886,30 +1902,17 @@ fn gen_rule_entry_wrapper(
         w.line(&"p.atn_ret_pending = -1;");
         w.line(&"p.atn_stack.push(_atn_ret);");
     }
-    // Forward the runtime FOLLOW continuation to the inner body so its
-    // tail-greedy gate sees the caller's continuation.
-    let fsep = if emit_follow { ", follow" } else { "" };
-    if takes_min_prec {
-        w.line(&`let r = {*inner_name}(p{fsep}, min_prec);`);
-    } else {
-        w.line(&`let r = {*inner_name}(p{fsep});`);
-    }
+    w.line(&`let r = {call};`);
     if needs_atn {
         w.line(&"p.atn_stack.pop();");
     }
-    if trace {
-        w.line(&"p.trace_depth -= 1;");
-    }
+    w.line(&"p.trace_depth -= 1;");
     w.begin(&"if let Err(mut e) = r");
     w.line(&`e.rule_stack.push({lit});`);
-    if trace {
-        w.line(&`trace_fail(p, &{lit}, &e.message);`);
-    }
+    w.line(&`trace_fail(p, &{lit}, &e.message);`);
     w.line(&`return Result::<{type_name}, ParseError>::Err(e);`);
     w.end();
-    if trace {
-        w.line(&`trace_ok(p, &{lit});`);
-    }
+    w.line(&`trace_ok(p, &{lit});`);
     w.line(&"return r;");
     w.end();
     w.blank();
@@ -5796,13 +5799,13 @@ fn gen_multi_alt_body_alt(
 /// is `_parse_<snake>`; LR rules take an extra `min_prec` parameter,
 /// which the public entry pins to `0` (matching `parse`'s historic
 /// behaviour: no precedence threshold at the top of the parse).
-fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, emit_follow: bool) {
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, trace: bool) {
     if lowered.parser_rules.len() == 0 {
         return;
     }
-    gen_parse_entry_helpers(w);
+    gen_parse_entry_helpers(w, trace);
     for let rule of &lowered.parser_rules {
-        gen_parse_rule_input_entry(w, rule, emit_follow);
+        gen_parse_rule_input_entry(w, rule);
     }
     let header = rule_header(&lowered.parser_rules[0]);
     let mut f = FnSpec::new("parse");
@@ -5823,7 +5826,49 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, emit_follow: bo
 /// The helpers are cold — called once per top-level parse — so the extra
 /// call is free; the `_gale_` prefix keeps them clear of any
 /// `parse_<rule>` the grammar might name.
-fn gen_parse_entry_helpers(w: &mut CodeWriter) {
+fn gen_parse_entry_helpers(w: &mut CodeWriter, trace: bool) {
+    // `_gale_run<T>` factors the whole per-rule input entry — build a
+    // `Parser`, run the rule, and select the error — so each public
+    // `parse_<rule>` collapses to a one-line call passing the rule as a
+    // closure (devirtualised at the call site). `_gale_rule<T>` factors the
+    // rule-entry wrapper's type-independent err / rule-stack tail. Both are
+    // generic, so monomorphisation still emits one wasm function per node
+    // type today; the win here is generated-source size, not wasm size
+    // (the compiler has no identical-code folding yet).
+    if !trace {
+        // The trace path keeps every `_parse_<rule>` wrapper fully expanded
+        // (its `Err` branch logs `e.message`), so `_gale_rule` would be
+        // unused under `trace`; emit it only when a wrapper references it.
+        let mut gr = FnSpec::new("_gale_rule");
+        gr.add_generic(&"T");
+        gr.add_param(&"r", &"Result<T, ParseError>");
+        gr.add_param(&"rule", &"String");
+        gr.set_return_type(&"Result<T, ParseError>");
+        gr.emit_begin(w);
+        w.begin(&"if let Err(mut e) = r");
+        w.line(&"e.rule_stack.push(rule);");
+        w.line(&"return Result::<T, ParseError>::Err(e);");
+        w.end();
+        w.line(&"return r;");
+        w.end();
+        w.blank();
+    }
+
+    let mut gru = FnSpec::new("_gale_run");
+    gru.add_generic(&"T");
+    gru.add_param(&"input", &"&String");
+    gru.add_param(&"run", &"fn(&mut Parser) -> Result<T, ParseError>");
+    gru.set_return_type(&"Result<T, ParseError>");
+    gru.emit_begin(w);
+    w.line(&"let mut parser = _gale_new_parser(input);");
+    w.line(&"let _result = run(&mut parser);");
+    w.begin(&"if let Err(_e) = _result");
+    w.line(&"return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));");
+    w.end();
+    w.line(&"return _result;");
+    w.end();
+    w.blank();
+
     let mut np = FnSpec::new("_gale_new_parser");
     np.add_param(&"input", &"&String");
     np.set_return_type(&"Parser");
@@ -5857,23 +5902,17 @@ fn gen_parse_entry_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
-fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule, emit_follow: bool) {
+fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     let header = rule_header(rule);
     let mut f = FnSpec::new(&`parse_{header.snake_name}`);
     f.set_pub();
     f.add_param(&"input", &"&String");
     f.set_return_type(&`Result<{header.type_name}, ParseError>`);
     f.emit_begin(w);
-    w.line(&"let mut parser = _gale_new_parser(input);");
-    if rule_takes_min_prec(rule) {
-        w.line(&`let _result = _parse_{header.snake_name}(&mut parser{empty_follow_sep(emit_follow)}, 0);`);
-    } else {
-        w.line(&`let _result = _parse_{header.snake_name}(&mut parser);`);
-    }
-    w.begin(&"if let Err(_e) = _result");
-    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_gale_pick_error(&parser, _e));`);
-    w.end();
-    w.line(&"return _result;");
+    // The closure forwards to the `_parse_<rule>` wrapper, letting its
+    // defaulted `follow` (&EMPTY_FOLLOW) and `min_prec` (0) apply, so the
+    // call is uniform for LR / non-LR and gated / gate-free grammars.
+    w.line(&`return _gale_run(input, |p: &mut Parser| _parse_{header.snake_name}(p));`);
     w.end();
     w.blank();
 }

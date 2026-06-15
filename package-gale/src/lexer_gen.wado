@@ -791,30 +791,37 @@ fn expand_char_class_ci(cc: &CharClass) -> CharClass {
 
 fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
     w.line(&`if pos >= chars.len() \{ {fail_action}; \}`);
+    let cond = char_class_disjunction(cc);
     if cc.negated {
-        w.write(&"if false");
-        for let range of cc.ranges {
-            if range.start == range.end {
-                w.write(&` || chars[pos] == {escape_char(range.start)}`);
-            } else {
-                w.write(&` || {escape_char(range.start)} <= chars[pos] <= {escape_char(range.end)}`);
-            }
-        }
-        w.write(&` \{ {*fail_action}; \}
-`);
+        w.line(&`if {cond} \{ {*fail_action}; \}`);
     } else {
-        w.write(&"if !(false");
-        for let range of cc.ranges {
-            if range.start == range.end {
-                w.write(&` || chars[pos] == {escape_char(range.start)}`);
-            } else {
-                w.write(&` || {escape_char(range.start)} <= chars[pos] <= {escape_char(range.end)}`);
-            }
-        }
-        w.write(&`) \{ {*fail_action}; \}
-`);
+        w.line(&`if !({cond}) \{ {*fail_action}; \}`);
     }
     w.line(&"pos += 1;");
+}
+
+/// Build the `chars[pos] == X || lo <= chars[pos] <= hi || ...` disjunction
+/// for a char class. No leading `false ||` seed: emit the first term bare,
+/// `||`-join the rest. Empty class lowers to the constant `false` (negated:
+/// never fails / matches anything; positive: always fails).
+fn char_class_disjunction(cc: &CharClass) -> String {
+    if cc.ranges.len() == 0 {
+        return "false";
+    }
+    let mut s = String::with_capacity(64);
+    let mut first = true;
+    for let range of &cc.ranges {
+        if !first {
+            s.push_str(&" || ");
+        }
+        first = false;
+        if range.start == range.end {
+            s.push_str(&`chars[pos] == {escape_char(range.start)}`);
+        } else {
+            s.push_str(&`{escape_char(range.start)} <= chars[pos] <= {escape_char(range.end)}`);
+        }
+    }
+    return s;
 }
 
 fn gen_lexer_repeat(
@@ -1421,7 +1428,6 @@ struct TryCall {
     first_chars: List<[char, char]>,
     is_wildcard: bool,
     is_catch_all: bool,
-    match_length: i32,
 }
 
 fn best_state_extras(
@@ -1509,7 +1515,7 @@ fn build_rule_try_call(
         has_channel_rules,
     );
     let mut chars: List<[char, char]> = [];
-    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci);
+    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci).0;
     // A catch-all rule (e.g., UNEXPECTED_CHAR: .) matches any single character.
     // It's only useful in the wildcard fallback, never in specific dispatch branches
     // where another rule already matches at least 1 character.
@@ -1524,28 +1530,47 @@ fn build_rule_try_call(
         first_chars: chars,
         is_wildcard: is_wc,
         is_catch_all: catch_all,
-        match_length: -1,
     };
 }
 
 /// Analyze first elements of rule body alternatives to find first-char set.
 /// Returns true if it's a wildcard (any char could match).
-fn compute_elem_first_chars(
+/// Compute the first-char set of a lexer rule body into `out`.
+/// Returns `[wildcard, nullable]`:
+///   - `wildcard`: the first set is unbounded (a negated class, an opaque rule
+///     ref, `.`) and the dispatch must treat the rule as matching any char.
+///   - `nullable`: the body can match the empty string, so a caller folding a
+///     sequence must also include the following element's first set.
+/// A nullable leading element (`x?` / `x*`) contributes its own first chars and
+/// then the walk CONTINUES to the next element, instead of collapsing the whole
+/// rule to wildcard (the bug that put `NUMBER: '-'? [0-9]+` in every branch).
+pub fn compute_elem_first_chars(
     body: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
     ci: bool,
-) -> bool {
+) -> [bool, bool] {
+    let mut any_nullable = false;
     for let alt of body {
         if alt.elements.is_empty() {
-            return true;
+            return [true, false];
         }
-        let elem = &alt.elements[0];
-        if compute_single_elem_first(elem, all_rules, out, ci) {
-            return true;
+        let mut alt_nullable = true;
+        for let mut i = 0; i < alt.elements.len(); i += 1 {
+            let r = compute_single_elem_first(&alt.elements[i], all_rules, out, ci);
+            if r.0 {
+                return [true, false];
+            }
+            if !r.1 {
+                alt_nullable = false;
+                break;
+            }
+        }
+        if alt_nullable {
+            any_nullable = true;
         }
     }
-    return false;
+    return [false, any_nullable];
 }
 
 fn add_folded_range(out: &mut List<[char, char]>, start: char, end: char, ci: bool) {
@@ -1560,30 +1585,32 @@ fn add_folded_range(out: &mut List<[char, char]>, start: char, end: char, ci: bo
     }
 }
 
+/// First-char set of a single lexer element into `out`, returning
+/// `[wildcard, nullable]` (see `compute_elem_first_chars`).
 fn compute_single_elem_first(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
     ci: bool,
-) -> bool {
+) -> [bool, bool] {
     match *elem {
         Literal(text) => {
             let c = text.chars().next().unwrap();
             add_folded_range(out, c, c, ci);
-            return false;
+            return [false, false];
         },
         CharRange(pair) => {
             add_folded_range(out, pair.0, pair.1, ci);
-            return false;
+            return [false, false];
         },
         CharClass(cc) => {
             if cc.negated {
-                return true;
+                return [true, false];
             }
             for let r of &cc.ranges {
                 add_folded_range(out, r.start, r.end, ci);
             }
-            return false;
+            return [false, false];
         },
         RuleRef(name) => {
             for let rule of all_rules {
@@ -1591,23 +1618,23 @@ fn compute_single_elem_first(
                     return compute_elem_first_chars(&rule.body, all_rules, out, ci);
                 }
             }
-            return true;
+            return [true, false];
         },
         Repeat(rep) => {
-            let is_wc = compute_single_elem_first(&rep.element, all_rules, out, ci);
-            if is_wc {
-                return true;
+            let inner = compute_single_elem_first(&rep.element, all_rules, out, ci);
+            if inner.0 {
+                return [true, false];
             }
-            if rep.kind matches { Star } || rep.kind matches { Optional } {
-                return true;
-            }
-            return false;
+            // `?` / `*` make this element skippable, so the rule's first set
+            // extends into the next element; `+` inherits the inner nullability.
+            let nullable = rep.kind matches { Star | Optional } || inner.1;
+            return [false, nullable];
         },
         Group(alts) => {
             return compute_elem_first_chars(&alts, all_rules, out, ci);
         },
         _ => {
-            return true;
+            return [true, false];
         },
     }
 }
@@ -1792,7 +1819,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
 fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<DispatchGroup>, needs_extras: bool) {
     // If only a wildcard group exists, emit calls directly without dispatch
     if groups.len() == 1 && groups[0].guard == "true" {
-        gen_group_calls(w, calls, &groups[0].calls, needs_extras, true);
+        gen_group_calls(w, calls, &groups[0].calls, needs_extras);
         return;
     }
     let mut first_group = true;
@@ -1800,7 +1827,7 @@ fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<
         let is_wc = g.guard == "true";
         if is_wc {
             if first_group {
-                gen_group_calls(w, calls, &g.calls, needs_extras, true);
+                gen_group_calls(w, calls, &g.calls, needs_extras);
                 continue;
             }
             w.else_begin(&"else");
@@ -1810,7 +1837,7 @@ fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<
             w.else_begin(&`else if {g.guard}`);
         }
         first_group = false;
-        gen_group_calls(w, calls, &g.calls, needs_extras, is_wc);
+        gen_group_calls(w, calls, &g.calls, needs_extras);
     }
     if !first_group {
         w.end();
@@ -1822,23 +1849,13 @@ fn gen_group_calls(
     calls: &List<TryCall>,
     indices: &List<i32>,
     needs_extras: bool,
-    is_wildcard_group: bool,
 ) {
+    // Emit a uniform `try_*` call per candidate and keep the longest match.
+    // No hand-inlining of single-char literals: the wado compiler's inliner
+    // folds the tiny `try_lit_*` bodies, so codegen stays simple and uniform
+    // and every emitted `try_lit_*` is actually referenced (no dead code).
     for let call_idx of indices {
         let call = &calls[*call_idx];
-        // In specific dispatch branches, single-char literals are guaranteed to match
-        // (the dispatch already confirmed the character). Inline the result
-        // instead of calling the try_* function.
-        if !is_wildcard_group && call.match_length == 1 {
-            if needs_extras {
-                w.line(
-                    &`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind};{call.extra} \}`,
-                );
-            } else {
-                w.line(&`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind}; \}`);
-            }
-            continue;
-        }
         w.line(&`end = {call.fn_name}(&lexer.chars, start);`);
         if needs_extras {
             w.line(&`if end > best_end \{ best_end = end; best_kind = {call.token_kind};{call.extra} \}`);
@@ -1984,7 +2001,6 @@ fn gen_tokenize_fn(
             // the literal's first char may appear in either case.
             add_folded_range(&mut fc, c, c, grammar_ci);
             let tk = lit.const_name;
-            let mlen = lit.text.chars().count();
             all_calls.push(TryCall {
                 fn_name,
                 token_kind: tk,
@@ -1992,7 +2008,6 @@ fn gen_tokenize_fn(
                 first_chars: fc,
                 is_wildcard: false,
                 is_catch_all: false,
-                match_length: mlen,
             });
         }
         for let rule of lexer_rules {

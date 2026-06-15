@@ -584,9 +584,11 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         if first_char == 'x' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_X; }
+            end = try_lit_x(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_X; }
         } else if first_char == 'y' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_Y; }
+            end = try_lit_y(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_Y; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
@@ -771,12 +773,7 @@ fn _parse_s__inner(p: &mut Parser) -> Result<SNode, ParseError> {
 }
 
 fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
-    let r = _parse_s__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("s");
-        return Result::<SNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_s__inner(p), "s");
 }
 
 fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
@@ -797,12 +794,24 @@ fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
 }
 
 fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
-    let r = _parse_a__inner(p);
+    return _gale_rule(_parse_a__inner(p), "a");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("a");
-        return Result::<ANode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -821,21 +830,11 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_s(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<SNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_s(p));
 }
 
 pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_a(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ANode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_a(p));
 }
 
 pub fn parse(input: &String) -> Result<SNode, ParseError> {

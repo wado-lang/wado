@@ -1099,12 +1099,7 @@ fn _parse_root__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_root(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RootNode, ParseError> {
-    let r = _parse_root__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("root");
-        return Result::<RootNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_root__inner(p, follow), "root");
 }
 
 fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ContinueNode, ParseError> {
@@ -1232,12 +1227,7 @@ fn _parse_continue__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_continue(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<ContinueNode, ParseError> {
-    let r = _parse_continue__inner(p, follow, min_prec);
-    if let Err(mut e) = r {
-        e.rule_stack.push("continue");
-        return Result::<ContinueNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_continue__inner(p, follow, min_prec), "continue");
 }
 
 fn _parse_args__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ArgsNode, ParseError> {
@@ -1250,12 +1240,7 @@ fn _parse_args__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_args(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ArgsNode, ParseError> {
-    let r = _parse_args__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("args");
-        return Result::<ArgsNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_args__inner(p, follow), "args");
 }
 
 fn _parse_for__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ForNode, ParseError> {
@@ -1268,12 +1253,24 @@ fn _parse_for__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_for(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ForNode, ParseError> {
-    let r = _parse_for__inner(p, follow);
+    return _gale_rule(_parse_for__inner(p, follow), "for");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("for");
-        return Result::<ForNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -1292,39 +1289,19 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_root(input: &String) -> Result<RootNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_root(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RootNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_root(p));
 }
 
 pub fn parse_continue(input: &String) -> Result<ContinueNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_continue(&mut parser, &EMPTY_FOLLOW, 0);
-    if let Err(_e) = _result {
-        return Result::<ContinueNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_continue(p));
 }
 
 pub fn parse_args(input: &String) -> Result<ArgsNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_args(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ArgsNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_args(p));
 }
 
 pub fn parse_for(input: &String) -> Result<ForNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_for(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ForNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_for(p));
 }
 
 pub fn parse(input: &String) -> Result<RootNode, ParseError> {
