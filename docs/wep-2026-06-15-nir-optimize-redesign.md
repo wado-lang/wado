@@ -3,12 +3,14 @@
 This WEP redesigns the NIR optimizer around a single intra-procedural
 worklist that builds the ValueGraph once per function and keeps it live
 through the edit API, instead of rebuilding per-pass analysis on every
-sweep. It draws on the two promotions the
+sweep. It promotes the ValueGraph from an engine side-table to the source
+of truth for pure values, then runs one destructive worklist per function
+over it. The goal is compile-time speed.
+
+The further exploratory driver the
 [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
-WEP deferred — operand promotion and equality saturation — but separates
-them: it adopts operand promotion and a single live-graph driver, and
-declines equality saturation. The goal is compile-time speed, not
-algebraic-output quality.
+WEP describes (equality saturation + cost-based extraction) is out of
+scope here; see that WEP for it.
 
 ## Context
 
@@ -43,42 +45,22 @@ every cross-pass journal adjacency (`inline` restructures bodies wholesale,
 passes). Raising the fire rate to ~100% requires the architecture where _one_
 driver keeps the graph live across all rewrites.
 
-## Two deferred promotions, separated
-
-The direction WEP deferred two promotions and treated them as one step. They
-are separable, and only one of them serves compile speed.
-
-### Operand promotion
+## Operand promotion
 
 Promote the ValueGraph from a side-table to the source of truth for pure
 values: pure literal / `Binary` / `Unary` / `Cast` slots become
 `Operand::Value(ValueId)`, `lower::translate` builds values directly, the
 `value_of` side-table is gone. This is the structural prerequisite for the
-graph to be _built once and kept live_ rather than rebuilt.
+graph to be _built once and kept live_ rather than rebuilt — without it, every
+pass has to re-derive a fresh `value_of` from the SkelTree.
 
-### Equality saturation
-
-Replace destructive rules with equality saturation: run all rules
-non-destructively to a budget-bounded fixed point, then extract a
-cost-minimal Skel form per `Operand::Value`. This unlocks algebraic
-exploration (re-association, strength-reduction-per-use, share-vs-duplicate).
-
-The direction WEP already argues equality saturation's payoff is marginal for
-Wado: the output is Wasm, which the host JIT re-optimizes, recovering most of
-the algebraic wins; Cranelift's aegraph reports 5 – 10% on native-AOT, and the
-JIT-target number is much smaller. It also carries the costs that make it the
-wrong choice for a _speed_ redesign: saturation tuning, e-graph extraction,
-rule-explosion control, and a much harder byte-output-identity argument.
-
-So the compile-speed optimum is operand promotion plus a single _destructive_
-worklist that keeps the graph live — without saturation. The rest of this WEP
-calls that state **the live ValueGraph**.
+Operand promotion plus a single _destructive_ worklist that keeps the graph
+live is the state the rest of this WEP calls **the live ValueGraph**.
 
 ## Decision
 
 Adopt the live ValueGraph: a single per-function worklist driver over a
-promoted ValueGraph kept coherent through the edit API. Decline equality
-saturation.
+promoted ValueGraph kept coherent through the edit API.
 
 - The ValueGraph is the source of truth for pure values (operand promotion).
   It is built once when a function's session opens and kept live by the edit
@@ -89,7 +71,7 @@ saturation.
   folding, and condition implication all become queries against the one live
   graph + flow state.
 - Rules stay destructive and priority-ordered (rule order in the session, as
-  `peephole.rs` encodes it today). No saturation, no cost-based extraction.
+  `peephole.rs` encodes it today).
 - The interprocedural stages (`inline`, `dae`, `drve`, `sroa_param`,
   `container_sroa`, `sroa`, globalization, `dce`) stay distinct gated steps;
   the single worklist replaces the _per-function intra-procedural_ inner loop,
@@ -174,17 +156,14 @@ rule and stay distinct gated steps, in the current order:
   inlined span's graph + flow is rebuilt incrementally (the same
   region-rebuild mechanism), not the whole function.
 
-### Why destructive, not saturating
+### Destructive rewrites
 
-A destructive single-worklist preserves the soundness invariant that has
-gated every migration: byte-output-identity with the pass it replaces. A
-saturating driver makes that argument far harder (extraction must reproduce
-the exact materialisation the old CSE / hoisting heuristics produced) for a
-payoff the host JIT largely recovers. Priorities are encoded by rule order,
-the way `peephole.rs` already does; confluence is the same obligation the
-engine already carries. If a future native-AOT backend lands, equality
-saturation can reactivate on top of this driver — the graph, rules, and
-worklist all carry over.
+Rules rewrite the graph in place, exactly as the engine's rules do today. This
+preserves the soundness invariant that has gated every migration:
+byte-output-identity with the pass each rule replaces — the destructive driver
+reproduces the existing CSE / hoisting materialisation directly. Priorities
+are encoded by rule order, the way `peephole.rs` already does; confluence is
+the same obligation the engine already carries.
 
 ## Migration plan
 
@@ -261,8 +240,6 @@ discipline the earlier ValueGraph migrations followed.
 
 ### Trade-offs accepted
 
-- No algebraic exploration beyond what destructive rules already do; recovered
-  by the host JIT, per the direction WEP's measured argument.
 - The edit API grows graph + flow maintenance, raising its complexity in
   exchange for deleting every pass's bespoke rebuild.
 - Arena compaction (dead nodes from in-place rewrites) becomes more worthwhile
@@ -270,7 +247,7 @@ discipline the earlier ValueGraph migrations followed.
 
 ## See also
 
-- [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md) — the direction; defines the operand promotion and equality saturation this WEP separates.
+- [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md) — the direction; defines operand promotion (adopted here) and the exploratory equality-saturation driver (out of scope here).
 - [NIR Rewrite Engine — Detailed Design](./wep-2026-06-05-nir-rewrite-engine-design.md) — the landed engine substrate, edit API, and gate.
 - [`docs/optimizer.md`](./optimizer.md) — the pass inventory the single worklist absorbs.
 - The reverted incremental-ValueGraph prototype, in branch history (`feat(optimize): edit journal on the NIR engine`, `incremental ValueGraph rebuild core`, `wire incremental ValueGraph through the gate`) — the verified mechanism the live-graph edit API reuses per-edit.
