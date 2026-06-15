@@ -211,29 +211,56 @@ benchmarks.
   worthwhile once bodies are walked fewer times; tracked as the existing
   follow-up.
 
+## Graph-preserving rewrites
+
+An implementation finding that shapes the build-once work: a rewrite that
+replaces an expression with a value the graph already holds — store-load
+forwarding a stored literal, materialising a condition the guard proved
+constant, folding a constant arithmetic node — does not change any _other_
+expression's ValueGraph value. Its only stale effect is on the rewritten node's
+own `value_of` entry, which now reads as a literal anyway. Such a rewrite is
+**graph-preserving**: a later pass can keep using the same build without a
+rebuild.
+
+This is the lever for build-once: passes whose rewrites are graph-preserving
+share one build per function per round. The combined session therefore carries,
+per migrated pass, a graph-preservation obligation — a `set_block_stmts` that
+drops an effectful statement (e.g. a panic check) can bump heap versions and is
+_not_ graph-preserving, so it must either rebuild or be expressed as a union.
+The `WADO_VERIFY_INCREMENTAL`-style cross-check guards each migration.
+
 ## Roadmap
 
 Each step must not regress output (code size or runtime) on the full fixture +
 E2E suite, on `wir_expect` / `wir_not_expect`, and on the benchmark set before
 the predecessor is deleted.
 
-- [ ] Operand promotion — pure literal / `Binary` / `Unary` / `Cast` slots carry
-      `ValueId`s; `lower::translate` builds the graph; the `value_of` side-table
-      retires. WIR output unchanged via a straight extraction that re-emits each
-      value at its original site.
-- [ ] Union-find + congruence rebuild on the `ValuePool` — equivalence by
-      `find()`, deferred re-canonicalisation after unions.
-- [ ] Build-once-per-round — the engine session holds the graph across all
-      intra-procedural rules; remove the per-pass `Engine::value` rebuild and the
-      `vg_cache` parking.
+- [x] Union-find + congruence rebuild on the `ValuePool` — equivalence by
+      `find()`, deferred re-canonicalisation after unions; constant kinds win the
+      representative so a class containing a literal resolves to it. Exposed on
+      the engine (`value_find` / `value_union` / `rebuild_value_congruence`).
+- [x] Extraction keystone — `extract::materialize_literal`, the graph→skeleton
+      primitive that resolves through the representative. `store_load_forward`
+      now routes through it (the first production pass on the e-class).
+- [ ] Build-once-per-round — one engine session holds the graph across the
+      intra-procedural passes whose rewrites are graph-preserving; share one
+      build, removing the per-pass `Engine::value` rebuild and `vg_cache` parking.
+      First pair: `store_load_forward` + `condition_implication`.
 - [ ] Subsume CSE, copy-prop, and store-load-forward into graph structure; delete
-      the passes and their analysis.
+      the passes and their analysis. (copy-prop / CSE need extraction beyond the
+      literal case — a flow-valid source for a shared non-constant value.)
 - [ ] Subsume flow-sensitive `const_fold` and `condition_implication` as graph
-      rewrites; delete their per-pass dataflow.
+      rewrites; delete their per-pass dataflow. (`const_fold` keeps niri for pure
+      CTFE calls, which the graph does not fold.)
 - [ ] Subsume loop-invariant hoisting into the extractor's placement decision;
       retire `licm`'s pure-arithmetic hoisting.
 - [ ] Cost-based extraction — replace the straight extraction with a share-vs-
       duplicate cost model; tune against benchmarks.
+- [ ] Operand promotion — pure literal / `Binary` / `Unary` / `Cast` slots carry
+      `ValueId`s; `lower::translate` builds the graph; the `value_of` side-table
+      retires. The widest change (arena / lowering / WIR build / unparser /
+      pure-`ExprKind`-matching passes); deferred until the graph-driven passes
+      prove the model and the win.
 - [ ] Retire the intra-procedural iteration count — the graph and worklist
       self-converge; keep an outer round count only for the interprocedural cycle.
 
@@ -243,4 +270,3 @@ the predecessor is deleted.
 - [NIR Rewrite Engine — Detailed Design](./wep-2026-06-05-nir-rewrite-engine-design.md) — the engine substrate, edit API, and gate this builds on.
 - [`docs/optimizer.md`](./optimizer.md) — the pass inventory the graph absorbs.
 - Cranelift's aegraph mid-end and `egg` (https://egraphs-good.github.io/) — the build-once, eager-rewrite, single-extraction model this adapts.
-  </content>
