@@ -148,10 +148,10 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::Licm, len, |fid| {
+    gate.run_gated_cached(GatedPass::Licm, len, |fid, cached| {
         let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {
-            return false;
+            return (false, None);
         }
         let rule = LicmRule {
             type_table: &type_table,
@@ -166,20 +166,29 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
-            body,
-            locals,
-            address_taken_locals,
-            stores_aliased_locals,
-            &type_table,
-            &first_param_types,
-            &call_immutability,
-        );
-        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_sets(aliased, untrackable, mut_escaped);
-        engine.set_value_graph_type_table(&type_table);
-        engine.set_param_locals(param_locals);
+        // Reuse the param-seeded graph `cse` + `store_load_forward` parked when
+        // `const_fold` left this function unchanged between the two sessions —
+        // keeping one build live across const_fold instead of rebuilding. A
+        // changed function falls back to a fresh build.
+        let mut engine = if let Some(cached) = cached {
+            Engine::with_analysis(body, &mut buffers, locals, &type_table, cached)
+        } else {
+            let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+                body,
+                locals,
+                address_taken_locals,
+                stores_aliased_locals,
+                &type_table,
+                &first_param_types,
+                &call_immutability,
+            );
+            let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
+            let mut engine = Engine::new(body, &mut buffers, locals);
+            engine.set_alias_sets(aliased, untrackable, mut_escaped);
+            engine.set_value_graph_type_table(&type_table);
+            engine.set_param_locals(param_locals);
+            engine
+        };
         let licm_changed = engine.run(&[&rule]);
         // Condition implication shares licm's session: licm hoists only
         // loop-invariant, move-safe code, so values are preserved and the
@@ -187,7 +196,9 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         // document order as the standalone passes — so it still sees the hoisted
         // body, reusing licm's build instead of rebuilding its own.
         let cond_changed = super::condition_implication::eliminate_at_root(&mut engine);
-        licm_changed || cond_changed
+        let changed = licm_changed || cond_changed;
+        let parked = if changed { None } else { engine.into_analysis() };
+        (changed, parked)
     })
 }
 

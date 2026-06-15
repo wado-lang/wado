@@ -61,6 +61,7 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
         let NirFunction {
             body,
             locals,
+            params,
             address_taken_locals,
             stores_aliased_locals,
             ..
@@ -78,9 +79,17 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
                 &first_param_types,
                 &call_immutability,
             );
+            // Seed params (loop-entry snapshots) so this graph is config-identical
+            // to licm's, letting `licm` + `condition_implication` reuse it through
+            // the gate's `vg_cache` when `const_fold` leaves the function
+            // unchanged between the two sessions. Seeding is equivalence-invariant
+            // for cse/slf (which test only `ValueId` equality), so output is
+            // unchanged.
+            let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
             let mut engine = Engine::new(body, &mut buffers, locals);
             engine.set_alias_sets(aliased, untrackable, mut_escaped);
             engine.set_value_graph_type_table(&type_table);
+            engine.set_param_locals(param_locals);
             engine
         };
         let cse_changed = engine.run(&[&rule]);

@@ -153,10 +153,13 @@ pub struct FunctionGate {
     /// is unchanged since the park (`revision` matches); `revision` bumps on the
     /// function's own change *and* any neighbour change, which over-covers the
     /// analysis's real dependency (body + callee immutability), so a reuse is
-    /// never stale. Used by the `cse` pass, which runs `store_load_forward` in
-    /// the same session (no `param_locals` seeding). `licm` seeds loop-entry
-    /// params and runs `condition_implication` in its own session; it uses
-    /// `run_gated` (uncached) since it has no cross-pass sharing partner.
+    /// never stale. Kept live across the loop's two value-graph sessions: the
+    /// `cse` + `store_load_forward` session parks a param-seeded graph, and the
+    /// `licm` + `condition_implication` session reuses it for every function
+    /// `const_fold` leaves unchanged between them — so one build serves both
+    /// instead of two. (`cse` seeds params too, making the two configs identical;
+    /// seeding is equivalence-invariant for cse/slf, which test only `ValueId`
+    /// equality.) A function changed by `const_fold` falls back to a fresh build.
     vg_cache: Vec<Option<(u64, CachedAnalysis)>>,
 }
 
