@@ -242,10 +242,16 @@ the predecessor is deleted.
 - [x] Extraction keystone — `extract::materialize_literal`, the graph→skeleton
       primitive that resolves through the representative. `store_load_forward`
       now routes through it (the first production pass on the e-class).
-- [ ] Build-once-per-round — one engine session holds the graph across the
-      intra-procedural passes whose rewrites are graph-preserving; share one
-      build, removing the per-pass `Engine::value` rebuild and `vg_cache` parking.
-      First pair: `store_load_forward` + `condition_implication`.
+- [~] Build-once-per-round — one engine session holds the graph across the
+  adjacent graph-preserving passes; share one build, dropping the second
+  pass's separate engine setup, alias-set computation, and `ValueGraph`
+  rebuild. Landed: `cse` + `store_load_forward` share one session
+  (byte-identical; `builder_alias_sets` 8.48% → 6.32%, `Engine::new`
+  9.00% → 8.37% as slf's separate session disappears). `condition_implication`
+  can _not_ join this session: it must run after `const_fold` / `licm` to see
+  folded / hoisted guards, so moving it earlier regresses output (+58 bytes on
+  package-gale). Extending build-once past the one clean adjacency needs
+  `const_fold` / `licm` made graph-preserving, or the full live session.
 - [ ] Subsume CSE, copy-prop, and store-load-forward into graph structure; delete
       the passes and their analysis. (copy-prop / CSE need extraction beyond the
       literal case — a flow-valid source for a shared non-constant value.)
