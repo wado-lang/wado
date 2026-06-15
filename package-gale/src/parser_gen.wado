@@ -27,7 +27,6 @@ use {
     dedup_name,
     peek_dedup_name,
     element_field_info,
-    replay_element_names,
     all_alts_are_single_token,
     single_token_first,
 } from "./gen_util.wado";
@@ -2115,6 +2114,18 @@ fn gen_parse_fn_named(
         }
     }
 
+    // `start` is referenced only by an inlined alt body — the non-overlap
+    // dispatch (`gen_multi_alt_body`) or a singleton overlap group (the
+    // `group.len() == 1` arm of `gen_multi_alt_body_alt`). A pure prediction
+    // dispatch (every group has >1 alt) only forwards to `_alt_<n>` helpers,
+    // so emit `let start` only when an inline body will use it.
+    let mut needs_start = !has_overlaps;
+    for let g of &groups {
+        if g.len() == 1 {
+            needs_start = true;
+        }
+    }
+
     let has_lr = match lowered_rule {
         LeftRecursive(_) => true,
         _ => false,
@@ -2129,7 +2140,9 @@ fn gen_parse_fn_named(
         }
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
-        w.line(&"let start = p.peek().span.start;");
+        if needs_start {
+            w.line(&"let start = p.peek().span.start;");
+        }
         if has_overlaps {
             gen_multi_alt_body_alt(
                 w,
@@ -2196,7 +2209,9 @@ fn gen_parse_fn_named(
         }
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
-        w.line(&"let start = p.peek().span.start;");
+        if needs_start {
+            w.line(&"let start = p.peek().span.start;");
+        }
         if has_overlaps {
             gen_multi_alt_body_alt(
                 w,
@@ -2267,71 +2282,6 @@ fn gen_field_assignments_from_fields(w: &mut CodeWriter, fields: &List<FieldDecl
             continue;
         }
         w.line(&`{fields[i].name},`);
-    }
-}
-
-fn gen_alt_body_skip(
-    w: &mut CodeWriter,
-    type_name: &String,
-    variant_case: Option<String>,
-    struct_name: Option<String>,
-    alt: &Alternative,
-    body: &AltBody,
-    ctx: &mut GenContext,
-    skip: i32,
-) {
-    // Parse elements from `skip` onward (prefix already consumed).
-    // Replay name counter for consumed elements so dedup_name stays in sync.
-    let mut name_counts: List<[String, i32]> = [];
-    for let mut i = 0; i < skip; i += 1 {
-        replay_element_names(&alt.elements[i], &mut name_counts);
-    }
-    // `body.ops` skips the LR-stripped prefix self-ref, so its
-    // indexing is offset from `alt.elements` by `skip` for LR suffix
-    // bodies. For the BT (multi-alt prediction) path `skip > 0` is a
-    // consumed-prefix offset rather than an LR strip — there the
-    // surface alt and the lowered alt have 1:1 element correspondence
-    // and `body.ops[i]` lines up with `alt.elements[i]`. Detect via
-    // length: if `body.ops.len() == alt.elements.len()` the ops are
-    // full-alt (BT path); otherwise they're a `lr_alts[k].suffix`
-    // and `body.ops[k]` corresponds to `alt.elements[skip + k]`.
-    let ops_offset = if body.ops.len() == alt.elements.len() { 0 } else { skip };
-    for let mut i = skip; i < alt.elements.len(); i += 1 {
-        let elem = &alt.elements[i];
-        let op = &body.ops[i - ops_offset];
-        if let Repeat(rep) = elem {
-            let rep_op = if let Repeat(r) = op {
-                r;
-            } else {
-                panic("gen_alt_body_skip: Repeat element / op mismatch");
-            };
-            gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
-        } else if op_is_leaf(op) {
-            gen_op_leaf(w, op, ctx, &mut name_counts);
-        } else if let ListLabel(ll) = op {
-            gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
-        } else if let Group(g_op) = op {
-            gen_op_group(w, g_op, elem, ctx, &mut name_counts);
-        } else {
-            panic("gen_alt_body_skip: unreachable op shape — every Op variant is handled");
-        }
-    }
-
-    if let Some(case) = variant_case {
-        let sname = struct_name.unwrap();
-        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
-        w.indent();
-        gen_clamped_span_field(w);
-        gen_field_assignments_from_fields(w, &body.fields);
-        w.dedent();
-        w.line(&"}));");
-    } else {
-        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
-        w.indent();
-        gen_clamped_span_field(w);
-        gen_field_assignments_from_fields(w, &body.fields);
-        w.dedent();
-        w.line(&"});");
     }
 }
 
@@ -2424,11 +2374,9 @@ fn peel_scalar_label(elem: &Element) -> &Element {
 fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>, ctx: &mut GenContext) {
     // gen_alt_elements requires 1:1 correspondence between
     // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
-    // LR atom). LR-suffix bodies strip the leading self-ref op and
-    // flow through `gen_alt_body_skip`, which carries its own offset
-    // calculation; that path never reaches here. Wado's power-assert
-    // surfaces the lengths automatically — the contract note in the
-    // message points callers at the right entry point.
+    // LR atom). LR-suffix bodies strip the leading self-ref op and are
+    // emitted by `gen_lr_suffix_helpers`, not here. Wado's power-assert
+    // surfaces the lengths automatically if a mismatched body reaches here.
     //
     // The element-side `if let Repeat(...)` and `gen_op_group` paths
     // require the inner shape, but a surface scalar `name=elem` wraps
@@ -2438,7 +2386,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>
     // the peeled element so `t=ID*` and friends route correctly
     // (today's g4 parser keeps the `*` outside the label, so this
     // arm is defensive — see `peel_scalar_label` for the contract).
-    assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies must use gen_alt_body_skip";
+    assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_suffix_helpers";
     let mut name_counts: List<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
@@ -2590,9 +2538,8 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
 /// LR-prefix `min_prec` argument — emit does not re-derive any of
 /// it. Counterpart of the leaf arms of `gen_element` for the surface
 /// IR walker; that walker is still in use inside group bodies and
-/// Label / Not cases, but the top-level alt walkers
-/// (`gen_alt_elements`, the body loop of `gen_alt_body_skip`)
-/// dispatch leaves here instead.
+/// Label / Not cases, but the top-level alt walker (`gen_alt_elements`)
+/// dispatches leaves here instead.
 ///
 /// The mirror `dedup_name(&op.dedup_base, name_counts)` keeps
 /// `name_counts` in sync with what `gen_element`'s leaf arms would
@@ -5421,8 +5368,7 @@ fn gen_prediction_code(
     ctx: &mut GenContext,
     rule_display: &String,
 ) {
-    let mut nc: List<[String, i32]> = [];
-    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, &mut nc, rule_display);
+    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, rule_display);
 }
 
 fn gen_prediction_code_inner(
@@ -5434,37 +5380,28 @@ fn gen_prediction_code_inner(
     type_name: &String,
     ctx: &mut GenContext,
     skip: i32,
-    name_counts: &mut List<[String, i32]>,
     rule_display: &String,
 ) {
     if let Leaf(idx) = node {
-        if skip == 0 {
-            w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
-        } else {
-            // Consumed prefix tokens already — inline the remaining alt body.
-            let alt = &alts[*idx];
-            let body = rule_alt_body(lowered_rule, *idx).unwrap();
-            gen_alt_body_skip(
-                w,
-                type_name,
-                Option::<String>::Some(body.case_name),
-                Option::<String>::Some(body.struct_name),
-                alt,
-                body,
-                ctx,
-                skip,
-            );
+        // The dispatch walked `skip` shared-prefix tokens by advancing `p.pos`
+        // (building no node); rewind them so `_alt_<idx>` re-parses the alt from
+        // its start. Inlining the helper is left to the wado compiler — codegen
+        // never hand-inlines the remaining alt body.
+        if skip > 0 {
+            w.line(&`p.pos -= {skip};`);
         }
+        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
         return;
     }
     if let Consume(c) = node {
-        // The consumed element at position `skip` must match every alt
-        // reachable below this node — `skip` is applied to whichever Leaf the
-        // dispatch lands on. Validating against the whole rule's `alts[0]`
-        // mismatched, since the tree is built over a sorted overlap group that
-        // need not contain alt 0 (regression fixture ll_consume_group.g4). On
-        // any mismatch, skip the consume — the Leaf falls back to the scan
-        // tournament.
+        // A shared-prefix terminal: every alt below this node carries
+        // `c.element` at offset `skip`, so it does not disambiguate. Advance
+        // `p.pos` past it (no node built — the chosen `_alt_<idx>` re-parses it)
+        // and descend to the disambiguating dispatch. Validating against the
+        // whole rule's `alts[0]` mismatched, since the tree is built over a
+        // sorted overlap group that need not contain alt 0 (regression fixture
+        // ll_consume_group.g4). On any mismatch, leave `p.pos`/`skip` unchanged
+        // so the Leaf rewinds exactly the tokens advanced so far.
         let mut node_alts: List<i32> = [];
         prediction_collect_all_indices(&c.child, &mut node_alts);
         let mut elem_matches = !node_alts.is_empty();
@@ -5475,34 +5412,10 @@ fn gen_prediction_code_inner(
             }
         }
         if elem_matches {
-            gen_element(w, &c.element, ctx, name_counts);
-            gen_prediction_code_inner(
-                w,
-                &c.child,
-                fn_name,
-                alts,
-                lowered_rule,
-                type_name,
-                ctx,
-                skip + 1,
-                name_counts,
-                rule_display,
-            );
+            w.line(&"p.pos += 1;");
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip + 1, rule_display);
         } else {
-            // Element mismatch — prediction consumed a later element.
-            // Don't emit the consume or increment skip; treat as skip=0 at the Leaf.
-            gen_prediction_code_inner(
-                w,
-                &c.child,
-                fn_name,
-                alts,
-                lowered_rule,
-                type_name,
-                ctx,
-                0,
-                name_counts,
-                rule_display,
-            );
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip, rule_display);
         }
         return;
     }
@@ -5690,7 +5603,6 @@ fn gen_prediction_code_inner(
                 type_name,
                 ctx,
                 skip,
-                name_counts,
                 rule_display,
             );
         }
