@@ -1207,13 +1207,13 @@ fn try_SCIENTIFIC_NUMBER(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
+    if !(chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { return -1; }
     pos += 1;
     loop {
         let rep_saved_14 = pos;
         rep_14: {
             if pos >= chars.len() { break rep_14; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { break rep_14; }
+            if !(chars[pos] == ' ' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\t') { break rep_14; }
             pos += 1;
             continue;
         }
@@ -1810,12 +1810,7 @@ fn _parse_equation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_equation(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<EquationNode, ParseError> {
-    let r = _parse_equation__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("equation");
-        return Result::<EquationNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_equation__inner(p, follow), "equation");
 }
 
 fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExpressionNode, ParseError> {
@@ -1872,12 +1867,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExpressionNode, ParseError> {
-    let r = _parse_expression__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("expression");
-        return Result::<ExpressionNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_expression__inner(p, follow), "expression");
 }
 
 fn _parse_multiplying_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<MultiplyingExpressionNode, ParseError> {
@@ -1934,12 +1924,7 @@ fn _parse_multiplying_expression__inner(p: &mut Parser, follow: &List<List<i32>>
 }
 
 fn _parse_multiplying_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<MultiplyingExpressionNode, ParseError> {
-    let r = _parse_multiplying_expression__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("multiplyingExpression");
-        return Result::<MultiplyingExpressionNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_multiplying_expression__inner(p, follow), "multiplyingExpression");
 }
 
 fn _parse_pow_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PowExpressionNode, ParseError> {
@@ -1982,12 +1967,7 @@ fn _parse_pow_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_pow_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PowExpressionNode, ParseError> {
-    let r = _parse_pow_expression__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("powExpression");
-        return Result::<PowExpressionNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_pow_expression__inner(p, follow), "powExpression");
 }
 
 fn _parse_signed_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SignedAtomNode, ParseError> {
@@ -2033,12 +2013,7 @@ fn _parse_signed_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_signed_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SignedAtomNode, ParseError> {
-    let r = _parse_signed_atom__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("signedAtom");
-        return Result::<SignedAtomNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_signed_atom__inner(p, follow), "signedAtom");
 }
 
 fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AtomNode, ParseError> {
@@ -2084,12 +2059,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AtomNode, ParseError> {
-    let r = _parse_atom__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("atom");
-        return Result::<AtomNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_atom__inner(p, follow), "atom");
 }
 
 fn _parse_scientific__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ScientificNode, ParseError> {
@@ -2102,12 +2072,7 @@ fn _parse_scientific__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_scientific(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ScientificNode, ParseError> {
-    let r = _parse_scientific__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("scientific");
-        return Result::<ScientificNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_scientific__inner(p, follow), "scientific");
 }
 
 fn _parse_constant__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ConstantNode, ParseError> {
@@ -2128,12 +2093,7 @@ fn _parse_constant__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_constant(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ConstantNode, ParseError> {
-    let r = _parse_constant__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("constant");
-        return Result::<ConstantNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_constant__inner(p, follow), "constant");
 }
 
 fn _parse_variable__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<VariableNode, ParseError> {
@@ -2146,12 +2106,7 @@ fn _parse_variable__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_variable(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<VariableNode, ParseError> {
-    let r = _parse_variable__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("variable");
-        return Result::<VariableNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_variable__inner(p, follow), "variable");
 }
 
 fn _parse_func___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FuncNode, ParseError> {
@@ -2199,12 +2154,7 @@ fn _parse_func___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_func_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FuncNode, ParseError> {
-    let r = _parse_func___inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("func_");
-        return Result::<FuncNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_func___inner(p, follow), "func_");
 }
 
 fn _parse_funcname__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FuncnameNode, ParseError> {
@@ -2225,12 +2175,7 @@ fn _parse_funcname__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_funcname(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FuncnameNode, ParseError> {
-    let r = _parse_funcname__inner(p, follow);
-    if let Err(mut e) = r {
-        e.rule_stack.push("funcname");
-        return Result::<FuncnameNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_funcname__inner(p, follow), "funcname");
 }
 
 fn _parse_relop__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RelopNode, ParseError> {
@@ -2251,12 +2196,24 @@ fn _parse_relop__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_relop(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RelopNode, ParseError> {
-    let r = _parse_relop__inner(p, follow);
+    return _gale_rule(_parse_relop__inner(p, follow), "relop");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("relop");
-        return Result::<RelopNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -2275,111 +2232,51 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_equation(input: &String) -> Result<EquationNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_equation(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<EquationNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_equation(p));
 }
 
 pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_expression(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ExpressionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_expression(p));
 }
 
 pub fn parse_multiplying_expression(input: &String) -> Result<MultiplyingExpressionNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_multiplying_expression(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<MultiplyingExpressionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_multiplying_expression(p));
 }
 
 pub fn parse_pow_expression(input: &String) -> Result<PowExpressionNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_pow_expression(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<PowExpressionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_pow_expression(p));
 }
 
 pub fn parse_signed_atom(input: &String) -> Result<SignedAtomNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_signed_atom(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<SignedAtomNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_signed_atom(p));
 }
 
 pub fn parse_atom(input: &String) -> Result<AtomNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_atom(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<AtomNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_atom(p));
 }
 
 pub fn parse_scientific(input: &String) -> Result<ScientificNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_scientific(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ScientificNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_scientific(p));
 }
 
 pub fn parse_constant(input: &String) -> Result<ConstantNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_constant(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ConstantNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_constant(p));
 }
 
 pub fn parse_variable(input: &String) -> Result<VariableNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_variable(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<VariableNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_variable(p));
 }
 
 pub fn parse_func_(input: &String) -> Result<FuncNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_func_(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<FuncNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_func_(p));
 }
 
 pub fn parse_funcname(input: &String) -> Result<FuncnameNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_funcname(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<FuncnameNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_funcname(p));
 }
 
 pub fn parse_relop(input: &String) -> Result<RelopNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_relop(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RelopNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_relop(p));
 }
 
 pub fn parse(input: &String) -> Result<EquationNode, ParseError> {

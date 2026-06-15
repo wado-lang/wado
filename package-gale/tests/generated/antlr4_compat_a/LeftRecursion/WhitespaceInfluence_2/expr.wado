@@ -1184,13 +1184,13 @@ fn try_DQ_STRING(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\n' || chars[pos] == '\r') { return -1; }
+    if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\n' || chars[pos] == '\r') { return -1; }
     pos += 1;
     loop {
         let rep_saved_22 = pos;
         rep_22: {
             if pos >= chars.len() { break rep_22; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\n' || chars[pos] == '\r') { break rep_22; }
+            if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\n' || chars[pos] == '\r') { break rep_22; }
             pos += 1;
             continue;
         }
@@ -1428,55 +1428,72 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '!' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_BANG; }
+            end = try_lit_bang(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_BANG; }
             end = try_lit_bangeq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; }
         } else if first_char == '"' {
             end = try_DQ_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DQ_STRING; }
         } else if first_char == '%' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PERCENT; }
+            end = try_lit_percent(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_PERCENT; }
         } else if first_char == '&' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_AMP; }
+            end = try_lit_amp(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_AMP; }
         } else if first_char == '\'' {
             end = try_DATE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DATE; }
             end = try_SQ_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SQ_STRING; }
         } else if first_char == '(' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LPAREN; }
+            end = try_lit_lparen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
         } else if first_char == ')' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RPAREN; }
+            end = try_lit_rparen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
         } else if first_char == '*' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_STAR; }
+            end = try_lit_star(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
         } else if first_char == '+' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PLUS; }
+            end = try_lit_plus(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
         } else if first_char == ',' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_COMMA; }
+            end = try_lit_comma(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
         } else if first_char == '-' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_MINUS; }
+            end = try_lit_minus(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
         } else if first_char == '/' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SLASH; }
+            end = try_lit_slash(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
             end = try_COMMENTS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COMMENTS; }
         } else if first_char == '<' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LT; }
+            end = try_lit_lt(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
             end = try_lit_lteq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LTEQ; }
         } else if first_char == '=' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_EQ; }
+            end = try_lit_eq(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
         } else if first_char == '>' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_GT; }
+            end = try_lit_gt(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
             end = try_lit_gteq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; }
         } else if first_char == '[' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LBRACKET; }
+            end = try_lit_lbracket(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
         } else if first_char == ']' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RBRACKET; }
+            end = try_lit_rbracket(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
         } else if first_char == '^' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_CARET; }
+            end = try_lit_caret(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_CARET; }
         } else if first_char == '|' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PIPE; }
+            end = try_lit_pipe(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
         } else if 'a' <= first_char <= 'z' {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
@@ -2183,12 +2200,7 @@ fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
 }
 
 fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
-    let r = _parse_prog__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("prog");
-        return Result::<ProgNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_prog__inner(p), "prog");
 }
 
 fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
@@ -2778,12 +2790,24 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
 }
 
 fn _parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode, ParseError> {
-    let r = _parse_expression__inner(p, min_prec);
+    return _gale_rule(_parse_expression__inner(p, min_prec), "expression");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("expression");
-        return Result::<ExpressionNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -2802,21 +2826,11 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_prog(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ProgNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_prog(p));
 }
 
 pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_expression(&mut parser, 0);
-    if let Err(_e) = _result {
-        return Result::<ExpressionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_expression(p));
 }
 
 pub fn parse(input: &String) -> Result<ProgNode, ParseError> {

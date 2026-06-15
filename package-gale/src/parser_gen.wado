@@ -27,7 +27,6 @@ use {
     dedup_name,
     peek_dedup_name,
     element_field_info,
-    replay_element_names,
     all_alts_are_single_token,
     single_token_first,
 } from "./gen_util.wado";
@@ -122,15 +121,6 @@ fn follow_arg_sep(emit_follow: bool, arg: &FollowArg) -> String {
     return "";
 }
 
-/// `", &EMPTY_FOLLOW"` (entry-stub default) when the grammar emits
-/// FOLLOW machinery, else `""`.
-fn empty_follow_sep(emit_follow: bool) -> String {
-    if emit_follow {
-        return ", &EMPTY_FOLLOW";
-    }
-    return "";
-}
-
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
     // by name and order. emit still consumes surface IR for the body
@@ -153,7 +143,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // caller's continuation at runtime via the `follow` argument (see
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
-    gen_parse_entry(w, lowered, ctx.emit_follow());
+    gen_parse_entry(w, lowered, ctx.is_trace());
 }
 
 fn join_kinds(kinds: &List<String>) -> String {
@@ -1826,6 +1816,17 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
+/// Emit the ATN return-state bookkeeping a rule entry performs around its
+/// inner call: consume the pending return state the call site stamped, reset
+/// it, and push it onto the simulator's caller stack for full-context
+/// prediction (popped via `p.atn_stack.pop()` on every exit). Only emitted for
+/// grammars that need the ATN.
+fn emit_atn_enter(w: &mut CodeWriter) {
+    w.line(&"let _atn_ret = p.atn_ret_pending;");
+    w.line(&"p.atn_ret_pending = -1;");
+    w.line(&"p.atn_stack.push(_atn_ret);");
+}
+
 /// Emit a thin entry wrapper named `outer_name` that delegates to
 /// `inner_name` and, on failure, records `rule_display` onto the
 /// propagating `ParseError`'s rule stack. Every cross-rule call site and
@@ -1871,45 +1872,41 @@ fn gen_rule_entry_wrapper(
     f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
     let lit = escape_string(rule_display);
-    if trace {
-        w.line(&`trace_enter(p, &{lit});`);
-        w.line(&"p.trace_depth += 1;");
-    }
-    // Maintain the caller stack of ATN return states the simulator reads
-    // for full-context prediction. The calling site set `p.atn_ret_pending`
-    // to this invocation's exact return state (or left it -1 for an
-    // unstamped call / the start rule); consume it here, reset it, and push
-    // it. Popped on every exit (success and failure) below. Only emitted for
-    // grammars that need the ATN.
-    if needs_atn {
-        w.line(&"let _atn_ret = p.atn_ret_pending;");
-        w.line(&"p.atn_ret_pending = -1;");
-        w.line(&"p.atn_stack.push(_atn_ret);");
-    }
-    // Forward the runtime FOLLOW continuation to the inner body so its
-    // tail-greedy gate sees the caller's continuation.
+    // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
+    // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
-    if takes_min_prec {
-        w.line(&`let r = {*inner_name}(p{fsep}, min_prec);`);
-    } else {
-        w.line(&`let r = {*inner_name}(p{fsep});`);
+    let call = if takes_min_prec { `{*inner_name}(p{fsep}, min_prec)` } else { `{*inner_name}(p{fsep})` };
+    if !trace {
+        // Compact form: shared `_gale_rule` tail; ATN stack still wraps the call.
+        if needs_atn {
+            emit_atn_enter(w);
+            w.line(&`let r = {call};`);
+            w.line(&"p.atn_stack.pop();");
+            w.line(&`return _gale_rule(r, {lit});`);
+        } else {
+            w.line(&`return _gale_rule({call}, {lit});`);
+        }
+        w.end();
+        w.blank();
+        return;
     }
+    // Trace form: fully expanded so the `Err` branch can log `e.message`.
+    w.line(&`trace_enter(p, &{lit});`);
+    w.line(&"p.trace_depth += 1;");
+    if needs_atn {
+        emit_atn_enter(w);
+    }
+    w.line(&`let r = {call};`);
     if needs_atn {
         w.line(&"p.atn_stack.pop();");
     }
-    if trace {
-        w.line(&"p.trace_depth -= 1;");
-    }
+    w.line(&"p.trace_depth -= 1;");
     w.begin(&"if let Err(mut e) = r");
     w.line(&`e.rule_stack.push({lit});`);
-    if trace {
-        w.line(&`trace_fail(p, &{lit}, &e.message);`);
-    }
+    w.line(&`trace_fail(p, &{lit}, &e.message);`);
     w.line(&`return Result::<{type_name}, ParseError>::Err(e);`);
     w.end();
-    if trace {
-        w.line(&`trace_ok(p, &{lit});`);
-    }
+    w.line(&`trace_ok(p, &{lit});`);
     w.line(&"return r;");
     w.end();
     w.blank();
@@ -1994,6 +1991,22 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
 /// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
 /// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
 /// path needs no per-(rule, mask) specialisation.
+/// Whether a multi-alt rule body references `start`: only an inlined alt body
+/// uses it — the non-overlap dispatch (`gen_multi_alt_body`) and a singleton
+/// overlap group (`gen_multi_alt_body_alt`, `group.len() == 1`). A pure
+/// prediction dispatch only calls `_alt_<n>` helpers (which capture their own).
+fn rule_body_needs_start(has_overlaps: bool, groups: &List<List<i32>>) -> bool {
+    if !has_overlaps {
+        return true;
+    }
+    for let g of groups {
+        if g.len() == 1 {
+            return true;
+        }
+    }
+    return false;
+}
+
 fn gen_parse_fn_named(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -2112,6 +2125,8 @@ fn gen_parse_fn_named(
         }
     }
 
+    let needs_start = rule_body_needs_start(has_overlaps, &groups);
+
     let has_lr = match lowered_rule {
         LeftRecursive(_) => true,
         _ => false,
@@ -2126,7 +2141,9 @@ fn gen_parse_fn_named(
         }
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
-        w.line(&"let start = p.peek().span.start;");
+        if needs_start {
+            w.line(&"let start = p.peek().span.start;");
+        }
         if has_overlaps {
             gen_multi_alt_body_alt(
                 w,
@@ -2193,7 +2210,9 @@ fn gen_parse_fn_named(
         }
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
-        w.line(&"let start = p.peek().span.start;");
+        if needs_start {
+            w.line(&"let start = p.peek().span.start;");
+        }
         if has_overlaps {
             gen_multi_alt_body_alt(
                 w,
@@ -2264,71 +2283,6 @@ fn gen_field_assignments_from_fields(w: &mut CodeWriter, fields: &List<FieldDecl
             continue;
         }
         w.line(&`{fields[i].name},`);
-    }
-}
-
-fn gen_alt_body_skip(
-    w: &mut CodeWriter,
-    type_name: &String,
-    variant_case: Option<String>,
-    struct_name: Option<String>,
-    alt: &Alternative,
-    body: &AltBody,
-    ctx: &mut GenContext,
-    skip: i32,
-) {
-    // Parse elements from `skip` onward (prefix already consumed).
-    // Replay name counter for consumed elements so dedup_name stays in sync.
-    let mut name_counts: List<[String, i32]> = [];
-    for let mut i = 0; i < skip; i += 1 {
-        replay_element_names(&alt.elements[i], &mut name_counts);
-    }
-    // `body.ops` skips the LR-stripped prefix self-ref, so its
-    // indexing is offset from `alt.elements` by `skip` for LR suffix
-    // bodies. For the BT (multi-alt prediction) path `skip > 0` is a
-    // consumed-prefix offset rather than an LR strip — there the
-    // surface alt and the lowered alt have 1:1 element correspondence
-    // and `body.ops[i]` lines up with `alt.elements[i]`. Detect via
-    // length: if `body.ops.len() == alt.elements.len()` the ops are
-    // full-alt (BT path); otherwise they're a `lr_alts[k].suffix`
-    // and `body.ops[k]` corresponds to `alt.elements[skip + k]`.
-    let ops_offset = if body.ops.len() == alt.elements.len() { 0 } else { skip };
-    for let mut i = skip; i < alt.elements.len(); i += 1 {
-        let elem = &alt.elements[i];
-        let op = &body.ops[i - ops_offset];
-        if let Repeat(rep) = elem {
-            let rep_op = if let Repeat(r) = op {
-                r;
-            } else {
-                panic("gen_alt_body_skip: Repeat element / op mismatch");
-            };
-            gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
-        } else if op_is_leaf(op) {
-            gen_op_leaf(w, op, ctx, &mut name_counts);
-        } else if let ListLabel(ll) = op {
-            gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
-        } else if let Group(g_op) = op {
-            gen_op_group(w, g_op, elem, ctx, &mut name_counts);
-        } else {
-            panic("gen_alt_body_skip: unreachable op shape — every Op variant is handled");
-        }
-    }
-
-    if let Some(case) = variant_case {
-        let sname = struct_name.unwrap();
-        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
-        w.indent();
-        gen_clamped_span_field(w);
-        gen_field_assignments_from_fields(w, &body.fields);
-        w.dedent();
-        w.line(&"}));");
-    } else {
-        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
-        w.indent();
-        gen_clamped_span_field(w);
-        gen_field_assignments_from_fields(w, &body.fields);
-        w.dedent();
-        w.line(&"});");
     }
 }
 
@@ -2421,11 +2375,9 @@ fn peel_scalar_label(elem: &Element) -> &Element {
 fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>, ctx: &mut GenContext) {
     // gen_alt_elements requires 1:1 correspondence between
     // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
-    // LR atom). LR-suffix bodies strip the leading self-ref op and
-    // flow through `gen_alt_body_skip`, which carries its own offset
-    // calculation; that path never reaches here. Wado's power-assert
-    // surfaces the lengths automatically — the contract note in the
-    // message points callers at the right entry point.
+    // LR atom). LR-suffix bodies strip the leading self-ref op and are
+    // emitted by `gen_lr_suffix_helpers`, not here. Wado's power-assert
+    // surfaces the lengths automatically if a mismatched body reaches here.
     //
     // The element-side `if let Repeat(...)` and `gen_op_group` paths
     // require the inner shape, but a surface scalar `name=elem` wraps
@@ -2435,7 +2387,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>
     // the peeled element so `t=ID*` and friends route correctly
     // (today's g4 parser keeps the `*` outside the label, so this
     // arm is defensive — see `peel_scalar_label` for the contract).
-    assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies must use gen_alt_body_skip";
+    assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_suffix_helpers";
     let mut name_counts: List<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
@@ -2587,9 +2539,8 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
 /// LR-prefix `min_prec` argument — emit does not re-derive any of
 /// it. Counterpart of the leaf arms of `gen_element` for the surface
 /// IR walker; that walker is still in use inside group bodies and
-/// Label / Not cases, but the top-level alt walkers
-/// (`gen_alt_elements`, the body loop of `gen_alt_body_skip`)
-/// dispatch leaves here instead.
+/// Label / Not cases, but the top-level alt walker (`gen_alt_elements`)
+/// dispatches leaves here instead.
 ///
 /// The mirror `dedup_name(&op.dedup_base, name_counts)` keeps
 /// `name_counts` in sync with what `gen_element`'s leaf arms would
@@ -5418,8 +5369,7 @@ fn gen_prediction_code(
     ctx: &mut GenContext,
     rule_display: &String,
 ) {
-    let mut nc: List<[String, i32]> = [];
-    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, &mut nc, rule_display);
+    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, rule_display);
 }
 
 fn gen_prediction_code_inner(
@@ -5431,37 +5381,23 @@ fn gen_prediction_code_inner(
     type_name: &String,
     ctx: &mut GenContext,
     skip: i32,
-    name_counts: &mut List<[String, i32]>,
     rule_display: &String,
 ) {
     if let Leaf(idx) = node {
-        if skip == 0 {
-            w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
-        } else {
-            // Consumed prefix tokens already — inline the remaining alt body.
-            let alt = &alts[*idx];
-            let body = rule_alt_body(lowered_rule, *idx).unwrap();
-            gen_alt_body_skip(
-                w,
-                type_name,
-                Option::<String>::Some(body.case_name),
-                Option::<String>::Some(body.struct_name),
-                alt,
-                body,
-                ctx,
-                skip,
-            );
+        // Consume advanced `p.pos` past `skip` shared tokens without building a
+        // node; rewind so `_alt_<idx>` re-parses the alt from its start.
+        if skip > 0 {
+            w.line(&`p.pos -= {skip};`);
         }
+        w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
         return;
     }
     if let Consume(c) = node {
-        // The consumed element at position `skip` must match every alt
-        // reachable below this node — `skip` is applied to whichever Leaf the
-        // dispatch lands on. Validating against the whole rule's `alts[0]`
-        // mismatched, since the tree is built over a sorted overlap group that
-        // need not contain alt 0 (regression fixture ll_consume_group.g4). On
-        // any mismatch, skip the consume — the Leaf falls back to the scan
-        // tournament.
+        // Shared-prefix terminal: advance past it (the chosen `_alt_<idx>`
+        // re-parses it) and descend to the disambiguating dispatch. It must
+        // match every alt below (the group need not contain alt 0; regression:
+        // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
+        // rewinds exactly what was advanced.
         let mut node_alts: List<i32> = [];
         prediction_collect_all_indices(&c.child, &mut node_alts);
         let mut elem_matches = !node_alts.is_empty();
@@ -5472,34 +5408,10 @@ fn gen_prediction_code_inner(
             }
         }
         if elem_matches {
-            gen_element(w, &c.element, ctx, name_counts);
-            gen_prediction_code_inner(
-                w,
-                &c.child,
-                fn_name,
-                alts,
-                lowered_rule,
-                type_name,
-                ctx,
-                skip + 1,
-                name_counts,
-                rule_display,
-            );
+            w.line(&"p.pos += 1;");
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip + 1, rule_display);
         } else {
-            // Element mismatch — prediction consumed a later element.
-            // Don't emit the consume or increment skip; treat as skip=0 at the Leaf.
-            gen_prediction_code_inner(
-                w,
-                &c.child,
-                fn_name,
-                alts,
-                lowered_rule,
-                type_name,
-                ctx,
-                0,
-                name_counts,
-                rule_display,
-            );
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip, rule_display);
         }
         return;
     }
@@ -5687,7 +5599,6 @@ fn gen_prediction_code_inner(
                 type_name,
                 ctx,
                 skip,
-                name_counts,
                 rule_display,
             );
         }
@@ -5796,13 +5707,13 @@ fn gen_multi_alt_body_alt(
 /// is `_parse_<snake>`; LR rules take an extra `min_prec` parameter,
 /// which the public entry pins to `0` (matching `parse`'s historic
 /// behaviour: no precedence threshold at the top of the parse).
-fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, emit_follow: bool) {
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, trace: bool) {
     if lowered.parser_rules.len() == 0 {
         return;
     }
-    gen_parse_entry_helpers(w);
+    gen_parse_entry_helpers(w, trace);
     for let rule of &lowered.parser_rules {
-        gen_parse_rule_input_entry(w, rule, emit_follow);
+        gen_parse_rule_input_entry(w, rule);
     }
     let header = rule_header(&lowered.parser_rules[0]);
     let mut f = FnSpec::new("parse");
@@ -5823,7 +5734,44 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, emit_follow: bo
 /// The helpers are cold — called once per top-level parse — so the extra
 /// call is free; the `_gale_` prefix keeps them clear of any
 /// `parse_<rule>` the grammar might name.
-fn gen_parse_entry_helpers(w: &mut CodeWriter) {
+fn gen_parse_entry_helpers(w: &mut CodeWriter, trace: bool) {
+    // `_gale_run<T>` / `_gale_rule<T>` factor the per-rule entry and the
+    // wrapper's err/rule-stack tail. Both are generic: monomorphisation emits
+    // one instance per node type (no ICF yet), so this saves generated-source
+    // size, not wasm size.
+    if !trace {
+        // Trace wrappers stay expanded (their `Err` branch logs `e.message`),
+        // so `_gale_rule` is referenced only when `!trace`.
+        let mut gr = FnSpec::new("_gale_rule");
+        gr.add_generic(&"T");
+        gr.add_param(&"r", &"Result<T, ParseError>");
+        gr.add_param(&"rule", &"String");
+        gr.set_return_type(&"Result<T, ParseError>");
+        gr.emit_begin(w);
+        w.begin(&"if let Err(mut e) = r");
+        w.line(&"e.rule_stack.push(rule);");
+        w.line(&"return Result::<T, ParseError>::Err(e);");
+        w.end();
+        w.line(&"return r;");
+        w.end();
+        w.blank();
+    }
+
+    let mut gru = FnSpec::new("_gale_run");
+    gru.add_generic(&"T");
+    gru.add_param(&"input", &"&String");
+    gru.add_param(&"run", &"fn(&mut Parser) -> Result<T, ParseError>");
+    gru.set_return_type(&"Result<T, ParseError>");
+    gru.emit_begin(w);
+    w.line(&"let mut parser = _gale_new_parser(input);");
+    w.line(&"let _result = run(&mut parser);");
+    w.begin(&"if let Err(_e) = _result");
+    w.line(&"return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));");
+    w.end();
+    w.line(&"return _result;");
+    w.end();
+    w.blank();
+
     let mut np = FnSpec::new("_gale_new_parser");
     np.add_param(&"input", &"&String");
     np.set_return_type(&"Parser");
@@ -5857,23 +5805,16 @@ fn gen_parse_entry_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
-fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule, emit_follow: bool) {
+fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     let header = rule_header(rule);
     let mut f = FnSpec::new(&`parse_{header.snake_name}`);
     f.set_pub();
     f.add_param(&"input", &"&String");
     f.set_return_type(&`Result<{header.type_name}, ParseError>`);
     f.emit_begin(w);
-    w.line(&"let mut parser = _gale_new_parser(input);");
-    if rule_takes_min_prec(rule) {
-        w.line(&`let _result = _parse_{header.snake_name}(&mut parser{empty_follow_sep(emit_follow)}, 0);`);
-    } else {
-        w.line(&`let _result = _parse_{header.snake_name}(&mut parser);`);
-    }
-    w.begin(&"if let Err(_e) = _result");
-    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_gale_pick_error(&parser, _e));`);
-    w.end();
-    w.line(&"return _result;");
+    // The wrapper's defaulted `follow`/`min_prec` absorb the LR / gated cases,
+    // so this one closure form is uniform across all rules.
+    w.line(&`return _gale_run(input, |p: &mut Parser| _parse_{header.snake_name}(p));`);
     w.end();
     w.blank();
 }

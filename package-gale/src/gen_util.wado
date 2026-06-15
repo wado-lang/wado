@@ -684,34 +684,6 @@ pub fn peek_dedup_name(base: &String, counts: &List<[String, i32]>) -> String {
     return *base;
 }
 
-pub fn has_field(elem: &Element) -> bool {
-    if let TokenRef(_) | Literal(_) | RuleRef(_) = elem {
-        return true;
-    }
-    if let Wildcard(_) = elem {
-        return true;
-    }
-    if let Not(_) = elem {
-        return true;
-    }
-    if let Label(lab) = elem {
-        return has_field(&lab.element);
-    }
-    if let Group(g) = elem {
-        return is_storable_group(&g.alternatives);
-    }
-    return false;
-}
-
-/// Returns true if `elem` is a list-label (`items+=X`). List labels store
-/// matches in an `List<InnerType>` named by `lab.name`.
-pub fn is_list_label(elem: &Element) -> bool {
-    if let Label(lab) = elem {
-        return lab.list;
-    }
-    return false;
-}
-
 pub fn element_field_info(elem: &Element) -> [String, String] {
     if let TokenRef(t) = elem {
         return [t.field_name, "Token"];
@@ -762,71 +734,4 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
     panic(
         "element_field_info: element has no storable field shape — caller routed a non-storable element into the field-info helper",
     );
-}
-
-/// Replay name counting for an element without emitting code.
-/// This advances the dedup counter so subsequent elements get correct suffixes.
-pub fn replay_element_names(elem: &Element, name_counts: &mut List<[String, i32]>) {
-    if let TokenRef(t) = elem {
-        dedup_name(&t.field_name, name_counts);
-        return;
-    }
-    if let Literal(l) = elem {
-        dedup_name(&literal_field_name(&l.text), name_counts);
-        return;
-    }
-    if let RuleRef(r) = elem {
-        dedup_name(&r.field_name, name_counts);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        dedup_name(&"wildcard", name_counts);
-        return;
-    }
-    if let Not(ne) = elem {
-        dedup_name(&not_element_field_name(&ne.element), name_counts);
-        return;
-    }
-    if let Repeat(rep) = elem {
-        if has_field(&rep.element) {
-            if is_list_label(&rep.element) {
-                let info = element_field_info(&rep.element);
-                dedup_name(&info.0, name_counts);
-                return;
-            }
-            let info = element_field_info(&rep.element);
-            if let Star | Plus = rep.kind {
-                dedup_name(&`{info.0}_list`, name_counts);
-            }
-            if let Optional = rep.kind {
-                dedup_name(&info.0, name_counts);
-            }
-        }
-        return;
-    }
-    if let Label(lab) = elem {
-        if has_field(&lab.element) {
-            dedup_name(&lab.field_name, name_counts);
-        }
-        return;
-    }
-    if let Group(g) = elem {
-        match classify_group(&g.alternatives) {
-            SimpleCst => {
-                dedup_name(&group_field_base_name(&g.alternatives), name_counts);
-            },
-            TokenOnly => {
-                dedup_name(&token_group_field_name(&g.alternatives), name_counts);
-            },
-            SingleAlt => {
-                dedup_name(&single_alt_group_field_name(&g.alternatives[0]), name_counts);
-            },
-            General => panic(
-                "replay_element_names: general Group reached the skip-replay walker — only token-shaped prefix elements should be replayed",
-            ),
-            Transparent => {
-            },
-        }
-        return;
-    }
 }

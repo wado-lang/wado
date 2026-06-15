@@ -598,13 +598,13 @@ fn try_C(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
+    if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_0; }
+            if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -871,24 +871,15 @@ fn _parse_r__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 }
 
 fn _parse_r__inner(p: &mut Parser) -> Result<RNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_A {
-        let a = p.expect(TK_A)?;
+        p.pos += 1;
         if p.peek_kind() == TK_B {
-            let b = p.expect(TK_B)?;
-            return Result::<RNode, ParseError>::Ok(RNode::Alt0(RAlt0 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                a,
-                b,
-            }));
+            p.pos -= 1;
+            return _parse_r__inner_alt_0(p);
         } else if p.peek_kind() == TK_C {
-            let c = p.expect(TK_C)?;
-            return Result::<RNode, ParseError>::Ok(RNode::Alt1(RAlt1 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                a,
-                c,
-            }));
+            p.pos -= 1;
+            return _parse_r__inner_alt_1(p);
         }
     }
     return Result::<RNode, ParseError>::Err(p.error(
@@ -899,12 +890,24 @@ fn _parse_r__inner(p: &mut Parser) -> Result<RNode, ParseError> {
 }
 
 fn _parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
-    let r = _parse_r__inner(p);
+    return _gale_rule(_parse_r__inner(p), "r");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("r");
-        return Result::<RNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -923,12 +926,7 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_r(input: &String) -> Result<RNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_r(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<RNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_r(p));
 }
 
 pub fn parse(input: &String) -> Result<RNode, ParseError> {

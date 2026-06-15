@@ -928,15 +928,15 @@ b : 'y' ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_a(input: &String)");
     assert str_contains(&output, &"pub fn parse_b(input: &String)");
-    // Per-rule entries share the type-independent prologue/epilogue via two
-    // helpers emitted once (`_gale_new_parser` builds the Parser;
-    // `_gale_pick_error` prefers a deeper recovery error recorded in
-    // `parser.pending` by a scan-gated repetition over a malformed element,
-    // over the shallow top-level failure). The wrapper keeps only the typed
-    // inner call and the typed `Err` reconstruction.
+    // The prologue/epilogue lives in `_gale_run<T>` (build Parser, run via
+    // closure, select error), so each `parse_<rule>` is a one-line forward.
+    assert str_contains(&output, &"return _gale_run(input, |p: &mut Parser| _parse_a(p));");
+    assert str_contains(&output, &"return _gale_run(input, |p: &mut Parser| _parse_b(p));");
+    assert str_contains(
+        &output,
+        &"fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError>",
+    );
     assert str_contains(&output, &"let mut parser = _gale_new_parser(input);");
-    assert str_contains(&output, &"let _result = _parse_a(&mut parser);");
-    assert str_contains(&output, &"let _result = _parse_b(&mut parser);");
     assert str_contains(&output, &"_gale_pick_error(&parser, _e)");
     assert str_contains(&output, &"fn _gale_new_parser(input: &String) -> Parser");
     assert str_contains(&output, &"fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError");
@@ -1061,10 +1061,8 @@ WS : [ \\t]+ -> skip ;
 }
 
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
-    // LR rules' internal helper takes a `min_prec: i32` parameter
-    // (see `lr_util.compute_prefix_self_ref_min_prec`); the public
-    // input entry must pin it to 0 so the top-level call admits every
-    // LR alt, matching the historic `parse(input)` behaviour.
+    // LR rules' `_parse_expr` wrapper defaults `min_prec` to 0, so the public
+    // entry's `_gale_run` closure admits every LR alt (historic `parse` behaviour).
     let input = "grammar Test;
 expr : expr '+' expr | NUMBER ;
 NUMBER : [0-9]+ ;
@@ -1073,7 +1071,7 @@ WS : [ \\t\\n]+ -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_expr(input: &String)");
-    assert str_contains(&output, &"let _result = _parse_expr(&mut parser, 0);");
+    assert str_contains(&output, &"return _gale_run(input, |p: &mut Parser| _parse_expr(p));");
 }
 
 test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {

@@ -682,13 +682,13 @@ fn try_ANY(chars: &List<char>, start: i32) -> i32 {
 fn try_ITEM(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || 'a' <= chars[pos] <= 'z' || chars[pos] == '_') { return -1; }
+    if !('a' <= chars[pos] <= 'z' || chars[pos] == '_') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !(false || 'a' <= chars[pos] <= 'z' || chars[pos] == '_' || '0' <= chars[pos] <= '9') { break rep_0; }
+            if !('a' <= chars[pos] <= 'z' || chars[pos] == '_' || '0' <= chars[pos] <= '9') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -701,13 +701,13 @@ fn try_ITEM(chars: &List<char>, start: i32) -> i32 {
 fn try_NUMBER(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || '0' <= chars[pos] <= '9') { return -1; }
+    if !('0' <= chars[pos] <= '9') { return -1; }
     pos += 1;
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if !(false || '0' <= chars[pos] <= '9') { break rep_1; }
+            if !('0' <= chars[pos] <= '9') { break rep_1; }
             pos += 1;
             continue;
         }
@@ -734,13 +734,13 @@ fn try_SEMI(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
+    if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
     pos += 1;
     loop {
         let rep_saved_2 = pos;
         rep_2: {
             if pos >= chars.len() { break rep_2; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_2; }
+            if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_2; }
             pos += 1;
             continue;
         }
@@ -1125,12 +1125,7 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
 }
 
 fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
-    let r = _parse_program__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("program");
-        return Result::<ProgramNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_program__inner(p), "program");
 }
 
 fn _parse_stmt__inner(p: &mut Parser) -> Result<StmtNode, ParseError> {
@@ -1165,12 +1160,7 @@ fn _parse_stmt__inner(p: &mut Parser) -> Result<StmtNode, ParseError> {
 }
 
 fn _parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
-    let r = _parse_stmt__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("stmt");
-        return Result::<StmtNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_stmt__inner(p), "stmt");
 }
 
 fn _parse_list_stmt__inner(p: &mut Parser) -> Result<ListStmtNode, ParseError> {
@@ -1220,12 +1210,7 @@ fn _parse_list_stmt__inner(p: &mut Parser) -> Result<ListStmtNode, ParseError> {
 }
 
 fn _parse_list_stmt(p: &mut Parser) -> Result<ListStmtNode, ParseError> {
-    let r = _parse_list_stmt__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("list_stmt");
-        return Result::<ListStmtNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_list_stmt__inner(p), "list_stmt");
 }
 
 fn _parse_not_stmt__inner(p: &mut Parser) -> Result<NotStmtNode, ParseError> {
@@ -1261,12 +1246,7 @@ fn _parse_not_stmt__inner(p: &mut Parser) -> Result<NotStmtNode, ParseError> {
 }
 
 fn _parse_not_stmt(p: &mut Parser) -> Result<NotStmtNode, ParseError> {
-    let r = _parse_not_stmt__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("not_stmt");
-        return Result::<NotStmtNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_not_stmt__inner(p), "not_stmt");
 }
 
 fn _parse_any_stmt__inner(p: &mut Parser) -> Result<AnyStmtNode, ParseError> {
@@ -1283,12 +1263,24 @@ fn _parse_any_stmt__inner(p: &mut Parser) -> Result<AnyStmtNode, ParseError> {
 }
 
 fn _parse_any_stmt(p: &mut Parser) -> Result<AnyStmtNode, ParseError> {
-    let r = _parse_any_stmt__inner(p);
+    return _gale_rule(_parse_any_stmt__inner(p), "any_stmt");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("any_stmt");
-        return Result::<AnyStmtNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -1307,48 +1299,23 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_program(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ProgramNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_program(p));
 }
 
 pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_stmt(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<StmtNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_stmt(p));
 }
 
 pub fn parse_list_stmt(input: &String) -> Result<ListStmtNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_list_stmt(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ListStmtNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_list_stmt(p));
 }
 
 pub fn parse_not_stmt(input: &String) -> Result<NotStmtNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_not_stmt(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<NotStmtNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_not_stmt(p));
 }
 
 pub fn parse_any_stmt(input: &String) -> Result<AnyStmtNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_any_stmt(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<AnyStmtNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_any_stmt(p));
 }
 
 pub fn parse(input: &String) -> Result<ProgramNode, ParseError> {

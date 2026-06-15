@@ -587,13 +587,13 @@ impl Lexer {
 fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { return -1; }
+    if !('a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_' || '0' <= chars[pos] <= '9') { break rep_0; }
+            if !('a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_' || '0' <= chars[pos] <= '9') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -606,13 +606,13 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 fn try_INT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || '0' <= chars[pos] <= '9') { return -1; }
+    if !('0' <= chars[pos] <= '9') { return -1; }
     pos += 1;
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if !(false || '0' <= chars[pos] <= '9') { break rep_1; }
+            if !('0' <= chars[pos] <= '9') { break rep_1; }
             pos += 1;
             continue;
         }
@@ -625,7 +625,7 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
 fn try_OP(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == '+' || chars[pos] == '-' || chars[pos] == '*' || chars[pos] == '/' || chars[pos] == '=') { return -1; }
+    if !(chars[pos] == '+' || chars[pos] == '-' || chars[pos] == '*' || chars[pos] == '/' || chars[pos] == '=') { return -1; }
     pos += 1;
     return pos;
 }
@@ -640,13 +640,13 @@ fn try_SEMI(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
+    if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
     pos += 1;
     loop {
         let rep_saved_2 = pos;
         rep_2: {
             if pos >= chars.len() { break rep_2; }
-            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_2; }
+            if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_2; }
             pos += 1;
             continue;
         }
@@ -1013,12 +1013,7 @@ fn _parse_file__inner(p: &mut Parser) -> Result<FileNode, ParseError> {
 }
 
 fn _parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
-    let r = _parse_file__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("file");
-        return Result::<FileNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_file__inner(p), "file");
 }
 
 fn _parse_constant__inner(p: &mut Parser) -> Result<ConstantNode, ParseError> {
@@ -1039,12 +1034,24 @@ fn _parse_constant__inner(p: &mut Parser) -> Result<ConstantNode, ParseError> {
 }
 
 fn _parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
-    let r = _parse_constant__inner(p);
+    return _gale_rule(_parse_constant__inner(p), "constant");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("constant");
-        return Result::<ConstantNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -1063,21 +1070,11 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_file(input: &String) -> Result<FileNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_file(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<FileNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_file(p));
 }
 
 pub fn parse_constant(input: &String) -> Result<ConstantNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_constant(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ConstantNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_constant(p));
 }
 
 pub fn parse(input: &String) -> Result<FileNode, ParseError> {

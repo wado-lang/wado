@@ -686,17 +686,23 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '(' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LPAREN; }
+            end = try_lit_lparen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
         } else if first_char == ')' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RPAREN; }
+            end = try_lit_rparen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
         } else if first_char == '*' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_STAR; }
+            end = try_lit_star(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
         } else if first_char == '+' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PLUS; }
+            end = try_lit_plus(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
         } else if first_char == '-' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_MINUS; }
+            end = try_lit_minus(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
         } else if first_char == '/' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SLASH; }
+            end = try_lit_slash(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
         } else if '0' <= first_char <= '9' {
             end = try_INT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_INT; }
@@ -992,12 +998,7 @@ fn _parse_s__inner(p: &mut Parser) -> Result<SNode, ParseError> {
 }
 
 fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
-    let r = _parse_s__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("s");
-        return Result::<SNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_s__inner(p), "s");
 }
 
 fn _parse_e__inner_atom(p: &mut Parser) -> Result<ENode, ParseError> {
@@ -1085,12 +1086,24 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseErro
 }
 
 fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
-    let r = _parse_e__inner(p, min_prec);
+    return _gale_rule(_parse_e__inner(p, min_prec), "e");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("e");
-        return Result::<ENode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -1109,21 +1122,11 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_s(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<SNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_s(p));
 }
 
 pub fn parse_e(input: &String) -> Result<ENode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_e(&mut parser, 0);
-    if let Err(_e) = _result {
-        return Result::<ENode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_e(p));
 }
 
 pub fn parse(input: &String) -> Result<SNode, ParseError> {

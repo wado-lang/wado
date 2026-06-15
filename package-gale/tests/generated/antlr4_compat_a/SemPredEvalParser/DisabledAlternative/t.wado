@@ -580,7 +580,7 @@ impl Lexer {
 fn try_ANY_CHAR(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == '_' || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || '0' <= chars[pos] <= '9') { return -1; }
+    if !(chars[pos] == '_' || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || '0' <= chars[pos] <= '9') { return -1; }
     pos += 1;
     return pos;
 }
@@ -862,12 +862,7 @@ fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> Result<CppCompilationUn
 }
 
 fn _parse_cpp_compilation_unit(p: &mut Parser) -> Result<CppCompilationUnitNode, ParseError> {
-    let r = _parse_cpp_compilation_unit__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("cppCompilationUnit");
-        return Result::<CppCompilationUnitNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_cpp_compilation_unit__inner(p), "cppCompilationUnit");
 }
 
 fn _parse_content__inner(p: &mut Parser) -> Result<ContentNode, ParseError> {
@@ -895,12 +890,7 @@ fn _parse_content__inner(p: &mut Parser) -> Result<ContentNode, ParseError> {
 }
 
 fn _parse_content(p: &mut Parser) -> Result<ContentNode, ParseError> {
-    let r = _parse_content__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("content");
-        return Result::<ContentNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_content__inner(p), "content");
 }
 
 fn _parse_anything__inner(p: &mut Parser) -> Result<AnythingNode, ParseError> {
@@ -913,12 +903,24 @@ fn _parse_anything__inner(p: &mut Parser) -> Result<AnythingNode, ParseError> {
 }
 
 fn _parse_anything(p: &mut Parser) -> Result<AnythingNode, ParseError> {
-    let r = _parse_anything__inner(p);
+    return _gale_rule(_parse_anything__inner(p), "anything");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("anything");
-        return Result::<AnythingNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -937,30 +939,15 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_cpp_compilation_unit(input: &String) -> Result<CppCompilationUnitNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_cpp_compilation_unit(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<CppCompilationUnitNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_cpp_compilation_unit(p));
 }
 
 pub fn parse_content(input: &String) -> Result<ContentNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_content(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ContentNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_content(p));
 }
 
 pub fn parse_anything(input: &String) -> Result<AnythingNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_anything(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<AnythingNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_anything(p));
 }
 
 pub fn parse(input: &String) -> Result<CppCompilationUnitNode, ParseError> {

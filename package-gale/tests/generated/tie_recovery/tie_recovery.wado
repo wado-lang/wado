@@ -577,13 +577,13 @@ impl Lexer {
 fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || 'a' <= chars[pos] <= 'z') { return -1; }
+    if !('a' <= chars[pos] <= 'z') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !(false || 'a' <= chars[pos] <= 'z') { break rep_0; }
+            if !('a' <= chars[pos] <= 'z') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -596,13 +596,13 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(false || chars[pos] == ' ') { return -1; }
+    if !(chars[pos] == ' ') { return -1; }
     pos += 1;
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if !(false || chars[pos] == ' ') { break rep_1; }
+            if !(chars[pos] == ' ') { break rep_1; }
             pos += 1;
             continue;
         }
@@ -638,9 +638,11 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char == '=' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_EQ; }
+            end = try_lit_eq(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
         } else if first_char == 'x' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_X; }
+            end = try_lit_x(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_X; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if 'a' <= first_char <= 'z' {
@@ -879,12 +881,7 @@ fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
 }
 
 fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
-    let r = _parse_prog__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("prog");
-        return Result::<ProgNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_prog__inner(p), "prog");
 }
 
 fn _parse_item__inner(p: &mut Parser) -> Result<ItemNode, ParseError> {
@@ -899,12 +896,7 @@ fn _parse_item__inner(p: &mut Parser) -> Result<ItemNode, ParseError> {
 }
 
 fn _parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
-    let r = _parse_item__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("item");
-        return Result::<ItemNode, ParseError>::Err(e);
-    }
-    return r;
+    return _gale_rule(_parse_item__inner(p), "item");
 }
 
 fn _parse_trailer__inner(p: &mut Parser) -> Result<TrailerNode, ParseError> {
@@ -919,12 +911,24 @@ fn _parse_trailer__inner(p: &mut Parser) -> Result<TrailerNode, ParseError> {
 }
 
 fn _parse_trailer(p: &mut Parser) -> Result<TrailerNode, ParseError> {
-    let r = _parse_trailer__inner(p);
+    return _gale_rule(_parse_trailer__inner(p), "trailer");
+}
+
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
-        e.rule_stack.push("trailer");
-        return Result::<TrailerNode, ParseError>::Err(e);
+        e.rule_stack.push(rule);
+        return Result::<T, ParseError>::Err(e);
     }
     return r;
+}
+
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+    let mut parser = _gale_new_parser(input);
+    let _result = run(&mut parser);
+    if let Err(_e) = _result {
+        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+    }
+    return _result;
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -943,30 +947,15 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
 }
 
 pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_prog(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ProgNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_prog(p));
 }
 
 pub fn parse_item(input: &String) -> Result<ItemNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_item(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<ItemNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_item(p));
 }
 
 pub fn parse_trailer(input: &String) -> Result<TrailerNode, ParseError> {
-    let mut parser = _gale_new_parser(input);
-    let _result = _parse_trailer(&mut parser);
-    if let Err(_e) = _result {
-        return Result::<TrailerNode, ParseError>::Err(_gale_pick_error(&parser, _e));
-    }
-    return _result;
+    return _gale_run(input, |p: &mut Parser| _parse_trailer(p));
 }
 
 pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
