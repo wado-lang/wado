@@ -14,14 +14,23 @@ hash-consed ValueGraph as an engine side-table, the per-function dirty-set
 gate, and the interprocedural worklist. What it left in place is the cost it
 was built to remove.
 
-A native sampling profile of `wado compile -O2` on package-gale puts
-`run_gated` (the gated intra passes) at ~48% of compile CPU. Inside it the
-dominant cost is reconstruction that is rebuilt per pass per function and
-then discarded:
+A sampling profile (samply, 1 kHz, dev/debug `wado`) of
+`wado compile -O2 package-gale/src/main.wado` (~37k lines) pins the cost.
+Percentages are inclusive shares of total CPU — machine-independent ratios;
+absolute time varies by host. `optimize` is 69% of compile CPU, and the gated
+intra passes (`run_gated` + `run_gated_cached`) are ~49%. Inside them the
+dominant cost is reconstruction rebuilt per pass per function and then
+discarded:
 
-- per-function `ValueGraph` build (`builder::build` + `Engine::value`) ~22%
-- flow joins (`join_overlay` / `join_heap` / `flow_join`) ~16%
-- alias-set computation ~14%
+- per-function `ValueGraph` build (`builder::build`, reached via
+  `Engine::value`; `walk_block` / `walk_expr`) ~20%
+- per-session engine setup (`Engine::new`: parent maps, use index, post-order
+  seed) ~9%
+- flow joins (`join_heap` / `flow_join_two` / `flow_join_n`) ~10%
+- alias-set computation (`builder_alias_sets`) ~9%
+
+Together that is ~40% of compile CPU spent building and tearing down
+per-function analysis the next pass rebuilds from scratch.
 
 The required path can only amortise this for _unchanged_ functions: the
 dirty-set gate skips them, and the revision-keyed `vg_cache` (gate.rs) shares
@@ -213,10 +222,11 @@ acceptable. A regression is not.
 
 ### Expected effect
 
-- The ~22% (build) + ~16% (joins) of `run_gated` collapse to one build + one
-  join set per function per outer round, kept live incrementally thereafter —
-  the bulk of the per-pass reconstruction the redesign targets.
-- The ~14% alias rebuild is computed once per function per round rather than
+- The ValueGraph build (~20%), engine session setup (~9%), and flow joins
+  (~10%) collapse to one build + one setup + one join set per function per
+  outer round, kept live incrementally thereafter — together ~40% of compile
+  CPU today, the bulk of what the redesign targets.
+- The alias rebuild (~9%) is computed once per function per round rather than
   per pass.
 - Target: package-gale optimise phase ~1.5× faster than the substrate-only
   baseline (the direction WEP's aspirational number; this is the path to it).
