@@ -1876,16 +1876,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        let scrutinee_type = self.resolve_expr(&match_expr.expr, ctx, None);
+        let mut scrutinee_type = self.resolve_expr(&match_expr.expr, ctx, None);
 
         // Resolve each arm for its facts (binding + guard + body). Surface only
         // the arm bodies' `(type_id, span)` — reify rebuilds the match node, so
         // no `TirMatchArm` is retained.
-        let arm_bodies: Vec<(TypeId, Span)> = match_expr
+        let mut arm_bodies: Vec<(TypeId, Span)> = match_expr
             .arms
             .iter()
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
             .collect();
+
+        // Deferred-inference: an inference hole may have reached the scrutinee
+        // (a generic call in scrutinee position, e.g. `match gen() { … }`) and
+        // flowed through the pattern bindings into the arm bodies. Solve it
+        // against the match's expected type or a concrete sibling arm, then
+        // concretise the arm / scrutinee types so the result-type selection
+        // below picks the solved type rather than the hole. The arm-binding
+        // hole is the same `TypeId` as the scrutinee's, so solving one solves
+        // both.
+        if arm_bodies.iter().any(|&(t, _)| self.type_has_infer_hole(t))
+            || self.type_has_infer_hole(scrutinee_type)
+        {
+            let target = expected_type
+                .filter(|&t| t != TypeTable::UNKNOWN && !self.type_has_infer_hole(t))
+                .or_else(|| {
+                    arm_bodies.iter().map(|(t, _)| *t).find(|&t| {
+                        t != TypeTable::NEVER
+                            && !self.type_has_infer_hole(t)
+                            && !self.tysys.type_table.borrow().contains_unknown(t)
+                    })
+                });
+            if let Some(target) = target {
+                for &(arm_type, _) in &arm_bodies {
+                    self.solve_infer_holes_against(arm_type, target);
+                }
+            }
+            for (t, _) in &mut arm_bodies {
+                *t = self.apply_infer_holes(*t);
+            }
+            scrutinee_type = self.apply_infer_holes(scrutinee_type);
+        }
 
         self.check_match_exhaustiveness(&match_expr.arms, scrutinee_type, match_expr.span);
 

@@ -25,16 +25,19 @@ available.
 - [x] associated-type-bound-driven inference
 - [x] backward inference through the `?` operator (this WEP, below)
 - [x] method-chain receiver — `let x: i32 = p.get().unwrap();` (this WEP, below)
+- [x] `match` scrutinee — `match m.get() { Some(x) => x, None => 0 }` (method
+      scrutinee; this WEP, below)
+- [x] binary-op operand — `m.num() + 1` (method operand; this WEP, below)
 
 ### Remaining gaps
 
-Each is the same shape: an inner generic call whose type parameter appears
-_only_ in its return type is resolved with no expected type, so it cannot be
-inferred and demands a turbofish.
-
-- [ ] `match` scrutinee — `match none_of() { Some(x) => x, None => 0 }`
-      (needs arm-body → scrutinee constraints, not just an expected type)
-- [ ] binary-op operand — `make() + 1` (needs sibling-operand unification)
+- [ ] free-function scrutinees / operands — `match none_of() { … }`,
+      `make() + 1`. The `match` / binary-op solve points already fire; what is
+      missing is _free-function_ deferral (today only generic _method_ calls
+      defer). Free-function deferral needs care the method path did not: a
+      deferred call's trait-bound check (`make<T: Producer>()`) must be
+      re-verified once the hole is solved, and the holey `type_args` vec must
+      align with the by-index return-type substitution.
 - [ ] deep method chains whose _intermediate_ call does not pin the parameter —
       `gen().filter(..).unwrap()` — currently a clean "cannot infer" error
       (see the taint rule below), not yet inferred
@@ -99,27 +102,37 @@ The pieces:
    deferred) and substitutes all holes (solved → concrete, otherwise → `error`)
    through every recorded fact map that can carry a `TypeId`.
 
-Fixture: `tests/fixtures/infer_type_arg_through_method_chain.wado`.
+Fixtures: `tests/fixtures/infer_type_arg_through_method_chain.wado`,
+`tests/fixtures/infer_type_arg_match_and_binop.wado`.
 
-### Deferred: match scrutinee and binary-op operand
+### Shipped: match scrutinee and binary-op operand (additional solve points)
 
-`match none_of() { … }` and `make() + 1` still demand a turbofish or an
-intermediate annotated `let`. Unlike the method-chain case, their constraint
-does not come from a single enclosing expected type: the `match` scrutinee's
-parameter is pinned by how the arm-bound variable is _used_ in the arm bodies,
-and the binary-op operand by unification with its sibling. Both need a richer
-constraint source than the current solve points and are left for a follow-up
-that builds on the same hole infrastructure.
+The same hole flows into a `match` scrutinee and a binary-op operand; two more
+solve points pin it:
+
+- `resolve_match_expr`: after the arms resolve, the scrutinee hole has flowed
+  through the pattern bindings into the arm bodies (the arm-binding `x` is the
+  same `TypeId` as the scrutinee's hole). Solving the holey arm bodies against
+  the match's expected type — or a concrete sibling arm — pins it, then the
+  arm / scrutinee types are concretised before the result-type selection.
+- `resolve_binary`: a binary op's operands share a type, so a holey operand is
+  solved against its concrete sibling before operator dispatch (which would
+  otherwise mangle a trait-method name against the hole).
+
+Both fire for any deferred hole, so they work today for method-call scrutinees
+/ operands. The free-function forms (`match none_of() { … }`, `make() + 1`)
+wait on free-function deferral (above).
 
 ## Consequences
 
-- The most common real-world omissions work today: `let v: T = call()?` and a
-  single-level method chain `let v: T = call().unwrap()` (and `.expect(..)`,
-  including a call result passed directly as a typed argument).
-- The `match` scrutinee and binary-op operand cases still require a turbofish or
-  an intermediate annotated `let`, as do deep chains whose intermediate call
-  does not pin the parameter; these are documented workarounds until the
-  follow-up extends the hole infrastructure to those constraint sources.
+- The most common real-world omissions work today: `let v: T = call()?`, a
+  single-level method chain `let v: T = call().unwrap()` (and `.expect(..)`, or
+  a call result passed directly as a typed argument), and a generic method call
+  in `match`-scrutinee or binary-operand position.
+- Free-function scrutinees / operands and deep chains whose intermediate call
+  does not pin the parameter still require a turbofish or an intermediate
+  annotated `let` — documented workarounds until the follow-up extends
+  deferral to free-function calls.
 - Stdlib turbofishes such as `seq.next_element::<Value>()?` are _not_ removable
   by the `?` fix: they bind to a `let` with no annotation, so the turbofish is
   the only place the element type is named. They remain correct as written.

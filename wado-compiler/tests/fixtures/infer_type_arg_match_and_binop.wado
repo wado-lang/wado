@@ -1,0 +1,59 @@
+// Deferred type inference into a `match` scrutinee and a binary-op operand.
+// A generic method call whose type parameter appears only in its return type
+// can sit in scrutinee / operand position (no expected type at the call) and
+// be inferred from the surrounding expression — the same inference-hole
+// machinery as the method-chain case (see `elaborator::infer_hole`).
+//
+// `match m.opt() { Some(x) => x, None => 0 }`: `opt`'s `T` is pinned by the
+// sibling arm's `0` (the arm-binding `x` is the same hole as the scrutinee).
+// `m.num() + 1`: `num`'s `T` is pinned by the other operand.
+//
+// Free-function scrutinees / operands (`match none_of() { … }`, `make() + 1`)
+// additionally need free-function deferral and are a follow-up.
+
+trait Producer {
+    fn make() -> Self;
+}
+impl Producer for i32 {
+    fn make() -> i32 { return 7; }
+}
+impl Producer for String {
+    fn make() -> String { return "hi"; }
+}
+
+struct Source {}
+impl Source {
+    fn opt<T: Producer>(&self) -> Option<T> {
+        return Option::Some(T::make());
+    }
+    fn num<T: Producer>(&self) -> T {
+        return T::make();
+    }
+}
+
+test "match scrutinee infers from a sibling arm" {
+    let s = Source {};
+    let r = match s.opt() {
+        Some(x) => x,
+        None => 0,
+    };
+    assert r == 7;
+}
+
+test "match scrutinee infers from the result annotation" {
+    let s = Source {};
+    let r: String = match s.opt() {
+        Some(x) => x,
+        None => "fallback",
+    };
+    assert r == "hi";
+}
+
+test "binary-op operand infers from the other operand" {
+    let s = Source {};
+    let n = s.num() + 1;
+    assert n == 8;
+}
+
+__DATA__
+{"test": {}}
