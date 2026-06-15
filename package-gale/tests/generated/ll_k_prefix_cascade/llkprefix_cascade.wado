@@ -1148,56 +1148,15 @@ fn _parse_m__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i3
 }
 
 fn _parse_m__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<MNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_K {
-        let k = p.expect(TK_K)?;
+        p.pos += 1;
         if p.peek_kind() == TK_X {
-            let mut x_y_list: List<XYItem> = [];
-            let mut _plus_first = true;
-            loop {
-                if !_plus_first {
-                    if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
-                    let mut rep_scan_pos: i32 = -1;
-                    rep_scan: {
-                        let tokens = &p.tokens;
-                        let mut pos: i32 = p.pos;
-                        sg_5_done: {
-                            sg_5: {
-                                if pos >= tokens.len() || tokens[pos].kind != TK_X { break sg_5; }
-                                pos += 1;
-                                if pos >= tokens.len() || tokens[pos].kind != TK_Y { break sg_5; }
-                                pos += 1;
-                                break sg_5_done;
-                            }
-                            break rep_scan;
-                        }
-                        if pos <= p.pos { break rep_scan; }
-                        rep_scan_pos = pos;
-                    }
-                    if rep_scan_pos < 0 { break; }
-                }
-                _plus_first = false;
-                let x = p.expect(TK_X)?;
-                let y = p.expect(TK_Y)?;
-                let x_y = XYItem {
-                    x,
-                    y,
-                };
-                x_y_list.push(x_y);
-            }
-            return Result::<MNode, ParseError>::Ok(MNode::Alt0(MAlt0 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                k,
-                x_y_list,
-            }));
+            p.pos -= 1;
+            return _parse_m__inner_alt_0(p, follow);
         } else if p.peek_kind() == TK_Z {
-            let z = p.expect(TK_Z)?;
-            return Result::<MNode, ParseError>::Ok(MNode::Alt1(MAlt1 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                k,
-                z,
-            }));
+            p.pos -= 1;
+            return _parse_m__inner_alt_1(p, follow);
         }
     }
     return Result::<MNode, ParseError>::Err(p.error(

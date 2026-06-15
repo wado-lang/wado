@@ -871,24 +871,15 @@ fn _parse_r__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 }
 
 fn _parse_r__inner(p: &mut Parser) -> Result<RNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_A {
-        let a = p.expect(TK_A)?;
+        p.pos += 1;
         if p.peek_kind() == TK_B {
-            let b = p.expect(TK_B)?;
-            return Result::<RNode, ParseError>::Ok(RNode::Alt0(RAlt0 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                a,
-                b,
-            }));
+            p.pos -= 1;
+            return _parse_r__inner_alt_0(p);
         } else if p.peek_kind() == TK_C {
-            let c = p.expect(TK_C)?;
-            return Result::<RNode, ParseError>::Ok(RNode::Alt1(RAlt1 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                a,
-                c,
-            }));
+            p.pos -= 1;
+            return _parse_r__inner_alt_1(p);
         }
     }
     return Result::<RNode, ParseError>::Err(p.error(

@@ -910,25 +910,13 @@ fn _parse_r__inner(p: &mut Parser) -> Result<RNode, ParseError> {
         }));
     }
     if kind == TK_ID {
-        let id = p.expect(TK_ID)?;
+        p.pos += 1;
         if p.peek_kind() == TK_X {
-            let x = p.expect(TK_X)?;
-            let id_2 = p.expect(TK_ID)?;
-            return Result::<RNode, ParseError>::Ok(RNode::Alt1(RAlt1 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                id,
-                x,
-                id_2,
-            }));
+            p.pos -= 1;
+            return _parse_r__inner_alt_1(p);
         } else if p.peek_kind() == TK_Y {
-            let y = p.expect(TK_Y)?;
-            let id_2 = p.expect(TK_ID)?;
-            return Result::<RNode, ParseError>::Ok(RNode::Alt2(RAlt2 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                id,
-                y,
-                id_2,
-            }));
+            p.pos -= 1;
+            return _parse_r__inner_alt_2(p);
         }
     }
     return Result::<RNode, ParseError>::Err(p.error(

@@ -910,67 +910,20 @@ fn _parse_a__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 }
 
 fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_A {
-        let lit_a = p.expect(TK_LIT_A)?;
+        p.pos += 1;
         if p.peek_kind() == TK_LIT_B {
             if p.peek_at(1) == TK_LIT_C {
-                let mut lit_b_list: List<Token> = [];
-                loop {
-                    let mut rep_scan_pos: i32 = -1;
-                    rep_scan: {
-                        let tokens = &p.tokens;
-                        let mut pos: i32 = p.pos;
-                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_B { break rep_scan; }
-                        pos += 1;
-                        if pos <= p.pos { break rep_scan; }
-                        rep_scan_pos = pos;
-                    }
-                    if rep_scan_pos < 0 { break; }
-                    let lit_b = p.expect(TK_LIT_B)?;
-                    lit_b_list.push(lit_b);
-                }
-                let lit_c = p.expect(TK_LIT_C)?;
-                return Result::<ANode, ParseError>::Ok(ANode::Alt0(AAlt0 {
-                    span: Span::new(start, i32::max(start, p.last_end())),
-                    lit_a,
-                    lit_b_list,
-                    lit_c,
-                }));
+                p.pos -= 1;
+                return _parse_a__inner_alt_0(p);
             } else if p.peek_at(1) == TK_LIT_D {
-                let lit_b = p.expect(TK_LIT_B)?;
-                let lit_d = p.expect(TK_LIT_D)?;
-                return Result::<ANode, ParseError>::Ok(ANode::Alt1(AAlt1 {
-                    span: Span::new(start, i32::max(start, p.last_end())),
-                    lit_a,
-                    lit_b,
-                    lit_d,
-                }));
+                p.pos -= 1;
+                return _parse_a__inner_alt_1(p);
             }
         } else if p.peek_kind() == TK_LIT_C {
-            let mut lit_b_list: List<Token> = [];
-            loop {
-                let mut rep_scan_pos: i32 = -1;
-                rep_scan: {
-                    let tokens = &p.tokens;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_B { break rep_scan; }
-                    pos += 1;
-                    if pos <= p.pos { break rep_scan; }
-                    rep_scan_pos = pos;
-                }
-                if rep_scan_pos < 0 { break; }
-                let lit_b = p.expect(TK_LIT_B)?;
-                lit_b_list.push(lit_b);
-            }
-            let lit_c = p.expect(TK_LIT_C)?;
-            return Result::<ANode, ParseError>::Ok(ANode::Alt0(AAlt0 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                lit_a,
-                lit_b_list,
-                lit_c,
-            }));
+            p.pos -= 1;
+            return _parse_a__inner_alt_0(p);
         }
     }
     return Result::<ANode, ParseError>::Err(p.error(

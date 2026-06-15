@@ -16270,7 +16270,6 @@ fn _parse_macro_invocation_semi__inner_scan_2(tokens: &Array<Token>, pos: i32, f
 }
 
 fn _parse_macro_invocation_semi__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<MacroInvocationSemiNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_9(kind) {
         if _gale_kind_set_9(p.peek_kind()) {
@@ -16742,76 +16741,13 @@ fn _parse_macro_match__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }));
     }
     if kind == TK_DOLLAR {
-        let dollar = p.expect(TK_DOLLAR)?;
+        p.pos += 1;
         if _gale_kind_set_6(p.peek_kind()) {
-            let mut group_0_inner: Option<MacroMatchGroup0> = null;
-            let grp_kind = p.peek_kind();
-            if _gale_kind_set_4(grp_kind) {
-                let identifier = _parse_identifier(p, follow)?;
-                group_0_inner = Option::<MacroMatchGroup0>::Some(MacroMatchGroup0::Alt0(MacroMatchGroup0Alt0 {
-                    identifier,
-                }));
-            } else if grp_kind == TK_KW_SELFVALUE {
-                let kw_selfvalue = p.expect(TK_KW_SELFVALUE)?;
-                group_0_inner = Option::<MacroMatchGroup0>::Some(MacroMatchGroup0::Alt1(MacroMatchGroup0Alt1 {
-                    kw_selfvalue,
-                }));
-            }
-            let group_0 = group_0_inner;
-            let colon = p.expect(TK_COLON)?;
-            let macro_frag_spec = _parse_macro_frag_spec(p, follow)?;
-            return Result::<MacroMatchNode, ParseError>::Ok(MacroMatchNode::Alt2(MacroMatchAlt2 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                dollar,
-                group_0,
-                colon,
-                macro_frag_spec,
-            }));
+            p.pos -= 1;
+            return _parse_macro_match__inner_alt_2(p, follow);
         } else if p.peek_kind() == TK_LPAREN {
-            let lparen = p.expect(TK_LPAREN)?;
-            let mut macro_match_list: List<MacroMatchNode> = [];
-            let mut _plus_first = true;
-            loop {
-                if !_plus_first {
-                    let mut rep_scan_pos: i32 = -1;
-                    rep_scan: {
-                        let tokens = &p.tokens;
-                        let mut pos: i32 = p.pos;
-                        pos = scan_macro_match(tokens, pos, &EMPTY_FOLLOW, 0);
-                        if pos < 0 { break rep_scan; }
-                        if pos <= p.pos { break rep_scan; }
-                        rep_scan_pos = pos;
-                    }
-                    if rep_scan_pos < 0 {
-                        if _gale_kind_set_1(p.peek_kind()) {
-                            let _rec_pos = p.pos;
-                            if let Err(_rec_e) = _parse_macro_match(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
-                            p.pos = _rec_pos;
-                        }
-                        break;
-                    }
-                }
-                _plus_first = false;
-                let macro_match = _parse_macro_match(p, &EMPTY_FOLLOW)?;
-                macro_match_list.push(macro_match);
-            }
-            let rparen = p.expect(TK_RPAREN)?;
-            let macro_rep_sep: Option<MacroRepSepNode> = if _gale_kind_set_7(p.peek_kind()) {
-                let macro_rep_sep = _parse_macro_rep_sep(p, &EMPTY_FOLLOW)?;
-                Option::<MacroRepSepNode>::Some(macro_rep_sep)
-            } else {
-                null
-            };
-            let macro_rep_op = _parse_macro_rep_op(p, follow)?;
-            return Result::<MacroMatchNode, ParseError>::Ok(MacroMatchNode::Alt3(MacroMatchAlt3 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                dollar,
-                lparen,
-                macro_match_list,
-                rparen,
-                macro_rep_sep,
-                macro_rep_op,
-            }));
+            p.pos -= 1;
+            return _parse_macro_match__inner_alt_3(p, follow);
         }
     }
     return Result::<MacroMatchNode, ParseError>::Err(p.error(
@@ -17243,7 +17179,6 @@ fn _parse_macro_item__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &Lis
 }
 
 fn _parse_macro_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<MacroItemNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_9(kind) {
         if p.peek_kind() == TK_KW_MACRORULES {
@@ -17737,7 +17672,6 @@ fn _parse_use_tree__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<
 }
 
 fn _parse_use_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<UseTreeNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_20(kind) {
         if _gale_kind_set_9(p.peek_kind()) {
@@ -18061,7 +17995,6 @@ fn _parse_function_parameters__inner_scan_0(tokens: &Array<Token>, pos: i32, fol
 }
 
 fn _parse_function_parameters__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FunctionParametersNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_22(kind) {
         if _gale_kind_set_24(p.peek_kind()) {
@@ -18410,7 +18343,6 @@ fn _parse_struct___inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<L
 }
 
 fn _parse_struct___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StructNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_KW_STRUCT {
         if p.peek_kind() == TK_KW_STRUCT {
@@ -19234,7 +19166,6 @@ fn _parse_implementation__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: 
 }
 
 fn _parse_implementation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ImplementationNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_14(kind) {
         if p.peek_kind() == TK_KW_IMPL {
@@ -19926,7 +19857,6 @@ fn _parse_where_clause_item__inner_scan_1(tokens: &Array<Token>, pos: i32, follo
 }
 
 fn _parse_where_clause_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<WhereClauseItemNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_29(kind) {
         if _gale_kind_set_27(p.peek_kind()) {
@@ -20488,7 +20418,6 @@ fn _parse_expression_statement__inner_scan_0(tokens: &Array<Token>, pos: i32, fo
 }
 
 fn _parse_expression_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExpressionStatementNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_48(kind) {
         if _gale_kind_set_83(p.peek_kind()) {
@@ -21957,7 +21886,6 @@ fn _parse_statements__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &Lis
 }
 
 fn _parse_statements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementsNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_51(kind) {
         if _gale_kind_set_48(p.peek_kind()) {
@@ -22134,7 +22062,6 @@ fn _parse_array_elements__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: 
 }
 
 fn _parse_array_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ArrayElementsNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_48(kind) {
         if _gale_kind_set_48(p.peek_kind()) {
@@ -22288,7 +22215,6 @@ fn _parse_struct_expression__inner_scan_2(tokens: &Array<Token>, pos: i32, follo
 }
 
 fn _parse_struct_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StructExpressionNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_50(kind) {
         if _gale_kind_set_50(p.peek_kind()) {
@@ -22781,7 +22707,6 @@ fn _parse_enumeration_variant_expression__inner_scan_2(tokens: &Array<Token>, po
 }
 
 fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<EnumerationVariantExpressionNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_50(kind) {
         if _gale_kind_set_50(p.peek_kind()) {
@@ -22970,7 +22895,6 @@ fn _parse_enum_expr_field__inner_scan_1(tokens: &Array<Token>, pos: i32, follow:
 }
 
 fn _parse_enum_expr_field__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<EnumExprFieldNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_54(kind) {
         if _gale_kind_set_4(p.peek_kind()) {
@@ -23742,7 +23666,6 @@ fn _parse_match_arm_expression__inner_scan_0(tokens: &Array<Token>, pos: i32, fo
 }
 
 fn _parse_match_arm_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<MatchArmExpressionNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_48(kind) {
         if _gale_kind_set_83(p.peek_kind()) {
@@ -23925,7 +23848,6 @@ fn _parse_pattern_no_top_alt__inner_scan_0(tokens: &Array<Token>, pos: i32, foll
 }
 
 fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PatternNoTopAltNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_116(kind) {
         if _gale_kind_set_98(p.peek_kind()) {
@@ -24545,7 +24467,6 @@ fn _parse_range_pattern__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &
 }
 
 fn _parse_range_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RangePatternNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_98(kind) {
         if _gale_kind_set_98(p.peek_kind()) {
@@ -24806,7 +24727,6 @@ fn _parse_struct_pattern_elements__inner_scan_0(tokens: &Array<Token>, pos: i32,
 }
 
 fn _parse_struct_pattern_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StructPatternElementsNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_61(kind) {
         if p.peek_kind() == TK_POUND {
@@ -25244,7 +25164,6 @@ fn _parse_tuple_pattern_items__inner_scan_0(tokens: &Array<Token>, pos: i32, fol
 }
 
 fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TuplePatternItemsNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_28(kind) {
         if p.peek_kind() == TK_DOTDOT {
@@ -25480,7 +25399,6 @@ fn _parse_type___inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<Lis
 }
 
 fn _parse_type___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TypeNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_29(kind) {
         if p.peek_kind() == TK_KW_IMPL {
@@ -26209,7 +26127,6 @@ fn _parse_function_parameters_maybe_named_variadic__inner_scan_1(tokens: &Array<
 }
 
 fn _parse_function_parameters_maybe_named_variadic__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FunctionParametersMaybeNamedVariadicNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_65(kind) {
         if _gale_kind_set_65(p.peek_kind()) {
@@ -27231,7 +27148,6 @@ fn _parse_generic_args__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &L
 }
 
 fn _parse_generic_args__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<GenericArgsNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LT {
         let _sd_tokens = &p.tokens;
@@ -27348,7 +27264,6 @@ fn _parse_generic_arg__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &Li
 }
 
 fn _parse_generic_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<GenericArgNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_68(kind) {
         if _gale_kind_set_27(p.peek_kind()) {

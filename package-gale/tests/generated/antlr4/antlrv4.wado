@@ -6095,7 +6095,6 @@ fn _parse_delegate_grammar__inner_scan_0(tokens: &Array<Token>, pos: i32, follow
 }
 
 fn _parse_delegate_grammar__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DelegateGrammarNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
@@ -6446,7 +6445,6 @@ fn _parse_rule_spec__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List
 }
 
 fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RuleSpecNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_4(kind) {
         if p.peek_kind() == TK_FRAGMENT {
@@ -7233,7 +7231,6 @@ fn _parse_lexer_command__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &
 }
 
 fn _parse_lexer_command__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerCommandNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_19(kind) {
         if _gale_kind_set_19(p.peek_kind()) {
@@ -7694,7 +7691,6 @@ fn _parse_predicate_option__inner_scan_1(tokens: &Array<Token>, pos: i32, follow
 }
 
 fn _parse_predicate_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PredicateOptionNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
@@ -8038,24 +8034,15 @@ fn _parse_not_set__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<L
 }
 
 fn _parse_not_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<NotSetNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_NOT {
-        let not = p.expect(TK_NOT)?;
+        p.pos += 1;
         if _gale_kind_set_21(p.peek_kind()) {
-            let set_element = _parse_set_element(p, follow)?;
-            return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt0(NotSetAlt0 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                not,
-                set_element,
-            }));
+            p.pos -= 1;
+            return _parse_not_set__inner_alt_0(p, follow);
         } else if p.peek_kind() == TK_LPAREN {
-            let block_set = _parse_block_set(p, follow)?;
-            return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt1(NotSetAlt1 {
-                span: Span::new(start, i32::max(start, p.last_end())),
-                not,
-                block_set,
-            }));
+            p.pos -= 1;
+            return _parse_not_set__inner_alt_1(p, follow);
         }
     }
     return Result::<NotSetNode, ParseError>::Err(p.error(
@@ -8521,7 +8508,6 @@ fn _parse_element_option__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: 
 }
 
 fn _parse_element_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementOptionNode, ParseError> {
-    let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
