@@ -186,12 +186,26 @@ pub enum ValueKind {
 #[derive(Debug, Default)]
 pub struct ValuePool {
     /// Allocated values, in `ValueId` order. `values[id.index() as usize]`
-    /// is the kind for `id`.
+    /// is the kind for `id`, with its children canonicalized to their class
+    /// representatives. A non-representative id's entry is read only via
+    /// [`ValuePool::find`].
     values: Vec<ValueKind>,
-    /// Reverse index: kind → `ValueId`. The hash-cons key.
+    /// Reverse index: canonical kind → `ValueId`. The hash-cons (e-graph memo).
+    /// Keyed by a kind whose children are class representatives.
     interned: IndexMap<ValueKind, ValueId>,
     /// Next `OpaqueId` to allocate.
     next_opaque: u32,
+    /// Union-find parent pointers, indexed by raw `ValueId`. `parent[i] == i`
+    /// for a class representative. [`ValuePool::union`] merges classes;
+    /// [`ValuePool::find`] resolves the representative with path halving.
+    parent: Vec<u32>,
+    /// For each class representative (by raw id), the ids of the nodes that
+    /// reference it as a child. [`ValuePool::rebuild`] re-canonicalizes these
+    /// after a union so structurally-equal parents re-merge (congruence).
+    class_parents: IndexMap<u32, Vec<ValueId>>,
+    /// Classes merged since the last [`ValuePool::rebuild`], pending congruence
+    /// repair.
+    pending: Vec<ValueId>,
 }
 
 impl ValuePool {
@@ -212,20 +226,151 @@ impl ValuePool {
         self.values.is_empty()
     }
 
-    /// Hash-cons: return the `ValueId` for `kind`, allocating a fresh one if
-    /// `kind` has not been seen before.
+    /// Hash-cons: return the `ValueId` for `kind`, allocating a fresh one if no
+    /// structurally-equal value exists. Children are canonicalized to their
+    /// class representatives first, so a node whose children were unioned dedups
+    /// against the congruent existing node.
     ///
     /// `kind` is cloned only on a fresh allocation (the clone goes into the
     /// `values` vector); a repeat lookup hits the index and returns the
     /// existing id without copying.
     pub fn intern(&mut self, kind: ValueKind) -> ValueId {
+        let kind = self.canonicalize(kind);
         if let Some(&id) = self.interned.get(&kind) {
-            return id;
+            return self.find(id);
         }
         let id = ValueId(self.values.len() as u32);
         self.values.push(kind.clone());
+        self.parent.push(id.0);
+        self.register_parent_links(id, &kind);
         self.interned.insert(kind, id);
         id
+    }
+
+    /// The class representative of `id`, with path halving.
+    pub fn find(&mut self, id: ValueId) -> ValueId {
+        let mut x = id.0;
+        while self.parent[x as usize] != x {
+            let gp = self.parent[self.parent[x as usize] as usize];
+            self.parent[x as usize] = gp;
+            x = gp;
+        }
+        ValueId(x)
+    }
+
+    /// Merge the classes of `a` and `b`, returning the surviving representative
+    /// (the smaller raw id, for determinism). The merge is recorded for the
+    /// next [`ValuePool::rebuild`], which restores congruence. A no-op (and
+    /// nothing pending) when they already share a class.
+    pub fn union(&mut self, a: ValueId, b: ValueId) -> ValueId {
+        let ra = self.find(a);
+        let rb = self.find(b);
+        if ra == rb {
+            return ra;
+        }
+        let (win, lose) = if ra.0 <= rb.0 { (ra, rb) } else { (rb, ra) };
+        self.parent[lose.0 as usize] = win.0;
+        if let Some(losers) = self.class_parents.swap_remove(&lose.0) {
+            self.class_parents.entry(win.0).or_default().extend(losers);
+        }
+        self.pending.push(win);
+        win
+    }
+
+    /// Restore congruence after a batch of unions: re-canonicalize the parents
+    /// of every merged class and re-merge any that became structurally equal,
+    /// to a fixed point. Cheap when nothing was unioned (empty `pending`).
+    pub fn rebuild(&mut self) {
+        while let Some(c) = self.pending.pop() {
+            let c = self.find(c);
+            self.repair(c);
+        }
+    }
+
+    /// Re-canonicalize and re-hash-cons the parents of class `c`, unioning any
+    /// pair that now denotes the same node. See [`ValuePool::rebuild`].
+    fn repair(&mut self, c: ValueId) {
+        let parents = self.class_parents.get(&c.0).cloned().unwrap_or_default();
+        // Drop every parent's stale memo entry before re-inserting, so a
+        // canonical kind that now collides with another parent is detected.
+        for &p in &parents {
+            let old = self.values[p.0 as usize].clone();
+            self.interned.swap_remove(&old);
+        }
+        for &p in &parents {
+            let canon = self.canonicalize(self.values[p.0 as usize].clone());
+            self.values[p.0 as usize] = canon.clone();
+            match self.interned.get(&canon).copied() {
+                Some(q) if self.find(q) != self.find(p) => {
+                    self.union(p, q);
+                    let r = self.find(p);
+                    self.interned.insert(canon, r);
+                }
+                _ => {
+                    let r = self.find(p);
+                    self.interned.insert(canon, r);
+                }
+            }
+        }
+    }
+
+    /// Replace each child of `kind` with its class representative.
+    fn canonicalize(&mut self, kind: ValueKind) -> ValueKind {
+        match kind {
+            ValueKind::Binary { op, lhs, rhs } => ValueKind::Binary {
+                op,
+                lhs: self.find(lhs),
+                rhs: self.find(rhs),
+            },
+            ValueKind::Unary { op, operand } => ValueKind::Unary {
+                op,
+                operand: self.find(operand),
+            },
+            ValueKind::Cast { operand, target } => ValueKind::Cast {
+                operand: self.find(operand),
+                target,
+            },
+            ValueKind::Select { cond, then, else_ } => ValueKind::Select {
+                cond: self.find(cond),
+                then: self.find(then),
+                else_: self.find(else_),
+            },
+            ValueKind::LoopPhi { entry, body_iter } => ValueKind::LoopPhi {
+                entry: self.find(entry),
+                body_iter: self.find(body_iter),
+            },
+            ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                heap_ver,
+            } => ValueKind::FieldAccess {
+                receiver: self.find(receiver),
+                field_index,
+                heap_ver,
+            },
+            leaf => leaf,
+        }
+    }
+
+    /// Register `id` as a parent of each of its (already-canonical) children's
+    /// classes, so a later union of a child re-canonicalizes `id`.
+    fn register_parent_links(&mut self, id: ValueId, kind: &ValueKind) {
+        for child in Self::child_values(kind) {
+            self.class_parents.entry(child.0).or_default().push(id);
+        }
+    }
+
+    /// The child `ValueId`s referenced by `kind` (empty for literals / opaque).
+    fn child_values(kind: &ValueKind) -> Vec<ValueId> {
+        match *kind {
+            ValueKind::Binary { lhs, rhs, .. } => vec![lhs, rhs],
+            ValueKind::Unary { operand, .. } => vec![operand],
+            ValueKind::Cast { operand, .. } => vec![operand],
+            ValueKind::Select { cond, then, else_ } => vec![cond, then, else_],
+            ValueKind::LoopPhi { entry, body_iter } => vec![entry, body_iter],
+            ValueKind::FieldAccess { receiver, .. } => vec![receiver],
+            _ => Vec::new(),
+        }
     }
 
     /// Allocate a fresh `Opaque` value. Each call returns a `ValueId`
@@ -645,5 +790,111 @@ mod tests {
         assert_eq!(_t, t2);
         // 4 originals + 1 new opaque = 5 entries.
         assert_eq!(pool.len(), 5);
+    }
+
+    // ---- Union-find / congruence ----
+
+    #[test]
+    fn fresh_value_is_its_own_representative() {
+        let mut pool = ValuePool::new();
+        let a = pool.int(1);
+        let b = pool.fresh_opaque();
+        assert_eq!(pool.find(a), a);
+        assert_eq!(pool.find(b), b);
+    }
+
+    #[test]
+    fn union_makes_find_agree() {
+        let mut pool = ValuePool::new();
+        let a = pool.fresh_opaque();
+        let b = pool.fresh_opaque();
+        assert_ne!(pool.find(a), pool.find(b));
+        let rep = pool.union(a, b);
+        assert_eq!(pool.find(a), rep);
+        assert_eq!(pool.find(b), rep);
+    }
+
+    #[test]
+    fn union_is_idempotent_and_keeps_smaller_id() {
+        let mut pool = ValuePool::new();
+        let a = pool.fresh_opaque();
+        let b = pool.fresh_opaque();
+        let rep1 = pool.union(a, b);
+        let rep2 = pool.union(b, a);
+        assert_eq!(rep1, rep2);
+        // The smaller raw id is the representative.
+        assert_eq!(rep1, if a.index() <= b.index() { a } else { b });
+    }
+
+    #[test]
+    fn rebuild_propagates_congruence_to_parents() {
+        // f = Add(a, c), g = Add(b, c). After union(a, b) + rebuild, the two
+        // sums denote the same value and must share a representative.
+        let mut pool = ValuePool::new();
+        let a = pool.fresh_opaque();
+        let b = pool.fresh_opaque();
+        let c = pool.fresh_opaque();
+        let f = pool.binary(NirBinaryOp::Add, a, c);
+        let g = pool.binary(NirBinaryOp::Add, b, c);
+        assert_ne!(pool.find(f), pool.find(g));
+        pool.union(a, b);
+        pool.rebuild();
+        assert_eq!(pool.find(f), pool.find(g));
+    }
+
+    #[test]
+    fn congruence_propagates_through_two_levels() {
+        // Neg(Add(a,c)) ≡ Neg(Add(b,c)) once a ≡ b.
+        let mut pool = ValuePool::new();
+        let a = pool.fresh_opaque();
+        let b = pool.fresh_opaque();
+        let c = pool.fresh_opaque();
+        let f = pool.binary(NirBinaryOp::Add, a, c);
+        let g = pool.binary(NirBinaryOp::Add, b, c);
+        let nf = pool.unary(NirUnaryOp::Neg, f);
+        let ng = pool.unary(NirUnaryOp::Neg, g);
+        pool.union(a, b);
+        pool.rebuild();
+        assert_eq!(pool.find(nf), pool.find(ng));
+    }
+
+    #[test]
+    fn interning_after_union_dedups_against_congruent_node() {
+        // Build Add(a,c); union a≡b; a fresh Add(b,c) interns to the same id.
+        let mut pool = ValuePool::new();
+        let a = pool.fresh_opaque();
+        let b = pool.fresh_opaque();
+        let c = pool.fresh_opaque();
+        let f = pool.binary(NirBinaryOp::Add, a, c);
+        pool.union(a, b);
+        pool.rebuild();
+        let g = pool.binary(NirBinaryOp::Add, b, c);
+        assert_eq!(pool.find(f), pool.find(g));
+    }
+
+    #[test]
+    fn unrelated_values_stay_distinct_after_union() {
+        let mut pool = ValuePool::new();
+        let a = pool.fresh_opaque();
+        let b = pool.fresh_opaque();
+        let c = pool.fresh_opaque();
+        let d = pool.fresh_opaque();
+        let f = pool.binary(NirBinaryOp::Add, a, c);
+        let h = pool.binary(NirBinaryOp::Add, c, d);
+        pool.union(a, b);
+        pool.rebuild();
+        // `h` shares no unioned operand with `f`, so it stays its own class.
+        assert_ne!(pool.find(f), pool.find(h));
+    }
+
+    #[test]
+    fn rebuild_without_union_is_noop() {
+        let mut pool = ValuePool::new();
+        let a = pool.fresh_opaque();
+        let c = pool.fresh_opaque();
+        let f = pool.binary(NirBinaryOp::Add, a, c);
+        pool.rebuild();
+        assert_eq!(pool.find(f), f);
+        assert_eq!(pool.find(a), a);
     }
 }
