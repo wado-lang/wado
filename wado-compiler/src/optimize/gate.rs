@@ -289,11 +289,30 @@ impl FunctionGate {
             if changed {
                 self.mark_changed(fid);
                 any = true;
-            } else if let Some(analysis) = analysis {
+            }
+            // Park the returned analysis even when the pass changed the function:
+            // a pass that returns `Some` after a change asserts its edits left the
+            // graph valid (value-preserving), so the next value-graph pass reuses
+            // it instead of rebuilding. Tagged at the post-`mark_changed` revision.
+            if let Some(analysis) = analysis {
                 self.park_analysis(fid, analysis);
             }
         }
         any
+    }
+
+    /// Re-tag the parked `ValueGraph` for `func` to its current revision,
+    /// asserting it survived the calling pass's value-preserving edits — so the
+    /// next value-graph pass reuses it instead of rebuilding. Used by
+    /// `const_fold`, whose folds are graph-preserving (the graph already holds
+    /// the folded constants via `current_value` / `fold_binary_const`). No-op if
+    /// nothing is parked for `func`.
+    pub fn carry_vg_cache(&mut self, func: FunctionId) {
+        let i = func.index();
+        let cur = self.revision[i];
+        if let Some(Some((rev, _))) = self.vg_cache.get_mut(i).map(|s| s.as_mut()) {
+            *rev = cur;
+        }
     }
 
     /// Take the parked analysis for `func` if it is still valid (parked at the
