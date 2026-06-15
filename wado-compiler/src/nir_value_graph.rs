@@ -268,7 +268,12 @@ impl ValuePool {
         if ra == rb {
             return ra;
         }
-        let (win, lose) = if ra.0 <= rb.0 { (ra, rb) } else { (rb, ra) };
+        // Prefer a constant representative: a class containing a literal should
+        // resolve to it, so extraction materializes the constant. Among equal
+        // ranks, the smaller raw id wins, for determinism.
+        let (ra_rank, rb_rank) = (self.rep_rank(ra), self.rep_rank(rb));
+        let ra_wins = ra_rank < rb_rank || (ra_rank == rb_rank && ra.0 <= rb.0);
+        let (win, lose) = if ra_wins { (ra, rb) } else { (rb, ra) };
         self.parent[lose.0 as usize] = win.0;
         if let Some(losers) = self.class_parents.swap_remove(&lose.0) {
             self.class_parents.entry(win.0).or_default().extend(losers);
@@ -311,6 +316,22 @@ impl ValuePool {
                     self.interned.insert(canon, r);
                 }
             }
+        }
+    }
+
+    /// Representative-preference rank for `id`: a constant kind ranks 0 (most
+    /// preferred), everything else 1. [`ValuePool::union`] keeps the
+    /// lower-ranked side, so a class containing a literal resolves to it.
+    fn rep_rank(&self, id: ValueId) -> u8 {
+        match self.values[id.0 as usize] {
+            ValueKind::Int(_)
+            | ValueKind::Float(_)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::String(_)
+            | ValueKind::Null
+            | ValueKind::Unit => 0,
+            _ => 1,
         }
     }
 

@@ -70,6 +70,7 @@ pub mod dce;
 mod drve;
 mod elide_box_local;
 mod elide_local;
+mod extract;
 mod field_scalarize;
 mod gate;
 mod inline;
