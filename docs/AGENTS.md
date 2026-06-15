@@ -128,3 +128,4 @@ It may include TODOs on WIP.
 - [Library-Defined Derivation: `Reflect` Extensions and the `#[validate]` Attribute](./wep-2026-06-13-reflect-derivation.md)
 - [Compile-Time Data Providers (bundled ICU)](./wep-2026-06-13-compile-time-data-providers.md)
 - [Symbol Notation](./wep-2026-06-14-symbol-notation.md)
+- [NIR Optimize Redesign for Compile Speed](./wep-2026-06-15-nir-optimize-redesign.md)
