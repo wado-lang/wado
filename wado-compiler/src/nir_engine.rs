@@ -286,6 +286,17 @@ impl<'a> Engine<'a> {
             .copied()
     }
 
+    /// Record `expr`'s value in the live graph, keeping it current after an
+    /// edit that introduced `expr` or re-pointed it to a known value (e.g. a
+    /// pass that creates a temp bound to an already-computed value). The next
+    /// graph query then resolves `expr` without a rebuild. No-op when the graph
+    /// is not built yet — the lazy build derives the value from the body.
+    pub fn set_value(&mut self, expr: ExprId, vid: crate::nir_value_graph::ValueId) {
+        if let Some(vg) = self.value_graph.as_mut() {
+            vg.value_of.insert(expr, vid);
+        }
+    }
+
     /// The class representative of `id` in the session's value graph. Two ids
     /// with the same representative denote the same value. See
     /// [`crate::nir_value_graph::ValuePool::find`].
@@ -1199,6 +1210,41 @@ mod tests {
             let ret = ret_x(b);
             vec![let_stmt, ret]
         })
+    }
+
+    #[test]
+    fn set_value_records_a_value_for_a_new_expr() {
+        // Build a graph, then introduce a fresh expr and pin its value, as a
+        // pass would when creating a temp bound to a known value.
+        let mut body = mk_body(|b| {
+            let seven = lit(b, 7);
+            let st = s(b, StmtKind::Expr(seven));
+            vec![st]
+        });
+        let seven = {
+            let st = body.blocks[body.root].stmts[0];
+            let StmtKind::Expr(e) = body.stmts[st].kind else {
+                unreachable!()
+            };
+            e
+        };
+        let mut buf = EngineBuffers::default();
+        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let v7 = eng.value(seven).unwrap();
+        // A fresh orphan expr has no value in the already-built graph.
+        let fresh = eng.alloc_expr(
+            ExprKind::IntLiteral {
+                value: 9,
+                repr: "9".to_string(),
+            },
+            TypeTable::UNIT,
+            Span::default(),
+        );
+        assert_eq!(eng.value(fresh), None);
+        // Pinning it keeps it resolvable without a rebuild.
+        eng.set_value(fresh, v7);
+        assert_eq!(eng.value(fresh), Some(v7));
     }
 
     #[test]
