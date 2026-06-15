@@ -243,15 +243,25 @@ the predecessor is deleted.
       primitive that resolves through the representative. `store_load_forward`
       now routes through it (the first production pass on the e-class).
 - [~] Build-once-per-round — one engine session holds the graph across the
-  adjacent graph-preserving passes; share one build, dropping the second
-  pass's separate engine setup, alias-set computation, and `ValueGraph`
-  rebuild. Landed: `cse` + `store_load_forward` share one session
-  (byte-identical; `builder_alias_sets` 8.48% → 6.32%, `Engine::new`
-  9.00% → 8.37% as slf's separate session disappears). `condition_implication`
-  can _not_ join this session: it must run after `const_fold` / `licm` to see
-  folded / hoisted guards, so moving it earlier regresses output (+58 bytes on
-  package-gale). Extending build-once past the one clean adjacency needs
-  `const_fold` / `licm` made graph-preserving, or the full live session.
+  adjacent graph-preserving passes; share one build, dropping the second pass's
+  separate engine setup, alias-set computation, and `ValueGraph` rebuild. Both
+  clean adjacencies landed, each byte-identical on package-gale + full E2E:
+  - `cse` + `store_load_forward` share one session (cse replaces matching
+    subexpressions in place, so values are preserved).
+  - `licm` + `condition_implication` share one session (licm hoists only
+    invariant, move-safe code, so values are preserved; cond-impl runs after
+    licm in document order — no reorder — and is invariant to licm's param
+    seeding since it tests only `ValueId` equality). ~2–4% faster compile on
+    package-gale (median 23.69s → 23.14s).
+
+  An _earlier_ adjacency does not work: moving `condition_implication` ahead of
+  `const_fold` / `licm` (into the cse session) regresses output (+58 bytes), as
+  it then misses folded / hoisted guards. `const_fold` itself builds no
+  `ValueGraph` (it is niri-based), so it is not a build to share. The two clean
+  adjacencies are now exhausted; the remaining build cost is the two surviving
+  build sites (`cse`, `licm`) rebuilding per changed function each round —
+  removed only by keeping the graph live across the structural passes (the
+  operand-promotion / live-session work), not by more pairwise merges.
 - [ ] Subsume CSE, copy-prop, and store-load-forward into graph structure; delete
       the passes and their analysis. (copy-prop / CSE need extraction beyond the
       literal case — a flow-valid source for a shared non-constant value.)
