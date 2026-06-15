@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781510882034,
+  "lastUpdate": 1781535734213,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33341,6 +33341,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 392782,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "de67f5088fc0de84eaa6aaa0af7c6ab77682af83",
+          "message": "Merge pull request #1385 from wado-lang/claude/nifty-edison-vxnigc\n\nrefactor(gale): dedupe generated parser/lexer boilerplate and fix lexer dispatch",
+          "timestamp": "2026-06-15T23:51:24+09:00",
+          "tree_id": "7177e26b22d1101e0347dce36df9d817f6ed92fe",
+          "url": "https://github.com/wado-lang/wado/commit/de67f5088fc0de84eaa6aaa0af7c6ab77682af83"
+        },
+        "date": 1781535733852,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 396125,
             "unit": "bytes"
           }
         ]
