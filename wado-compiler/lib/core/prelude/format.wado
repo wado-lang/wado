@@ -60,6 +60,16 @@ impl Formatter {
     /// Default sequence Inspect cap: chars for `String`, elements for `List`.
     pub const DEFAULT_SEQ_LIMIT: i32 = 256;
 
+    /// The element/char cap a sequence Inspect should apply: the explicit
+    /// precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
+    /// (`PRECISION_INFINITE`) means uncapped.
+    pub fn resolved_seq_limit(&self) -> i32 {
+        if self.precision == Formatter::PRECISION_DEFAULT {
+            return Formatter::DEFAULT_SEQ_LIMIT;
+        }
+        return self.precision;
+    }
+
     /// Create a Formatter with the default spec, writing into the given buffer.
     pub fn new(buf: &mut String) -> Formatter with stores[buf] {
         return Formatter {
@@ -312,7 +322,7 @@ impl Inspect for String {
         // Caps to N chars and appends `...` outside the quotes when truncated
         // (the marker doesn't count toward N). PRECISION_DEFAULT uses the
         // default cap; negatives below it mean no cap.
-        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
+        let limit = f.resolved_seq_limit();
         f.write_char('"');
         let mut count = 0;
         let mut truncated = false;
@@ -348,47 +358,6 @@ impl Inspect for String {
     }
 }
 
-// Shared List Inspect/Display rendering. `limit` is the resolved element cap
-// (negative = none); `marker` appends `, ...` when elements are dropped.
-fn write_array_inspect<T: Inspect>(arr: &List<T>, f: &mut Formatter, marker: bool, limit: i32) {
-    f.write_char('[');
-    let mut shown = 0;
-    let mut truncated = false;
-    for let mut i = 0; i < arr.len(); i += 1 {
-        if limit >= 0 && shown >= limit {
-            truncated = true;
-            break;
-        }
-        if shown > 0 {
-            f.write_str(&", ");
-        }
-        arr[i].inspect(f);
-        shown += 1;
-    }
-    if marker && truncated {
-        if shown > 0 {
-            f.write_str(&", ...");
-        } else {
-            f.write_str(&"...");
-        }
-    }
-    f.write_char(']');
-}
-
-impl<T: Inspect> Inspect for List<T> {
-    pub fn inspect(&self, f: &mut Formatter) {
-        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
-        write_array_inspect(self, f, true, limit);
-    }
-}
-
-impl<T: Inspect> Display for List<T> {
-    pub fn fmt(&self, f: &mut Formatter) {
-        // Display never applies the default cap; raw precision caps only if >= 0.
-        write_array_inspect(self, f, false, f.precision);
-    }
-}
-
 impl<T: Inspect> Inspect for &T {
     pub fn inspect(&self, f: &mut Formatter) {
         f.write_str(&"&");
@@ -408,47 +377,6 @@ impl<T: Inspect> Inspect for &mut T {
 impl InspectAlt for String {
     pub fn inspect_alt(&self, f: &mut Formatter) {
         self.inspect(f);
-    }
-}
-
-// Pretty-printed counterpart of `write_array_inspect`: `marker` appends a
-// `...` line when elements are dropped.
-fn write_array_inspect_alt<T: InspectAlt>(arr: &List<T>, f: &mut Formatter, marker: bool, limit: i32) {
-    if arr.is_empty() {
-        f.write_str(&"[]");
-        return;
-    }
-    f.open_brace("[");
-    let mut shown = 0;
-    let mut truncated = false;
-    for let mut i = 0; i < arr.len(); i += 1 {
-        if limit >= 0 && shown >= limit {
-            truncated = true;
-            break;
-        }
-        f.write_newline_indent();
-        arr[i].inspect_alt(f);
-        f.write_char(',');
-        shown += 1;
-    }
-    if marker && truncated {
-        f.write_newline_indent();
-        f.write_str(&"...");
-    }
-    f.close_brace("]");
-}
-
-impl<T: InspectAlt> InspectAlt for List<T> {
-    pub fn inspect_alt(&self, f: &mut Formatter) {
-        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
-        write_array_inspect_alt(self, f, true, limit);
-    }
-}
-
-impl<T: InspectAlt> DisplayAlt for List<T> {
-    pub fn fmt_alt(&self, f: &mut Formatter) {
-        // DisplayAlt never applies the default sequence cap (see Display).
-        write_array_inspect_alt(self, f, false, f.precision);
     }
 }
 

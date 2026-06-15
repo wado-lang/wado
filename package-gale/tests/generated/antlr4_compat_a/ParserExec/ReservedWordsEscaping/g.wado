@@ -426,7 +426,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
     // Char index where each line begins; built once so each token's `line:col`
     // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
@@ -569,7 +569,7 @@ pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> Lis
     return combined;
 }
 
-pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -751,7 +751,7 @@ fn try_CONTINUE_(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-pub fn tokenize(input: &String) -> List<Token> {
+pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: List<Token> = [];
@@ -793,7 +793,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         }
     }
     tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
-    return tokens;
+    return tokens.to_array();
 }
 
 pub fn token_kind_name(kind: i32) -> String {
@@ -809,14 +809,14 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: List<Token>,
+    tokens: Array<Token>,
     pos: i32,
     chars: List<char>,
     pending: Option<ParseError>,
 }
 
 impl Parser {
-    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
+    fn new(tokens: Array<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars, pending: null };
     }
 
@@ -935,7 +935,7 @@ impl Parser {
     }
 }
 
-fn scan_root(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_root(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_continue(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -948,7 +948,7 @@ fn scan_root(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     return pos;
 }
 
-fn scan_continue_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_continue_atom(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1022,14 +1022,14 @@ fn scan_continue_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_continue_lr_3(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_continue_lr_3(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_CONTINUE_ { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_continue(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_continue(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_continue_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
@@ -1049,14 +1049,14 @@ fn scan_continue(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
-fn scan_args(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_args(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_for(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_for(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_for(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_FOR { return -1; }
     pos += 1;

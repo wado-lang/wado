@@ -118,15 +118,17 @@ fn "wado-compiler/tests/fixtures/optimize_bce_ref_param.wado/sum_all"(input) {
     let input_len: i32;
     let sum: i32;
     let i: i32;
-    let _licm_repr_8: ref Array<u8>;
+    let __cse_12: bool;
+    let _licm_repr_14: ref Array<u8>;
     input_len = input.used;
     sum = 0;
     i = 0;
-    _licm_repr_8 = input.repr;
+    _licm_repr_14 = input.repr;
     b0: block {
         l1: loop {
-            break_if b0 i >= input_len;
-            sum = sum + builtin::array_get<u8>(_licm_repr_8, i);
+            __cse_12 = i < input_len;
+            break_if b0 __cse_12 == 0;
+            sum = sum + builtin::array_get<u8>(_licm_repr_14, i);
             i = i + 1;
             continue l1;
         };

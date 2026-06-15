@@ -61,6 +61,10 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             pattern.lower_function(&mut func_rc.borrow_mut(), &type_table);
         }
     }
+    // Lower the `assert_failed` marker before string planning, so a bare-asserts
+    // build never collects the dropped diagnostic literals into the data section
+    // (and a default build routes the marker back to a plain `panic`).
+    crate::lower::bare_asserts::lower(&flat, flat.codegen_flags.bare_asserts);
     let strings = crate::lower::plan::string::plan(&flat);
     let FlatPackage {
         entry_module_source,

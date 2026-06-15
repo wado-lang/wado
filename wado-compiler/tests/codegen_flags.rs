@@ -142,6 +142,86 @@ fn no_branch_hinting_flag_drops_every_hint() {
     );
 }
 
+/// Indexing a `List` lowers to `assert i < used`, whose failure path formats
+/// the operands and so drags in the `Formatter` / `Inspect` stack. The
+/// `"\ncondition:"` literal is part of every power-assert diagnostic template,
+/// so its presence in the wasm is a reliable proxy for "the diagnostic shipped".
+const ASSERT_SOURCE: &str = r#"
+export fn run() {
+    let xs = [1, 2, 3] as List<i32>;
+    let mut sum = 0;
+    let mut i = 0;
+    while i < 3 {
+        sum += xs[i];
+        i += 1;
+    }
+    assert sum == 6;
+}
+"#;
+
+fn compile_assert_source(opt_level: OptLevel, codegen_flags: Vec<String>) -> Vec<u8> {
+    let options = CompilerOptions {
+        opt_level,
+        codegen_flags,
+        ..Default::default()
+    };
+    common::compile_source_with_compiler_options(
+        Path::new("codegen_flags_assert_test.wado"),
+        ASSERT_SOURCE,
+        options,
+    )
+    .expect("compilation should succeed")
+    .wasm
+}
+
+fn ships_assert_diagnostic(wasm: &[u8]) -> bool {
+    let marker = b"\ncondition:";
+    wasm.windows(marker.len()).any(|w| w == marker)
+}
+
+#[test]
+fn default_o2_ships_the_assert_diagnostic() {
+    let wasm = compile_assert_source(OptLevel::O2, Vec::new());
+    assert!(
+        ships_assert_diagnostic(&wasm),
+        "default -O2 must keep the power-assert diagnostic"
+    );
+}
+
+#[test]
+fn bare_asserts_flag_strips_the_diagnostic() {
+    let with = compile_assert_source(OptLevel::O2, Vec::new());
+    let without = compile_assert_source(OptLevel::O2, vec!["bare-asserts".to_string()]);
+    assert!(
+        !ships_assert_diagnostic(&without),
+        "`-f bare-asserts` must drop the assert diagnostic, lowering it to a bare trap"
+    );
+    assert!(
+        without.len() < with.len(),
+        "`-f bare-asserts` must shrink the binary ({} >= {})",
+        without.len(),
+        with.len()
+    );
+}
+
+#[test]
+fn os_enables_bare_asserts_by_default() {
+    let wasm = compile_assert_source(OptLevel::Os, Vec::new());
+    assert!(
+        !ships_assert_diagnostic(&wasm),
+        "-Os must enable bare-asserts by default, dropping the diagnostic"
+    );
+}
+
+#[test]
+fn no_bare_asserts_restores_the_diagnostic_at_os() {
+    let wasm = compile_assert_source(OptLevel::Os, vec!["no-bare-asserts".to_string()]);
+    assert!(
+        ships_assert_diagnostic(&wasm),
+        "`-f no-bare-asserts` must restore the diagnostic even at -Os"
+    );
+}
+
 #[test]
 fn unknown_codegen_flag_is_rejected() {
     let options = CompilerOptions {

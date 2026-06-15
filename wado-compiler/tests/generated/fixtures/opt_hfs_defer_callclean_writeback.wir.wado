@@ -399,30 +399,32 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "wado-compiler/tests/fixtures/opt_hfs_defer_callclean_writeback.wado/Cursor::skip_spaces"(self) {
     let b: i32;
     let index: i32;
-    let _licm_data_5: ref "core:prelude//List<u8>";
-    let _licm_used_6: i32;
-    let _licm_repr_7: ref Array<u8>;
-    let __hfs_pos_8: i32;
-    _licm_data_5 = self.data;
-    _licm_used_6 = _licm_data_5.used;
-    _licm_repr_7 = _licm_data_5.repr;
-    __hfs_pos_8 = self.pos;
+    let __cse_10: bool;
+    let _licm_data_11: ref "core:prelude//List<u8>";
+    let _licm_used_12: i32;
+    let _licm_repr_13: ref Array<u8>;
+    let __hfs_pos_14: i32;
+    _licm_data_11 = self.data;
+    _licm_used_12 = _licm_data_11.used;
+    _licm_repr_13 = _licm_data_11.repr;
+    __hfs_pos_14 = self.pos;
     b20: block {
         l21: loop {
-            if __hfs_pos_8 >= _licm_used_6 {
-                self.pos = __hfs_pos_8;
+            __cse_10 = __hfs_pos_14 < _licm_used_12;
+            if __cse_10 == 0 {
+                self.pos = __hfs_pos_14;
                 break b20;
             }
-            index = __hfs_pos_8;
-            b = builtin::array_get<u8>(_licm_repr_7, index);
+            index = __hfs_pos_14;
+            b = builtin::array_get<u8>(_licm_repr_13, index);
             if b > 32 {
-                self.pos = __hfs_pos_8;
+                self.pos = __hfs_pos_14;
                 return;
             }
             if b == 32 {
-                __hfs_pos_8 = __hfs_pos_8 + 1;
+                __hfs_pos_14 = __hfs_pos_14 + 1;
             } else {
-                self.pos = __hfs_pos_8;
+                self.pos = __hfs_pos_14;
                 return;
             }
             continue l21;

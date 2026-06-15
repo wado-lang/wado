@@ -120,7 +120,7 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(39)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(40)
+type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>" = fn(ref "Array<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>", i32, ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(40)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(41)
 
@@ -154,7 +154,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(56)
 
-type "functype//core:prelude/format.wado/List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Inspect::inspect" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>", ref "core:prelude/format.wado//Formatter");  // TypeId(57)
+type "functype//core:prelude/list.wado/List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Inspect::inspect" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>", ref "core:prelude/format.wado//Formatter");  // TypeId(57)
 
 type "functype//core:prelude/list.wado/List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Eq::eq" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>", ref "core:prelude//List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>") -> bool;  // TypeId(58)
 
@@ -421,27 +421,23 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
     }
 }
 
-fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>"(arr, f, marker, limit) {
+fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>"(repr, len, f, marker, limit) {
     let shown: i32;
     let truncated: bool;
     let i: i32;
     let s_11: ref "core:prelude/string.wado//String";
     let s_15: ref "core:prelude/string.wado//String";
     let s_17: ref "core:prelude/string.wado//String";
-    let _licm_used_20: i32;
-    let _licm_repr_21: ref "Array<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>";
-    let _licm_arith_22: bool;
+    let _licm_arith_20: bool;
     "core:prelude/string.wado/String::push"(f.buf, 91);
     shown = 0;
     truncated = 0;
     i = 0;
-    _licm_used_20 = arr.used;
-    _licm_repr_21 = arr.repr;
-    _licm_arith_22 = limit >= 0;
+    _licm_arith_20 = limit >= 0;
     b16: block {
         l17: loop {
-            break_if b16 i >= _licm_used_20;
-            if (if _licm_arith_22 -> i32 {
+            break_if b16 i >= len;
+            if (if _licm_arith_20 -> i32 {
                 shown >= limit;
             } else {
                 0;
@@ -453,7 +449,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-c
                 s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
                 "core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
-            "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<Node>" { value: builtin::array_get<ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node">(_licm_repr_21, i) }, f);
+            "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<Node>" { value: builtin::array_get<ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node">(repr, i) }, f);
             shown = shown + 1;
             i = i + 1;
             continue l17;
@@ -627,7 +623,7 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Bran
     "core:prelude/string.wado/String::push_str"(f.buf, s_3);
     s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("children: "), used: 10 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_5);
-    "core:prelude/format.wado/List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Inspect::inspect"(self.children, f);
+    "core:prelude/list.wado/List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Inspect::inspect"(self.children, f);
     s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_7);
 }
@@ -757,14 +753,13 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/format.wado/List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Inspect::inspect"(self, f) {
-    let limit: i32;
-    limit = (if f.precision == -2 -> i32 {
-        256;
-    } else {
-        f.precision;
+fn "core:prelude/list.wado/List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Inspect::inspect"(self, f) {
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>"(self.repr, self.used, f, 1, __inline_Formatter__resolved_seq_limit_0: block -> i32 {
+        if f.precision == -2 {
+            break __inline_Formatter__resolved_seq_limit_0: 256;
+        }
+        break __inline_Formatter__resolved_seq_limit_0: f.precision;
     });
-    "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>"(self, f, 1, limit);
 }
 
 fn "core:prelude/list.wado/List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Eq::eq"(self, other) {

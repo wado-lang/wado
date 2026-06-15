@@ -115,12 +115,12 @@ fn "wado-compiler/tests/fixtures/optimize_bitmask_bce.wado/run"() {
     let sum: i32;
     let i: i32;
     let idx: i32;
-    let __cond: bool;
-    let __local_6: ref "core:prelude/string.wado//String";
-    let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __cond_5: bool;
+    let __local_6_6: ref "core:prelude/string.wado//String";
+    let __local_7_7: ref "core:prelude/format.wado//Formatter";
     let repr: ref Array<i32>;
     let value: i32;
-    let _licm_repr_16: ref Array<i32>;
+    let _licm_repr_26: ref Array<i32>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -131,24 +131,24 @@ fn "wado-compiler/tests/fixtures/optimize_bitmask_bce.wado/run"() {
     builtin::array_fill<i32>(repr, 0, -1, 32768);
     sum = 0;
     i = 0;
-    _licm_repr_16 = repr;
+    _licm_repr_26 = repr;
     b0: block {
         l1: loop {
             break_if b0 i >= 100;
             idx = i & 32767;
-            sum = sum + builtin::array_get<i32>(_licm_repr_16, idx);
+            sum = sum + builtin::array_get<i32>(_licm_repr_26, idx);
             value = i;
-            builtin::array_set<i32>(_licm_repr_16, idx, value);
+            builtin::array_set<i32>(_licm_repr_26, idx, value);
             i = i + 1;
             continue l1;
         };
     };
-    __cond = sum == -100;
-    if @unlikely(__cond == 0) {
+    __cond_5 = sum == -100;
+    if @unlikely(__cond_5 == 0) {
         cold_path;
-        "core:internal/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(119); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/optimize_bitmask_bce.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 10 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:internal/panic"(__local_6_6 = "core:prelude/string.wado/String::with_capacity"(119); "core:prelude/string.wado/String::push_str"(__local_6_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6_6, 114); "core:prelude/string.wado/String::push"(__local_6_6, 117); "core:prelude/string.wado/String::push"(__local_6_6, 110); "core:prelude/string.wado/String::push"(__local_6_6, 32); "core:prelude/string.wado/String::push"(__local_6_6, 97); "core:prelude/string.wado/String::push"(__local_6_6, 116); "core:prelude/string.wado/String::push"(__local_6_6, 32); "core:prelude/string.wado/String::push_str"(__local_6_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/optimize_bitmask_bce.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_6_6, 58); __local_7_7 = "core:prelude/format.wado/Formatter::new"(__local_6_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 10 }, __local_7_7); "core:prelude/string.wado/String::push_str"(__local_6_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum == -100
-"), used: 24 }); "core:prelude/string.wado/String::push"(__local_6, 115); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 109); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: sum }, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
+"), used: 24 }); "core:prelude/string.wado/String::push"(__local_6_6, 115); "core:prelude/string.wado/String::push"(__local_6_6, 117); "core:prelude/string.wado/String::push"(__local_6_6, 109); "core:prelude/string.wado/String::push"(__local_6_6, 58); "core:prelude/string.wado/String::push"(__local_6_6, 32); __local_7_7 = "core:prelude/format.wado/Formatter::new"(__local_6_6); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: sum }, __local_7_7); "core:prelude/string.wado/String::push"(__local_6_6, 10); __local_6_6);
         unreachable;
     }
 }

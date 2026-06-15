@@ -172,14 +172,16 @@ pub const ALLOCATOR_SPEC: OptSpec = OptSpec {
 /// Shared spec: `-f <flag>` — generic codegen feature flag forwarded to the
 /// compiler. Repeatable. Prefix a flag with `no-` to disable it. Currently
 /// recognized: `array-copy` (lower `builtin::array_copy` to the native Wasm
-/// `array.copy` instruction; on by default, disable with `no-array-copy`)
-/// and `branch-hinting` (emit `metadata.code.branch_hint` entries; on by
-/// default, disable with `no-branch-hinting`).
+/// `array.copy` instruction; on by default, disable with `no-array-copy`),
+/// `branch-hinting` (emit `metadata.code.branch_hint` entries; on by
+/// default, disable with `no-branch-hinting`), and `bare-asserts` (lower an
+/// assertion failure to a bare trap, dropping the diagnostic message; on by
+/// default at `-Os`, disable with `no-bare-asserts`).
 pub const FEATURE_SPEC: OptSpec = OptSpec {
     long: None,
     short: Some('f'),
     value: Some("<flag>"),
-    desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\narray-copy      native Wasm array.copy instead of a loop (default: on)\nbranch-hinting  emit metadata.code.branch_hint entries (default: on)",
+    desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\narray-copy      native Wasm array.copy instead of a loop (default: on)\nbranch-hinting  emit metadata.code.branch_hint entries (default: on)\nbare-asserts    assertion failures trap without a message (default: on at -Os)",
 };
 
 /// Shared spec: `--collector <mode>`

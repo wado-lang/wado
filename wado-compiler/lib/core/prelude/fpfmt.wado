@@ -840,6 +840,7 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     // Check for infinity/NaN
     let exp_mask: i64 = 0x7FF0000000000000;
     if bits & exp_mask == exp_mask {
+        builtin::cold_path();
         let mantissa_mask: i64 = 0x000FFFFFFFFFFFFF;
         if bits & mantissa_mask != 0 {
             return [true, false, SpecialKind::NaN];
@@ -932,6 +933,8 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
 
     // "inf" or "infinity"
     if (c0 == 'i' as u8 || c0 == 'I' as u8) && remaining >= 3 {
+        builtin::cold_path();
+
         let c1 = s.get_byte_unchecked(i + 1);
         let c2 = s.get_byte_unchecked(i + 2);
         if (c1 == 'n' as u8 || c1 == 'N' as u8) && (c2 == 'f' as u8 || c2 == 'F' as u8) {
@@ -958,6 +961,8 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
 
     // "nan" (sign is ignored for NaN)
     if (c0 == 'n' as u8 || c0 == 'N' as u8) && remaining == 3 {
+        builtin::cold_path();
+
         let c1 = s.get_byte_unchecked(i + 1);
         let c2 = s.get_byte_unchecked(i + 2);
         if (c1 == 'a' as u8 || c1 == 'A' as u8) && (c2 == 'n' as u8 || c2 == 'N' as u8) {

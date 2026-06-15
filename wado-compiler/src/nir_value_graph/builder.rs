@@ -756,10 +756,24 @@ impl<'a> Builder<'a> {
 
             // ---- Control-flow expressions ----
             ExprKind::Block(block) => {
-                // Block expressions are walked for the side-table but get
-                // no `ValueId`.
-                self.walk_block(block);
-                None
+                // A single-expression block `{ e }` (e.g. an inlined getter
+                // `{ x.used }`) forwards `e`'s value, so a later read unifies
+                // with the same access written directly. Multi-statement blocks
+                // stay opaque: forwarding the tail would let CSE drop the side
+                // effects of the leading statements (e.g. `{ cold_path(); e }`).
+                let tail = if let [only] = self.body.blocks[block].stmts[..]
+                    && let StmtKind::Expr(e) = &self.body.stmts[only].kind
+                {
+                    Some(*e)
+                } else {
+                    None
+                };
+                if let Some(e) = tail {
+                    self.walk_expr(e)
+                } else {
+                    self.walk_block(block);
+                    None
+                }
             }
             ExprKind::If {
                 condition,

@@ -5,9 +5,22 @@
 // the shared types from `core:prelude/slice.wado`.
 
 
-use { Ordering, Eq, Ord, IndexValue, IndexAssign, IntoIterator, FromIterator, Display } from "core:prelude/traits.wado";
+use {
+    Ordering,
+    Eq,
+    Ord,
+    IndexValue,
+    IndexAssign,
+    IntoIterator,
+    FromIterator,
+    Display,
+    DisplayAlt,
+    Inspect,
+    InspectAlt,
+} from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { Formatter } from "core:prelude/format.wado";
+use { write_seq_inspect, write_seq_inspect_alt } from "core:prelude/array.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { ArraySlice, ArrayIter, ArrayRefIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
 use { panic, i32_min, i32_max, i32_clamp } from "core:internal";
@@ -111,10 +124,22 @@ impl List<T> {
         return Option::Some(builtin::array_get(&self.repr, index));
     }
 
+    /// Copy the live `0..len()` elements into a fresh fixed `Array<T>` of exactly
+    /// `len()`. Hand a finished, no-longer-growing buffer to code that only
+    /// indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
+    /// without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
+    /// generated parser over a fixed token stream) avoid that per-access cost.
+    /// Unlike `internal_raw_data`, the result is sized to `len()`, not capacity.
+    pub fn to_array(&self) -> Array<T> {
+        let mut out: Array<T> = builtin::array_new(self.used);
+        builtin::array_copy(&mut out, 0, &self.repr, 0, self.used);
+        return out;
+    }
+
     /// Inserts an element at the given index, shifting all elements after it to the right.
     /// Panics if `index > len()`.
     pub fn insert(&mut self, index: i32, value: T) with stores[value] {
-        assert index >= 0 && index <= self.used, "index out of bounds";
+        assert 0 <= index <= self.used, "index out of bounds";
         if self.used >= builtin::array_len(&self.repr) {
             builtin::cold_path();
             self.grow();
@@ -128,7 +153,7 @@ impl List<T> {
     /// Removes and returns the element at the given index, shifting all elements after it to the left.
     /// Panics if `index >= len()`.
     pub fn remove(&mut self, index: i32) -> T {
-        assert index >= 0 && index < self.used, "index out of bounds";
+        assert 0 <= index < self.used, "index out of bounds";
         let value = builtin::array_get(&self.repr, index);
         // Shift elements left
         builtin::array_copy(&mut self.repr, index, &self.repr, index + 1, self.used - 1 - index);
@@ -139,8 +164,8 @@ impl List<T> {
     /// Swaps two elements by index.
     /// Panics if either index is out of bounds.
     pub fn swap(&mut self, a: i32, b: i32) {
-        assert a >= 0 && a < self.used, "index out of bounds";
-        assert b >= 0 && b < self.used, "index out of bounds";
+        assert 0 <= a < self.used, "index out of bounds";
+        assert 0 <= b < self.used, "index out of bounds";
         let tmp = builtin::array_get(&self.repr, a);
         builtin::array_set(&mut self.repr, a, builtin::array_get(&self.repr, b));
         builtin::array_set(&mut self.repr, b, tmp);
@@ -287,10 +312,7 @@ impl IndexValue<i32> for List<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        if index >= self.used {
-            builtin::cold_path();
-            panic("index out of bounds");
-        }
+        assert index < self.used, "index out of bounds";
         return builtin::array_get(&self.repr, index);
     }
 }
@@ -299,10 +321,7 @@ impl IndexAssign<i32> for List<T> {
     type Input = T;
 
     fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
-        if index >= self.used {
-            builtin::cold_path();
-            panic("index out of bounds");
-        }
+        assert index < self.used, "index out of bounds";
         builtin::array_set(&mut self.repr, index, value);
     }
 }
@@ -564,5 +583,31 @@ impl SequenceLiteralBuilder for List<T> {
 impl Default for List<T> {
     pub fn default() -> List<T> {
         return [] as List<T>;
+    }
+}
+
+impl<T: Inspect> Inspect for List<T> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        write_seq_inspect(&self.repr, self.used, f, true, f.resolved_seq_limit());
+    }
+}
+
+impl<T: Inspect> Display for List<T> {
+    pub fn fmt(&self, f: &mut Formatter) {
+        // Display never applies the default cap; raw precision caps only if >= 0.
+        write_seq_inspect(&self.repr, self.used, f, false, f.precision);
+    }
+}
+
+impl<T: InspectAlt> InspectAlt for List<T> {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        write_seq_inspect_alt(&self.repr, self.used, f, true, f.resolved_seq_limit());
+    }
+}
+
+impl<T: InspectAlt> DisplayAlt for List<T> {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        // DisplayAlt never applies the default sequence cap (see Display).
+        write_seq_inspect_alt(&self.repr, self.used, f, false, f.precision);
     }
 }

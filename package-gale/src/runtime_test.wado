@@ -23,7 +23,7 @@ test "to_lexer_string interleaves non-default-channel trivia in source order" {
     let b = Token::with_channel(1, ls("b"), Span::new(1, 2), [], 2);
     let eof = Token::with_trivia(2, ls(""), Span::new(2, 2), [b]);
     let tokens: List<Token> = [a, eof];
-    let actual = to_lexer_string(&tokens, &"ab", 2);
+    let actual = to_lexer_string(&tokens.to_array(), &"ab", 2);
     let expected = "[@0,0:0='a',<1>,1:0]
 [@1,1:1='b',<2>,channel=2,1:1]
 [@2,2:1='<EOF>',<-1>,1:2]
@@ -39,7 +39,7 @@ test "to_lexer_string skips default-channel (skip) trivia without consuming an i
     let ws = Token::new(1, ls(" "), Span::new(1, 2));
     let c = Token::with_trivia(0, ls("c"), Span::new(2, 3), [ws]);
     let tokens: List<Token> = [a, c];
-    let actual = to_lexer_string(&tokens, &"a c", 2);
+    let actual = to_lexer_string(&tokens.to_array(), &"a c", 2);
     let expected = "[@0,0:0='a',<1>,1:0]
 [@1,2:2='c',<1>,1:2]
 ";

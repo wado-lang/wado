@@ -430,7 +430,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
     // Char index where each line begins; built once so each token's `line:col`
     // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
@@ -573,7 +573,7 @@ pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> Lis
     return combined;
 }
 
-pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -6856,7 +6856,7 @@ fn try_lit_questionquestioneq(chars: &List<char>, start: i32) -> i32 {
     return pos + 3;
 }
 
-pub fn tokenize(input: &String) -> List<Token> {
+pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: List<Token> = [];
@@ -7205,7 +7205,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         }
     }
     tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
-    return tokens;
+    return tokens.to_array();
 }
 
 pub fn token_kind_name(kind: i32) -> String {
@@ -7424,14 +7424,14 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: List<Token>,
+    tokens: Array<Token>,
     pos: i32,
     chars: List<char>,
     pending: Option<ParseError>,
 }
 
 impl Parser {
-    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
+    fn new(tokens: Array<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars, pending: null };
     }
 
@@ -7550,7 +7550,7 @@ impl Parser {
     }
 }
 
-fn scan_initializer(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_initializer(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { return -1; }
     pos += 1;
@@ -7559,7 +7559,7 @@ fn scan_initializer(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_binding_pattern(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_binding_pattern(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -7583,7 +7583,7 @@ fn scan_binding_pattern(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_type_parameters(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_parameters(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LT { return -1; }
     pos += 1;
@@ -7597,7 +7597,7 @@ fn scan_type_parameters(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_type_parameter_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_parameter_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_type_parameter(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -7619,7 +7619,7 @@ fn scan_type_parameter_list(tokens: &List<Token>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn scan_type_parameter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_parameter(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -7664,7 +7664,7 @@ fn scan_type_parameter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_constraint(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_constraint(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EXTENDS { return -1; }
     pos += 1;
@@ -7673,7 +7673,7 @@ fn scan_constraint(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &E
     return pos;
 }
 
-fn scan_type_arguments(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_arguments(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LT { return -1; }
     pos += 1;
@@ -7687,7 +7687,7 @@ fn scan_type_arguments(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_type_argument_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_argument_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_type_argument(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -7709,14 +7709,14 @@ fn scan_type_argument_list(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_type_argument(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_argument(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_type_(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_type_(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -7816,14 +7816,14 @@ fn scan_type_(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     return pos;
 }
 
-fn scan_union_or_intersection_or_primary_type_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_union_or_intersection_or_primary_type_atom(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_primary_type(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_union_or_intersection_or_primary_type_lr_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_union_or_intersection_or_primary_type_lr_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPE { return -1; }
     pos += 1;
@@ -7832,7 +7832,7 @@ fn scan_union_or_intersection_or_primary_type_lr_0(tokens: &List<Token>, pos: i3
     return pos;
 }
 
-fn scan_union_or_intersection_or_primary_type_lr_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_union_or_intersection_or_primary_type_lr_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AMP { return -1; }
     pos += 1;
@@ -7841,7 +7841,7 @@ fn scan_union_or_intersection_or_primary_type_lr_1(tokens: &List<Token>, pos: i3
     return pos;
 }
 
-fn scan_union_or_intersection_or_primary_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_union_or_intersection_or_primary_type(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_union_or_intersection_or_primary_type_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
@@ -7869,7 +7869,7 @@ fn scan_union_or_intersection_or_primary_type(tokens: &List<Token>, pos: i32, fo
     return pos;
 }
 
-fn scan_primary_type_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_primary_type_atom(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -8011,7 +8011,7 @@ fn scan_primary_type_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_primary_type_lr_4(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_primary_type_lr_4(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
@@ -8025,7 +8025,7 @@ fn scan_primary_type_lr_4(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_primary_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_primary_type(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_primary_type_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
@@ -8045,7 +8045,7 @@ fn scan_primary_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_predefined_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_predefined_type(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -8166,7 +8166,7 @@ fn scan_predefined_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_type_reference(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_reference(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_type_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8178,7 +8178,7 @@ fn scan_type_reference(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_type_generic(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_generic(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LT { return -1; }
     pos += 1;
@@ -8194,7 +8194,7 @@ fn scan_type_generic(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_type_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_name(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -8222,7 +8222,7 @@ fn scan_type_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_object_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_object_type(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -8236,7 +8236,7 @@ fn scan_object_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_type_body(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_body(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_type_member_list(tokens, pos, &follow_prepend(&FOLLOW_MASK_5, follow), 0);
     if pos < 0 { return -1; }
@@ -8263,7 +8263,7 @@ fn scan_type_body(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_type_member_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_member_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_type_member(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8299,7 +8299,7 @@ fn scan_type_member_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_type_member(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_member(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -8393,7 +8393,7 @@ fn scan_type_member(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_array_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_array_type(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_primary_type(tokens, pos, &FOLLOW_MASK_6, 0);
     if pos < 0 { return -1; }
@@ -8404,7 +8404,7 @@ fn scan_array_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &E
     return pos;
 }
 
-fn scan_tuple_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_tuple_type(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
@@ -8415,7 +8415,7 @@ fn scan_tuple_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &E
     return pos;
 }
 
-fn scan_tuple_element_types(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_tuple_element_types(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_type_(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8442,7 +8442,7 @@ fn scan_tuple_element_types(tokens: &List<Token>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn scan_function_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_function_type(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_LT {
         let sp = pos;
@@ -8465,7 +8465,7 @@ fn scan_function_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_constructor_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_constructor_type(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_NEW { return -1; }
     pos += 1;
@@ -8490,7 +8490,7 @@ fn scan_constructor_type(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_type_query(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_query(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_TYPEOF { return -1; }
     pos += 1;
@@ -8499,7 +8499,7 @@ fn scan_type_query(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &E
     return pos;
 }
 
-fn scan_type_query_expression(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_query_expression(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -8585,7 +8585,7 @@ fn scan_type_query_expression(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn scan_property_signatur(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_property_signatur(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_ReadOnly {
         let sp = pos;
@@ -8621,7 +8621,7 @@ fn scan_property_signatur(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_type_annotation(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_annotation(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
     pos += 1;
@@ -8630,7 +8630,7 @@ fn scan_type_annotation(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_call_signature(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_call_signature(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_LT {
         let sp = pos;
@@ -8654,7 +8654,7 @@ fn scan_call_signature(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_parameter_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_parameter_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -8716,7 +8716,7 @@ fn scan_parameter_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_required_parameter_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_required_parameter_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_required_parameter(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8738,7 +8738,7 @@ fn scan_required_parameter_list(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_parameter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_parameter(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -8766,7 +8766,7 @@ fn scan_parameter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_optional_parameter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_optional_parameter(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_AT {
         let sp = pos;
@@ -8813,7 +8813,7 @@ fn scan_optional_parameter(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_rest_parameter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_rest_parameter(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOTDOTDOT { return -1; }
     pos += 1;
@@ -8827,7 +8827,7 @@ fn scan_rest_parameter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_required_parameter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_required_parameter(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_AT {
         let sp = pos;
@@ -8844,14 +8844,14 @@ fn scan_required_parameter(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_accessibility_modifier(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_accessibility_modifier(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_12(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_identifier_or_pattern(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_identifier_or_pattern(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -8879,7 +8879,7 @@ fn scan_identifier_or_pattern(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn scan_construct_signature(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_construct_signature(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_NEW { return -1; }
     pos += 1;
@@ -8905,7 +8905,7 @@ fn scan_construct_signature(tokens: &List<Token>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn scan_index_signature(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_index_signature(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
@@ -8936,7 +8936,7 @@ fn scan_index_signature(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_method_signature(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_method_signature(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_property_name(tokens, pos, &FOLLOW_MASK_10, 0);
     if pos < 0 { return -1; }
@@ -8950,7 +8950,7 @@ fn scan_method_signature(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_type_alias_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_type_alias_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Export {
         let sp = pos;
@@ -8975,7 +8975,7 @@ fn scan_type_alias_declaration(tokens: &List<Token>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn scan_constructor_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_constructor_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_12(tokens[pos].kind) {
         let sp = pos;
@@ -9026,7 +9026,7 @@ fn scan_constructor_declaration(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_interface_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_interface_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Export {
         let sp = pos;
@@ -9062,7 +9062,7 @@ fn scan_interface_declaration(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn scan_interface_extends_clause(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_interface_extends_clause(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Extends { return -1; }
     pos += 1;
@@ -9071,7 +9071,7 @@ fn scan_interface_extends_clause(tokens: &List<Token>, pos: i32, follow: &List<L
     return pos;
 }
 
-fn scan_class_or_interface_type_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_class_or_interface_type_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_type_reference(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -9093,7 +9093,7 @@ fn scan_class_or_interface_type_list(tokens: &List<Token>, pos: i32, follow: &Li
     return pos;
 }
 
-fn scan_enum_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_enum_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Const {
         let sp = pos;
@@ -9116,7 +9116,7 @@ fn scan_enum_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_enum_body(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_enum_body(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_enum_member_list(tokens, pos, &follow_prepend(&FOLLOW_MASK_16, follow), 0);
     if pos < 0 { return -1; }
@@ -9128,7 +9128,7 @@ fn scan_enum_body(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_enum_member_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_enum_member_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_enum_member(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -9150,7 +9150,7 @@ fn scan_enum_member_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_enum_member(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_enum_member(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_property_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -9171,7 +9171,7 @@ fn scan_enum_member(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_namespace_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_namespace_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Declare {
         let sp = pos;
@@ -9194,7 +9194,7 @@ fn scan_namespace_declaration(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn scan_namespace_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_namespace_name(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -9222,7 +9222,7 @@ fn scan_namespace_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_import_alias_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_import_alias_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
@@ -9235,7 +9235,7 @@ fn scan_import_alias_declaration(tokens: &List<Token>, pos: i32, follow: &List<L
     return pos;
 }
 
-fn scan_decorator_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_decorator_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_decorator(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -9248,7 +9248,7 @@ fn scan_decorator_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_decorator(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_decorator(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AT { return -1; }
     pos += 1;
@@ -9276,7 +9276,7 @@ fn scan_decorator(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_decorator_member_expression_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_decorator_member_expression_atom(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -9308,7 +9308,7 @@ fn scan_decorator_member_expression_atom(tokens: &List<Token>, pos: i32, follow:
     return pos;
 }
 
-fn scan_decorator_member_expression_lr_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_decorator_member_expression_lr_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -9317,7 +9317,7 @@ fn scan_decorator_member_expression_lr_1(tokens: &List<Token>, pos: i32, follow:
     return pos;
 }
 
-fn scan_decorator_member_expression(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_decorator_member_expression(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_decorator_member_expression_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
@@ -9337,7 +9337,7 @@ fn scan_decorator_member_expression(tokens: &List<Token>, pos: i32, follow: &Lis
     return pos;
 }
 
-fn scan_decorator_call_expression(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_decorator_call_expression(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_decorator_member_expression(tokens, pos, &FOLLOW_MASK_17, 0);
     if pos < 0 { return -1; }
@@ -9346,7 +9346,7 @@ fn scan_decorator_call_expression(tokens: &List<Token>, pos: i32, follow: &List<
     return pos;
 }
 
-fn scan_program(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_program(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_18(tokens[pos].kind) {
         let sp = pos;
@@ -9358,7 +9358,7 @@ fn scan_program(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
     return pos;
 }
 
-fn scan_source_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_source_element(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Export {
         let sp = pos;
@@ -9370,7 +9370,7 @@ fn scan_source_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10100,7 +10100,7 @@ fn scan_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_block(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -10114,7 +10114,7 @@ fn scan_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     return pos;
 }
 
-fn scan_statement_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_statement_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -10127,7 +10127,7 @@ fn scan_statement_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_abstract_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_abstract_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Abstract { return -1; }
     pos += 1;
@@ -10159,7 +10159,7 @@ fn scan_abstract_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn scan_import_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_import_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
     pos += 1;
@@ -10168,7 +10168,7 @@ fn scan_import_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_import_from_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_import_from_block(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10219,7 +10219,7 @@ fn scan_import_from_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_import_module_items(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_import_module_items(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -10256,7 +10256,7 @@ fn scan_import_module_items(tokens: &List<Token>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn scan_import_alias_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_import_alias_name(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_module_export_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -10277,7 +10277,7 @@ fn scan_import_alias_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_module_export_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_module_export_name(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10305,14 +10305,14 @@ fn scan_module_export_name(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_imported_binding(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_imported_binding(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_51(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_import_default(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_import_default(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_alias_name(tokens, pos, &FOLLOW_MASK_16, 0);
     if pos < 0 { return -1; }
@@ -10321,7 +10321,7 @@ fn scan_import_default(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_import_namespace(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_import_namespace(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_35 = pos;
     let sgk_35 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10359,7 +10359,7 @@ fn scan_import_namespace(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_import_from(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_import_from(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_From { return -1; }
     pos += 1;
@@ -10368,7 +10368,7 @@ fn scan_import_from(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_alias_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_alias_name(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -10389,7 +10389,7 @@ fn scan_alias_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &E
     return pos;
 }
 
-fn scan_export_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_export_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10451,7 +10451,7 @@ fn scan_export_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_export_from_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_export_from_block(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10490,7 +10490,7 @@ fn scan_export_from_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_export_module_items(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_export_module_items(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -10527,7 +10527,7 @@ fn scan_export_module_items(tokens: &List<Token>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn scan_export_alias_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_export_alias_name(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_module_export_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -10548,7 +10548,7 @@ fn scan_export_alias_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10616,7 +10616,7 @@ fn scan_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_variable_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_variable_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10724,7 +10724,7 @@ fn scan_variable_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_variable_declaration_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_variable_declaration_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_variable_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -10746,7 +10746,7 @@ fn scan_variable_declaration_list(tokens: &List<Token>, pos: i32, follow: &List<
     return pos;
 }
 
-fn scan_variable_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_variable_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_44 = pos;
     let sgk_44 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10803,14 +10803,14 @@ fn scan_variable_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn scan_empty_statement_(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_empty_statement_(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expression_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_expression_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expression_sequence(tokens, pos, &follow_prepend(&FOLLOW_MASK_14, follow), 0);
     if pos < 0 { return -1; }
@@ -10822,7 +10822,7 @@ fn scan_expression_statement(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn scan_if_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_if_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_If { return -1; }
     pos += 1;
@@ -10851,7 +10851,7 @@ fn scan_if_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_iteration_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_iteration_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -11078,14 +11078,14 @@ fn scan_iteration_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn scan_var_modifier(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_var_modifier(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_27(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_continue_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_continue_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Continue { return -1; }
     pos += 1;
@@ -11099,7 +11099,7 @@ fn scan_continue_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_break_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_break_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Break { return -1; }
     pos += 1;
@@ -11113,7 +11113,7 @@ fn scan_break_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_return_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_return_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Return { return -1; }
     pos += 1;
@@ -11127,7 +11127,7 @@ fn scan_return_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_yield_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_yield_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_50 = pos;
     sg_50: {
@@ -11155,7 +11155,7 @@ fn scan_yield_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_with_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_with_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_With { return -1; }
     pos += 1;
@@ -11170,7 +11170,7 @@ fn scan_with_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_switch_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_switch_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Switch { return -1; }
     pos += 1;
@@ -11185,7 +11185,7 @@ fn scan_switch_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_case_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_case_block(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -11212,7 +11212,7 @@ fn scan_case_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &E
     return pos;
 }
 
-fn scan_case_clauses(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_case_clauses(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_case_clause(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -11225,7 +11225,7 @@ fn scan_case_clauses(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_case_clause(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_case_clause(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Case { return -1; }
     pos += 1;
@@ -11241,7 +11241,7 @@ fn scan_case_clause(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_default_clause(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_default_clause(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Default { return -1; }
     pos += 1;
@@ -11255,7 +11255,7 @@ fn scan_default_clause(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_labelled_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_labelled_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_9, 0);
     if pos < 0 { return -1; }
@@ -11266,7 +11266,7 @@ fn scan_labelled_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_throw_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_throw_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Throw { return -1; }
     pos += 1;
@@ -11277,7 +11277,7 @@ fn scan_throw_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_try_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_try_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Try { return -1; }
     pos += 1;
@@ -11310,7 +11310,7 @@ fn scan_try_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_catch_production(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_catch_production(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Catch { return -1; }
     pos += 1;
@@ -11340,7 +11340,7 @@ fn scan_catch_production(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_finally_production(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_finally_production(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Finally { return -1; }
     pos += 1;
@@ -11349,7 +11349,7 @@ fn scan_finally_production(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_debugger_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_debugger_statement(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Debugger { return -1; }
     pos += 1;
@@ -11358,7 +11358,7 @@ fn scan_debugger_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_function_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_function_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Async {
         let sp = pos;
@@ -11408,7 +11408,7 @@ fn scan_function_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn scan_class_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_class_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_AT {
         let sp = pos;
@@ -11449,7 +11449,7 @@ fn scan_class_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_class_heritage(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_class_heritage(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Extends && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -11464,7 +11464,7 @@ fn scan_class_heritage(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_class_tail(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_class_tail(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -11479,7 +11479,7 @@ fn scan_class_tail(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &E
     return pos;
 }
 
-fn scan_class_extends_clause(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_class_extends_clause(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Extends { return -1; }
     pos += 1;
@@ -11488,7 +11488,7 @@ fn scan_class_extends_clause(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn scan_implements_clause(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_implements_clause(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Implements { return -1; }
     pos += 1;
@@ -11497,7 +11497,7 @@ fn scan_implements_clause(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_class_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_class_element(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -11597,7 +11597,7 @@ fn scan_class_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_property_member_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -11873,7 +11873,7 @@ fn scan_property_member_declaration(tokens: &List<Token>, pos: i32, follow: &Lis
     return pos;
 }
 
-fn scan_property_member_base(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_property_member_base(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_12(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -11898,7 +11898,7 @@ fn scan_property_member_base(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn scan_index_member_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_index_member_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_index_signature(tokens, pos, &FOLLOW_MASK_14, 0);
     if pos < 0 { return -1; }
@@ -11907,7 +11907,7 @@ fn scan_index_member_declaration(tokens: &List<Token>, pos: i32, follow: &List<L
     return pos;
 }
 
-fn scan_generator_method(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_generator_method(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Async {
         let sp = pos;
@@ -11939,7 +11939,7 @@ fn scan_generator_method(tokens: &List<Token>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_generator_function_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_generator_function_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Async {
         let sp = pos;
@@ -11973,7 +11973,7 @@ fn scan_generator_function_declaration(tokens: &List<Token>, pos: i32, follow: &
     return pos;
 }
 
-fn scan_generator_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_generator_block(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -12004,7 +12004,7 @@ fn scan_generator_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_generator_definition(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_generator_definition(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { return -1; }
     pos += 1;
@@ -12013,7 +12013,7 @@ fn scan_generator_definition(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn scan_iterator_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_iterator_block(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -12044,7 +12044,7 @@ fn scan_iterator_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_iterator_definition(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_iterator_definition(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
@@ -12070,7 +12070,7 @@ fn scan_iterator_definition(tokens: &List<Token>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn scan_class_element_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_class_element_name(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -12098,7 +12098,7 @@ fn scan_class_element_name(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_private_identifier(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_private_identifier(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_HASH { return -1; }
     pos += 1;
@@ -12107,7 +12107,7 @@ fn scan_private_identifier(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_formal_parameter_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_formal_parameter_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -12283,7 +12283,7 @@ fn scan_formal_parameter_list(tokens: &List<Token>, pos: i32, follow: &List<List
     return pos;
 }
 
-fn scan_formal_parameter_arg(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_formal_parameter_arg(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_AT {
         let sp = pos;
@@ -12319,7 +12319,7 @@ fn scan_formal_parameter_arg(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn scan_last_formal_parameter_arg(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_last_formal_parameter_arg(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Ellipsis { return -1; }
     pos += 1;
@@ -12333,7 +12333,7 @@ fn scan_last_formal_parameter_arg(tokens: &List<Token>, pos: i32, follow: &List<
     return pos;
 }
 
-fn scan_function_body(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_function_body(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_18(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -12343,7 +12343,7 @@ fn scan_function_body(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_source_elements(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_source_elements(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_source_element(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -12356,7 +12356,7 @@ fn scan_source_elements(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_array_literal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_array_literal(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     sg_78_done: {
         sg_78: {
@@ -12373,7 +12373,7 @@ fn scan_array_literal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_element_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_element_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -12416,7 +12416,7 @@ fn scan_element_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_array_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_array_element(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Ellipsis {
         let sp = pos;
@@ -12452,7 +12452,7 @@ fn scan_array_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_object_literal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_object_literal(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -12493,7 +12493,7 @@ fn scan_object_literal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_property_assignment(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_property_assignment(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -12752,7 +12752,7 @@ fn scan_property_assignment(tokens: &List<Token>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn scan_get_accessor(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_get_accessor(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_getter(tokens, pos, &FOLLOW_MASK_37, 0);
     if pos < 0 { return -1; }
@@ -12774,7 +12774,7 @@ fn scan_get_accessor(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_set_accessor(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_set_accessor(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_setter(tokens, pos, &FOLLOW_MASK_17, 0);
     if pos < 0 { return -1; }
@@ -12796,7 +12796,7 @@ fn scan_set_accessor(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_property_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_property_name(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -12844,7 +12844,7 @@ fn scan_property_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_arguments(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_arguments(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -12866,7 +12866,7 @@ fn scan_arguments(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_argument_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_argument_list(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_argument(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -12888,7 +12888,7 @@ fn scan_argument_list(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_argument(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_argument(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Ellipsis {
         let sp = pos;
@@ -12919,7 +12919,7 @@ fn scan_argument(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
-fn scan_expression_sequence(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_expression_sequence(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_single_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -12941,7 +12941,7 @@ fn scan_expression_sequence(tokens: &List<Token>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn scan_single_expression_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -13478,7 +13478,7 @@ fn scan_single_expression_atom(tokens: &List<Token>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn scan_single_expression_lr_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_2(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_QUESTIONDOT {
         let sp = pos;
@@ -13494,7 +13494,7 @@ fn scan_single_expression_lr_2(tokens: &List<Token>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn scan_single_expression_lr_3(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_3(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_QUESTIONDOT { return -1; }
     pos += 1;
@@ -13503,7 +13503,7 @@ fn scan_single_expression_lr_3(tokens: &List<Token>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn scan_single_expression_lr_4(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_4(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_BANG {
         let sp = pos;
@@ -13527,7 +13527,7 @@ fn scan_single_expression_lr_4(tokens: &List<Token>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn scan_single_expression_lr_5(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_5(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_QUESTION {
         let sp = pos;
@@ -13551,28 +13551,28 @@ fn scan_single_expression_lr_5(tokens: &List<Token>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn scan_single_expression_lr_8(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_8(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_arguments(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_single_expression_lr_9(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_9(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUSPLUS { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_single_expression_lr_10(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_10(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUSMINUS { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_single_expression_lr_21(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_21(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STARSTAR { return -1; }
     pos += 1;
@@ -13581,7 +13581,7 @@ fn scan_single_expression_lr_21(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_22(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_22(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_92 = pos;
     sg_92: {
@@ -13610,7 +13610,7 @@ fn scan_single_expression_lr_22(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_23(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_23(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_93 = pos;
     sg_93: {
@@ -13633,7 +13633,7 @@ fn scan_single_expression_lr_23(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_24(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_24(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_QUESTIONQUESTION { return -1; }
     pos += 1;
@@ -13642,7 +13642,7 @@ fn scan_single_expression_lr_24(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_25(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_25(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_94 = pos;
     let sgk_94 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -13682,7 +13682,7 @@ fn scan_single_expression_lr_25(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_26(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_26(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_95 = pos;
     sg_95: {
@@ -13717,7 +13717,7 @@ fn scan_single_expression_lr_26(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_27(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_27(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Instanceof { return -1; }
     pos += 1;
@@ -13726,7 +13726,7 @@ fn scan_single_expression_lr_27(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_28(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_28(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_In { return -1; }
     pos += 1;
@@ -13735,7 +13735,7 @@ fn scan_single_expression_lr_28(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_29(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_29(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_96 = pos;
     sg_96: {
@@ -13770,7 +13770,7 @@ fn scan_single_expression_lr_29(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_30(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_30(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AMP { return -1; }
     pos += 1;
@@ -13779,7 +13779,7 @@ fn scan_single_expression_lr_30(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_31(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_31(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_CARET { return -1; }
     pos += 1;
@@ -13788,7 +13788,7 @@ fn scan_single_expression_lr_31(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_32(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_32(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPE { return -1; }
     pos += 1;
@@ -13797,7 +13797,7 @@ fn scan_single_expression_lr_32(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_33(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_33(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AMPAMP { return -1; }
     pos += 1;
@@ -13806,7 +13806,7 @@ fn scan_single_expression_lr_33(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_34(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_34(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPEPIPE { return -1; }
     pos += 1;
@@ -13815,7 +13815,7 @@ fn scan_single_expression_lr_34(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_35(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_35(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_QUESTION { return -1; }
     pos += 1;
@@ -13828,7 +13828,7 @@ fn scan_single_expression_lr_35(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_36(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_36(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { return -1; }
     pos += 1;
@@ -13837,7 +13837,7 @@ fn scan_single_expression_lr_36(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_37(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_37(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_assignment_operator(tokens, pos, &FOLLOW_MASK_25, 0);
     if pos < 0 { return -1; }
@@ -13846,14 +13846,14 @@ fn scan_single_expression_lr_37(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_38(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_38(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_template_string_literal(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_single_expression_lr_51(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_51(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_As { return -1; }
     pos += 1;
@@ -13862,14 +13862,14 @@ fn scan_single_expression_lr_51(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_single_expression_lr_52(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_single_expression_lr_52(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BANG { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_single_expression(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_single_expression(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_single_expression_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
@@ -14174,7 +14174,7 @@ fn scan_single_expression(tokens: &List<Token>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_as_expression(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_as_expression(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14224,7 +14224,7 @@ fn scan_as_expression(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_assignable(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_assignable(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14284,7 +14284,7 @@ fn scan_assignable(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &E
     return pos;
 }
 
-fn scan_anonymous_function(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_anonymous_function(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14356,7 +14356,7 @@ fn scan_anonymous_function(tokens: &List<Token>, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_arrow_function_declaration(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_arrow_function_declaration(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Async {
         let sp = pos;
@@ -14377,7 +14377,7 @@ fn scan_arrow_function_declaration(tokens: &List<Token>, pos: i32, follow: &List
     return pos;
 }
 
-fn scan_arrow_function_parameters(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_arrow_function_parameters(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14412,7 +14412,7 @@ fn scan_arrow_function_parameters(tokens: &List<Token>, pos: i32, follow: &List<
     return pos;
 }
 
-fn scan_arrow_function_body(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_arrow_function_body(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14452,14 +14452,14 @@ fn scan_arrow_function_body(tokens: &List<Token>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn scan_assignment_operator(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_assignment_operator(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_74(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_literal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_literal(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14527,7 +14527,7 @@ fn scan_literal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
     return pos;
 }
 
-fn scan_template_string_literal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_template_string_literal(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_BackTick { return -1; }
     pos += 1;
@@ -14542,7 +14542,7 @@ fn scan_template_string_literal(tokens: &List<Token>, pos: i32, follow: &List<Li
     return pos;
 }
 
-fn scan_template_string_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_template_string_atom(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14582,21 +14582,21 @@ fn scan_template_string_atom(tokens: &List<Token>, pos: i32, follow: &List<List<
     return pos;
 }
 
-fn scan_numeric_literal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_numeric_literal(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_34(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_bigint_literal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_bigint_literal(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_36(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_getter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_getter(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_40, 0);
     if pos < 0 { return -1; }
@@ -14605,7 +14605,7 @@ fn scan_getter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
     return pos;
 }
 
-fn scan_setter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_setter(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_40, 0);
     if pos < 0 { return -1; }
@@ -14614,7 +14614,7 @@ fn scan_setter(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
     return pos;
 }
 
-fn scan_identifier_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_identifier_name(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14658,14 +14658,14 @@ fn scan_identifier_name(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_identifier(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_identifier(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_20(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_identifier_or_key_word(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_identifier_or_key_word(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14709,7 +14709,7 @@ fn scan_identifier_or_key_word(tokens: &List<Token>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn scan_reserved_word(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_reserved_word(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14745,14 +14745,14 @@ fn scan_reserved_word(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_keyword(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_keyword(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_38(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_eos(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_eos(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -14945,7 +14945,7 @@ fn _parse_type_parameter__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> =
     }));
 }
 
-fn _parse_type_parameter__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type_parameter__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
@@ -14974,7 +14974,7 @@ fn _parse_type_parameter__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> =
     }));
 }
 
-fn _parse_type_parameter__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type_parameter__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -15257,7 +15257,7 @@ fn _parse_type___inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }));
 }
 
-fn _parse_type___inner_scan_3(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type___inner_scan_3(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_type_generic(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -15273,7 +15273,7 @@ fn _parse_type___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }));
 }
 
-fn _parse_type___inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type___inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_function_type(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -15318,7 +15318,7 @@ fn _parse_type___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }));
 }
 
-fn _parse_type___inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type___inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_3(tokens[pos].kind) {
         let sp = pos;
@@ -15509,7 +15509,7 @@ fn _parse_primary_type__inner_alt_9(p: &mut Parser, follow: &List<List<i32>> = &
     }));
 }
 
-fn _parse_primary_type__inner_scan_9(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_primary_type__inner_scan_9(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_KeyOf { return -1; }
     pos += 1;
@@ -15527,7 +15527,7 @@ fn _parse_primary_type__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &
     }));
 }
 
-fn _parse_primary_type__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_primary_type__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_predefined_type(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -15543,7 +15543,7 @@ fn _parse_primary_type__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &
     }));
 }
 
-fn _parse_primary_type__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_primary_type__inner_scan_2(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_type_reference(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -15563,7 +15563,7 @@ fn _parse_primary_type__inner_alt_8(p: &mut Parser, follow: &List<List<i32>> = &
     }));
 }
 
-fn _parse_primary_type__inner_scan_8(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_primary_type__inner_scan_8(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_type_reference(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
@@ -15944,7 +15944,7 @@ fn _parse_type_name__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_type_name__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type_name__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -15960,7 +15960,7 @@ fn _parse_type_name__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_type_name__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type_name__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_namespace_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -16156,7 +16156,7 @@ fn _parse_type_member__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &E
     }));
 }
 
-fn _parse_type_member__inner_scan_3(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type_member__inner_scan_3(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_index_signature(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -16172,7 +16172,7 @@ fn _parse_type_member__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &E
     }));
 }
 
-fn _parse_type_member__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type_member__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_property_signatur(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -16200,7 +16200,7 @@ fn _parse_type_member__inner_alt_4(p: &mut Parser, follow: &List<List<i32>> = &E
     }));
 }
 
-fn _parse_type_member__inner_scan_4(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type_member__inner_scan_4(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_method_signature(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -16517,7 +16517,7 @@ fn _parse_type_query_expression__inner_alt_0(p: &mut Parser, follow: &List<List<
     }));
 }
 
-fn _parse_type_query_expression__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type_query_expression__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -16566,7 +16566,7 @@ fn _parse_type_query_expression__inner_alt_1(p: &mut Parser, follow: &List<List<
     }));
 }
 
-fn _parse_type_query_expression__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_type_query_expression__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     sg_108_done: {
         sg_108: {
@@ -16903,7 +16903,7 @@ fn _parse_parameter__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_parameter__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_parameter__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_required_parameter(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -16919,7 +16919,7 @@ fn _parse_parameter__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_parameter__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_parameter__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_optional_parameter(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18032,7 +18032,7 @@ fn _parse_statement__inner_alt_27(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_27(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_27(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Export { return -1; }
     pos += 1;
@@ -18050,7 +18050,7 @@ fn _parse_statement__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_statement__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_block(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18066,7 +18066,7 @@ fn _parse_statement__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_statement__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_2(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_import_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18082,7 +18082,7 @@ fn _parse_statement__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_statement__inner_scan_3(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_3(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_export_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18098,7 +18098,7 @@ fn _parse_statement__inner_alt_5(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_statement__inner_scan_5(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_5(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_abstract_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18114,7 +18114,7 @@ fn _parse_statement__inner_alt_11(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_11(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_11(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_if_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18130,7 +18130,7 @@ fn _parse_statement__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_13(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_13(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_continue_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18146,7 +18146,7 @@ fn _parse_statement__inner_alt_14(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_14(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_14(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_break_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18162,7 +18162,7 @@ fn _parse_statement__inner_alt_15(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_15(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_15(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_return_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18178,7 +18178,7 @@ fn _parse_statement__inner_alt_17(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_17(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_17(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_with_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18194,7 +18194,7 @@ fn _parse_statement__inner_alt_19(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_19(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_19(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_switch_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18210,7 +18210,7 @@ fn _parse_statement__inner_alt_20(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_20(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_20(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_throw_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18226,7 +18226,7 @@ fn _parse_statement__inner_alt_21(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_21(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_21(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_try_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18242,7 +18242,7 @@ fn _parse_statement__inner_alt_22(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_22(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_22(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_debugger_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18258,7 +18258,7 @@ fn _parse_statement__inner_alt_7(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_statement__inner_scan_7(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_7(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_function_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18274,7 +18274,7 @@ fn _parse_statement__inner_alt_10(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_10(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_10(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_namespace_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18290,7 +18290,7 @@ fn _parse_statement__inner_alt_16(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_16(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_16(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_yield_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18306,7 +18306,7 @@ fn _parse_statement__inner_alt_24(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_24(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_24(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_generator_function_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18322,7 +18322,7 @@ fn _parse_statement__inner_alt_25(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_25(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_25(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_type_alias_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18338,7 +18338,7 @@ fn _parse_statement__inner_alt_26(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_26(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_26(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_enum_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18354,7 +18354,7 @@ fn _parse_statement__inner_alt_9(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_statement__inner_scan_9(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_9(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_interface_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18370,7 +18370,7 @@ fn _parse_statement__inner_alt_12(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_12(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_12(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_iteration_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18386,7 +18386,7 @@ fn _parse_statement__inner_alt_6(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_statement__inner_scan_6(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_6(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_class_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18402,7 +18402,7 @@ fn _parse_statement__inner_alt_18(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_18(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_18(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_labelled_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18418,7 +18418,7 @@ fn _parse_statement__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_statement__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_variable_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18434,7 +18434,7 @@ fn _parse_statement__inner_alt_23(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_statement__inner_scan_23(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_23(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_arrow_function_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -18450,7 +18450,7 @@ fn _parse_statement__inner_alt_8(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_statement__inner_scan_8(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_statement__inner_scan_8(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_expression_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -19935,7 +19935,7 @@ fn _parse_export_statement__inner_alt_0(p: &mut Parser, follow: &List<List<i32>>
     }));
 }
 
-fn _parse_export_statement__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_export_statement__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Export { return -1; }
     pos += 1;
@@ -19985,7 +19985,7 @@ fn _parse_export_statement__inner_alt_1(p: &mut Parser, follow: &List<List<i32>>
     }));
 }
 
-fn _parse_export_statement__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_export_statement__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Export { return -1; }
     pos += 1;
@@ -20203,7 +20203,7 @@ fn _parse_declaration__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &E
     }));
 }
 
-fn _parse_declaration__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_declaration__inner_scan_2(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_function_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -20219,7 +20219,7 @@ fn _parse_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &E
     }));
 }
 
-fn _parse_declaration__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_declaration__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_class_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -20235,7 +20235,7 @@ fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &E
     }));
 }
 
-fn _parse_declaration__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_declaration__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_variable_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -20353,7 +20353,7 @@ fn _parse_variable_statement__inner_alt_1(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_variable_statement__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_variable_statement__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_12(tokens[pos].kind) {
         let sp = pos;
@@ -20407,7 +20407,7 @@ fn _parse_variable_statement__inner_alt_0(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_variable_statement__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_variable_statement__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_binding_pattern(tokens, pos, &FOLLOW_MASK_20, 0);
     if pos < 0 { return -1; }
@@ -20732,7 +20732,7 @@ fn _parse_iteration_statement__inner_alt_3(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_iteration_statement__inner_scan_3(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_iteration_statement__inner_scan_3(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_For { return -1; }
     pos += 1;
@@ -20805,7 +20805,7 @@ fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_iteration_statement__inner_scan_7(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_iteration_statement__inner_scan_7(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_For { return -1; }
     pos += 1;
@@ -20885,7 +20885,7 @@ fn _parse_iteration_statement__inner_alt_2(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_iteration_statement__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_iteration_statement__inner_scan_2(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_For { return -1; }
     pos += 1;
@@ -20957,7 +20957,7 @@ fn _parse_iteration_statement__inner_alt_6(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_iteration_statement__inner_scan_6(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_iteration_statement__inner_scan_6(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_For { return -1; }
     pos += 1;
@@ -21018,7 +21018,7 @@ fn _parse_iteration_statement__inner_alt_5(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_iteration_statement__inner_scan_5(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_iteration_statement__inner_scan_5(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_For { return -1; }
     pos += 1;
@@ -21060,7 +21060,7 @@ fn _parse_iteration_statement__inner_alt_4(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_iteration_statement__inner_scan_4(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_iteration_statement__inner_scan_4(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_For { return -1; }
     pos += 1;
@@ -21964,7 +21964,7 @@ fn _parse_class_element__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = 
     }));
 }
 
-fn _parse_class_element__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_class_element__inner_scan_2(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_index_member_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -21980,7 +21980,7 @@ fn _parse_class_element__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = 
     }));
 }
 
-fn _parse_class_element__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_class_element__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_constructor_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -21996,7 +21996,7 @@ fn _parse_class_element__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = 
     }));
 }
 
-fn _parse_class_element__inner_scan_3(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_class_element__inner_scan_3(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -22019,7 +22019,7 @@ fn _parse_class_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = 
     }));
 }
 
-fn _parse_class_element__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_class_element__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_AT {
         let sp = pos;
@@ -22185,7 +22185,7 @@ fn _parse_property_member_declaration__inner_alt_0(p: &mut Parser, follow: &List
     }));
 }
 
-fn _parse_property_member_declaration__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_property_member_declaration__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_32, 0);
     if pos < 0 { return -1; }
@@ -22246,7 +22246,7 @@ fn _parse_property_member_declaration__inner_alt_1(p: &mut Parser, follow: &List
     }));
 }
 
-fn _parse_property_member_declaration__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_property_member_declaration__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_32, 0);
     if pos < 0 { return -1; }
@@ -22319,7 +22319,7 @@ fn _parse_property_member_declaration__inner_alt_2(p: &mut Parser, follow: &List
     }));
 }
 
-fn _parse_property_member_declaration__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_property_member_declaration__inner_scan_2(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_24, 0);
     if pos < 0 { return -1; }
@@ -22811,7 +22811,7 @@ fn _parse_formal_parameter_list__inner_alt_2(p: &mut Parser, follow: &List<List<
     }));
 }
 
-fn _parse_formal_parameter_list__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_formal_parameter_list__inner_scan_2(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_array_literal(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -22878,7 +22878,7 @@ fn _parse_formal_parameter_list__inner_alt_0(p: &mut Parser, follow: &List<List<
     }));
 }
 
-fn _parse_formal_parameter_list__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_formal_parameter_list__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_formal_parameter_arg(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -22940,7 +22940,7 @@ fn _parse_formal_parameter_list__inner_alt_3(p: &mut Parser, follow: &List<List<
     }));
 }
 
-fn _parse_formal_parameter_list__inner_scan_3(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_formal_parameter_list__inner_scan_3(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_object_literal(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -23499,7 +23499,7 @@ fn _parse_property_assignment__inner_alt_1(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_property_assignment__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_property_assignment__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
@@ -23523,7 +23523,7 @@ fn _parse_property_assignment__inner_alt_2(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_property_assignment__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_property_assignment__inner_scan_2(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_get_accessor(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -23539,7 +23539,7 @@ fn _parse_property_assignment__inner_alt_3(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_property_assignment__inner_scan_3(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_property_assignment__inner_scan_3(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_set_accessor(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -23555,7 +23555,7 @@ fn _parse_property_assignment__inner_alt_5(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_property_assignment__inner_scan_5(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_property_assignment__inner_scan_5(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier_or_key_word(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -23571,7 +23571,7 @@ fn _parse_property_assignment__inner_alt_4(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_property_assignment__inner_scan_4(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_property_assignment__inner_scan_4(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_generator_method(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -23591,7 +23591,7 @@ fn _parse_property_assignment__inner_alt_0(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_property_assignment__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_property_assignment__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_property_name(tokens, pos, &FOLLOW_MASK_20, 0);
     if pos < 0 { return -1; }
@@ -23632,7 +23632,7 @@ fn _parse_property_assignment__inner_alt_6(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_property_assignment__inner_scan_6(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_property_assignment__inner_scan_6(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Ellipsis {
         let sp = pos;
@@ -24175,7 +24175,7 @@ fn _parse_single_expression__inner_alt_1(p: &mut Parser, follow: &List<List<i32>
     }));
 }
 
-fn _parse_single_expression__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Class { return -1; }
     pos += 1;
@@ -24216,7 +24216,7 @@ fn _parse_single_expression__inner_alt_6(p: &mut Parser, follow: &List<List<i32>
     }));
 }
 
-fn _parse_single_expression__inner_scan_6(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_6(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_New { return -1; }
     pos += 1;
@@ -24252,7 +24252,7 @@ fn _parse_single_expression__inner_alt_7(p: &mut Parser, follow: &List<List<i32>
     }));
 }
 
-fn _parse_single_expression__inner_scan_7(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_7(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_New { return -1; }
     pos += 1;
@@ -24279,7 +24279,7 @@ fn _parse_single_expression__inner_alt_49(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_49(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_49(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -24301,7 +24301,7 @@ fn _parse_single_expression__inner_alt_11(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_11(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_11(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Delete { return -1; }
     pos += 1;
@@ -24321,7 +24321,7 @@ fn _parse_single_expression__inner_alt_12(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_12(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_12(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Void { return -1; }
     pos += 1;
@@ -24341,7 +24341,7 @@ fn _parse_single_expression__inner_alt_13(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_13(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_13(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Typeof { return -1; }
     pos += 1;
@@ -24361,7 +24361,7 @@ fn _parse_single_expression__inner_alt_20(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_20(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_20(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Await { return -1; }
     pos += 1;
@@ -24379,7 +24379,7 @@ fn _parse_single_expression__inner_alt_47(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_47(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_47(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_array_literal(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -24395,7 +24395,7 @@ fn _parse_single_expression__inner_alt_41(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_41(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_41(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_generator_function_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -24411,7 +24411,7 @@ fn _parse_single_expression__inner_alt_42(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_42(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_42(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_yield_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -24427,7 +24427,7 @@ fn _parse_single_expression__inner_alt_46(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_46(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_46(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_literal(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -24443,7 +24443,7 @@ fn _parse_single_expression__inner_alt_0(p: &mut Parser, follow: &List<List<i32>
     }));
 }
 
-fn _parse_single_expression__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_anonymous_function(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -24468,7 +24468,7 @@ fn _parse_single_expression__inner_alt_44(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_44(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_44(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -24489,7 +24489,7 @@ fn _parse_single_expression__inner_alt_43(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_43(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_43(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_This { return -1; }
     pos += 1;
@@ -24505,7 +24505,7 @@ fn _parse_single_expression__inner_alt_45(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_45(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_45(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Super { return -1; }
     pos += 1;
@@ -24521,7 +24521,7 @@ fn _parse_single_expression__inner_alt_39(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_39(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_39(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_iterator_block(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -24537,7 +24537,7 @@ fn _parse_single_expression__inner_alt_40(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_40(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_40(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_generator_block(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -24553,7 +24553,7 @@ fn _parse_single_expression__inner_alt_48(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_single_expression__inner_scan_48(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_single_expression__inner_scan_48(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_object_literal(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -25845,7 +25845,7 @@ fn _parse_as_expression__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = 
     }));
 }
 
-fn _parse_as_expression__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_as_expression__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_single_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -25873,7 +25873,7 @@ fn _parse_as_expression__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = 
     }));
 }
 
-fn _parse_as_expression__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_as_expression__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_predefined_type(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -25949,7 +25949,7 @@ fn _parse_assignable__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_assignable__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_assignable__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -25965,7 +25965,7 @@ fn _parse_assignable__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_assignable__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_assignable__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_keyword(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -26081,7 +26081,7 @@ fn _parse_anonymous_function__inner_alt_1(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_anonymous_function__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_anonymous_function__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_Async {
         let sp = pos;
@@ -26127,7 +26127,7 @@ fn _parse_anonymous_function__inner_alt_0(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_anonymous_function__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_anonymous_function__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_function_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -26143,7 +26143,7 @@ fn _parse_anonymous_function__inner_alt_2(p: &mut Parser, follow: &List<List<i32
     }));
 }
 
-fn _parse_anonymous_function__inner_scan_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_anonymous_function__inner_scan_2(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_arrow_function_declaration(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -26295,7 +26295,7 @@ fn _parse_arrow_function_body__inner_alt_1(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_arrow_function_body__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_arrow_function_body__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -26315,7 +26315,7 @@ fn _parse_arrow_function_body__inner_alt_0(p: &mut Parser, follow: &List<List<i3
     }));
 }
 
-fn _parse_arrow_function_body__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_arrow_function_body__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_single_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -26650,7 +26650,7 @@ fn _parse_identifier_name__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> 
     }));
 }
 
-fn _parse_identifier_name__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_identifier_name__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -26666,7 +26666,7 @@ fn _parse_identifier_name__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> 
     }));
 }
 
-fn _parse_identifier_name__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_identifier_name__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_reserved_word(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -26756,7 +26756,7 @@ fn _parse_identifier_or_key_word__inner_alt_0(p: &mut Parser, follow: &List<List
     }));
 }
 
-fn _parse_identifier_or_key_word__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_identifier_or_key_word__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -26772,7 +26772,7 @@ fn _parse_identifier_or_key_word__inner_alt_1(p: &mut Parser, follow: &List<List
     }));
 }
 
-fn _parse_identifier_or_key_word__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_identifier_or_key_word__inner_scan_1(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_TypeAlias { return -1; }
     pos += 1;

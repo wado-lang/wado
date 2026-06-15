@@ -426,7 +426,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
     // Char index where each line begins; built once so each token's `line:col`
     // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
@@ -1414,7 +1414,7 @@ fn try_lit_rbracket(chars: &List<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
-pub fn tokenize(input: &String) -> List<Token> {
+pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: List<Token> = [];
@@ -1511,7 +1511,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         }
     }
     tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
-    return tokens;
+    return tokens.to_array();
 }
 
 pub fn token_kind_name(kind: i32) -> String {
@@ -1556,14 +1556,14 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: List<Token>,
+    tokens: Array<Token>,
     pos: i32,
     chars: List<char>,
     pending: Option<ParseError>,
 }
 
 impl Parser {
-    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
+    fn new(tokens: Array<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars, pending: null };
     }
 
@@ -1682,7 +1682,7 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -1691,7 +1691,7 @@ fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1857,7 +1857,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_5(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_5(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_CARET { return -1; }
     pos += 1;
@@ -1866,7 +1866,7 @@ fn scan_expression_lr_5(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_6(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_6(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { return -1; }
     pos += 1;
@@ -1875,7 +1875,7 @@ fn scan_expression_lr_6(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_7(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_7(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SLASH { return -1; }
     pos += 1;
@@ -1884,7 +1884,7 @@ fn scan_expression_lr_7(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_8(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_8(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PERCENT { return -1; }
     pos += 1;
@@ -1893,7 +1893,7 @@ fn scan_expression_lr_8(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_9(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_9(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { return -1; }
     pos += 1;
@@ -1902,7 +1902,7 @@ fn scan_expression_lr_9(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_10(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_10(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { return -1; }
     pos += 1;
@@ -1911,7 +1911,7 @@ fn scan_expression_lr_10(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_11(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_11(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { return -1; }
     pos += 1;
@@ -1920,7 +1920,7 @@ fn scan_expression_lr_11(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_12(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_12(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BANGEQ { return -1; }
     pos += 1;
@@ -1929,7 +1929,7 @@ fn scan_expression_lr_12(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_13(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_13(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_GT { return -1; }
     pos += 1;
@@ -1938,7 +1938,7 @@ fn scan_expression_lr_13(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_14(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_14(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_GTEQ { return -1; }
     pos += 1;
@@ -1947,7 +1947,7 @@ fn scan_expression_lr_14(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_15(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_15(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LT { return -1; }
     pos += 1;
@@ -1956,7 +1956,7 @@ fn scan_expression_lr_15(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_16(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_16(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LTEQ { return -1; }
     pos += 1;
@@ -1965,7 +1965,7 @@ fn scan_expression_lr_16(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_17(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_17(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_IN { return -1; }
     pos += 1;
@@ -1993,7 +1993,7 @@ fn scan_expression_lr_17(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_18(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_18(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_3 = pos;
     sg_3: {
@@ -2016,7 +2016,7 @@ fn scan_expression_lr_18(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_19(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_19(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_4 = pos;
     sg_4: {
@@ -2039,7 +2039,7 @@ fn scan_expression_lr_19(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -2235,7 +2235,7 @@ fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<ExpressionNode, Pars
     }));
 }
 
-fn _parse_expression__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
+fn _parse_expression__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
@@ -2272,7 +2272,7 @@ fn _parse_expression__inner_alt_25(p: &mut Parser) -> Result<ExpressionNode, Par
     }));
 }
 
-fn _parse_expression__inner_scan_25(tokens: &List<Token>, pos: i32) -> i32 {
+fn _parse_expression__inner_scan_25(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;

@@ -266,7 +266,12 @@ impl TestSpec {
 // ---------------------------------------------------------------------------
 
 /// Verify the actual result matches the expected spec
-fn verify_result(result: &common::WasmRunResult, spec: &TestSpec, fixture_name: &str) {
+fn verify_result(
+    result: &common::WasmRunResult,
+    spec: &TestSpec,
+    fixture_name: &str,
+    opt_level: OptLevel,
+) {
     // Check trapped status
     assert_eq!(
         result.trapped, spec.trapped,
@@ -311,14 +316,30 @@ fn verify_result(result: &common::WasmRunResult, spec: &TestSpec, fixture_name: 
         );
     }
 
-    // Check stderr contains
+    // Check stderr contains.
+    //
+    // `-f bare-asserts` (default at -Os) lowers an assertion failure to a bare
+    // `unreachable` trap, so a trapping assert at -Os carries no diagnostic
+    // message. When the program trapped exactly as the spec expects and stderr
+    // is just the bare trap backtrace (nothing logged before it), accept the
+    // stripped message. Explicit `panic(...)` text still precedes the backtrace
+    // and is enforced normally (it is not stripped).
+    let assert_diagnostic_stripped =
+        opt_level == OptLevel::Os && spec.trapped && result.trapped && is_bare_trap(&result.stderr);
     for expected in &spec.stderr_contains {
         assert!(
-            result.stderr.contains(expected),
+            result.stderr.contains(expected) || assert_diagnostic_stripped,
             "[{fixture_name}] stderr should contain '{expected}', but got:\n{}",
             result.stderr
         );
     }
+}
+
+/// A bare wasm trap with no guest-logged diagnostic before it — what a stripped
+/// (`-f bare-asserts`) assertion failure produces. `panic(...)` / `log_stderr`
+/// output would precede the host's `error while executing` backtrace.
+fn is_bare_trap(stderr: &str) -> bool {
+    stderr.trim_start().starts_with("error while executing") && stderr.contains("unreachable")
 }
 
 // ---------------------------------------------------------------------------
@@ -898,7 +919,7 @@ fn run_normal_test(
         .unwrap_or_else(|e| {
             panic!("[{test_id}] test world error: {e:?}");
         });
-        verify_result(&result, spec, test_id);
+        verify_result(&result, spec, test_id, opt_level);
     } else {
         // Default: wasi:cli/command. `_temp_dirs` must outlive the run: dropping
         // a `TempDir` deletes it from disk.
@@ -913,7 +934,7 @@ fn run_normal_test(
         .unwrap_or_else(|e| {
             panic!("[{test_id}] runtime error: {e}");
         });
-        verify_result(&result, spec, test_id);
+        verify_result(&result, spec, test_id, opt_level);
     }
 
     // Verify WIR pattern expectations (if any for this optimization level)

@@ -2794,12 +2794,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let template_tir = TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span);
 
-        let panic_module_source = self.interner.borrow_mut().core("internal");
+        // Emit `core:internal::assert_failed`, not `panic`: a distinct callee
+        // lets `-f bare-asserts` (see `lower::bare_asserts`) replace assertion
+        // failures with a bare trap, dropping this diagnostic without touching
+        // explicit `panic(...)` calls. It behaves identically to `panic`.
+        let assert_failed_module_source = self.interner.borrow_mut().core("internal");
         let panic_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source: panic_module_source,
-                    name: "panic".to_string(),
+                    module_source: assert_failed_module_source,
+                    name: "assert_failed".to_string(),
                     monomorph_info: None,
                     method_info: None,
                 },

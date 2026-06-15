@@ -2473,6 +2473,12 @@ Current indentation level for pretty-printing (used by InspectAlt)
 
 Reference to the output buffer
 
+#### `pub fn resolved_seq_limit(&self) -> i32`
+
+The element/char cap a sequence Inspect should apply: the explicit
+precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
+(`PRECISION_INFINITE`) means uncapped.
+
 #### `pub fn new(buf: &mut String) -> Formatter with stores[buf]`
 
 Create a Formatter with the default spec, writing into the given buffer.
@@ -3789,6 +3795,15 @@ Returns the first element, or None if empty.
 
 #### `pub fn get(&self, index: i32) -> Option<T>`
 
+#### `pub fn to_array(&self) -> Array<T>`
+
+Copy the live `0..len()` elements into a fresh fixed `Array<T>` of exactly
+`len()`. Hand a finished, no-longer-growing buffer to code that only
+indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
+without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
+generated parser over a fixed token stream) avoid that per-access cost.
+Unlike `internal_raw_data`, the result is sized to `len()`, not capacity.
+
 #### `pub fn insert(&mut self, index: i32, value: T) with stores[value]`
 
 Inserts an element at the given index, shifting all elements after it to the right.
@@ -3943,6 +3958,22 @@ byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 #### `impl Default for List<T>`
 
 ##### `pub fn default() -> List<T>`
+
+#### `impl Inspect for List<T>`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl Display for List<T>`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for List<T>`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl DisplayAlt for List<T>`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
 
 ### `pub struct RangeExclusive<T: Ord>`
 

@@ -121,16 +121,18 @@ global mut global:__modules_initialized: bool = 0;
 fn "wado-compiler/tests/fixtures/wir_optimize_branchless_increment.wado/count_trues"(arr) {
     let count: i32;
     let i: i32;
-    let _licm_used_6: i32;
-    let _licm_repr_7: ref Array<bool>;
+    let __cse_11: bool;
+    let _licm_used_12: i32;
+    let _licm_repr_13: ref Array<bool>;
     count = 0;
     i = 0;
-    _licm_used_6 = arr.used;
-    _licm_repr_7 = arr.repr;
+    _licm_used_12 = arr.used;
+    _licm_repr_13 = arr.repr;
     b0: block {
         l1: loop {
-            break_if b0 i >= _licm_used_6;
-            count = count + builtin::array_get<bool>(_licm_repr_7, i);
+            __cse_11 = i < _licm_used_12;
+            break_if b0 __cse_11 == 0;
+            count = count + builtin::array_get<bool>(_licm_repr_13, i);
             i = i + 1;
             continue l1;
         };

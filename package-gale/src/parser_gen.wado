@@ -169,7 +169,7 @@ fn join_kinds(kinds: &List<String>) -> String {
 
 fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut s = StructSpec::new("Parser");
-    s.add_field(&"tokens", &"List<Token>");
+    s.add_field(&"tokens", &"Array<Token>");
     s.add_field(&"pos", &"i32");
     // Source chars; error sites resolve `span.start` into `line:col` via `line_col_at`.
     s.add_field(&"chars", &"List<char>");
@@ -198,7 +198,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     ImplSpec::new("Parser").emit_begin(w);
 
     let mut f = FnSpec::new("new");
-    f.add_param(&"tokens", &"List<Token>");
+    f.add_param(&"tokens", &"Array<Token>");
     f.add_param(&"chars", &"List<char>");
     f.set_return_type(&"Parser");
     f.emit_begin(w);
@@ -457,7 +457,7 @@ fn gen_alt_scan_if_possible(
     let scan_name = `{*fn_name}_scan_{alt_index}`;
 
     let mut f = FnSpec::new(&scan_name);
-    f.add_param(&"tokens", &"&List<Token>");
+    f.add_param(&"tokens", &"&Array<Token>");
     f.add_param(&"pos", &"i32");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
@@ -547,7 +547,7 @@ fn gen_scan_function_named(
     }
 
     let mut f = FnSpec::new(fn_name);
-    f.add_param(&"tokens", &"&List<Token>");
+    f.add_param(&"tokens", &"&Array<Token>");
     f.add_param(&"pos", &"i32");
     // Accept (and ignore) min_prec so call sites pass it uniformly
     // regardless of whether the target rule is left-recursive. See
@@ -648,7 +648,7 @@ fn gen_scan_lr_functions(
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
-    fa.add_param(&"tokens", &"&List<Token>");
+    fa.add_param(&"tokens", &"&Array<Token>");
     fa.add_param(&"pos", &"i32");
     if ctx.emit_follow() {
         add_follow_param(&mut fa);
@@ -677,7 +677,7 @@ fn gen_scan_lr_functions(
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
-    f2.add_param(&"tokens", &"&List<Token>");
+    f2.add_param(&"tokens", &"&Array<Token>");
     f2.add_param(&"pos", &"i32");
     if ctx.emit_follow() {
         add_follow_param(&mut f2);
@@ -723,7 +723,7 @@ fn gen_scan_lr_suffix_helpers(
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
-        f.add_param(&"tokens", &"&List<Token>");
+        f.add_param(&"tokens", &"&Array<Token>");
         f.add_param(&"pos", &"i32");
         if ctx.emit_follow() {
             add_follow_param(&mut f);

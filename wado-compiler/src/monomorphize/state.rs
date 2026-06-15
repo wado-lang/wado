@@ -490,6 +490,10 @@ impl Monomorphizer {
         type_id: TypeId,
         type_table: &TypeTable,
     ) -> Option<(String, Vec<TypeId>)> {
+        // Generic containers share their dispatch name with the call sites.
+        if let Some(info) = type_table.generic_dispatch_components(type_id) {
+            return Some(info);
+        }
         match type_table.get(type_id) {
             ResolvedType::Struct { name, .. } => {
                 // For monomorphized structs with names like "List<i32>", look up the
@@ -499,14 +503,6 @@ impl Monomorphizer {
                 } else {
                     Some((name.clone(), vec![]))
                 }
-            }
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => Some((name.clone(), type_args.clone())),
-            // The raw GC array's methods live in `impl Array<T>`; its base
-            // method-owner name is "Array" with the element as the type arg.
-            ResolvedType::BuiltinArray(elem) => {
-                Some((TypeTable::ARRAY_TYPE_NAME.to_string(), vec![*elem]))
             }
             // Newtypes are transparent — unwrap to base type for struct info lookup
             ResolvedType::Newtype { base_type, .. } => {
