@@ -1,0 +1,61 @@
+// Type inference through the `?` operator. When a generic call's type
+// parameter appears only in the Ok/Some payload of its return type, the
+// parameter must be inferred from the LHS annotation even though `?` strips
+// the wrapper. Before the fix the expected type was dropped at the `?`
+// operator (`resolve_question_mark` resolved its operand with `None`), so the
+// call required a turbofish — the `seq.next_element::<Value>()?` pattern in
+// `core:value` / `core:serde`.
+
+trait Producer {
+    fn make() -> Self;
+}
+impl Producer for i32 {
+    fn make() -> i32 { return 7; }
+}
+impl Producer for String {
+    fn make() -> String { return "hi"; }
+}
+
+struct Seq {}
+impl Seq {
+    // `T` is named only in the Ok payload — nothing in the call arguments
+    // constrains it.
+    fn next_el<T: Producer>(&mut self) -> Result<T, String> {
+        return Result::Ok(T::make());
+    }
+}
+
+// Result operand: `T` inferred as i32 / String from the `let` annotation,
+// through `?`.
+fn read_i32(s: &mut Seq) -> Result<i32, String> {
+    let v: i32 = s.next_el()?;
+    return Result::Ok(v);
+}
+
+fn read_string(s: &mut Seq) -> Result<String, String> {
+    let v: String = s.next_el()?;
+    return Result::Ok(v);
+}
+
+// Free function with an Option operand: same back-inference path.
+fn parse<T: Producer>() -> Option<T> {
+    return Option::Some(T::make());
+}
+
+fn read_opt() -> Option<i32> {
+    let v: i32 = parse()?;
+    return Option::Some(v);
+}
+
+test "infer through ? on a Result-returning generic method" {
+    let mut s = Seq {};
+    assert read_i32(&mut s) matches { Ok(7) };
+    assert read_string(&mut s) matches { Ok(v) && v == "hi" };
+}
+
+test "infer through ? on an Option-returning generic function" {
+    assert read_opt() matches { Some(7) };
+}
+
+__DATA__
+{"test": {}}

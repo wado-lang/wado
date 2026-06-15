@@ -221,7 +221,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Spread(..) => {
                 panic!("Spread expression should only appear inside TupleLiteral handling")
             }
-            Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
+            Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx, expected_type),
             Expr::Range(range) => self.resolve_range(range, ctx),
             Expr::WithHandler(w) => self.resolve_with_handler(w, ctx, expected_type),
             Expr::Resume(r) => self.resolve_resume(r, ctx),
@@ -3559,12 +3559,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// For `Option<T>` in a function returning `Option<U>`:
     ///   match expr { Some(v) => v, None => return null }
+    /// Reconstruct the operand's expected type for a `?` expression from the
+    /// `?`-stripped expected payload `u` and the enclosing function's return
+    /// type. Returns `None` when there is no usable payload type or the return
+    /// type is not an Option/Result (the latter is a real `?`-misuse that
+    /// [`resolve_question_mark`] reports after resolving the operand).
+    fn question_mark_operand_expected(
+        &mut self,
+        expected_payload: Option<TypeId>,
+        return_type: TypeId,
+    ) -> Option<TypeId> {
+        let u = expected_payload?;
+        if u == TypeTable::UNKNOWN || u == TypeTable::ERROR {
+            return None;
+        }
+        // `None` error slot => Option wrapper; `Some(err)` => Result<_, err>.
+        let result_err = {
+            let tt = self.tysys.type_table.borrow();
+            if tt.as_option(return_type).is_some() {
+                None
+            } else if let ResolvedType::GenericInstance {
+                name, type_args, ..
+            } = tt.get(return_type)
+                && name == "Result"
+                && type_args.len() == 2
+            {
+                Some(type_args[1])
+            } else {
+                return None;
+            }
+        };
+        let mut tt = self.tysys.type_table.borrow_mut();
+        Some(match result_err {
+            None => tt.make_option(u),
+            Some(err) => tt.make_result(u, err),
+        })
+    }
+
     pub(super) fn resolve_question_mark(
         &mut self,
         qm: &ast::TryOpExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TypeId {
-        let inner_type = self.resolve_expr(&qm.expr, ctx, None);
+        // Propagate the `?`-stripped expected type backward to the operand, so
+        // a generic call whose type parameter appears only in the Ok/Some
+        // payload can be inferred from an LHS annotation (`let v: U = call()?`)
+        // instead of demanding a turbofish. `?` requires the enclosing
+        // function to return the same Option/Result shape as the operand, so
+        // the operand's expected type is the wrapper reconstructed around `U`:
+        // `Option<U>` or `Result<U, F>` (F = the function's return error type).
+        let operand_expected = self.question_mark_operand_expected(expected_type, ctx.return_type);
+        let inner_type = self.resolve_expr(&qm.expr, ctx, operand_expected);
         let tt = self.tysys.type_table.borrow();
         let type_name = tt.type_name(inner_type);
 
