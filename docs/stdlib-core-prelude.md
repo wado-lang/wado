@@ -3795,15 +3795,14 @@ Returns the first element, or None if empty.
 
 #### `pub fn get(&self, index: i32) -> Option<T>`
 
-#### `pub fn get_unchecked(&self, index: i32) -> T`
+#### `pub fn to_array(&self) -> Array<T>`
 
-Element at `index` without the `[]` operator's power-assert bounds check.
-The backing Wasm `array.get` still traps on out-of-bounds (no memory
-unsafety), it just skips building the rich diagnostic — so the caller
-must have already established `0 <= index < len()`. Use only on a proven
-hot path where the assert's cold diagnostic would bloat the stack frame
-(e.g. a generated recursive-descent parser's token lookahead); prefer
-`[]` or `get` everywhere else.
+Copy the live `0..len()` elements into a fresh fixed `Array<T>` of exactly
+`len()`. Hand a finished, no-longer-growing buffer to code that only
+indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
+without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
+generated parser over a fixed token stream) avoid that per-access cost.
+Unlike `internal_raw_data`, the result is sized to `len()`, not capacity.
 
 #### `pub fn insert(&mut self, index: i32, value: T) with stores[value]`
 
