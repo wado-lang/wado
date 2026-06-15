@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781474855831,
+  "lastUpdate": 1781510882034,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33297,6 +33297,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 432081,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "02b7b8878a57e333e9ebd9befe63b6838b0b19df",
+          "message": "Merge pull request #1381 from wado-lang/stdlib-array-format-traits\n\nfeat(stdlib): Array<T> format traits and assert-based List bounds checks",
+          "timestamp": "2026-06-15T16:57:44+09:00",
+          "tree_id": "982502e38ae04ca5e4ff47e0d1f5734f5bd55dce",
+          "url": "https://github.com/wado-lang/wado/commit/02b7b8878a57e333e9ebd9befe63b6838b0b19df"
+        },
+        "date": 1781510881649,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 392782,
             "unit": "bytes"
           }
         ]
