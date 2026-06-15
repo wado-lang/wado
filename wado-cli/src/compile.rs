@@ -82,6 +82,10 @@ pub struct CompileOptions {
     pub allocator: Option<String>,
     pub no_cache: bool,
     pub codegen_flags: Vec<String>,
+    /// Library world FQ (`namespace:name/name@version`) for `--lib`. When set,
+    /// the compiler synthesizes a library world from the entry module's
+    /// `export fn`s and exports each one as a Component Model function.
+    pub lib_world: Option<String>,
 }
 
 /// Compile-time options shared by `compile`/`run`/`serve`/`test`.
@@ -111,6 +115,8 @@ pub struct CompileFlags {
     /// Forwarded verbatim to `CompilerOptions::codegen_flags`; the compiler
     /// validates them.
     pub codegen_flags: Vec<String>,
+    /// Library world FQ for `--lib`. Forwarded to `CompilerOptions::lib_world`.
+    pub lib_world: Option<String>,
 }
 
 impl CompileOptions {
@@ -127,6 +133,7 @@ impl CompileOptions {
             no_cache: self.no_cache,
             test_name_filters: Vec::new(),
             codegen_flags: self.codegen_flags.clone(),
+            lib_world: self.lib_world.clone(),
         }
     }
 }
@@ -137,6 +144,7 @@ enum Opt {
     Format,
     WatToStdout,
     World,
+    Lib,
     OptLevel,
     InlineThreshold,
     OptIterations,
@@ -154,6 +162,7 @@ impl Opt {
         Self::Format,
         Self::WatToStdout,
         Self::World,
+        Self::Lib,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
@@ -186,6 +195,12 @@ impl Opt {
                 desc: "Output WAT to stdout (shorthand for --format wat -o /dev/stdout)",
             },
             Self::World => args::WORLD_SPEC,
+            Self::Lib => args::OptSpec {
+                long: Some("lib"),
+                short: None,
+                value: None,
+                desc: "Compile as a Component Model library, exporting every `export fn`\n(entry from [package].lib; requires [package].namespace)",
+            },
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
@@ -229,6 +244,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut allocator: Option<String> = None;
     let mut codegen_flags: Vec<String> = Vec::new();
     let mut no_cache = false;
+    let mut lib = false;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
@@ -241,6 +257,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 }
                 Opt::WatToStdout => wat_to_stdout = true,
                 Opt::World => target_world = Some(args::require_string(&mut parser)?),
+                Opt::Lib => lib = true,
                 Opt::OptLevel => opt_level = parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
@@ -271,12 +288,27 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         }
     }
 
-    // `--lib` is abolished pending a world model that fits libraries; every
-    // `wado compile` resolves the command entry point.
-    let entry_kind = manifest::EntryPointKind::Command;
+    if lib && target_world.is_some() {
+        return Err(CliExit::error(
+            "`--lib` and `--world` are mutually exclusive",
+        ));
+    }
+
+    let (input, lib_world) = if lib {
+        let (entry, world_fq) = manifest::resolve_lib_input(input, &usage)?;
+        // The library defaults to the freelist allocator (long-lived host),
+        // still overridable by an explicit `--allocator`.
+        if allocator.is_none() {
+            allocator = Some("freelist".to_string());
+        }
+        (entry, Some(world_fq))
+    } else {
+        let entry = manifest::resolve_input(input, manifest::EntryPointKind::Command, &usage)?;
+        (entry, None)
+    };
 
     Ok(CompileOptions {
-        input: manifest::resolve_input(input, entry_kind, &usage)?,
+        input,
         output,
         format,
         opt_level,
@@ -289,6 +321,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         allocator,
         no_cache,
         codegen_flags,
+        lib_world,
     })
 }
 
@@ -348,13 +381,11 @@ pub async fn try_compile(
     // Load the nearest manifest once: it seeds both the host's `[dependencies]`
     // index and the Kiln pipeline's `[build-dependencies]` resolution.
     let manifest_pair = load_nearest_manifest(path);
-    let dep_index = manifest_pair
-        .as_ref()
-        .map(|(manifest, root)| wado_lsp::host::dependency_index_from(manifest, root, &base_path));
-    let mut host = FilesystemCompilerHost::with_log_level(base_path, flags.log_level);
-    if let Some(index) = dep_index {
-        host = host.with_dependency_index(index);
-    }
+    let host = attach_manifest_deps(
+        FilesystemCompilerHost::with_log_level(base_path.clone(), flags.log_level),
+        manifest_pair.as_ref(),
+        &base_path,
+    );
 
     let pipeline_outcome =
         match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {
@@ -378,6 +409,7 @@ pub async fn try_compile(
         invocations: pipeline_outcome.invocations,
         test_name_filters: flags.test_name_filters.clone(),
         codegen_flags: flags.codegen_flags.clone(),
+        lib_world: flags.lib_world.clone(),
         ..Default::default()
     };
 
@@ -394,6 +426,23 @@ pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, Cl
         .map_err(|_| CliExit::silent_failure(1))
 }
 
+/// Seed `host` with the `[dependencies]` index derived from `manifest_pair`
+/// (anchored at `base_path`), or return it unchanged when there is no
+/// manifest. Shared by `compile`, `check`, and the `query` adapter so every
+/// entry point attaches dependency resolution identically.
+pub(crate) fn attach_manifest_deps(
+    host: FilesystemCompilerHost,
+    manifest_pair: Option<&(wado_manifest::Manifest, std::path::PathBuf)>,
+    base_path: &Path,
+) -> FilesystemCompilerHost {
+    match manifest_pair {
+        Some((manifest, root)) => host.with_dependency_index(
+            wado_lsp::host::dependency_index_from(manifest, root, base_path),
+        ),
+        None => host,
+    }
+}
+
 /// Collect inline `with { generator: { ... } }` clauses from `entry_file`
 /// (and any sibling manifest's directory if one is found), then drive the
 /// Kiln pipeline via [`run_pipeline`]. Returns `Ok(PipelineOutcome::default())`
@@ -402,7 +451,7 @@ pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, Cl
 /// Errors from [`run_pipeline`] are surfaced unchanged; the caller decides
 /// whether to abort or continue (e.g. for consume-only mode, a stale-cache
 /// warning is not fatal).
-async fn maybe_run_pipeline(
+pub(crate) async fn maybe_run_pipeline(
     entry_file: &Path,
     host: &FilesystemCompilerHost,
     no_cache: bool,

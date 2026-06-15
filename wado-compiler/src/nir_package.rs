@@ -92,8 +92,6 @@ pub struct NirPackage {
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
     pub target_world: String,
 
-    /// When true, the target world exports an HTTP handler.
-    pub has_http_handler_export: bool,
     /// Maps world export name → adapter function name.
     pub export_binding_names: IndexMap<String, String>,
 

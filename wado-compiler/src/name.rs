@@ -398,7 +398,7 @@ pub struct LocalMethodName {
 /// rules: "Use utilities in name.rs to handle name mangling and
 /// monomorphization. Other components must not know the details of
 /// name formats.").
-fn split_base_name(name: &str) -> &str {
+pub(crate) fn split_base_name(name: &str) -> &str {
     match name.find('<') {
         Some(i) => &name[..i],
         None => name,
@@ -773,25 +773,32 @@ pub fn validate_module_path(path: &str) -> Result<(), String> {
 /// - `./sub/./nested/../file.wado` → `./sub/file.wado`
 /// - `foo//bar.wado` → `foo/bar.wado`
 pub fn normalize_module_path(path: &str) -> String {
+    try_normalize_module_path(path).unwrap_or_else(|e| panic!("invalid module path '{path}': {e}"))
+}
+
+/// Fallible [`normalize_module_path`]. Returns `Err` with a human-readable
+/// reason when `path` is not a valid URI reference, so callers that accept
+/// untrusted input (e.g. a CLI `--symbol` notation) can surface a clean error
+/// instead of panicking.
+pub fn try_normalize_module_path(path: &str) -> Result<String, String> {
     // Handle special module prefixes that shouldn't be normalized
     if path.starts_with("core:")
         || path.starts_with("wasi:")
         || path.starts_with("https://")
         || path.starts_with("http://")
     {
-        return path.to_string();
+        return Ok(path.to_string());
     }
 
     // RFC 3986 normalize() only removes dot segments from absolute paths,
     // so we use our manual implementation for relative module paths.
     // We still use fluent-uri for validation and encoding normalization.
-    let uri_ref =
-        UriRef::parse(path).unwrap_or_else(|e| panic!("invalid module path '{path}': {e}"));
+    let uri_ref = UriRef::parse(path).map_err(|e| e.to_string())?;
 
     // Apply encoding normalization (percent-encoding, etc.)
     let normalized = uri_ref.normalize();
     // Then apply dot segment removal for relative paths
-    remove_dot_segments(normalized.as_str())
+    Ok(remove_dot_segments(normalized.as_str()))
 }
 
 /// Resolve a relative module path against a base module path.

@@ -1501,6 +1501,33 @@ impl CmInterfaceRegistry {
             .or_else(|| self.find_kiln_enum_source(&named.name))
     }
 
+    /// Resolve a named type to a source interface within `namespace_prefix`
+    /// (e.g. `"core:kiln/"`, `"wasi:http/"`). Used to scope a world export's
+    /// type to the world's own package, so a name that also exists in another
+    /// package (e.g. `Response` in both `wasi:http` and `core:kiln`) resolves
+    /// to the world's own. Returns `None` for an empty prefix or no unique match.
+    pub fn resolve_cm_source_with_prefix<'a>(
+        &'a self,
+        named: &crate::ast::NamedType,
+        namespace_prefix: &str,
+    ) -> Option<&'a str> {
+        if namespace_prefix.is_empty() {
+            return None;
+        }
+        find_unique_source_with_prefix(&self.newtypes, namespace_prefix, &named.name)
+            .or_else(|| {
+                find_unique_source_with_prefix(&self.resources, namespace_prefix, &named.name)
+            })
+            .or_else(|| {
+                find_unique_source_with_prefix(&self.structs, namespace_prefix, &named.name)
+            })
+            .or_else(|| {
+                find_unique_source_with_prefix(&self.variants, namespace_prefix, &named.name)
+            })
+            .or_else(|| find_unique_source_with_prefix(&self.enums, namespace_prefix, &named.name))
+            .or_else(|| find_unique_source_with_prefix(&self.flags, namespace_prefix, &named.name))
+    }
+
     // -- Legacy unscoped lookups -------------------------------------------
 
     /// Get a newtype by name, when unambiguous across interfaces.
@@ -1527,6 +1554,14 @@ impl CmInterfaceRegistry {
     /// e.g., `TerminalInput` -> `"wasi:cli/terminal-input@0.3.0-rc-2026-01-06"`.
     pub fn get_resource_source_interface(&self, name: &str) -> Option<&str> {
         find_unique_source_in(&self.resources, name)
+    }
+
+    /// Source interface of the resource whose CM (kebab) name is `cm_name`.
+    pub fn resource_source_by_cm_name(&self, cm_name: &str) -> Option<&str> {
+        self.resources
+            .iter()
+            .find(|((_, _), cm)| cm.as_str() == cm_name)
+            .map(|((src, _), _)| src.as_str())
     }
 
     /// Check if a type name is a registered enum (in any interface).
@@ -2023,22 +2058,6 @@ impl CmInterfaceRegistry {
         None
     }
 
-    /// Get the WASI version for a specific package (e.g., "cli", "clocks")
-    ///
-    /// Returns the version string from the first interface of that package.
-    pub fn get_package_version(&self, package: &str) -> Option<&str> {
-        for path in self.interfaces.keys() {
-            if let Some(wasi) = CmImport::parse(path)
-                && wasi.namespace == "wasi"
-                && wasi.package == package
-                && let Some(at_pos) = path.find('@')
-            {
-                return Some(&path[at_pos + 1..]);
-            }
-        }
-        None
-    }
-
     /// Get all registered WASI function names
     ///
     /// Returns an iterator over function names in `Effect::method` format
@@ -2141,6 +2160,32 @@ impl CmInterfaceRegistry {
 }
 
 use wasm_encoder::{ComponentValType, InstanceType, PrimitiveValType, TypeBounds};
+
+/// Map a Wado primitive type name to its Component Model [`PrimitiveValType`].
+///
+/// Single source of truth for the Wado-primitive → CM-primitive table. Both the
+/// plan builder (which only needs the recognized set) and codegen (which needs
+/// the rendered valtype) delegate here, so the recognized and renderable sets
+/// cannot diverge. Returns `None` for any non-primitive name.
+pub fn wado_primitive_name_to_cm(name: &str) -> Option<PrimitiveValType> {
+    let prim = match name {
+        "i8" => PrimitiveValType::S8,
+        "i16" => PrimitiveValType::S16,
+        "i32" => PrimitiveValType::S32,
+        "i64" => PrimitiveValType::S64,
+        "u8" => PrimitiveValType::U8,
+        "u16" => PrimitiveValType::U16,
+        "u32" => PrimitiveValType::U32,
+        "u64" => PrimitiveValType::U64,
+        "f32" => PrimitiveValType::F32,
+        "f64" => PrimitiveValType::F64,
+        "bool" => PrimitiveValType::Bool,
+        "char" => PrimitiveValType::Char,
+        "String" => PrimitiveValType::String,
+        _ => return None,
+    };
+    Some(prim)
+}
 
 /// Helper for generating CM types within an [`InstanceType`] from registry metadata.
 ///
@@ -3085,11 +3130,11 @@ fn is_return_type_supported_with_types(
                     })
                 }
                 "List" | "Option" => {
-                    // Recursively check that inner types are supported primitives
-                    generic
-                        .args
-                        .iter()
-                        .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
+                    // A list/option element is any supported value type (e.g.
+                    // `list<list<u8>>`, `list<tuple<field-name, field-value>>`).
+                    generic.args.iter().all(|arg| {
+                        is_return_type_supported_with_types(arg, enums, resources, structs)
+                    })
                 }
                 "Tuple" => {
                     // All tuple elements must be supported return types
@@ -3110,49 +3155,6 @@ fn is_return_type_supported_with_types(
                 .iter()
                 .all(|el| is_return_type_supported_with_types(el, enums, resources, structs))
         }
-        _ => false,
-    }
-}
-
-/// Check if a type is a supported primitive type (for inner types of List/Option/Tuple)
-fn is_primitive_type_supported_with_types(
-    ty: &Type,
-    enums: &IndexSet<&str>,
-    resources: &IndexSet<&str>,
-) -> bool {
-    match ty {
-        Type::Named(named) => {
-            let name = named.name.as_str();
-            // Unit type () is parsed as Named("()"), not Tuple([])
-            matches!(
-                name,
-                "i32"
-                    | "i64"
-                    | "u8"
-                    | "u16"
-                    | "u32"
-                    | "u64"
-                    | "f32"
-                    | "f64"
-                    | "bool"
-                    | "char"
-                    | "String"
-                    | "()"
-            ) || enums.contains(name)
-                || resources.contains(name)
-        }
-        // Handle Tuple<...> syntax
-        Type::Generic(generic) if generic.name == "Tuple" => {
-            // Tuples are allowed if all elements are primitives
-            generic
-                .args
-                .iter()
-                .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
-        }
-        // Handle [...] tuple syntax
-        Type::Tuple(elements) => elements
-            .iter()
-            .all(|el| is_primitive_type_supported_with_types(el, enums, resources)),
         _ => false,
     }
 }

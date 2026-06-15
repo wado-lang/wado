@@ -29,19 +29,26 @@ pub fn resolve_import_plan(
     let registry = project.cm_interface_registry;
     let mut entries: Vec<ImportEntry> = Vec::new();
     // Dedup by FQ alone — one import per interface, the first kind pushed wins.
-    // This is sound because a given FQ is only ever pushed under a single kind:
-    // the phases below partition interfaces by shape (function-bearing vs.
-    // resource-defining vs. resource-getter), and those shapes are mutually
-    // exclusive in the registry (a resource-getter has `resource_type.is_some()`,
-    // which Phase 1 skips, and a getter never defines the resource it returns, so
-    // its FQ is never also a `ResourceSource`). If that ever stops holding, this
-    // must become a `(fq, kind)` dedup with explicit precedence.
+    // An interface that both defines resources and exposes a getter (e.g.
+    // `wasi:http/types`) matches both Phase 1 (`ResourceDefiningInterface`) and
+    // the Phase 3 getter scan; Phase 1 runs first, so the resource-defining kind
+    // wins and the getter push is deduped away. The remaining shapes
+    // (function-bearing, resource-source, pure getter) are mutually exclusive by
+    // construction.
     let mut seen: IndexSet<String> = IndexSet::default();
     let mut push = |entries: &mut Vec<ImportEntry>, fq: String, kind: ImportKind| {
         if seen.insert(fq.clone()) {
             entries.push(ImportEntry { fq, kind });
         }
     };
+
+    let mut export_referenced_interfaces: IndexSet<String> = IndexSet::default();
+    for export in &project.component_plan.world_exports {
+        for (_, cm_ty) in &export.cm_params {
+            collect_export_interface_fqs(cm_ty, &mut export_referenced_interfaces);
+        }
+        collect_export_interface_fqs(&export.cm_result, &mut export_referenced_interfaces);
+    }
 
     // No blanket "kiln forbids WASI" early-return: the kiln-generator world
     // forbids WASI *interfaces*, and `optimize/dce.rs` keeps `used_wasi_functions`
@@ -70,10 +77,40 @@ pub fn resolve_import_plan(
     // otherwise it is a plain `FunctionInterface`.
     let mut needed_resources: IndexSet<String> = IndexSet::default();
     for interface_info in registry.interfaces() {
-        if interface_info.interface == "run"
-            || interface_info.resource_type.is_some()
-            || interface_info.package == "http"
-        {
+        if interface_info.interface == "run" {
+            continue;
+        }
+        // An interface that both defines its own resources and exposes an
+        // `option<resource>` getter method (e.g. `wasi:http/types`) is encoded
+        // by the dedicated resource-defining pass. A pure getter (defines no
+        // resources, e.g. `wasi:cli/terminal-stdin`) is handled by Phase 3; a
+        // resource-definer without a getter (`wasi:sockets/types`) flows through
+        // the function-interface path below.
+        let defines_resources = registry
+            .resources_for_interface(&interface_info.path)
+            .next()
+            .is_some();
+        if defines_resources && interface_info.resource_type.is_some() {
+            // Import when a function of this interface is used, or when a world
+            // export's signature references its types (e.g. a handler returning
+            // `Result<Response, ErrorCode>` that constructs no request/response
+            // itself still needs the response/error-code types).
+            let has_used_function = interface_info.functions.iter().any(|func| {
+                registry.is_function_supported(func)
+                    && project
+                        .used_wasi_functions
+                        .contains(&format!("{}::{}", func.interface_name, func.method_name))
+            });
+            if has_used_function || export_referenced_interfaces.contains(&interface_info.path) {
+                push(
+                    &mut entries,
+                    interface_info.path.clone(),
+                    ImportKind::ResourceDefiningInterface,
+                );
+            }
+            continue;
+        }
+        if interface_info.resource_type.is_some() {
             continue;
         }
         let used: Vec<_> = interface_info
@@ -160,13 +197,13 @@ pub fn resolve_import_plan(
         if !needed {
             continue;
         }
-        if interface_info.package != "http" {
-            push(
-                &mut entries,
-                interface_info.path.clone(),
-                ImportKind::ResourceGetter,
-            );
-        }
+        // A resource-defining interface was already pushed in Phase 1 (deduped
+        // by FQ); only a pure getter is newly pushed here.
+        push(
+            &mut entries,
+            interface_info.path.clone(),
+            ImportKind::ResourceGetter,
+        );
         if let Some(source) = registry.get_resource_source_interface(resource_wado_name)
             && source != interface_info.path
         {
@@ -174,27 +211,28 @@ pub fn resolve_import_plan(
         }
     }
 
-    // Phase 4: HTTP interfaces under the handler / Client conditions.
-    if (project.has_http_handler_export || project.has_interface("Client"))
-        && let Some(version) = registry.get_package_version("http")
-    {
-        push(
-            &mut entries,
-            format!("wasi:http/types@{version}"),
-            ImportKind::HttpTypes,
-        );
-    }
-    if project.has_interface("Client")
-        && let Some(version) = registry.get_package_version("http")
-    {
-        push(
-            &mut entries,
-            format!("wasi:http/client@{version}"),
-            ImportKind::HttpClient,
-        );
-    }
-
     entries
+}
+
+/// Collect the CM interface FQs a world export's boundary type references, so a
+/// resource-defining interface is imported when an export's signature needs its
+/// types even if no function of it is called.
+fn collect_export_interface_fqs(
+    ty: &crate::wir_build::component_plan::CmExportType,
+    out: &mut IndexSet<String>,
+) {
+    use crate::wir_build::component_plan::CmExportType;
+    match ty {
+        CmExportType::Unit => {}
+        CmExportType::Primitive(_) => {}
+        CmExportType::Named { interface_fq, .. } => {
+            out.insert(interface_fq.clone());
+        }
+        CmExportType::HandlerResult { ok, err } => {
+            collect_export_interface_fqs(ok, out);
+            collect_export_interface_fqs(err, out);
+        }
+    }
 }
 
 /// The flat sorted FQ list, for the WIT producer's world import refs.

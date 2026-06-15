@@ -1,6 +1,6 @@
-# docs
+# Overview of Docs
 
-Wado documentation, including the WEP (Wado Evolution Proposals) archive.
+This is the documentation directory of Wado.
 
 ## Rules for Markdown
 
@@ -116,4 +116,15 @@ It may include TODOs on WIP.
 - [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md)
 - [`NirExprKind::ArrayLiteral` — a NIR-Materialized List Node](./wep-2026-05-31-nir-array-literal.md)
 - [Diagnostic Reason Chains for Type and Trait Errors](./wep-2026-06-02-diagnostic-reason-chains.md)
-- [Redesign `builtin::array` into a First-Class `Array<T>`](./wep-2026-06-02-builtin-array-redesign.md)
+- [Redesign `builtin::array` into a First-Class `List<T>`](./wep-2026-06-02-builtin-array-redesign.md)
+- [Optimizer Remarks for Missed Optimizations](./wep-2026-06-03-optimizer-remarks.md)
+- [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
+- [Temporal Standard Library (`core:temporal`)](./wep-2026-06-05-core-temporal.md)
+- [CBOR Standard Library (`core:cbor`)](./wep-2026-06-05-core-cbor.md)
+- [NIR Skeleton Arena (Layer 1)](./wep-2026-06-05-nir-skeleton-arena.md)
+- [NIR Rewrite Engine — Detailed Design](./wep-2026-06-05-nir-rewrite-engine-design.md)
+- [Reference Representation and Mutation Write-Back](./wep-2026-06-13-reference-representation.md)
+- [Jade — JSON Schema for Wado](./wep-2026-06-13-jade.md)
+- [Library-Defined Derivation: `Reflect` Extensions and the `#[validate]` Attribute](./wep-2026-06-13-reflect-derivation.md)
+- [Compile-Time Data Providers (bundled ICU)](./wep-2026-06-13-compile-time-data-providers.md)
+- [Symbol Notation](./wep-2026-06-14-symbol-notation.md)

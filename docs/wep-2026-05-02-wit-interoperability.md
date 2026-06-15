@@ -34,7 +34,8 @@ be consumed without compiler changes. Concretely:
    (or depends on a packaged component via `wado.toml`).
 2. The compiler reads the `component-type` custom section embedded in the
    component (the section described by [WIT Bundling](./wep-2026-03-21-wit-bundling.md);
-   the producer side is designed but not yet implemented).
+   the producer can compute the WIT — `wado wit`, Phase 1 — but embedding it
+   into the binary is Phase 2, not yet done).
 3. The use resolver constructs Wado IR (worlds, interfaces, resources, types)
    directly from that embedded WIT.
 4. The CM binding synthesis lifts/lowers values at the boundary based on that
@@ -125,7 +126,7 @@ The migration runs on a single feature branch and lands as one merge:
       to type parameters: an effect variable binds an effect row, which
       is a Wado-specific concept WIT has no equivalent for. The current
       parser support stays.
-- [ ] Update WEP: WIT and Wado Mapping to mark the interface/effect split as
+- [x] Update WEP: WIT and Wado Mapping to mark the interface/effect split as
       superseded.
 
 There is no compatibility shim and no deprecation period. Wado is pre-stable
@@ -183,29 +184,25 @@ form is unambiguous and minimal.
   `--world` flag is given. Acceptable as a default; not a structural problem.
 - Synthetic `TEST_WORLD` constant in `world_registry.rs`. Used for the test
   harness; does not block external WIT support.
-- HTTP handler specialization in `codegen/component.rs`. The _decision_ is now
-  plan-driven (`ComponentPlan::has_http_handler_export`), but the
-  `append_http_handler_export` post-finish byte-append mechanism itself remains.
-  Retiring it — folding the handler export into `emit_world_exports` so HTTP
-  detection comes from the interface FQ (`WorldExportInfo::from_interface_fq`,
-  now populated) — is the largest world-specific block left to design out.
 - `stdlib::ALL_WASI_MODULES` is an `include_str!`-driven static list. Adding a
   new WASI/CM library currently requires either putting the binding `.wado`
   in this list or feeding it through `CompilerHost`. Neither path reads
   embedded WIT directly.
-- `wit-parser` is in `[workspace.dependencies]` but is consumed only by
-  `wado-from-idl` (WIT → Wado, build-time). `wit-component` and
-  `wit-encoder` are not yet added; they are required by the producer-side
-  work in §"Producer Side: WIT Generation and Embedding" and by future
-  consumer-side `component-type` parsing for external `.wasm` imports.
-  `wado-compiler` itself still relies on `wado-from-idl`-generated `.wado`
-  files as the source of truth.
+- `wado-compiler` still relies on `wado-from-idl`-generated `.wado` files as
+  the source of truth; no path reads embedded WIT from external `.wasm` yet
+  (consumer side, still open). `wit-parser` and `wit-encoder` are wired into
+  `wado-compiler` for the producer side; `wit-component` lands with Phase 2
+  embedding and the consumer-side `component-type` reader.
 - Producer-side WIT embedding (the `component-type` custom section described
-  in [WIT Bundling](./wep-2026-03-21-wit-bundling.md)) is designed but not
-  yet implemented in codegen. Without it, a Wado-compiled component cannot
-  be consumed via the embedded-WIT path described in this WEP's Goal. The
-  detailed design lives in §"Producer Side: WIT Generation and Embedding"
-  below; implementation is staged into Phases 0–3.
+  in [WIT Bundling](./wep-2026-03-21-wit-bundling.md)) is not yet wired into
+  codegen (Phase 2). `wado wit` text emission (Phase 1) is done, so the
+  contract is computable; embedding it into the binary is the remaining step
+  before a Wado component is consumable via the embedded-WIT path.
+
+Resolved since the first draft: HTTP handler specialization in
+`codegen/component.rs` is gone — CM imports/exports are now emitted from the
+WIR import plan and registry-derived descriptors with no HTTP/world literals
+(see §"Codegen Genericization", P1–P5).
 
 ### Stale items already cleaned up
 
@@ -249,9 +246,9 @@ plus the precomputed WIT text.
 ### Semantics additions
 
 `Semantics` is the contract output of the frontend, so every fact needed
-to emit WIT lives on it. Phase 0 has landed the registry accessors; the
-interface / exported-item indices land in Phase 1 alongside their
-`wit_emit` consumer.
+to emit WIT lives on it. Phase 0 landed the registry accessors; Phase 1's
+emitter read interfaces and exported items off those registries and the
+loaded TIR directly, so no further `Semantics` accessor was required.
 
 Phase 0 (landed):
 
@@ -269,19 +266,14 @@ compilation share the same instance. `FlatPackage` / `Package` /
 already held — Phase 0 added access without changing how the data is
 threaded.
 
-Phase 1 (planned):
-
-| Accessor                                 | Returns                                                                                                                  |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `Semantics::interfaces()`                | Index of `pub interface Foo { ... }` decls with their `#[cm("...")]` FQ.                                                 |
-| `Semantics::exported_items()`            | Index of `export fn / export struct / export interface / ...` keyed by source key.                                       |
-| `WitEmitOptions::default_interface_name` | `[package].name` from `wado.toml`, or entry-file stem — a CLI option threaded into the emitter, not a `Semantics` field. |
-
-`interfaces()` and `exported_items()` are derived in a single pass over
-the loaded TIR modules and add no work to the LSP path that does not use
-them. `default_interface_name` is intentionally a `WitEmitOptions` field
-rather than a `Semantics` accessor: it is a project-level configuration
-input, not a frontend-derived fact.
+Phase 1 (landed, simpler than planned): the proposed `Semantics::interfaces()`
+/ `exported_items()` indices were not needed. `emit_wit_text` reads the
+exported items off the loaded TIR modules and the interface bodies off the
+Phase 0 registries directly, so no new `Semantics` accessor was added. The
+remaining inputs are `WitEmitOptions` fields threaded from the CLI:
+`default_interface_name` (`[package].name` or entry-file stem) and
+`world_imports` (the faithful WIR import plan — a project/codegen fact, not a
+frontend one).
 
 The wir-build / codegen path continues to consume `Package` as today. The
 new WIT path is a sibling reader of `Semantics`; it does not touch
@@ -322,6 +314,14 @@ Name conversion: Wado identifiers (`distance`, `MyApi`, `set_level`) become
 WIT kebab-case (`distance`, `my-api`, `set-level`). Conflicts after
 kebabification (e.g. two declarations colliding) are a compile error at WIT
 emit time with both source spans surfaced.
+
+The structural constructors (`option` / `list` / `tuple` / `result` /
+`future` / `stream`) are assembled by one shared rule (`wit_emit::assemble`
+over a single-level `CmShape` classification). The two front-ends — resolved
+types (user exports) and CM-registry AST signatures (`full`-scope interface
+reconstruction) — only classify their input and render leaves, so the two
+paths cannot drift in how a shape becomes WIT. `own<R>`/`borrow<R>` map from a
+resource value / `&resource` respectively.
 
 ### Interface grouping
 
@@ -387,96 +387,32 @@ as user interfaces; there is no special-case "stdlib" code path. Each
 
 The world's import set must equal what the compiled component actually
 imports — otherwise the embedded `component-type` (Phase 2) misrepresents
-the binary. Verification across the example/benchmark corpus showed the
-first cut (deriving imports from exported functions' effect rows plus a
-type-reference closure) is _not_ faithful in two ways:
+the binary. Deriving the set semantically (effect rows + type closure) is
+not faithful: it over-includes type-alias-only interfaces (`wasi:clocks/types`,
+`duration = u64`) and misses implicit imports (`wasi:cli/stderr`, written by
+the `assert` / panic path with no `with` clause).
 
-- It over-includes interfaces that only contribute a type _alias_ (e.g.
-  `wasi:clocks/types`, which provides `duration = u64`). A type alias is
-  transparent and creates no component import.
-- It misses implicit runtime imports — chiefly `wasi:cli/stderr`, which the
-  `assert` / panic path writes to even though no `with` clause names it.
+Decision: build the complete import/export interface set once, as structured
+data, at the WIR layer (after DCE, so `used_wasi_functions` is populated),
+and have codegen merely emit it. This restores the `codegen.rs` principle
+("emit `Package` as is, without knowledge of earlier phases"). `wado wit` and
+the Phase 2 embedder read the same plan; `full`-scope nested-package bodies
+stay a separate type-closure (which follows type aliases, so `use duration`
+resolves).
 
-Both stem from deriving the set semantically. The authoritative set is the
-one the codegen import logic already computes from `used_wasi_functions`
-(the DCE-populated set of called functions, which _does_ include the
-implicit `Stderr::write_via_stream`) plus the registry. Re-deriving it in
-the emitter would duplicate that logic and risk divergence; reading it back
-from the emitted component bytes is redundant work.
+Done (R1–R3, each gated by the full E2E suite):
 
-Decision: the complete import/export interface set is built once, as
-structured data, at the WIR layer, and codegen merely emits it. This
-restores the `codegen.rs` principle ("emit `Package` as is, without
-knowledge of earlier phases"), which the current four-phase import logic in
-`codegen/component.rs` (`generate_cm_imports` + the resource-deferral phases
-
-- the HTTP phase, lines ~1715–3305) violates.
-
-Mechanics:
-
-- The decision depends on `used_wasi_functions`, populated post-DCE
-  (`optimize/dce.rs`), so the plan is built _after_ DCE — later than the
-  current `ComponentPlan`, which is built pre-DCE and carries exports only.
-- The plan enumerates, in deterministic order, the imported CM interface
-  FQs and, per interface, the functions / resources / types to expose; plus
-  the exported interface FQs (already available via
-  `WorldInfo::exports[].from_interface_fq`).
-- Imported FQ rule (mirrors today's codegen): `wasi:cli/types` when any WASI
-  function is used (shared `error-code`); every interface with a function in
-  `used_wasi_functions`; the resource-defining interfaces for resources
-  those signatures reference (transitively); and `wasi:http/{types,client}`
-  under the HTTP-handler / `Client` conditions.
-- `wado wit` and the Phase 2 embedder both read this plan for the world's
-  `import` / `export` refs. `full`-scope nested-package bodies stay a
-  type-closure over those FQs (which _does_ follow type aliases, so the
-  `use duration` reference resolves), kept separate from the import set.
-
-Rollout (each step gated by the full E2E suite):
-
-- [x] R1 — Build the plan as structured data in `wir_build::component_imports`
-      (`resolve_import_plan`, flattened by `import_plan_fqs`), stored in
-      `WirPackage::{import_plan, imported_cm_interfaces}`. Built at the end of
-      `build_wir_package`, the one place with the full picture: the NIR facts
-      (`used_wasi_functions`, registry) _and_ the WIR canonical intrinsics
-      (`needed_canonicals`). `tests/wit_import_plan.rs` validates it equals the
-      compiled component's CM imports across the CLI corpus, the HTTP service
-      (resources), and a pure-compute program.
-- [x] R2 — Codegen emits CM imports/exports from the plan and only encodes; no
-      `has_interface` / `has_http_handler_export` / registry re-derivation is
-      left for interface- or world-level decisions. The flat FQ list alone can't
-      drive codegen — each category needs a distinct encoding (the shared
-      `wasi:cli/types` `error-code` instance vs. a function-bearing instance vs.
-      a resource source/getter/using interface vs. HTTP) — so every entry carries
-      an `ImportKind`: `SharedTypes`, `FunctionInterface`, `ResourceUsingInterface`,
-      `ResourceSource`, `ResourceGetter`, `HttpTypes`, `HttpClient`. Decisions
-      worth recording:
-  - `wasi:cli/types` (the canonical `error-code`) is imported iff a used
-    signature references it OR an async-export transmission future resolves to
-    it (`Transmission("cli")`, e.g. a kiln generator's `task return`). The second
-    condition needs `needed_canonicals`, which is why the plan is built at the
-    WIR layer rather than post-DCE on `NirPackage`.
-  - The two resource-source import paths are unified in one idempotent
-    `import_resource_source` helper, keyed on the package-qualified instance-type
-    name (collision-free across same-named interfaces like `wasi:cli/types` vs.
-    `wasi:filesystem/types`).
-  - Resource-getter membership follows `NirPackage::has_interface` — a
-    `used_wasi_functions` test, _not_ the registry's same-named `with`-set
-    predicate. The getter FQ lands in the faithful world import set.
-  - `append_http_handler_export`, the HTTP `client`, and the HTTP request-
-    construction core-func exports read the plan / `ComponentPlan`; world and
-    test exports were already plan-driven via `ComponentPlan::{world_exports,
-    test_exports}`.
-  - Function-level selection within an imported interface still reads
-    `used_wasi_functions` directly. That is package data codegen may read (like
-    `project.functions`), not a re-derived phase decision, so it does not violate
-    the `codegen.rs` principle.
-- [x] R3 — The WIT emitter reads the plan for its world import refs
-      (`WitEmitOptions::world_imports`), replacing the effect-row derivation;
-      `wado wit` compiles through optimize (on a silent host) to obtain it.
-      `wado wit` imports are now faithful: implicit `wasi:cli/stderr` is
-      included, type-alias-only `wasi:clocks/types` is excluded, and `full`
-      scope still self-describes (the alias interface stays a nested package).
-      Phase 2 (embedding) will read the same plan when it lands.
+- The plan is built in `wir_build::component_imports` (`resolve_import_plan`),
+  stored in `WirPackage::{import_plan, imported_cm_interfaces}`. Every entry
+  carries an `ImportKind` (`SharedTypes`, `FunctionInterface`,
+  `ResourceUsingInterface`, `ResourceSource`, `ResourceGetter`, `HttpTypes`,
+  `HttpClient`) so codegen knows the encoding without re-deriving any
+  interface/world decision. `tests/wit_import_plan.rs` asserts the plan equals
+  the compiled component's CM imports across the CLI corpus, the HTTP service,
+  and a pure-compute program.
+- The WIT emitter reads it via `WitEmitOptions::world_imports`; `wado wit`
+  imports are faithful (implicit `wasi:cli/stderr` in, alias-only
+  `wasi:clocks/types` out) and `full` scope still self-describes.
 
 ### Embedding target and format
 
@@ -597,64 +533,32 @@ libraries").
 
 Each phase ends with green E2E tests for the listed fixtures.
 
-- [x] Phase 0 — Dependencies and `Semantics` groundwork
-  - [x] Add `wit-encoder` and `wit-component` to `[workspace.dependencies]`,
-        matching the existing `wit-parser` generation (currently `0.246`).
-        No crate consumes them yet; Phase 1 pulls them into
-        `wado-compiler`.
-  - [x] Expose `Semantics::world_registry()` and
-        `Semantics::cm_interface_registry()`. The registries are already
-        built by `Elaborator::annotate_modules` and live on
-        `AnnotateState`; the accessors surface them for the WIT producer
-        (Phase 1) and LSP without re-running stdlib parsing. Both
-        registries stay as `OnceLock`-cached `&'static` singletons —
-        `FlatPackage` reads the same instance the accessors hand out, so
-        no threading change is required downstream.
-  - [x] Rename the legacy `WasiRegistry` to `CmInterfaceRegistry`, and
-        the CM-general functions/types named `wasi_*` / `Wasi*` to
-        `cm_*` / `Cm*`. The old names were stale after the
-        effect→interface unification: the registry and the surrounding
-        helpers cover every CM interface (`wasi:*`, `core:kiln/*`,
-        future user-declared interfaces), not just WASI. Methods with
-        genuinely WASI-namespace-scoped semantics
-        (`find_wasi_struct_source` and siblings, `resolve_wasi_source_for`)
-        keep their `wasi_` prefix.
-  - [x] All existing tests still pass; Phase 0 is a non-breaking
-        surface addition.
+- [x] Phase 0 — Dependencies and `Semantics` groundwork. Added the
+      wasm-tools WIT crates to `[workspace.dependencies]`; exposed
+      `Semantics::{world_registry, cm_interface_registry}()` over the
+      `OnceLock`-cached `&'static` registries built by
+      `Elaborator::annotate_modules`; renamed `WasiRegistry` →
+      `CmInterfaceRegistry` and the CM-general `wasi_*` / `Wasi*` helpers to
+      `cm_*` / `Cm*` (genuinely WASI-scoped methods keep the `wasi_` prefix).
+      Non-breaking surface addition.
 
-- [ ] Phase 1 — `wado wit` text emission
-  - [ ] Pull `wit-encoder` and `wit-component` into
-        `wado-compiler/Cargo.toml`.
-  - [ ] Extend `Semantics`: `Semantics::interfaces()` (index of
-        `pub interface Foo { ... }` decls with their `#[cm("...")]` FQ)
-        and `Semantics::exported_items()` (`export fn / export struct /
-        export interface / ...` keyed by source key). Threaded via the
-        same `state: AnnotateState` path as the Phase 0 accessors.
-  - [ ] `wado-compiler/src/wit_emit.rs`: type mapping, kebabification,
-        interface grouping, transitive-type closure, both `full` and
-        `local` scopes.
-  - [ ] `WitEmitOptions { scope, world_fq, default_interface_name }`.
-        `world_fq` is the resolved target world; `default_interface_name`
-        is `[package].name` from `wado.toml` or the entry-file stem. Both
-        are threaded in from the CLI rather than read off `Semantics`.
-  - [ ] No-entry-point files emit an empty world (the resolved world name
-        with no exports), so library-shaped `.wado` still produces valid
-        WIT. The fuller "world-less library" model is deferred.
-  - [ ] `wado-cli/src/wit.rs` subcommand + `Cmd::Wit` registration in
-        `wado-cli/src/main.rs`. Single positional target (file or
-        directory) resolved via the existing `resolve_input`; no `-O` flag;
-        calls `wado_compiler::semantics()`
-        and bails silently when `Semantics::is_complete()` is false
-        (diagnostics already emitted by the host). When the target resolves
-        through a manifest, read `[package].name` via
-        `load_nearest_manifest` for `default_interface_name`. The
-        `[wit].scope` default lands in Phase 3; until then scope is the
-        `--scope` flag or `full`.
-  - [ ] E2E fixtures under `wado-compiler/tests/fixtures/wit/`: empty
-        world, default-interface, explicit-interface, multiple-interfaces,
-        `wasi:cli/command`, `wasi:http/service`, `core:kiln/generator`.
-  - [ ] Each fixture is parsed back with `wit-parser` to confirm the
-        emitted text is syntactically valid WIT.
+- [x] Phase 1 — `wado wit` text emission. `wado wit` (`wado-cli/src/wit.rs`,
+      `Cmd::Wit`) takes a single file-or-directory target via `resolve_input`,
+      runs `wado_compiler::semantics()` with no `-O`, and bails silently when
+      `Semantics::is_complete()` is false. `wado-compiler/src/wit_emit.rs`
+      (`emit_wit_text`) does type mapping, kebabification, interface grouping,
+      transitive-type closure, and both `full` / `local` scopes; no-entry-point
+      files emit an empty world. `tests/wit.rs` asserts the rendered text per
+      shape (empty world, functions-only direct exports, record default
+      interface, CLI `run`, full-scope resources/interfaces, string/list/option)
+      and re-parses each with `wit-parser`.
+  - Deviation from the original plan: `Semantics::interfaces()` /
+    `exported_items()` were not added. The emitter reads the
+    `CmInterfaceRegistry` / `WorldRegistry` directly and takes the faithful
+    world import set from the WIR import plan, so `WitEmitOptions` carries
+    `world_imports: Vec<String>` (alongside `scope`, `world_fq`,
+    `default_interface_name`) instead. Only `wit-parser` and `wit-encoder` are
+    pulled into `wado-compiler`; `wit-component` lands with Phase 2.
 
 - [ ] Phase 2 — `wado compile` embedding (default on, scope `full`)
   - [ ] `wado-compiler/src/wit_bundle.rs`: text → `Resolve` →
@@ -681,24 +585,29 @@ Each phase ends with green E2E tests for the listed fixtures.
 
 ## Open Design Questions
 
-### World-less libraries
+### World-less libraries (`wado compile --lib`)
 
-A `.wado` file may carry only `pub interface` declarations and bare
-`export` items with no world entry point (`fn run` / `fn handle`). Such a
-file is conceptually a _library_: a bag of interfaces meant to be consumed
-by other components, not a runnable world. WIT can express this — a package
-may contain interface definitions with no world, or with a world that only
-re-exports interfaces — but Wado has not yet decided what a world-less
-library _is_ at the language level (how it is declared, published, and
-depended upon).
+A `.wado` file with only `export` items and no world entry point
+(`fn run` / `fn handle`) is a _library_. It is declared by `[package].lib` in
+`wado.toml` and built with `wado compile --lib`: every `export fn` becomes a
+Component Model export under a world named after the package
+(`<namespace>:<name>/<name>@<version>`; `[package].namespace` is required for
+`--lib`, and `--lib` is mutually exclusive with `--world`). The library world
+is synthesized from the entry module's export signatures and carried on
+`Package.lib_world_info` — it cannot live in the `&'static` stdlib
+`WorldRegistry`, so it is special-cased like the `test` world. Library exports
+use a synchronous lift (the core function returns the value directly), and the
+default allocator is `freelist`.
 
-Until that is settled, `wado wit` and `wado compile` take the conservative
-path: a file with no world entry point emits an **empty world** (the
-resolved world name, no exports) alongside its interface definitions. This
-keeps the output valid WIT and round-trippable without committing to a
-library model. Promoting world-less libraries to a first-class concept —
-and deciding whether the emitted world should disappear entirely rather
-than be empty — is deferred to a future WEP.
+Status: plumbing plus the primitive value types compile and validate today
+(milestones 1–2). Containers, the four `result` forms, `string` returns, and
+user-defined named types (record/enum/variant/flags/newtype) are still being
+wired; `package-cm-catalog` is the corpus that enumerates the value-type ABI
+surface and tracks which CM shapes the lift/lower path supports.
+
+`wado wit` (without `--lib`) still wraps a no-entry-point file's interface in
+the resolved default world (an otherwise empty `world`), which keeps its output
+valid, round-trippable WIT.
 
 ### World structure faithfulness
 
@@ -753,16 +662,17 @@ will get one when work starts.
       referenced `pub interface Foo`'s `#[cm(...)]`.
 - [ ] Producer side: emit WIT text and embed `component-type` in output
       (WEP: WIT Bundling for the format; this WEP §"Producer Side: WIT
-      Generation and Embedding" for the detailed design). Designed; Phase 0
-      is a `Semantics` refactor, Phase 1 is `wado wit`, Phase 2 makes
-      `wado compile` embed WIT by default (scope `full`, `--no-wit` to opt
-      out), Phase 3 lets `[wit].scope` in `wado.toml` retune the scope.
+      Generation and Embedding" for the detailed design). Phase 0
+      (`Semantics` refactor) and Phase 1 (`wado wit` text) are done; Phase 2
+      (`wado compile` embeds WIT by default, scope `full`, `--no-wit` to opt
+      out) and Phase 3 (`[wit].scope` in `wado.toml`) remain.
 - [ ] Decide world structure faithfulness level (L2 vs L3) and document.
 - [ ] Implement `contract` declaration with the chosen scope rules (revise
       WEP: World Conformance accordingly).
-- [ ] Decouple HTTP handler specialization from codegen: drive it from
-      `WorldExportInfo::from_interface_fq` rather than the return-type sniffer
-      (`returns_http_response`) and the post-hoc `append_http_handler_export`.
+- [x] Decouple HTTP handler specialization from codegen: driven from
+      `WorldExportInfo::from_interface_fq` (P1/P2) rather than the return-type
+      sniffer (`returns_http_response`) and the post-hoc
+      `append_http_handler_export`. See §"Codegen Genericization".
 - [ ] Add `wit-component` as a `wado-compiler` dependency (consumer side).
       `wit-parser` is already in `[workspace.dependencies]` for
       `wado-from-idl`; the consumer-side use-resolver reads embedded
@@ -770,101 +680,51 @@ will get one when work starts.
 - [ ] Construct world / interface / resource entries in the existing
       registries directly from parsed WIT, on the same code path as
       stdlib-derived entries.
-- [ ] Close the binding-synthesis gaps required for arbitrary worlds: struct,
-      variant, and `Result` parameter lifting; sync export support;
-      return-via-outptr when flat count exceeds `MAX_FLAT_RESULTS`.
-- [ ] Retire ad-hoc HTTP detection (`has_http_handler_export`,
-      `append_http_handler_export`) once world-driven dispatch is in place.
-- [ ] Emit `wasi:cli/run@<v>` and `wasi:http/handler@<v>` as proper CM
-      instance exports in `emit_world_exports` (currently top-level
-      function exports + post-hoc wrap).
+- [ ] `wado compile --lib`: export every `export fn` under a package-named
+      library world (the world-less-library path; see Open Design Questions).
+      Plumbing and primitive sync exports landed (M1–M2); containers,
+      `result`/`string` returns, user-defined named-type emission, and
+      default-interface grouping remain. `package-cm-catalog` tracks the surface.
+- [ ] Close the binding-synthesis gaps for arbitrary exports: container and
+      user-named-type lift/lower, `result`/`string` returns, and
+      return-via-outptr when flat count exceeds `MAX_FLAT_RESULTS`. Sync export
+      support and primitive lift/lower landed with `--lib`.
+- [x] Retire ad-hoc HTTP detection from the import/codegen path: the
+      `has_http_handler_export` package field and `append_http_handler_export`
+      are gone (P2/P5). `WorldInfo::has_http_handler_export` survives only as the
+      allocator-default heuristic (HTTP service → free-list).
+- [x] Emit `wasi:cli/run@<v>` and `wasi:http/handler@<v>` as proper CM
+      instance exports in `emit_world_exports` (P2: `append_interface_instance_exports`).
 
 ## Codegen Genericization: Removing HTTP/world Special-Casing
 
-The three roadmap items above (HTTP decoupling, ad-hoc detection retirement,
-instance-export emission) are one body of work: make `codegen/component.rs`
-encode CM imports/exports from registry-derived structured descriptors with no
-`package == "http"`, `namespace_prefix == "wasi:http/"`, `returns_http_response`,
-`{pkg}-handler-result`, or `get_package_version("http")` hardcoding. HTTP and
-kiln (`emit_kiln_world_types`) both fall out of the same generic mechanism.
-Scope is the stdlib-derived registry path only; external `.wasm` consumption is
+Done (P1–P5). `codegen/component.rs` now encodes CM imports/exports from the
+WIR import plan and registry-derived descriptors with no `package == "http"`,
+`namespace_prefix == "wasi:http/"`, `returns_http_response`,
+`{pkg}-handler-result`, or `get_package_version("http")` literals. HTTP and kiln
+(`emit_kiln_world_types`) fall out of one generic mechanism. Key pieces:
+
+- Handler detection is structural (`WorldExportInfo::is_handler_instance_export`:
+  `from_interface_fq.is_some()` + non-unit `Result`). `append_http_handler_export`
+  is replaced by `append_interface_instance_exports`, which wraps every
+  `from_interface_fq = Some(fq)` export in an `fq`-named instance (CLI `run` is now
+  `wasi:cli/run@<v>`); runtime drivers bind it via the generated `Command` bindings.
+- A structural CM type interner in `ComponentModelContext` (`CmTypeKey →
+  type-index`, recursive `intern_cm_type`) resolves the `result<own<response>,
+  error-code>` transport composite that no signature names; the export lift and
+  the `Client` import resolve to one index, dropping the `{pkg}-handler-result`
+  name. World exports resolve type names within their own package first
+  (`resolve_cm_source_with_prefix`), fixing a kiln/HTTP `Response` collision.
+- `wasi:http/{types,client}` are now ordinary `ResourceDefiningInterface` /
+  `ResourceUsingInterface` entries classified structurally by
+  `resolve_import_plan`; the HTTP constructors are declared in
+  `lib/wasi/http/types.wado` with `#[cm(...)]` and lowered generically. The dead
+  `has_http_handler_export` field is removed (`WorldInfo::has_http_handler_export`
+  survives only as the allocator-default heuristic); `tests/wit_import_plan.rs`
+  keeps the plan faithful to the emitted bytes.
+
+Scope was the stdlib-derived registry path only; external `.wasm` consumption is
 a separate item.
-
-- [x] P1 — World-driven handler detection. Replaced `returns_http_response` /
-      `namespace_prefix == "wasi:http/"` with the structural
-      `WorldExportInfo::is_handler_instance_export` (`from_interface_fq.is_some()`
-      and a non-unit `Result` return). Output bytes unchanged.
-- [x] P2 — Generic instance-export emission. `append_http_handler_export` is
-      replaced by `append_interface_instance_exports`: every export with
-      `from_interface_fq = Some(fq)` is wrapped in an `fq`-named instance export
-      (CLI `run` is now `wasi:cli/run@<v>`, dropping the bare top-level export),
-      bare otherwise. `CmExportType::HandlerResult` carries resolved `ok`/`err`
-      so the re-export set derives from the signature. Runtime drivers bind
-      `wasi:cli/run` via the generated `Command` bindings.
-
-The export side is done. The remaining phases are the import side — the WEP's
-"largest world-specific block". The machinery map showed `wasi:http/types` is a
-resource-defining _and_ function-bearing interface, a shape no current generic
-import path handles (the function-interface loop skips `resource_type.is_some()`
-_and_ `package == "http"`; `import_resource_source` is methods-less; the getter
-and resource-using paths cover other shapes). The bespoke `http-handler-result`
-(`result<own<response>, error-code>`) is a composite transport type absent from
-every function signature, consumed by ~6 sites by hardcoded name
-(`ctx.type_idx("http-handler-result")`, `"http-request"`, `"http-response"`,
-`"http-error-code"`) — the export lift, `import_http_client`, the transmission
-futures, and a `debug_assert`. These phases are mutually entangled and carry
-high regression risk across the HTTP fixtures, so they land as one carefully
-tested unit:
-
-- [ ] P2.5 — Structural CM type interner in `ComponentModelContext`: a
-      `CmTypeKey → type-index` map keyed by resolved structure
-      (`result`/`option`/`own`/leaf-index), emitted via a recursive
-      `intern_cm_type(builder, ctx, key)` helper. Replaces the per-name
-      `{pkg}-handler-result` registration; the same key from the export lift and
-      the `Client` import resolves to one index.
-- [ ] P3 — Resolve `CmExportType::HandlerResult` and the `Client` return type
-      through the interner (byte-preserving: same structure, same index).
-      Absorb `emit_kiln_world_types`'s `kiln-handler-result` and the
-      `KilnHost`-import gate so kiln and HTTP share the path.
-- [~] P4 — A generic "resource-defining function interface" import path that
-  subsumes `import_http_types_for_service` (resource types + their used
-  constructors/methods/statics in one instance, on-demand payload types via
-  the already-generic `CmInstanceTypeGen`) and folds `import_http_client`
-  into the resource-using path (reading registry signatures instead of the
-  hardcoded `(request) -> handler-result`). Seed the import-resource closure
-  with exported-interface signature types; collapse
-  `ImportKind::{HttpTypes,HttpClient}` into the generic variants; delete the
-  `package == "http"` skips and the `http-fields-constructor` /
-  `http-response-new` core-func aliasing special case.
-  - [x] `import_http_types_for_service` / `import_http_client` are now
-        package-generic: they take the interface FQ from the plan entry and
-        derive package and every instance/type name from it
-        (`fq_name_package`), with no `"http"` / `wasi:http/*` /
-        `get_package_version("http")` literals. Byte-identical for HTTP.
-  - [x] Fixed the latent instance-key collision that blocked removing the
-        codegen skips: every CM-import instance is now keyed by
-        `{package}-{interface}` (matching `import_resource_source` and the HTTP
-        dedicated path), not the bare interface name that collides across
-        packages (`wasi:cli/types` vs `wasi:http/types`). The
-        `error-code` alias loop guards on `ctx.has_instance(...)`.
-  - [x] Deleted all four codegen `package == "http"` skips. HTTP reaches its
-        dedicated import path through the plan (`ImportKind::HttpTypes` /
-        `HttpClient`), not a package check; the generic loops exclude it via
-        `resource_type.is_some()`, plan-kind gates, and the instance guard.
-        `codegen/component.rs` now has zero `package == "http"` checks.
-        Byte-identical, full E2E green.
-  - [ ] The plan layer remains HTTP-protocol-aware:
-        `wir_build/component_imports.rs` Phase 4 still classifies HTTP as
-        `ImportKind::{HttpTypes,HttpClient}` (the `package == "http"` skip there
-        is load-bearing for `wasi:http/client`, whose `send` returns the
-        handler-result composite), and `wir_build/functions.rs` exempts HTTP
-        resource-method params (`Fields::append`'s `&Resource`) from the general
-        `is_function_supported` check. Both hang on the handler-result composite
-        and resource-method type support; genericizing them needs the structural
-        interner (P2.5/P3) and general resource-method param support first.
-- [ ] P5 — Remove the remaining `get_package_version("http")` and FQ string
-      literals; descriptors carry version/FQ. `tests/wit_import_plan.rs` keeps
-      the plan faithful to the emitted bytes.
 
 ## Consequences
 

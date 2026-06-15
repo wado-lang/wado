@@ -351,6 +351,65 @@ only helps _unchanged_ functions), and (2) function-level parallelism (the
 per-function build / walk is independent). Both are prerequisites to the ~1.5×
 target; the full single-worklist promotion subsumes (1).
 
+### Incremental ValueGraph (lever 1) — prototyped, measured, reverted
+
+Lever 1's idea: instead of full-rebuilding a changed function's graph, reuse the
+parked graph's _unchanged prefix_ and re-walk only the disturbed region. A
+working, verified prototype was built and then **reverted** from the tree — it is
+subsumed by the single-worklist promotion (Stages 7 – 8) and fires too rarely in
+the current multi-pass pipeline to pay for itself. The implementation lives in
+the branch history; retrieve it if Stage 7 – 8 work wants the verified mechanism:
+
+- `feat(optimize): edit journal on the NIR engine` — `Engine::dirty_root_stmts`,
+  mapping each edit-API mutation to its enclosing root-block `StmtId`.
+- `feat(optimize): incremental ValueGraph rebuild core` — per-root-statement
+  checkpoints (the full flow state: `current_value`, heap incl. its `next`,
+  `ref_targets`, `field_store`, `literal_source`) + `rebuild_incremental`, which
+  restores the checkpoint at the first dirty statement and re-walks to the end.
+- `feat(optimize): wire incremental ValueGraph through the gate` — a per-function
+  journal (`run_gated_incremental`): a value-graph pass parks its graph plus the
+  statements it edited; the next pass rebuilds incrementally. A
+  `WADO_VERIFY_INCREMENTAL_VG` harness builds both ways per rebuild and asserts
+  observable equality (value_of partition, `loop_entry_values`, literal
+  payloads).
+
+Soundness held: the consumers only test `value(a) == value(b)` (the equivalence
+relation, never absolute numbering), and restoring the exact entry flow-state
+before the first disturbed statement reproduces the from-scratch equivalence
+classes. The full E2E suite passed under the verify harness and WIR was
+byte-identical with the rebuild on vs off.
+
+What killed it was the fire rate, instrumented across benchmarks:
+
+| workload                       | full builds | wholesale reuse | incremental |
+| ------------------------------ | ----------: | --------------: | ----------: |
+| sqlite_parse (gale-generated)  |       16308 |            4856 |      **32** |
+| fts / mandelbrot / count_prime |     ~560 ea |         ~135 ea |       **0** |
+
+Incremental rebuild fires on **~0.15%** of value-graph builds on the large
+workload and **0%** on the small ones, so the optimise phase was within run-to-run
+noise of the baseline. The cause is architectural:
+
+- The only clean pass adjacency is `cse → store_load_forward` (nothing runs
+  between them, so `cse`'s edits are the complete delta). Every other handoff is
+  spoiled by a non-journaling pass — `const_fold` (a direct-arena walker) and
+  `licm` between `store_load_forward` and `condition_implication`; `inline` /
+  `const_fold` / `sroa` / `copy_prop` between iterations before `cse`.
+- And `cse` — a specialized loop-guard CSE — rarely changes a function, so even
+  the one clean adjacency has almost nothing to hand downstream.
+
+Raising the fire rate is not a journaling problem: `inline` restructures bodies
+wholesale every iteration and spoils any cross-iteration journal regardless. It
+needs the single-worklist architecture, where one pass maintains the graph across
+all rewrites (fire rate ~100%) — which is exactly Stages 7 – 8. So lever 1 and the
+single-worklist promotion are **not orthogonal**: Stage 8 subsumes lever 1 (the
+per-pass rebuild it makes incremental simply ceases to exist), and most of the
+prototype's code (the `value_of` side-table rebuild, the gate journal) would
+retire alongside the side-table at Stage 7. The durable takeaways — the
+incremental-dataflow correctness argument and the verify-harness approach — are
+recorded here; the rest is left in history rather than carried as a gated-off
+path through the optimizer's hot code.
+
 ### Additional effect — if optional acceleration ever activates
 
 - Phase-ordering hazards dissolve: rules co-exist under saturation; the

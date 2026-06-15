@@ -11,7 +11,7 @@ use predicates::prelude::*;
 use serde_json::{Value, json};
 
 mod common;
-use common::{project_root, wado, wado_bin};
+use common::{project_root, wado, wado_bin, wado_in};
 
 /// Cap on `read_message` so a regression that stops the LSP from
 /// responding fails the test in seconds rather than hanging until the
@@ -1510,7 +1510,7 @@ fn query_missing_kind() {
 #[test]
 fn query_unknown_kind() {
     wado()
-        .args(["query", "hover"])
+        .args(["query", "bogus"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("unknown query kind"));
@@ -1842,7 +1842,7 @@ fn query_references_requires_line_and_column() {
 #[test]
 fn query_unknown_kind_lists_available_kinds() {
     let output = wado()
-        .args(["query", "hover"])
+        .args(["query", "signature"])
         .assert()
         .failure()
         .get_output()
@@ -1851,6 +1851,553 @@ fn query_unknown_kind_lists_available_kinds() {
     let stderr = String::from_utf8(output).unwrap();
     assert_eq!(
         stderr,
-        "Error: unknown query kind 'hover'. Available: diagnostics, references, document-highlight, definition\n",
+        "Error: unknown query kind 'signature'. Available: diagnostics, references, document-highlight, definition, hover\n",
     );
+}
+
+#[test]
+fn query_definition_by_symbol_relative_module() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+
+    // `helper` name starts at column 8 (1-based) on line 1.
+    wado_in(dir.path())
+        .args(["query", "definition", "--symbol", "./lib.wado#helper"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("lib.wado:1:8"));
+}
+
+#[test]
+fn query_definition_by_symbol_with_base() {
+    let dir = tempfile::tempdir().unwrap();
+    let sub = dir.path().join("src");
+    std::fs::create_dir(&sub).unwrap();
+    std::fs::write(
+        sub.join("geo.wado"),
+        "pub struct Point { x: i32, y: i32 }\n",
+    )
+    .unwrap();
+
+    wado()
+        .args([
+            "query",
+            "definition",
+            "--symbol",
+            "./geo.wado#Point",
+            "--base",
+            sub.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("geo.wado:1:12"));
+}
+
+#[test]
+fn query_definition_by_symbol_unknown_symbol() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "definition", "--symbol", "./lib.wado#nope"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No definition."))
+        .stderr(predicate::str::contains("no symbol 'nope'"))
+        .stderr(predicate::str::contains("public symbols in ./lib.wado:"))
+        .stderr(predicate::str::contains("helper"));
+}
+
+#[test]
+fn query_symbol_rejects_input_file() {
+    wado()
+        .args([
+            "query",
+            "definition",
+            "--symbol",
+            "core:cli#println",
+            "example/hello.wado",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--symbol does not take an input file",
+        ));
+}
+
+#[test]
+fn query_references_by_symbol() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\npub fn use_it() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+
+    // Call site of `helper` inside `use_it`: line 2, column 33 (1-based).
+    wado_in(dir.path())
+        .args(["query", "references", "--symbol", "./lib.wado#helper"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("lib.wado:2:33"));
+}
+
+#[test]
+fn query_references_by_symbol_include_declaration() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\npub fn use_it() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args([
+            "query",
+            "references",
+            "--symbol",
+            "./lib.wado#helper",
+            "--include-declaration",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("lib.wado:1:8"))
+        .stdout(predicate::str::contains("lib.wado:2:33"));
+}
+
+#[test]
+fn query_document_highlight_by_symbol() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\npub fn use_it() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args([
+            "query",
+            "document-highlight",
+            "--symbol",
+            "./lib.wado#helper",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("lib.wado:1:8: write"))
+        .stdout(predicate::str::contains("lib.wado:2:33: read"));
+}
+
+#[test]
+fn query_hover_by_symbol_function() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn add(a: i32, b: i32) -> i32 { return a + b; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "hover", "--symbol", "./lib.wado#add"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn add(a: i32, b: i32) -> i32"));
+}
+
+#[test]
+fn query_hover_position_based() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("m.wado");
+    std::fs::write(&file, "fn add(a: i32, b: i32) -> i32 { return a + b; }\n").unwrap();
+
+    // Cursor on the `add` declaration (line 1, column 4, 1-based).
+    wado()
+        .args([
+            "query",
+            "hover",
+            "--line",
+            "1",
+            "--column",
+            "4",
+            file.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn add(a: i32, b: i32) -> i32"));
+}
+
+#[test]
+fn query_hover_by_symbol_unknown_lists_symbols() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn add(a: i32, b: i32) -> i32 { return a + b; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "hover", "--symbol", "./lib.wado#missing"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No hover."))
+        .stderr(predicate::str::contains("public symbols in ./lib.wado:"))
+        .stderr(predicate::str::contains("add"));
+}
+
+#[test]
+fn query_definition_by_symbol_method() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("geo.wado"),
+        "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+
+    // `zero` is declared on line 2 (the impl line).
+    wado_in(dir.path())
+        .args(["query", "definition", "--symbol", "./geo.wado#Point::zero"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("geo.wado:2:"));
+}
+
+#[test]
+fn query_hover_by_symbol_method() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("geo.wado"),
+        "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "hover", "--symbol", "./geo.wado#Point::zero"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn zero() -> i32"));
+}
+
+#[test]
+fn query_by_symbol_unknown_member_lists_type_members() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("geo.wado"),
+        "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "definition", "--symbol", "./geo.wado#Point::nope"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No definition."))
+        .stderr(predicate::str::contains("no member 'nope' on Point"))
+        .stderr(predicate::str::contains("members of Point:"))
+        .stderr(predicate::str::contains("zero"));
+}
+
+#[test]
+fn query_hover_type_default_view_lists_public_api() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("c.wado"),
+        "pub struct Counter { n: i32 }\nimpl Counter { pub fn get(&self) -> i32 { return self.n; } fn helper(&self) -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "hover", "--symbol", "./c.wado#Counter"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("struct Counter { .. }"))
+        .stdout(predicate::str::contains("impl Counter {"))
+        .stdout(predicate::str::contains("pub fn get(&self) -> i32"))
+        .stdout(predicate::str::contains("helper").not());
+}
+
+#[test]
+fn query_hover_type_all_view_shows_private() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("c.wado"),
+        "pub struct Counter { n: i32 }\nimpl Counter { pub fn get(&self) -> i32 { return self.n; } fn helper(&self) -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "hover", "--symbol", "./c.wado#Counter", "--all"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("struct Counter { n: i32 }"))
+        .stdout(predicate::str::contains("fn helper(&self) -> i32"));
+}
+
+#[test]
+fn query_references_by_symbol_spans_workspace() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    // A sibling file that does not appear in lib.wado's own import graph.
+    std::fs::write(
+        dir.path().join("main.wado"),
+        "use { helper } from \"./lib.wado\";\nfn run() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+
+    // Default workspace context finds the call in main.wado (line 2, col 26).
+    wado_in(dir.path())
+        .args(["query", "references", "--symbol", "./lib.wado#helper"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("main.wado:2:26"));
+}
+
+#[test]
+fn query_references_by_symbol_method_include_declaration() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("geo.wado"),
+        "pub struct Point { x: i32 }\nimpl Point { pub fn zero() -> i32 { return 0; } }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("use.wado"),
+        "use { Point } from \"./geo.wado\";\nfn run() -> i32 { return Point::zero(); }\n",
+    )
+    .unwrap();
+
+    // The method declaration (geo.wado:2) must appear alongside the call site
+    // (use.wado:2) when --include-declaration is set, even though methods are
+    // not symbol-table entries.
+    wado_in(dir.path())
+        .args([
+            "query",
+            "references",
+            "--symbol",
+            "./geo.wado#Point::zero",
+            "--include-declaration",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("geo.wado:2:"))
+        .stdout(predicate::str::contains("use.wado:2:"));
+}
+
+#[test]
+fn query_references_by_symbol_tolerates_unanalyzable_sibling() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("main.wado"),
+        "use { helper } from \"./lib.wado\";\nfn run() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+    // A sibling that fails to load (missing import) must not sink the whole
+    // workspace reference search.
+    std::fs::write(
+        dir.path().join("broken.wado"),
+        "use { nope } from \"./does_not_exist.wado\";\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "references", "--symbol", "./lib.wado#helper"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("main.wado:2:26"));
+}
+
+/// Build a generator package + a consumer that routes a schema through it
+/// via an inline `with { generator }` clause. Returns the consumer dir.
+/// `wado compile` must be run in it to materialize the Kiln artifacts.
+fn kiln_consumer_fixture(root: &std::path::Path) -> std::path::PathBuf {
+    let gen_pkg = root.join("gen");
+    std::fs::create_dir_all(gen_pkg.join("src")).unwrap();
+    std::fs::write(
+        gen_pkg.join("wado.toml"),
+        "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n\n[world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        gen_pkg.join("src/generator.wado"),
+        r#"use { RawRequest, Response, OutputFile, Error } from "core:kiln";
+
+export fn generate(raw: RawRequest) -> Result<Response, Error> {
+    let _ = raw;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "greeting.wado",
+            content: "pub fn greeting() -> String { return \"hi\"; }",
+            is_entry: true,
+        }],
+    });
+}
+"#,
+    )
+    .unwrap();
+
+    let app = root.join("app");
+    std::fs::create_dir_all(app.join("src")).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n[build-dependencies]\ngen = { path = \"../gen\" }\n",
+    )
+    .unwrap();
+    std::fs::write(app.join("src/schema.idl"), "anything\n").unwrap();
+    std::fs::write(
+        app.join("src/main.wado"),
+        "use { println, Stdout } from \"core:cli\";\nuse { greeting } from \"./schema.idl\" with {\n    generator: { module: \"gen\" },\n};\n\nexport fn run() with Stdout {\n    println(greeting());\n}\n",
+    )
+    .unwrap();
+    app
+}
+
+/// With the cache already warm from a prior `wado compile`, `wado query`
+/// still resolves the generated symbol: the pipeline re-runs cache-aware
+/// (no regeneration) and the redirect to the generated module fires — no
+/// stale-cache warning, hover reports the generated signature.
+#[test]
+fn query_resolves_kiln_generated_symbol_after_compile() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = kiln_consumer_fixture(tmp.path());
+
+    // Materialize the generated `.wado` + `<primary>.kiln.json`.
+    wado_in(&app)
+        .args(["compile", "-o", "out.wasm", "src/main.wado"])
+        .assert()
+        .success();
+
+    wado_in(&app)
+        .args(["query", "diagnostics", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No diagnostics."));
+
+    // `greeting` is on line 7 (`println(greeting())`), column 13.
+    wado_in(&app)
+        .args([
+            "query",
+            "hover",
+            "--line",
+            "7",
+            "--column",
+            "13",
+            "src/main.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn greeting() -> String"));
+}
+
+/// Native `wado query` runs the generator itself (wasmtime), so it resolves
+/// a generated symbol even with **no prior `wado compile`** and no on-disk
+/// artifact — the whole point of running generators on the query path.
+#[test]
+fn query_runs_generator_without_prior_compile() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = kiln_consumer_fixture(tmp.path());
+
+    wado_in(&app)
+        .args(["query", "diagnostics", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No diagnostics."))
+        .stdout(predicate::str::contains("KILN_STALE_CACHE").not());
+
+    // `greeting` resolves on line 7 (`println(greeting())`), column 13.
+    wado_in(&app)
+        .args([
+            "query",
+            "hover",
+            "--line",
+            "7",
+            "--column",
+            "13",
+            "src/main.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn greeting() -> String"));
+
+    // Running the generator wrote its output under the default cache dir,
+    // exactly as `wado compile` would.
+    assert!(
+        app.join("build/kiln").is_dir(),
+        "running the generator should have materialized build/kiln/"
+    );
+}
+
+/// Tier 2: a `--symbol` query whose target module consumes a generator.
+/// The kiln `with` clause lives in `src/main.wado`, not the synthetic query
+/// entry, so `run` resolves only if the generator ran for the target module
+/// and the redirect was re-keyed to the module identity the loader uses.
+#[test]
+fn query_symbol_runs_generator_for_target_module() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = kiln_consumer_fixture(tmp.path());
+
+    // `--base` defaults to the working directory (the app), and the notation
+    // addresses the consumer module that carries the inline generator clause.
+    wado_in(&app)
+        .args(["query", "hover", "--symbol", "./src/main.wado#run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn run"));
+}
+
+/// A `--symbol` notation whose module isn't a valid module path must fail
+/// with a clean error, not panic inside `normalize_module_path`.
+#[test]
+fn query_symbol_rejects_malformed_module() {
+    let output = wado()
+        .args(["query", "hover", "--symbol", "./a b.wado#run"])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let stderr = String::from_utf8(output).unwrap();
+    assert!(
+        !stderr.contains("panicked"),
+        "must not panic on a malformed --symbol module, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("invalid module") || stderr.contains("invalid symbol notation"),
+        "expected a clean error, got: {stderr}"
+    );
+}
+
+/// When the generator cannot run (here: its source does not compile), the
+/// query must not crash — it degrades to consume-only on-disk discovery and
+/// surfaces a `KILN_STALE_CACHE` warning rather than panicking or hanging.
+#[test]
+fn query_degrades_when_generator_cannot_run() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = kiln_consumer_fixture(tmp.path());
+    // Corrupt the generator so the provider fails to compile it.
+    std::fs::write(
+        tmp.path().join("gen/src/generator.wado"),
+        "this is not valid wado source !!!\n",
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["query", "diagnostics", "src/main.wado"])
+        .assert()
+        .stderr(predicate::str::contains("kiln generators could not run"))
+        .stdout(predicate::str::contains("KILN_STALE_CACHE"));
 }

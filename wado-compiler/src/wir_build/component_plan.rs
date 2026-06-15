@@ -7,7 +7,7 @@ use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, is_unit_type};
 use crate::hashmap::IndexMap;
 use crate::tir::TirTest;
-use crate::world_registry::{WorldExportInfo, WorldRegistry};
+use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
 
 /// Plan for the Component Model structure.
 ///
@@ -23,20 +23,19 @@ pub struct ComponentPlan {
     pub world_exports: Vec<WorldExportPlan>,
     /// Test functions to export.
     pub test_exports: Vec<TestExportPlan>,
-    /// CM package segment of the target world's `fq_name` (e.g., `"http"`,
-    /// `"kiln"`). `None` for the test world or when the target world is not
-    /// in the registry — both cases never produce a [`CmExportType::HandlerResult`]
-    /// so the package is genuinely absent rather than empty. Used by codegen
-    /// to resolve `HandlerResult` to the per-world `{pkg}-handler-result`
-    /// registered type.
-    pub world_package: Option<String>,
 }
 
 /// A world export to create at the component boundary.
 #[derive(Debug, Clone)]
 pub struct WorldExportPlan {
-    /// Export function name (e.g., "run", "handle")
+    /// Export function name (e.g., "run", "handle"). Used as-is for the core
+    /// module alias (`{name}-core`).
     pub name: String,
+    /// Kebab-case CM extern name for the component boundary (underscores → hyphens).
+    /// Computed once here so codegen emits the plan as-is rather than owning the
+    /// underscore→kebab transform. WASI names (`run`, `handle`, `generate`) are
+    /// already kebab-safe, so this equals `name` for them.
+    pub cm_export_name: String,
     /// Core function name in the Wasm module (e.g., `"__cm_export__run"` if adapter exists, or `"run"`)
     pub core_func_name: String,
     /// Whether this is an async export
@@ -56,16 +55,27 @@ pub struct WorldExportPlan {
     /// freestanding world function export (the kiln generator's `generate`,
     /// test exports) emitted as a bare top-level function.
     pub from_interface_fq: Option<String>,
+    /// Use a synchronous canonical lift (no `CanonicalOption::Async`): the core
+    /// function returns the lowered value(s) directly instead of delivering them
+    /// via `task.return`. Set for `--lib` world exports, whose adapters are
+    /// synthesized as value-returning functions. The existing WASI worlds (CLI,
+    /// HTTP, kiln) keep the async lift, so this is `false` for them.
+    pub sync_lift: bool,
 }
 
 /// CM-level type at the world export boundary.
 ///
 /// Plan-level abstraction populated by [`build_component_plan`]; resolved to
-/// component type indices in codegen via the per-world naming convention
-/// `{pkg}-{cm_name}` for [`Self::Named`] and `{world_pkg}-handler-result` for
+/// component type indices in codegen via the `{pkg}-{cm_name}` naming
+/// convention for [`Self::Named`] and via the structural type interner for
 /// [`Self::HandlerResult`].
 #[derive(Debug, Clone)]
 pub enum CmExportType {
+    /// A primitive value type at the boundary, carrying the Wado type name
+    /// (`"bool"`, `"u32"`, `"i64"`, `"f64"`, `"char"`, `"String"`, ...).
+    /// Codegen maps it to the matching `PrimitiveValType`. Used by `--lib`
+    /// world exports whose signatures are primitives-only.
+    Primitive(String),
     /// `result<>` — no value at the boundary.
     ///
     /// Produced when the export has no return type or its return type is
@@ -90,9 +100,9 @@ pub enum CmExportType {
     /// `result<own<resp>, error>` synthesized for the world's handler return.
     ///
     /// Produced when the export's return type is `Result<X, Y>` with at least
-    /// one non-unit component. Codegen registers a per-world named alias
-    /// (e.g. `http-handler-result`, `kiln-handler-result`) and resolves this
-    /// variant to `ctx.type_idx(&format!("{world_package}-handler-result"))`.
+    /// one non-unit component. Codegen resolves this variant through the
+    /// structural type interner, keyed on the `ok`/`err` arm types, so it
+    /// shares the type the import/world-type helpers interned.
     ///
     /// The resolved `ok`/`err` boundary types are carried so codegen can
     /// enumerate the named CM types to re-export in an interface-instance
@@ -136,6 +146,7 @@ pub struct TestExportPlan {
 ///
 /// Canonical intrinsics are NOT collected here — they are discovered lazily
 /// during WIR translation via `WirContext::ensure_canonical`.
+#[allow(clippy::too_many_arguments)]
 pub fn build_component_plan(
     is_test_world: bool,
     target_world: &str,
@@ -144,6 +155,8 @@ pub fn build_component_plan(
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
+    lib_world: Option<&WorldInfo>,
+    is_lib_world: bool,
 ) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
@@ -155,6 +168,8 @@ pub fn build_component_plan(
             export_binding_names,
             world_registry,
             cm_interface_registry,
+            lib_world,
+            is_lib_world,
         )
     };
 
@@ -188,18 +203,9 @@ pub fn build_component_plan(
         vec![]
     };
 
-    let world_package = if is_test_world {
-        None
-    } else {
-        world_registry
-            .get(target_world)
-            .map(|w| w.package().to_string())
-    };
-
     ComponentPlan {
         world_exports,
         test_exports,
-        world_package,
     }
 }
 
@@ -209,8 +215,13 @@ fn build_world_export_plans(
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
+    lib_world: Option<&WorldInfo>,
+    is_lib_world: bool,
 ) -> Vec<WorldExportPlan> {
-    let world = world_registry.get(target_world);
+    // The synthesized library world (`--lib`) takes priority over the static
+    // registry, which cannot hold a per-package world.
+    let world = lib_world.or_else(|| world_registry.get(target_world));
+    let world_namespace_prefix = world.map(crate::world_registry::WorldInfo::namespace_prefix);
     let exports: Vec<WorldExportInfo> = world.map(|w| w.exports.clone()).unwrap_or_else(|| {
         // Fallback to a default run export for unknown worlds
         vec![WorldExportInfo {
@@ -240,23 +251,27 @@ fn build_world_export_plans(
                 .map(|(name, ty)| {
                     (
                         name.clone(),
-                        resolve_cm_export_type(ty, cm_interface_registry),
+                        resolve_cm_export_type(ty, cm_interface_registry, world_namespace_prefix),
                     )
                 })
                 .collect();
             let cm_result = export
                 .return_type
                 .as_ref()
-                .map(|ty| resolve_cm_export_type(ty, cm_interface_registry))
+                .map(|ty| resolve_cm_export_type(ty, cm_interface_registry, world_namespace_prefix))
                 .unwrap_or(CmExportType::Unit);
 
             WorldExportPlan {
                 from_interface_fq: export.from_interface_fq.clone(),
+                cm_export_name: kebab_export_name(&export.name),
                 name: export.name,
                 core_func_name,
                 is_async: export.is_async,
                 cm_params,
                 cm_result,
+                // Library exports use a synchronous lift; the WASI worlds keep
+                // the async/task-return lift.
+                sync_lift: is_lib_world,
             }
         })
         .collect()
@@ -277,7 +292,17 @@ fn build_world_export_plans(
 /// originate in stdlib `lib/wasi/**/worlds.wado` and
 /// `lib/core/kiln/worlds.wado`, so any unresolved name indicates a bug in the
 /// stdlib bootstrap rather than user input.
-fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry) -> CmExportType {
+/// Whether `name` is a Wado primitive that maps directly to a Component Model
+/// primitive value type at the export boundary.
+fn is_cm_primitive_name(name: &str) -> bool {
+    crate::component_model::wado_primitive_name_to_cm(name).is_some()
+}
+
+fn resolve_cm_export_type(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+    world_namespace_prefix: Option<&str>,
+) -> CmExportType {
     if is_unit_type(ty) {
         return CmExportType::Unit;
     }
@@ -292,12 +317,19 @@ fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry
             ok: Box::new(resolve_cm_export_type(
                 &generic.args[0],
                 cm_interface_registry,
+                world_namespace_prefix,
             )),
             err: Box::new(resolve_cm_export_type(
                 &generic.args[1],
                 cm_interface_registry,
+                world_namespace_prefix,
             )),
         };
+    }
+    if let Type::Named(named) = ty
+        && is_cm_primitive_name(&named.name)
+    {
+        return CmExportType::Primitive(named.name.clone());
     }
     if let Type::Named(named) = ty {
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)
@@ -306,8 +338,15 @@ fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry
         // leaves `source_interface = None`. `CmInterfaceRegistry::resolve_cm_source_for`
         // already chains the `wasi:*` and `core:kiln/*` by-name lookups for
         // exactly this case — re-use it instead of duplicating the chain.
-        let interface_fq = cm_interface_registry
-            .resolve_cm_source_for(named, None)
+        let interface_fq = named
+            .source_interface
+            .as_deref()
+            .or_else(|| {
+                world_namespace_prefix.and_then(|prefix| {
+                    cm_interface_registry.resolve_cm_source_with_prefix(named, prefix)
+                })
+            })
+            .or_else(|| cm_interface_registry.resolve_cm_source_for(named, None))
             .map(str::to_string)
             .unwrap_or_else(|| {
                 panic!(
@@ -336,6 +375,13 @@ fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry
         };
     }
     panic!("unsupported world export type shape: {ty:?}");
+}
+
+/// Kebab-case a world export name for the Component Model boundary: underscores
+/// become hyphens. Wado identifiers are `[a-z0-9_]`, so this yields a valid CM
+/// extern name. Already-kebab WASI names (`run`, `handle`) are unchanged.
+fn kebab_export_name(name: &str) -> String {
+    name.replace('_', "-")
 }
 
 /// Convert a test function name (e.g., `__test_0_my_name`) to a valid kebab-case
@@ -454,21 +500,21 @@ mod tests {
 
         // Bare unit forms
         assert!(matches!(
-            resolve_cm_export_type(&unit_named(), registry),
+            resolve_cm_export_type(&unit_named(), registry, None),
             CmExportType::Unit
         ));
         assert!(matches!(
-            resolve_cm_export_type(&empty_tuple(), registry),
+            resolve_cm_export_type(&empty_tuple(), registry, None),
             CmExportType::Unit
         ));
 
         // Result<(), ()> — both arms unit → still Unit (CLI Command::run shape)
         assert!(matches!(
-            resolve_cm_export_type(&result_of(unit_named(), unit_named()), registry),
+            resolve_cm_export_type(&result_of(unit_named(), unit_named()), registry, None),
             CmExportType::Unit
         ));
         assert!(matches!(
-            resolve_cm_export_type(&result_of(empty_tuple(), empty_tuple()), registry),
+            resolve_cm_export_type(&result_of(empty_tuple(), empty_tuple()), registry, None),
             CmExportType::Unit
         ));
     }
@@ -478,28 +524,40 @@ mod tests {
         use resolver_helpers::*;
         let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
-        // wasi:http handler shape: Result<Response, ErrorCode>. The resolved
-        // `ok`/`err` arms are carried so codegen can enumerate the re-exported
-        // CM types (here `response` and `error-code`).
+        // wasi:http handler shape: Result<Response, ErrorCode>, resolved in the
+        // http world scope. The arms resolve to wasi:http/types.
         let http = result_of(named("Response"), named("ErrorCode"));
-        match resolve_cm_export_type(&http, registry) {
+        match resolve_cm_export_type(&http, registry, Some("wasi:http/")) {
             CmExportType::HandlerResult { ok, err } => {
                 assert!(
-                    matches!(*ok, CmExportType::Named { ref cm_name, .. } if cm_name == "response")
+                    matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "response" && interface_fq.starts_with("wasi:http/types"))
                 );
                 assert!(
-                    matches!(*err, CmExportType::Named { ref cm_name, .. } if cm_name == "error-code")
+                    matches!(*err, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "error-code" && interface_fq.starts_with("wasi:http/types"))
                 );
             }
             other => panic!("expected HandlerResult, got {other:?}"),
         }
 
-        // core:kiln generator shape: Result<Response, Error>
+        // core:kiln generator shape: Result<Response, Error>. `Response` also
+        // exists in wasi:http; the kiln world scope must resolve it to
+        // core:kiln/types rather than the http resource.
         let kiln = result_of(named("Response"), named("Error"));
-        assert!(matches!(
-            resolve_cm_export_type(&kiln, registry),
-            CmExportType::HandlerResult { .. }
-        ));
+        match resolve_cm_export_type(&kiln, registry, Some("core:kiln/")) {
+            CmExportType::HandlerResult { ok, err } => {
+                assert!(
+                    matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "response" && interface_fq.starts_with("core:kiln/types"))
+                );
+                assert!(
+                    matches!(*err, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "error" && interface_fq.starts_with("core:kiln/types"))
+                );
+            }
+            other => panic!("expected HandlerResult, got {other:?}"),
+        }
     }
 
     #[test]
@@ -508,7 +566,7 @@ mod tests {
         let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
         // `Request` is a resource declared in `wasi:http/types`.
-        match resolve_cm_export_type(&named("Request"), registry) {
+        match resolve_cm_export_type(&named("Request"), registry, None) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,
@@ -532,7 +590,7 @@ mod tests {
 
         // `RawRequest` is a struct declared in `core:kiln/types` — exercises
         // the `find_kiln_*` half of `resolve_cm_source_for`.
-        match resolve_cm_export_type(&named("RawRequest"), registry) {
+        match resolve_cm_export_type(&named("RawRequest"), registry, None) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,

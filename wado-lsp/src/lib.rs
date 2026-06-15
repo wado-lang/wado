@@ -21,6 +21,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use indexmap::IndexMap;
+use wado_compiler::kiln::InvocationIndex;
 use wado_compiler::semantics::Semantics;
 use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, LogLevel};
 
@@ -35,6 +36,33 @@ pub use inlay_hints::{InlayHint, InlayHintKind};
 pub use references::ReferenceLocation;
 pub use text::PositionEncoding;
 pub use uri::{Uri, UriScheme};
+
+/// Why [`Engine::definition_by_symbol`] could not resolve a notation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SymbolQueryError {
+    /// The query context could not be analyzed (loader failure, etc.).
+    Unavailable,
+    /// The notation's module is not loaded in the analysis context.
+    ModuleNotFound,
+    /// No matching symbol or member; `available` lists suggestions (the
+    /// module's public symbols, or the type's members for a `Type::m` miss).
+    NotFound { available: Vec<String> },
+    /// The resolved symbol has no usable source location / URI.
+    NoLocation,
+}
+
+impl std::fmt::Display for SymbolQueryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unavailable => f.write_str("could not analyze the query context"),
+            Self::ModuleNotFound => f.write_str("module not found or not loaded"),
+            Self::NotFound { .. } => f.write_str("no such symbol in module"),
+            Self::NoLocation => f.write_str("symbol has no resolvable source location"),
+        }
+    }
+}
+
+impl std::error::Error for SymbolQueryError {}
 
 /// Language service engine backing both the `wado-lsp` binary and direct
 /// library consumers.
@@ -84,6 +112,12 @@ struct Document {
     /// document is updated/closed, so cross-file edits don't leave a
     /// stale `Semantics` against changed imports.
     snapshot: RefCell<Option<Rc<Snapshot>>>,
+    /// Precomputed kiln redirect index supplied by a runtime-backed host
+    /// (native `wado-cli`, which ran the generators via wasmtime). When
+    /// `Some`, [`build_semantics`] uses it verbatim instead of the
+    /// consume-only on-disk discovery (`kiln::prepare_invocations`); the
+    /// wasm32 LSP leaves it `None` and stays consume-only.
+    invocations: Option<InvocationIndex>,
 }
 
 impl Document {
@@ -91,12 +125,25 @@ impl Document {
         Self {
             text,
             snapshot: RefCell::new(None),
+            invocations: None,
+        }
+    }
+
+    fn with_invocations(text: String, invocations: InvocationIndex) -> Self {
+        Self {
+            text,
+            snapshot: RefCell::new(None),
+            invocations: Some(invocations),
         }
     }
 
     fn replace_text(&mut self, text: String) {
         self.text = text;
         self.snapshot.get_mut().take();
+        // The injected index was built for the old text; drop it so a
+        // changed document falls back to consume-only rather than
+        // redirecting against a stale invocation set.
+        self.invocations = None;
     }
 }
 
@@ -125,6 +172,27 @@ impl Engine {
     pub fn open_document(&mut self, uri: &str, text: String) {
         self.invalidate_all_snapshots();
         self.documents.insert(uri.to_string(), Document::new(text));
+    }
+
+    /// Open a document together with a precomputed kiln redirect index.
+    ///
+    /// For native hosts that ran the generators themselves (wasmtime-backed
+    /// `wado-cli`): the resulting [`InvocationIndex`] redirects
+    /// `use { ... } from "<schema>"` clauses to the freshly generated entry
+    /// modules, so queries resolve generated symbols even when no on-disk
+    /// artifact existed beforehand. Without this, a document falls back to
+    /// consume-only on-disk discovery (see [`kiln::prepare_invocations`]).
+    pub fn open_document_with_invocations(
+        &mut self,
+        uri: &str,
+        text: String,
+        invocations: InvocationIndex,
+    ) {
+        self.invalidate_all_snapshots();
+        self.documents.insert(
+            uri.to_string(),
+            Document::with_invocations(text, invocations),
+        );
     }
 
     pub fn update_document(&mut self, uri: &str, text: String) {
@@ -157,6 +225,17 @@ impl Engine {
         self.documents.get(uri).map(|d| d.text.as_str())
     }
 
+    /// Whether `uri` analyzes to a non-empty module graph. `false` when the
+    /// loader/analysis hard-failed (e.g. a missing import, or a compile-time
+    /// codegen module the LSP path can't produce) — `build_semantics` returns
+    /// an empty `Semantics` in that case. Used to probe whether importing a
+    /// workspace file would sink a combined analysis.
+    pub async fn analyzes<H: CompilerHost>(&self, uri: &str, host: &H) -> bool {
+        self.snapshot(uri, host)
+            .await
+            .is_some_and(|s| !s.sem.modules.is_empty())
+    }
+
     /// Compute (or reuse) a [`Snapshot`] for the given document.
     ///
     /// On a cache hit returns the same `Rc` so call sites that issue
@@ -178,6 +257,7 @@ impl Engine {
             return Some(cached);
         }
         let filename = Uri::new(uri).to_filename();
+        let invocations = doc.invocations.clone();
         let collecting_host = DiagnosticCollector::new(host);
         // Three-stage composition: parse once, derive kiln invocations
         // from the parsed entry AST, then drive load + semantics_of with
@@ -186,7 +266,7 @@ impl Engine {
         // convenience would otherwise do, and threads the
         // InvocationIndex through without the LSP having to know the
         // loader's source-based entry point.
-        let sem = build_semantics(&doc.text, &filename, &collecting_host).await;
+        let sem = build_semantics(&doc.text, &filename, invocations, &collecting_host).await;
         // The Design-B semantic diagnostics (effect / stores / default-purity)
         // are produced from `Semantics`; the LSP builds no TIR, so this is the
         // only place they surface in the editor. `check_semantics` builds the
@@ -249,15 +329,176 @@ impl Engine {
         .await
     }
 
-    /// Compute hover information for the symbol at the given position.
+    /// Snapshot `uri` and resolve a [symbol
+    /// notation](wado_compiler::symbol_notation) to its [`Definition`].
+    ///
+    /// Shared by the name-based query methods. `uri` must be an open document
+    /// that loads the notation's module (typically a synthetic entry that
+    /// `use`s it); the module resolves relative to that entry, so relative
+    /// paths anchor at its directory while `core:` / `wasi:` modules are
+    /// location-independent. On [`SymbolQueryError::NotFound`] the error
+    /// carries the module's public symbol names as suggestions.
+    async fn resolve_symbol_def<H: CompilerHost>(
+        &self,
+        uri: &str,
+        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        public_only: bool,
+        host: &H,
+    ) -> Result<(Rc<Snapshot>, wado_compiler::Definition), SymbolQueryError> {
+        use wado_compiler::SymbolResolveError;
+        let snapshot = self
+            .snapshot(uri, host)
+            .await
+            .ok_or(SymbolQueryError::Unavailable)?;
+        match snapshot.sem.resolve_symbol_notation(notation) {
+            Ok(def) => Ok((snapshot, def)),
+            Err(SymbolResolveError::ModuleNotLoaded) => Err(SymbolQueryError::ModuleNotFound),
+            Err(SymbolResolveError::SymbolNotFound) => {
+                let module = snapshot.sem.resolve_notation_module(&notation.module);
+                let available = match &notation.receiver {
+                    Some(receiver) => {
+                        snapshot
+                            .sem
+                            .type_member_names(&module, receiver, public_only)
+                    }
+                    None => snapshot.sem.module_symbol_names(&module, public_only),
+                };
+                Err(SymbolQueryError::NotFound { available })
+            }
+        }
+    }
+
+    /// Build a [`QueryContext`] over `uri`'s cached snapshot. The caller owns
+    /// the `Rc<Snapshot>` so the borrow outlives the context.
+    fn query_ctx_over<'a>(&'a self, snapshot: &'a Snapshot, uri: &'a str) -> QueryContext<'a> {
+        QueryContext {
+            sem: &snapshot.sem,
+            source: self.documents.get(uri).map_or("", |d| d.text.as_str()),
+            uri,
+            encoding: self.position_encoding,
+        }
+    }
+
+    /// Resolve a symbol notation to a definition location. `public_only` only
+    /// affects the suggestions on a miss (public symbols vs. everything).
+    pub async fn definition_by_symbol<H: CompilerHost>(
+        &self,
+        uri: &str,
+        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        public_only: bool,
+        host: &H,
+    ) -> Result<DefinitionResult, SymbolQueryError> {
+        let (snapshot, def) = self
+            .resolve_symbol_def(uri, notation, public_only, host)
+            .await?;
+        let sem = &snapshot.sem;
+        let span = def.span.ok_or(SymbolQueryError::NoLocation)?;
+        let entry = &sem.entry_module_source;
+        let def_uri = match sem.symbol_at(def.ast_id) {
+            Some(symbol) => location::symbol_uri(entry, symbol, uri),
+            None => sem
+                .module_of_id(def.ast_id)
+                .and_then(|m| location::module_uri(entry, m, uri)),
+        }
+        .ok_or(SymbolQueryError::NoLocation)?;
+        Ok(DefinitionResult {
+            uri: def_uri,
+            range: location::span_to_range(&span, None, self.position_encoding),
+        })
+    }
+
+    /// Compute hover info for a symbol named by notation. With `public_only`,
+    /// a type's rendering matches `wado doc` (private fields elided, only `pub`
+    /// inherent members listed); otherwise everything is shown.
+    pub async fn hover_by_symbol<H: CompilerHost>(
+        &self,
+        uri: &str,
+        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        public_only: bool,
+        host: &H,
+    ) -> Result<HoverResult, SymbolQueryError> {
+        let (snapshot, def) = self
+            .resolve_symbol_def(uri, notation, public_only, host)
+            .await?;
+        let sem = &snapshot.sem;
+        // Module-level symbols render from the symbol table; methods and free
+        // functions reached by AstId (e.g. `Type::m`) render from the AST.
+        if let Some(symbol) = sem.symbol_at(def.ast_id) {
+            return hover::hover_for_item_symbol(sem, symbol, public_only)
+                .ok_or(SymbolQueryError::NoLocation);
+        }
+        if let Some(function) = sem.function_at(def.ast_id) {
+            return Ok(hover::hover_for_function(function));
+        }
+        Err(SymbolQueryError::NoLocation)
+    }
+
+    /// Find every reference to a symbol named by notation, across the loaded
+    /// module graph. `include_declaration` adds the declaration site.
+    pub async fn references_by_symbol<H: CompilerHost>(
+        &self,
+        uri: &str,
+        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        include_declaration: bool,
+        public_only: bool,
+        host: &H,
+    ) -> Result<Vec<ReferenceLocation>, SymbolQueryError> {
+        let (snapshot, def) = self
+            .resolve_symbol_def(uri, notation, public_only, host)
+            .await?;
+        let ctx = self.query_ctx_over(&snapshot, uri);
+        Ok(references::references_for_def(
+            &ctx,
+            def.ast_id,
+            include_declaration,
+        ))
+    }
+
+    /// Highlight every occurrence (Read/Write) of a symbol named by notation
+    /// inside its own defining module. Returns the defining module's URI
+    /// alongside the highlights (they all live in that one file).
+    pub async fn document_highlight_by_symbol<H: CompilerHost>(
+        &self,
+        uri: &str,
+        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        public_only: bool,
+        host: &H,
+    ) -> Result<(String, Vec<DocumentHighlight>), SymbolQueryError> {
+        let (snapshot, def) = self
+            .resolve_symbol_def(uri, notation, public_only, host)
+            .await?;
+        let sem = &snapshot.sem;
+        let def_uri = location::module_uri(&sem.entry_module_source, &def.module, uri)
+            .ok_or(SymbolQueryError::NoLocation)?;
+        let ctx = self.query_ctx_over(&snapshot, uri);
+        let highlights = document_highlight::highlights_for_def(&ctx, def.ast_id, &def.module);
+        Ok((def_uri, highlights))
+    }
+
+    /// Compute hover information for the symbol at the given position
+    /// (public-API view: container types render like `wado doc`).
     pub async fn hover<H: CompilerHost>(
         &self,
         uri: &str,
         position: Position,
         host: &H,
     ) -> Option<HoverResult> {
-        self.with_query_ctx(uri, host, None, |ctx| hover::find_hover(ctx, position))
-            .await
+        self.hover_with(uri, position, true, host).await
+    }
+
+    /// [`Engine::hover`] with explicit member visibility: `public_only = false`
+    /// shows private fields too (the `wado query --all` view).
+    pub async fn hover_with<H: CompilerHost>(
+        &self,
+        uri: &str,
+        position: Position,
+        public_only: bool,
+        host: &H,
+    ) -> Option<HoverResult> {
+        self.with_query_ctx(uri, host, None, |ctx| {
+            hover::find_hover_opts(ctx, position, public_only)
+        })
+        .await
     }
 
     /// Find every reference to the symbol named at the given position.
@@ -452,10 +693,20 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
 /// discovery between parse and load so the entry AST is shared instead
 /// of parsed twice.
 ///
+/// `override_invocations` short-circuits kiln discovery: a runtime-backed
+/// host (native `wado-cli`) supplies an [`InvocationIndex`] it built by
+/// running the generators, and it is used verbatim. When `None`, the
+/// consume-only on-disk discovery (`kiln::prepare_invocations`) runs.
+///
 /// Every failure path emits its diagnostic directly through `host` and
 /// returns [`Semantics::empty`], so callers see a uniformly-shaped
 /// (possibly empty) snapshot regardless of which stage bailed.
-async fn build_semantics<H: CompilerHost>(source: &str, filename: &str, host: &H) -> Semantics {
+async fn build_semantics<H: CompilerHost>(
+    source: &str,
+    filename: &str,
+    override_invocations: Option<InvocationIndex>,
+    host: &H,
+) -> Semantics {
     let parsed = wado_compiler::parse(source);
     // Report each recovered lex/parse error, then continue with the partial
     // AST so position queries resolve in the regions outside the error. A
@@ -467,7 +718,10 @@ async fn build_semantics<H: CompilerHost>(source: &str, filename: &str, host: &H
     for e in &parsed.errors {
         host.emit_diagnostic(wado_compiler::parse_error_diagnostic(e, Some(filename)));
     }
-    let invocations = kiln::prepare_invocations(filename, &parsed.ast, host);
+    let invocations = match override_invocations {
+        Some(index) => index,
+        None => kiln::prepare_invocations(filename, &parsed.ast, host),
+    };
     match wado_compiler::load(
         parsed,
         Some(filename),

@@ -37,12 +37,23 @@ pub(crate) fn find_references(
     let Some(def_key) = cursor.def_key() else {
         return Vec::new();
     };
+    references_for_def(ctx, def_key, include_declaration)
+}
 
+/// Collect every reference to the definition `def_key`, optionally including
+/// the declaration site. Shared by the position-based [`find_references`] and
+/// the name-based `Engine::references_by_symbol`.
+#[must_use]
+pub(crate) fn references_for_def(
+    ctx: &QueryContext,
+    def_key: wado_compiler::ast::AstId,
+    include_declaration: bool,
+) -> Vec<ReferenceLocation> {
     let mut out = Vec::new();
     if include_declaration && let Some(loc) = declaration_location(ctx, def_key) {
         out.push(loc);
     }
-    for use_id in cursor.references_to_def() {
+    for use_id in ctx.sem.references_to(def_key) {
         if let Some(loc) = use_site_location(ctx, use_id) {
             out.push(loc);
         }
@@ -62,9 +73,17 @@ pub(crate) fn declaration_location(
     ctx: &QueryContext,
     def_id: wado_compiler::ast::AstId,
 ) -> Option<ReferenceLocation> {
-    let symbol = ctx.sem.symbol_at(def_id)?;
-    let span = ctx.sem.name_span_of(def_id).or(symbol.span)?;
-    let uri = symbol_uri(ctx.entry(), symbol, ctx.uri)?;
+    // Module-level symbols carry a symbol-table entry; methods / associated
+    // constants (reached by a `Type::m` notation) do not, so fall back to the
+    // node's own module + name span.
+    let span = ctx
+        .sem
+        .name_span_of(def_id)
+        .or_else(|| ctx.sem.symbol_at(def_id).and_then(|s| s.span))?;
+    let uri = match ctx.sem.symbol_at(def_id) {
+        Some(symbol) => symbol_uri(ctx.entry(), symbol, ctx.uri)?,
+        None => module_uri(ctx.entry(), ctx.sem.module_of_id(def_id)?, ctx.uri)?,
+    };
     Some(ReferenceLocation {
         uri,
         range: span_to_range(&span, ctx.source_for_id(def_id), ctx.encoding),

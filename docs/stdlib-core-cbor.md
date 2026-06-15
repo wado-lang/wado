@@ -49,7 +49,7 @@ Float caveat: Wado has no `f16`, so the canonical float ladder stops at
 binary32. Output is byte-identical to a reference deterministic encoder for
 integers, lengths, and map order, but may differ on float-bearing values.
 
-### `pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool) -> Result<T, DeserializeError>`
+### `pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true) -> Result<T, DeserializeError>`
 
 Deserialize a value from CBOR — the primary entry point.
 
@@ -194,12 +194,12 @@ depth guard. Returns `[remaining, indef]` for the access to carry
 module-global constant) so the common success path allocates nothing;
 the message is only copied on the cold error path.
 
-##### `fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError>`
+##### `fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError> with stores[self]`
 
-##### `fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError>`
+##### `fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError> with stores[self]`
 
-##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<CborStructAccess, DeserializeError>`
+##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<CborStructAccess, DeserializeError> with stores[self]`
 
-##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<CborVariantAccess, DeserializeError>`
+##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<CborVariantAccess, DeserializeError> with stores[self]`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`

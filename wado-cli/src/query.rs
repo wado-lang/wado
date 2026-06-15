@@ -11,15 +11,19 @@ enum QueryKind {
     References,
     DocumentHighlight,
     Definition,
+    Hover,
 }
 
 pub struct QueryOptions {
     kind: QueryKind,
-    input: String,
+    input: Option<String>,
     json: bool,
     line: Option<u32>,
     column: Option<u32>,
     include_declaration: bool,
+    symbol: Option<String>,
+    base: Option<String>,
+    all: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -28,6 +32,9 @@ enum Opt {
     Line,
     Column,
     IncludeDeclaration,
+    Symbol,
+    Base,
+    All,
     Help,
 }
 
@@ -37,6 +44,9 @@ impl Opt {
         Self::Line,
         Self::Column,
         Self::IncludeDeclaration,
+        Self::Symbol,
+        Self::Base,
+        Self::All,
         Self::Help,
     ];
 
@@ -47,6 +57,18 @@ impl Opt {
                 short: None,
                 value: None,
                 desc: "Output as JSON",
+            },
+            Self::Symbol => args::OptSpec {
+                long: Some("symbol"),
+                short: None,
+                value: Some("<notation>"),
+                desc: "Locate by symbol notation (e.g. core:json#parse) instead of a position",
+            },
+            Self::Base => args::OptSpec {
+                long: Some("base"),
+                short: None,
+                value: Some("<dir>"),
+                desc: "Base directory for relative modules in --symbol (default: .)",
             },
             Self::Line => args::OptSpec {
                 long: Some("line"),
@@ -66,6 +88,12 @@ impl Opt {
                 value: None,
                 desc: "Include the declaration in `references` results",
             },
+            Self::All => args::OptSpec {
+                long: Some("all"),
+                short: None,
+                value: None,
+                desc: "Show private members too (hover/suggestions); default is the public API",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -74,6 +102,11 @@ impl Opt {
 fn format_usage() -> String {
     let mut buf = String::new();
     writeln!(buf, "Usage: wado query <kind> [options] <file.wado>").unwrap();
+    writeln!(
+        buf,
+        "       wado query definition --symbol <notation> [--base <dir>]"
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Query compiler information about a source file.").unwrap();
     writeln!(buf).unwrap();
@@ -92,6 +125,11 @@ fn format_usage() -> String {
     writeln!(
         buf,
         "  definition           Jump to the definition of the symbol at --line/--column"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "  hover                Show the signature of the symbol at --line/--column"
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -120,6 +158,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
     let mut line: Option<u32> = None;
     let mut column: Option<u32> = None;
     let mut include_declaration = false;
+    let mut symbol: Option<String> = None;
+    let mut base: Option<String> = None;
+    let mut all = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -134,6 +175,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                     column = Some(parse_position_value("--column", val)?);
                 }
                 Opt::IncludeDeclaration => include_declaration = true,
+                Opt::Symbol => symbol = Some(args::require_string(&mut parser)?),
+                Opt::Base => base = Some(args::require_string(&mut parser)?),
+                Opt::All => all = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -144,9 +188,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                     "references" => QueryKind::References,
                     "document-highlight" => QueryKind::DocumentHighlight,
                     "definition" => QueryKind::Definition,
+                    "hover" => QueryKind::Hover,
                     other => {
                         return Err(CliExit::error(format!(
-                            "unknown query kind '{other}'. Available: diagnostics, references, document-highlight, definition"
+                            "unknown query kind '{other}'. Available: diagnostics, references, document-highlight, definition, hover"
                         )));
                     }
                 });
@@ -160,11 +205,54 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
     }
 
     let kind = kind.ok_or_else(|| CliExit::error_with_usage("missing query kind", &usage))?;
-    let input = input.ok_or_else(|| CliExit::error_with_usage("missing input file", &usage))?;
+
+    if symbol.is_some() {
+        if input.is_some() {
+            return Err(CliExit::error_with_usage(
+                "--symbol does not take an input file",
+                &usage,
+            ));
+        }
+        if line.is_some() || column.is_some() {
+            return Err(CliExit::error_with_usage(
+                "--symbol cannot be combined with --line/--column",
+                &usage,
+            ));
+        }
+        if matches!(kind, QueryKind::Diagnostics) {
+            return Err(CliExit::error_with_usage(
+                "--symbol is not supported for the `diagnostics` kind",
+                &usage,
+            ));
+        }
+        return Ok(QueryOptions {
+            kind,
+            input,
+            json,
+            line,
+            column,
+            include_declaration,
+            symbol,
+            base,
+            all,
+        });
+    }
+
+    if base.is_some() {
+        return Err(CliExit::error_with_usage(
+            "--base is only valid together with --symbol",
+            &usage,
+        ));
+    }
+
+    let input = Some(input.ok_or_else(|| CliExit::error_with_usage("missing input file", &usage))?);
 
     if matches!(
         kind,
-        QueryKind::References | QueryKind::DocumentHighlight | QueryKind::Definition
+        QueryKind::References
+            | QueryKind::DocumentHighlight
+            | QueryKind::Definition
+            | QueryKind::Hover
     ) {
         if line.is_none() {
             return Err(CliExit::error_with_usage(
@@ -187,15 +275,54 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
         line,
         column,
         include_declaration,
+        symbol,
+        base,
+        all,
     })
 }
 
 pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
+    let public_only = !opts.all;
+    if let Some(notation) = &opts.symbol {
+        let base = opts.base.as_deref().unwrap_or(".");
+        return match opts.kind {
+            QueryKind::Definition => {
+                query_adapter::run_definition_by_symbol(notation, base, public_only, opts.json)
+                    .await
+            }
+            QueryKind::References => {
+                query_adapter::run_references_by_symbol(
+                    notation,
+                    base,
+                    opts.include_declaration,
+                    public_only,
+                    opts.json,
+                )
+                .await
+            }
+            QueryKind::DocumentHighlight => {
+                query_adapter::run_document_highlight_by_symbol(
+                    notation,
+                    base,
+                    public_only,
+                    opts.json,
+                )
+                .await
+            }
+            QueryKind::Hover => {
+                query_adapter::run_hover_by_symbol(notation, base, public_only, opts.json).await
+            }
+            QueryKind::Diagnostics => unreachable!("--symbol rejected for diagnostics"),
+        };
+    }
+
+    // Position-based kinds always carry an input file (validated in parse_args).
+    let input = opts.input.as_deref().unwrap_or_default();
     match opts.kind {
-        QueryKind::Diagnostics => query_adapter::run_diagnostics(&opts.input, opts.json).await,
+        QueryKind::Diagnostics => query_adapter::run_diagnostics(input, opts.json).await,
         QueryKind::References => {
             query_adapter::run_references(
-                &opts.input,
+                input,
                 opts.line.unwrap(),
                 opts.column.unwrap(),
                 opts.include_declaration,
@@ -205,7 +332,7 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
         }
         QueryKind::DocumentHighlight => {
             query_adapter::run_document_highlight(
-                &opts.input,
+                input,
                 opts.line.unwrap(),
                 opts.column.unwrap(),
                 opts.json,
@@ -214,9 +341,19 @@ pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
         }
         QueryKind::Definition => {
             query_adapter::run_definition(
-                &opts.input,
+                input,
                 opts.line.unwrap(),
                 opts.column.unwrap(),
+                opts.json,
+            )
+            .await
+        }
+        QueryKind::Hover => {
+            query_adapter::run_hover(
+                input,
+                opts.line.unwrap(),
+                opts.column.unwrap(),
+                public_only,
                 opts.json,
             )
             .await

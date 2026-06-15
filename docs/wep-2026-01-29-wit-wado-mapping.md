@@ -72,6 +72,12 @@ Wado's `interface` block exists **solely for CM purposes**: it is a grouping syn
 
 ### Relationship with `effect`
 
+Superseded: the `effect`/`interface` block-declaration split below is
+gone. [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md)
+unified block declarations into `interface`; `effect` survives only for
+polymorphic effect parameters (`<effect E>`). The mapping (both becoming
+WIT `interface`) still holds; only the dual block keyword is retired.
+
 Both `interface` and `effect` map to WIT `interface`, but they serve different roles in Wado:
 
 | Wado        | WIT         | Direction | Wado semantics                                                       |

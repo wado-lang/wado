@@ -204,7 +204,7 @@ Compresses data using DEFLATE with the given compression level and strategy.
 `strategy` is one of `Z_DEFAULT_STRATEGY`, `Z_FILTERED`, `Z_HUFFMAN_ONLY`,
 `Z_RLE`, or `Z_FIXED`.
 
-### `pub fn zlib_compress(input: &List<u8>, level: i32, strategy: i32) -> List<u8>`
+### `pub fn zlib_compress(input: &List<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> List<u8>`
 
 Compresses data in zlib format (RFC 1950).
 
@@ -217,7 +217,7 @@ Decompresses gzip-wrapped data (RFC 1952).
 
 Supports multi-member gzip streams; member outputs are concatenated.
 
-### `pub fn gzip_compress(input: &List<u8>, level: i32, strategy: i32) -> List<u8>`
+### `pub fn gzip_compress(input: &List<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> List<u8>`
 
 Compresses data in gzip format (RFC 1952) with a minimal header.
 
@@ -225,14 +225,14 @@ Compresses data in gzip format (RFC 1952) with a minimal header.
 `Z_DEFAULT_STRATEGY`. Use `gzip_compress_with_header` to set MTIME, file
 name, comment, and other gzip header fields.
 
-### `pub fn uncompress(input: &List<u8>, max_output: i32) -> Result<List<u8>, ZlibError>`
+### `pub fn uncompress(input: &List<u8>, max_output: i32 = i32::MAX) -> Result<List<u8>, ZlibError>`
 
 Auto-detects the wrapper format (zlib or gzip) and decompresses.
 
 Returns `ZlibError::OutputExceedsMax` if the decompressed size exceeds
 `max_output` (default: `i32::MAX`).
 
-### `pub fn deflate_raw(input: &List<u8>, level: i32, strategy: i32) -> List<u8>`
+### `pub fn deflate_raw(input: &List<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> List<u8>`
 
 Compresses data as raw DEFLATE (RFC 1951) with no wrapper header or trailer.
 

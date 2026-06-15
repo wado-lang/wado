@@ -36,13 +36,6 @@ pub fn link(package: Package) -> FlatPackage {
         .type_table
         .clone();
 
-    // Determine HTTP handler export from world registry.
-    let has_http_handler_export = package
-        .world_registry
-        .get(&package.target_world)
-        .map(super::world_registry::WorldInfo::has_http_handler_export)
-        .unwrap_or(false);
-
     // Build the component plan before consuming tir_modules.
     let is_test_world = package.target_world == super::world_registry::TEST_WORLD;
     let entry_tests = &package.entry_module().tests;
@@ -54,6 +47,8 @@ pub fn link(package: Package) -> FlatPackage {
         &package.export_binding_names,
         package.world_registry,
         package.cm_interface_registry,
+        package.lib_world_info.as_ref(),
+        package.is_lib_world(),
     );
 
     // Flatten all per-module TIR into flat lists.
@@ -122,7 +117,6 @@ pub fn link(package: Package) -> FlatPackage {
         codegen_flags: package.codegen_flags,
         skip_validation: package.skip_validation,
         target_world: package.target_world,
-        has_http_handler_export,
         export_binding_names: package.export_binding_names,
         component_plan,
         builtin_registry: package.builtin_registry,
