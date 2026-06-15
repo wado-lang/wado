@@ -1872,8 +1872,8 @@ fn gen_rule_entry_wrapper(
     f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
     let lit = escape_string(rule_display);
-    // Forward the runtime FOLLOW continuation and precedence threshold to the
-    // inner body so its tail-greedy gate sees the caller's continuation.
+    // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
+    // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
     let call = if takes_min_prec {
         `{*inner_name}(p{fsep}, min_prec)`
@@ -1881,8 +1881,7 @@ fn gen_rule_entry_wrapper(
         `{*inner_name}(p{fsep})`
     };
     if !trace {
-        // Compact form: the type-independent `Err` / rule-stack tail is shared
-        // by `_gale_rule`. The ATN return-state stack still wraps the call.
+        // Compact form: shared `_gale_rule` tail; ATN stack still wraps the call.
         if needs_atn {
             emit_atn_enter(w);
             w.line(&`let r = {call};`);
@@ -1895,8 +1894,7 @@ fn gen_rule_entry_wrapper(
         w.blank();
         return;
     }
-    // Trace form: keep the body fully expanded so the `Err` branch can log
-    // `e.message` and the success path can log `ok`.
+    // Trace form: fully expanded so the `Err` branch can log `e.message`.
     w.line(&`trace_enter(p, &{lit});`);
     w.line(&"p.trace_depth += 1;");
     if needs_atn {
@@ -1997,13 +1995,10 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
 /// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
 /// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
 /// path needs no per-(rule, mask) specialisation.
-/// Whether a multi-alt rule body references `start` (`p.peek().span.start`).
-/// `start` is read only by an inlined alt body that builds the result node:
-/// the non-overlap dispatch (`gen_multi_alt_body`) inlines every alt, and a
-/// singleton overlap group inlines its one alt (`gen_multi_alt_body_alt`'s
-/// `group.len() == 1` arm). A pure prediction dispatch (every group has >1 alt)
-/// only forwards to `_alt_<n>` helpers, which capture their own `start`. Keep
-/// this in step with those two inline emit sites.
+/// Whether a multi-alt rule body references `start`: only an inlined alt body
+/// uses it — the non-overlap dispatch (`gen_multi_alt_body`) and a singleton
+/// overlap group (`gen_multi_alt_body_alt`, `group.len() == 1`). A pure
+/// prediction dispatch only calls `_alt_<n>` helpers (which capture their own).
 fn rule_body_needs_start(has_overlaps: bool, groups: &List<List<i32>>) -> bool {
     if !has_overlaps {
         return true;
@@ -5393,10 +5388,8 @@ fn gen_prediction_code_inner(
     rule_display: &String,
 ) {
     if let Leaf(idx) = node {
-        // The dispatch walked `skip` shared-prefix tokens by advancing `p.pos`
-        // (building no node); rewind them so `_alt_<idx>` re-parses the alt from
-        // its start. Inlining the helper is left to the wado compiler — codegen
-        // never hand-inlines the remaining alt body.
+        // Consume advanced `p.pos` past `skip` shared tokens without building a
+        // node; rewind so `_alt_<idx>` re-parses the alt from its start.
         if skip > 0 {
             w.line(&`p.pos -= {skip};`);
         }
@@ -5404,14 +5397,11 @@ fn gen_prediction_code_inner(
         return;
     }
     if let Consume(c) = node {
-        // A shared-prefix terminal: every alt below this node carries
-        // `c.element` at offset `skip`, so it does not disambiguate. Advance
-        // `p.pos` past it (no node built — the chosen `_alt_<idx>` re-parses it)
-        // and descend to the disambiguating dispatch. Validating against the
-        // whole rule's `alts[0]` mismatched, since the tree is built over a
-        // sorted overlap group that need not contain alt 0 (regression fixture
-        // ll_consume_group.g4). On any mismatch, leave `p.pos`/`skip` unchanged
-        // so the Leaf rewinds exactly the tokens advanced so far.
+        // Shared-prefix terminal: advance past it (the chosen `_alt_<idx>`
+        // re-parses it) and descend to the disambiguating dispatch. It must
+        // match every alt below (the group need not contain alt 0; regression:
+        // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
+        // rewinds exactly what was advanced.
         let mut node_alts: List<i32> = [];
         prediction_collect_all_indices(&c.child, &mut node_alts);
         let mut elem_matches = !node_alts.is_empty();
@@ -5749,18 +5739,13 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, trace: bool) {
 /// call is free; the `_gale_` prefix keeps them clear of any
 /// `parse_<rule>` the grammar might name.
 fn gen_parse_entry_helpers(w: &mut CodeWriter, trace: bool) {
-    // `_gale_run<T>` factors the whole per-rule input entry — build a
-    // `Parser`, run the rule, and select the error — so each public
-    // `parse_<rule>` collapses to a one-line call passing the rule as a
-    // closure (devirtualised at the call site). `_gale_rule<T>` factors the
-    // rule-entry wrapper's type-independent err / rule-stack tail. Both are
-    // generic, so monomorphisation still emits one wasm function per node
-    // type today; the win here is generated-source size, not wasm size
-    // (the compiler has no identical-code folding yet).
+    // `_gale_run<T>` / `_gale_rule<T>` factor the per-rule entry and the
+    // wrapper's err/rule-stack tail. Both are generic: monomorphisation emits
+    // one instance per node type (no ICF yet), so this saves generated-source
+    // size, not wasm size.
     if !trace {
-        // The trace path keeps every `_parse_<rule>` wrapper fully expanded
-        // (its `Err` branch logs `e.message`), so `_gale_rule` would be
-        // unused under `trace`; emit it only when a wrapper references it.
+        // Trace wrappers stay expanded (their `Err` branch logs `e.message`),
+        // so `_gale_rule` is referenced only when `!trace`.
         let mut gr = FnSpec::new("_gale_rule");
         gr.add_generic(&"T");
         gr.add_param(&"r", &"Result<T, ParseError>");
@@ -5831,9 +5816,8 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     f.add_param(&"input", &"&String");
     f.set_return_type(&`Result<{header.type_name}, ParseError>`);
     f.emit_begin(w);
-    // The closure forwards to the `_parse_<rule>` wrapper, letting its
-    // defaulted `follow` (&EMPTY_FOLLOW) and `min_prec` (0) apply, so the
-    // call is uniform for LR / non-LR and gated / gate-free grammars.
+    // The wrapper's defaulted `follow`/`min_prec` absorb the LR / gated cases,
+    // so this one closure form is uniform across all rules.
     w.line(&`return _gale_run(input, |p: &mut Parser| _parse_{header.snake_name}(p));`);
     w.end();
     w.blank();

@@ -218,19 +218,14 @@ fn rule_first_chars(g: &Grammar, name: &String) -> [bool, List<[char, char]>] {
 }
 
 test "compute_elem_first_chars: nullable leading element keeps a bounded first set" {
-    // Regression: `NUMBER : '-'? [0-9]+` has a nullable leading element
-    // (`'-'?`). The first-set walk must add `-` and CONTINUE into `[0-9]`,
-    // yielding the bounded set {`-`, `0`-`9`}. The old `compute_single_elem_first`
-    // Repeat arm returned wildcard on any nullable leading element, so NUMBER
-    // was misclassified as a wildcard rule and dispatched into every token
-    // branch (a wasted `try_NUMBER` call per token).
+    // Regression: `NUMBER : '-'? [0-9]+` — the nullable `'-'?` must add `-` and
+    // let the walk continue into `[0-9]`, not collapse the rule to wildcard
+    // (which used to dispatch `try_NUMBER` into every token branch).
     let g = parse_grammar("grammar T; SEMI : ';' ; NUMBER : '-'? [0-9]+ ;");
     let [is_wildcard, first] = rule_first_chars(&g, &"NUMBER");
     assert !is_wildcard, "NUMBER must not be classified as wildcard";
     assert ranges_contain(&first, '-'), "first set must include '-'";
     assert ranges_contain(&first, '0') && ranges_contain(&first, '9'), "first set must include 0-9";
-    // Unrelated leading chars (a literal token's char) must NOT be in the set,
-    // which is exactly what prevents the every-branch dispatch.
     assert !ranges_contain(&first, ';'), "first set must not include unrelated ';'";
 }
 

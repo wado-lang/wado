@@ -928,12 +928,8 @@ b : 'y' ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_a(input: &String)");
     assert str_contains(&output, &"pub fn parse_b(input: &String)");
-    // The whole prologue/epilogue lives in `_gale_run<T>` (build the Parser,
-    // run the rule via a closure, select the error), so each `parse_<rule>`
-    // collapses to a single closure-forwarding call. `_gale_new_parser` builds
-    // the Parser; `_gale_pick_error` prefers a deeper recovery error recorded
-    // in `parser.pending` by a scan-gated repetition over a malformed element,
-    // over the shallow top-level failure.
+    // The prologue/epilogue lives in `_gale_run<T>` (build Parser, run via
+    // closure, select error), so each `parse_<rule>` is a one-line forward.
     assert str_contains(&output, &"return _gale_run(input, |p: &mut Parser| _parse_a(p));");
     assert str_contains(&output, &"return _gale_run(input, |p: &mut Parser| _parse_b(p));");
     assert str_contains(&output, &"fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError>");
@@ -1062,11 +1058,8 @@ WS : [ \\t]+ -> skip ;
 }
 
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
-    // LR rules' internal helper takes a `min_prec: i32` parameter
-    // (see `lr_util.compute_prefix_self_ref_min_prec`); the public input
-    // entry forwards to the `_parse_expr` wrapper through the `_gale_run`
-    // closure, which lets `min_prec` default to 0 — the top-level call
-    // admits every LR alt, matching the historic `parse(input)` behaviour.
+    // LR rules' `_parse_expr` wrapper defaults `min_prec` to 0, so the public
+    // entry's `_gale_run` closure admits every LR alt (historic `parse` behaviour).
     let input = "grammar Test;
 expr : expr '+' expr | NUMBER ;
 NUMBER : [0-9]+ ;

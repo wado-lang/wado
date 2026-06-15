@@ -800,10 +800,9 @@ fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
     w.line(&"pos += 1;");
 }
 
-/// Build the `chars[pos] == X || lo <= chars[pos] <= hi || ...` disjunction
-/// for a char class. No leading `false ||` seed: emit the first term bare,
-/// `||`-join the rest. Empty class lowers to the constant `false` (negated:
-/// never fails / matches anything; positive: always fails).
+/// Build the `chars[pos] == X || lo <= chars[pos] <= hi || ...` disjunction for
+/// a char class (no leading `false ||` seed). Empty class lowers to `false`
+/// (negated: matches any char; positive: always fails).
 fn char_class_disjunction(cc: &CharClass) -> String {
     if cc.ranges.len() == 0 {
         return "false";
@@ -1537,13 +1536,12 @@ fn build_rule_try_call(
 /// Returns true if it's a wildcard (any char could match).
 /// Compute the first-char set of a lexer rule body into `out`.
 /// Returns `[wildcard, nullable]`:
-///   - `wildcard`: the first set is unbounded (a negated class, an opaque rule
-///     ref, `.`) and the dispatch must treat the rule as matching any char.
-///   - `nullable`: the body can match the empty string, so a caller folding a
-///     sequence must also include the following element's first set.
-/// A nullable leading element (`x?` / `x*`) contributes its own first chars and
-/// then the walk CONTINUES to the next element, instead of collapsing the whole
-/// rule to wildcard (the bug that put `NUMBER: '-'? [0-9]+` in every branch).
+///   - `wildcard`: the first set is unbounded (negated class, opaque rule ref,
+///     `.`) — the dispatch treats the rule as matching any char.
+///   - `nullable`: the body can match empty, so a caller folding a sequence
+///     must also include the following element's first set.
+/// A nullable leading element (`x?` / `x*`) contributes its first chars and the
+/// walk continues to the next element (rather than collapsing to wildcard).
 pub fn compute_elem_first_chars(
     body: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
@@ -1850,10 +1848,8 @@ fn gen_group_calls(
     indices: &List<i32>,
     needs_extras: bool,
 ) {
-    // Emit a uniform `try_*` call per candidate and keep the longest match.
-    // No hand-inlining of single-char literals: the wado compiler's inliner
-    // folds the tiny `try_lit_*` bodies, so codegen stays simple and uniform
-    // and every emitted `try_lit_*` is actually referenced (no dead code).
+    // Uniform `try_*` call per candidate (keep the longest match). Single-char
+    // literals are not hand-inlined — the wado compiler folds the tiny bodies.
     for let call_idx of indices {
         let call = &calls[*call_idx];
         w.line(&`end = {call.fn_name}(&lexer.chars, start);`);
