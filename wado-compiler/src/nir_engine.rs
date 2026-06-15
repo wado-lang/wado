@@ -286,6 +286,42 @@ impl<'a> Engine<'a> {
             .copied()
     }
 
+    /// The class representative of `id` in the session's value graph. Two ids
+    /// with the same representative denote the same value. See
+    /// [`crate::nir_value_graph::ValuePool::find`].
+    pub fn value_find(
+        &mut self,
+        id: crate::nir_value_graph::ValueId,
+    ) -> crate::nir_value_graph::ValueId {
+        self.ensure_value_graph();
+        self.value_graph.as_mut().unwrap().pool.find(id)
+    }
+
+    /// Prove `a ≡ b` in the session's value graph by merging their classes,
+    /// returning the surviving representative. Call
+    /// [`Engine::rebuild_value_congruence`] after a batch of unions to restore
+    /// congruence (so structurally-equal parents re-merge).
+    ///
+    /// Unions live in the cached graph; a rebuild of the graph
+    /// ([`Engine::invalidate_value_graph`] or any `set_*` that drops the cache)
+    /// discards them. A pure-value rewrite that unions must therefore not
+    /// invalidate the graph before the result is used.
+    pub fn value_union(
+        &mut self,
+        a: crate::nir_value_graph::ValueId,
+        b: crate::nir_value_graph::ValueId,
+    ) -> crate::nir_value_graph::ValueId {
+        self.ensure_value_graph();
+        self.value_graph.as_mut().unwrap().pool.union(a, b)
+    }
+
+    /// Restore congruence after a batch of [`Engine::value_union`] calls. See
+    /// [`crate::nir_value_graph::ValuePool::rebuild`].
+    pub fn rebuild_value_congruence(&mut self) {
+        self.ensure_value_graph();
+        self.value_graph.as_mut().unwrap().pool.rebuild();
+    }
+
     /// Drop the cached `ValueGraph` so the next [`Engine::value`] call
     /// rebuilds. Used by rules that intend to query the value graph again
     /// after a structural rewrite that would invalidate the prior build.
@@ -1163,6 +1199,65 @@ mod tests {
             let ret = ret_x(b);
             vec![let_stmt, ret]
         })
+    }
+
+    #[test]
+    fn value_union_and_congruence_through_engine() {
+        // { x + 5; y + 5; } where x,y are local 0,1. The two sums start in
+        // distinct classes; after unioning x≡y and rebuilding, they share one.
+        fn local(body: &mut Body, index: u32) -> ExprId {
+            e(
+                body,
+                ExprKind::Local {
+                    index,
+                    name: format!("v{index}"),
+                },
+            )
+        }
+        let mut body = mk_body(|b| {
+            let x = local(b, 0);
+            let c0 = lit(b, 5);
+            let f = bin(b, x, NirBinaryOp::Add, c0);
+            let y = local(b, 1);
+            let c1 = lit(b, 5);
+            let g = bin(b, y, NirBinaryOp::Add, c1);
+            let sf = s(b, StmtKind::Expr(f));
+            let sg = s(b, StmtKind::Expr(g));
+            vec![sf, sg]
+        });
+        // The two sum expressions are the second-and-third exprs after each
+        // local+literal pair: recover them by walking the root statements.
+        let (f_expr, g_expr, x_expr, y_expr) = {
+            let stmts = &body.blocks[body.root].stmts;
+            let StmtKind::Expr(f) = body.stmts[stmts[0]].kind else {
+                unreachable!()
+            };
+            let StmtKind::Expr(g) = body.stmts[stmts[1]].kind else {
+                unreachable!()
+            };
+            let ExprKind::Binary { left: xf, .. } = body.exprs[f].kind else {
+                unreachable!()
+            };
+            let ExprKind::Binary { left: yg, .. } = body.exprs[g].kind else {
+                unreachable!()
+            };
+            (f, g, xf, yg)
+        };
+        let mut buf = EngineBuffers::default();
+        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let vf = eng.value(f_expr).unwrap();
+        let vg = eng.value(g_expr).unwrap();
+        let vx = eng.value(x_expr).unwrap();
+        let vy = eng.value(y_expr).unwrap();
+        // x and y are distinct opaques, so the sums start distinct.
+        assert_ne!(eng.value_find(vx), eng.value_find(vy));
+        assert_ne!(eng.value_find(vf), eng.value_find(vg));
+        // Prove x ≡ y; congruence must make the two sums equal.
+        eng.value_union(vx, vy);
+        eng.rebuild_value_congruence();
+        assert_eq!(eng.value_find(vx), eng.value_find(vy));
+        assert_eq!(eng.value_find(vf), eng.value_find(vg));
     }
 
     #[test]
