@@ -178,6 +178,10 @@ fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
         let Some(vid) = engine.value(expr) else {
             continue;
         };
+        // Resolve through the e-class representative so a value proven equal to
+        // a literal by a union (not only by build-time hash-consing) forwards
+        // too. With no unions this is the identity.
+        let vid = engine.value_find(vid);
         if !matches!(
             engine.value_kind(vid),
             ValueKind::Int(_) | ValueKind::Float(_) | ValueKind::Bool(_) | ValueKind::Char(_)
