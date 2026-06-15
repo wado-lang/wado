@@ -256,12 +256,28 @@ the predecessor is deleted.
 
   An _earlier_ adjacency does not work: moving `condition_implication` ahead of
   `const_fold` / `licm` (into the cse session) regresses output (+58 bytes), as
-  it then misses folded / hoisted guards. `const_fold` itself builds no
-  `ValueGraph` (it is niri-based), so it is not a build to share. The two clean
-  adjacencies are now exhausted; the remaining build cost is the two surviving
-  build sites (`cse`, `licm`) rebuilding per changed function each round —
-  removed only by keeping the graph live across the structural passes (the
-  operand-promotion / live-session work), not by more pairwise merges.
+  it then misses folded / hoisted guards.
+
+- [~] Keep the graph live across `const_fold`. The cse session now seeds
+  params, making its parked graph config-identical to licm's, and the licm
+  session reuses it (via `run_gated_cached`) for every function `const_fold`
+  leaves unchanged between them — so one build serves both value-graph sessions
+  instead of two. `const_fold` is niri-based and touches the graph through no
+  re-walk (it only `mark_changed`s); a function it _does_ change falls back to a
+  fresh build at licm. No incremental rebuild, no re-derivation — the graph is
+  simply not invalidated by an intervening pass that did not disturb the
+  function. Byte-identical, full E2E green, ~7.6% faster compile on package-gale
+  (median 23.21s → 21.45s).
+
+  Remaining: the first build at `cse` (per function the early structural passes
+  changed) and the licm rebuild for `const_fold`-changed functions. Removing
+  these needs the structural passes and `const_fold` to _maintain_ the graph
+  through their edits via graph operations (union / `set_value` / new-node
+  construction for genuinely-new code) — never a re-walk of existing code — i.e.
+  the operand-promotion / graph-as-source-of-truth work. Incremental rebuild of
+  the derived side-table (re-walking disturbed regions) is explicitly _not_ the
+  path: it was prototyped, reverted, and is the wrong shape (see "Why
+  source-of-truth, not incremental rebuild").
 - [ ] Subsume CSE, copy-prop, and store-load-forward into graph structure; delete
       the passes and their analysis. (copy-prop / CSE need extraction beyond the
       literal case — a flow-valid source for a shared non-constant value.)
