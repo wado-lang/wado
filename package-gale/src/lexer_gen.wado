@@ -1878,7 +1878,7 @@ fn gen_tokenize_fn(
     let mut f = FnSpec::new("tokenize");
     f.set_pub();
     f.add_param(&"input", &"&String");
-    f.set_return_type(&"List<Token>");
+    f.set_return_type(&"Array<Token>");
     f.emit_begin(w);
     w.line(&"let mut lexer = Lexer::new(input);");
     // Pre-size to roughly one token per 4 input chars to avoid repeated grow().
@@ -2156,7 +2156,7 @@ fn gen_tokenize_fn(
     w.line(
         &"tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));",
     );
-    w.line(&"return tokens;");
+    w.line(&"return tokens.to_array();");
     w.end();  // fn
     w.blank();
 }

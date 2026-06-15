@@ -426,7 +426,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
     // Char index where each line begins; built once so each token's `line:col`
     // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
@@ -1448,7 +1448,7 @@ pub fn atn_predict_with_stack(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,
-    tokens: &List<Token>,
+    tokens: &Array<Token>,
     start_pos: i32,
     eof: i32,
     min_prec: i32 = 0,
@@ -1518,7 +1518,7 @@ pub fn atn_lr_loop_decision(
     sim: &AtnSim,
     rule_stack: &List<i32>,
     decision: i32,
-    tokens: &List<Token>,
+    tokens: &Array<Token>,
     pos: i32,
     eof: i32,
     min_prec: i32 = 0,
@@ -1578,7 +1578,7 @@ fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -
 /// top-level decisions; deeper decisions whose disambiguation depends on the
 /// caller's follow need `atn_predict_with_stack` with the real rule stack.
 #[allow(dead_code)]
-pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &List<Token>, start_pos: i32, eof: i32) -> i32 {
+pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &Array<Token>, start_pos: i32, eof: i32) -> i32 {
     let empty: List<i32> = [];
     return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
 }
@@ -1599,7 +1599,7 @@ pub fn atn_ng_optional_enter(
     sim: &AtnSim,
     current_rule: i32,
     rule_stack: &List<i32>,
-    tokens: &List<Token>,
+    tokens: &Array<Token>,
     pos: i32,
     eof: i32,
 ) -> bool {
@@ -1780,7 +1780,7 @@ fn try_lit_between(chars: &List<char>, start: i32) -> i32 {
     return pos + 7;
 }
 
-pub fn tokenize(input: &String) -> List<Token> {
+pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: List<Token> = [];
@@ -1839,7 +1839,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         }
     }
     tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
-    return tokens;
+    return tokens.to_array();
 }
 
 pub fn token_kind_name(kind: i32) -> String {
@@ -1857,7 +1857,7 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: List<Token>,
+    tokens: Array<Token>,
     pos: i32,
     chars: List<char>,
     pending: Option<ParseError>,
@@ -1866,7 +1866,7 @@ struct Parser {
 }
 
 impl Parser {
-    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
+    fn new(tokens: Array<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars, pending: null, atn_stack: [], atn_ret_pending: -1 };
     }
 
@@ -1985,10 +1985,10 @@ impl Parser {
     }
 }
 
-fn scan_stat(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_stat(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_0(alt_kind) {
             let mut best: i32 = -1;
@@ -1998,11 +1998,11 @@ fn scan_stat(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 pos = scan_expr(tokens, pos, 0);
                 GALE_SCAN_STACK.pop();
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_AND { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_BANG { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BANG { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -2012,7 +2012,7 @@ fn scan_stat(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 pos = scan_expr(tokens, pos, 0);
                 GALE_SCAN_STACK.pop();
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_SEMI { break try_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -2025,15 +2025,15 @@ fn scan_stat(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_expr_atom(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2041,13 +2041,13 @@ fn scan_expr_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_BETWEEN {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_BETWEEN { break try_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BETWEEN { break try_1; }
                 pos += 1;
                 GALE_SCAN_STACK.push(29);
                 pos = scan_expr(tokens, pos, 0);
                 GALE_SCAN_STACK.pop();
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_AND { break try_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { break try_1; }
                 pos += 1;
                 GALE_SCAN_STACK.push(33);
                 pos = scan_expr(tokens, pos, 0);
@@ -2063,9 +2063,9 @@ fn scan_expr_atom(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_AND { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { return -1; }
     pos += 1;
     GALE_SCAN_STACK.push(41);
     pos = scan_expr(tokens, pos, 2);
@@ -2074,7 +2074,7 @@ fn scan_expr_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expr_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -2109,17 +2109,17 @@ fn _parse_stat__inner_alt_0(p: &mut Parser) -> Result<StatNode, ParseError> {
     }));
 }
 
-fn _parse_stat__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
+fn _parse_stat__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     GALE_SCAN_STACK.push(8);
     pos = scan_expr(tokens, pos, 0);
     GALE_SCAN_STACK.pop();
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_AND { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AND { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_BANG { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BANG { return -1; }
     pos += 1;
     return pos;
 }
@@ -2136,13 +2136,13 @@ fn _parse_stat__inner_alt_1(p: &mut Parser) -> Result<StatNode, ParseError> {
     }));
 }
 
-fn _parse_stat__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
+fn _parse_stat__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     GALE_SCAN_STACK.push(17);
     pos = scan_expr(tokens, pos, 0);
     GALE_SCAN_STACK.pop();
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
     pos += 1;
     return pos;
 }

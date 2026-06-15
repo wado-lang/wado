@@ -426,7 +426,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
     // Char index where each line begins; built once so each token's `line:col`
     // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
@@ -569,7 +569,7 @@ pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> Lis
     return combined;
 }
 
-pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -670,7 +670,7 @@ fn try_lit_x(chars: &List<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
-pub fn tokenize(input: &String) -> List<Token> {
+pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: List<Token> = [];
@@ -707,7 +707,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         }
     }
     tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
-    return tokens;
+    return tokens.to_array();
 }
 
 pub fn token_kind_name(kind: i32) -> String {
@@ -723,14 +723,14 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: List<Token>,
+    tokens: Array<Token>,
     pos: i32,
     chars: List<char>,
     pending: Option<ParseError>,
 }
 
 impl Parser {
-    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
+    fn new(tokens: Array<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars, pending: null };
     }
 
@@ -849,71 +849,71 @@ impl Parser {
     }
 }
 
-fn scan_file_(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_file_(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_para(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
     pos = scan_para(tokens, pos, &FOLLOW_MASK_1, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_para(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_para(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_para_content(tokens, pos, &FOLLOW_MASK_2, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_NL { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_NL { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_NL { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_NL { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_para_content(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_para_content(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     sg_0: {
         pos = gp_0;
         sg_0_0: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_S { break sg_0_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_0_0; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_1: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_X { break sg_0_1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_0_1; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_2: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_NL { break sg_0_2; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_0_2; }
             pos += 1;
             break sg_0;
         }
         return -1;
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         let gp_1 = pos;
         sg_1: {
             pos = gp_1;
             sg_1_0: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_S { break sg_1_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_1_0; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_1: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_X { break sg_1_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_1_1; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_2: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_NL { break sg_1_2; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_1_2; }
                 pos += 1;
                 break sg_1;
             }
@@ -925,9 +925,9 @@ fn scan_para_content(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_s(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_S { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { return -1; }
     pos += 1;
     return pos;
 }
@@ -991,19 +991,19 @@ fn _parse_para_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 sg_2: {
                     pos = gp_2;
                     sg_2_0: {
-                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_S { break sg_2_0; }
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_S { break sg_2_0; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_1: {
-                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_X { break sg_2_1; }
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_2_1; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_2: {
-                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_NL { break sg_2_2; }
+                        if pos >= tokens.len() || tokens[pos].kind != TK_NL { break sg_2_2; }
                         pos += 1;
                         break sg_2;
                     }

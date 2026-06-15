@@ -426,7 +426,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
     // Char index where each line begins; built once so each token's `line:col`
     // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
@@ -584,7 +584,7 @@ fn try_lit_y(chars: &List<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
-pub fn tokenize(input: &String) -> List<Token> {
+pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: List<Token> = [];
@@ -618,7 +618,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         }
     }
     tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
-    return tokens;
+    return tokens.to_array();
 }
 
 pub fn token_kind_name(kind: i32) -> String {
@@ -632,14 +632,14 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: List<Token>,
+    tokens: Array<Token>,
     pos: i32,
     chars: List<char>,
     pending: Option<ParseError>,
 }
 
 impl Parser {
-    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
+    fn new(tokens: Array<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars, pending: null };
     }
 
@@ -758,24 +758,24 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
-    let sgk_0 = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
+    let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     if sgk_0 == TK_LIT_X {
         let mut sg_0_best = -1;
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_X { break sg_0_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_0_0; }
                 pos += 1;
                 if pos > sg_0_best { sg_0_best = pos; }
             }
             pos = gp_0;
             sg_0_1: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_X { break sg_0_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break sg_0_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_Y { break sg_0_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_Y { break sg_0_1; }
                 pos += 1;
                 if pos > sg_0_best { sg_0_best = pos; }
             }
@@ -783,9 +783,9 @@ fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             pos = gp_0;
         }
     }
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
@@ -800,9 +800,9 @@ fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_X { break gd_scan; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { break gd_scan; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_Y { break gd_scan; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_Y { break gd_scan; }
                 pos += 1;
                 gd_winner = 0;
                 break gd_dispatch;

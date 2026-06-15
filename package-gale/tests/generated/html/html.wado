@@ -429,7 +429,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
     // Char index where each line begins; built once so each token's `line:col`
     // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
@@ -572,7 +572,7 @@ pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> Lis
     return combined;
 }
 
-pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -1944,7 +1944,7 @@ fn try_ATTRIBUTE(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-pub fn tokenize(input: &String) -> List<Token> {
+pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: List<Token> = [];
@@ -2046,7 +2046,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         }
     }
     tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
-    return tokens;
+    return tokens.to_array();
 }
 
 pub fn token_kind_name(kind: i32) -> String {
@@ -2081,14 +2081,14 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: List<Token>,
+    tokens: Array<Token>,
     pos: i32,
     chars: List<char>,
     pending: Option<ParseError>,
 }
 
 impl Parser {
-    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
+    fn new(tokens: Array<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars, pending: null };
     }
 
@@ -2207,37 +2207,37 @@ impl Parser {
     }
 }
 
-fn scan_html_document(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_document(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_XML && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos].kind == TK_XML && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
-        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_XML { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_XML { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_DTD && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos].kind == TK_DTD && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
-        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_DTD { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_DTD { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    while pos < tokens.len() && _gale_kind_set_1(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_html_elements(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2246,16 +2246,16 @@ fn scan_html_document(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_scriptlet_or_sea_ws(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_0(tokens.get_unchecked(pos).kind) {
+fn scan_scriptlet_or_sea_ws(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_html_elements(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_elements(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_2(tokens.get_unchecked(pos).kind) {
+    while pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
         let sp = pos;
         pos = scan_html_misc(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2263,7 +2263,7 @@ fn scan_html_elements(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     }
     pos = scan_html_element(tokens, pos, &follow_prepend(&FOLLOW_MASK_0, follow), 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_2(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_html_misc(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2272,45 +2272,45 @@ fn scan_html_elements(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_html_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_element(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_TAG_OPEN {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_OPEN { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_OPEN { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_NAME { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { break try_0; }
                 pos += 1;
-                while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_TAG_NAME {
+                while pos < tokens.len() && tokens[pos].kind == TK_TAG_NAME {
                     let sp = pos;
                     pos = scan_html_attribute(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
                 let gp_0 = pos;
-                let sgk_0 = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
+                let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
                 if _gale_kind_set_4(sgk_0) {
                     sg_0: {
                         pos = gp_0;
                         sg_0_0: {
-                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_CLOSE { break sg_0_0; }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_TAG_CLOSE { break sg_0_0; }
                             pos += 1;
-                            if pos < tokens.len() && _gale_kind_set_3(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            if pos < tokens.len() && _gale_kind_set_3(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                                 let sp = pos;
                                 sg_1_done: {
                                     sg_1: {
                                         pos = scan_html_content(tokens, pos, &FOLLOW_MASK_1, 0);
                                         if pos < 0 { break sg_1; }
-                                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_OPEN { break sg_1; }
+                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_OPEN { break sg_1; }
                                         pos += 1;
-                                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_SLASH { break sg_1; }
+                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_SLASH { break sg_1; }
                                         pos += 1;
-                                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_NAME { break sg_1; }
+                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { break sg_1; }
                                         pos += 1;
-                                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_CLOSE { break sg_1; }
+                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_CLOSE { break sg_1; }
                                         pos += 1;
                                         break sg_1_done;
                                     }
@@ -2322,7 +2322,7 @@ fn scan_html_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
                         }
                         pos = gp_0;
                         sg_0_1: {
-                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_SLASH_CLOSE { break sg_0_1; }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_TAG_SLASH_CLOSE { break sg_0_1; }
                             pos += 1;
                             break sg_0;
                         }
@@ -2335,7 +2335,7 @@ fn scan_html_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
         } else if alt_kind == TK_SCRIPTLET {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SCRIPTLET { break try_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_SCRIPTLET { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2363,19 +2363,19 @@ fn scan_html_element(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_html_content(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_content(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _gale_kind_set_8(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_7(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_7(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_2_done: {
             sg_2: {
                 let gp_3 = pos;
-                let sgk_3 = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
+                let sgk_3 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
                 if _gale_kind_set_7(sgk_3) {
                     sg_3: {
                         pos = gp_3;
@@ -2386,7 +2386,7 @@ fn scan_html_content(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
                         }
                         pos = gp_3;
                         sg_3_1: {
-                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_CDATA { break sg_3_1; }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_CDATA { break sg_3_1; }
                             pos += 1;
                             break sg_3;
                         }
@@ -2399,7 +2399,7 @@ fn scan_html_content(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
                         pos = gp_3;
                     }
                 }
-                if pos < tokens.len() && _gale_kind_set_8(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -2414,17 +2414,17 @@ fn scan_html_content(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_html_attribute(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_attribute(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_NAME { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_TAG_EQUALS && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos].kind == TK_TAG_EQUALS && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_4_done: {
             sg_4: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_EQUALS { break sg_4; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_EQUALS { break sg_4; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ATTVALUE_VALUE { break sg_4; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_ATTVALUE_VALUE { break sg_4; }
                 pos += 1;
                 break sg_4_done;
             }
@@ -2435,17 +2435,17 @@ fn scan_html_attribute(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_html_chardata(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_8(tokens.get_unchecked(pos).kind) {
+fn scan_html_chardata(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_html_misc(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_misc(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_6(alt_kind) {
             pos = start;
@@ -2458,7 +2458,7 @@ fn scan_html_misc(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
         } else if alt_kind == TK_SEA_WS {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SEA_WS { break try_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_SEA_WS { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2470,28 +2470,28 @@ fn scan_html_misc(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_html_comment(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_6(tokens.get_unchecked(pos).kind) {
+fn scan_html_comment(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _gale_kind_set_6(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_script(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_script(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SCRIPT_OPEN { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_SCRIPT_OPEN { return -1; }
     pos += 1;
     let gp_5 = pos;
     sg_5: {
         pos = gp_5;
         sg_5_0: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SCRIPT_BODY { break sg_5_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_SCRIPT_BODY { break sg_5_0; }
             pos += 1;
             break sg_5;
         }
         pos = gp_5;
         sg_5_1: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SCRIPT_SHORT_BODY { break sg_5_1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_SCRIPT_SHORT_BODY { break sg_5_1; }
             pos += 1;
             break sg_5;
         }
@@ -2500,21 +2500,21 @@ fn scan_script(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
     return pos;
 }
 
-fn scan_style(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_style(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_STYLE_OPEN { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_STYLE_OPEN { return -1; }
     pos += 1;
     let gp_6 = pos;
     sg_6: {
         pos = gp_6;
         sg_6_0: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_STYLE_BODY { break sg_6_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_STYLE_BODY { break sg_6_0; }
             pos += 1;
             break sg_6;
         }
         pos = gp_6;
         sg_6_1: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_STYLE_SHORT_BODY { break sg_6_1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_STYLE_SHORT_BODY { break sg_6_1; }
             pos += 1;
             break sg_6;
         }
@@ -2782,13 +2782,13 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 let mut pos: i32 = p.pos;
                 pos = scan_html_content(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break opt_scan; }
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_OPEN { break opt_scan; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_OPEN { break opt_scan; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_SLASH { break opt_scan; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_SLASH { break opt_scan; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_NAME { break opt_scan; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { break opt_scan; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_TAG_CLOSE { break opt_scan; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_CLOSE { break opt_scan; }
                 pos += 1;
                 opt_scan_pos = pos;
             }
@@ -2885,7 +2885,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             sg_7_done: {
                 sg_7: {
                     let gp_8 = pos;
-                    let sgk_8 = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
+                    let sgk_8 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
                     if _gale_kind_set_7(sgk_8) {
                         sg_8: {
                             pos = gp_8;
@@ -2896,7 +2896,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                             }
                             pos = gp_8;
                             sg_8_1: {
-                                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_CDATA { break sg_8_1; }
+                                if pos >= tokens.len() || tokens[pos].kind != TK_CDATA { break sg_8_1; }
                                 pos += 1;
                                 break sg_8;
                             }
@@ -2909,7 +2909,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                             pos = gp_8;
                         }
                     }
-                    if pos < tokens.len() && _gale_kind_set_8(tokens.get_unchecked(pos).kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                         let sp = pos;
                         pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW, 0);
                         if pos < 0 { pos = sp; }

@@ -426,7 +426,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
     let chars: List<char> = input.chars().collect();
     // Char index where each line begins; built once so each token's `line:col`
     // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
@@ -1414,7 +1414,7 @@ fn try_lit_rbracket(chars: &List<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
-pub fn tokenize(input: &String) -> List<Token> {
+pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: List<Token> = [];
@@ -1511,7 +1511,7 @@ pub fn tokenize(input: &String) -> List<Token> {
         }
     }
     tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
-    return tokens;
+    return tokens.to_array();
 }
 
 pub fn token_kind_name(kind: i32) -> String {
@@ -1556,14 +1556,14 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: List<Token>,
+    tokens: Array<Token>,
     pos: i32,
     chars: List<char>,
     pending: Option<ParseError>,
 }
 
 impl Parser {
-    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
+    fn new(tokens: Array<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars, pending: null };
     }
 
@@ -1682,35 +1682,35 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LPAREN { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_0; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_COMMA {
+                while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
                     let sp = pos;
                     sg_0_done: {
                         sg_0: {
-                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_COMMA { break sg_0; }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_0; }
                             pos += 1;
                             pos = scan_expression(tokens, pos, 0);
                             if pos < 0 { break sg_0; }
@@ -1721,13 +1721,13 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RPAREN { break try_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
             pos = start;
             try_10: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { break try_10; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_10; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -1736,11 +1736,11 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_LPAREN {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LPAREN { break try_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_1; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RPAREN { break try_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1748,7 +1748,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_BANG {
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_BANG { break try_2; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BANG { break try_2; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_2; }
@@ -1758,7 +1758,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_MINUS {
             pos = start;
             try_3: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_MINUS { break try_3; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { break try_3; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_3; }
@@ -1768,7 +1768,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_PLUS {
             pos = start;
             try_4: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_PLUS { break try_4; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break try_4; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_4; }
@@ -1778,15 +1778,15 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_LBRACKET {
             pos = start;
             try_5: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LBRACKET { break try_5; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break try_5; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_5; }
-                while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_COMMA {
+                while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
                     let sp = pos;
                     sg_1_done: {
                         sg_1: {
-                            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_COMMA { break sg_1; }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_1; }
                             pos += 1;
                             pos = scan_expression(tokens, pos, 0);
                             if pos < 0 { break sg_1; }
@@ -1797,7 +1797,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RBRACKET { break try_5; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break try_5; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1805,7 +1805,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_K_TRUE {
             pos = start;
             try_6: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_K_TRUE { break try_6; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_TRUE { break try_6; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1813,7 +1813,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_K_FALSE {
             pos = start;
             try_7: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_K_FALSE { break try_7; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_FALSE { break try_7; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1821,7 +1821,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_NUMBER {
             pos = start;
             try_8: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_NUMBER { break try_8; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_NUMBER { break try_8; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1829,7 +1829,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_DATE {
             pos = start;
             try_9: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_DATE { break try_9; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_DATE { break try_9; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1837,7 +1837,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_SQ_STRING {
             pos = start;
             try_11: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_SQ_STRING { break try_11; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_SQ_STRING { break try_11; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1845,7 +1845,7 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
         } else if alt_kind == TK_K_NULL {
             pos = start;
             try_12: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_K_NULL { break try_12; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_NULL { break try_12; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1857,127 +1857,127 @@ fn scan_expression_atom(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_5(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_5(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_CARET { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_CARET { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 16);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_6(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_6(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_STAR { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 15);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_7(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_7(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_SLASH { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SLASH { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 14);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_8(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_8(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_PERCENT { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PERCENT { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 13);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_9(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_9(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_MINUS { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 12);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_10(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_10(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_PLUS { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 11);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_11(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_11(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_EQ { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 10);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_12(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_12(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_BANGEQ { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_BANGEQ { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 9);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_13(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_13(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_GT { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_GT { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 8);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_14(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_14(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_GTEQ { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_GTEQ { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 7);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_15(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_15(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LT { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LT { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 6);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_16(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_16(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LTEQ { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LTEQ { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 5);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_17(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_17(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_K_IN { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_IN { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 4);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_COMMA {
+    while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
         let sp = pos;
         sg_2_done: {
             sg_2: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_COMMA { break sg_2; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_2; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 4);
                 if pos < 0 { break sg_2; }
@@ -1988,24 +1988,24 @@ fn scan_expression_lr_17(tokens: &List<Token>, pos: i32) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expression_lr_18(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_18(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_3 = pos;
     sg_3: {
         pos = gp_3;
         sg_3_0: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_AMP { break sg_3_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AMP { break sg_3_0; }
             pos += 1;
             break sg_3;
         }
         pos = gp_3;
         sg_3_1: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_K_AND { break sg_3_1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_AND { break sg_3_1; }
             pos += 1;
             break sg_3;
         }
@@ -2016,19 +2016,19 @@ fn scan_expression_lr_18(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_19(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_expression_lr_19(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_4 = pos;
     sg_4: {
         pos = gp_4;
         sg_4_0: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_PIPE { break sg_4_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPE { break sg_4_0; }
             pos += 1;
             break sg_4;
         }
         pos = gp_4;
         sg_4_1: {
-            if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_K_OR { break sg_4_1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_4_1; }
             pos += 1;
             break sg_4;
         }
@@ -2039,11 +2039,11 @@ fn scan_expression_lr_19(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
-        let suffix_kind = if pos < tokens.len() { tokens.get_unchecked(pos).kind } else { TK_EOF };
+        let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
         if suffix_kind == TK_LIT_CARET {
             if 15 >= min_prec {
                 let lr_saved_pos = pos;
@@ -2204,7 +2204,7 @@ fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<ExpressionNode, Pars
             let mut pos: i32 = p.pos;
             sg_5_done: {
                 sg_5: {
-                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_COMMA { break sg_5; }
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_5; }
                     pos += 1;
                     pos = scan_expression(tokens, pos, 0);
                     if pos < 0 { break sg_5; }
@@ -2235,19 +2235,19 @@ fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<ExpressionNode, Pars
     }));
 }
 
-fn _parse_expression__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
+fn _parse_expression__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.get_unchecked(pos).kind == TK_LIT_COMMA {
+    while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
         let sp = pos;
         sg_6_done: {
             sg_6: {
-                if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_COMMA { break sg_6; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_6; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break sg_6; }
@@ -2258,7 +2258,7 @@ fn _parse_expression__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
     pos += 1;
     return pos;
 }
@@ -2272,9 +2272,9 @@ fn _parse_expression__inner_alt_25(p: &mut Parser) -> Result<ExpressionNode, Par
     }));
 }
 
-fn _parse_expression__inner_scan_25(tokens: &List<Token>, pos: i32) -> i32 {
+fn _parse_expression__inner_scan_25(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
@@ -2354,7 +2354,7 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
                 let mut pos: i32 = p.pos;
                 sg_7_done: {
                     sg_7: {
-                        if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_COMMA { break sg_7; }
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_7; }
                         pos += 1;
                         pos = scan_expression(tokens, pos, 0);
                         if pos < 0 { break sg_7; }
@@ -2576,7 +2576,7 @@ fn _parse_expression__inner_lr_17(p: &mut Parser, left: ExpressionNode, start: i
             let mut pos: i32 = p.pos;
             sg_8_done: {
                 sg_8: {
-                    if pos >= tokens.len() || tokens.get_unchecked(pos).kind != TK_LIT_COMMA { break sg_8; }
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_8; }
                     pos += 1;
                     pos = scan_expression(tokens, pos, 4);
                     if pos < 0 { break sg_8; }
