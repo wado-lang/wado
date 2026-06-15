@@ -110,7 +110,7 @@ use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
-use store_load_forward::{forward_stores_to_loads, forward_stores_to_loads_all};
+use store_load_forward::forward_stores_to_loads_all;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 
@@ -616,8 +616,9 @@ fn run_optimization_passes(
         // elimination moved into the unified `nir/peephole` pass above.)
         gated!("nir/dae", eliminate_dead_arguments);
         gated!("nir/drve", eliminate_dead_return_values);
+        // `cse` runs store-load forwarding in the same engine session (both
+        // graph-preserving, adjacent passes) — one ValueGraph build for both.
         gated!("nir/cse", eliminate_common_subexprs);
-        gated!("nir/store_load_forward", forward_stores_to_loads);
         // The flow-sensitive half of constant folding; the env-free half
         // (literal arithmetic + pure CTFE) runs in the `nir/peephole` passes.
         // This walker handles the folds that need per-function dataflow state —

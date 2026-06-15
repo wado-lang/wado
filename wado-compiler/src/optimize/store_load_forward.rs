@@ -26,29 +26,6 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{CachedAnalysis, Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
-use cranelift_entity::EntityRef;
-
-use super::gate::{FunctionGate, GatedPass};
-
-pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let type_table = project.type_table.borrow();
-    let first_param_types = super::alias::first_param_types(project);
-    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated_cached(GatedPass::StoreLoadForward, len, |fid, cached| {
-        let mut func = project.functions[fid.index()].borrow_mut();
-        forward_one(
-            &mut func,
-            &type_table,
-            &first_param_types,
-            &call_immutability,
-            &mut buffers,
-            cached,
-        )
-    })
-}
-
 /// Ungated variant: forwards stores to loads in every function. Used by the
 /// post-`field_scalarize` cleanup, which runs once outside the gated loop so
 /// the scalarization shadow inits (`__hfs_x = obj.f`) get their fields
@@ -155,7 +132,10 @@ impl Rule for StoreLoadForwardRule {
     }
 }
 
-fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
+/// Forward stored literals to later reads at the body root. Shared by the
+/// standalone rule and the combined cse+forward session, which runs it on a
+/// `ValueGraph` cse already built (both passes are graph-preserving).
+pub(super) fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
     // Snapshot reads before rewriting. `FieldAccess` reads carry `None`:
     // their alias safety is upstream — the builder never seeds an aliased
     // receiver, so such a read never carries a literal `ValueId`.

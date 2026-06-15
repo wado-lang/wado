@@ -83,7 +83,17 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
             engine.set_value_graph_type_table(&type_table);
             engine
         };
-        let changed = engine.run(&[&rule]);
+        let cse_changed = engine.run(&[&rule]);
+        // Store-load forwarding shares cse's session: cse is graph-preserving
+        // (it replaces matching subexpressions in place, so `value_of` stays
+        // current), so forwarding runs on the same ValueGraph without a rebuild.
+        // cse and slf are adjacent in the loop, so this only merges their two
+        // sessions — no reordering — saving slf's separate engine setup + build.
+        let mut unsafe_locals = address_taken_locals.clone();
+        unsafe_locals.extend(stores_aliased_locals.iter().copied());
+        unsafe_locals.extend(engine.body_address_taken().iter().copied());
+        let slf_changed = super::store_load_forward::forward_at_root(&mut engine, &unsafe_locals);
+        let changed = cse_changed || slf_changed;
         let parked = if changed {
             None
         } else {

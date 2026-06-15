@@ -67,7 +67,6 @@ pub enum GatedPass {
     Cse,
     Licm,
     ConditionImplication,
-    StoreLoadForward,
     TmplHoist,
     ContainerSroa,
     Inline,
@@ -78,7 +77,7 @@ pub enum GatedPass {
 }
 
 impl GatedPass {
-    const COUNT: usize = 15;
+    const COUNT: usize = 14;
 }
 
 /// Static call graph over [`FunctionId`]s, built once at loop start.
@@ -332,7 +331,6 @@ mod tests {
             GatedPass::Cse,
             GatedPass::Licm,
             GatedPass::ConditionImplication,
-            GatedPass::StoreLoadForward,
             GatedPass::TmplHoist,
             GatedPass::ContainerSroa,
             GatedPass::Inline,
@@ -350,7 +348,6 @@ mod tests {
                 | GatedPass::Cse
                 | GatedPass::Licm
                 | GatedPass::ConditionImplication
-                | GatedPass::StoreLoadForward
                 | GatedPass::TmplHoist
                 | GatedPass::ContainerSroa
                 | GatedPass::Inline
