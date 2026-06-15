@@ -1,4 +1,4 @@
-# WEP: NIR Optimize Redesign for Compile Speed
+# WEP: The Live ValueGraph — Single-Session NIR Optimizer
 
 This WEP redesigns the NIR optimizer around a single intra-procedural
 worklist that builds the ValueGraph once per function and keeps it live
@@ -153,21 +153,24 @@ rule and stay distinct gated steps, in the current order:
 
 ### Destructive rewrites
 
-Rules rewrite the graph in place, exactly as the engine's rules do today. This
-preserves the soundness invariant that has gated every migration:
-byte-output-identity with the pass each rule replaces — the destructive driver
-reproduces the existing CSE / hoisting materialisation directly. Priorities
-are encoded by rule order, the way `peephole.rs` already does; confluence is
-the same obligation the engine already carries.
+Rules rewrite the graph in place, exactly as the engine's rules do today, so
+each migrated rule maps directly onto the pass it replaces — the destructive
+driver reproduces the existing CSE / hoisting materialisation without a new
+extraction heuristic. Priorities are encoded by rule order, the way
+`peephole.rs` already does; confluence is the same obligation the engine
+already carries.
 
 ## Migration plan
 
-Each step is byte-output-identical to its predecessor on the full fixture +
-E2E suite and on package-gale before the predecessor is deleted, the same
-discipline the earlier ValueGraph migrations followed.
+Each step must not regress output (code size or runtime) on the full fixture +
+E2E suite, on `wir_expect`/`wir_not_expect`, and on the benchmark set before
+the predecessor is deleted. An improvement is welcome; incidental output
+differences that neither shrink nor grow the result meaningfully are
+acceptable. A regression is not.
 
 - [ ] Promote literal operands — `Operand::Value` on pure literal slots;
-      `lower::translate` builds them; `wir_build` follows. WIR byte-identical.
+      `lower::translate` builds them; `wir_build` follows. A representation
+      change, so WIR is expected to stay the same.
 - [ ] Promote arithmetic operands — extend `Operand::Value` to `Binary` /
       `Unary` / `Cast`; retire the `value_of` side-table and the
       `Engine::value` bridge.
@@ -191,8 +194,10 @@ discipline the earlier ValueGraph migrations followed.
 
 ## Soundness invariants
 
-- Byte-output-identity per step (as above). Operand promotion may alter the
-  NIR shape; the WIR output stays byte-identical.
+- No output regression per step (as above): each step preserves or improves
+  the result, never degrades it. Operand promotion is a representation change
+  with no intended output effect; the dataflow migrations may shift output
+  incidentally, which is fine as long as it is not a regression.
 - Rules stay idempotent and confluent-or-priority-ordered; priorities are rule
   order in the session.
 - Graph-liveness equivalence: after any edit, `value(a) == value(b)` holds iff
