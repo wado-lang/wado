@@ -1,19 +1,16 @@
-# WEP: The Live ValueGraph — Single-Session NIR Optimizer
+# WEP: The Live ValueGraph — ValueGraph as the Pure-Value IR
 
-This WEP redesigns the NIR optimizer for compile speed. The current optimizer
-runs a fixed-point loop of standalone passes, and each pass that needs pure-
-value identity or reaching-defs rebuilds the per-function ValueGraph from
-scratch and throws it away. The redesign collapses the intra-procedural passes
-into one worklist session per function that builds the ValueGraph once and
-keeps it live — maintaining it incrementally through the engine edit API as
-rules fire — so the graph is built once per function per outer round instead of
-once per pass.
+This WEP redesigns the NIR optimizer for compile speed by making the ValueGraph
+the source of truth for pure values, instead of a side-table re-derived from the
+SkelTree on every pass. Pure operand positions in the SkelTree become
+`ValueId`s; the graph is built once per function, rewritten eagerly in place via
+e-class union, and extracted back to a skeleton form once before WIR build. The
+SkelTree stays the effect-and-control schedule.
 
-The ValueGraph stays an engine side-table (`engine.value(expr)`); this WEP does
-not change the NIR arena. Two heavier promotions the
-[Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
-WEP describes — moving pure values into IR-level operands, and switching to
-equality saturation — are out of scope here and stay in that WEP.
+This is the aegraph mid-end model (build once, eager rewrite with union-find,
+single extraction — Cranelift's, not equality saturation): rules apply once and
+destructively-by-union, never searched to a fixed point. Equality saturation
+stays out of scope.
 
 ## Context
 
@@ -22,243 +19,228 @@ A sampling profile (samply, 1 kHz, dev/debug `wado`) of
 Percentages are inclusive shares of total CPU — machine-independent ratios;
 absolute time varies by host. `optimize` is 69% of compile CPU, and the gated
 intra passes (`run_gated` + `run_gated_cached`) are ~49%. Inside them the
-dominant cost is reconstruction rebuilt per pass per function and discarded:
+dominant cost is per-function analysis rebuilt per pass and discarded:
 
-- per-function `ValueGraph` build (`builder::build`, reached via
-  `Engine::value`; the `walk_block` / `walk_expr` flow walk) ~20%
+- per-function `ValueGraph` build (the `walk_block` / `walk_expr` flow walk,
+  reached via `Engine::value`) ~20%
 - per-session engine setup (`Engine::new`: parent maps, use index, post-order
   seed) ~9%
 - flow joins (`join_heap` / `flow_join_two` / `flow_join_n`) ~10%
 - alias-set computation (`builder_alias_sets`) ~9%
 
-Together that is ~40% of compile CPU spent building and tearing down
-per-function analysis the next pass rebuilds from scratch.
+Together ~40% of compile CPU is spent re-deriving per-function analysis the next
+pass rebuilds from scratch. The build is compute-bound, not allocation-bound:
+pooling the builder's output maps measured no improvement. The cost is the flow
+walk, the hash-cons, and the joins.
 
-The dirty-set gate amortises this only for _unchanged_ functions: it skips
-them, and the revision-keyed `vg_cache` shares one parked `ValueGraph` across
-the value-graph passes when the function did not change between them. A
-function that _did_ change rebuilds the whole analysis once per pass that
-visits it — and a busy function changes often.
+This cost exists for one structural reason: the ValueGraph is a _derived_
+analysis of a _mutable_ SkelTree. Every SkelTree edit can stale the graph, so
+every pass that needs pure-value identity re-derives it. The dirty-set gate and
+the revision-keyed `vg_cache` amortise this only for functions that did not
+change; a function a pass actually rewrites pays a fresh re-derivation in the
+next pass that visits it.
 
-The build is compute-bound, not allocation-bound: pooling the builder's output
-maps measured no improvement. The cost is the flow walk, the hash-cons, and the
-joins — so the only way to remove it is to stop redoing it.
+## Why source-of-truth, not incremental rebuild
 
-## Why a single session
+The obvious patch — re-derive only the changed region of the side-table — was
+prototyped, verified equivalent to a full rebuild under a `WADO_VERIFY_INCREMENTAL`
+harness, and reverted: it fired on ~0.15% of builds on the large workload and 0%
+on the small ones. Worse, it is the wrong shape of fix: it makes the
+_re-derivation of a derived side-table_ cheaper, when the side-table only needs
+re-deriving because it is derived. The direction WEP already reached this
+conclusion — the side-table, and any machinery that rebuilds it, retire once the
+graph becomes the source of truth.
 
-Re-walking only the changed region of a function — reusing the unchanged prefix
-of its ValueGraph — was prototyped, verified byte-identical under a
-`WADO_VERIFY_INCREMENTAL` harness, and reverted. It fired on ~0.15% of builds on
-the large workload and 0% on the small ones, so it bought nothing.
+So this WEP does not resurrect incremental rebuild. It removes the reason
+re-derivation exists: the graph stops being a shadow of the SkelTree and becomes
+where pure values _live_. Flow is resolved into the graph once, at build, and
+frozen there; a rewrite is a union of two e-classes, which every user sees
+through `find()` without any re-walk. There is no derived form to bring current.
 
-The failure was architectural, not a bug in the mechanism. Incremental rebuild
-needs the parked graph's edits to be the _complete_ delta since it was parked.
-In the multi-pass pipeline almost every pass handoff is spoiled: `inline`
-restructures bodies wholesale, the flow-sensitive `const_fold` walks the arena
-directly, `licm` sits between the value-graph passes. The only clean adjacency
-is `cse → store_load_forward`, and `cse` rarely changes anything, so even that
-one handoff had nothing to pass downstream.
-
-The mechanism itself is sound and verified. What it needs is an architecture
-where _one_ driver owns the graph across _all_ rewrites, so every edit is part
-of the delta and the incremental rebuild fires on essentially every query. That
-is a single session.
+This reverses the operand-promotion deferral from the previous draft of this WEP.
+Promotion was mischaracterised there as a marginal representational cleanup; it
+is the load-bearing change that lets flow be derived once and rewrites be
+pointwise. It is in scope here.
 
 ## Decision
 
-Run all intra-procedural rewrites in one worklist session per function, over a
-ValueGraph the session keeps live.
+Promote the ValueGraph to the pure-value IR and drive it aegraph-style.
 
-- The ValueGraph and its flow state are built once when a function's session
-  opens. The engine edit API journals every mutation; before a rule queries a
-  value, the engine re-walks only the journaled dirty regions to bring the
-  graph current. The graph is never rebuilt from scratch within a session.
-- All genuinely intra-procedural rewrites run as `Rule`s interleaved on one
-  worklist, the way `peephole.rs` already runs its subset. CSE equality,
-  store-load forwarding, flow-sensitive constant folding, condition implication,
-  and the loop passes all become queries against the one live graph.
-- Rules stay destructive and priority-ordered (rule order in the session, as
-  `peephole.rs` encodes it today). The graph stays an engine side-table; the NIR
-  arena is unchanged.
-- The interprocedural stages (`inline`, `dae`, `drve`, `sroa_param`,
-  `container_sroa`, `sroa`, `const_object_globalization`, `dce`) stay distinct
-  gated steps; the single session replaces the _per-function intra-procedural_
-  inner loop, not the whole-program structure.
+- Pure operand positions in the SkelTree (literals, `Binary`, `Unary`, `Cast`)
+  carry a `ValueId`. `lower::translate` builds the graph directly; the
+  `value_of: ExprId → ValueId` side-table and its per-pass rebuild are gone.
+- The graph is hash-consed with a union-find over e-classes. Flow is frozen at
+  build via `Select` (merges), `LoopPhi` (loop recurrence), `Opaque` (params,
+  unknowns), and per-field `HeapVersion` reads. A pure-value rewrite unions two
+  classes; users resolve through `find()`. No re-derivation.
+- Rules apply eagerly and once per match, not searched to saturation. Priorities
+  are rule order, as `peephole.rs` encodes today. Congruence is maintained by a
+  deferred e-graph rebuild after a batch of unions (egg/aegraph-style), not by
+  re-walking the SkelTree.
+- The SkelTree stays the effect-and-control schedule: statement order, control
+  flow, and effectful / allocation-bearing expressions (`Call`, `Assign` to
+  heap, `StructLiteral` / `TupleLiteral` / `ArrayLiteral`). It is rewritten by
+  skeleton rules on the existing worklist engine.
+- One extraction pass, before WIR build, walks the SkelTree and lowers each
+  pure `ValueId` operand to a concrete form, materialising a shared value once
+  only when sharing beats duplication.
 
 ## Architecture
 
-### The live graph
+### Operand promotion
 
-`builder::build` does one linear, flow-sensitive walk of a function body: it
-threads `current_value` (the `ValueId` of every live local), the heap versions,
-reference look-through targets, and the field-store forwarding table, and at
-control-flow merges it snapshots each arm and joins them into `Select` values.
-It leaves a side-table `value_of: ExprId → ValueId` that the rules query through
-`engine.value(expr)`. The worklist does not re-derive flow per query; it reads
-the precomputed map. Keeping the graph live therefore means keeping `value_of`
-and that flow state current after each edit — not re-deriving anything per pass.
+`lower::translate` emits a `ValueId` for every pure operand position instead of
+a pure `ExprKind`. The pure literal / `Binary` / `Unary` / `Cast` variants leave
+the SkelTree; the slots that referenced them hold `ValueId`s. Effectful and
+control-flow `ExprKind`s keep their skeleton form, with their pure operands
+promoted. WIR build no longer matches the pure `ExprKind` arms — it consumes the
+extractor's output. This is a wide but mechanical change across the arena,
+lowering, WIR build, the unparser, and the passes that match pure `ExprKind`s;
+it is load-bearing, so its breadth is accepted rather than worked around.
 
-The redesign keeps this builder and this side-table. It changes only _when_ the
-walk runs: once per session, then incrementally over the edited regions, instead
-of once per pass.
+### The graph as IR
 
-### Journaling edits
+The existing builder already resolves a function into the frozen-flow form this
+needs: it threads `current_value`, the heap versions, and reference targets in
+one linear walk, and constructs `Select` at merges and `LoopPhi` at loops. The
+redesign keeps that build and runs it once per function per outer round. Two
+additions make it an IR rather than a side-table:
 
-The engine edit API (`replace_expr_kind`, `become_expr`, `set_block_stmts`,
-`alloc_*`, `clone_expr`) already keeps the parent map, use index, and worklist
-coherent. It gains one more responsibility: record each mutated node so the
-graph can be brought current later. Mapping a mutated node up the parent map to
-the root-block statement that encloses it yields the set of disturbed top-level
-statements; an edit to the root statement list itself cannot be localised and
-forces a full rebuild (rare, and a safe fallback). This is the verified
-`dirty_root_stmts` mechanism from the reverted prototype, reused unchanged.
+- A union-find over `ValueId`s, so a rewrite that proves `a ≡ b` unions their
+  classes and every user resolves the representative through `find()`.
+- Deferred congruence rebuild: after a batch of unions, re-canonicalise the
+  hash-cons so structurally-equal parents re-merge (a node whose child's
+  representative changed may now equal another node). This is bounded work over
+  the touched classes, not a SkelTree re-walk.
 
-### Incremental rebuild on query
+### Optimizations that become graph properties
 
-Before a rule reads `engine.value(...)` (or `value_kind` / `literal_source` /
-`loop_entry_value`), the engine settles the journal: it finds the first disturbed
-root statement, restores the exact flow-state the clean prefix left at that
-point, and re-walks from there to the end of the body, overwriting `value_of` for
-the re-walked region. Everything before the first dirty statement is reused.
+Once pure values live in the graph, a cluster of today's passes is subsumed and
+their per-pass walks disappear:
 
-The correctness argument is the prototype's, already verified: consumers only
-test `value(a) == value(b)` (the equivalence relation, never absolute
-numbering), and restoring the entry flow-state before the first disturbed
-statement reproduces the from-scratch equivalence classes. The reusable pieces —
-the per-statement checkpoint of the full flow-state, the `rebuild_incremental`
-re-walk, and the `WADO_VERIFY_INCREMENTAL` harness that builds both ways and
-asserts observable equality — are retrievable from branch history.
+- CSE / GVN — identical pure values share a `ValueId` by hash-consing. No pass.
+- Copy propagation of pure copies — `let x = y` makes `x` resolve to `y`'s
+  `ValueId`. No pass.
+- Constant folding (env-free and flow-sensitive) — folding rewrites a node to a
+  literal and unions; the flow-sensitive folds read the frozen flow already in
+  the graph. niri's CTFE stays the evaluator.
+- Store-load forwarding — a read at a `(receiver, field, heap_ver)` already
+  shared with a prior write resolves to the stored value by construction.
+- Loop-invariant detection — a value is loop-invariant iff its class does not
+  transitively depend on that loop's `LoopPhi`; a structural query, not a
+  dataflow walk. Hoisting becomes an extraction decision (materialise the
+  invariant value in the pre-header).
+- Condition implication — a condition whose `ValueId` equals a value a
+  dominating guard proved is folded; the guard fact keys on a `ValueId`, so it
+  goes stale by construction when the operand's class changes.
 
-Settling is lazy and coalesced: structural rules that never query the graph
-(block flattening, statement fusion) journal their edits but trigger no re-walk;
-the cost is paid once, when a value-querying rule next runs, over the union of
-the regions disturbed since the last settle. Re-walk granularity is root-block
-statements in the MVP; a finer granularity is a later tuning lever if scattered
-edits make the re-walked suffix too large.
+### What stays a skeleton rule
 
-### The single combined session
+Structural and effectful rewrites do not reduce to a graph union and stay rules
+on the worklist engine: block flattening / dead-statement pruning, `match_to_switch`,
+`labeled_block_fusion`, `ref_elim`, `elide_box_local`, `value_copy_*`, `sroa`,
+`container_sroa`, `field_scalarize`, `inline`, `dae`, `drve`,
+`const_object_globalization`, `dce`. A skeleton rewrite that changes control
+flow keeps the graph coherent pointwise: pruning a branch unions the dead
+`Select` arm's class into the surviving arm; splicing an inlined body or an SROA
+split builds value nodes for the _new_ skeleton subtree (monotone graph growth
+at the splice point, not a re-derivation of existing flow). Interprocedural
+passes that restructure a whole body (notably `inline`) run between outer rounds;
+the next round rebuilds that function's graph once.
 
-The fixed-point loop's intra-procedural passes collapse into one session hosting
-the full rule set, interleaved on one worklist — the existing `peephole.rs`
-model, scaled up:
+### Extraction
 
-- Local rules already on the peephole session stay: `string_push`,
-  `array_literal`, `elide_local`, env-free `const_fold`, `const_branch_prune`,
-  `match_to_switch`, `ref_elim`, `elide_box_local`, `labeled_block_fusion`,
-  `value_copy_elide`.
-- The per-function dataflow passes join them as rules querying the live graph:
-  `cse`, `store_load_forward`, flow-sensitive `const_fold`,
-  `condition_implication`, `copy_prop`, `licm`, `tmpl_hoist`, `field_scalarize`.
-
-A node is revisited only when an edit may have made it reducible — the
-re-enqueue the edit API already records. Because there is one session over one
-live graph, the incremental rebuild fires on essentially every query, the fire
-rate the prototype could never reach in the multi-pass pipeline.
-
-### What stays a distinct step
-
-Interprocedural and whole-function structural passes do not fit a local-node
-rule and stay distinct gated steps, in the current order: `inline`, `dae`,
-`drve`, `sroa_param`, `container_sroa`, `sroa`, `const_object_globalization`,
-`dce`. The session is opened once per function per outer round; an
-interprocedural pass that restructures a body (notably `inline`) invalidates the
-session's graph for that function, so the next round rebuilds it once and then
-keeps it live again. The outer round count bounds the interprocedural cycle
-(`inline` shrinks a callee → re-examine its callers); the intra-procedural
-worklist self-converges within each round.
-
-### Destructive rewrites
-
-Rules rewrite in place, exactly as the engine's rules do today, so each migrated
-rule maps directly onto the pass it replaces and reproduces its CSE / hoisting
-materialisation without a new extraction heuristic. Priorities are rule order in
-the session; confluence is the obligation the engine already carries.
+Before WIR build, one pass walks the SkelTree and lowers each pure `ValueId`
+operand to a concrete skeleton/WIR form, choosing per multi-use value whether to
+re-compute it at each use or materialise it once into a hoisted temp. This is the
+one genuinely new analysis and the main regression risk: the cost model must not
+emit worse code than today's CSE / hoisting heuristics. The migration de-risks it
+by reproducing the current materialisation first (extract each value at the sites
+and shapes the old passes produced), then improving the cost model behind
+benchmarks.
 
 ## Soundness invariants
 
 - No output regression per step (below): each step preserves or improves the
-  result, never degrades it. Incidental output differences that neither shrink
-  nor grow the result meaningfully are acceptable; a regression is not.
-- Graph-liveness equivalence: after any edit, `value(a) == value(b)` holds iff
-  it held in a from-scratch rebuild of the post-edit body. Asserted by the
-  `WADO_VERIFY_INCREMENTAL` harness on the full E2E suite before the
-  from-scratch path is removed.
-- Heap-version monotonicity is unchanged: a read carries the version before it;
-  a following write bumps it; later reads at that slot get fresh `ValueId`s.
-- Rules stay idempotent and confluent-or-priority-ordered.
-- Gating still changes only which functions a step visits, never the result of a
-  visit, so an imprecise gate costs quality, never correctness.
+  result; incidental differences that neither shrink nor grow the result
+  meaningfully are acceptable, a regression is not.
+- Union soundness: two `ValueId`s are unioned only when they denote the same
+  value in every execution reaching that point — the same obligation today's
+  CSE / copy-prop / forwarding rules already discharge, now expressed once.
+- Flow-freeze validity: a read's `ValueId` is fixed at build to the value
+  dominant at that point; a control-flow rewrite that changes which value is
+  dominant must union or rebuild the affected classes, never leave a read
+  pointing at a value that no longer reaches it. Guarded by the verify harness.
+- Heap-version monotonicity is unchanged.
+- Extraction equivalence: the extracted skeleton computes, for every effectful
+  position, the same values in the same effect order as the pre-extraction
+  graph + skeleton.
+- Gating still changes only which functions a step visits, never the result.
 
 ## Consequences
 
 ### Expected effect
 
-- The ValueGraph build (~20%), engine session setup (~9%), and flow joins (~10%)
-  collapse to one build + one setup + one join set per function per outer round,
-  kept live incrementally thereafter — together ~40% of compile CPU today, the
-  bulk of what the redesign removes.
-- The alias rebuild (~9%) is computed once per function per round rather than per
-  pass.
+- The per-pass re-derivation (~40% of compile CPU: build ~20%, setup ~9%, joins
+  ~10%) collapses to one build per function per outer round; intra-procedural
+  rewrites then mutate the live graph in place. The alias rebuild (~9%) is
+  computed once per function per round.
+- A cluster of dataflow passes (CSE, copy-prop, the bulk of const-fold,
+  store-load-forward, loop-invariant hoisting) stops being passes and becomes
+  graph structure, removing both their walks and their bespoke analysis caches.
 - Target: package-gale optimise phase ~1.5× faster than the current baseline.
   Aspirational, not committed.
-- Code reduction: each migrated dataflow pass loses its bespoke analysis (CSE
-  keys, def maps, snapshot/join walkers) and becomes a thinner rule querying the
-  shared graph.
 
 ### Risks
 
-- Phase ordering: the current pipeline encodes ordering in the pass sequence
-  (`container_sroa` before `inline`, `value_copy_demote` after the pre-inline
-  peephole, …). Intra-procedural ordering becomes rule priority in the single
-  session; the genuinely interprocedural ordering stays explicit. Mis-encoded
-  priority costs quality, caught by the `wir_expect` fixtures.
-- Re-walk size: if edits scatter across a function, the re-walked suffix can be
-  large. Lazy coalescing bounds it to one settle per query-burst; finer
-  granularity is the follow-up lever if measurement needs it.
-- Live flow at merges and loops: re-deriving `Select` / `LoopPhi` after an edit
-  inside a branch or loop body is the subtle part; the prototype already
-  exercised it and the verify harness guards it.
-- Migrating the flow-sensitive passes (especially `licm` and `field_scalarize`,
-  which carry the most bespoke dataflow) onto live-graph queries is the largest
-  single piece of work.
+- Extraction is the central risk: a weak cost model regresses code size or
+  runtime. Mitigated by reproducing current materialisation first, then tuning.
+- Operand-promotion breadth: a wide change across arena, lowering, WIR build, the
+  unparser, and pure-`ExprKind`-matching passes. Mechanical but large.
+- Congruence maintenance: deferred e-graph rebuild after unions has its own cost;
+  it must stay below the re-derivation it replaces. Measured per step.
+- Control-flow rewrites keeping the graph coherent (Select collapse, inlined-region
+  build) is the subtle correctness surface; the verify harness is the guard.
 
 ### Trade-offs accepted
 
-- The edit API grows journaling and the engine grows settle-on-query, in
-  exchange for deleting every pass's bespoke rebuild.
-- Arena compaction (dead nodes from in-place rewrites) becomes more worthwhile
-  once the body is walked fewer times; tracked as the existing follow-up.
+- The graph gains a union-find and a congruence rebuild; the optimizer gains an
+  extractor. In exchange every pure-value pass's per-pass rebuild and bespoke
+  analysis is deleted.
+- Arena compaction (dead skeleton nodes from in-place rewrites) becomes more
+  worthwhile once bodies are walked fewer times; tracked as the existing
+  follow-up.
 
 ## Roadmap
 
 Each step must not regress output (code size or runtime) on the full fixture +
 E2E suite, on `wir_expect` / `wir_not_expect`, and on the benchmark set before
-the predecessor is deleted. The `WADO_VERIFY_INCREMENTAL` harness asserts
-graph-liveness equivalence throughout the migration.
+the predecessor is deleted.
 
-- [ ] Restore the verified mechanism from history — the per-statement flow-state
-      checkpoint, `rebuild_incremental`, `dirty_root_stmts`, and the
-      `WADO_VERIFY_INCREMENTAL` harness — as engine internals, not yet wired to
-      any pass.
-- [ ] Settle-on-query in the engine — the edit API journals dirty regions; a
-      value query coalesces the journal and re-walks only the disturbed regions
-      before answering. Verified equivalent to a from-scratch rebuild.
-- [ ] Combined-session skeleton — extend the `peephole.rs` model to a session
-      that can host flow-sensitive rules querying the live graph, with rule
-      priority replacing intra-procedural pass order.
-- [ ] Fold in `cse` + `store_load_forward` — the adjacency the prototype already
-      proved clean. Delete their standalone analysis.
-- [ ] Fold in flow-sensitive `const_fold`, `condition_implication`, `copy_prop`
-      — delete their per-pass dataflow walkers.
-- [ ] Fold in `licm`, `tmpl_hoist`, `field_scalarize` — collapse the fixed-point
-      loop's intra-procedural passes into the single session.
-- [ ] Retire the intra-procedural iteration count — the worklist self-converges;
-      keep an outer round count only for the interprocedural cycle.
+- [ ] Operand promotion — pure literal / `Binary` / `Unary` / `Cast` slots carry
+      `ValueId`s; `lower::translate` builds the graph; the `value_of` side-table
+      retires. WIR output unchanged via a straight extraction that re-emits each
+      value at its original site.
+- [ ] Union-find + congruence rebuild on the `ValuePool` — equivalence by
+      `find()`, deferred re-canonicalisation after unions.
+- [ ] Build-once-per-round — the engine session holds the graph across all
+      intra-procedural rules; remove the per-pass `Engine::value` rebuild and the
+      `vg_cache` parking.
+- [ ] Subsume CSE, copy-prop, and store-load-forward into graph structure; delete
+      the passes and their analysis.
+- [ ] Subsume flow-sensitive `const_fold` and `condition_implication` as graph
+      rewrites; delete their per-pass dataflow.
+- [ ] Subsume loop-invariant hoisting into the extractor's placement decision;
+      retire `licm`'s pure-arithmetic hoisting.
+- [ ] Cost-based extraction — replace the straight extraction with a share-vs-
+      duplicate cost model; tune against benchmarks.
+- [ ] Retire the intra-procedural iteration count — the graph and worklist
+      self-converge; keep an outer round count only for the interprocedural cycle.
 
 ## See also
 
-- [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md) — the direction; the operand-promotion and equality-saturation steps deferred there stay out of scope here.
+- [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md) — the direction; equality saturation stays deferred there.
 - [NIR Rewrite Engine — Detailed Design](./wep-2026-06-05-nir-rewrite-engine-design.md) — the engine substrate, edit API, and gate this builds on.
-- [`docs/optimizer.md`](./optimizer.md) — the pass inventory the single session absorbs.
-- The reverted incremental-ValueGraph prototype, in branch history — the checkpoint, `rebuild_incremental`, and verify harness this design reuses.
+- [`docs/optimizer.md`](./optimizer.md) — the pass inventory the graph absorbs.
+- Cranelift's aegraph mid-end and `egg` (https://egraphs-good.github.io/) — the build-once, eager-rewrite, single-extraction model this adapts.
   </content>
