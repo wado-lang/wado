@@ -7,11 +7,6 @@ sweep. It promotes the ValueGraph from an engine side-table to the source
 of truth for pure values, then runs one destructive worklist per function
 over it. The goal is compile-time speed.
 
-The further exploratory driver the
-[Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
-WEP describes (equality saturation + cost-based extraction) is out of
-scope here; see that WEP for it.
-
 ## Context
 
 The substrate WEP delivered the arena NIR, the engine edit API, the
