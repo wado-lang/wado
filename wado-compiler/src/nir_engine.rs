@@ -80,7 +80,6 @@ impl EngineBuffers {
     }
 }
 
-
 /// An engine session over one function body: the arena plus the [`EngineBuffers`]
 /// scratch (parent map, use index, and worklist) the worklist discipline needs,
 /// and the function's `locals` list so rules can allocate fresh locals.
@@ -158,8 +157,6 @@ impl<'a> Engine<'a> {
         engine.seed_post_order();
         engine
     }
-
-
 
     /// Return the [`ValueId`] of `expr` if the per-function `ValueGraph`
     /// assigned one. Returns `None` for impure / allocation-bearing /

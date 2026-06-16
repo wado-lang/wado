@@ -247,7 +247,6 @@ impl FunctionGate {
         }
         any
     }
-
 }
 
 #[cfg(test)]

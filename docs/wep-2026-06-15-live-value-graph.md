@@ -324,14 +324,34 @@ is tracked against the three acceptance criteria, not against incidental speedup
       it, so the effectful sub-results stay scheduled in the skeleton and the
       extractor reads them. Constants extract without this; non-constants need the
       scheduler. Required to fully retire `value_of`.
+- [x] **Cache deleted (criterion 3, cache half) — graph relocated to the body.**
+      `build` now writes into `Body::values` (the one persistent pool; ids stay
+      stable across builds), and `ValueGraphBuild` drops its own pool. The
+      revision-keyed cross-pass cache and all its machinery are gone:
+      `vg_cache`, `carry_vg_cache`, `CachedAnalysis`, `run_gated_cached`,
+      `Engine::with_analysis` / `into_analysis` reach zero references. cse / licm /
+      store_load_forward build their session fresh via `run_gated`. Verified e2e
+      (2982 fixtures green); package-gale byte-identical. The cache was masking
+      rebuilds: `WADO_MEASURE_VG` rebuilds 2796 → 5988 (cse and licm no longer
+      reuse one build across const_fold). That increase is intentional and honest.
+      `value_of` retirement (the side-table half of criterion 3) still needs full
+      promotion (Phase B.2/B.3).
+
+      Architectural finding that fixes the next step: cross-session graph reuse
+      (cse → licm sharing one build) requires storing the build-config (alias
+      sets, param seeding) *with* the graph — structurally the just-deleted
+      `CachedAnalysis`. So a body-owned, config-keyed reuse is the cache by
+      another name and is rejected. The only no-cache route to `rebuilds = 0` is
+      maintenance: build once and keep current through every edit, so there is no
+      config to check and nothing to cache. The two maintenance items below are
+      therefore the whole of criteria 1 and 2.
 - [ ] **Maintain the graph through structural passes.** `inline` / `sroa` /
       `dae` / `drve` grow or union the live graph through their edits; no pass
       triggers a rebuild. Drives `rebuilds` toward 0.
 - [ ] **Maintain the engine analysis.** Parent map, use index, and post-order are
       built once and updated through the edit API; `Engine::new`'s per-pass cost
       retires.
-- [ ] **Delete the cache.** Remove `vg_cache`, `carry_vg_cache`,
-      `CachedAnalysis`, and `run_gated_cached`. Acceptance criterion 3.
+- [x] **Delete the cache.** Done above — all cache symbols at zero references.
 - [ ] **Subsume the dataflow passes into graph structure.** CSE, copy-prop, and
       store-load-forward become hash-cons / `find()` results; delete the passes.
       Then flow-sensitive `const_fold` and `condition_implication` as graph
