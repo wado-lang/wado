@@ -792,7 +792,14 @@ mod tests {
         )
     }
     fn bin(body: &mut Body, left: ExprId, op: NirBinaryOp, right: ExprId) -> ExprId {
-        pe(body, ExprKind::Binary { left: left.into(), op, right: right.into() })
+        pe(
+            body,
+            ExprKind::Binary {
+                left: left.into(),
+                op,
+                right: right.into(),
+            },
+        )
     }
     fn deref(body: &mut Body, expr: ExprId) -> ExprId {
         pe(
@@ -818,7 +825,13 @@ mod tests {
         )
     }
     fn assign(body: &mut Body, target: ExprId, value: ExprId) -> ExprId {
-        pe(body, ExprKind::Assign { target, value: value.into() })
+        pe(
+            body,
+            ExprKind::Assign {
+                target,
+                value: value.into(),
+            },
+        )
     }
     fn expr_stmt(body: &mut Body, e: ExprId) -> StmtId {
         ps(body, StmtKind::Expr(e))
@@ -1497,7 +1510,10 @@ mod tests {
 
     fn cast(body: &mut Body, expr: ExprId, target_type: TypeId) -> ExprId {
         body.exprs.push(ExprNode {
-            kind: ExprKind::Cast { expr: expr.into(), target_type },
+            kind: ExprKind::Cast {
+                expr: expr.into(),
+                target_type,
+            },
             type_id: target_type,
             span: sp(),
         })

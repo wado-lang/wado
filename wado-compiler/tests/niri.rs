@@ -2086,7 +2086,14 @@ fn match_expr(scrutinee: Build, arms: Vec<ArmBuild>, type_id: TypeId) -> Build {
     Rc::new(move |b| {
         let expr = scrutinee(b);
         let arms = arms.iter().map(|a| a(b)).collect();
-        pe(b, ExprKind::Match { expr: expr.into(), arms }, type_id)
+        pe(
+            b,
+            ExprKind::Match {
+                expr: expr.into(),
+                arms,
+            },
+            type_id,
+        )
     })
 }
 
@@ -2631,7 +2638,10 @@ fn reduce_local_collapses_enum_match_true_false_to_eq() {
     };
     assert!(matches!(op, NirBinaryOp::Eq));
     let ExprKind::Local { index, .. } = body.exprs[left.expr()].kind else {
-        panic!("expected Local on left, got {:?}", body.exprs[left.expr()].kind);
+        panic!(
+            "expected Local on left, got {:?}",
+            body.exprs[left.expr()].kind
+        );
     };
     assert_eq!(index, 0);
     let ExprKind::EnumConstruct {
@@ -3346,7 +3356,12 @@ fn ps(body: &mut Body, kind: StmtKind) -> StmtId {
 fn return_stmt(value: Build) -> StmtBuild {
     Rc::new(move |b| {
         let v = value(b);
-        ps(b, StmtKind::Return { value: Some(v.into()) })
+        ps(
+            b,
+            StmtKind::Return {
+                value: Some(v.into()),
+            },
+        )
     })
 }
 

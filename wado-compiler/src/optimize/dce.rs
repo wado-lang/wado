@@ -1932,7 +1932,8 @@ fn expr_has_side_effects(body: &Body, e: ExprId) -> bool {
         ExprKind::Match { expr, arms } => {
             expr_has_side_effects(body, expr.expr())
                 || arms.iter().any(|a| {
-                    a.guard.is_some_and(|g| expr_has_side_effects(body, g.expr()))
+                    a.guard
+                        .is_some_and(|g| expr_has_side_effects(body, g.expr()))
                         || expr_has_side_effects(body, a.body.expr())
                 })
         }
@@ -1957,7 +1958,9 @@ fn block_has_side_effects(body: &Body, block: BlockId) -> bool {
         .any(|s| match &body.stmts[*s].kind {
             StmtKind::Expr(e) => expr_has_side_effects(body, *e),
             StmtKind::Let { value, .. } => expr_has_side_effects(body, value.expr()),
-            StmtKind::Return { value } => value.is_some_and(|v| expr_has_side_effects(body, v.expr())),
+            StmtKind::Return { value } => {
+                value.is_some_and(|v| expr_has_side_effects(body, v.expr()))
+            }
             StmtKind::If {
                 condition,
                 then_block,
@@ -1970,7 +1973,9 @@ fn block_has_side_effects(body: &Body, block: BlockId) -> bool {
             StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
                 block_has_side_effects(body, *b)
             }
-            StmtKind::Break { value, .. } => value.is_some_and(|v| expr_has_side_effects(body, v.expr())),
+            StmtKind::Break { value, .. } => {
+                value.is_some_and(|v| expr_has_side_effects(body, v.expr()))
+            }
             StmtKind::Continue => false,
             StmtKind::LetDestructure { value, .. } => expr_has_side_effects(body, value.expr()),
         })
@@ -2025,7 +2030,9 @@ fn remove_dead_global_sets_expr(body: &mut Body, e: ExprId, used: &IndexSet<(Str
             then_branch,
             else_branch,
         } => W::If(condition.expr(), *then_branch, *else_branch),
-        ExprKind::Match { expr, arms } => W::Match(expr.expr(), arms.iter().map(|a| a.body.expr()).collect()),
+        ExprKind::Match { expr, arms } => {
+            W::Match(expr.expr(), arms.iter().map(|a| a.body.expr()).collect())
+        }
         ExprKind::Switch { arms, default, .. } => W::Switch(arms.clone(), *default),
         _ => W::None,
     };

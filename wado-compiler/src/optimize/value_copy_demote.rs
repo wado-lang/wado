@@ -859,7 +859,12 @@ impl ElementImmutable<'_, '_, '_> {
                     let value = *value;
                     if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
                         let index = *index;
-                        if is_self_derived(body, value.expr(), &self.tainted, self.analyzer.type_table) {
+                        if is_self_derived(
+                            body,
+                            value.expr(),
+                            &self.tainted,
+                            self.analyzer.type_table,
+                        ) {
                             self.tainted.insert(index);
                         }
                     }
@@ -901,7 +906,10 @@ impl ElementImmutable<'_, '_, '_> {
                     ExprKind::FieldAccess { expr: base, .. } => {
                         let base = *base;
                         is_self_derived(body, base.expr(), &self.tainted, tt)
-                            && !matches!(&body.exprs[base.expr()].kind, ExprKind::Local { index: 0, .. })
+                            && !matches!(
+                                &body.exprs[base.expr()].kind,
+                                ExprKind::Local { index: 0, .. }
+                            )
                     }
                     ExprKind::Index { expr: base, .. } => {
                         is_self_derived(body, base.expr(), &self.tainted, tt)

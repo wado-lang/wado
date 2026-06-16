@@ -717,7 +717,15 @@ fn make_write_back_stmt(
 ) -> StmtId {
     let target = field_access_expr(body, c, span);
     let value = scalar_local_expr(body, c, span);
-    let assign = push_expr(body, ExprKind::Assign { target, value: value.into() }, c.type_id, span);
+    let assign = push_expr(
+        body,
+        ExprKind::Assign {
+            target,
+            value: value.into(),
+        },
+        c.type_id,
+        span,
+    );
     push_stmt(body, StmtKind::Expr(assign), span)
 }
 
@@ -725,7 +733,15 @@ fn make_write_back_stmt(
 fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> StmtId {
     let target = scalar_local_expr(body, c, span);
     let value = field_access_expr(body, c, span);
-    let assign = push_expr(body, ExprKind::Assign { target, value: value.into() }, c.type_id, span);
+    let assign = push_expr(
+        body,
+        ExprKind::Assign {
+            target,
+            value: value.into(),
+        },
+        c.type_id,
+        span,
+    );
     push_stmt(body, StmtKind::Expr(assign), span)
 }
 
@@ -1392,9 +1408,23 @@ fn count_field_accesses_in_expr(
             count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
             for arm in &arms {
                 if let Some(guard) = arm.guard {
-                    count_field_accesses_in_expr(body, guard.expr(), counts, false, false, type_table);
+                    count_field_accesses_in_expr(
+                        body,
+                        guard.expr(),
+                        counts,
+                        false,
+                        false,
+                        type_table,
+                    );
                 }
-                count_field_accesses_in_expr(body, arm.body.expr(), counts, false, false, type_table);
+                count_field_accesses_in_expr(
+                    body,
+                    arm.body.expr(),
+                    counts,
+                    false,
+                    false,
+                    type_table,
+                );
             }
         }
     }
@@ -2406,15 +2436,23 @@ fn recurse_into_call_args(
     out: &mut Vec<StmtId>,
     ctx: &mut WalkCtx,
 ) {
-    let (receiver, callee, arg_ids): (Option<ExprId>, Option<ExprId>, Vec<ExprId>) =
-        match &body.exprs[e].kind {
-            ExprKind::Call { args, .. } => (None, None, args.iter().map(|a| a.expr.expr()).collect()),
-            ExprKind::MethodCall { receiver, args, .. } => {
-                (Some(receiver.expr()), None, args.iter().map(|a| a.expr.expr()).collect())
-            }
-            ExprKind::IndirectCall { callee, args, .. } => (None, Some(callee.expr()), args.iter().map(|a| a.expr()).collect()),
-            _ => unreachable!("recurse_into_call_args called on non-call expr"),
-        };
+    let (receiver, callee, arg_ids): (Option<ExprId>, Option<ExprId>, Vec<ExprId>) = match &body
+        .exprs[e]
+        .kind
+    {
+        ExprKind::Call { args, .. } => (None, None, args.iter().map(|a| a.expr.expr()).collect()),
+        ExprKind::MethodCall { receiver, args, .. } => (
+            Some(receiver.expr()),
+            None,
+            args.iter().map(|a| a.expr.expr()).collect(),
+        ),
+        ExprKind::IndirectCall { callee, args, .. } => (
+            None,
+            Some(callee.expr()),
+            args.iter().map(|a| a.expr()).collect(),
+        ),
+        _ => unreachable!("recurse_into_call_args called on non-call expr"),
+    };
     if let Some(callee) = callee {
         walk_expr(body, callee, states, true, out, ctx);
     }
@@ -2514,7 +2552,15 @@ fn accumulate_call_sync(
             let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             let immut_ref = is_immut_ref_arg(body, receiver.expr(), type_table);
             add_sync_fields_for_arg(
-                body, receiver.expr(), &func, 0, candidates, type_table, cache, immut_ref, result,
+                body,
+                receiver.expr(),
+                &func,
+                0,
+                candidates,
+                type_table,
+                cache,
+                immut_ref,
+                result,
             );
             for (arg_position, aid) in arg_ids.into_iter().enumerate() {
                 let immut_ref = is_immut_ref_arg(body, aid, type_table);
@@ -2874,7 +2920,14 @@ fn walk_expr_branches_match(
         // the body's value-producing expression; wrap the body in a
         // Block to hold them.
         let mut body_pre: Vec<StmtId> = Vec::new();
-        walk_expr(body, arm.body.expr(), &mut s, result_used, &mut body_pre, ctx);
+        walk_expr(
+            body,
+            arm.body.expr(),
+            &mut s,
+            result_used,
+            &mut body_pre,
+            ctx,
+        );
         if !body_pre.is_empty() {
             wrap_expr_with_prefix(body, arm.body.expr(), body_pre);
         }

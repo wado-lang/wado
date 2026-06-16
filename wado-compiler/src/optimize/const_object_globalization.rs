@@ -407,7 +407,9 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             let callee = *callee;
             let args = args.clone();
             expr_readonly(body, callee.expr(), idx, gate)
-                && args.iter().all(|&a| call_arg_readonly(body, a.expr(), idx, gate))
+                && args
+                    .iter()
+                    .all(|&a| call_arg_readonly(body, a.expr(), idx, gate))
         }
 
         // `&mut <…xs…>` — a mutable reference into the binding escapes.
@@ -419,7 +421,8 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         // Pure scalar reads.
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            expr_readonly(body, left.expr(), idx, gate) && expr_readonly(body, right.expr(), idx, gate)
+            expr_readonly(body, left.expr(), idx, gate)
+                && expr_readonly(body, right.expr(), idx, gate)
         }
         ExprKind::Cast { expr: inner, .. }
         | ExprKind::Unary {
@@ -459,8 +462,10 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         }
         ExprKind::Match { expr: scrut, arms } => {
             let scrut = *scrut;
-            let arms: Vec<(Option<ExprId>, ExprId)> =
-                arms.iter().map(|a| (a.guard.map(|g| g.expr()), a.body.expr())).collect();
+            let arms: Vec<(Option<ExprId>, ExprId)> = arms
+                .iter()
+                .map(|a| (a.guard.map(|g| g.expr()), a.body.expr()))
+                .collect();
             expr_readonly(body, scrut.expr(), idx, gate)
                 && arms.iter().all(|(guard, arm_body)| {
                     guard.is_none_or(|g| expr_readonly(body, g, idx, gate))

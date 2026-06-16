@@ -230,7 +230,12 @@ impl Collapser<'_> {
         // push statements that owned them are dropped with the window). The
         // `body` immutable borrow ends here; the rewrite mutates the arena.
         for (target, elements) in targets.iter().zip(pushes_per_target) {
-            let array_lit = ExprKind::ArrayLiteral { elements: elements.into_iter().map(crate::nir_arena::Operand::Expr).collect() };
+            let array_lit = ExprKind::ArrayLiteral {
+                elements: elements
+                    .into_iter()
+                    .map(crate::nir_arena::Operand::Expr)
+                    .collect(),
+            };
             engine.replace_expr_kind(target.struct_expr_id, array_lit);
         }
         consumed
@@ -352,8 +357,10 @@ fn collect_array_targets(
                 });
             } else {
                 // A wrapper struct: recurse into each field, extending the path.
-                let fields: Vec<(u32, ExprId)> =
-                    fields.iter().map(|f| (f.field_index, f.value.expr())).collect();
+                let fields: Vec<(u32, ExprId)> = fields
+                    .iter()
+                    .map(|f| (f.field_index, f.value.expr()))
+                    .collect();
                 for (field_index, value) in fields {
                     path.push(field_index);
                     collect_array_targets(body, value, path, out);

@@ -290,10 +290,31 @@ is tracked against the three acceptance criteria, not against incidental speedup
       to the end) — pointwise maintenance never re-walks, so its cost tracks the
       edit count, not the disturbed suffix. `rebuilds = 0` is reachable far below
       the rebuild it replaces; the wide change is justified.
-- [ ] **Operand promotion.** Pure literal / `Binary` / `Unary` / `Cast` slots
-      carry `ValueId`s; `lower::translate` builds the graph; the `value_of`
-      side-table retires. The widest change (arena / lowering / WIR build /
-      unparser / pure-`ExprKind`-matching passes).
+- [x] **Phase A — representation.** The arena's operand slots carry
+      `Operand { Value(ValueId), Expr(ExprId) }`; `lower` emits `Operand`; every
+      consumer (engine, builder, passes, WIR build, niri, unparser) handles it;
+      the extraction seams (`translate_operand` / `splice_operand` /
+      `walk_operand`) are in place. All operands are `Operand::Expr`, so behavior
+      is unchanged — the full suite (769 lib + 2958 e2e) is green. This is the
+      safe scaffold; it meets no acceptance criterion yet.
+- [~] **Phase B — make values live.** In progress. Landed: `ValuePool` records a
+  per-value source type (`set_type` / `type_of`), since `ValueKind` is
+  type-erased and extraction needs the width; a constant-value extractor
+  (`extract_value`) that materialises `Int`/`Float`/`Bool`/`Char`/`String`/
+  `Null`/`Unit` from the pool; `Body::map_operands` for in-place operand
+  rewrite. Two design findings shape the rest:
+  - **Single pool.** Promotion writes values into `Body::values`, but the per-pass
+    `builder::build` makes a _fresh_ pool, so a promoted `Operand::Value` it never
+    interned is unresolvable. Phase B must unify on `Body::values` as the one
+    owned pool — built once, the builder retired or repurposed to populate it,
+    the value-graph passes reading it. Promotion cannot be a standalone
+    byte-identical step before this.
+  - **Scheduling extraction.** Materialising a _non-constant_ value
+    (`Binary(Opaque, 1)`) needs the skeleton computation behind the `Opaque`
+    operand (a `Local` read, a `Call` result). The graph alone cannot re-emit it,
+    so the effectful sub-results must stay scheduled in the skeleton and the
+    extractor reads them — the WEP's "extraction is the main regression risk."
+    Constants extract without this; non-constants need the scheduler.
 - [ ] **Maintain the graph through structural passes.** `inline` / `sroa` /
       `dae` / `drve` grow or union the live graph through their edits; no pass
       triggers a rebuild. Drives `rebuilds` toward 0.

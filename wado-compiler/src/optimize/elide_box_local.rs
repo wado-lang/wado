@@ -482,7 +482,8 @@ fn walk_expr_for_leftmost(
                         LeftmostWalk::Found => LeftmostWalk::Found,
                         LeftmostWalk::Blocked => LeftmostWalk::Blocked,
                         LeftmostWalk::Pure => {
-                            match walk_expr_for_leftmost(body, right.expr(), candidate, field_name) {
+                            match walk_expr_for_leftmost(body, right.expr(), candidate, field_name)
+                            {
                                 LeftmostWalk::Pure => LeftmostWalk::Pure,
                                 _ => LeftmostWalk::Blocked,
                             }
@@ -498,7 +499,12 @@ fn walk_expr_for_leftmost(
                     candidate,
                     field_name,
                 )),
-                _ => walk_children_pure(body, [left.expr(), right.expr()].into_iter(), candidate, field_name),
+                _ => walk_children_pure(
+                    body,
+                    [left.expr(), right.expr()].into_iter(),
+                    candidate,
+                    field_name,
+                ),
             }
         }
         ExprKind::Unary { expr: inner, op } => {
@@ -506,9 +512,12 @@ fn walk_expr_for_leftmost(
             match op {
                 // Deref may trap on a null receiver; the op itself is
                 // observable.
-                NirUnaryOp::Deref => {
-                    observable_propagate(walk_expr_for_leftmost(body, inner.expr(), candidate, field_name))
-                }
+                NirUnaryOp::Deref => observable_propagate(walk_expr_for_leftmost(
+                    body,
+                    inner.expr(),
+                    candidate,
+                    field_name,
+                )),
                 // Arithmetic / logical / address-taking unaries are pure.
                 NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot => {
                     walk_expr_for_leftmost(body, inner.expr(), candidate, field_name)
@@ -519,17 +528,23 @@ fn walk_expr_for_leftmost(
             }
         }
         // `as` lowers to `ref.cast` / numeric narrowing — both may trap.
-        ExprKind::Cast { expr: inner, .. } => {
-            observable_propagate(walk_expr_for_leftmost(body, inner.expr(), candidate, field_name))
-        }
+        ExprKind::Cast { expr: inner, .. } => observable_propagate(walk_expr_for_leftmost(
+            body,
+            inner.expr(),
+            candidate,
+            field_name,
+        )),
         // FieldAccess on a non-candidate receiver: a fresh `struct.get`
         // on a possibly-null reference, so the op itself may trap. A
         // Found in the receiver still anchors at the receiver position
         // (the FieldAccess applies AFTER the substituted inner), but
         // a Pure receiver does NOT make this subtree Pure.
-        ExprKind::FieldAccess { expr: inner, .. } => {
-            observable_propagate(walk_expr_for_leftmost(body, inner.expr(), candidate, field_name))
-        }
+        ExprKind::FieldAccess { expr: inner, .. } => observable_propagate(walk_expr_for_leftmost(
+            body,
+            inner.expr(),
+            candidate,
+            field_name,
+        )),
         // `List<T>::index_value`-shaped Index may trap on a null base
         // and on OOB; the op itself is observable.
         ExprKind::Index { expr: inner, index } => {
@@ -561,9 +576,9 @@ fn walk_expr_for_leftmost(
         // possibly-null receiver; each may trap.
         ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => {
-            observable_propagate(walk_expr_for_leftmost(body, inner.expr(), candidate, field_name))
-        }
+        | ExprKind::VariantPayload { expr: inner, .. } => observable_propagate(
+            walk_expr_for_leftmost(body, inner.expr(), candidate, field_name),
+        ),
 
         ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -592,7 +607,12 @@ fn walk_assign_target(
         }
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
-            walk_children_pure(body, [expr.expr(), index.expr()].into_iter(), candidate, field_name)
+            walk_children_pure(
+                body,
+                [expr.expr(), index.expr()].into_iter(),
+                candidate,
+                field_name,
+            )
         }
         ExprKind::Unary {
             op: NirUnaryOp::Deref,

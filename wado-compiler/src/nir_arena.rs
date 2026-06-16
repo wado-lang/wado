@@ -792,10 +792,16 @@ impl Body {
                     .collect(),
             },
             ExprKind::TupleLiteral { elements } => ExprKind::TupleLiteral {
-                elements: elements.into_iter().map(|e| self.clone_operand(e)).collect(),
+                elements: elements
+                    .into_iter()
+                    .map(|e| self.clone_operand(e))
+                    .collect(),
             },
             ExprKind::ArrayLiteral { elements } => ExprKind::ArrayLiteral {
-                elements: elements.into_iter().map(|e| self.clone_operand(e)).collect(),
+                elements: elements
+                    .into_iter()
+                    .map(|e| self.clone_operand(e))
+                    .collect(),
             },
             ExprKind::IndirectCall { callee, args } => ExprKind::IndirectCall {
                 callee: self.clone_operand(callee),

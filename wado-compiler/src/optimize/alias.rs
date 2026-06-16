@@ -405,8 +405,14 @@ fn collect_mut_escaped_node(
         } => {
             // Unknown callee (builtin / extern not in the project) → assume it
             // may mutate the receiver (`conservative_on_unknown = true`).
-            if method_mutates_receiver(body, receiver.expr(), func, first_param_types, type_table, true)
-                && let Some(r) = projection_root_local(body, receiver.expr())
+            if method_mutates_receiver(
+                body,
+                receiver.expr(),
+                func,
+                first_param_types,
+                type_table,
+                true,
+            ) && let Some(r) = projection_root_local(body, receiver.expr())
             {
                 out.insert(r);
             }

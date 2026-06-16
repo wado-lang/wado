@@ -294,7 +294,8 @@ fn check_expr(
         ExprKind::Local { index, .. } if *index == idx => false,
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if matches!(&body.exprs[inner.expr()].kind, ExprKind::Local { index, .. } if *index == idx) {
+            if matches!(&body.exprs[inner.expr()].kind, ExprKind::Local { index, .. } if *index == idx)
+            {
                 return true;
             }
             check_expr(body, inner.expr(), idx, candidates)
@@ -326,7 +327,8 @@ fn check_expr(
             if place_root_local(body, target) == Some(idx) {
                 return false;
             }
-            check_expr(body, target, idx, candidates) && check_expr(body, value.expr(), idx, candidates)
+            check_expr(body, target, idx, candidates)
+                && check_expr(body, value.expr(), idx, candidates)
         }
         _ => {
             let mut kids = Vec::new();

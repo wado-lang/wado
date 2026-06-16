@@ -166,14 +166,18 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(body, inner.expr()),
-        ExprKind::Index { expr: e, index: i } => is_pure_expr(body, e.expr()) && is_pure_expr(body, i.expr()),
+        ExprKind::Index { expr: e, index: i } => {
+            is_pure_expr(body, e.expr()) && is_pure_expr(body, i.expr())
+        }
         ExprKind::StructLiteral { fields, .. } => {
             fields.iter().all(|f| is_pure_expr(body, f.value.expr()))
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             elements.iter().all(|e| is_pure_expr(body, e.expr()))
         }
-        ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(|p| is_pure_expr(body, p.expr())),
+        ExprKind::VariantConstruct { payload, .. } => {
+            payload.is_none_or(|p| is_pure_expr(body, p.expr()))
+        }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             is_pure_block(body, *block)
         }

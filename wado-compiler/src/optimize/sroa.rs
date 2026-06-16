@@ -826,7 +826,15 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
                 unreachable!("candidate must be Let statement");
             };
             let value = *value;
-            expand_struct_let(engine, value.expr(), local_idx, is_mut, span, ctx, &mut new_stmts);
+            expand_struct_let(
+                engine,
+                value.expr(),
+                local_idx,
+                is_mut,
+                span,
+                ctx,
+                &mut new_stmts,
+            );
             continue;
         }
         rewrite_node(engine, NodeRef::Stmt(stmt), ctx);
@@ -933,9 +941,10 @@ fn expand_struct_let(
 ) {
     // (field_index, value_expr) pairs in field-index order.
     let mut pairs: Vec<(u32, ExprId)> = match &engine.body.exprs[value].kind {
-        ExprKind::StructLiteral { fields, .. } => {
-            fields.iter().map(|f| (f.field_index, f.value.expr())).collect()
-        }
+        ExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .map(|f| (f.field_index, f.value.expr()))
+            .collect(),
         ExprKind::TupleLiteral { elements, .. } => elements
             .iter()
             .enumerate()
@@ -1012,7 +1021,15 @@ fn reconstruct_aggregate(engine: &mut Engine, id: ExprId, local_idx: u32, ctx: &
             );
             elements.push(e);
         }
-        engine.replace_expr_kind(id, ExprKind::TupleLiteral { elements: elements.into_iter().map(crate::nir_arena::Operand::Expr).collect() });
+        engine.replace_expr_kind(
+            id,
+            ExprKind::TupleLiteral {
+                elements: elements
+                    .into_iter()
+                    .map(crate::nir_arena::Operand::Expr)
+                    .collect(),
+            },
+        );
     } else {
         let mut fields: Vec<ArenaStructField> = Vec::with_capacity(field_specs.len());
         for (i, (name, type_id)) in field_specs.iter().enumerate() {

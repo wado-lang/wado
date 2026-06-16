@@ -717,7 +717,9 @@ impl<'a> Builder<'a> {
                 };
                 let lhs = lhs?;
                 let rhs = rhs?;
-                if let Some(folded) = self.fold_binary_const(op, lhs, rhs, left.expr(), right.expr()) {
+                if let Some(folded) =
+                    self.fold_binary_const(op, lhs, rhs, left.expr(), right.expr())
+                {
                     return Some(folded);
                 }
                 Some(self.pool.binary(op, lhs, rhs))
@@ -1081,7 +1083,10 @@ impl<'a> Builder<'a> {
         };
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
-        let pairs: Vec<(u32, ExprId)> = fields.iter().map(|f| (f.field_index, f.value.expr())).collect();
+        let pairs: Vec<(u32, ExprId)> = fields
+            .iter()
+            .map(|f| (f.field_index, f.value.expr()))
+            .collect();
         for (field_index, field_value) in pairs {
             if let Some(&fv) = self.value_of.get(&field_value) {
                 let ver = self.heap_state.version_of(Some(root), field_index);
@@ -1924,12 +1929,25 @@ mod tests {
 
     fn assign_stmt(body: &mut Body, idx: u32, value: ExprId) -> StmtId {
         let target = local_ref(body, idx);
-        let assign = alloc_expr(body, ExprKind::Assign { target, value: value.into() });
+        let assign = alloc_expr(
+            body,
+            ExprKind::Assign {
+                target,
+                value: value.into(),
+            },
+        );
         alloc_stmt(body, StmtKind::Expr(assign))
     }
 
     fn binary(body: &mut Body, op: NirBinaryOp, left: ExprId, right: ExprId) -> ExprId {
-        alloc_expr(body, ExprKind::Binary { left: left.into(), op, right: right.into() })
+        alloc_expr(
+            body,
+            ExprKind::Binary {
+                left: left.into(),
+                op,
+                right: right.into(),
+            },
+        )
     }
 
     fn bool_lit(body: &mut Body, b: bool) -> ExprId {
@@ -1956,7 +1974,13 @@ mod tests {
 
     fn field_assign_stmt(body: &mut Body, recv: ExprId, field_index: u32, value: ExprId) -> StmtId {
         let target = field_access(body, recv, field_index);
-        let assign = alloc_expr(body, ExprKind::Assign { target, value: value.into() });
+        let assign = alloc_expr(
+            body,
+            ExprKind::Assign {
+                target,
+                value: value.into(),
+            },
+        );
         alloc_stmt(body, StmtKind::Expr(assign))
     }
 

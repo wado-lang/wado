@@ -319,7 +319,8 @@ fn analyze_expr(
             analyze_expr(body, inner.expr(), result, type_table, fpt);
         }
         ExprKind::Call { args, .. } => {
-            let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr.expr(), a.is_mut)).collect();
+            let arg_data: Vec<(ExprId, bool)> =
+                args.iter().map(|a| (a.expr.expr(), a.is_mut)).collect();
             for (arg, is_mut) in arg_data {
                 if is_mut && may_mutate_through_arg(body, arg, type_table) {
                     mark_potentially_mutated_local(body, arg, result);
@@ -334,11 +335,19 @@ fn analyze_expr(
             ..
         } => {
             let receiver = *receiver;
-            let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr.expr(), a.is_mut)).collect();
+            let arg_data: Vec<(ExprId, bool)> =
+                args.iter().map(|a| (a.expr.expr(), a.is_mut)).collect();
             // Copy propagation: a callee absent from `fpt` is assumed *not* to
             // mutate the receiver (`conservative_on_unknown = false`); the
             // receiver-type guard below still protects value receivers.
-            if super::alias::method_mutates_receiver(body, receiver.expr(), func, fpt, type_table, false) {
+            if super::alias::method_mutates_receiver(
+                body,
+                receiver.expr(),
+                func,
+                fpt,
+                type_table,
+                false,
+            ) {
                 mark_potentially_mutated_local(body, receiver.expr(), result);
             }
             analyze_expr(body, receiver.expr(), result, type_table, fpt);
@@ -567,7 +576,13 @@ fn emit_ref(
 ) {
     let span = engine.body.exprs[id].span;
     let inner = engine.alloc_expr(ExprKind::Local { index, name }, inner_type_id, span);
-    engine.replace_expr_kind(id, ExprKind::Unary { op, expr: inner.into() });
+    engine.replace_expr_kind(
+        id,
+        ExprKind::Unary {
+            op,
+            expr: inner.into(),
+        },
+    );
 }
 
 /// Whole-function copy-propagation fixpoint driven from the engine session

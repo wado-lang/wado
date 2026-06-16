@@ -1026,8 +1026,10 @@ impl<'a> Interpreter<'a> {
                 arms,
             } => {
                 let scrutinee = *scrutinee;
-                let arm_data: Vec<(Option<ExprId>, ExprId)> =
-                    arms.iter().map(|a| (a.guard.map(|g| g.expr()), a.body.expr())).collect();
+                let arm_data: Vec<(Option<ExprId>, ExprId)> = arms
+                    .iter()
+                    .map(|a| (a.guard.map(|g| g.expr()), a.body.expr()))
+                    .collect();
                 let mut ch = self.reduce_in_place_a(body, scrutinee.expr());
                 for (guard, arm_body) in arm_data {
                     if let Some(g) = guard {
@@ -1549,7 +1551,11 @@ fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
     let body = sink.body();
     let keep = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
-            match (&body.exprs[left.expr()].kind, *op, &body.exprs[right.expr()].kind) {
+            match (
+                &body.exprs[left.expr()].kind,
+                *op,
+                &body.exprs[right.expr()].kind,
+            ) {
                 (ExprKind::BoolLiteral(false), NirBinaryOp::Or, _)
                 | (ExprKind::BoolLiteral(true), NirBinaryOp::And, _) => *right,
                 (_, NirBinaryOp::Or, ExprKind::BoolLiteral(false))

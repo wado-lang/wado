@@ -694,7 +694,9 @@ fn recognize_init(body: &Body, value: ExprId, sig_kinds: &SigKindIndex) -> Optio
     if !is_duplicable_expr(body, cap.expr()) {
         return None;
     }
-    Some(CandidateInit { capacity: cap.expr() })
+    Some(CandidateInit {
+        capacity: cap.expr(),
+    })
 }
 
 /// Unwrap a labeled block of shape
@@ -1339,7 +1341,12 @@ impl Rewriter<'_, '_> {
                 if fields.len() != expected_arity {
                     return None;
                 }
-                Source::Struct(fields.iter().map(|f| (f.field_index, f.value.expr())).collect())
+                Source::Struct(
+                    fields
+                        .iter()
+                        .map(|f| (f.field_index, f.value.expr()))
+                        .collect(),
+                )
             }
             ExprKind::MethodCall {
                 receiver,
@@ -1591,7 +1598,14 @@ fn build_receiver(
     } else {
         NirUnaryOp::Ref
     };
-    engine.alloc_expr(ExprKind::Unary { op, expr: local.into() }, arr_ty, span)
+    engine.alloc_expr(
+        ExprKind::Unary {
+            op,
+            expr: local.into(),
+        },
+        arr_ty,
+        span,
+    )
 }
 
 /// Build a `List<T_k>::Constructor(cap)` NIR call — e.g. `with_capacity(cap)`.
@@ -1754,7 +1768,8 @@ fn is_duplicable_expr(body: &Body, e: ExprId) -> bool {
             is_duplicable_expr(body, left.expr()) && is_duplicable_expr(body, right.expr())
         }
         ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) && is_duplicable_expr(body, inner.expr())
+            !matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+                && is_duplicable_expr(body, inner.expr())
         }
         ExprKind::Cast { expr: inner, .. } => is_duplicable_expr(body, inner.expr()),
         // FieldAccess is only duplicable if its inner is too (most commonly a Local).

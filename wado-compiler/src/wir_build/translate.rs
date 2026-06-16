@@ -2047,8 +2047,10 @@ impl FunctionTranslator<'_, '_> {
                     .iter()
                     .filter(|f| {
                         !matches!(
-                            self.ctx
-                                .type_id_to_wir_type(self.type_table, arena.exprs[f.value.expr()].type_id),
+                            self.ctx.type_id_to_wir_type(
+                                self.type_table,
+                                arena.exprs[f.value.expr()].type_id
+                            ),
                             WirType::Unit
                         )
                     })
@@ -2155,9 +2157,10 @@ impl FunctionTranslator<'_, '_> {
                     } => {
                         let receiver = *receiver;
                         let recv = self.translate_operand(receiver);
-                        let wir_type = self
-                            .ctx
-                            .type_id_to_wir_type(self.type_table, arena.exprs[receiver.expr()].type_id);
+                        let wir_type = self.ctx.type_id_to_wir_type(
+                            self.type_table,
+                            arena.exprs[receiver.expr()].type_id,
+                        );
                         let WirType::Ref { type_id, .. } = wir_type else {
                             panic!(
                                 "[WIR] FieldAccess assignment expected Ref receiver, got {wir_type:?} (field={field_name}, type_id={:?})",
@@ -2182,7 +2185,11 @@ impl FunctionTranslator<'_, '_> {
                 target_type,
             } => {
                 // Type casts become appropriate conversion instructions
-                self.translate_cast(inner.expr(), arena.exprs[inner.expr()].type_id, *target_type)
+                self.translate_cast(
+                    inner.expr(),
+                    arena.exprs[inner.expr()].type_id,
+                    *target_type,
+                )
             }
 
             ExprKind::Block(block) => {
@@ -2249,11 +2256,17 @@ impl FunctionTranslator<'_, '_> {
                 // enclosing function has `ReturnAbi::MultiValue`. For
                 // call-site destructures the heap struct is elided by
                 // `wir_optimize::elide_struct::elide_multi_field_struct_locals`.
-                let (type_id, fields) = self.tuple_constructor_args(expr.type_id, &elements.iter().map(|e| e.expr()).collect::<Vec<_>>());
+                let (type_id, fields) = self.tuple_constructor_args(
+                    expr.type_id,
+                    &elements.iter().map(|e| e.expr()).collect::<Vec<_>>(),
+                );
                 WirInstr::StructNew { type_id, fields }
             }
 
-            ExprKind::ArrayLiteral { elements } => self.build_array_literal(expr.type_id, &elements.iter().map(|e| e.expr()).collect::<Vec<_>>()),
+            ExprKind::ArrayLiteral { elements } => self.build_array_literal(
+                expr.type_id,
+                &elements.iter().map(|e| e.expr()).collect::<Vec<_>>(),
+            ),
 
             ExprKind::Switch {
                 scrutinee,
@@ -2363,9 +2376,11 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            ExprKind::IndirectCall { callee, args } => {
-                self.translate_indirect_call(callee.expr(), &args.iter().map(|a| a.expr()).collect::<Vec<_>>(), expr.type_id)
-            }
+            ExprKind::IndirectCall { callee, args } => self.translate_indirect_call(
+                callee.expr(),
+                &args.iter().map(|a| a.expr()).collect::<Vec<_>>(),
+                expr.type_id,
+            ),
             ExprKind::ClosureToCanonical {
                 functor,
                 functor_id,

@@ -140,7 +140,8 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
                 + arms
                     .iter()
                     .map(|arm| {
-                        arm.guard.map_or(0, |g| count_expr(body, g.expr(), type_table))
+                        arm.guard
+                            .map_or(0, |g| count_expr(body, g.expr(), type_table))
                             + count_expr(body, arm.body.expr(), type_table)
                     })
                     .sum::<usize>()
@@ -161,9 +162,10 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         | ExprKind::Null => 0,
         // Closure and effect-related expressions
         ExprKind::EnumConstruct { .. } => 0,
-        ExprKind::CmRawCall { args, .. } => {
-            args.iter().map(|a| count_expr(body, a.expr(), type_table)).sum()
-        }
+        ExprKind::CmRawCall { args, .. } => args
+            .iter()
+            .map(|a| count_expr(body, a.expr(), type_table))
+            .sum(),
         ExprKind::IndirectCall { callee, args } => {
             count_expr(body, callee.expr(), type_table)
                 + args
@@ -171,7 +173,9 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
                     .map(|a| count_expr(body, a.expr(), type_table))
                     .sum::<usize>()
         }
-        ExprKind::ClosureToCanonical { functor, .. } => count_expr(body, functor.expr(), type_table),
+        ExprKind::ClosureToCanonical { functor, .. } => {
+            count_expr(body, functor.expr(), type_table)
+        }
         ExprKind::Switch {
             scrutinee,
             arms,
@@ -2064,9 +2068,10 @@ fn inline_calls_in_expr(
         }
         Call::Method => {
             let (receiver, args): (ExprId, Vec<ExprId>) = match &body.exprs[e].kind {
-                ExprKind::MethodCall { receiver, args, .. } => {
-                    (receiver.expr(), args.iter().map(|a| a.expr.expr()).collect())
-                }
+                ExprKind::MethodCall { receiver, args, .. } => (
+                    receiver.expr(),
+                    args.iter().map(|a| a.expr.expr()).collect(),
+                ),
                 _ => unreachable!(),
             };
             inline_calls_in_expr(

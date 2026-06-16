@@ -969,10 +969,16 @@ impl<'a> Engine<'a> {
                     .collect(),
             },
             ExprKind::TupleLiteral { elements } => ExprKind::TupleLiteral {
-                elements: elements.into_iter().map(|e| self.clone_operand(e)).collect(),
+                elements: elements
+                    .into_iter()
+                    .map(|e| self.clone_operand(e))
+                    .collect(),
             },
             ExprKind::ArrayLiteral { elements } => ExprKind::ArrayLiteral {
-                elements: elements.into_iter().map(|e| self.clone_operand(e)).collect(),
+                elements: elements
+                    .into_iter()
+                    .map(|e| self.clone_operand(e))
+                    .collect(),
             },
             ExprKind::IndirectCall { callee, args } => ExprKind::IndirectCall {
                 callee: self.clone_operand(callee),
@@ -1231,7 +1237,14 @@ mod tests {
         )
     }
     fn bin(body: &mut Body, left: ExprId, op: NirBinaryOp, right: ExprId) -> ExprId {
-        e(body, ExprKind::Binary { left: left.into(), op, right: right.into() })
+        e(
+            body,
+            ExprKind::Binary {
+                left: left.into(),
+                op,
+                right: right.into(),
+            },
+        )
     }
     fn local0(body: &mut Body) -> ExprId {
         e(
@@ -1264,7 +1277,12 @@ mod tests {
     }
     fn ret_x(body: &mut Body) -> StmtId {
         let xref = local0(body);
-        s(body, StmtKind::Return { value: Some(xref.into()) })
+        s(
+            body,
+            StmtKind::Return {
+                value: Some(xref.into()),
+            },
+        )
     }
 
     /// `{ let x = 1 + 2; return x; }`

@@ -366,7 +366,12 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let inner = *inner;
             let arm_exprs: Vec<ExprId> = arms
                 .iter()
-                .flat_map(|arm| arm.guard.into_iter().chain(std::iter::once(arm.body)).map(|o| o.expr()))
+                .flat_map(|arm| {
+                    arm.guard
+                        .into_iter()
+                        .chain(std::iter::once(arm.body))
+                        .map(|o| o.expr())
+                })
                 .collect();
             collect_escaping_in_expr(body, inner.expr(), escaping);
             for ae in arm_exprs {
@@ -525,7 +530,13 @@ fn transform_stmt(
             return;
         }
         // Recurse into the value expression
-        transform_expr(engine, value.expr(), escaping_locals, hoist_stmts, type_table);
+        transform_expr(
+            engine,
+            value.expr(),
+            escaping_locals,
+            hoist_stmts,
+            type_table,
+        );
         return;
     }
 
@@ -1034,12 +1045,12 @@ fn extract_local_from_ref(body: &Body, e: ExprId) -> Option<u32> {
             ExprKind::Local { index, .. } => Some(*index),
             _ => None,
         },
-        ExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
-            args.first().and_then(|a| match &body.exprs[a.expr.expr()].kind {
+        ExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => args
+            .first()
+            .and_then(|a| match &body.exprs[a.expr.expr()].kind {
                 ExprKind::Local { index, .. } => Some(*index),
                 _ => None,
-            })
-        }
+            }),
         _ => None,
     }
 }
@@ -1508,7 +1519,10 @@ mod tests {
 
     fn unary(body: &mut Body, op: NirUnaryOp, inner: ExprId) -> ExprId {
         body.exprs.push(ExprNode {
-            kind: ExprKind::Unary { op, expr: inner.into() },
+            kind: ExprKind::Unary {
+                op,
+                expr: inner.into(),
+            },
             type_id: TypeId(0),
             span: Span::default(),
         })

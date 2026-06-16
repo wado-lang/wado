@@ -644,8 +644,12 @@ fn translate_global_init(
             // Negation of constant (normally folded by elaborator, but handle
             // for robustness). The inner literal uses its own type.
             let inner = *inner;
-            let inner_wir =
-                translate_global_init(body, inner.expr(), body.exprs[inner.expr()].type_id, type_table);
+            let inner_wir = translate_global_init(
+                body,
+                inner.expr(),
+                body.exprs[inner.expr()].type_id,
+                type_table,
+            );
             match inner_wir {
                 WirInstr::I32Const(v) => WirInstr::I32Const(v.wrapping_neg()),
                 WirInstr::I64Const(v) => WirInstr::I64Const(v.wrapping_neg()),

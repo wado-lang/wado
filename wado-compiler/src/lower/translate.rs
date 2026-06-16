@@ -1002,7 +1002,7 @@ impl FunctionTranslator<'_, '_> {
                 .iter()
                 .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
                 .map(|(arg, is_mut)| ArenaCallArg {
-                        expr: self.convert_operand(arg),
+                    expr: self.convert_operand(arg),
                     is_mut,
                 })
                 .collect();

@@ -478,9 +478,11 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
             vec![Child::Expr(*target), Child::Expr(value.expr())]
         }
         ExprKind::Call { args, .. } => args.iter().map(|a| Child::Expr(a.expr.expr())).collect(),
-        ExprKind::MethodCall { receiver, args, .. } => std::iter::once(Child::Expr(receiver.expr()))
-            .chain(args.iter().map(|a| Child::Expr(a.expr.expr())))
-            .collect(),
+        ExprKind::MethodCall { receiver, args, .. } => {
+            std::iter::once(Child::Expr(receiver.expr()))
+                .chain(args.iter().map(|a| Child::Expr(a.expr.expr())))
+                .collect()
+        }
         ExprKind::CmRawCall { args, .. } => args.iter().map(|a| Child::Expr(a.expr())).collect(),
         ExprKind::IndirectCall { callee, args } => std::iter::once(Child::Expr(callee.expr()))
             .chain(args.iter().map(|a| Child::Expr(a.expr())))
@@ -1022,8 +1024,10 @@ fn collect_modified_vars_in_expr(
         | ExprKind::EnumConstruct { .. } => {}
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
-            let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, ExprId)> =
-                arms.iter().map(|a| (a.pattern, a.guard.map(|g| g.expr()), a.body.expr())).collect();
+            let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, ExprId)> = arms
+                .iter()
+                .map(|a| (a.pattern, a.guard.map(|g| g.expr()), a.body.expr()))
+                .collect();
             collect_modified_vars_in_expr(body, expr.expr(), modified, type_table);
             for (pattern, guard, body_expr) in arm_data {
                 collect_pattern_bindings(body, pattern, modified);

@@ -324,9 +324,10 @@ impl FunctionTranslator<'_, '_> {
             "builtin::array_get" => {
                 let arr = self.translate_expr(args[0].expr.expr());
                 let idx = self.translate_expr(args[1].expr.expr());
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr.expr()].type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(
+                    self.type_table,
+                    self.body.exprs[args[0].expr.expr()].type_id,
+                );
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayGet {
                         type_id: type_id.clone(),
@@ -342,9 +343,10 @@ impl FunctionTranslator<'_, '_> {
                 let arr = self.translate_expr(args[0].expr.expr());
                 let idx = self.translate_expr(args[1].expr.expr());
                 let val = self.translate_expr(args[2].expr.expr());
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr.expr()].type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(
+                    self.type_table,
+                    self.body.exprs[args[0].expr.expr()].type_id,
+                );
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArraySet {
                         type_id,
@@ -362,9 +364,10 @@ impl FunctionTranslator<'_, '_> {
                 let src = self.translate_expr(args[2].expr.expr());
                 let src_offset = self.translate_expr(args[3].expr.expr());
                 let len = self.translate_expr(args[4].expr.expr());
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr.expr()].type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(
+                    self.type_table,
+                    self.body.exprs[args[0].expr.expr()].type_id,
+                );
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayCopy {
                         dest_type_id: type_id.clone(),
@@ -422,9 +425,10 @@ impl FunctionTranslator<'_, '_> {
                 let offset = self.translate_expr(args[1].expr.expr());
                 let val = self.translate_expr(args[2].expr.expr());
                 let len = self.translate_expr(args[3].expr.expr());
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr.expr()].type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(
+                    self.type_table,
+                    self.body.exprs[args[0].expr.expr()].type_id,
+                );
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayFill {
                         type_id,
@@ -479,9 +483,10 @@ impl FunctionTranslator<'_, '_> {
                 let cond = self.translate_expr(args[0].expr.expr());
                 let a = self.translate_expr(args[1].expr.expr());
                 let b = self.translate_expr(args[2].expr.expr());
-                let result_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[1].expr.expr()].type_id);
+                let result_type = self.ctx.type_id_to_wir_type(
+                    self.type_table,
+                    self.body.exprs[args[1].expr.expr()].type_id,
+                );
                 Some(WirInstr::Select {
                     condition: Box::new(cond),
                     if_true: Box::new(a),
@@ -559,8 +564,10 @@ impl FunctionTranslator<'_, '_> {
                 };
                 let key = format!("wasi/{wasi_func_name}");
                 if let Some(func_id) = self.ctx.func_map.get(&key).cloned() {
-                    let call_args: Vec<WirInstr> =
-                        args.iter().map(|a| self.translate_expr(a.expr.expr())).collect();
+                    let call_args: Vec<WirInstr> = args
+                        .iter()
+                        .map(|a| self.translate_expr(a.expr.expr()))
+                        .collect();
                     Some(WirInstr::Call {
                         func_id,
                         args: call_args,

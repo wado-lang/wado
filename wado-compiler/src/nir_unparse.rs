@@ -8,7 +8,9 @@ use crate::nir::{
     NirBinaryOp, NirEnum, NirFlags, NirFunction, NirGlobal, NirLiteralPattern, NirModule, NirParam,
     NirStruct, NirUnaryOp,
 };
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtId, StmtKind,
+};
 use crate::tir::TypeTable;
 
 fn escape_string(s: &str) -> String {
@@ -796,8 +798,10 @@ impl<'a> NirUnparser<'a> {
                 ..
             } => {
                 let struct_name = struct_name.clone();
-                let field_data: Vec<(String, ExprId)> =
-                    fields.iter().map(|f| (f.name.clone(), f.value.expr())).collect();
+                let field_data: Vec<(String, ExprId)> = fields
+                    .iter()
+                    .map(|f| (f.name.clone(), f.value.expr()))
+                    .collect();
                 // Functor structs are rendered as `&Name { ... }` to mirror the
                 // reference type that the elaborator attached.
                 if matches!(self.type_table.get(ty), crate::tir::ResolvedType::Ref(_)) {
