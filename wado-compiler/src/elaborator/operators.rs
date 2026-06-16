@@ -1186,15 +1186,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.typecheck(index_type, expected, index_expr.index.span());
                     }
 
-                    let assign_info = self
-                        .find_index_assign_trait_impl(&struct_name, base_type_id, index_type)
-                        .or_else(|| {
-                            self.find_index_assign_trait_impl(
-                                &lookup_name,
-                                lookup_type_id,
-                                index_type,
-                            )
-                        });
+                    let assign_info = self.index_lookup_or_newtype_base(
+                        &struct_name,
+                        base_type_id,
+                        &lookup_name,
+                        lookup_type_id,
+                        |s, n, t| s.find_index_assign_trait_impl(n, t, index_type),
+                    );
                     if let Some(trait_info) = assign_info {
                         // Generate: expr.index_assign(index, value)
                         let value_span = value.span();

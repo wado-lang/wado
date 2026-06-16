@@ -29,7 +29,7 @@
 //! every loaded module for inherent impls (`O(modules × items)`), and
 //! `find_indexing_trait_impl` re-derived its answer from the same impl
 //! scan. Once both lookups became index-driven — inherent impls via
-//! [`super::trait_env::TraitEnv::inherent_impl_index`], trait impls via
+//! [`super::trait_env::TraitEnv::all_impl_index`], trait impls via
 //! the existing `impl_index` — the caches were pure overhead. Each also
 //! carried a latent staleness hazard: `method_info_cache` keyed on
 //! `(TypeId, name)` with no module-visibility component, and
