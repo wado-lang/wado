@@ -125,7 +125,7 @@ pub struct PatNode {
 /// A call argument with its parameter mutability flag.
 #[derive(Debug, Clone)]
 pub struct ArenaCallArg {
-    pub expr: ExprId,
+    pub expr: Operand,
     pub is_mut: bool,
 }
 
@@ -133,7 +133,7 @@ pub struct ArenaCallArg {
 #[derive(Debug, Clone)]
 pub struct ArenaStructField {
     pub name: String,
-    pub value: ExprId,
+    pub value: Operand,
     pub field_index: u32,
 }
 
@@ -141,8 +141,8 @@ pub struct ArenaStructField {
 #[derive(Debug, Clone)]
 pub struct ArmData {
     pub pattern: PatId,
-    pub guard: Option<ExprId>,
-    pub body: ExprId,
+    pub guard: Option<Operand>,
+    pub body: Operand,
     pub span: Span,
 }
 
@@ -182,23 +182,23 @@ pub enum ExprKind {
     GlobalVarSet {
         module_source: crate::module_source::ModuleSource,
         name: String,
-        value: ExprId,
+        value: Operand,
     },
     Binary {
-        left: ExprId,
+        left: Operand,
         op: NirBinaryOp,
-        right: ExprId,
+        right: Operand,
     },
     Unary {
         op: NirUnaryOp,
-        expr: ExprId,
+        expr: Operand,
     },
     Assign {
         target: ExprId,
-        value: ExprId,
+        value: Operand,
     },
     Cast {
-        expr: ExprId,
+        expr: Operand,
         target_type: TypeId,
     },
     Call {
@@ -208,31 +208,31 @@ pub enum ExprKind {
     },
     CmRawCall {
         local_name: String,
-        args: Vec<ExprId>,
+        args: Vec<Operand>,
     },
     MethodCall {
-        receiver: ExprId,
+        receiver: Operand,
         func: FunctionRef,
         type_args: Vec<TypeId>,
         args: Vec<ArenaCallArg>,
     },
     FieldAccess {
-        expr: ExprId,
+        expr: Operand,
         field_index: u32,
         field_name: String,
     },
     Index {
-        expr: ExprId,
-        index: ExprId,
+        expr: Operand,
+        index: Operand,
     },
     Block(BlockId),
     If {
-        condition: ExprId,
+        condition: Operand,
         then_branch: BlockId,
         else_branch: Option<BlockId>,
     },
     Match {
-        expr: ExprId,
+        expr: Operand,
         arms: Vec<ArmData>,
     },
     StructLiteral {
@@ -241,17 +241,17 @@ pub enum ExprKind {
         fields: Vec<ArenaStructField>,
     },
     TupleLiteral {
-        elements: Vec<ExprId>,
+        elements: Vec<Operand>,
     },
     ArrayLiteral {
-        elements: Vec<ExprId>,
+        elements: Vec<Operand>,
     },
     IndirectCall {
-        callee: ExprId,
-        args: Vec<ExprId>,
+        callee: Operand,
+        args: Vec<Operand>,
     },
     ClosureToCanonical {
-        functor: ExprId,
+        functor: Operand,
         functor_id: u32,
         target_fn_type: TypeId,
         closure_module: crate::module_source::ModuleSource,
@@ -260,7 +260,7 @@ pub enum ExprKind {
         variant_type: TypeId,
         case_index: u32,
         case_name: String,
-        payload: Option<ExprId>,
+        payload: Option<Operand>,
     },
     EnumConstruct {
         enum_type: TypeId,
@@ -273,20 +273,20 @@ pub enum ExprKind {
         result_type: TypeId,
     },
     VariantTag {
-        expr: ExprId,
+        expr: Operand,
     },
     VariantTest {
-        expr: ExprId,
+        expr: Operand,
         case_index: u32,
         case_name: String,
     },
     VariantPayload {
-        expr: ExprId,
+        expr: Operand,
         case_index: u32,
         payload_type: TypeId,
     },
     Switch {
-        scrutinee: ExprId,
+        scrutinee: Operand,
         min_value: i64,
         arms: Vec<BlockId>,
         default: BlockId,
@@ -302,15 +302,15 @@ pub enum StmtKind {
         is_mut: bool,
         is_reactive: bool,
         type_id: TypeId,
-        value: ExprId,
+        value: Operand,
         skip_value_copy: bool,
     },
     Expr(ExprId),
     Return {
-        value: Option<ExprId>,
+        value: Option<Operand>,
     },
     If {
-        condition: ExprId,
+        condition: Operand,
         then_block: BlockId,
         else_block: Option<BlockId>,
     },
@@ -319,7 +319,7 @@ pub enum StmtKind {
     },
     Break {
         label: Option<String>,
-        value: Option<ExprId>,
+        value: Option<Operand>,
     },
     Continue,
     LabeledBlock {
@@ -329,7 +329,7 @@ pub enum StmtKind {
     LetDestructure {
         pattern: PatId,
         is_mut: bool,
-        value: ExprId,
+        value: Operand,
     },
 }
 
@@ -363,7 +363,7 @@ pub enum PatKind {
     },
     Or(Vec<PatId>),
     ConstantValue {
-        expr: ExprId,
+        expr: Operand,
     },
     Range {
         start: i128,
@@ -538,6 +538,16 @@ impl Body {
         })
     }
 
+    /// Deep-copy an operand. A promoted pure value is shared (the same pool
+    /// backs the clone, so its `ValueId` stays valid); an effectful subtree is
+    /// cloned into fresh nodes.
+    fn clone_operand(&mut self, op: Operand) -> Operand {
+        match op {
+            Operand::Value(v) => Operand::Value(v),
+            Operand::Expr(e) => Operand::Expr(self.clone_expr(e)),
+        }
+    }
+
     /// Deep-copy a block subtree into fresh arena nodes, returning the new
     /// block id. The block-level counterpart of [`Body::clone_expr`].
     pub fn clone_block(&mut self, id: BlockId) -> BlockId {
@@ -576,23 +586,23 @@ impl Body {
             } => ExprKind::GlobalVarSet {
                 module_source,
                 name,
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
             },
             ExprKind::Binary { left, op, right } => ExprKind::Binary {
-                left: self.clone_expr(left),
+                left: self.clone_operand(left),
                 op,
-                right: self.clone_expr(right),
+                right: self.clone_operand(right),
             },
             ExprKind::Unary { op, expr } => ExprKind::Unary {
                 op,
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
             },
             ExprKind::Assign { target, value } => ExprKind::Assign {
                 target: self.clone_expr(target),
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
             },
             ExprKind::Cast { expr, target_type } => ExprKind::Cast {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 target_type,
             },
             ExprKind::Call {
@@ -605,14 +615,14 @@ impl Body {
                 args: args
                     .into_iter()
                     .map(|a| ArenaCallArg {
-                        expr: self.clone_expr(a.expr),
+                        expr: self.clone_operand(a.expr),
                         is_mut: a.is_mut,
                     })
                     .collect(),
             },
             ExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
                 local_name,
-                args: args.into_iter().map(|a| self.clone_expr(a)).collect(),
+                args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
             },
             ExprKind::MethodCall {
                 receiver,
@@ -620,13 +630,13 @@ impl Body {
                 type_args,
                 args,
             } => ExprKind::MethodCall {
-                receiver: self.clone_expr(receiver),
+                receiver: self.clone_operand(receiver),
                 func,
                 type_args,
                 args: args
                     .into_iter()
                     .map(|a| ArenaCallArg {
-                        expr: self.clone_expr(a.expr),
+                        expr: self.clone_operand(a.expr),
                         is_mut: a.is_mut,
                     })
                     .collect(),
@@ -636,13 +646,13 @@ impl Body {
                 field_index,
                 field_name,
             } => ExprKind::FieldAccess {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 field_index,
                 field_name,
             },
             ExprKind::Index { expr, index } => ExprKind::Index {
-                expr: self.clone_expr(expr),
-                index: self.clone_expr(index),
+                expr: self.clone_operand(expr),
+                index: self.clone_operand(index),
             },
             ExprKind::Block(b) => ExprKind::Block(self.clone_block(b)),
             ExprKind::If {
@@ -650,18 +660,18 @@ impl Body {
                 then_branch,
                 else_branch,
             } => ExprKind::If {
-                condition: self.clone_expr(condition),
+                condition: self.clone_operand(condition),
                 then_branch: self.clone_block(then_branch),
                 else_branch: else_branch.map(|b| self.clone_block(b)),
             },
             ExprKind::Match { expr, arms } => ExprKind::Match {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 arms: arms
                     .into_iter()
                     .map(|a| ArmData {
                         pattern: self.clone_pat(a.pattern),
-                        guard: a.guard.map(|g| self.clone_expr(g)),
-                        body: self.clone_expr(a.body),
+                        guard: a.guard.map(|g| self.clone_operand(g)),
+                        body: self.clone_operand(a.body),
                         span: a.span,
                     })
                     .collect(),
@@ -677,20 +687,20 @@ impl Body {
                     .into_iter()
                     .map(|f| ArenaStructField {
                         name: f.name,
-                        value: self.clone_expr(f.value),
+                        value: self.clone_operand(f.value),
                         field_index: f.field_index,
                     })
                     .collect(),
             },
             ExprKind::TupleLiteral { elements } => ExprKind::TupleLiteral {
-                elements: elements.into_iter().map(|e| self.clone_expr(e)).collect(),
+                elements: elements.into_iter().map(|e| self.clone_operand(e)).collect(),
             },
             ExprKind::ArrayLiteral { elements } => ExprKind::ArrayLiteral {
-                elements: elements.into_iter().map(|e| self.clone_expr(e)).collect(),
+                elements: elements.into_iter().map(|e| self.clone_operand(e)).collect(),
             },
             ExprKind::IndirectCall { callee, args } => ExprKind::IndirectCall {
-                callee: self.clone_expr(callee),
-                args: args.into_iter().map(|a| self.clone_expr(a)).collect(),
+                callee: self.clone_operand(callee),
+                args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
             },
             ExprKind::ClosureToCanonical {
                 functor,
@@ -698,7 +708,7 @@ impl Body {
                 target_fn_type,
                 closure_module,
             } => ExprKind::ClosureToCanonical {
-                functor: self.clone_expr(functor),
+                functor: self.clone_operand(functor),
                 functor_id,
                 target_fn_type,
                 closure_module,
@@ -712,7 +722,7 @@ impl Body {
                 variant_type,
                 case_index,
                 case_name,
-                payload: payload.map(|p| self.clone_expr(p)),
+                payload: payload.map(|p| self.clone_operand(p)),
             },
             ExprKind::LabeledBlock {
                 label,
@@ -724,14 +734,14 @@ impl Body {
                 result_type,
             },
             ExprKind::VariantTag { expr } => ExprKind::VariantTag {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
             },
             ExprKind::VariantTest {
                 expr,
                 case_index,
                 case_name,
             } => ExprKind::VariantTest {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 case_index,
                 case_name,
             },
@@ -740,7 +750,7 @@ impl Body {
                 case_index,
                 payload_type,
             } => ExprKind::VariantPayload {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 case_index,
                 payload_type,
             },
@@ -750,7 +760,7 @@ impl Body {
                 arms,
                 default,
             } => ExprKind::Switch {
-                scrutinee: self.clone_expr(scrutinee),
+                scrutinee: self.clone_operand(scrutinee),
                 min_value,
                 arms: arms.into_iter().map(|a| self.clone_block(a)).collect(),
                 default: self.clone_block(default),
@@ -776,19 +786,19 @@ impl Body {
                 is_mut,
                 is_reactive,
                 type_id,
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
                 skip_value_copy,
             },
             StmtKind::Expr(e) => StmtKind::Expr(self.clone_expr(e)),
             StmtKind::Return { value } => StmtKind::Return {
-                value: value.map(|e| self.clone_expr(e)),
+                value: value.map(|o| self.clone_operand(o)),
             },
             StmtKind::If {
                 condition,
                 then_block,
                 else_block,
             } => StmtKind::If {
-                condition: self.clone_expr(condition),
+                condition: self.clone_operand(condition),
                 then_block: self.clone_block(then_block),
                 else_block: else_block.map(|b| self.clone_block(b)),
             },
@@ -797,7 +807,7 @@ impl Body {
             },
             StmtKind::Break { label, value } => StmtKind::Break {
                 label,
-                value: value.map(|e| self.clone_expr(e)),
+                value: value.map(|o| self.clone_operand(o)),
             },
             StmtKind::Continue => StmtKind::Continue,
             StmtKind::LabeledBlock { label, block } => StmtKind::LabeledBlock {
@@ -811,7 +821,7 @@ impl Body {
             } => StmtKind::LetDestructure {
                 pattern: self.clone_pat(pattern),
                 is_mut,
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
             },
         }
     }
@@ -850,7 +860,7 @@ impl Body {
                 has_rest,
             },
             PatKind::ConstantValue { expr } => PatKind::ConstantValue {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
             },
             // Leaves carry no id children.
             leaf => leaf,
@@ -875,7 +885,8 @@ impl Body {
                     op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
                     expr: inner,
                 } = &self.exprs[id].kind
-                && let ExprKind::Local { index, .. } = &self.exprs[*inner].kind
+                && let Some(inner) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &self.exprs[inner].kind
             {
                 out.insert(*index);
             }
@@ -884,6 +895,13 @@ impl Body {
     }
 
     pub fn for_each_child(&self, node: NodeRef, mut f: impl FnMut(NodeRef)) {
+        // A promoted pure value (`Operand::Value`) has no skeleton child; only an
+        // `Operand::Expr` yields one.
+        fn op_child<F: FnMut(NodeRef)>(o: Operand, f: &mut F) {
+            if let Operand::Expr(e) = o {
+                f(NodeRef::Expr(e));
+            }
+        }
         match node {
             NodeRef::Block(b) => {
                 for s in &self.blocks[b].stmts {
@@ -891,11 +909,11 @@ impl Body {
                 }
             }
             NodeRef::Stmt(s) => match &self.stmts[s].kind {
-                StmtKind::Let { value, .. } => f(NodeRef::Expr(*value)),
+                StmtKind::Let { value, .. } => op_child(*value, &mut f),
                 StmtKind::Expr(e) => f(NodeRef::Expr(*e)),
                 StmtKind::Return { value } => {
-                    if let Some(e) = value {
-                        f(NodeRef::Expr(*e));
+                    if let Some(o) = value {
+                        op_child(*o, &mut f);
                     }
                 }
                 StmtKind::If {
@@ -903,7 +921,7 @@ impl Body {
                     then_block,
                     else_block,
                 } => {
-                    f(NodeRef::Expr(*condition));
+                    op_child(*condition, &mut f);
                     f(NodeRef::Block(*then_block));
                     if let Some(b) = else_block {
                         f(NodeRef::Block(*b));
@@ -911,15 +929,15 @@ impl Body {
                 }
                 StmtKind::Loop { body } => f(NodeRef::Block(*body)),
                 StmtKind::Break { value, .. } => {
-                    if let Some(e) = value {
-                        f(NodeRef::Expr(*e));
+                    if let Some(o) = value {
+                        op_child(*o, &mut f);
                     }
                 }
                 StmtKind::Continue => {}
                 StmtKind::LabeledBlock { block, .. } => f(NodeRef::Block(*block)),
                 StmtKind::LetDestructure { pattern, value, .. } => {
                     f(NodeRef::Pat(*pattern));
-                    f(NodeRef::Expr(*value));
+                    op_child(*value, &mut f);
                 }
             },
             NodeRef::Pat(p) => match &self.pats[p].kind {
@@ -943,7 +961,7 @@ impl Body {
                         f(NodeRef::Pat(fld.pattern));
                     }
                 }
-                PatKind::ConstantValue { expr } => f(NodeRef::Expr(*expr)),
+                PatKind::ConstantValue { expr } => op_child(*expr, &mut f),
             },
             NodeRef::Expr(e) => match &self.exprs[e].kind {
                 ExprKind::IntLiteral { .. }
@@ -957,39 +975,39 @@ impl Body {
                 | ExprKind::Local { .. }
                 | ExprKind::GlobalVarGet { .. }
                 | ExprKind::EnumConstruct { .. } => {}
-                ExprKind::GlobalVarSet { value, .. } => f(NodeRef::Expr(*value)),
+                ExprKind::GlobalVarSet { value, .. } => op_child(*value, &mut f),
                 ExprKind::Binary { left, right, .. } => {
-                    f(NodeRef::Expr(*left));
-                    f(NodeRef::Expr(*right));
+                    op_child(*left, &mut f);
+                    op_child(*right, &mut f);
                 }
                 ExprKind::Unary { expr, .. }
                 | ExprKind::Cast { expr, .. }
                 | ExprKind::FieldAccess { expr, .. }
                 | ExprKind::VariantTag { expr }
                 | ExprKind::VariantTest { expr, .. }
-                | ExprKind::VariantPayload { expr, .. } => f(NodeRef::Expr(*expr)),
+                | ExprKind::VariantPayload { expr, .. } => op_child(*expr, &mut f),
                 ExprKind::Assign { target, value } => {
                     f(NodeRef::Expr(*target));
-                    f(NodeRef::Expr(*value));
+                    op_child(*value, &mut f);
                 }
                 ExprKind::Index { expr, index } => {
-                    f(NodeRef::Expr(*expr));
-                    f(NodeRef::Expr(*index));
+                    op_child(*expr, &mut f);
+                    op_child(*index, &mut f);
                 }
                 ExprKind::Call { args, .. } => {
                     for a in args {
-                        f(NodeRef::Expr(a.expr));
+                        op_child(a.expr, &mut f);
                     }
                 }
                 ExprKind::CmRawCall { args, .. } => {
                     for a in args {
-                        f(NodeRef::Expr(*a));
+                        op_child(*a, &mut f);
                     }
                 }
                 ExprKind::MethodCall { receiver, args, .. } => {
-                    f(NodeRef::Expr(*receiver));
+                    op_child(*receiver, &mut f);
                     for a in args {
-                        f(NodeRef::Expr(a.expr));
+                        op_child(a.expr, &mut f);
                     }
                 }
                 ExprKind::Block(b) => f(NodeRef::Block(*b)),
@@ -998,42 +1016,42 @@ impl Body {
                     then_branch,
                     else_branch,
                 } => {
-                    f(NodeRef::Expr(*condition));
+                    op_child(*condition, &mut f);
                     f(NodeRef::Block(*then_branch));
                     if let Some(b) = else_branch {
                         f(NodeRef::Block(*b));
                     }
                 }
                 ExprKind::Match { expr, arms } => {
-                    f(NodeRef::Expr(*expr));
+                    op_child(*expr, &mut f);
                     for arm in arms {
                         f(NodeRef::Pat(arm.pattern));
                         if let Some(g) = arm.guard {
-                            f(NodeRef::Expr(g));
+                            op_child(g, &mut f);
                         }
-                        f(NodeRef::Expr(arm.body));
+                        op_child(arm.body, &mut f);
                     }
                 }
                 ExprKind::StructLiteral { fields, .. } => {
                     for fld in fields {
-                        f(NodeRef::Expr(fld.value));
+                        op_child(fld.value, &mut f);
                     }
                 }
                 ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                     for el in elements {
-                        f(NodeRef::Expr(*el));
+                        op_child(*el, &mut f);
                     }
                 }
                 ExprKind::IndirectCall { callee, args } => {
-                    f(NodeRef::Expr(*callee));
+                    op_child(*callee, &mut f);
                     for a in args {
-                        f(NodeRef::Expr(*a));
+                        op_child(*a, &mut f);
                     }
                 }
-                ExprKind::ClosureToCanonical { functor, .. } => f(NodeRef::Expr(*functor)),
+                ExprKind::ClosureToCanonical { functor, .. } => op_child(*functor, &mut f),
                 ExprKind::VariantConstruct { payload, .. } => {
                     if let Some(p) = payload {
-                        f(NodeRef::Expr(*p));
+                        op_child(*p, &mut f);
                     }
                 }
                 ExprKind::LabeledBlock { block, .. } => f(NodeRef::Block(*block)),
@@ -1043,7 +1061,7 @@ impl Body {
                     default,
                     ..
                 } => {
-                    f(NodeRef::Expr(*scrutinee));
+                    op_child(*scrutinee, &mut f);
                     for a in arms {
                         f(NodeRef::Block(*a));
                     }
