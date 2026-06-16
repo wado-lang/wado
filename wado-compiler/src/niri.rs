@@ -1027,7 +1027,7 @@ impl<'a> Interpreter<'a> {
             } => {
                 let scrutinee = *scrutinee;
                 let arm_data: Vec<(Option<ExprId>, ExprId)> =
-                    arms.iter().map(|a| (a.guard, a.body)).collect();
+                    arms.iter().map(|a| (a.guard.map(|g| g.expr()), a.body.expr())).collect();
                 let mut ch = self.reduce_in_place_a(body, scrutinee.expr());
                 for (guard, arm_body) in arm_data {
                     if let Some(g) = guard {
@@ -1286,7 +1286,7 @@ impl<'a> Interpreter<'a> {
         };
         let (func, args): (crate::nir::FunctionRef, Vec<ExprId>) = match &body.exprs[e].kind {
             ExprKind::Call { func, args, .. } => {
-                (func.clone(), args.iter().map(|a| a.expr).collect())
+                (func.clone(), args.iter().map(|a| a.expr.expr()).collect())
             }
             _ => return Lattice::Unevaluated,
         };

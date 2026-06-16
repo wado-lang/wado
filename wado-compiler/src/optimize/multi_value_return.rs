@@ -60,7 +60,7 @@ fn walk_call_args_for_uses(
     tracked: &IndexMap<u32, usize>,
 ) {
     let args: Vec<ExprId> = match &body.exprs[expr].kind {
-        ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
+        ExprKind::Call { args, .. } => args.iter().map(|a| a.expr.expr()).collect(),
         ExprKind::MethodCall { receiver, args, .. } => std::iter::once(*receiver)
             .chain(args.iter().map(|a| a.expr))
             .collect(),
@@ -330,7 +330,7 @@ fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape) -> bo
                 })
         }
         ExprKind::Match { arms, .. } => {
-            let bodies: Vec<ExprId> = arms.iter().map(|a| a.body).collect();
+            let bodies: Vec<ExprId> = arms.iter().map(|a| a.body.expr()).collect();
             bodies
                 .iter()
                 .all(|&b| expr_returns_match(body, b, expected))
@@ -535,7 +535,7 @@ fn walk_expr_for_uses(
             {
                 invalid.insert(candidate_idx);
             }
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             for a in args {
                 walk_expr_for_uses(body, a, candidate_names, candidates, invalid, tracked);
             }
@@ -552,7 +552,7 @@ fn walk_expr_for_uses(
                 invalid.insert(candidate_idx);
             }
             let receiver = *receiver;
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             walk_expr_for_uses(
                 body,
                 receiver.expr(),
@@ -614,7 +614,7 @@ fn walk_expr_for_uses(
         ExprKind::Match { expr: scrut, arms } => {
             let scrut = *scrut;
             let arm_data: Vec<(Option<ExprId>, ExprId)> =
-                arms.iter().map(|a| (a.guard, a.body)).collect();
+                arms.iter().map(|a| (a.guard.map(|g| g.expr()), a.body.expr())).collect();
             walk_expr_for_uses(body, scrut.expr(), candidate_names, candidates, invalid, tracked);
             for (guard, arm_body) in arm_data {
                 if let Some(g) = guard {

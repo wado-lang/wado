@@ -353,7 +353,7 @@ fn collect_array_targets(
             } else {
                 // A wrapper struct: recurse into each field, extending the path.
                 let fields: Vec<(u32, ExprId)> =
-                    fields.iter().map(|f| (f.field_index, f.value)).collect();
+                    fields.iter().map(|f| (f.field_index, f.value.expr())).collect();
                 for (field_index, value) in fields {
                     path.push(field_index);
                     collect_array_targets(body, value, path, out);

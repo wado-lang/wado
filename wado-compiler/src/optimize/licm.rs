@@ -902,7 +902,7 @@ fn collect_modified_vars_in_expr(
             collect_modified_vars_in_expr(body, inner.expr(), modified, type_table);
         }
         ExprKind::Call { args, .. } => {
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             for a in arg_ids {
                 mark_gc_local_as_fully_modified(body, a, modified, type_table);
                 record_mut_ref_clobber(body, a, modified, type_table);
@@ -911,7 +911,7 @@ fn collect_modified_vars_in_expr(
         }
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             mark_gc_local_as_fully_modified(body, receiver.expr(), modified, type_table);
             record_mut_ref_clobber(body, receiver.expr(), modified, type_table);
             collect_modified_vars_in_expr(body, receiver.expr(), modified, type_table);
@@ -954,7 +954,7 @@ fn collect_modified_vars_in_expr(
             }
         }
         ExprKind::StructLiteral { fields, .. } => {
-            let vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            let vals: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
             for v in vals {
                 collect_modified_vars_in_expr(body, v, modified, type_table);
             }
@@ -1023,7 +1023,7 @@ fn collect_modified_vars_in_expr(
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
             let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, ExprId)> =
-                arms.iter().map(|a| (a.pattern, a.guard, a.body)).collect();
+                arms.iter().map(|a| (a.pattern, a.guard.map(|g| g.expr()), a.body.expr())).collect();
             collect_modified_vars_in_expr(body, expr.expr(), modified, type_table);
             for (pattern, guard, body_expr) in arm_data {
                 collect_pattern_bindings(body, pattern, modified);

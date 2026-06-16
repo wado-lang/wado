@@ -904,7 +904,7 @@ impl WhitelistChecker<'_> {
                     }
                     seen[k] = true;
                 }
-                let field_vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+                let field_vals: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
                 for v in field_vals {
                     self.visit_expr(body, v);
                 }
@@ -969,7 +969,7 @@ impl WhitelistChecker<'_> {
                 ..
             } => {
                 let receiver = *receiver;
-                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
                 let kind = list_method_kind(func, self.sig_kinds);
                 if let Some(rec_local) = receiver_local(body, receiver.expr())
                     && self.safe.contains(&rec_local)
@@ -1339,7 +1339,7 @@ impl Rewriter<'_, '_> {
                 if fields.len() != expected_arity {
                     return None;
                 }
-                Source::Struct(fields.iter().map(|f| (f.field_index, f.value)).collect())
+                Source::Struct(fields.iter().map(|f| (f.field_index, f.value.expr())).collect())
             }
             ExprKind::MethodCall {
                 receiver,

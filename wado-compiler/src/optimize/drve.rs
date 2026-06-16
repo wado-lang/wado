@@ -231,7 +231,7 @@ impl ValidateCtx<'_> {
             let (call_key, scan): (Option<FnKey>, Vec<ExprId>) = match &body.exprs[e].kind {
                 ExprKind::Call { func, args, .. } => (
                     Some((func.module_source.clone(), func.name.clone())),
-                    args.iter().map(|a| a.expr).collect(),
+                    args.iter().map(|a| a.expr.expr()).collect(),
                 ),
                 ExprKind::MethodCall {
                     func,

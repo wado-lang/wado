@@ -220,7 +220,7 @@ fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -
         | ExprKind::EnumConstruct { .. } => true,
         ExprKind::Local { index, .. } => bound.contains(index),
         ExprKind::StructLiteral { fields, .. } => {
-            let fields: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            let fields: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
             fields
                 .iter()
                 .all(|&v| is_globalizable_const(body, v, bound))
@@ -382,7 +382,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         } => {
             let receiver = *receiver;
             let func = func.clone();
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             let recv = strip_refs(body, receiver.expr());
             if is_local(body, recv, idx) {
                 if gate.callee_mutates_self(&func) != Some(false) {
@@ -401,7 +401,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             args.iter().all(|&a| call_arg_readonly(body, a, idx, gate))
         }
         ExprKind::Call { args, .. } => {
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             args.iter().all(|&a| call_arg_readonly(body, a, idx, gate))
         }
         ExprKind::IndirectCall { callee, args } => {
@@ -461,7 +461,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         ExprKind::Match { expr: scrut, arms } => {
             let scrut = *scrut;
             let arms: Vec<(Option<ExprId>, ExprId)> =
-                arms.iter().map(|a| (a.guard, a.body)).collect();
+                arms.iter().map(|a| (a.guard.map(|g| g.expr()), a.body.expr())).collect();
             expr_readonly(body, scrut.expr(), idx, gate)
                 && arms.iter().all(|(guard, arm_body)| {
                     guard.is_none_or(|g| expr_readonly(body, g, idx, gate))

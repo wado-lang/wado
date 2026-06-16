@@ -1616,7 +1616,7 @@ fn subst_variant_payload_in_expr(
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::ClosureToCanonical { functor: inner, .. }
         | ExprKind::GlobalVarSet { value: inner, .. } => Walk::Exprs(vec![inner.expr()]),
-        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr).collect()),
+        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr.expr()).collect()),
         ExprKind::CmRawCall { args, .. } => Walk::Exprs(args.clone()),
         ExprKind::MethodCall { receiver, args, .. } => {
             let mut v = vec![*receiver];
@@ -1629,7 +1629,7 @@ fn subst_variant_payload_in_expr(
             Walk::Exprs(v)
         }
         ExprKind::StructLiteral { fields, .. } => {
-            Walk::Exprs(fields.iter().map(|f| f.value).collect())
+            Walk::Exprs(fields.iter().map(|f| f.value.expr()).collect())
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             Walk::Exprs(elements.clone())

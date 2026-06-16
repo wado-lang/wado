@@ -2023,7 +2023,7 @@ fn remove_dead_global_sets_expr(body: &mut Body, e: ExprId, used: &IndexSet<(Str
             then_branch,
             else_branch,
         } => W::If(condition.expr(), *then_branch, *else_branch),
-        ExprKind::Match { expr, arms } => W::Match(expr.expr(), arms.iter().map(|a| a.body).collect()),
+        ExprKind::Match { expr, arms } => W::Match(expr.expr(), arms.iter().map(|a| a.body.expr()).collect()),
         ExprKind::Switch { arms, default, .. } => W::Switch(arms.clone(), *default),
         _ => W::None,
     };

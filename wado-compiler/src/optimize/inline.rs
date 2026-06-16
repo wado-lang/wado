@@ -12,7 +12,8 @@ use crate::module_source::ModuleSource;
 use crate::nir::{InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
-    ExprId, ExprKind, ExprNode, NodeRef, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
+    ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId, StmtKind,
+    StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -480,7 +481,7 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
         } => {
             callees.insert(func_ref_inline_key(func));
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             collect_callees_from_expr(body, receiver.expr(), callees);
             for aid in arg_ids {
                 collect_callees_from_expr(body, aid, callees);
@@ -1219,7 +1220,7 @@ fn try_inline_call_expr(
             ExprKind::Call { func, args, .. } => (
                 func.module_source.clone(),
                 func.name.clone(),
-                args.iter().map(|a| a.expr).collect(),
+                args.iter().map(|a| a.expr.expr()).collect(),
             ),
             _ => return None,
         };
@@ -1288,7 +1289,7 @@ fn try_inline_method_call_expr(
             func.module_source.clone(),
             func.name.clone(),
             receiver.expr(),
-            args.iter().map(|a| a.expr).collect(),
+            args.iter().map(|a| a.expr.expr()).collect(),
         ),
         _ => return None,
     };
@@ -1993,7 +1994,7 @@ fn inline_calls_in_expr(
         Call::Free => {
             // Recurse into arguments first, then attempt to inline this call.
             let args: Vec<ExprId> = match &body.exprs[e].kind {
-                ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
+                ExprKind::Call { args, .. } => args.iter().map(|a| a.expr.expr()).collect(),
                 _ => Vec::new(),
             };
             for a in args {
@@ -2044,7 +2045,7 @@ fn inline_calls_in_expr(
         Call::Method => {
             let (receiver, args): (ExprId, Vec<ExprId>) = match &body.exprs[e].kind {
                 ExprKind::MethodCall { receiver, args, .. } => {
-                    (receiver.expr(), args.iter().map(|a| a.expr).collect())
+                    (receiver.expr(), args.iter().map(|a| a.expr.expr()).collect())
                 }
                 _ => unreachable!(),
             };

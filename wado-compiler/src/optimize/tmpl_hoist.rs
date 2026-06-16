@@ -271,7 +271,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
     match &body.exprs[e].kind {
         // Function call: args (not receiver) escape
         ExprKind::Call { args, .. } => {
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             for arg in args {
                 collect_local_refs(body, arg, escaping);
                 collect_escaping_in_expr(body, arg, escaping);
@@ -280,7 +280,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::MethodCall { receiver, args, .. } => {
             // Receiver (self) doesn't escape — only non-self args escape
             let receiver = *receiver;
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             collect_escaping_in_expr(body, receiver.expr(), escaping);
             for arg in args {
                 collect_local_refs(body, arg, escaping);
@@ -306,7 +306,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         }
         // Struct literal fields: all field values escape
         ExprKind::StructLiteral { fields, .. } => {
-            let vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            let vals: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
             for v in vals {
                 collect_local_refs(body, v, escaping);
                 collect_escaping_in_expr(body, v, escaping);
@@ -583,7 +583,7 @@ fn transform_expr(
         None,
     }
     let walk = match &engine.body.exprs[e].kind {
-        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr).collect()),
+        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr.expr()).collect()),
         ExprKind::MethodCall { receiver, args, .. } => {
             let mut v = vec![*receiver];
             v.extend(args.iter().map(|a| a.expr));
@@ -1413,7 +1413,7 @@ fn rename_local_in_expr(
     }
     let walk = match &engine.body.exprs[e].kind {
         ExprKind::Local { index, .. } if *index == old_index => Walk::Local,
-        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr).collect()),
+        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr.expr()).collect()),
         ExprKind::MethodCall { receiver, args, .. } => {
             let mut v = vec![*receiver];
             v.extend(args.iter().map(|a| a.expr));
@@ -1430,7 +1430,7 @@ fn rename_local_in_expr(
         | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![inner.expr()]),
         ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, value.expr()]),
         ExprKind::StructLiteral { fields, .. } => {
-            Walk::Exprs(fields.iter().map(|f| f.value).collect())
+            Walk::Exprs(fields.iter().map(|f| f.value.expr()).collect())
         }
         ExprKind::Index { expr: inner, index } => Walk::Exprs(vec![inner.expr(), index.expr()]),
         ExprKind::If {

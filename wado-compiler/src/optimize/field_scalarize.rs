@@ -247,7 +247,7 @@ fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsag
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 let receiver = *receiver;
-                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
                 mark_if_param_passed(body, receiver.expr(), cx);
                 for arg in arg_ids {
                     mark_if_param_passed(body, arg, cx);
@@ -886,7 +886,7 @@ fn visit_expr_for_alias(
         }
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             visit_expr_for_alias(body, receiver.expr(), true, type_table, out);
             for aid in arg_ids {
                 visit_expr_for_alias(body, aid, true, type_table, out);
@@ -1267,7 +1267,7 @@ fn count_field_accesses_in_expr(
         }
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             count_field_accesses_in_expr(body, receiver.expr(), counts, false, true, type_table);
             for aid in arg_ids {
                 count_field_accesses_in_expr(body, aid, counts, false, true, type_table);
@@ -2408,9 +2408,9 @@ fn recurse_into_call_args(
 ) {
     let (receiver, callee, arg_ids): (Option<ExprId>, Option<ExprId>, Vec<ExprId>) =
         match &body.exprs[e].kind {
-            ExprKind::Call { args, .. } => (None, None, args.iter().map(|a| a.expr).collect()),
+            ExprKind::Call { args, .. } => (None, None, args.iter().map(|a| a.expr.expr()).collect()),
             ExprKind::MethodCall { receiver, args, .. } => {
-                (Some(receiver.expr()), None, args.iter().map(|a| a.expr).collect())
+                (Some(receiver.expr()), None, args.iter().map(|a| a.expr.expr()).collect())
             }
             ExprKind::IndirectCall { callee, args, .. } => (None, Some(callee.expr()), args.clone()),
             _ => unreachable!("recurse_into_call_args called on non-call expr"),
@@ -2487,7 +2487,7 @@ fn accumulate_call_sync(
     match &body.exprs[call].kind {
         ExprKind::Call { func, args, .. } => {
             let func = func.clone();
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             for (arg_position, aid) in arg_ids.into_iter().enumerate() {
                 let immut_ref = is_immut_ref_arg(body, aid, type_table);
                 add_sync_fields_for_arg(
@@ -2511,7 +2511,7 @@ fn accumulate_call_sync(
         } => {
             let func = func.clone();
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             let immut_ref = is_immut_ref_arg(body, receiver.expr(), type_table);
             add_sync_fields_for_arg(
                 body, receiver.expr(), &func, 0, candidates, type_table, cache, immut_ref, result,

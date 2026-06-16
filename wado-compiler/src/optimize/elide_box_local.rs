@@ -447,7 +447,7 @@ fn walk_expr_for_leftmost(
             }
         }
         ExprKind::Call { args, .. } => {
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             walk_children_observable(body, args.into_iter(), candidate, field_name)
         }
         ExprKind::MethodCall { receiver, args, .. } => {
@@ -542,7 +542,7 @@ fn walk_expr_for_leftmost(
             ))
         }
         ExprKind::StructLiteral { fields, .. } => {
-            let fields: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            let fields: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
             walk_children_pure(body, fields.into_iter(), candidate, field_name)
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {

@@ -278,7 +278,7 @@ fn mark_ref_field_locals_as_aliased(
 fn collect_ref_locals_in_fields(body: &Body, expr: ExprId, stores_aliased: &mut IndexSet<u32>) {
     match &body.exprs[expr].kind {
         ExprKind::StructLiteral { fields, .. } => {
-            let vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            let vals: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
             for v in vals {
                 extract_ref_local(body, v, stores_aliased);
             }
@@ -705,7 +705,7 @@ fn soft_expr(
         }
         ExprKind::Call { func, args, .. } => {
             let func = func.clone();
-            let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             for (i, arg) in arg_exprs.into_iter().enumerate() {
                 if is_immut_ref_to_candidate(body, arg, candidates)
                     && !callee_stores_param_at(&func, i, current_module, stores_lookup)
@@ -731,7 +731,7 @@ fn soft_expr(
         } => {
             let receiver = *receiver;
             let func = func.clone();
-            let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             if !is_immut_ref_to_candidate(body, receiver.expr(), candidates)
                 || callee_stores_param_at(&func, 0, current_module, stores_lookup)
             {
@@ -934,7 +934,7 @@ fn expand_struct_let(
     // (field_index, value_expr) pairs in field-index order.
     let mut pairs: Vec<(u32, ExprId)> = match &engine.body.exprs[value].kind {
         ExprKind::StructLiteral { fields, .. } => {
-            fields.iter().map(|f| (f.field_index, f.value)).collect()
+            fields.iter().map(|f| (f.field_index, f.value.expr())).collect()
         }
         ExprKind::TupleLiteral { elements, .. } => elements
             .iter()

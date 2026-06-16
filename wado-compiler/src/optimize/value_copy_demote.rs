@@ -614,7 +614,7 @@ impl ElementClean<'_, '_> {
             } => {
                 let receiver = *receiver;
                 let key = (func.module_source.clone(), func.name.clone());
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
                 // The receiver auto-refs to `&self` / `&mut self`, so strip
                 // the wrapping reference before matching the handle.
                 let recv = strip_refs(body, receiver.expr());
@@ -660,7 +660,7 @@ impl ElementClean<'_, '_> {
                 }
             }
             ExprKind::Call { args, .. } => {
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
                 for a in args {
                     self.visit_call_arg(body, a);
                     if !self.clean {
@@ -927,7 +927,7 @@ impl ElementImmutable<'_, '_, '_> {
             } => {
                 let receiver = *receiver;
                 let key = (func.module_source.clone(), func.name.clone());
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
                 // A call whose receiver is self-derived may mutate an element
                 // unless the callee is known `&self` (cannot mutate) or a
                 // verified element-immutable `&mut self` method. An
@@ -971,7 +971,7 @@ impl ElementImmutable<'_, '_, '_> {
                 // harmless. Opaque (non-builtin) calls still gate.
                 let is_builtin = builtin_gname(func).is_some();
                 let fname = func.name.clone();
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
                 for a in args {
                     if is_builtin {
                         // The `array_*` intrinsics take `&` / `&mut` first

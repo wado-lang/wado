@@ -301,7 +301,7 @@ fn check_expr(
         }
         ExprKind::Call { func, args, .. } => {
             let key: FnKey = (func.module_source.clone(), func.name.clone());
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             args.iter()
                 .enumerate()
                 .all(|(i, &a)| check_call_arg(body, &key, i, a, idx, candidates))
@@ -314,7 +314,7 @@ fn check_expr(
         } => {
             let key: FnKey = (func.module_source.clone(), func.name.clone());
             let receiver = *receiver;
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             check_call_arg(body, &key, 0, receiver.expr(), idx, candidates)
                 && args
                     .iter()
@@ -507,7 +507,7 @@ fn rewrite_call_expr(
             let Some(positions) = sroa_positions.get(&key).cloned() else {
                 return false;
             };
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
             for (pi, info) in &positions {
                 if *pi < args.len() {
                     rewrite_arg(body, args[*pi], info, scalar_param_struct, type_table);
@@ -565,7 +565,7 @@ fn rewrite_call_expr(
                 let ExprKind::MethodCall { args, .. } = &body.exprs[id].kind else {
                     unreachable!();
                 };
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
                 for (pi, info) in &positions {
                     let arg_idx = pi.saturating_sub(1);
                     if *pi >= 1 && arg_idx < args.len() {
