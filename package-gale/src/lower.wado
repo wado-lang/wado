@@ -699,8 +699,8 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
 /// (`TokenRef` / `Literal`), or `null` for anything else.
 fn fixed_token_const_name(elem: &Element) -> Option<String> {
     return match *elem {
-        TokenRef(t) => Option::<String>::Some(`TK_{t.name}`),
-        Literal(l) => Option::<String>::Some(literal_const_name(&l.text)),
+        TokenRef(t) => Option::Some(`TK_{t.name}`),
+        Literal(l) => Option::Some(literal_const_name(&l.text)),
         _ => null,
     };
 }
@@ -794,7 +794,7 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rul
 fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
     if let RuleCall(mut rc) = se {
         if rc.target_snake == *rule_snake {
-            rc.min_prec_arg = Option::<i32>::Some(prec);
+            rc.min_prec_arg = Option::Some(prec);
             return ScanElement::RuleCall(rc);
         }
     }
@@ -804,7 +804,7 @@ fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32
 fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> with stores[op] {
     if let RuleCall(rc) = op {
         if rc.target_name == *rule_name {
-            return Option::<&RuleCallOp>::Some(rc);
+            return Option::Some(rc);
         }
     }
     if let ListLabel(ll) = op {
@@ -849,7 +849,7 @@ fn op_subtree_contains_self_ref(op: &Op, rule_name: &String) -> bool {
 fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
     return match op {
         RuleCall(mut rc) => {
-            rc.min_prec_arg = Option::<i32>::Some(prec);
+            rc.min_prec_arg = Option::Some(prec);
             Op::RuleCall(rc);
         },
         ListLabel(mut ll) => {
@@ -875,7 +875,7 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
     return match op {
         RuleCall(mut rc) => {
             if rc.target_name == *rule_name {
-                rc.min_prec_arg = Option::<i32>::Some(prec);
+                rc.min_prec_arg = Option::Some(prec);
             }
             Op::RuleCall(rc);
         },
@@ -934,7 +934,7 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
     return match se {
         RuleCall(mut rc) => {
             if rc.target_snake == *rule_snake {
-                rc.min_prec_arg = Option::<i32>::Some(prec);
+                rc.min_prec_arg = Option::Some(prec);
             }
             ScanElement::RuleCall(rc);
         },
@@ -3136,23 +3136,23 @@ fn pick_optional_specialised(inner: &Element, body_has_field: bool, ctx: &mut Ge
     let scan_guard = try_optional_scan_guard(inner, ctx);
     if body_has_field {
         if let Some(s) = k_token {
-            return Option::<RepeatStrategy>::Some(s);
+            return Option::Some(s);
         }
         if let Some(s) = shape {
-            return Option::<RepeatStrategy>::Some(s);
+            return Option::Some(s);
         }
         if let Some(s) = scan_guard {
-            return Option::<RepeatStrategy>::Some(s);
+            return Option::Some(s);
         }
     } else {
         if let Some(s) = shape {
-            return Option::<RepeatStrategy>::Some(s);
+            return Option::Some(s);
         }
         if let Some(s) = k_token {
-            return Option::<RepeatStrategy>::Some(s);
+            return Option::Some(s);
         }
         if let Some(s) = scan_guard {
-            return Option::<RepeatStrategy>::Some(s);
+            return Option::Some(s);
         }
     }
     return null;
@@ -3175,7 +3175,7 @@ fn try_optional_k_token_lookahead(inner: &Element) -> Option<RepeatStrategy> {
     for let tk of &tokens {
         sig.push([*tk]);
     }
-    return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalLookahead(
+    return Option::Some(RepeatStrategy::OptionalLookahead(
         OptionalLookaheadStrategy { sig: sig },
     ));
 }
@@ -3277,7 +3277,7 @@ fn try_optional_shape_lookahead(inner: &Element, ctx: &mut GenContext) -> Option
         if shape_entries.is_empty() {
             return null;
         }
-        return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalShapeLookahead(
+        return Option::Some(RepeatStrategy::OptionalShapeLookahead(
             OptionalShapeLookaheadStrategy { shapes: shape_entries },
         ));
     }
@@ -3325,7 +3325,7 @@ fn try_optional_scan_guard(inner: &Element, ctx: &mut GenContext) -> Option<Repe
     if !ctx.is_element_scannable(inner, &mut visiting) {
         return null;
     }
-    return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalScanGuard);
+    return Option::Some(RepeatStrategy::OptionalScanGuard);
 }
 
 /// Compute the `NonGreedy` strategy for a non-greedy Repeat (`e*?` /
@@ -3561,27 +3561,27 @@ fn enumerate_op_field_decls(ops: &List<Op>) -> List<FieldDecl> {
 /// over zero-field inners would do the same once supported).
 fn op_field_decl(op: &Op) -> Option<FieldDecl> {
     return match op {
-        Token(t) => Option::<FieldDecl>::Some(FieldDecl {
+        Token(t) => Option::Some(FieldDecl {
             name: t.field,
             type_str: "Token",
             kind: FieldKind::Plain,
         }),
-        Literal(l) => Option::<FieldDecl>::Some(FieldDecl {
+        Literal(l) => Option::Some(FieldDecl {
             name: l.field,
             type_str: "Token",
             kind: FieldKind::Plain,
         }),
-        RuleCall(r) => Option::<FieldDecl>::Some(FieldDecl {
+        RuleCall(r) => Option::Some(FieldDecl {
             name: r.field,
             type_str: rule_type_name(&r.target_name),
             kind: FieldKind::Plain,
         }),
-        Wildcard(w) => Option::<FieldDecl>::Some(FieldDecl {
+        Wildcard(w) => Option::Some(FieldDecl {
             name: w.field,
             type_str: "Token",
             kind: FieldKind::Plain,
         }),
-        Excluded(e) => Option::<FieldDecl>::Some(FieldDecl {
+        Excluded(e) => Option::Some(FieldDecl {
             name: e.field,
             type_str: "Token",
             kind: FieldKind::Plain,
@@ -3599,7 +3599,7 @@ fn op_field_decl(op: &Op) -> Option<FieldDecl> {
 fn list_label_field_decl(ll: &ListLabelOp) -> Option<FieldDecl> {
     let inner_decl = op_field_decl_for_repeat_inner(&ll.inner);
     return match &inner_decl {
-        Some(d) => Option::<FieldDecl>::Some(FieldDecl {
+        Some(d) => Option::Some(FieldDecl {
             name: ll.field,
             type_str: `List<{d.type_str}>`,
             kind: FieldKind::List,
@@ -3624,12 +3624,12 @@ fn repeat_field_decl(rep: &RepeatOp) -> Option<FieldDecl> {
         },
     };
     return match rep.kind {
-        Optional => Option::<FieldDecl>::Some(FieldDecl {
+        Optional => Option::Some(FieldDecl {
             name: rep.field,
             type_str: `Option<{inner_type}>`,
             kind: FieldKind::Optional,
         }),
-        Star | Plus => Option::<FieldDecl>::Some(FieldDecl {
+        Star | Plus => Option::Some(FieldDecl {
             name: rep.field,
             type_str: `List<{inner_type}>`,
             kind: FieldKind::List,
@@ -3647,22 +3647,22 @@ fn op_field_decl_for_repeat_inner(op: &Op) -> Option<FieldDecl> {
     if let Group(g) = op {
         return match &g.shape {
             Transparent => transparent_group_inner_decl(g),
-            TokenOnly(to) => Option::<FieldDecl>::Some(FieldDecl {
+            TokenOnly(to) => Option::Some(FieldDecl {
                 name: to.field,
                 type_str: "Token",
                 kind: FieldKind::Plain,
             }),
-            SimpleCst(scst) => Option::<FieldDecl>::Some(FieldDecl {
+            SimpleCst(scst) => Option::Some(FieldDecl {
                 name: scst.field,
                 type_str: scst.type_name,
                 kind: FieldKind::Plain,
             }),
-            SingleAlt(sa) => Option::<FieldDecl>::Some(FieldDecl {
+            SingleAlt(sa) => Option::Some(FieldDecl {
                 name: sa.field,
                 type_str: sa.struct_name,
                 kind: FieldKind::Plain,
             }),
-            General(gen) => Option::<FieldDecl>::Some(FieldDecl {
+            General(gen) => Option::Some(FieldDecl {
                 name: gen.field,
                 type_str: gen.variant_type,
                 kind: FieldKind::Plain,
@@ -3681,7 +3681,7 @@ fn group_field_decl(g: &GroupOp) -> Option<FieldDecl> {
         // entry in the alt's op list at that position. We need to
         // hand back the inner's decl directly.
         Transparent => transparent_group_inner_decl(g),
-        TokenOnly(to) => Option::<FieldDecl>::Some(FieldDecl {
+        TokenOnly(to) => Option::Some(FieldDecl {
             name: to.field,
             type_str: "Token",
             kind: FieldKind::Plain,
@@ -3691,17 +3691,17 @@ fn group_field_decl(g: &GroupOp) -> Option<FieldDecl> {
         // `gen_consume_group_store_optional` /
         // `gen_general_group_store_optional` initialise the slot to
         // `None` and only populate on a successful dispatch.
-        SimpleCst(scst) => Option::<FieldDecl>::Some(FieldDecl {
+        SimpleCst(scst) => Option::Some(FieldDecl {
             name: scst.field,
             type_str: `Option<{scst.type_name}>`,
             kind: FieldKind::Optional,
         }),
-        SingleAlt(sa) => Option::<FieldDecl>::Some(FieldDecl {
+        SingleAlt(sa) => Option::Some(FieldDecl {
             name: sa.field,
             type_str: sa.struct_name,
             kind: FieldKind::Plain,
         }),
-        General(gen) => Option::<FieldDecl>::Some(FieldDecl {
+        General(gen) => Option::Some(FieldDecl {
             name: gen.field,
             type_str: `Option<{gen.variant_type}>`,
             kind: FieldKind::Optional,

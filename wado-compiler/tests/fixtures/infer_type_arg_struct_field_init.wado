@@ -1,0 +1,28 @@
+// A struct-literal field initializer receives the field's declared type as its
+// expected type, so a generic call whose type parameters are only in its return
+// (`TreeMap::new()`) infers them from the field type without a turbofish.
+
+use { TreeMap } from "core:collections";
+
+struct Holder {
+    m: TreeMap<String, i32>,
+    s: List<i32>,
+    o: Option<i32>,
+}
+
+fn make() -> Holder {
+    return Holder {
+        m: TreeMap::new(),
+        s: [],
+        o: Option::Some(1),
+    };
+}
+
+test "struct field initializers infer generic type args from the field type" {
+    let h = make();
+    assert h.m.len() == 0;
+    assert h.o == Option::Some(1);
+}
+
+__DATA__
+{"test": {}}

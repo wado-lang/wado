@@ -44,13 +44,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        let (left, right) = self.resolve_binary_operands_with_coercion(
+        let (mut left, mut right) = self.resolve_binary_operands_with_coercion(
             &binary.left,
             binary.op,
             &binary.right,
             ctx,
             expected_type,
         );
+        // Operands share a type, so pin a holey side (`m.get_num() + 1`) to its
+        // concrete sibling before operator dispatch, which would otherwise
+        // mangle a trait-method name against the hole.
+        if self.type_has_infer_hole(left.type_id) ^ self.type_has_infer_hole(right.type_id) {
+            if self.type_has_infer_hole(left.type_id) {
+                self.solve_infer_holes_against(left.type_id, right.type_id);
+            } else {
+                self.solve_infer_holes_against(right.type_id, left.type_id);
+            }
+            left.type_id = self.apply_infer_holes(left.type_id);
+            right.type_id = self.apply_infer_holes(right.type_id);
+        }
         // Pin the binary's source AstId on the
         // side-channel so the operator-trait dispatch path can record
         // the decision under it. Cleared by

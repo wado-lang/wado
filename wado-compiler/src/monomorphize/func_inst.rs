@@ -1743,7 +1743,31 @@ impl Monomorphizer {
                                     .impl_module(&new_info, receiver_module.as_ref());
                                 let concrete_module =
                                     concrete_impl_module.or(blanket_module).or(receiver_module);
-                                let new_monomorph = if new_info.method_type_args.is_empty() {
+                                let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
+                                    monomorph_info: Some(mi),
+                                    ..
+                                } = &*call_func
+                                {
+                                    mi.method_type_args
+                                        .iter()
+                                        .map(|&tid| {
+                                            self.substitute_type(tid, substitution, type_table)
+                                        })
+                                        .collect()
+                                } else {
+                                    Vec::new()
+                                };
+                                let impl_type_arg_tids: Vec<TypeId> = type_table
+                                    .generic_type_args(concrete_type_id)
+                                    .unwrap_or_default();
+                                // A generic-instance receiver
+                                // (`List<i32>^Default::default`) must queue its impl
+                                // instantiation even with no method type args of its
+                                // own — they are impl-level. A non-generic receiver
+                                // (`i32^Default::default`) is a direct function.
+                                let new_monomorph = if method_type_arg_tids.is_empty()
+                                    && impl_type_arg_tids.is_empty()
+                                {
                                     None
                                 } else {
                                     let base_info = LocalMethodName::new(
@@ -1753,23 +1777,6 @@ impl Monomorphizer {
                                     )
                                     .with_base_trait_module(new_info.base_trait_module.clone());
                                     let generic_name = base_info.to_mangled_name();
-                                    let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
-                                        monomorph_info: Some(mi),
-                                        ..
-                                    } = &*call_func
-                                    {
-                                        mi.method_type_args
-                                            .iter()
-                                            .map(|&tid| {
-                                                self.substitute_type(tid, substitution, type_table)
-                                            })
-                                            .collect()
-                                    } else {
-                                        Vec::new()
-                                    };
-                                    let impl_type_arg_tids: Vec<TypeId> = type_table
-                                        .generic_type_args(concrete_type_id)
-                                        .unwrap_or_default();
                                     Some(MonomorphInfo {
                                         generic_name,
                                         impl_type_args: impl_type_arg_tids,

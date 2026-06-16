@@ -1,0 +1,52 @@
+// Free-function deferral: `match none_of() { … }` and `make() + 1` pin a
+// free function's return-only `T` from the surrounding expression, like the
+// method-call forms.
+
+use { println, Stdout } from "core:cli";
+
+fn none_of<T>() -> Option<T> {
+    return null;
+}
+
+trait Producer {
+    fn make() -> Self;
+}
+impl Producer for i32 {
+    fn make() -> i32 { return 7; }
+}
+impl Producer for String {
+    fn make() -> String { return "hi"; }
+}
+
+fn produce<T: Producer>() -> T {
+    return T::make();
+}
+
+export fn run() with Stdout {
+    // match scrutinee: sibling arm pins T = i32.
+    let a = match none_of() {
+        Some(x) => x,
+        None => 0,
+    };
+    assert a == 0;
+
+    // match scrutinee: result annotation pins T = String.
+    let b: String = match none_of() {
+        Some(x) => x,
+        None => "fallback",
+    };
+    assert b == "fallback";
+
+    // binary-op operand: sibling literal pins T = i32.
+    let c = produce() + 1;
+    assert c == 8;
+
+    // LHS annotation through the chain still works for free fns too.
+    let d: i32 = produce();
+    assert d == 7;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

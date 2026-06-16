@@ -1,0 +1,25 @@
+// An explicit method type arg that violates its bound must raise a clean
+// trait-bound error: `m.get::<String>()` where `String` is not `Producer`.
+
+trait Producer {
+    fn make() -> Self;
+}
+impl Producer for i32 {
+    fn make() -> i32 { return 1; }
+}
+
+struct Source {}
+impl Source {
+    fn get<T: Producer>(&self) -> Option<T> {
+        return Option::Some(T::make());
+    }
+}
+
+export fn run() {
+    let s = Source {};
+    let x = s.get::<String>().unwrap();
+    let _ = x;
+}
+
+__DATA__
+{"compile_error": "Producer"}

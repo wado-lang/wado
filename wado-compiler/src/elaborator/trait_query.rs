@@ -1073,39 +1073,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &[TypeId],
         span: Span,
     ) {
-        // Look up function's type params from AST
         let type_params = self.lookup_function_type_params(callee);
-        for (i, param) in type_params.iter().enumerate() {
-            if let Some(&type_arg) = type_args.get(i) {
-                for bound in &param.bounds {
-                    // Skip `fn(...)` / `fn mut(...)` closure-type bounds: they
-                    // are eagerly realised to the bound's function type at
-                    // `register_generic_params`, so the parameter is no longer
-                    // a real generic that needs `type_implements_trait` to
-                    // satisfy a synthetic `Fn` trait.
-                    if bound.fn_signature.is_some() {
-                        continue;
-                    }
-                    if self.type_implements_trait(&self.annotate_ctx, type_arg, &bound.name) {
-                        // Register associated type resolutions so the monomorphizer can
-                        // substitute e.g. I::Iter → ListIter<u8> when I = List<u8>.
-                        self.register_assoc_types_for_concrete_type_and_trait(
-                            type_arg,
-                            &bound.name.clone(),
-                        );
-                    } else {
-                        let type_name = self.tysys.type_id_to_string(type_arg);
-                        let reason = self.trait_unimpl_reason_chain(type_arg, &bound.name);
-                        let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
-                            type_name,
-                            trait_name: bound.name.clone(),
-                            param_name: param.name.clone(),
-                            reason,
-                            span,
-                        });
-                    }
-                }
+        self.enforce_type_arg_bounds(&type_params, type_args, span);
+    }
+
+    /// The single enforcement of trait bounds on a generic decl's type args,
+    /// shared by every generic-call kind so the rule cannot drift. Enforces only
+    /// fully concrete args: a still-parametric arg is forwarded from the caller
+    /// (verified once concrete, since impl-level bounds are not in scope here),
+    /// and `fn(...)`-bound params are realised eagerly elsewhere.
+    pub(super) fn enforce_type_arg_bounds(
+        &mut self,
+        params: &[ast::GenericParam],
+        type_args: &[TypeId],
+        span: Span,
+    ) {
+        for (i, param) in params.iter().enumerate() {
+            let Some(&type_arg) = type_args.get(i) else {
+                continue;
+            };
+            if self.tysys.type_table.borrow().contains_type_param(type_arg) {
+                // Also covers holes (reserved-index params), re-checked at finalize.
+                continue;
             }
+            for bound in &param.bounds {
+                if bound.fn_signature.is_some() {
+                    continue;
+                }
+                self.enforce_single_bound(type_arg, &bound.name, &param.name, span);
+            }
+        }
+    }
+
+    /// Check one concrete type argument against one trait bound — the primitive
+    /// every bound-enforcement path funnels through. On success registers the
+    /// associated types; on failure raises a clean `TraitBoundNotSatisfied`.
+    pub(super) fn enforce_single_bound(
+        &mut self,
+        type_arg: TypeId,
+        trait_name: &str,
+        param_name: &str,
+        span: Span,
+    ) {
+        if self.type_implements_trait(&self.annotate_ctx, type_arg, trait_name) {
+            self.register_assoc_types_for_concrete_type_and_trait(type_arg, trait_name);
+        } else {
+            let type_name = self.tysys.type_id_to_string(type_arg);
+            let reason = self.trait_unimpl_reason_chain(type_arg, trait_name);
+            let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
+                type_name,
+                trait_name: trait_name.to_string(),
+                param_name: param_name.to_string(),
+                reason,
+                span,
+            });
         }
     }
 

@@ -97,7 +97,7 @@ fn add_follow_param(f: &mut FnSpec) {
     f.add_param_spec(ParamSpec {
         name: "follow",
         type_str: "&List<List<i32>>",
-        default_value: Option::<String>::Some("&EMPTY_FOLLOW"),
+        default_value: Option::Some("&EMPTY_FOLLOW"),
     });
 }
 
@@ -225,7 +225,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     frd.emit_begin(w);
     w.line(&"let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };");
     w.begin(&"if take");
-    w.line(&"self.pending = Option::<ParseError>::Some(e);");
+    w.line(&"self.pending = Option::Some(e);");
     w.end();
     w.end();
     w.blank();
@@ -288,13 +288,13 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f7.emit_begin(w);
     w.begin(&"if self.tokens[self.pos].kind == kind");
     w.begin(&"if kind == TK_EOF");
-    w.line(&"return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);");
+    w.line(&"return Result::Ok(self.tokens[self.pos]);");
     w.end();
-    w.line(&"return Result::<Token, ParseError>::Ok(self.advance());");
+    w.line(&"return Result::Ok(self.advance());");
     w.end();
     w.line(&"let tok = &self.tokens[self.pos];");
     w.line(&"let name = token_kind_name(kind);");
-    w.line(&"return Result::<Token, ParseError>::Err(self.error(");
+    w.line(&"return Result::Err(self.error(");
     w.indent();
     w.line(&"`expected {name}, got \"{tok.text}\"`,");
     w.line(&"tok.span,");
@@ -310,7 +310,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f8.set_return_type(&"Result<Token, ParseError>");
     f8.emit_begin(w);
     w.line(&"let tok = &self.tokens[self.pos];");
-    w.line(&"return Result::<Token, ParseError>::Err(self.error(");
+    w.line(&"return Result::Err(self.error(");
     w.indent();
     w.line(&"`expected {name}, got \"{tok.text}\"`,");
     w.line(&"tok.span,");
@@ -327,10 +327,10 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f9.set_return_type(&"Result<Token, ParseError>");
     f9.emit_begin(w);
     w.begin(&"if self.tokens[self.pos].kind != TK_EOF");
-    w.line(&"return Result::<Token, ParseError>::Ok(self.advance());");
+    w.line(&"return Result::Ok(self.advance());");
     w.end();
     w.line(&"let tok = &self.tokens[self.pos];");
-    w.line(&"return Result::<Token, ParseError>::Err(self.error(");
+    w.line(&"return Result::Err(self.error(");
     w.indent();
     w.line(&"`expected any token, got \"{tok.text}\"`,");
     w.line(&"tok.span,");
@@ -357,11 +357,11 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.end();
     w.begin(&"if !blocked");
-    w.line(&"return Result::<Token, ParseError>::Ok(self.advance());");
+    w.line(&"return Result::Ok(self.advance());");
     w.end();
     w.end();
     w.line(&"let tok = &self.tokens[self.pos];");
-    w.line(&"return Result::<Token, ParseError>::Err(self.error(");
+    w.line(&"return Result::Err(self.error(");
     w.indent();
     w.line(&"`unexpected token \"{tok.text}\"`,");
     w.line(&"tok.span,");
@@ -383,13 +383,13 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.begin(&"for let x of included");
     w.begin(&"if x == k");
     w.begin(&"if k == TK_EOF");
-    w.line(&"return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);");
+    w.line(&"return Result::Ok(self.tokens[self.pos]);");
     w.end();
-    w.line(&"return Result::<Token, ParseError>::Ok(self.advance());");
+    w.line(&"return Result::Ok(self.advance());");
     w.end();
     w.end();
     w.line(&"let tok = &self.tokens[self.pos];");
-    w.line(&"return Result::<Token, ParseError>::Err(self.error(");
+    w.line(&"return Result::Err(self.error(");
     w.indent();
     w.line(&"`unexpected token \"{tok.text}\"`,");
     w.line(&"tok.span,");
@@ -548,7 +548,7 @@ fn gen_scan_function_named(
     f.add_param_spec(ParamSpec {
         name: "min_prec",
         type_str: "i32",
-        default_value: Option::<String>::Some("0"),
+        default_value: Option::Some("0"),
     });
     f.set_return_type(&"i32");
     f.emit_begin(w);
@@ -675,7 +675,7 @@ fn gen_scan_lr_functions(
     f2.add_param_spec(ParamSpec {
         name: "min_prec",
         type_str: "i32",
-        default_value: Option::<String>::Some("0"),
+        default_value: Option::Some("0"),
     });
     f2.set_return_type(&"i32");
     f2.emit_begin(w);
@@ -1866,7 +1866,7 @@ fn gen_rule_entry_wrapper(
         f.add_param_spec(ParamSpec {
             name: "min_prec",
             type_str: "i32",
-            default_value: Option::<String>::Some("0"),
+            default_value: Option::Some("0"),
         });
     }
     f.set_return_type(&`Result<{type_name}, ParseError>`);
@@ -1904,7 +1904,7 @@ fn gen_rule_entry_wrapper(
     w.begin(&"if let Err(mut e) = r");
     w.line(&`e.rule_stack.push({lit});`);
     w.line(&`trace_fail(p, &{lit}, &e.message);`);
-    w.line(&`return Result::<{type_name}, ParseError>::Err(e);`);
+    w.line(&`return Result::Err(e);`);
     w.end();
     w.line(&`trace_ok(p, &{lit});`);
     w.line(&"return r;");
@@ -1974,7 +1974,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     let check = ctx.kind_check_str(&firsts, &"kind");
     w.begin(&`if {check}`);
     w.line(&"let token = p.expect(kind)?;");
-    w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
+    w.line(&`return Result::Ok({type_name} \{`);
     w.indent();
     gen_clamped_span_field(w);
     w.line(&"token,");
@@ -2107,8 +2107,8 @@ fn gen_parse_fn_named(
                     gen_alt_body(
                         w,
                         &type_name,
-                        Option::<String>::Some(body.case_name),
-                        Option::<String>::Some(body.struct_name),
+                        Option::Some(body.case_name),
+                        Option::Some(body.struct_name),
                         alt,
                         body,
                         ctx,
@@ -2181,7 +2181,7 @@ fn gen_parse_fn_named(
         f2.add_param_spec(ParamSpec {
             name: "min_prec",
             type_str: "i32",
-            default_value: Option::<String>::Some("0"),
+            default_value: Option::Some("0"),
         });
         f2.set_return_type(&`Result<{type_name}, ParseError>`);
         f2.emit_begin(w);
@@ -2199,7 +2199,7 @@ fn gen_parse_fn_named(
         } else {
             gen_lr_suffix_dispatch(w, &side, rule, lr_alts, lr_dispatch, ctx);
         }
-        w.line(&`return Result::<{type_name}, ParseError>::Ok(result);`);
+        w.line(&`return Result::Ok(result);`);
         w.end();
         w.blank();
     } else {
@@ -2255,14 +2255,14 @@ fn gen_alt_body(
 
     if let Some(case) = variant_case {
         let sname = struct_name.unwrap();
-        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
+        w.line(&`return Result::Ok({type_name}::{case}({sname} \{`);
         w.indent();
         gen_clamped_span_field(w);
         gen_field_assignments_from_fields(w, &body.fields);
         w.dedent();
         w.line(&"}));");
     } else {
-        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
+        w.line(&`return Result::Ok({type_name} \{`);
         w.indent();
         gen_clamped_span_field(w);
         gen_field_assignments_from_fields(w, &body.fields);
@@ -2330,8 +2330,8 @@ fn gen_multi_alt_body(
         gen_alt_body(
             w,
             type_name,
-            Option::<String>::Some(body.case_name),
-            Option::<String>::Some(body.struct_name),
+            Option::Some(body.case_name),
+            Option::Some(body.struct_name),
             alt,
             body,
             ctx,
@@ -2973,7 +2973,7 @@ fn gen_op_storable_optional_with_first(
     w.begin(&`let {*opt_field}: Option<{*inner_type}> = if {*cond}`);
     let mut nc: List<[String, i32]> = [];
     gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nc, &([] as List<String>));
-    w.line(&`Option::<{*inner_type}>::Some({*inner_field})`);
+    w.line(&`Option::Some({*inner_field})`);
     w.else_begin(&"else");
     w.line(&"null");
     w.end_with(&";");
@@ -3115,7 +3115,7 @@ fn gen_op_optional_with_shape_lookahead_storable(
         gen_field_assignments_from_fields(w, &body.fields);
         w.dedent();
         w.line(&"};");
-        w.line(&`Option::<{*inner_type}>::Some({*inner_field})`);
+        w.line(&`Option::Some({*inner_field})`);
     }
     if !is_first {
         w.else_begin(&"else");
@@ -3860,7 +3860,7 @@ fn gen_op_repeat_optional_rulecall(
         w.else_begin(&`else if {ctx.first_check_str(&first)}`);
         let mut nc: List<[String, i32]> = [];
         gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
-        w.line(&`Option::<{inner_type}>::Some({inner_field})`);
+        w.line(&`Option::Some({inner_field})`);
         w.else_begin(&"else");
         w.line(&"null");
         w.end_with(&";");
@@ -3869,7 +3869,7 @@ fn gen_op_repeat_optional_rulecall(
     w.begin(&`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
     let mut nc: List<[String, i32]> = [];
     gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
-    w.line(&`Option::<{inner_type}>::Some({inner_field})`);
+    w.line(&`Option::Some({inner_field})`);
     w.else_begin(&"else");
     w.line(&"null");
     w.end_with(&";");
@@ -3905,7 +3905,7 @@ fn gen_op_repeat_optional_leaf(
         w.else_begin(&`else if {ctx.first_check_str(&loop_first)}`);
         let mut nc: List<[String, i32]> = [];
         gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
-        w.line(&`Option::<{inner_type}>::Some({inner_field})`);
+        w.line(&`Option::Some({inner_field})`);
         w.else_begin(&"else");
         w.line(&"null");
         w.end_with(&";");
@@ -3914,7 +3914,7 @@ fn gen_op_repeat_optional_leaf(
     w.begin(&`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
     let mut nc: List<[String, i32]> = [];
     gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
-    w.line(&`Option::<{inner_type}>::Some({inner_field})`);
+    w.line(&`Option::Some({inner_field})`);
     w.else_begin(&"else");
     w.line(&"null");
     w.end_with(&";");
@@ -4071,7 +4071,7 @@ fn rep_recovery_expr(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
             } else {
                 `{fn_name}(p{follow_arg_str})`;
             };
-            return Option::<String>::Some(call);
+            return Option::Some(call);
         }
     }
     return null;
@@ -4552,7 +4552,7 @@ fn gen_rule_ref_group_scan_dispatch(
         }
         let case_name = group_case_name(&alts[alt_index]);
         let val = gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx, type_name, &case_name);
-        w.line(&`{*opt_var} = Option::<{type_name}>::Some({val});`);
+        w.line(&`{*opt_var} = Option::Some({val});`);
     }
     w.end();
 }
@@ -4595,7 +4595,7 @@ fn gen_simplecst_overlap_loop(
             let alt_index = group[0];
             let body = &g_op_alts[alt_index];
             let val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, type_name, &body.case_name);
-            w.line(&`{*acc_var} = Option::<{*type_name}>::Some({val});`);
+            w.line(&`{*acc_var} = Option::Some({val});`);
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
@@ -4958,7 +4958,7 @@ fn gen_general_alt_parse_and_store(
 
     let mut nc: List<[String, i32]> = [];
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>));
-    w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_index}({struct_name} \{`);
+    w.line(&`{inner_var} = Option::Some({type_name}::Alt{alt_index}({struct_name} \{`);
     w.indent();
     gen_field_assignments_from_fields(w, &body.fields);
     w.dedent();
@@ -5219,7 +5219,7 @@ fn gen_lr_suffix_helpers(
         }
 
         let first_field = first_binding;
-        w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name}::{lr_alt.case_name}({sname} \{`);
+        w.line(&`return Result::Ok({type_name}::{lr_alt.case_name}({sname} \{`);
         w.indent();
         gen_clamped_span_field(w);
         if first_is_list_label {
@@ -5665,8 +5665,8 @@ fn gen_multi_alt_body_alt(
             gen_alt_body(
                 w,
                 type_name,
-                Option::<String>::Some(body.case_name),
-                Option::<String>::Some(body.struct_name),
+                Option::Some(body.case_name),
+                Option::Some(body.struct_name),
                 alt,
                 body,
                 ctx,
@@ -5750,7 +5750,7 @@ fn gen_parse_entry_helpers(w: &mut CodeWriter, trace: bool) {
         gr.emit_begin(w);
         w.begin(&"if let Err(mut e) = r");
         w.line(&"e.rule_stack.push(rule);");
-        w.line(&"return Result::<T, ParseError>::Err(e);");
+        w.line(&"return Result::Err(e);");
         w.end();
         w.line(&"return r;");
         w.end();
@@ -5766,7 +5766,7 @@ fn gen_parse_entry_helpers(w: &mut CodeWriter, trace: bool) {
     w.line(&"let mut parser = _gale_new_parser(input);");
     w.line(&"let _result = run(&mut parser);");
     w.begin(&"if let Err(_e) = _result");
-    w.line(&"return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));");
+    w.line(&"return Result::Err(_gale_pick_error(&parser, _e));");
     w.end();
     w.line(&"return _result;");
     w.end();
@@ -5919,7 +5919,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         dedup_append_arr(&mut expected, &first);
     }
     let msg = escape_string(&`expected {rule.name}`);
-    w.line(&`return Result::<{type_name}, ParseError>::Err(p.error(`);
+    w.line(&`return Result::Err(p.error(`);
     w.indent();
     w.line(&`{msg},`);
     w.line(&"p.peek().span,");

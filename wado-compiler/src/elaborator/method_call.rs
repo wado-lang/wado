@@ -117,8 +117,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
-        // Get the base (non-ref) type for method lookup and struct name extraction
-        let base_type_id = self.tysys.get_base_type(receiver.type_id);
+        // Base (non-ref) type for method lookup. `mut`: deferred-inference may
+        // concretise the receiver below.
+        let mut base_type_id = self.tysys.get_base_type(receiver.type_id);
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
@@ -633,9 +634,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Then add method-level type args with the correct offset
         // If no explicit type args, try to infer from arguments
-        let method_type_args = if type_args.is_empty() {
+        let (method_type_args, reuse_params) = if type_args.is_empty() {
             // Try to infer method type args from actual arguments and expected return type
-            self.infer_method_type_args(MethodInferenceInput {
+            let inferred = self.infer_method_type_args(MethodInferenceInput {
                 receiver_type: receiver.type_id,
                 method_name,
                 impl_offset,
@@ -644,14 +645,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 raw_args: args_ast,
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
+                trait_name: trait_name.as_deref(),
                 span,
-            })
+            });
+            (inferred.type_args, inferred.bound_check_params)
         } else {
-            type_args
+            (type_args, None)
         };
 
         if !method_type_args.is_empty() {
             subst_ctx = subst_ctx.with_method_args(&method_type_args, impl_offset);
+            // Enforce the method's type-arg bounds (shared rule); a violating
+            // concrete arg would otherwise trap WIR build. Hole args are skipped
+            // and re-checked in `finalize_infer_holes`. Reuse the params
+            // `infer_method_type_args` already looked up; the explicit-turbofish
+            // path (no inference) falls back to a fresh lookup.
+            match reuse_params {
+                Some(params) => self.enforce_type_arg_bounds(&params, &method_type_args, span),
+                None => self.check_method_type_arg_bounds(
+                    &struct_name,
+                    &struct_module,
+                    method_name,
+                    trait_name.as_deref(),
+                    &method_type_args,
+                    span,
+                ),
+            }
         }
 
         // Apply unified substitution
@@ -659,6 +678,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type =
                 subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
         }
+
+        // Deferred-inference solve point: a hole that flowed in from an
+        // uninferred generic receiver (`p.get()` in `p.get().unwrap()`) is
+        // solved against this call's expected type and concretised *before* the
+        // mangling/recording below embeds the receiver type in a name a later
+        // TypeId sweep could not fix.
+        if let Some(expected) = expected_type
+            && (self.type_has_infer_hole(return_type) || self.type_has_infer_hole(receiver.type_id))
+        {
+            self.solve_infer_holes_against(return_type, expected);
+            receiver.type_id = self.apply_infer_holes(receiver.type_id);
+            return_type = self.apply_infer_holes(return_type);
+            base_type_id = self.tysys.get_base_type(receiver.type_id);
+        }
+        // A hole may still ride the receiver (a deep chain's intermediate call,
+        // `gen().keep().unwrap()`): the recorded name embeds `Type<?hole>`, but
+        // the monomorphizer rebuilds names from the receiver type, which the
+        // module-end sweep concretises once the hole is solved further out.
 
         // Re-coerce literal-number args and typecheck each arg against the substituted
         // parameter type. This catches inference conflicts such as

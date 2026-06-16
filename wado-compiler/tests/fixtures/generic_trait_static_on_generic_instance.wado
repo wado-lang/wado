@@ -1,0 +1,29 @@
+// A trait-static call `T::default()` where `T` monomorphizes to a generic
+// instance (`List<i32>`) must instantiate the generic trait impl, even though
+// the type args are impl-level (the receiver's), not the method's.
+
+use { println, Stdout } from "core:cli";
+
+fn make_default<T: Default>() -> T {
+    return T::default();
+}
+
+export fn run() with Stdout {
+    let a: List<i32> = make_default();
+    assert a.len() == 0;
+
+    let b: List<String> = make_default();
+    assert b.len() == 0;
+
+    let c: Option<i32> = make_default();
+    assert c matches { None };
+
+    // Non-generic concrete T still works.
+    let d: i32 = make_default();
+    assert d == 0;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

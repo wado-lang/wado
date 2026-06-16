@@ -2054,6 +2054,33 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` (recursively) contains an inference-hole `TypeParam` — one
+    /// whose `index >= base` (see `elaborator::infer_hole`).
+    pub fn contains_infer_hole(&self, id: TypeId, base: u32) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                *index >= base
+            }
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_infer_hole(*inner, base),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|p| self.contains_infer_hole(*p, base))
+                    || self.contains_infer_hole(*return_type, base)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().any(|t| self.contains_infer_hole(*t, base))
+            }
+            _ => false,
+        }
+    }
+
     /// Get a human-readable name for a type
     pub fn type_name(&self, id: TypeId) -> String {
         match self.get(id) {

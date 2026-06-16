@@ -1,0 +1,52 @@
+// Deferred inference through a method chain: `let x: i32 = p.get().unwrap()`
+// infers `get`'s `T` (only in its return type, receiver position) from the LHS
+// annotation via an inference hole solved at `.unwrap()`.
+
+trait Producer {
+    fn make() -> Self;
+}
+impl Producer for i32 {
+    fn make() -> i32 { return 7; }
+}
+impl Producer for String {
+    fn make() -> String { return "hi"; }
+}
+
+struct Source {}
+impl Source {
+    // `T` appears only in the Ok/Some payload — nothing at the call constrains
+    // it, so it must be inferred from a later expected type.
+    fn opt<T: Producer>(&self) -> Option<T> {
+        return Option::Some(T::make());
+    }
+    fn res<T: Producer>(&self) -> Result<T, String> {
+        return Result::Ok(T::make());
+    }
+}
+
+fn take_i32(n: i32) -> i32 {
+    return n;
+}
+
+test "unwrap chain infers the receiver call's type param from the LHS" {
+    let s = Source {};
+    let n: i32 = s.opt().unwrap();
+    assert n == 7;
+    let t: String = s.opt().unwrap();
+    assert t == "hi";
+}
+
+test "expect chain infers, and result-returning receiver too" {
+    let s = Source {};
+    let n: i32 = s.res().expect("value");
+    assert n == 7;
+}
+
+test "argument position drives the chain's expected type" {
+    let s = Source {};
+    // `take_i32`'s parameter type pins `unwrap`'s result, hence `opt`'s `T`.
+    assert take_i32(s.opt().unwrap()) == 7;
+}
+
+__DATA__
+{"test": {}}
