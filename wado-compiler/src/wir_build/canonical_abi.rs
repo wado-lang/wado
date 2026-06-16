@@ -1477,16 +1477,20 @@ fn match_ok_none(body: &Body, op: Operand) -> bool {
     if outer != "Ok" {
         return false;
     }
-    let Some(outer_payload) = outer_payload.as_expr() else {
-        return false;
-    };
-    match &body.exprs[outer_payload].kind {
-        ExprKind::Null => true,
-        ExprKind::VariantConstruct {
-            case_name: inner,
-            payload,
-            ..
-        } => inner == "None" && payload.is_none(),
-        _ => false,
+    match *outer_payload {
+        // `null` promotes to a value; recognise it as the None/null payload.
+        Operand::Value(v) => matches!(
+            body.values.kind(v),
+            crate::nir_value_graph::ValueKind::Null
+        ),
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Null => true,
+            ExprKind::VariantConstruct {
+                case_name: inner,
+                payload,
+                ..
+            } => inner == "None" && payload.is_none(),
+            _ => false,
+        },
     }
 }
