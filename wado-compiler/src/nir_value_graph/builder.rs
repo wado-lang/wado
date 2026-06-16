@@ -238,7 +238,18 @@ pub fn build(
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
-    let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table);
+    // Seed the pool from the body's owned values so a promoted `Operand::Value`
+    // (interned at lower / promotion into `body.values`) resolves through the
+    // same ids. Empty until promotion populates `body.values`, so this is a
+    // no-op clone for an unpromoted body.
+    let mut b = Builder::new(
+        body,
+        aliased,
+        untrackable,
+        mut_escaped,
+        type_table,
+        body.values.clone(),
+    );
     b.seed_params(param_locals);
     b.walk_block(body.root);
     ValueGraphBuild {
@@ -353,10 +364,11 @@ impl<'a> Builder<'a> {
         untrackable: &crate::hashmap::IndexSet<u32>,
         mut_escaped: &crate::hashmap::IndexSet<u32>,
         type_table: Option<&'a crate::tir::TypeTable>,
+        pool: ValuePool,
     ) -> Self {
         Self {
             body,
-            pool: ValuePool::new(),
+            pool,
             value_of: IndexMap::default(),
             current_value: IndexMap::default(),
             heap_state: HeapState::new(),
