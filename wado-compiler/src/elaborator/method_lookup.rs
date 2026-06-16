@@ -211,25 +211,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Shared scan-and-map prologue behind `find_indexing_trait_impl`,
-    /// `find_assoc_type_in_trait_impl`, and `find_arithmetic_trait_impl`.
-    ///
-    /// Walks the trait impls on `struct_name` whose trait name satisfies
-    /// `trait_matches`, builds each candidate's type-parameter mapping from
-    /// `concrete_type_args`, and returns the first non-`None` `project` result.
-    /// Each caller's per-candidate filtering, `Self` handling, and projection
-    /// stay inside `project` (returning `None` skips the candidate); the
-    /// prologue owns only the two mechanical axes the three copies drifted on:
+    /// `find_assoc_type_in_trait_impl`, and `find_arithmetic_trait_impl`: walk
+    /// the trait impls on `struct_name` whose name satisfies `trait_matches`,
+    /// build each candidate's type-parameter mapping from `concrete_type_args`,
+    /// and return the first non-`None` `project` (per-candidate filtering,
+    /// `Self` handling, and projection live in `project`; `None` skips it).
     ///
     /// - `trait_matches`: prefix (indexing / assoc) vs exact (arithmetic).
     /// - `use_declared_type_params`: when false, `build_type_param_mapping`
-    ///   treats every `Named` impl arg as a type parameter (the arithmetic
-    ///   path's legacy behavior); when true it consults the impl's declared
-    ///   params. The resolved declared set is handed to `project` so callers
-    ///   that also run `verify_impl_type_compatibility` reuse it.
-    ///
-    /// `collect_trait_impl_refs` already keys on `struct_name`, so the former
-    /// per-candidate `get_type_name(&impl.ty) == struct_name` re-check (always
-    /// true here) is dropped.
+    ///   treats every `Named` impl arg as a type parameter (arithmetic's legacy
+    ///   behavior); when true it consults the impl's declared params, which are
+    ///   also handed to `project`.
     fn probe_trait_impls<R>(
         &mut self,
         struct_name: &str,
@@ -1522,12 +1514,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         include_trait: bool,
         only_module: Option<&ModuleSource>,
     ) -> Option<Vec<ast::GenericParam>> {
-        // Candidate impl-header keys for this receiver type, in global build
-        // order, keyed by the bare receiver name `get_type_name_static` yields
-        // (the same name the former scan compared against). Iterating
-        // `all_impl_index` directly preserves the original order — and the
-        // original `!include_trait` `trait_name.is_some()` skip — with no merge
-        // or per-call sort.
+        // `all_impl_index` is already in global build order, so iterating it
+        // directly preserves the original order with no merge or per-call sort.
         let Some(candidates) = self.tysys.trait_env.all_impl_index.get(struct_name) else {
             return None;
         };
@@ -1732,8 +1720,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `struct_name` plus the base names of its newtype chain
     /// (`type Alias = Base` → `Base`, `Flags` → `u32`), so a trait impl on a
-    /// base type is reachable through the alias. Phase A of
-    /// [`Self::find_trait_method_for_type_inner`].
+    /// base type is reachable through the alias.
     fn newtype_chain_names(&self, struct_name: &str) -> Vec<String> {
         let mut names = vec![struct_name.to_string()];
         if let Some(newtype_id) = self.lookup_newtype(struct_name) {
@@ -1756,9 +1743,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         names
     }
 
-    /// Candidate trait impls for [`Self::find_trait_method_for_type_inner`]
-    /// (Phase A): every trait impl on one of `names_to_check`, plus blanket
-    /// impls (`impl<T: Bound> Trait for T`) whose bound the receiver satisfies.
+    /// Every trait impl on one of `names_to_check`, plus blanket impls
+    /// (`impl<T: Bound> Trait for T`) whose bound the receiver satisfies.
     fn trait_method_candidates(&mut self, names_to_check: &[String]) -> Vec<ImplBlockRef> {
         // Collect lightweight impl block references (avoiding deep clones).
         let mut impl_refs = self.collect_trait_impl_refs_multi(names_to_check);
@@ -1797,10 +1783,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_refs
     }
 
-    /// Phase B of [`Self::find_trait_method_for_type_inner`]: decide whether
-    /// a candidate impl applies to the receiver. Returns the impl's receiver
-    /// name and whether it is a blanket type-param impl (both consumed by
-    /// Phase C), or `None` to skip the candidate.
+    /// Whether a candidate impl applies to the receiver. Returns its receiver
+    /// name and whether it is a blanket type-param impl, or `None` to skip.
     fn candidate_matches_receiver(
         &mut self,
         impl_ref: &ImplBlockRef,
@@ -1826,16 +1810,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((impl_struct_name, is_blanket_type_param))
     }
 
-    /// For a reference-typed impl (`impl ... for &Container<T>` / `&mut …`),
-    /// whether its inner outer name matches the receiver's outer name.
-    ///
-    /// The name match in [`Self::candidate_matches_receiver`] only sees `"&"` /
-    /// `"&mut"` (`get_type_name` collapses every reference to that literal), so
-    /// without this inner-type check every ref impl would match any `&T`
-    /// receiver — e.g. `&TreeSet<String>` wrongly wiring to `impl<T>
-    /// IntoIterator for &List<T>` and ICEing in WIR validation. Blanket
-    /// `impl<T: Bound> Trait for &T` (inner is a bare type-param name) is exempt:
-    /// widely-applicable by design, soundness handled by the bound check.
+    /// For a reference-typed impl (`impl ... for &Container<T>`), whether its
+    /// inner outer name matches the receiver's. `candidate_matches_receiver`'s
+    /// name match only sees `"&"` / `"&mut"` (`get_type_name` collapses every
+    /// reference to that literal), so without this check every ref impl would
+    /// match any `&T` receiver. Blanket `impl<T: Bound> Trait for &T` (inner is
+    /// a bare type-param name) is exempt — soundness handled by the bound check.
     /// Returns `true` (keep) for any non-reference impl.
     fn ref_impl_targets_receiver(
         &self,
@@ -1875,10 +1855,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The raw GC array's outer constructor is "Array", so a `&Array<T>`
             // ref impl (`impl Trait for &Array<T>`) matches a `&Array<_>` receiver.
             ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
-            // Receiver types with no nominal outer name (`TypeParam`, `Unknown`,
-            // `AssocTypeProjection`, …) are reachable here — e.g. `&T` for a
-            // generic `T`. The empty sentinel never equals the non-empty
-            // `impl_inner`, so the ref impl is conservatively not matched.
+            // Receivers with no nominal outer name (`TypeParam`, `Unknown`, …)
+            // reach here, e.g. `&T`. The empty sentinel never equals the
+            // non-empty `impl_inner`, so the ref impl is not matched.
             _ => String::new(),
         };
         impl_inner == receiver_outer
@@ -1907,22 +1886,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// `TypeId`-equality disambiguation for concrete `impl Trait for <NamedType>`
-    /// impls. The bare-name check in [`Self::candidate_matches_receiver`] accepts
-    /// every such impl with a matching name, so two `impl Describe for Data`
-    /// blocks in different modules — each targeting its own `struct Data` — both
-    /// land here even though only one matches the receiver. Resolve the impl's
-    /// receiver type in the impl's own module context and compare `TypeId`s
-    /// (each module's `Data` interns distinctly), walking the receiver's newtype
-    /// chain so an impl on a base struct stays reachable through `type Alias = Base`.
-    ///
-    /// Widely-applicable receivers are exempt (return `true`): blanket impls
-    /// (type-param receivers), ref-shape impls (already filtered by the
-    /// inner-name check), and *parametric* generic impls (`impl<V> X for
-    /// Bag<V>`), which dispatch through the monomorphizer where the impl's `ty`
-    /// is `TypeParam`-bearing and cannot be compared to a concrete receiver. A
-    /// fully concrete generic impl (`impl X for List<u8>`) interns to a concrete
-    /// `TypeId` and IS checked, or it would also match a `List<i32>` receiver.
+    /// Whether a concrete `impl Trait for <NamedType>` actually targets the
+    /// receiver. The bare-name check in `candidate_matches_receiver` accepts
+    /// every same-named impl, so two `impl Describe for Data` in different
+    /// modules both reach here; resolve the impl's receiver in its own module
+    /// and compare `TypeId`s (each module's `Data` interns distinctly), walking
+    /// the receiver's newtype chain. Widely-applicable receivers — blanket,
+    /// ref-shape, and *parametric* generic impls (`impl<V> X for Bag<V>`) — are
+    /// exempt (`true`), since their `ty` is `TypeParam`-bearing; a fully
+    /// concrete generic impl (`impl X for List<u8>`) interns concretely and is
+    /// checked (else it would also match `List<i32>`).
     fn concrete_impl_matches_receiver(
         &mut self,
         impl_ref: &ImplBlockRef,
@@ -1972,11 +1945,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The body of [`Self::find_trait_method_for_type`] (the wrapper runs it
+    /// The body of [`Self::find_trait_method_for_type`]; the wrapper runs it
     /// with use→def reference recording suppressed, since foreign impl
-    /// signatures are walked here). Orchestrates candidate collection,
-    /// per-candidate receiver matching, projection, and final selection across
-    /// the dedicated helpers below.
+    /// signatures are walked here.
     fn find_trait_method_for_type_inner(
         &mut self,
         struct_name: &str,
@@ -1988,25 +1959,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         use super::types::TraitMethodMatch;
         let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
 
-        // Struct name plus its newtype-chain base names, so an impl on a base
-        // type stays reachable through `type Alias = Base`.
         let names_to_check = self.newtype_chain_names(struct_name);
-
-        // Candidate trait impls for any of those names, plus blanket impls the
-        // receiver satisfies.
         let impl_refs = self.trait_method_candidates(&names_to_check);
 
-        // Now process the collected impl blocks with mutable access.
-        // Re-access impl block fields via index to avoid cloning.
         for impl_ref in &impl_refs {
-            // Filter by receiver match (Phase B); skip non-matching candidates.
             let Some((impl_struct_name, is_blanket_type_param)) =
                 self.candidate_matches_receiver(impl_ref, &names_to_check, receiver_type_id)
             else {
                 continue;
             };
-
-            // Project this candidate into 0+ trait-method matches (Phase C).
             found_traits.extend(self.collect_trait_method_matches_from_impl(
                 impl_ref,
                 impl_struct_name,
@@ -2033,11 +1994,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Project one candidate trait impl into 0+ [`TraitMethodMatch`]es
-    /// (Phase C of [`Self::find_trait_method_for_type_inner`]). Sets up the
-    /// impl's type-parameter / associated-type scope, then emits a match for the
-    /// impl's own method (if it defines `method_name`) or, failing that, for any
-    /// matching trait default method with a body.
+    /// Project one candidate trait impl into 0+ [`TraitMethodMatch`]es: set up
+    /// the impl's type-parameter / associated-type scope, then emit a match for
+    /// the impl's own `method_name`, or failing that for any matching trait
+    /// default method with a body.
     fn collect_trait_method_matches_from_impl(
         &mut self,
         impl_ref: &ImplBlockRef,
@@ -2503,11 +2463,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Phase D of [`Self::find_trait_method_for_type_inner`]: choose the
-    /// winning match from the collected candidates. Prefers a trait impl in the
-    /// current module, deduplicates `(trait, module)` pairs, and returns the
-    /// first remaining (multiple survivors are ambiguous, resolved later by
-    /// explicit disambiguation syntax).
+    /// Choose the winning match: prefer a trait impl in the current module,
+    /// dedup `(trait, module)` pairs, return the first remaining (multiple
+    /// survivors are ambiguous, resolved later by explicit disambiguation).
     fn select_trait_match(
         &self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
@@ -2853,9 +2811,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.probe_trait_impls(
             struct_name,
             &concrete_type_args,
-            // Arithmetic's mapping treats every `Named` impl arg as a type
-            // parameter (empty declared set), unlike the indexing/assoc paths.
-            false,
+            false, // legacy mapping: every `Named` impl arg is a type param
             |found_trait_name| found_trait_name == trait_name,
             |s, impl_ref, mapping, _declared| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>)

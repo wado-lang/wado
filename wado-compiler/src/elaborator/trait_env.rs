@@ -240,19 +240,12 @@ pub struct TraitEnv {
     /// Type name → impl blocks that implement traits for that type.
     pub(super) impl_index: TraitImplIndex,
     /// Type name → **every** impl block (inherent and trait) on that type, in
-    /// global build order (module-then-item, matching `impl_headers`'s
-    /// insertion order). Lets instance-method lookup fetch only the candidate
-    /// impls for a receiver type instead of scanning every item in every
-    /// loaded module — the dominant cost for module-less receivers
-    /// (primitives, `Array<T>`, `unit`) whose inherent methods previously
-    /// triggered a full `O(modules × items)` sweep. Keyed by the same bare
-    /// type name as `impl_index` (via `get_type_name_static`), so two
-    /// same-named types in different modules share a bucket and are
-    /// disambiguated by the per-entry `ModuleSource` at the call site.
-    ///
-    /// Because entries are already globally ordered, candidate scans iterate
-    /// directly — no per-call sort to reconstruct order — and the inherent
-    /// subset is the `trait_name.is_none()` filter ([`Self::inherent_impl_keys`]).
+    /// global build order (matching `impl_headers`'s insertion order), so
+    /// candidate scans iterate directly with no per-call sort. Keyed like
+    /// `impl_index` (bare name via `get_type_name_static`); same-named types in
+    /// different modules share a bucket, disambiguated by the per-entry
+    /// `ModuleSource`. The inherent subset is the `trait_name.is_none()` filter
+    /// ([`Self::inherent_impl_keys`]).
     pub(super) all_impl_index: TraitImplIndex,
     /// Trait name → trait declaration location.
     pub(super) decl_index: TraitDeclIndex,
@@ -669,9 +662,8 @@ impl TraitEnv {
                         associated_types: impl_block.associated_types.clone(),
                     },
                 );
-                // Every impl (inherent or trait) joins `all_impl_index` here,
-                // before the trait/inherent split below, so its order matches
-                // `impl_headers`'s global insertion order.
+                // Joins `all_impl_index` before the trait/inherent split, so its
+                // order matches `impl_headers`'s global insertion order.
                 all_impl_index
                     .entry(type_name.clone())
                     .or_default()
@@ -736,9 +728,8 @@ impl TraitEnv {
                         }
                     }
                 } else {
-                    // Non-trait (inherent) impl block: already recorded in
-                    // `all_impl_index` above; here only its static methods need
-                    // the dedicated index.
+                    // Inherent impl: already in `all_impl_index`; here only its
+                    // static methods need the dedicated index.
                     let recv_key = canonical_key(module_source, &type_name);
                     for (method_idx, method) in impl_block.methods.iter().enumerate() {
                         let has_self = method

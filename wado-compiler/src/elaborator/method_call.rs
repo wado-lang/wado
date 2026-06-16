@@ -2399,11 +2399,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Impl blocks whose receiver base name is `struct_name`, from the
-    /// pre-built `all_impl_index`, ordered current-module-first to preserve the
-    /// former "current items, then loaded modules" scan precedence. Replaces an
-    /// O(all items in all modules) walk per call. `all_impl_index` is already
-    /// in global order, so partitioning by module needs no per-call sort.
+    /// Impl blocks on `struct_name`, current-module-first. `all_impl_index` is
+    /// already in global order, so the partition needs no per-call sort.
     fn impl_blocks_for_type<'b>(&'b self, struct_name: &str) -> Vec<&'b ast::ImplBlock> {
         let Some(keys) = self.tysys.trait_env.all_impl_index.get(struct_name) else {
             return Vec::new();
