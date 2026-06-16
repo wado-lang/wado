@@ -710,7 +710,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
 
     Some(TmplCandidate {
         buf_local_index,
-        init_value.expr(),
+        init_value: init_value.expr(),
         string_type,
         span,
     })

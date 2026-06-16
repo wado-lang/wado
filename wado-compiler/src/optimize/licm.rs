@@ -1501,7 +1501,7 @@ fn hoist_invariant_arith(
                 is_mut: false,
                 is_reactive: false,
                 type_id,
-                value.into(),
+                value: value.into(),
                 skip_value_copy: true,
             },
             Span::new(0, 0, 0, 0),

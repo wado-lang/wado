@@ -279,7 +279,7 @@ fn register_let_binding(
         refs.insert(
             local_index,
             RefInfo {
-                referent_e.expr(),
+                referent_e: referent_e.expr(),
                 eliminable: true,
             },
         );

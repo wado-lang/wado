@@ -976,7 +976,7 @@ fn push_field_let(
             is_mut,
             is_reactive: false,
             type_id: field_type,
-            value.into(),
+            value: value.into(),
             // The original literal was a fresh value, so its fields don't need
             // value_copy — see the original pass comment.
             skip_value_copy: true,
@@ -1029,7 +1029,7 @@ fn reconstruct_aggregate(engine: &mut Engine, id: ExprId, local_idx: u32, ctx: &
             );
             fields.push(ArenaStructField {
                 name: name.clone(),
-                value.into(),
+                value: value.into(),
                 field_index: i as u32,
             });
         }

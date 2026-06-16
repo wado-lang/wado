@@ -234,7 +234,7 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
                 is_mut: false,
                 is_reactive: false,
                 type_id,
-                value.into(),
+                value: value.into(),
                 skip_value_copy: false,
             },
             span,

@@ -1650,7 +1650,7 @@ fn build_element_writer_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            receiver.into(),
+            receiver: receiver.into(),
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
@@ -1685,7 +1685,7 @@ fn build_index_writer_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            receiver.into(),
+            receiver: receiver.into(),
             func,
             type_args: Vec::new(),
             args: vec![
@@ -1725,7 +1725,7 @@ fn build_index_reader_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, false, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            receiver.into(),
+            receiver: receiver.into(),
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {

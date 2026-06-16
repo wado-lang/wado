@@ -717,7 +717,7 @@ fn make_write_back_stmt(
 ) -> StmtId {
     let target = field_access_expr(body, c, span);
     let value = scalar_local_expr(body, c, span);
-    let assign = push_expr(body, ExprKind::Assign { target, value.into() }, c.type_id, span);
+    let assign = push_expr(body, ExprKind::Assign { target, value: value.into() }, c.type_id, span);
     push_stmt(body, StmtKind::Expr(assign), span)
 }
 
@@ -725,7 +725,7 @@ fn make_write_back_stmt(
 fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> StmtId {
     let target = scalar_local_expr(body, c, span);
     let value = field_access_expr(body, c, span);
-    let assign = push_expr(body, ExprKind::Assign { target, value.into() }, c.type_id, span);
+    let assign = push_expr(body, ExprKind::Assign { target, value: value.into() }, c.type_id, span);
     push_stmt(body, StmtKind::Expr(assign), span)
 }
 

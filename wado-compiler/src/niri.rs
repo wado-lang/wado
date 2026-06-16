@@ -1239,7 +1239,7 @@ impl<'a> Interpreter<'a> {
                 ExprKind::Binary {
                     left: scrutinee,
                     op: NirBinaryOp::Eq,
-                    right.into(),
+                    right: right.into(),
                 },
             );
             return true;
@@ -1372,7 +1372,8 @@ fn single_tail_expression_a(body: &Body) -> Option<ExprId> {
         return None;
     };
     match body.stmts[*single].kind {
-        StmtKind::Return { value: Some(e) } | StmtKind::Expr(e.into()) => Some(e.expr()),
+        StmtKind::Return { value: Some(e) } => Some(e.expr()),
+        StmtKind::Expr(e) => Some(e),
         _ => None,
     }
 }

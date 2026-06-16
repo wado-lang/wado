@@ -285,7 +285,7 @@ fn build_switch(
     };
 
     ExprKind::Switch {
-        scrutinee.into(),
+        scrutinee: scrutinee.into(),
         min_value: analysis.min_value,
         arms: switch_arms,
         default: default_block,
