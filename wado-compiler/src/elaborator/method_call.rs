@@ -2399,37 +2399,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// Impl blocks whose receiver base name is `struct_name`, from the
+    /// pre-built inherent + trait impl indices, ordered current-module-first to
+    /// preserve the former "current items, then loaded modules" scan
+    /// precedence. Replaces an O(all items in all modules) walk per call.
+    fn impl_blocks_for_type<'b>(&'b self, struct_name: &str) -> Vec<&'b ast::ImplBlock> {
+        let env = &self.tysys.trait_env;
+        let mut keys: Vec<&(ModuleSource, usize)> = Vec::new();
+        if let Some(entries) = env.inherent_impl_index.get(struct_name) {
+            keys.extend(entries.iter());
+        }
+        if let Some(entries) = env.impl_index.get(struct_name) {
+            keys.extend(entries.iter());
+        }
+        keys.sort_by_key(|key| {
+            // false (current module) sorts before true; within each group keep
+            // the original global insertion order via the header index.
+            (
+                key.0 != self.current_module_source,
+                env.impl_headers.get_index_of(*key),
+            )
+        });
+        keys.into_iter()
+            .filter_map(
+                |key| match self.loaded_modules.get(&key.0)?.items.get(key.1) {
+                    Some(Item::Impl(impl_block)) => Some(impl_block),
+                    _ => None,
+                },
+            )
+            .collect()
+    }
+
     /// Look up whether each non-self parameter of an instance method is `mut`.
     /// Returns empty vec (conservative) for unknown methods.
     fn lookup_method_param_is_mut(&self, struct_name: &str, method_name: &str) -> Vec<bool> {
-        let find_in_items = |items: &[Item]| -> Option<Vec<bool>> {
-            items.iter().find_map(|item| {
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            if method.name == method_name {
-                                let is_muts: Vec<bool> = method
-                                    .params
-                                    .iter()
-                                    .filter(|p| p.self_kind == ast::SelfKind::None)
-                                    .map(|p| p.is_mut)
-                                    .collect();
-                                return Some(is_muts);
-                            }
-                        }
-                    }
+        for impl_block in self.impl_blocks_for_type(struct_name) {
+            for method in &impl_block.methods {
+                if method.name == method_name {
+                    return method
+                        .params
+                        .iter()
+                        .filter(|p| p.self_kind == ast::SelfKind::None)
+                        .map(|p| p.is_mut)
+                        .collect();
                 }
-                None
-            })
-        };
-
-        if let Some(result) = find_in_items(self.current_module_items) {
-            return result;
-        }
-        for module in self.loaded_modules.values() {
-            if let Some(result) = find_in_items(&module.items) {
-                return result;
             }
         }
         Vec::new()
@@ -2442,32 +2455,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Vec<bool> {
-        let find_in_items = |items: &[Item]| -> Option<Vec<bool>> {
-            items.iter().find_map(|item| {
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                return Some(method.params.iter().map(|p| p.is_mut).collect());
-                            }
-                        }
-                    }
+        for impl_block in self.impl_blocks_for_type(struct_name) {
+            for method in &impl_block.methods {
+                let has_self = method
+                    .params
+                    .iter()
+                    .any(|p| p.self_kind != ast::SelfKind::None);
+                if method.name == method_name && !has_self {
+                    return method.params.iter().map(|p| p.is_mut).collect();
                 }
-                None
-            })
-        };
-
-        if let Some(result) = find_in_items(self.current_module_items) {
-            return result;
-        }
-        for module in self.loaded_modules.values() {
-            if let Some(result) = find_in_items(&module.items) {
-                return result;
             }
         }
         Vec::new()

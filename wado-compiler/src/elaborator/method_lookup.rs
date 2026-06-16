@@ -1478,24 +1478,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         include_trait: bool,
         only_module: Option<&ModuleSource>,
     ) -> Option<Vec<ast::GenericParam>> {
-        for (key, header) in &self.tysys.trait_env.impl_headers {
+        // Candidate impl-header keys for this receiver type from the pre-built
+        // indices, both keyed by the bare receiver name `get_type_name_static`
+        // yields — the same name the former scan compared against. Inherent and
+        // trait impls live in disjoint indices, so selecting by `include_trait`
+        // reproduces the old `trait_name.is_some()` skip without touching every
+        // impl in the program.
+        let mut candidates: Vec<&(ModuleSource, usize)> = Vec::new();
+        if let Some(entries) = self.tysys.trait_env.inherent_impl_index.get(struct_name) {
+            candidates.extend(entries.iter());
+        }
+        if include_trait && let Some(entries) = self.tysys.trait_env.impl_index.get(struct_name) {
+            candidates.extend(entries.iter());
+        }
+        // Restore the original global insertion order so a tie between two
+        // impls defining the same method keeps the previous winner.
+        candidates.sort_by_key(|key| self.tysys.trait_env.impl_headers.get_index_of(*key));
+
+        for key in candidates {
             if let Some(m) = only_module
                 && &key.0 != m
             {
                 continue;
             }
-            if !include_trait && header.trait_name.is_some() {
+            let Some(header) = self.tysys.trait_env.impl_headers.get(key) else {
                 continue;
-            }
-            let impl_type_name = self.get_type_name(&header.ty);
-            let impl_base_name = impl_type_name.split('<').next().unwrap_or(&impl_type_name);
-            if impl_type_name == struct_name || impl_base_name == struct_name {
-                for method in &header.methods {
-                    if method.name == method_name
-                        && let Some(names) = Self::non_effect_generic_params(&method.type_params)
-                    {
-                        return Some(names);
-                    }
+            };
+            for method in &header.methods {
+                if method.name == method_name
+                    && let Some(names) = Self::non_effect_generic_params(&method.type_params)
+                {
+                    return Some(names);
                 }
             }
         }
