@@ -1376,9 +1376,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // First, try Index trait (returns reference)
             // Try the direct name first, then fall back to base type name for newtypes
-            let index_trait_info = self
-                .find_index_trait_impl(&struct_name, base_type_id, index_type)
-                .or_else(|| self.find_index_trait_impl(&lookup_name, lookup_type_id, index_type));
+            let index_trait_info = self.index_lookup_or_newtype_base(
+                &struct_name,
+                base_type_id,
+                &lookup_name,
+                lookup_type_id,
+                |s, n, t| s.find_index_trait_impl(n, t, index_type),
+            );
             if let Some(trait_info) = index_trait_info {
                 // Generate: *expr.index(index_expr)
                 let mangled_method_name =
@@ -1423,11 +1427,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Fallback: try IndexValue trait (returns value by copy)
-            let index_value_info = self
-                .find_index_value_trait_impl(&struct_name, base_type_id, index_type)
-                .or_else(|| {
-                    self.find_index_value_trait_impl(&lookup_name, lookup_type_id, index_type)
-                });
+            let index_value_info = self.index_lookup_or_newtype_base(
+                &struct_name,
+                base_type_id,
+                &lookup_name,
+                lookup_type_id,
+                |s, n, t| s.find_index_value_trait_impl(n, t, index_type),
+            );
             if let Some(trait_info) = index_value_info {
                 // Generate: expr.index_value(index_expr)
                 let mangled_method_name = MethodName::format_local(
