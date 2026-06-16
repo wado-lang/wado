@@ -48,7 +48,7 @@ fn cast_expr(inner: Build, target_ty: TypeId) -> Build {
         pe(
             b,
             ExprKind::Cast {
-                expr: e,
+                expr: e.into(),
                 target_type: target_ty,
             },
             target_ty,
@@ -95,9 +95,9 @@ fn binary(op: NirBinaryOp, left: Build, right: Build, result_ty: TypeId) -> Buil
         pe(
             b,
             ExprKind::Binary {
-                left: l,
+                left: l.into(),
                 op,
-                right: r,
+                right: r.into(),
             },
             result_ty,
         )
@@ -107,7 +107,7 @@ fn binary(op: NirBinaryOp, left: Build, right: Build, result_ty: TypeId) -> Buil
 fn unary(op: NirUnaryOp, expr: Build, result_ty: TypeId) -> Build {
     Rc::new(move |b| {
         let e = expr(b);
-        pe(b, ExprKind::Unary { op, expr: e }, result_ty)
+        pe(b, ExprKind::Unary { op, expr: e.into() }, result_ty)
     })
 }
 
@@ -1039,7 +1039,7 @@ fn if_expr(
         pe(
             b,
             ExprKind::If {
-                condition,
+                condition: condition.into(),
                 then_branch,
                 else_branch,
             },
@@ -1365,10 +1365,10 @@ fn reduce_local_rewrites_if_false_true_to_not_cond() {
         panic!("expected Unary::Not, got {:?}", body.exprs[e].kind);
     };
     assert!(matches!(op, NirUnaryOp::Not));
-    let ExprKind::Local { index, .. } = body.exprs[inner].kind else {
+    let ExprKind::Local { index, .. } = body.exprs[inner.expr()].kind else {
         panic!(
             "expected Local inside Unary::Not, got {:?}",
-            body.exprs[inner].kind
+            body.exprs[inner.expr()].kind
         );
     };
     assert_eq!(index, 0);
@@ -1445,7 +1445,7 @@ fn reduce_local_block_splices_const_true_if_stmt() {
     let if_stmt = ps(
         &mut body,
         StmtKind::If {
-            condition,
+            condition: condition.into(),
             then_block,
             else_block: Some(else_block),
         },
@@ -1476,7 +1476,7 @@ fn reduce_local_block_drops_const_false_if_stmt_without_else() {
     let if_stmt = ps(
         &mut body,
         StmtKind::If {
-            condition,
+            condition: condition.into(),
             then_block,
             else_block: None,
         },
@@ -1501,7 +1501,7 @@ fn reduce_local_block_leaves_nonconst_if_alone() {
     let if_stmt = ps(
         &mut body,
         StmtKind::If {
-            condition,
+            condition: condition.into(),
             then_block,
             else_block: None,
         },
@@ -2086,7 +2086,7 @@ fn match_expr(scrutinee: Build, arms: Vec<ArmBuild>, type_id: TypeId) -> Build {
     Rc::new(move |b| {
         let expr = scrutinee(b);
         let arms = arms.iter().map(|a| a(b)).collect();
-        pe(b, ExprKind::Match { expr, arms }, type_id)
+        pe(b, ExprKind::Match { expr: expr.into(), arms }, type_id)
     })
 }
 
@@ -2097,7 +2097,7 @@ fn arm(pattern: PatBuild, body: Build) -> ArmBuild {
         ArmData {
             pattern,
             guard: None,
-            body,
+            body: body.into(),
             span: Span::default(),
         }
     })
@@ -2106,12 +2106,12 @@ fn arm(pattern: PatBuild, body: Build) -> ArmBuild {
 fn arm_with_guard(pattern: PatBuild, guard: Build, body: Build) -> ArmBuild {
     Rc::new(move |b| {
         let pattern = pattern(b);
-        let guard = Some(guard(b));
+        let guard = Some(guard(b).into());
         let body = body(b);
         ArmData {
             pattern,
             guard,
-            body,
+            body: body.into(),
             span: Span::default(),
         }
     })
@@ -2630,19 +2630,19 @@ fn reduce_local_collapses_enum_match_true_false_to_eq() {
         panic!("expected Binary, got {:?}", body.exprs[e].kind);
     };
     assert!(matches!(op, NirBinaryOp::Eq));
-    let ExprKind::Local { index, .. } = body.exprs[left].kind else {
-        panic!("expected Local on left, got {:?}", body.exprs[left].kind);
+    let ExprKind::Local { index, .. } = body.exprs[left.expr()].kind else {
+        panic!("expected Local on left, got {:?}", body.exprs[left.expr()].kind);
     };
     assert_eq!(index, 0);
     let ExprKind::EnumConstruct {
         case_index,
         case_name,
         ..
-    } = &body.exprs[right].kind
+    } = &body.exprs[right.expr()].kind
     else {
         panic!(
             "expected EnumConstruct on right, got {:?}",
-            body.exprs[right].kind
+            body.exprs[right.expr()].kind
         );
     };
     assert_eq!(*case_index, 3);
@@ -3158,7 +3158,7 @@ fn variant_pat(
 fn constant_value_pat(expr: Build) -> PatBuild {
     Rc::new(move |b| {
         let e = expr(b);
-        pp(b, PatKind::ConstantValue { expr: e })
+        pp(b, PatKind::ConstantValue { expr: e.into() })
     })
 }
 
@@ -3346,7 +3346,7 @@ fn ps(body: &mut Body, kind: StmtKind) -> StmtId {
 fn return_stmt(value: Build) -> StmtBuild {
     Rc::new(move |b| {
         let v = value(b);
-        ps(b, StmtKind::Return { value: Some(v) })
+        ps(b, StmtKind::Return { value: Some(v.into()) })
     })
 }
 
@@ -3373,7 +3373,7 @@ fn let_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -> St
                 is_mut: false,
                 is_reactive: false,
                 type_id,
-                value,
+                value: value.into(),
                 skip_value_copy: false,
             },
         )
@@ -3467,7 +3467,7 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
         let call_args = args
             .iter()
             .map(|e| wado_compiler::nir_arena::ArenaCallArg {
-                expr: e(b),
+                expr: e(b).into(),
                 is_mut: false,
             })
             .collect();
@@ -3496,7 +3496,7 @@ fn call_into(body: &mut Body, func: &NirFunction, args: Vec<ExprId>) -> ExprId {
     let call_args = args
         .into_iter()
         .map(|expr| wado_compiler::nir_arena::ArenaCallArg {
-            expr,
+            expr: expr.into(),
             is_mut: false,
         })
         .collect();
@@ -3886,7 +3886,7 @@ fn pure_call_in_if_arm_folds_via_outer_walk() {
     let if_e = pe(
         &mut body,
         ExprKind::If {
-            condition,
+            condition: condition.into(),
             then_branch,
             else_branch: Some(else_branch),
         },
