@@ -141,6 +141,11 @@ pub struct WirContext<'a> {
     /// without re-deriving the aggregate shape.
     /// Computed from `package.functions` at WIR-build start.
     pub multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>,
+    /// `Type^Trait::method` calls that could not be resolved because `Type`
+    /// does not implement `Trait` (an unsatisfied trait bound that escaped
+    /// earlier checks). Collected here rather than trapping the build; the
+    /// compile driver emits clean diagnostics and bails before codegen.
+    pub trait_bound_violations: Vec<crate::wir::TraitBoundViolation>,
 }
 
 /// A function body that needs to be translated from TIR to WIR.
@@ -284,6 +289,7 @@ impl<'a> WirContext<'a> {
             pending_bodies: Vec::new(),
             needed_canonicals: IndexMap::default(),
             multi_value_return_funcs,
+            trait_bound_violations: Vec::new(),
         }
     }
 
@@ -1063,6 +1069,7 @@ impl<'a> WirContext<'a> {
 
     /// Consume this context and produce the final `WirPackage`.
     pub fn into_wir_package(self) -> WirPackage {
+        let trait_bound_violations = self.trait_bound_violations;
         let functions = self.functions;
         let globals = self.globals;
         let global_map = &self.global_map;
@@ -1173,6 +1180,7 @@ impl<'a> WirContext<'a> {
             imported_cm_interfaces: Vec::new(),
             import_plan: Vec::new(),
             defined_func_base: DEFINED_FUNC_BASE,
+            trait_bound_violations,
         }
     }
 }

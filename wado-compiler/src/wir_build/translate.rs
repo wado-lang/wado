@@ -1721,6 +1721,32 @@ impl FunctionTranslator<'_, '_> {
     /// that any subsequent type expectations in the same block are vacuously satisfied,
     /// so `never`-typed sub-expressions can appear in any value position (binary
     /// operands, struct fields, array elements, function arguments, …).
+    /// Handle a call whose `FunctionRef` could not be resolved to a generated
+    /// function. A `Type^Trait::method` name means `Type` does not implement
+    /// `Trait` — an unsatisfied trait bound that escaped earlier checks (a
+    /// forwarded generic parameter whose bound the caller never declared).
+    /// Record it (the driver reports it cleanly and bails before codegen) and
+    /// emit a polymorphic `Unreachable` so the build can finish. A name with no
+    /// trait segment is a genuine internal inconsistency — trap with `panic`.
+    fn unresolved_trait_call_or_trap(
+        &mut self,
+        name: &str,
+        span: crate::token::Span,
+        panic_msg: impl FnOnce() -> String,
+    ) -> WirInstr {
+        if name.contains('^') {
+            self.ctx
+                .trait_bound_violations
+                .push(crate::wir::TraitBoundViolation {
+                    call_name: name.to_string(),
+                    span,
+                });
+            WirInstr::Unreachable
+        } else {
+            panic!("{}", panic_msg());
+        }
+    }
+
     pub(super) fn translate_expr(&mut self, expr_id: ExprId) -> WirInstr {
         let instr = self.translate_expr_inner(expr_id);
         if self.body.exprs[expr_id].type_id == TypeTable::NEVER && !instr.ends_with_terminator() {
@@ -1922,11 +1948,12 @@ impl FunctionTranslator<'_, '_> {
                         args: translated_args,
                     }
                 } else {
-                    panic!(
-                        "[WIR] unresolved Call: name={:?} builtin={:?}",
-                        func.name.clone(),
-                        builtin
-                    );
+                    self.unresolved_trait_call_or_trap(&func.name, expr.span, || {
+                        format!(
+                            "[WIR] unresolved Call: name={:?} builtin={:?}",
+                            func.name, builtin
+                        )
+                    })
                 }
             }
             ExprKind::MethodCall {
@@ -1958,19 +1985,13 @@ impl FunctionTranslator<'_, '_> {
                         func_id,
                         args: translated_args,
                     }
-                } else if let Some(mi) = func.method_info.clone() {
-                    panic!(
-                        "[WIR] unresolved MethodCall: name={:?} module={} method_info={:?}",
-                        func.name.clone(),
-                        func.module_source,
-                        mi
-                    );
                 } else {
-                    panic!(
-                        "[WIR] unresolved MethodCall: name={:?} module={}",
-                        func.name.clone(),
-                        func.module_source
-                    );
+                    self.unresolved_trait_call_or_trap(&func.name, expr.span, || {
+                        format!(
+                            "[WIR] unresolved MethodCall: name={:?} module={} method_info={:?}",
+                            func.name, func.module_source, func.method_info
+                        )
+                    })
                 }
             }
 

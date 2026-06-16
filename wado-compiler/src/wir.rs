@@ -126,6 +126,23 @@ pub struct WirPackage {
     /// `WirFuncId` indices and 0-based array indices into
     /// [`functions`](Self::functions) without hard-coding the offset.
     pub defined_func_base: u32,
+    /// Trait-bound violations discovered while resolving function references: a
+    /// generic call's `Type^Trait::method` whose target was never generated
+    /// because `Type` does not implement `Trait`. Collected here (instead of
+    /// trapping the build) so the compile driver can emit a clean diagnostic
+    /// and bail before codegen. Empty in well-formed programs.
+    pub trait_bound_violations: Vec<TraitBoundViolation>,
+}
+
+/// A `Type^Trait::method` call left unresolved at WIR build because `Type` does
+/// not implement `Trait` — i.e. a trait bound that was not satisfied and
+/// escaped earlier checks (a generic parameter forwarded without its bound).
+#[derive(Debug, Clone)]
+pub struct TraitBoundViolation {
+    /// The unresolved mangled call name (`Type^Trait::method`).
+    pub call_name: String,
+    /// Source location of the offending call.
+    pub span: crate::token::Span,
 }
 
 /// Functions and globals extracted from a `#![wasm_module("name")]` source module.
@@ -297,6 +314,7 @@ impl WirPackage {
             imported_cm_interfaces: Vec::new(),
             import_plan: Vec::new(),
             defined_func_base: 0,
+            trait_bound_violations: Vec::new(),
         }
     }
 }

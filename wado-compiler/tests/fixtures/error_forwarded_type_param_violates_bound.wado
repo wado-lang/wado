@@ -1,0 +1,33 @@
+// A generic function forwarding its own type parameter to a bounded generic
+// call, instantiated with a type that does not satisfy the bound, must produce
+// a clean trait-bound error — not trap WIR build. `outer<U>` forwards `U` to
+// `needs::<U>()` (which requires `U: Producer`) but does not declare the bound;
+// instantiating `outer::<String>()` (String is not `Producer`) leaves
+// `String^Producer::make` unresolved. Regression: this trapped at WIR build;
+// now the build collects the unresolved trait-impl call and the driver reports
+// it cleanly and bails.
+
+use { println, Stdout } from "core:cli";
+
+trait Producer {
+    fn make() -> Self;
+}
+impl Producer for i32 {
+    fn make() -> i32 { return 1; }
+}
+
+fn needs<T: Producer>() -> T {
+    return T::make();
+}
+
+fn outer<U>() -> U {
+    return needs::<U>();
+}
+
+export fn run() with Stdout {
+    let x: String = outer::<String>();
+    println(x);
+}
+
+__DATA__
+{"compile_error": "does not implement trait `Producer`"}

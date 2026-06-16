@@ -114,6 +114,33 @@ at the call site: a still-parametric argument is a forwarded generic, verified
 when its owner is monomorphized; a hole is verified at finalize. Routing every
 path through one primitive is what makes the rule unable to diverge again.
 
+### Two codegen-traps closed (`/code-review` follow-up)
+
+Reviewing this work surfaced two pre-existing traps where a trait bound that
+the front end did not reject reached WIR build as an unresolved
+`Type^Trait::method` (`panic!` at `wir_build/translate.rs`). Both are now clean
+compile errors / correct code:
+
+- A `T::trait_method()` whose `T` is monomorphized to a generic instance —
+  `let xs: List<i32> = make_default()` reaching `List<i32>^Default::default` —
+  was never generated even though `List` implements the trait. The
+  type-param-receiver rewrite only queued the instantiation when the method had
+  type args of its own; for `default()` the type args are impl-level (the
+  receiver's). It now queues those too. Fixture:
+  `tests/fixtures/generic_trait_static_on_generic_instance.wado`.
+- A generic parameter forwarded to a bounded call without the caller declaring
+  the bound — `fn outer<U>() { needs::<U>() }` instantiated `outer::<String>()`
+  where `String` is not `Producer` — left `String^Producer::make` unresolved.
+  Enforcing this at the elaborator call site is unreliable (impl-level
+  parameters' bounds are not in the method body's scope, and same-named methods
+  on different traits confuse a name-only lookup). It is instead caught where
+  every type argument is fully concrete: WIR build collects an unresolved
+  `Type^Trait::method` as a `TraitBoundViolation` (emitting a polymorphic
+  `Unreachable` so the build finishes) and the compile driver reports
+  "type `Type` does not implement trait `Trait`" and bails before codegen.
+  Strictly safe — well-formed code never reaches that resolution failure.
+  Fixture: `tests/fixtures/error_forwarded_type_param_violates_bound.wado`.
+
 Fixtures: `tests/fixtures/infer_type_arg_through_method_chain.wado`,
 `tests/fixtures/infer_type_arg_match_and_binop.wado`,
 `tests/fixtures/infer_type_arg_deep_chain.wado`.
