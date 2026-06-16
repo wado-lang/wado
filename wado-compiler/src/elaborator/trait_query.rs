@@ -1085,17 +1085,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// a clean `TraitBoundNotSatisfied`.
     ///
     /// Only fully concrete arguments are enforced here. A type argument that is
-    /// still a type parameter is *forwarded* from the caller's own generics and
-    /// is verified when that caller is monomorphized (where it becomes
-    /// concrete); enforcing it here would consult the current scope's bounds,
-    /// which is fragile and call-kind-dependent — the exact inconsistency that
-    /// let the three paths drift. Skips:
+    /// still a type parameter is *forwarded* from the caller's own generics; a
+    /// reliable call-site check would need every parameter's declared bounds in
+    /// scope, but impl-level parameters' bounds are not (see the note in
+    /// `item.rs`), so checking them here false-positives. Forwarded parameters
+    /// are therefore left to be verified once concrete. Skips:
     /// - `fn(...)` / `fn mut(...)` closure-type bounds (realised eagerly to the
     ///   bound's function type at `register_generic_params`, so the parameter
     ///   is no longer a real generic needing a `Fn`-trait check);
     /// - non-concrete args — inference holes (re-checked in
     ///   [`Self::finalize_infer_holes`] once solved) and forwarded type
-    ///   parameters (verified at monomorphization).
+    ///   parameters.
     pub(super) fn enforce_type_arg_bounds(
         &mut self,
         params: &[ast::GenericParam],
