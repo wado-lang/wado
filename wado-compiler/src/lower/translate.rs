@@ -26,7 +26,8 @@ use crate::nir::{
 };
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
-    ExprBody, ExprId, ExprKind, ExprNode, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
+    ExprBody, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind, PatNode, StmtId, StmtKind,
+    StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::tir;
@@ -474,7 +475,7 @@ impl FunctionTranslator<'_, '_> {
                 );
                 Some(self.alloc_expr(
                     ExprKind::FieldAccess {
-                        expr: local_expr,
+                        expr: local_expr.into(),
                         field_index: 0,
                         field_name: "value".to_string(),
                     },
@@ -533,7 +534,7 @@ impl FunctionTranslator<'_, '_> {
                 struct_name: box_struct_name,
                 fields: vec![ArenaStructField {
                     name: "value".to_string(),
-                    value,
+                    value: value.into(),
                     field_index: 0,
                 }],
             },
@@ -607,7 +608,7 @@ impl FunctionTranslator<'_, '_> {
                 is_mut: false,
                 is_reactive: false,
                 type_id: ref_type_id,
-                value: ref_nir,
+                value: ref_nir.into(),
                 // Translator-synthesized binding — never a user-visible
                 // defensive copy. See the equivalent flag on the
                 // wide-int rewrite's `__wide_scrut` binding.
@@ -622,7 +623,7 @@ impl FunctionTranslator<'_, '_> {
                 is_mut: false,
                 is_reactive: false,
                 type_id: inner_type_id,
-                value: val_nir,
+                value: val_nir.into(),
                 skip_value_copy: true,
             },
             span,
@@ -646,7 +647,7 @@ impl FunctionTranslator<'_, '_> {
             );
             let target_field = self.alloc_expr(
                 ExprKind::FieldAccess {
-                    expr: ref_local,
+                    expr: ref_local.into(),
                     field_index: field.index,
                     field_name: field.name.clone(),
                 },
@@ -655,7 +656,7 @@ impl FunctionTranslator<'_, '_> {
             );
             let value_field = self.alloc_expr(
                 ExprKind::FieldAccess {
-                    expr: val_local,
+                    expr: val_local.into(),
                     field_index: field.index,
                     field_name: field.name.clone(),
                 },
@@ -665,7 +666,7 @@ impl FunctionTranslator<'_, '_> {
             let assign = self.alloc_expr(
                 ExprKind::Assign {
                     target: target_field,
-                    value: value_field,
+                    value: value_field.into(),
                 },
                 field.type_id,
                 span,
@@ -696,7 +697,7 @@ impl FunctionTranslator<'_, '_> {
         let inner_nir = self.convert_expr(inner);
         Some(self.alloc_expr(
             ExprKind::FieldAccess {
-                expr: inner_nir,
+                expr: inner_nir.into(),
                 field_index: 0,
                 field_name: "value".to_string(),
             },
@@ -727,7 +728,7 @@ impl FunctionTranslator<'_, '_> {
                 },
                 type_args: vec![],
                 args: vec![ArenaCallArg {
-                    expr: value,
+                    expr: value.into(),
                     is_mut: false,
                 }],
             },
@@ -798,13 +799,13 @@ impl FunctionTranslator<'_, '_> {
                     is_mut: *is_mut,
                     is_reactive: *is_reactive,
                     type_id: effective_type,
-                    value: value_nir,
+                    value: value_nir.into(),
                     skip_value_copy: *skip_value_copy,
                 }
             }
             TirStmtKind::Expr(expr) => StmtKind::Expr(self.convert_expr(expr)),
             TirStmtKind::Return { value } => StmtKind::Return {
-                value: value.as_ref().map(|v| self.convert_expr(v)),
+                value: value.as_ref().map(|v| self.convert_operand(v)),
             },
             TirStmtKind::TaskReturn { .. } => unreachable!(
                 "TirStmtKind::TaskReturn should be eliminated by synthesis::cm_binding before lower::translate runs"
@@ -814,7 +815,7 @@ impl FunctionTranslator<'_, '_> {
                 then_block,
                 else_block,
             } => StmtKind::If {
-                condition: self.convert_expr(condition),
+                condition: self.convert_operand(condition),
                 then_block: self.convert_block(then_block),
                 else_block: else_block.as_ref().map(|b| self.convert_block(b)),
             },
@@ -823,7 +824,7 @@ impl FunctionTranslator<'_, '_> {
             },
             TirStmtKind::Break { label, value } => StmtKind::Break {
                 label: label.clone(),
-                value: value.as_ref().map(|v| self.convert_expr(v)),
+                value: value.as_ref().map(|v| self.convert_operand(v)),
             },
             TirStmtKind::Continue => StmtKind::Continue,
             TirStmtKind::LabeledBlock { label, block } => StmtKind::LabeledBlock {
@@ -846,13 +847,20 @@ impl FunctionTranslator<'_, '_> {
                 StmtKind::LetDestructure {
                     pattern: self.convert_pattern(pattern),
                     is_mut: *is_mut,
-                    value: value_nir,
+                    value: value_nir.into(),
                 }
             }
             TirStmtKind::VariadicForOf { .. } => unreachable!(
                 "TirStmtKind::VariadicForOf should be expanded by monomorphize before lower::translate runs"
             ),
         }
+    }
+
+    /// Lower an expression in an operand (rvalue) position. Phase A wraps the
+    /// skeleton subtree as `Operand::Expr`; Phase B interns pure expressions into
+    /// the function's `ValuePool` and returns `Operand::Value` here instead.
+    fn convert_operand(&self, expr: &TirExpr) -> Operand {
+        Operand::Expr(self.convert_expr(expr))
     }
 
     fn convert_expr(&self, expr: &TirExpr) -> ExprId {
@@ -934,7 +942,7 @@ impl FunctionTranslator<'_, '_> {
             }
             return self.alloc_expr(
                 ExprKind::ClosureToCanonical {
-                    functor: nir_struct,
+                    functor: nir_struct.into(),
                     functor_id: *closure_id,
                     target_fn_type: expr.type_id,
                     closure_module: functor.module_source.clone(),
@@ -994,13 +1002,13 @@ impl FunctionTranslator<'_, '_> {
                 .iter()
                 .zip(params_is_mut.into_iter().chain(std::iter::repeat(false)))
                 .map(|(arg, is_mut)| ArenaCallArg {
-                    expr: self.convert_expr(arg),
+                        expr: self.convert_operand(arg),
                     is_mut,
                 })
                 .collect();
             return self.alloc_expr(
                 ExprKind::MethodCall {
-                    receiver: nir_receiver,
+                    receiver: nir_receiver.into(),
                     func: nir::FunctionRef {
                         module_source: functor.module_source.clone(),
                         name: call_method_name,
@@ -1042,7 +1050,7 @@ impl FunctionTranslator<'_, '_> {
             let inner = self.convert_expr(arg);
             return self.alloc_expr(
                 ExprKind::ClosureToCanonical {
-                    functor: inner,
+                    functor: inner.into(),
                     functor_id: spec.functor_id,
                     target_fn_type: spec.original_fn_type,
                     closure_module: functor.module_source.clone(),
@@ -1091,16 +1099,16 @@ impl FunctionTranslator<'_, '_> {
             } => ExprKind::GlobalVarSet {
                 module_source: module_source.clone(),
                 name: name.clone(),
-                value: self.convert_expr(value),
+                value: self.convert_operand(value),
             },
             TirExprKind::Binary { left, op, right } => ExprKind::Binary {
-                left: self.convert_expr(left),
+                left: self.convert_operand(left),
                 op: convert_binary_op(*op),
-                right: self.convert_expr(right),
+                right: self.convert_operand(right),
             },
             TirExprKind::Unary { op, expr } => ExprKind::Unary {
                 op: convert_unary_op(*op),
-                expr: self.convert_expr(expr),
+                expr: self.convert_operand(expr),
             },
             TirExprKind::Assign { target, value } => {
                 // Only `Local` targets receive a defensive copy.
@@ -1118,11 +1126,11 @@ impl FunctionTranslator<'_, '_> {
                 };
                 ExprKind::Assign {
                     target: self.convert_expr(target),
-                    value: value_nir,
+                    value: value_nir.into(),
                 }
             }
             TirExprKind::Cast { expr, target_type } => ExprKind::Cast {
-                expr: self.convert_expr(expr),
+                expr: self.convert_operand(expr),
                 target_type: *target_type,
             },
             TirExprKind::Call {
@@ -1132,7 +1140,7 @@ impl FunctionTranslator<'_, '_> {
             } => self.convert_call(func, type_args, args),
             TirExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
                 local_name: local_name.clone(),
-                args: args.iter().map(|a| self.convert_expr(a)).collect(),
+                args: args.iter().map(|a| self.convert_operand(a)).collect(),
             },
             TirExprKind::MethodCall {
                 receiver,
@@ -1141,7 +1149,7 @@ impl FunctionTranslator<'_, '_> {
                 args,
                 ..
             } => ExprKind::MethodCall {
-                receiver: self.convert_expr(receiver),
+                receiver: self.convert_operand(receiver),
                 func: convert_function_ref(func),
                 type_args: type_args.clone(),
                 args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
@@ -1151,13 +1159,13 @@ impl FunctionTranslator<'_, '_> {
                 field_index,
                 field_name,
             } => ExprKind::FieldAccess {
-                expr: self.convert_expr(expr),
+                expr: self.convert_operand(expr),
                 field_index: *field_index,
                 field_name: field_name.clone(),
             },
             TirExprKind::Index { expr, index } => ExprKind::Index {
-                expr: self.convert_expr(expr),
-                index: self.convert_expr(index),
+                expr: self.convert_operand(expr),
+                index: self.convert_operand(index),
             },
             TirExprKind::Block(block) => ExprKind::Block(self.convert_block(block)),
             TirExprKind::If {
@@ -1165,12 +1173,12 @@ impl FunctionTranslator<'_, '_> {
                 then_branch,
                 else_branch,
             } => ExprKind::If {
-                condition: self.convert_expr(condition),
+                condition: self.convert_operand(condition),
                 then_branch: self.convert_block(then_branch),
                 else_branch: else_branch.as_ref().map(|b| self.convert_block(b)),
             },
             TirExprKind::Match { expr, arms } => ExprKind::Match {
-                expr: self.convert_expr(expr),
+                expr: self.convert_operand(expr),
                 arms: arms.iter().map(|a| self.convert_match_arm(a)).collect(),
             },
             TirExprKind::StructLiteral {
@@ -1186,7 +1194,7 @@ impl FunctionTranslator<'_, '_> {
                     .collect(),
             },
             TirExprKind::TupleLiteral { elements } => ExprKind::TupleLiteral {
-                elements: elements.iter().map(|e| self.convert_expr(e)).collect(),
+                elements: elements.iter().map(|e| self.convert_operand(e)).collect(),
             },
             TirExprKind::TupleSpread { .. } => unreachable!(
                 "TirExprKind::TupleSpread should be expanded by monomorphize before lower::translate runs"
@@ -1215,7 +1223,7 @@ impl FunctionTranslator<'_, '_> {
                 "TirExprKind::Closure reached lower::translate without a functor_id assigned by lower::plan::closure"
             ),
             TirExprKind::IndirectCall { callee, args } => ExprKind::IndirectCall {
-                callee: self.convert_expr(callee),
+                callee: self.convert_operand(callee),
                 // Indirect-call args take an unconditional defensive
                 // copy when the value semantics require it: the callee
                 // signature is opaque here, so the wrap predicate is
@@ -1226,11 +1234,11 @@ impl FunctionTranslator<'_, '_> {
                     .map(|a| {
                         let needs_wrap = self.should_wrap_value_copy(a);
                         let nir = self.convert_expr(a);
-                        if needs_wrap {
+                        Operand::Expr(if needs_wrap {
                             self.wrap_value_copy(nir, a.type_id)
                         } else {
                             nir
-                        }
+                        })
                     })
                     .collect(),
             },
@@ -1243,7 +1251,7 @@ impl FunctionTranslator<'_, '_> {
                 variant_type: *variant_type,
                 case_index: *case_index,
                 case_name: case_name.clone(),
-                payload: payload.as_ref().map(|p| self.convert_expr(p)),
+                payload: payload.as_ref().map(|p| self.convert_operand(p)),
             },
             TirExprKind::EnumConstruct {
                 enum_type,
@@ -1264,14 +1272,14 @@ impl FunctionTranslator<'_, '_> {
                 result_type: *result_type,
             },
             TirExprKind::VariantTag { expr } => ExprKind::VariantTag {
-                expr: self.convert_expr(expr),
+                expr: self.convert_operand(expr),
             },
             TirExprKind::VariantTest {
                 expr,
                 case_index,
                 case_name,
             } => ExprKind::VariantTest {
-                expr: self.convert_expr(expr),
+                expr: self.convert_operand(expr),
                 case_index: *case_index,
                 case_name: case_name.clone(),
             },
@@ -1280,7 +1288,7 @@ impl FunctionTranslator<'_, '_> {
                 case_index,
                 payload_type,
             } => ExprKind::VariantPayload {
-                expr: self.convert_expr(expr),
+                expr: self.convert_operand(expr),
                 case_index: *case_index,
                 payload_type: *payload_type,
             },
@@ -1387,7 +1395,7 @@ impl FunctionTranslator<'_, '_> {
                 PatKind::Or(patterns.iter().map(|p| self.convert_pattern(p)).collect())
             }
             TirPattern::ConstantValue { expr } => PatKind::ConstantValue {
-                expr: self.convert_expr(expr),
+                expr: self.convert_operand(expr),
             },
             TirPattern::Range {
                 start,
@@ -1419,8 +1427,8 @@ impl FunctionTranslator<'_, '_> {
         // Match the tree → arena lowering's child order (pattern, guard,
         // body) so node ids land identically to the path this replaces.
         let pattern = self.convert_pattern(&arm.pattern);
-        let guard = arm.guard.as_ref().map(|g| self.convert_expr(g));
-        let body = self.convert_expr(&arm.body);
+        let guard = arm.guard.as_ref().map(|g| self.convert_operand(g));
+        let body = self.convert_operand(&arm.body);
         ArmData {
             pattern,
             guard,
@@ -1432,7 +1440,7 @@ impl FunctionTranslator<'_, '_> {
     fn convert_struct_field(&self, field: &TirStructField) -> ArenaStructField {
         ArenaStructField {
             name: field.name.clone(),
-            value: self.convert_expr(&field.value),
+            value: self.convert_operand(&field.value),
             field_index: field.field_index,
         }
     }
@@ -1460,7 +1468,7 @@ impl FunctionTranslator<'_, '_> {
                 );
                 ArenaStructField {
                     name: format!("__capture_{i}"),
-                    value,
+                    value: value.into(),
                     field_index: i as u32,
                 }
             })
@@ -1483,7 +1491,7 @@ impl FunctionTranslator<'_, '_> {
             converted
         };
         ArenaCallArg {
-            expr,
+            expr: expr.into(),
             is_mut: arg.is_mut,
         }
     }

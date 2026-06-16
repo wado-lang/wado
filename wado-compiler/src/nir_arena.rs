@@ -67,6 +67,13 @@ impl Operand {
     }
 }
 
+impl From<ExprId> for Operand {
+    #[inline]
+    fn from(e: ExprId) -> Self {
+        Operand::Expr(e)
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ExprId(u32);
 entity_impl!(ExprId, "expr");
