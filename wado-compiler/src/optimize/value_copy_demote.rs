@@ -726,7 +726,9 @@ impl ElementClean<'_, '_> {
                     self.clean = false;
                     return;
                 }
-                self.visit_expr(body, value.expr());
+                if let Some(ve) = value.as_expr() {
+                    self.visit_expr(body, ve);
+                }
             }
             // Every other shape — operators, casts, aggregates, control flow,
             // and the patterns reached through it — is a plain read; recurse
@@ -988,8 +990,9 @@ impl ElementImmutable<'_, '_, '_> {
                 // harmless. Opaque (non-builtin) calls still gate.
                 let is_builtin = builtin_gname(func).is_some();
                 let fname = func.name.clone();
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+                let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 for a in args {
+                    let Some(a) = a.as_expr() else { continue };
                     if is_builtin {
                         // The `array_*` intrinsics take `&` / `&mut` first
                         // parameters (WEP-2026-06-02 Phase 1). A `&mut

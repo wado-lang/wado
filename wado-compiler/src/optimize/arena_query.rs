@@ -168,9 +168,7 @@ pub(super) fn materialize_operand_in_body(
                 .type_of(v)
                 .expect("promoted operand has a recorded type");
             let prim = crate::const_eval::prim_of(ty, type_table);
-            let value = crate::nir_value_graph::value_kind_to_const(body.values.kind(v), prim)
-                .expect("promoted scalar materializes");
-            let kind = crate::const_eval::value_to_arena_kind(value);
+            let kind = crate::nir_value_graph::materialize_value_kind(body.values.kind(v), prim);
             body.exprs.push(crate::nir_arena::ExprNode {
                 kind,
                 type_id: ty,

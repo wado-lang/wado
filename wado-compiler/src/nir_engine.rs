@@ -807,10 +807,10 @@ impl<'a> Engine<'a> {
                 let prim = self
                     .value_graph_type_table()
                     .and_then(|tt| crate::const_eval::prim_of(ty, tt));
-                let vk = self.body.values.kind(v).clone();
-                let value = crate::nir_value_graph::value_kind_to_const(&vk, prim)
-                    .expect("promoted constant operand must materialize");
-                let kind = crate::const_eval::value_to_arena_kind(value);
+                let kind = crate::nir_value_graph::materialize_value_kind(
+                    self.body.values.kind(v),
+                    prim,
+                );
                 self.alloc_expr(kind, ty, span)
             }
         }

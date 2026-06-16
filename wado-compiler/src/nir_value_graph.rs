@@ -14,7 +14,46 @@ pub mod builder;
 
 use crate::hashmap::IndexMap;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::nir_arena::ExprKind;
 use crate::tir::{PrimitiveType, TypeId};
+
+/// The literal [`ExprKind`] for a promoted scalar [`ValueKind`] — the constant
+/// extractor that puts a promoted operand back into the skeleton. `prim` (the
+/// operand's resolved primitive) gives the exact integer repr when known; the
+/// repr falls back to a plain decimal otherwise (value-correct — repr is
+/// cosmetic). Panics on a non-scalar kind: only `Int`/`Float`/`Bool`/`Char` are
+/// promoted.
+pub(crate) fn materialize_value_kind(kind: &ValueKind, prim: Option<PrimitiveType>) -> ExprKind {
+    use crate::const_eval::{Value, value_to_arena_kind};
+    match (kind, prim) {
+        (ValueKind::Int(x), Some(p)) if crate::const_eval::is_int_prim(p) => {
+            value_to_arena_kind(Value::Int {
+                value: *x,
+                prim: p,
+            })
+        }
+        (ValueKind::Int(x), _) => ExprKind::IntLiteral {
+            value: *x,
+            repr: x.to_string(),
+        },
+        (ValueKind::Float(b), Some(p)) if matches!(p, PrimitiveType::F32 | PrimitiveType::F64) => {
+            value_to_arena_kind(Value::Float {
+                value: f64::from_bits(*b),
+                prim: p,
+            })
+        }
+        (ValueKind::Float(b), _) => {
+            let f = f64::from_bits(*b);
+            ExprKind::FloatLiteral {
+                value: f,
+                repr: format!("{f}"),
+            }
+        }
+        (ValueKind::Bool(b), _) => ExprKind::BoolLiteral(*b),
+        (ValueKind::Char(c), _) => ExprKind::CharLiteral(*c),
+        _ => panic!("non-scalar promoted operand cannot be materialized"),
+    }
+}
 
 /// Bridge a literal [`ValueKind`] to niri's [`crate::const_eval::Value`] for
 /// constant folding, applying the same prim-consistency filter niri's own

@@ -318,10 +318,12 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let type_table = type_table_rc.borrow();
         let mut engine = Engine::new(body, &mut buffers, locals);
-        // `with_capacity` rewrite may re-materialize a promoted constant capacity.
-        engine.set_value_graph_type_table(&type_table);
+        // A promoted constant capacity is re-materialized during the rewrite;
+        // `materialize_operand` falls back to a decimal repr without the type
+        // table, which is exact for the non-negative capacity ints. (The session
+        // cannot hold a `type_table` borrow — the rule's `make_list` needs
+        // `borrow_mut`.)
         engine.run(&[&rule])
     })
 }

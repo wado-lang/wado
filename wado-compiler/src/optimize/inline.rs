@@ -2077,11 +2077,12 @@ fn inline_calls_in_expr(
     match kind {
         Call::Free => {
             // Recurse into arguments first, then attempt to inline this call.
-            let args: Vec<ExprId> = match &body.exprs[e].kind {
-                ExprKind::Call { args, .. } => args.iter().map(|a| a.expr.expr()).collect(),
+            let args: Vec<Operand> = match &body.exprs[e].kind {
+                ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
                 _ => Vec::new(),
             };
             for a in args {
+                let Some(a) = a.as_expr() else { continue };
                 inline_calls_in_expr(
                     body,
                     a,
