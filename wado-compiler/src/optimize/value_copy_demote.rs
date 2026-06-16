@@ -274,12 +274,12 @@ fn stmt_binding(body: &Body, s: StmtId) -> Option<(ExprId, u32)> {
     match &body.stmts[s].kind {
         StmtKind::Let {
             local_index, value, ..
-        } => Some((value.expr(), *local_index)),
+        } => value.as_expr().map(|e| (e, *local_index)),
         StmtKind::Expr(e) => {
             if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
                 && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
             {
-                Some((value.expr(), *index))
+                value.as_expr().map(|e| (e, *index))
             } else {
                 None
             }

@@ -163,6 +163,9 @@ pub(super) fn run_peephole(
             rules.push(push_rule);
         }
         let mut engine = Engine::new(body, &mut buffers, locals);
+        // `MatchToSwitchRule` materializes promoted constant scrutinees / arm
+        // bodies; the extractor reads `prim` from the type table for literal repr.
+        engine.set_value_graph_type_table(&type_table);
         engine.run(&rules)
     })
 }

@@ -59,11 +59,14 @@ fn run_rule(project: &mut NirPackage, mode: PruneMode) -> bool {
     let rule = BranchPruneRule::new(mode);
     let mut changed = false;
     let mut buffers = EngineBuffers::default();
+    let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         if let Some(body) = body.as_mut() {
             let mut engine = Engine::new(body, &mut buffers, locals);
+            // A pruned break value that is a promoted constant is re-materialized.
+            engine.set_value_graph_type_table(&type_table);
             changed |= engine.run(&[&rule]);
         }
     }
@@ -158,11 +161,13 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
                 // Drop the trailing break; the broken value becomes the tail.
                 let mut stmts = engine.body.blocks[block].stmts.clone();
                 stmts.pop();
+                let bv_span = engine.body.exprs[id].span;
+                let bv = engine.materialize_operand(brk_value, bv_span);
                 if stmts.is_empty() {
-                    engine.become_expr(id, brk_value.expr());
+                    engine.become_expr(id, bv);
                 } else {
-                    let tail_span = engine.body.exprs[brk_value.expr()].span;
-                    let tail = engine.alloc_stmt(StmtKind::Expr(brk_value.expr()), tail_span);
+                    let tail_span = engine.body.exprs[bv].span;
+                    let tail = engine.alloc_stmt(StmtKind::Expr(bv), tail_span);
                     stmts.push(tail);
                     engine.set_block_stmts(block, stmts);
                     engine.replace_expr_kind(id, ExprKind::Block(block));

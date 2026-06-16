@@ -176,10 +176,14 @@ fn classify_expr(
             // Auto-ref: the receiver carries `T` even for `&mut self`
             // methods, so be conservative and treat any local receiver as
             // potentially field-mutated by the call.
-            mark_root_field_mutated(body, receiver.expr(), usage);
+            if let Some(re) = receiver.as_expr() {
+                mark_root_field_mutated(body, re, usage);
+            }
             for arg in args {
-                if arg.is_mut || is_mut_ref_type(body.exprs[arg.expr.expr()].type_id, type_table) {
-                    mark_root_field_mutated(body, arg.expr.expr(), usage);
+                if let Some(ae) = arg.expr.as_expr()
+                    && (arg.is_mut || is_mut_ref_type(body.exprs[ae].type_id, type_table))
+                {
+                    mark_root_field_mutated(body, ae, usage);
                 }
             }
         }
@@ -306,11 +310,12 @@ fn eligible_value(
             skip_value_copy,
             ..
         } => {
-            if !*is_mut
+            if let Some(ve) = value.as_expr()
+                && !*is_mut
                 && !*skip_value_copy
-                && elision_safe(body, *local_index, 0, value.expr(), value_copy_set, usage)
+                && elision_safe(body, *local_index, 0, ve, value_copy_set, usage)
             {
-                Some(value.expr())
+                Some(ve)
             } else {
                 None
             }

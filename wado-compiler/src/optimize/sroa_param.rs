@@ -330,7 +330,7 @@ fn check_expr(
                 return false;
             }
             check_expr(body, target, idx, candidates)
-                && check_expr(body, value.expr(), idx, candidates)
+                && check_operand(body, value, idx, candidates)
         }
         _ => {
             let mut kids = Vec::new();

@@ -51,10 +51,12 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
         let mut func = func_rc.borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         if let Some(body) = body.as_mut() {
-            changed |= Engine::new(body, &mut buffers, locals).run(&[&rule]);
+            let mut engine = Engine::new(body, &mut buffers, locals);
+            engine.set_value_graph_type_table(&type_table);
+            changed |= engine.run(&[&rule]);
         }
     }
-    changed | run_globals(&mut project.globals, &rule, &mut buffers)
+    changed | run_globals(&mut project.globals, &rule, &type_table, &mut buffers)
 }
 
 /// Lower dense `Match` → `Switch` in global initializer bodies only. Functions
@@ -66,12 +68,13 @@ pub(super) fn match_to_switch_globals(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
     let rule = MatchToSwitchRule::new(&type_table);
     let mut buffers = EngineBuffers::default();
-    run_globals(&mut project.globals, &rule, &mut buffers)
+    run_globals(&mut project.globals, &rule, &type_table, &mut buffers)
 }
 
 fn run_globals(
     globals: &mut [crate::nir::NirGlobal],
     rule: &MatchToSwitchRule,
+    type_table: &TypeTable,
     buffers: &mut EngineBuffers,
 ) -> bool {
     let mut changed = false;
@@ -82,6 +85,7 @@ fn run_globals(
     let mut no_locals: Vec<crate::nir::NirLocal> = Vec::new();
     for global in globals {
         let mut engine = Engine::new(global.initializer.body_mut(), buffers, &mut no_locals);
+        engine.set_value_graph_type_table(type_table);
         changed |= engine.run(&[rule]);
     }
     changed

@@ -77,7 +77,9 @@ use std::cell::Cell;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirStruct, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{
+    ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
+};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -267,8 +269,10 @@ enum ElementLayout {
 /// the live body) is deep-cloned once per decomposed field at rewrite time, so
 /// it must be side-effect-free.
 struct CandidateInit {
-    /// Capacity expression id to pass to each per-field `with_capacity(...)` call.
-    capacity: ExprId,
+    /// Capacity operand passed to each per-field `with_capacity(...)` call —
+    /// a skeleton subtree (cloned per field) or a promoted constant
+    /// (re-materialised per field).
+    capacity: Operand,
 }
 
 /// Apply container SROA to all functions in the project.
@@ -314,7 +318,10 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let type_table = type_table_rc.borrow();
         let mut engine = Engine::new(body, &mut buffers, locals);
+        // `with_capacity` rewrite may re-materialize a promoted constant capacity.
+        engine.set_value_graph_type_table(&type_table);
         engine.run(&[&rule])
     })
 }
@@ -690,13 +697,12 @@ fn recognize_init(body: &Body, value: ExprId, sig_kinds: &SigKindIndex) -> Optio
     }
     let cap = args[0].expr;
     // The capacity expression is cloned once per per-field constructor
-    // call during rewrite, so it must be side-effect-free.
-    if !is_duplicable_expr(body, cap.expr()) {
+    // call during rewrite, so it must be side-effect-free. A promoted constant
+    // is trivially duplicable.
+    if !cap.as_expr().map_or(true, |e| is_duplicable_expr(body, e)) {
         return None;
     }
-    Some(CandidateInit {
-        capacity: cap.expr(),
-    })
+    Some(CandidateInit { capacity: cap })
 }
 
 /// Unwrap a labeled block of shape
@@ -1180,8 +1186,12 @@ impl Rewriter<'_, '_> {
         for (k, elem_ty) in element_types.into_iter().enumerate() {
             let new_local_index = ctx.field_local_map[&(local_index, k as u32)];
             let (new_name, arr_ty) = ctx.field_info_map[&(local_index, k as u32)].clone();
-            // Deep-clone the (duplicable) capacity once per field.
-            let cap = engine.clone_expr(capacity);
+            // Deep-clone the (duplicable) capacity once per field — or
+            // re-materialize it for a promoted constant (a fresh literal each).
+            let cap = match capacity {
+                Operand::Expr(e) => engine.clone_expr(e),
+                Operand::Value(_) => engine.materialize_operand(capacity, span),
+            };
             let init = build_with_capacity_call(engine, elem_ty, arr_ty, cap, span, ctx);
             let let_stmt = engine.alloc_stmt(
                 StmtKind::Let {

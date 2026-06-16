@@ -68,16 +68,16 @@ fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable) -> BlockCut {
 fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable) -> usize {
     match &body.stmts[stmt].kind {
         StmtKind::Expr(expr) => count_expr(body, *expr, type_table),
-        StmtKind::Let { value, .. } => count_expr(body, value.expr(), type_table),
-        StmtKind::LetDestructure { value, .. } => count_expr(body, value.expr(), type_table),
-        StmtKind::Return { value } => value.map_or(0, |v| count_expr(body, v.expr(), type_table)),
+        StmtKind::Let { value, .. } => count_operand(body, *value, type_table),
+        StmtKind::LetDestructure { value, .. } => count_operand(body, *value, type_table),
+        StmtKind::Return { value } => value.map_or(0, |v| count_operand(body, v, type_table)),
         StmtKind::If {
             condition,
             then_block,
             else_block,
             ..
         } => {
-            count_expr(body, condition.expr(), type_table)
+            count_operand(body, *condition, type_table)
                 + count_block_exprs(body, *then_block, type_table)
                 + else_block.map_or(0, |b| count_block_exprs(body, b, type_table))
         }
@@ -89,40 +89,45 @@ fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable) -> usize {
 }
 
 /// Count expressions in a NIR expression (recursive)
+fn count_operand(body: &Body, op: Operand, type_table: &TypeTable) -> usize {
+    // A promoted constant counts as the one literal node it replaced.
+    op.as_expr().map_or(1, |e| count_expr(body, e, type_table))
+}
+
 fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
     1 + match &body.exprs[id].kind {
         ExprKind::Binary { left, right, .. } => {
-            count_expr(body, left.expr(), type_table) + count_expr(body, right.expr(), type_table)
+            count_operand(body, *left, type_table) + count_operand(body, *right, type_table)
         }
-        ExprKind::Unary { expr, .. } => count_expr(body, expr.expr(), type_table),
+        ExprKind::Unary { expr, .. } => count_operand(body, *expr, type_table),
         ExprKind::Call { args, .. } => args
             .iter()
-            .map(|a| count_expr(body, a.expr.expr(), type_table))
+            .map(|a| count_operand(body, a.expr, type_table))
             .sum(),
         ExprKind::MethodCall { receiver, args, .. } => {
-            count_expr(body, receiver.expr(), type_table)
+            count_operand(body, *receiver, type_table)
                 + args
                     .iter()
-                    .map(|a| count_expr(body, a.expr.expr(), type_table))
+                    .map(|a| count_operand(body, a.expr, type_table))
                     .sum::<usize>()
         }
-        ExprKind::FieldAccess { expr, .. } => count_expr(body, expr.expr(), type_table),
+        ExprKind::FieldAccess { expr, .. } => count_operand(body, *expr, type_table),
         ExprKind::Index { expr, index, .. } => {
-            count_expr(body, expr.expr(), type_table) + count_expr(body, index.expr(), type_table)
+            count_operand(body, *expr, type_table) + count_operand(body, *index, type_table)
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .map(|e| count_expr(body, e.expr(), type_table))
+            .map(|e| count_operand(body, *e, type_table))
             .sum(),
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .map(|f| count_expr(body, f.value.expr(), type_table))
+            .map(|f| count_operand(body, f.value, type_table))
             .sum(),
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.map_or(0, |p| count_expr(body, p.expr(), type_table))
+            payload.map_or(0, |p| count_operand(body, p, type_table))
         }
         ExprKind::Assign { target, value } => {
-            count_expr(body, *target, type_table) + count_expr(body, value.expr(), type_table)
+            count_expr(body, *target, type_table) + count_operand(body, *value, type_table)
         }
         ExprKind::If {
             condition,
@@ -131,24 +136,24 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         } => {
             // Cold branches contribute nothing: `count_block_exprs` stops at a
             // `cold_path()` marker or a diverging statement within each arm.
-            count_expr(body, condition.expr(), type_table)
+            count_operand(body, *condition, type_table)
                 + count_block_exprs(body, *then_branch, type_table)
                 + else_branch.map_or(0, |b| count_block_exprs(body, b, type_table))
         }
         ExprKind::Match { expr, arms } => {
-            count_expr(body, expr.expr(), type_table)
+            count_operand(body, *expr, type_table)
                 + arms
                     .iter()
                     .map(|arm| {
                         arm.guard
-                            .map_or(0, |g| count_expr(body, g.expr(), type_table))
-                            + count_expr(body, arm.body.expr(), type_table)
+                            .map_or(0, |g| count_operand(body, g, type_table))
+                            + count_operand(body, arm.body, type_table)
                     })
                     .sum::<usize>()
         }
         ExprKind::Block(block) => count_block_exprs(body, *block, type_table),
-        ExprKind::Cast { expr, .. } => count_expr(body, expr.expr(), type_table),
-        ExprKind::GlobalVarSet { value, .. } => count_expr(body, value.expr(), type_table),
+        ExprKind::Cast { expr, .. } => count_operand(body, *expr, type_table),
+        ExprKind::GlobalVarSet { value, .. } => count_operand(body, *value, type_table),
         // Leaf expressions (no children)
         ExprKind::IntLiteral { .. }
         | ExprKind::FloatLiteral { .. }
@@ -164,17 +169,17 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         ExprKind::EnumConstruct { .. } => 0,
         ExprKind::CmRawCall { args, .. } => args
             .iter()
-            .map(|a| count_expr(body, a.expr(), type_table))
+            .map(|a| count_operand(body, *a, type_table))
             .sum(),
         ExprKind::IndirectCall { callee, args } => {
-            count_expr(body, callee.expr(), type_table)
+            count_operand(body, *callee, type_table)
                 + args
                     .iter()
-                    .map(|a| count_expr(body, a.expr(), type_table))
+                    .map(|a| count_operand(body, *a, type_table))
                     .sum::<usize>()
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
-            count_expr(body, functor.expr(), type_table)
+            count_operand(body, *functor, type_table)
         }
         ExprKind::Switch {
             scrutinee,
@@ -182,7 +187,7 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
             default,
             ..
         } => {
-            count_expr(body, scrutinee.expr(), type_table)
+            count_operand(body, *scrutinee, type_table)
                 + arms
                     .iter()
                     .map(|a| count_block_exprs(body, *a, type_table))
@@ -192,7 +197,7 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         // Lowered pattern matching nodes - count inner expressions
         ExprKind::VariantTag { expr }
         | ExprKind::VariantTest { expr, .. }
-        | ExprKind::VariantPayload { expr, .. } => count_expr(body, expr.expr(), type_table),
+        | ExprKind::VariantPayload { expr, .. } => count_operand(body, *expr, type_table),
         ExprKind::LabeledBlock { block, .. } => count_block_exprs(body, *block, type_table),
     }
 }
@@ -490,10 +495,10 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
         } => {
             callees.insert(func_ref_inline_key(func));
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let arg_ids: Vec<Operand> = args.iter().map(|a| a.expr).collect();
             collect_callees_from_operand(body, receiver, callees);
             for aid in arg_ids {
-                collect_callees_from_expr(body, aid, callees);
+                collect_callees_from_operand(body, aid, callees);
             }
         }
         ExprKind::Binary { left, right, .. } => {
@@ -569,7 +574,7 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
                 if let Some(guard) = arm.guard {
                     collect_callees_from_operand(body, guard, callees);
                 }
-                collect_callees_from_expr(body, arm.body.expr(), callees);
+                collect_callees_from_operand(body, arm.body, callees);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
