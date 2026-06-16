@@ -216,6 +216,9 @@ pub fn optimize(
     // pick a constant `array.new_fixed<u8>` repr for strings at or below it —
     // which lets a constant string global promote to an eager Wasm constant.
     project.string_inline_max_bytes = string_inline_max_bytes(opt_level);
+    // Promote literal operands to `Operand::Value` before any pass runs, so the
+    // value passes read promoted constants from `body.values` (WEP Phase B.2).
+    promote_all(&project, profiler);
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
@@ -308,6 +311,14 @@ pub fn optimize(
     multi_value_return::classify_multi_value_returns(&mut project);
     profiler.span_end("nir/multi_value_return");
 
+    project
+}
+
+/// Promote every function's literal operands to `Operand::Value` (interned into
+/// `body.values`). Run *before* the optimization loop so the value passes read
+/// promoted constants from the pool instead of matching literal `ExprKind`s
+/// (WEP: The Live ValueGraph, Phase B.2 — promote early).
+fn promote_all(project: &NirPackage, profiler: &dyn SpanEmitter) {
     profiler.span_start("nir/promote");
     for func in &project.functions {
         if let Some(body) = func.borrow_mut().body.as_mut() {
@@ -315,8 +326,6 @@ pub fn optimize(
         }
     }
     profiler.span_end("nir/promote");
-
-    project
 }
 
 fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {

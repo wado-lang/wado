@@ -402,6 +402,20 @@ pub struct Body {
 }
 
 impl Body {
+    /// The type of an operand: the expr's `type_id` for `Operand::Expr`, or the
+    /// promoted value's recorded source type for `Operand::Value` (WEP: operand
+    /// promotion). Panics if a promoted value has no recorded type (a builder
+    /// bug — every promotion records one).
+    pub fn operand_type(&self, op: Operand) -> TypeId {
+        match op {
+            Operand::Expr(e) => self.exprs[e].type_id,
+            Operand::Value(v) => self
+                .values
+                .type_of(v)
+                .expect("promoted operand has no recorded type"),
+        }
+    }
+
     /// An empty body: no nodes and a placeholder `root` (set by the caller once
     /// the root block is built). Used by `lower::translate` as the canonical
     /// builder it pushes nodes into, and as a scratch arena for passes that
