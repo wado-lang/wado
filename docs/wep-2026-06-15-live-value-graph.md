@@ -392,6 +392,20 @@ is tracked against the three acceptance criteria, not against incidental speedup
       side-table maintenance. `partitions_agree` (strict) stays the oracle for
       that precise design; `partition_refines` is the oracle for the conservative
       maintenance that exists today.
+
+      Second concrete blocker, found while scaffolding env-gated reuse and then
+      reverted: even setting code quality aside, side-table reuse does not reduce
+      `rebuilds`. The two builds per function per iteration are `cse` and `licm`;
+      `cse` is graph-preserving so `licm` could reuse its maintained graph — but
+      `licm::hoist_invariant_arith` calls `invalidate_value_graph()` mid-pass to
+      force a rebuild after each hoist round, because hoisting reorders the loop
+      and staled its `loop_entry_values` snapshot. `loop_entry_values` is loop
+      *recurrence* state the pure-operand maintenance does not update, and
+      `partition_refines` does not cover it (it checks only the `value_of`
+      partition), so reusing across a hoist would be both rebuild-defeating and
+      unguarded. With `licm` still rebuilding, reuse saves nothing. The fix is
+      the same operand-promotion model: loop recurrence frozen as a `LoopPhi`
+      `ValueId` that a hoist references rather than re-derives.
 - [ ] **Maintain the engine analysis.** Parent map, use index, and post-order are
       built once and updated through the edit API; `Engine::new`'s per-pass cost
       retires.
