@@ -394,6 +394,7 @@ impl<'a> Engine<'a> {
 
     fn ensure_value_graph(&mut self) {
         if self.value_graph.is_some() {
+            self.verify_maintained_graph();
             return;
         }
         let build = crate::nir_value_graph::builder::build(
@@ -405,6 +406,44 @@ impl<'a> Engine<'a> {
             self.vg_type_table,
         );
         self.value_graph = Some(build);
+    }
+
+    /// Soundness net for per-edit maintenance (`WADO_VERIFY_VG`): rebuild a fresh
+    /// graph with the same config and assert the maintained partition *refines*
+    /// it ([`crate::nir_value_graph::builder::partition_refines`]) — the
+    /// maintained graph may merge a pair only if a fresh build also merges it.
+    /// An over-merge is a value the optimizer could miscompile through; fail
+    /// loudly. Conservative coarsening (the maintained graph splitting a pair a
+    /// fresh build merges) is sound — a missed optimization — and is allowed. Off
+    /// (and free) unless `WADO_VERIFY_VG` is set; the fresh build makes it slow,
+    /// so it is a small-input debugging mode, not a production path.
+    fn verify_maintained_graph(&mut self) {
+        if !crate::optimize::vg_measure::verify_enabled() || self.value_graph.is_none() {
+            return;
+        }
+        let fresh = crate::nir_value_graph::builder::build(
+            &mut *self.body,
+            &self.param_locals,
+            &self.aliased_locals,
+            &self.untrackable_locals,
+            &self.mut_escaped_locals,
+            self.vg_type_table,
+        );
+        let maintained = self.value_graph.as_ref().unwrap();
+        let mut exprs: Vec<ExprId> = maintained.value_of.keys().copied().collect();
+        for &e in fresh.value_of.keys() {
+            if !maintained.value_of.contains_key(&e) {
+                exprs.push(e);
+            }
+        }
+        if let Err(msg) = crate::nir_value_graph::builder::partition_refines(
+            &mut self.body.values,
+            maintained,
+            &fresh,
+            &exprs,
+        ) {
+            panic!("WADO_VERIFY_VG: maintained graph over-merges vs a fresh build: {msg}");
+        }
     }
 
     /// Read-only view of the owning function's local list. Some rules
@@ -615,6 +654,56 @@ impl<'a> Engine<'a> {
         // The enclosing context may now be reducible.
         if let Some(p) = self.parent_of(NodeRef::Expr(id)) {
             self.enqueue(p);
+        }
+        // Keep the value graph current through this edit (WEP: maintenance, not
+        // rebuild). Re-derive `id`'s value and propagate up its ancestors.
+        if self.value_graph.is_some() {
+            self.maintain_value_after_edit(id);
+        }
+    }
+
+    /// Maintain the value graph after `id`'s kind changed in place: re-derive
+    /// `id`'s value and propagate up its ancestor chain until a value is
+    /// unchanged. An expr whose value can no longer be derived (impure /
+    /// flow-dependent — e.g. a `FieldAccess`, a `Local`, a `Call`) has its
+    /// `value_of` entry *removed* rather than left stale: a later query then
+    /// sees no value identity (conservative), never a wrong one. This keeps the
+    /// graph a sound description of the edited body without a rebuild — the
+    /// `WADO_VERIFY_VG` harness checks it agrees with a fresh build.
+    fn maintain_value_after_edit(&mut self, id: ExprId) {
+        let mut cur = id;
+        loop {
+            let old = self
+                .value_graph
+                .as_ref()
+                .unwrap()
+                .value_of
+                .get(&cur)
+                .copied();
+            // `maintain_pure_value` re-interns a pure kind and updates `value_of`;
+            // for a kind it cannot derive it returns `None` and leaves the (now
+            // stale) entry, which we drop.
+            if self.maintain_pure_value(cur).is_none() {
+                self.value_graph
+                    .as_mut()
+                    .unwrap()
+                    .value_of
+                    .swap_remove(&cur);
+            }
+            let new = self
+                .value_graph
+                .as_ref()
+                .unwrap()
+                .value_of
+                .get(&cur)
+                .copied();
+            if new == old {
+                break;
+            }
+            match self.parent_of(NodeRef::Expr(cur)) {
+                Some(NodeRef::Expr(p)) => cur = p,
+                _ => break,
+            }
         }
     }
 

@@ -311,6 +311,46 @@ pub(crate) fn partitions_agree(
     Ok(())
 }
 
+/// Soundness check for *conservative* per-edit maintenance: the maintained
+/// partition must **refine** the fresh one — every pair the maintained graph
+/// merges, a fresh build also merges. The reverse (a fresh build merges a pair
+/// the maintained graph splits) is allowed: it is conservative coarsening — a
+/// value identity the maintenance dropped rather than re-derived, costing a
+/// missed optimization, never a miscompile.
+///
+/// This is the right oracle for the live graph's maintenance, which is sound by
+/// refinement, not equality: `maintain_pure_value` re-derives only the pure
+/// operand nodes and drops the flow-sensitive ones it cannot, so the graph stays
+/// a sound (possibly coarser) description of the edited body without a rebuild.
+/// [`partitions_agree`] (strict equality) over-reports on this design — it flags
+/// the safe coarsening too. `Err` names the first expression pair the maintained
+/// graph merges but a fresh build splits (the only unsound direction).
+pub(crate) fn partition_refines(
+    pool: &mut ValuePool,
+    maintained: &ValueGraphBuild,
+    fresh: &ValueGraphBuild,
+    exprs: &[ExprId],
+) -> Result<(), String> {
+    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
+    for &e in exprs {
+        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
+            continue;
+        };
+        let rm = pool.find(vm);
+        let rf = pool.find(vf);
+        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
+            if prev_rf != rf {
+                return Err(format!(
+                    "expr {prev_e:?} and expr {e:?} share a value in the maintained graph but a fresh build splits them"
+                ));
+            }
+        } else {
+            m_to_f.insert(rm, (rf, e));
+        }
+    }
+    Ok(())
+}
+
 struct Builder<'a> {
     body: &'a Body,
     pool: ValuePool,

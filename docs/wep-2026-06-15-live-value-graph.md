@@ -359,10 +359,39 @@ is tracked against the three acceptance criteria, not against incidental speedup
       retired `carry_vg_cache` relied on the same false assumption. So sound
       build-once requires **precise per-edit maintenance** — every value-changing
       pass (`const_fold` included) updates the graph as it edits, not just the
-      structural ones — verified by the harness. The harness's strict
-      partition-equality is the right oracle for that precise design (it
-      false-positives on the current stale-tolerant per-session graph, which is
-      sound by its documented "edits don't invalidate" contract).
+      structural ones — verified by the harness.
+
+      Landed and validated (the maintenance primitive + the right oracle):
+      `Engine::replace_expr_kind` now calls `maintain_value_after_edit`, which
+      re-derives the edited node's pure value (`maintain_pure_value`) and
+      propagates up its ancestor chain, dropping any entry it cannot re-derive
+      (flow-sensitive `Local` / `FieldAccess`) rather than leaving it stale. The
+      `WADO_VERIFY_VG` harness is wired live: on every graph query it rebuilds a
+      fresh graph and checks the maintained one against it. The check is
+      `partition_refines`, not strict `partitions_agree`: maintenance is sound by
+      **refinement** (it may merge a pair only if a fresh build also merges it),
+      not equality — dropping a flow value it cannot re-derive makes the graph
+      *coarser*, a missed optimization, never a wrong merge. Empirically, across
+      the full e2e fixture corpus at `-O2`, the maintained graph **never
+      over-merges** (`partition_refines` clean; the strict `partitions_agree`
+      flagged only the expected conservative-coarsening direction). The wiring is
+      **byte-identical** on package-gale and **within timing noise** (~24s
+      total), so it is sound, free groundwork — but it does not yet move
+      `rebuilds` (still 5988): it only keeps the existing per-session graph
+      current through `cse`'s edits, which were already value-preserving.
+
+      Consequence that pins the next step: in the *side-table* model a coarser
+      maintained graph is sound to consume but, reused across sessions, would
+      **regress code quality** (the missed merges `cse` / `licm` would have
+      found). Non-regressing reuse therefore needs *precise* flow-value
+      preservation, and re-deriving flow values on each edit is the rejected
+      incremental rebuild. The only model in which a pure-edit preserves flow
+      values for free is operand promotion: flow is frozen into `ValueId`s in the
+      operand slots at build, and a pure rewrite is a union that leaves them
+      intact. So `rebuilds = 0` runs through Phase B.2/B.3, not through more
+      side-table maintenance. `partitions_agree` (strict) stays the oracle for
+      that precise design; `partition_refines` is the oracle for the conservative
+      maintenance that exists today.
 - [ ] **Maintain the engine analysis.** Parent map, use index, and post-order are
       built once and updated through the edit API; `Engine::new`'s per-pass cost
       retires.
