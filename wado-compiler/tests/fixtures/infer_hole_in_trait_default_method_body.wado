@@ -1,0 +1,43 @@
+// A deferred inference hole minted inside a trait *default method* body must
+// be concretised by the module-end sweep. Default-method bodies are walked
+// into a separate synthetic `ModuleSemantics` stashed under the (impl, method)
+// key; if the sweep only touched the main semantics, the hole's reserved-index
+// `TypeParam` would survive into reify and trap a later phase.
+
+struct Box<T> {
+    v: T,
+}
+impl<T> Box<T> {
+    fn keep(&self) -> Box<T> {
+        return Box { v: self.v };
+    }
+    fn unwrap_box(&self) -> T {
+        return self.v;
+    }
+}
+
+struct Gen {}
+impl Gen {
+    fn make<U: Default>(&self) -> Box<U> {
+        return Box { v: U::default() };
+    }
+}
+
+trait Doer {
+    fn doit(&self) -> i32 {
+        let g = Gen {};
+        let x: i32 = g.make().keep().unwrap_box();
+        return x;
+    }
+}
+
+struct Foo {}
+impl Doer for Foo {}
+
+test "deferred hole inside a trait default method body is swept" {
+    let f = Foo {};
+    assert f.doit() == 0;
+}
+
+__DATA__
+{"test": {}}

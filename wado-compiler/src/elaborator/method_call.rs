@@ -636,9 +636,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Then add method-level type args with the correct offset
         // If no explicit type args, try to infer from arguments
-        let method_type_args = if type_args.is_empty() {
+        let (method_type_args, reuse_params) = if type_args.is_empty() {
             // Try to infer method type args from actual arguments and expected return type
-            self.infer_method_type_args(MethodInferenceInput {
+            let inferred = self.infer_method_type_args(MethodInferenceInput {
                 receiver_type: receiver.type_id,
                 method_name,
                 impl_offset,
@@ -649,9 +649,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expected_return_type: expected_type,
                 trait_name: trait_name.as_deref(),
                 span,
-            })
+            });
+            (inferred.type_args, inferred.bound_check_params)
         } else {
-            type_args
+            (type_args, None)
         };
 
         if !method_type_args.is_empty() {
@@ -662,14 +663,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // (e.g. `m.get::<String>()` where `String: Producer` does not hold)
             // reaches WIR build and traps. Deferred (inference-hole) args are
             // skipped here and re-checked once solved in `finalize_infer_holes`.
-            self.check_method_type_arg_bounds(
-                &struct_name,
-                &struct_module,
-                method_name,
-                trait_name.as_deref(),
-                &method_type_args,
-                span,
-            );
+            //
+            // Reuse the params `infer_method_type_args` already looked up
+            // (struct / generic-instance receiver); fall back to a fresh lookup
+            // on the explicit-turbofish path, where inference did not run.
+            match reuse_params {
+                Some(params) => self.enforce_type_arg_bounds(&params, &method_type_args, span),
+                None => self.check_method_type_arg_bounds(
+                    &struct_name,
+                    &struct_module,
+                    method_name,
+                    trait_name.as_deref(),
+                    &method_type_args,
+                    span,
+                ),
+            }
         }
 
         // Apply unified substitution

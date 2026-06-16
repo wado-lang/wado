@@ -1,0 +1,47 @@
+// A deferred inference hole that resolves to an in-scope, bounded type
+// parameter must not be re-checked against its bound after the parameter's
+// scope has closed. `make<T: Producer>()` defers a hole (bound `Producer`);
+// `.unwrap_box()` lets the enclosing `let x: U` pin the hole to `U`. `U` is
+// itself `Producer` within `outer`, so the call is valid — but the deferred
+// bound re-check runs at module end, after `outer`'s scope (and `U`'s bound)
+// is gone. It must skip non-concrete solutions, exactly as the call-site bound
+// check skips forwarded type-param args.
+
+struct Box<T> {
+    v: T,
+}
+impl<T> Box<T> {
+    fn unwrap_box(&self) -> T {
+        return self.v;
+    }
+}
+
+trait Producer {
+    fn make_one() -> Self;
+}
+impl Producer for i32 {
+    fn make_one() -> i32 {
+        return 7;
+    }
+}
+
+struct Gen {}
+impl Gen {
+    fn make<T: Producer>(&self) -> Box<T> {
+        return Box { v: T::make_one() };
+    }
+}
+
+fn outer<U: Producer>() -> U {
+    let g = Gen {};
+    let x: U = g.make().unwrap_box();
+    return x;
+}
+
+test "deferred hole resolving to a bounded type parameter is not re-checked out of scope" {
+    let r: i32 = outer::<i32>();
+    assert r == 7;
+}
+
+__DATA__
+{"test": {}}

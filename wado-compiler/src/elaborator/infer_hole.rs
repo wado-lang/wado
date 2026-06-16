@@ -35,8 +35,6 @@ pub(super) const HOLE_INDEX_BASE: u32 = 0x8000_0000;
 /// Per-module registry of inference holes and their (eventual) solutions.
 #[derive(Default)]
 pub(crate) struct InferHoleTable {
-    /// Monotonic counter for fresh hole indices (added to [`HOLE_INDEX_BASE`]).
-    next: u32,
     /// Hole `TypeId` → solution (`None` until solved).
     solutions: IndexMap<TypeId, Option<TypeId>>,
     /// Hole `TypeId` → diagnostic raised if it is never solved.
@@ -67,8 +65,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: String,
         bound_names: Vec<String>,
     ) -> TypeId {
-        let index = HOLE_INDEX_BASE + self.infer_holes.next;
-        self.infer_holes.next += 1;
+        // Holes are only ever appended to `solutions` (never removed before the
+        // table is reset), so the next dense index is its current length.
+        let index = HOLE_INDEX_BASE + self.infer_holes.solutions.len() as u32;
         let name = format!("?{index}");
         let hole = self
             .tysys
@@ -195,12 +194,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Collect (solution, param_name, trait, span) for solved holes first so
         // the immutable `type_implements_trait` borrow is released before the
         // mutable register / diagnostic calls.
+        let tt = self.tysys.type_table.borrow();
         let checks: Vec<(TypeId, String, String, Span)> = self
             .infer_holes
             .bounds
             .iter()
             .filter_map(|(hole, (param_name, trait_names, span))| {
                 let solution = (*self.infer_holes.solutions.get(hole)?)?;
+                // A solution that is still a (forwarded) type parameter — or
+                // itself a hole — has its bound verified where it becomes
+                // concrete (the owner's monomorphization), exactly as
+                // `enforce_type_arg_bounds` skips non-concrete args. The hole's
+                // bound scope is already closed by finalize, so re-checking a
+                // type-param solution here (`type_implements_trait` cannot see
+                // the now-gone bound) would spuriously fail.
+                if tt.contains_type_param(solution) {
+                    return None;
+                }
                 Some(
                     trait_names
                         .iter()
@@ -209,6 +219,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .flatten()
             .collect();
+        drop(tt);
 
         for (solution, param_name, trait_name, span) in checks {
             // Same enforcement primitive the call-site type-arg loops use, so
@@ -221,13 +232,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `TypeId`. Because deferral only fires for hole-free receivers/args and
     /// enclosing calls are concretised before they record, no recorded
     /// *mangled name* embeds a hole — a `TypeId` substitution alone suffices.
+    ///
+    /// A trait default-method body is walked into a *separate* synthetic
+    /// `ModuleSemantics` stashed under its `(impl, method)` key (see the
+    /// default-method synthesis in `resolve_module`); its recorded facts live
+    /// in `default_method_semantics`, not the module's main `types`. Sweep
+    /// those too, or a hole minted inside a default-method body would survive
+    /// into reify and trap a later phase.
     fn sweep_recorded_facts(&mut self, subst: &IndexMap<u32, TypeId>) {
         if subst.is_empty() {
             return;
         }
         let mut tt = self.tysys.type_table.borrow_mut();
-        let types = &mut self.sem.types;
+        Self::sweep_type_annotations(&mut tt, &mut self.sem.types, subst);
+        for sem in self.sem.default_method_semantics.values_mut() {
+            Self::sweep_type_annotations(&mut tt, &mut sem.types, subst);
+        }
+    }
 
+    /// Substitute `subst` through one `TypeAnnotations` fact bundle.
+    fn sweep_type_annotations(
+        mut tt: &mut TypeTable,
+        types: &mut super::sem::TypeAnnotations,
+        subst: &IndexMap<u32, TypeId>,
+    ) {
         let sub = |tt: &mut TypeTable, t: TypeId| tt.substitute_type_params(t, subst);
         let sub_vec = |tt: &mut TypeTable, v: &mut Vec<TypeId>| {
             for t in v.iter_mut() {

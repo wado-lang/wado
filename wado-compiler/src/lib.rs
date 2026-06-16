@@ -97,8 +97,7 @@ pub use token::Span;
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).
 fn trait_bound_violation_message(call_name: &str) -> String {
-    if let Some((ty, rest)) = call_name.split_once('^') {
-        let trait_name = rest.split_once("::").map_or(rest, |(t, _)| t);
+    if let Some((ty, trait_name)) = name::split_trait_method_receiver(call_name) {
         format!("type `{ty}` does not implement trait `{trait_name}`")
     } else {
         format!("unresolved generic call `{call_name}`")
@@ -865,15 +864,20 @@ fn compile_after_load<H: CompilerHost>(
     // caller declaring the bound). Report it cleanly and bail before codegen
     // instead of trapping the build. Well-formed programs collect nothing here.
     if !wir_package.trait_bound_violations.is_empty() {
+        // Dedup by (call, site) so distinct call sites of the same unresolved
+        // method are each reported with their own location, rather than
+        // collapsing every site into one spanless message.
         let mut seen = std::collections::HashSet::new();
         for v in &wir_package.trait_bound_violations {
-            let message = trait_bound_violation_message(&v.call_name);
-            if seen.insert(message.clone()) {
+            if seen.insert((v.call_name.clone(), v.span)) {
                 let _ = logger.error(compiler_host::Diagnostic {
                     severity: compiler_host::Severity::Error,
                     code: compiler_host::Code::TypeMismatch,
-                    message,
-                    span: None,
+                    message: trait_bound_violation_message(&v.call_name),
+                    span: Some(compiler_host::DiagnosticSpan::from_span(
+                        &v.span,
+                        Some(&entry_filename),
+                    )),
                 });
             }
         }

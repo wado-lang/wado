@@ -1734,7 +1734,7 @@ impl FunctionTranslator<'_, '_> {
         span: crate::token::Span,
         panic_msg: impl FnOnce() -> String,
     ) -> WirInstr {
-        if name.contains('^') {
+        if crate::name::is_local_trait_method_name(name) {
             self.ctx
                 .trait_bound_violations
                 .push(crate::wir::TraitBoundViolation {
