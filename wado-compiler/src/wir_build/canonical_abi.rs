@@ -190,7 +190,7 @@ impl FunctionTranslator<'_, '_> {
             }
             "future-write" => {
                 let value_expr = args[0].expr;
-                let value_type_id = self.body.exprs[value_expr.expr()].type_id;
+                let value_type_id = self.operand_type_id(value_expr);
                 let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
                 // Variant-shaped futures (used for trailers): pattern-match on
                 // TIR because general variant→CM lowering is not yet implemented.
@@ -202,7 +202,7 @@ impl FunctionTranslator<'_, '_> {
                     return Some(self.emit_future_write_ok_none(handle));
                 }
                 // Scalar primitives are evaluated and lowered generically.
-                let value_arg = self.translate_expr(value_expr.expr());
+                let value_arg = self.translate_operand(value_expr);
                 Some(self.emit_future_write(handle, value_arg, value_type_id, payload))
             }
             "future-cancel-read" => {

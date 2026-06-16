@@ -1548,9 +1548,9 @@ impl FunctionTranslator<'_, '_> {
                 // so LocalSet would be invalid. `translate_expr` already appends
                 // `unreachable` for `never`-typed expressions, so just emit the
                 // diverging instruction; the local is declared but never assigned.
-                if arena.exprs[value.expr()].type_id == TypeTable::NEVER {
+                if self.operand_type_id(*value) == TypeTable::NEVER {
                     Some(value_instr)
-                } else if arena.exprs[value.expr()].type_id == TypeTable::UNIT {
+                } else if self.operand_type_id(*value) == TypeTable::UNIT {
                     // Unit-type locals have no Wasm representation; just emit
                     // the init expression for its side effects (usually Nop).
                     Some(value_instr)
@@ -1741,6 +1741,19 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// The NIR type of an operand — the `ExprNode` type for a skeleton subtree,
+    /// or the pool-recorded source type for a promoted pure value.
+    pub(super) fn operand_type_id(&self, op: Operand) -> crate::tir::TypeId {
+        match op {
+            Operand::Expr(e) => self.body.exprs[e].type_id,
+            Operand::Value(v) => self
+                .body
+                .values
+                .type_of(v)
+                .expect("promoted value has no recorded type"),
+        }
+    }
+
     /// Materialise a promoted pure [`Operand::Value`] back to WIR (the extractor;
     /// WEP: The Live ValueGraph). Constant value kinds lower directly from the
     /// pool, using the source type recorded by the builder. Non-constant kinds
@@ -1904,7 +1917,7 @@ impl FunctionTranslator<'_, '_> {
                 }
                 let l = Box::new(self.translate_operand(left));
                 let r = Box::new(self.translate_operand(right));
-                let result = self.translate_binary_op(op, l, r, arena.exprs[left.expr()].type_id);
+                let result = self.translate_binary_op(op, l, r, self.operand_type_id(left));
                 // Truncate sub-i32 arithmetic/bitwise results to the correct width.
                 // Comparisons and logical ops return bool (i32 0/1), so skip those.
                 if !matches!(
@@ -1920,7 +1933,7 @@ impl FunctionTranslator<'_, '_> {
                         | NirBinaryOp::RefEq
                         | NirBinaryOp::RefNotEq
                 ) && let ResolvedType::Primitive(prim) =
-                    self.type_table.get(arena.exprs[left.expr()].type_id)
+                    self.type_table.get(self.operand_type_id(left))
                 {
                     return Self::truncate_to_sub_i32(result, prim);
                 }
@@ -1933,11 +1946,11 @@ impl FunctionTranslator<'_, '_> {
                 _ => {
                     let inner = *inner;
                     let o = Box::new(self.translate_operand(inner));
-                    let result = self.translate_unary_op(op, o, arena.exprs[inner.expr()].type_id);
+                    let result = self.translate_unary_op(op, o, self.operand_type_id(inner));
                     // Truncate sub-i32 results for Neg and BitNot.
                     if matches!(op, NirUnaryOp::Neg | NirUnaryOp::BitNot)
                         && let ResolvedType::Primitive(prim) =
-                            self.type_table.get(arena.exprs[inner.expr()].type_id)
+                            self.type_table.get(self.operand_type_id(inner))
                     {
                         return Self::truncate_to_sub_i32(result, prim);
                     }
@@ -1969,11 +1982,13 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-                let translated_args: Vec<WirInstr> = args
+                let kept: Vec<Operand> = args
                     .iter()
-                    .filter(|a| arena.exprs[a.expr.expr()].type_id != TypeTable::UNIT)
-                    .map(|a| self.translate_operand(a.expr))
+                    .filter(|a| self.operand_type_id(a.expr) != TypeTable::UNIT)
+                    .map(|a| a.expr)
                     .collect();
+                let translated_args: Vec<WirInstr> =
+                    kept.into_iter().map(|op| self.translate_operand(op)).collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
                     WirInstr::Call {
@@ -2007,7 +2022,7 @@ impl FunctionTranslator<'_, '_> {
                 translated_args.push(self.translate_operand(*receiver));
                 // params[0] is self; args[i] corresponds to params[i+1]
                 for arg in args {
-                    if arena.exprs[arg.expr.expr()].type_id != TypeTable::UNIT {
+                    if self.operand_type_id(arg.expr) != TypeTable::UNIT {
                         translated_args.push(self.translate_operand(arg.expr));
                     }
                 }
@@ -2049,7 +2064,7 @@ impl FunctionTranslator<'_, '_> {
                         !matches!(
                             self.ctx.type_id_to_wir_type(
                                 self.type_table,
-                                arena.exprs[f.value.expr()].type_id
+                                self.operand_type_id(f.value)
                             ),
                             WirType::Unit
                         )
@@ -2093,11 +2108,11 @@ impl FunctionTranslator<'_, '_> {
                 let recv = self.translate_operand(receiver);
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, arena.exprs[receiver.expr()].type_id);
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(receiver));
                 let WirType::Ref { type_id, .. } = wir_type else {
                     panic!(
                         "[WIR] FieldAccess receiver expected Ref WirType, got {wir_type:?} (field={field_name}, type_id={:?})",
-                        arena.exprs[receiver.expr()].type_id
+                        self.operand_type_id(receiver)
                     );
                 };
                 let result_ty = self.struct_field_wir_type(&type_id, field_name);
@@ -2159,12 +2174,12 @@ impl FunctionTranslator<'_, '_> {
                         let recv = self.translate_operand(receiver);
                         let wir_type = self.ctx.type_id_to_wir_type(
                             self.type_table,
-                            arena.exprs[receiver.expr()].type_id,
+                            self.operand_type_id(receiver),
                         );
                         let WirType::Ref { type_id, .. } = wir_type else {
                             panic!(
                                 "[WIR] FieldAccess assignment expected Ref receiver, got {wir_type:?} (field={field_name}, type_id={:?})",
-                                arena.exprs[receiver.expr()].type_id
+                                self.operand_type_id(receiver)
                             );
                         };
                         self.struct_set(type_id, field_name.clone(), recv, val)
@@ -2187,7 +2202,7 @@ impl FunctionTranslator<'_, '_> {
                 // Type casts become appropriate conversion instructions
                 self.translate_cast(
                     inner.expr(),
-                    arena.exprs[inner.expr()].type_id,
+                    self.operand_type_id(*inner),
                     *target_type,
                 )
             }
@@ -2281,7 +2296,7 @@ impl FunctionTranslator<'_, '_> {
                 let val = self.translate_operand(inner);
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, arena.exprs[inner.expr()].type_id);
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(inner));
                 if let WirType::Ref { type_id, .. } = wir_type {
                     WirInstr::StructGet {
                         type_id,
@@ -2341,7 +2356,7 @@ impl FunctionTranslator<'_, '_> {
                         .iter()
                         .map(|a| {
                             self.ctx
-                                .type_id_to_wir_type(self.type_table, arena.exprs[a.expr()].type_id)
+                                .type_id_to_wir_type(self.type_table, self.operand_type_id(*a))
                         })
                         .collect();
                     let results =
