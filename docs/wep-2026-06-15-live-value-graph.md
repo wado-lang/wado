@@ -348,6 +348,21 @@ is tracked against the three acceptance criteria, not against incidental speedup
 - [ ] **Maintain the graph through structural passes.** `inline` / `sroa` /
       `dae` / `drve` grow or union the live graph through their edits; no pass
       triggers a rebuild. Drives `rebuilds` toward 0.
+
+      Finding (a `WADO_VERIFY_VG` harness — `partitions_agree` against a fresh
+      build — earned this): a build-once attempt that let `licm` reuse `cse`'s
+      graph across `const_fold` was prototyped and **reverted as unsound**.
+      `const_fold` rewrites flow-sensitive local values (constant propagation), so
+      it is **not graph-preserving** — `cse`'s graph is stale for `licm`. It was
+      byte-identical on the full suite (the staleness happened to be conservative),
+      but not rigorously sound, and a compiler ships only proven-sound passes. The
+      retired `carry_vg_cache` relied on the same false assumption. So sound
+      build-once requires **precise per-edit maintenance** — every value-changing
+      pass (`const_fold` included) updates the graph as it edits, not just the
+      structural ones — verified by the harness. The harness's strict
+      partition-equality is the right oracle for that precise design (it
+      false-positives on the current stale-tolerant per-session graph, which is
+      sound by its documented "edits don't invalidate" contract).
 - [ ] **Maintain the engine analysis.** Parent map, use index, and post-order are
       built once and updated through the edit API; `Engine::new`'s per-pass cost
       retires.
