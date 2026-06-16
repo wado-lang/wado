@@ -212,21 +212,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Shared scan-and-map prologue behind `find_indexing_trait_impl`,
     /// `find_assoc_type_in_trait_impl`, and `find_arithmetic_trait_impl`: walk
-    /// the trait impls on `struct_name` whose name satisfies `trait_matches`,
-    /// build each candidate's type-parameter mapping from `concrete_type_args`,
-    /// and return the first non-`None` `project` (per-candidate filtering,
-    /// `Self` handling, and projection live in `project`; `None` skips it).
-    ///
-    /// - `trait_matches`: prefix (indexing / assoc) vs exact (arithmetic).
-    /// - `use_declared_type_params`: when false, `build_type_param_mapping`
-    ///   treats every `Named` impl arg as a type parameter (arithmetic's legacy
-    ///   behavior); when true it consults the impl's declared params, which are
-    ///   also handed to `project`.
+    /// the trait impls on `struct_name` whose name satisfies `trait_matches`
+    /// (prefix for indexing / assoc, exact for arithmetic), build each
+    /// candidate's type-parameter mapping from `concrete_type_args`, and return
+    /// the first non-`None` `project`. Per-candidate filtering, `Self` handling,
+    /// and projection live in `project` (which also receives the impl's declared
+    /// type params); returning `None` skips the candidate.
     fn probe_trait_impls<R>(
         &mut self,
         struct_name: &str,
         concrete_type_args: &[TypeId],
-        use_declared_type_params: bool,
         trait_matches: impl Fn(&str) -> bool,
         mut project: impl FnMut(
             &mut Self,
@@ -242,11 +237,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !trait_matches(&trait_name) {
                 continue;
             }
-            let declared = if use_declared_type_params {
-                self.tysys.build_declared_type_params(impl_block)
-            } else {
-                IndexSet::default()
-            };
+            let declared = self.tysys.build_declared_type_params(impl_block);
             let mapping =
                 TypeSystem::build_type_param_mapping(&impl_block.ty, concrete_type_args, &declared);
             if let Some(result) = project(self, impl_ref, &mapping, &declared) {
@@ -2611,7 +2602,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.probe_trait_impls(
             struct_name,
             &concrete_type_args,
-            true,
             |trait_name| trait_name.starts_with(trait_base_name),
             |s, impl_ref, mapping, declared| {
                 let impl_block = s.get_impl_block(impl_ref);
@@ -2811,7 +2801,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.probe_trait_impls(
             struct_name,
             &concrete_type_args,
-            false, // legacy mapping: every `Named` impl arg is a type param
             |found_trait_name| found_trait_name == trait_name,
             |s, impl_ref, mapping, _declared| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>)
@@ -2982,7 +2971,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.probe_trait_impls(
             struct_name,
             &concrete_type_args,
-            true,
             |trait_base| trait_base.starts_with(trait_base_name),
             |s, impl_ref, mapping, declared| {
                 // If an expected index type is provided, check the trait's type
