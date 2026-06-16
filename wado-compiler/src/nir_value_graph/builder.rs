@@ -1913,7 +1913,7 @@ mod tests {
                 is_mut,
                 is_reactive: false,
                 type_id: TypeTable::UNIT,
-                value,
+                value: value.into(),
                 skip_value_copy: false,
             },
         )
@@ -1921,12 +1921,12 @@ mod tests {
 
     fn assign_stmt(body: &mut Body, idx: u32, value: ExprId) -> StmtId {
         let target = local_ref(body, idx);
-        let assign = alloc_expr(body, ExprKind::Assign { target, value });
+        let assign = alloc_expr(body, ExprKind::Assign { target, value: value.into() });
         alloc_stmt(body, StmtKind::Expr(assign))
     }
 
     fn binary(body: &mut Body, op: NirBinaryOp, left: ExprId, right: ExprId) -> ExprId {
-        alloc_expr(body, ExprKind::Binary { left, op, right })
+        alloc_expr(body, ExprKind::Binary { left: left.into(), op, right: right.into() })
     }
 
     fn bool_lit(body: &mut Body, b: bool) -> ExprId {
@@ -1944,7 +1944,7 @@ mod tests {
         alloc_expr(
             body,
             ExprKind::FieldAccess {
-                expr,
+                expr: expr.into(),
                 field_index,
                 field_name: format!("__f{field_index}"),
             },
@@ -1953,7 +1953,7 @@ mod tests {
 
     fn field_assign_stmt(body: &mut Body, recv: ExprId, field_index: u32, value: ExprId) -> StmtId {
         let target = field_access(body, recv, field_index);
-        let assign = alloc_expr(body, ExprKind::Assign { target, value });
+        let assign = alloc_expr(body, ExprKind::Assign { target, value: value.into() });
         alloc_stmt(body, StmtKind::Expr(assign))
     }
 
@@ -2062,7 +2062,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: Some(else_block),
             },
@@ -2095,7 +2095,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: None,
             },
@@ -2130,7 +2130,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: Some(else_block),
             },
@@ -2414,7 +2414,7 @@ mod tests {
         let switch_e = alloc_expr(
             &mut body,
             ExprKind::Switch {
-                scrutinee: scrut,
+                scrutinee: scrut.into(),
                 min_value: 0,
                 arms: vec![arm0, arm1],
                 default,
@@ -2458,7 +2458,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: Some(else_block),
             },
@@ -2497,7 +2497,7 @@ mod tests {
         let if_inside = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: Some(else_block),
             },
@@ -2552,7 +2552,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: None,
             },
@@ -2587,7 +2587,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: None,
             },
@@ -2624,7 +2624,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: None,
             },
@@ -2745,12 +2745,12 @@ mod tests {
                 fields: vec![
                     crate::nir_arena::ArenaStructField {
                         name: "f0".to_string(),
-                        value: five,
+                        value: five.into(),
                         field_index: 0,
                     },
                     crate::nir_arena::ArenaStructField {
                         name: "f1".to_string(),
-                        value: six,
+                        value: six.into(),
                         field_index: 1,
                     },
                 ],
@@ -2774,7 +2774,7 @@ mod tests {
                 struct_name: "S".to_string(),
                 fields: vec![crate::nir_arena::ArenaStructField {
                     name: "f0".to_string(),
-                    value,
+                    value: value.into(),
                     field_index: 0,
                 }],
             },
@@ -2787,7 +2787,7 @@ mod tests {
             body,
             ExprKind::Unary {
                 op: NirUnaryOp::Ref,
-                expr: inner,
+                expr: inner.into(),
             },
         )
     }
@@ -2887,7 +2887,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: None,
             },
@@ -2919,7 +2919,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: None,
             },
@@ -2957,7 +2957,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: Some(else_block),
             },
@@ -2995,9 +2995,9 @@ mod tests {
         let and = alloc_expr(
             &mut body,
             ExprKind::Binary {
-                left: cond,
+                left: cond.into(),
                 op: NirBinaryOp::And,
-                right: rhs_expr,
+                right: rhs_expr.into(),
             },
         );
         let let_b = let_stmt(&mut body, 3, and, false);
@@ -3030,7 +3030,7 @@ mod tests {
                 struct_name: "S".to_string(),
                 fields: vec![crate::nir_arena::ArenaStructField {
                     name: "f0".to_string(),
-                    value: n_read,
+                    value: n_read.into(),
                     field_index: 0,
                 }],
             },

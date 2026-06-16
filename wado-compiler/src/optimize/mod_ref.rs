@@ -792,14 +792,14 @@ mod tests {
         )
     }
     fn bin(body: &mut Body, left: ExprId, op: NirBinaryOp, right: ExprId) -> ExprId {
-        pe(body, ExprKind::Binary { left, op, right })
+        pe(body, ExprKind::Binary { left: left.into(), op, right: right.into() })
     }
     fn deref(body: &mut Body, expr: ExprId) -> ExprId {
         pe(
             body,
             ExprKind::Unary {
                 op: NirUnaryOp::Deref,
-                expr,
+                expr: expr.into(),
             },
         )
     }
@@ -812,13 +812,13 @@ mod tests {
                 is_mut: false,
                 is_reactive: false,
                 type_id: ty(),
-                value,
+                value: value.into(),
                 skip_value_copy: false,
             },
         )
     }
     fn assign(body: &mut Body, target: ExprId, value: ExprId) -> ExprId {
-        pe(body, ExprKind::Assign { target, value })
+        pe(body, ExprKind::Assign { target, value: value.into() })
     }
     fn expr_stmt(body: &mut Body, e: ExprId) -> StmtId {
         ps(body, StmtKind::Expr(e))
@@ -850,7 +850,7 @@ mod tests {
             ExprKind::GlobalVarSet {
                 module_source: ModuleSource::prelude(),
                 name: name.to_string(),
-                value,
+                value: value.into(),
             },
         )
     }
@@ -858,7 +858,7 @@ mod tests {
         pe(
             body,
             ExprKind::FieldAccess {
-                expr,
+                expr: expr.into(),
                 field_index: 0,
                 field_name: "value".to_string(),
             },
@@ -870,7 +870,7 @@ mod tests {
             .enumerate()
             .map(|(i, value)| ArenaStructField {
                 name: format!("f{i}"),
-                value,
+                value: value.into(),
                 field_index: i as u32,
             })
             .collect();
@@ -895,7 +895,7 @@ mod tests {
         let args = args
             .into_iter()
             .map(|expr| ArenaCallArg {
-                expr,
+                expr: expr.into(),
                 is_mut: false,
             })
             .collect();
@@ -1079,7 +1079,7 @@ mod tests {
             ps(
                 b,
                 StmtKind::If {
-                    condition: cond,
+                    condition: cond.into(),
                     then_block,
                     else_block: Some(else_block),
                 },
@@ -1111,11 +1111,11 @@ mod tests {
             pe(
                 b,
                 ExprKind::Match {
-                    expr: scrut,
+                    expr: scrut.into(),
                     arms: vec![ArmData {
                         pattern,
                         guard: None,
-                        body: arm_body,
+                        body: arm_body.into(),
                         span: sp(),
                     }],
                 },
@@ -1287,7 +1287,7 @@ mod tests {
             ps(
                 b,
                 StmtKind::If {
-                    condition: cond,
+                    condition: cond.into(),
                     then_block,
                     else_block: None,
                 },
@@ -1403,14 +1403,14 @@ mod tests {
     // -----------------------------------------------------------------
 
     fn variant_tag(body: &mut Body, expr: ExprId) -> ExprId {
-        pe(body, ExprKind::VariantTag { expr })
+        pe(body, ExprKind::VariantTag { expr: expr.into() })
     }
 
     fn variant_test(body: &mut Body, expr: ExprId) -> ExprId {
         pe(
             body,
             ExprKind::VariantTest {
-                expr,
+                expr: expr.into(),
                 case_index: 0,
                 case_name: "Some".to_string(),
             },
@@ -1466,11 +1466,11 @@ mod tests {
             pe(
                 b,
                 ExprKind::Match {
-                    expr: scrut,
+                    expr: scrut.into(),
                     arms: vec![ArmData {
                         pattern,
                         guard: None,
-                        body: arm_body,
+                        body: arm_body.into(),
                         span: sp(),
                     }],
                 },
@@ -1497,7 +1497,7 @@ mod tests {
 
     fn cast(body: &mut Body, expr: ExprId, target_type: TypeId) -> ExprId {
         body.exprs.push(ExprNode {
-            kind: ExprKind::Cast { expr, target_type },
+            kind: ExprKind::Cast { expr: expr.into(), target_type },
             type_id: target_type,
             span: sp(),
         })
@@ -1531,7 +1531,7 @@ mod tests {
             let inner = ps(
                 b,
                 StmtKind::If {
-                    condition: cond,
+                    condition: cond.into(),
                     then_block,
                     else_block: None,
                 },

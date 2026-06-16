@@ -139,9 +139,9 @@ mod tests {
         let sum = e(
             &mut body,
             ExprKind::Binary {
-                left: a,
+                left: a.into(),
                 op: NirBinaryOp::Add,
-                right: b,
+                right: b.into(),
             },
         );
         let five = e(
@@ -208,9 +208,9 @@ mod tests {
         let sum = e(
             &mut body,
             ExprKind::Binary {
-                left: a,
+                left: a.into(),
                 op: NirBinaryOp::Add,
-                right: b,
+                right: b.into(),
             },
         );
         let s0 = body.stmts.push(StmtNode {

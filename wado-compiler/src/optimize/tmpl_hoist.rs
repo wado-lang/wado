@@ -1508,7 +1508,7 @@ mod tests {
 
     fn unary(body: &mut Body, op: NirUnaryOp, inner: ExprId) -> ExprId {
         body.exprs.push(ExprNode {
-            kind: ExprKind::Unary { op, expr: inner },
+            kind: ExprKind::Unary { op, expr: inner.into() },
             type_id: TypeId(0),
             span: Span::default(),
         })
@@ -1531,7 +1531,7 @@ mod tests {
                 },
                 type_args: vec![],
                 args: vec![ArenaCallArg {
-                    expr: arg,
+                    expr: arg.into(),
                     is_mut: false,
                 }],
             },

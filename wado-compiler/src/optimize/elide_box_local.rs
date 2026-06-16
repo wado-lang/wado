@@ -709,7 +709,7 @@ mod tests {
         push(
             body,
             ExprKind::FieldAccess {
-                expr: receiver,
+                expr: receiver.into(),
                 field_index: 0,
                 field_name: name.to_string(),
             },
@@ -719,8 +719,8 @@ mod tests {
         push(
             body,
             ExprKind::Index {
-                expr: arr,
-                index: idx,
+                expr: arr.into(),
+                index: idx.into(),
             },
         )
     }
@@ -728,20 +728,20 @@ mod tests {
         push(
             body,
             ExprKind::Binary {
-                left: lhs,
-                right: rhs,
+                left: lhs.into(),
+                right: rhs.into(),
                 op,
             },
         )
     }
     fn unary(body: &mut Body, op: NirUnaryOp, e: ExprId) -> ExprId {
-        push(body, ExprKind::Unary { op, expr: e })
+        push(body, ExprKind::Unary { op, expr: e.into() })
     }
     fn cast(body: &mut Body, e: ExprId, target: TypeId) -> ExprId {
         push(
             body,
             ExprKind::Cast {
-                expr: e,
+                expr: e.into(),
                 target_type: target,
             },
         )

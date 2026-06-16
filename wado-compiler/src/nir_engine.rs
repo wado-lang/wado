@@ -1231,7 +1231,7 @@ mod tests {
         )
     }
     fn bin(body: &mut Body, left: ExprId, op: NirBinaryOp, right: ExprId) -> ExprId {
-        e(body, ExprKind::Binary { left, op, right })
+        e(body, ExprKind::Binary { left: left.into(), op, right: right.into() })
     }
     fn local0(body: &mut Body) -> ExprId {
         e(
@@ -1257,14 +1257,14 @@ mod tests {
                 is_mut,
                 is_reactive: false,
                 type_id: TypeTable::UNIT,
-                value,
+                value: value.into(),
                 skip_value_copy: false,
             },
         )
     }
     fn ret_x(body: &mut Body) -> StmtId {
         let xref = local0(body);
-        s(body, StmtKind::Return { value: Some(xref) })
+        s(body, StmtKind::Return { value: Some(xref.into()) })
     }
 
     /// `{ let x = 1 + 2; return x; }`
@@ -1331,7 +1331,7 @@ mod tests {
         let mut buf = EngineBuffers::default();
         let mut locals: Vec<NirLocal> = Vec::new();
         let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
-        let v_add = eng.value(add).unwrap();
+        let v_add = eng.value(add.expr()).unwrap();
 
         let one = eng.alloc_expr(
             ExprKind::IntLiteral {
@@ -1351,9 +1351,9 @@ mod tests {
         );
         let sum = eng.alloc_expr(
             ExprKind::Binary {
-                left: one,
+                left: one.into(),
                 op: NirBinaryOp::Add,
-                right: two,
+                right: two.into(),
             },
             TypeTable::UNIT,
             Span::default(),
@@ -1377,9 +1377,9 @@ mod tests {
         );
         let mixed = eng.alloc_expr(
             ExprKind::Binary {
-                left: lx,
+                left: lx.into(),
                 op: NirBinaryOp::Add,
-                right: two,
+                right: two.into(),
             },
             TypeTable::UNIT,
             Span::default(),
@@ -1434,8 +1434,8 @@ mod tests {
         let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
         let vf = eng.value(f_expr).unwrap();
         let vg = eng.value(g_expr).unwrap();
-        let vx = eng.value(x_expr).unwrap();
-        let vy = eng.value(y_expr).unwrap();
+        let vx = eng.value(x_expr.expr()).unwrap();
+        let vy = eng.value(y_expr.expr()).unwrap();
         // x and y are distinct opaques, so the sums start distinct.
         assert_ne!(eng.value_find(vx), eng.value_find(vy));
         assert_ne!(eng.value_find(vf), eng.value_find(vg));
@@ -1486,11 +1486,11 @@ mod tests {
                 ExprKind::Binary { left, op, right } => (*op, *left, *right),
                 _ => return false,
             };
-            let lv = match &e.body.exprs[l].kind {
+            let lv = match &e.body.exprs[l.expr()].kind {
                 ExprKind::IntLiteral { value, .. } => *value,
                 _ => return false,
             };
-            let rv = match &e.body.exprs[r].kind {
+            let rv = match &e.body.exprs[r.expr()].kind {
                 ExprKind::IntLiteral { value, .. } => *value,
                 _ => return false,
             };
@@ -1534,7 +1534,7 @@ mod tests {
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
         };
-        match &body.exprs[*value].kind {
+        match &body.exprs[value.expr()].kind {
             ExprKind::IntLiteral { value, .. } => assert_eq!(*value, 12),
             other => panic!("expected folded IntLiteral(12), got {other:?}"),
         }
@@ -1549,9 +1549,9 @@ mod tests {
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
         };
-        let original = *value;
+        let original = value.expr();
         let (orig_left, orig_right) = match &body.exprs[original].kind {
-            ExprKind::Binary { left, right, .. } => (*left, *right),
+            ExprKind::Binary { left, right, .. } => (left.expr(), right.expr()),
             other => panic!("expected Binary, got {other:?}"),
         };
         let before = body.exprs.len();
@@ -1565,7 +1565,7 @@ mod tests {
         assert_eq!(body.exprs.len(), before + 3);
         assert_ne!(clone, original);
         let (new_left, new_right) = match &body.exprs[clone].kind {
-            ExprKind::Binary { left, right, .. } => (*left, *right),
+            ExprKind::Binary { left, right, .. } => (left.expr(), right.expr()),
             other => panic!("expected cloned Binary, got {other:?}"),
         };
         // Deep copy: the clone's operands are fresh ids, not shared.
@@ -1638,7 +1638,7 @@ mod tests {
                 b,
                 ExprKind::Assign {
                     target,
-                    value: seven,
+                    value: seven.into(),
                 },
             );
             let assign_stmt = s(b, StmtKind::Expr(assign));
