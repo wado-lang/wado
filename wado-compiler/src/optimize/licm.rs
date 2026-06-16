@@ -173,6 +173,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         let mut engine = if let Some(cached) = cached {
             Engine::with_analysis(body, &mut buffers, locals, &type_table, cached)
         } else {
+            super::vg_measure::record_build(fid.index(), body);
             let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
                 body,
                 locals,
