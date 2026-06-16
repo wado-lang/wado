@@ -88,6 +88,7 @@ mod store_load_forward;
 mod string_push;
 mod tmpl_hoist;
 mod value_copy_demote;
+mod promote;
 mod value_copy_elide;
 pub(crate) mod vg_measure;
 
