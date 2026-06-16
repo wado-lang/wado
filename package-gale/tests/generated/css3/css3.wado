@@ -398,7 +398,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
     for let child of &parent.children {
         if let Node(n) = *child {
             if n.name == *name {
-                return Option::<CstNode>::Some(n);
+                return Option::Some(n);
             }
         }
     }
@@ -29295,7 +29295,7 @@ impl Parser {
     fn record_deeper(&mut self, e: ParseError) {
         let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::<ParseError>::Some(e);
+            self.pending = Option::Some(e);
         }
     }
 
@@ -29327,13 +29327,13 @@ impl Parser {
     fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
             if kind == TK_EOF {
-                return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                return Result::Ok(self.tokens[self.pos]);
             }
-            return Result::<Token, ParseError>::Ok(self.advance());
+            return Result::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
         let name = token_kind_name(kind);
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -29342,7 +29342,7 @@ impl Parser {
 
     fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -29351,10 +29351,10 @@ impl Parser {
 
     fn match_any(&mut self) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind != TK_EOF {
-            return Result::<Token, ParseError>::Ok(self.advance());
+            return Result::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `expected any token, got "{tok.text}"`,
             tok.span,
             ["any token"],
@@ -29372,11 +29372,11 @@ impl Parser {
                 }
             }
             if !blocked {
-                return Result::<Token, ParseError>::Ok(self.advance());
+                return Result::Ok(self.advance());
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["set complement"],
@@ -29388,13 +29388,13 @@ impl Parser {
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                    return Result::Ok(self.tokens[self.pos]);
                 }
-                return Result::<Token, ParseError>::Ok(self.advance());
+                return Result::Ok(self.advance());
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["token set"],
@@ -33470,7 +33470,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         nested_statement_item_list.push(nested_statement_item);
     }
     let eof = p.expect(TK_EOF)?;
-    return Result::<StylesheetNode, ParseError>::Ok(StylesheetNode {
+    return Result::Ok(StylesheetNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ws,
         charset_item_list,
@@ -33493,7 +33493,7 @@ fn _parse_charset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
     let ws_3 = _parse_ws(p, follow)?;
-    return Result::<CharsetNode, ParseError>::Ok(CharsetNode::goodCharset(CharsetgoodCharset {
+    return Result::Ok(CharsetNode::goodCharset(CharsetgoodCharset {
         span: Span::new(start, i32::max(start, p.last_end())),
         charset,
         ws,
@@ -33527,7 +33527,7 @@ fn _parse_charset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let ws = _parse_ws(p, &FOLLOW_MASK_2)?;
     let string_ = p.expect(TK_String_)?;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<CharsetNode, ParseError>::Ok(CharsetNode::badCharset(CharsetbadCharset {
+    return Result::Ok(CharsetNode::badCharset(CharsetbadCharset {
         span: Span::new(start, i32::max(start, p.last_end())),
         charset,
         ws,
@@ -33574,7 +33574,7 @@ fn _parse_charset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         }
         return _parse_charset__inner_alt_1(p, follow);
     }
-    return Result::<CharsetNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected charset",
         p.peek().span,
         ["TK_Charset"],
@@ -33593,12 +33593,12 @@ fn _parse_imports__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
-        group_0_inner = Option::<ImportsGroup0>::Some(ImportsGroup0::Alt0(ImportsGroup0Alt0 {
+        group_0_inner = Option::Some(ImportsGroup0::Alt0(ImportsGroup0Alt0 {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-        group_0_inner = Option::<ImportsGroup0>::Some(ImportsGroup0::Alt1(ImportsGroup0Alt1 {
+        group_0_inner = Option::Some(ImportsGroup0::Alt1(ImportsGroup0Alt1 {
             url,
         }));
     }
@@ -33607,7 +33607,7 @@ fn _parse_imports__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_3)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
     let ws_3 = _parse_ws(p, follow)?;
-    return Result::<ImportsNode, ParseError>::Ok(ImportsNode::goodImport0(ImportsgoodImport0 {
+    return Result::Ok(ImportsNode::goodImport0(ImportsgoodImport0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         import_,
         ws,
@@ -33663,12 +33663,12 @@ fn _parse_imports__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
-        group_1_inner = Option::<ImportsGroup1>::Some(ImportsGroup1::Alt0(ImportsGroup1Alt0 {
+        group_1_inner = Option::Some(ImportsGroup1::Alt0(ImportsGroup1Alt0 {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-        group_1_inner = Option::<ImportsGroup1>::Some(ImportsGroup1::Alt1(ImportsGroup1Alt1 {
+        group_1_inner = Option::Some(ImportsGroup1::Alt1(ImportsGroup1Alt1 {
             url,
         }));
     }
@@ -33676,7 +33676,7 @@ fn _parse_imports__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
     let ws_3 = _parse_ws(p, follow)?;
-    return Result::<ImportsNode, ParseError>::Ok(ImportsNode::goodImport1(ImportsgoodImport1 {
+    return Result::Ok(ImportsNode::goodImport1(ImportsgoodImport1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         import_,
         ws,
@@ -33729,19 +33729,19 @@ fn _parse_imports__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
-        group_2_inner = Option::<ImportsGroup2>::Some(ImportsGroup2::Alt0(ImportsGroup2Alt0 {
+        group_2_inner = Option::Some(ImportsGroup2::Alt0(ImportsGroup2Alt0 {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-        group_2_inner = Option::<ImportsGroup2>::Some(ImportsGroup2::Alt1(ImportsGroup2Alt1 {
+        group_2_inner = Option::Some(ImportsGroup2::Alt1(ImportsGroup2Alt1 {
             url,
         }));
     }
     let group_2 = group_2_inner;
     let ws_2 = _parse_ws(p, follow)?;
     let media_query_list = _parse_media_query_list(p, follow)?;
-    return Result::<ImportsNode, ParseError>::Ok(ImportsNode::badImport0(ImportsbadImport0 {
+    return Result::Ok(ImportsNode::badImport0(ImportsbadImport0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         import_,
         ws,
@@ -33791,18 +33791,18 @@ fn _parse_imports__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
-        group_3_inner = Option::<ImportsGroup3>::Some(ImportsGroup3::Alt0(ImportsGroup3Alt0 {
+        group_3_inner = Option::Some(ImportsGroup3::Alt0(ImportsGroup3Alt0 {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-        group_3_inner = Option::<ImportsGroup3>::Some(ImportsGroup3::Alt1(ImportsGroup3Alt1 {
+        group_3_inner = Option::Some(ImportsGroup3::Alt1(ImportsGroup3Alt1 {
             url,
         }));
     }
     let group_3 = group_3_inner;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<ImportsNode, ParseError>::Ok(ImportsNode::badImport1(ImportsbadImport1 {
+    return Result::Ok(ImportsNode::badImport1(ImportsbadImport1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         import_,
         ws,
@@ -33882,7 +33882,7 @@ fn _parse_imports__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         }
         return _parse_imports__inner_alt_3(p, follow);
     }
-    return Result::<ImportsNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected imports",
         p.peek().span,
         ["TK_Import"],
@@ -33914,7 +33914,7 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
             namespace_prefix,
             ws,
         };
-        Option::<NamespacePrefixWsItem>::Some(namespace_prefix_ws)
+        Option::Some(namespace_prefix_ws)
     } else {
         null
     };
@@ -33922,12 +33922,12 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
-        group_0_inner = Option::<NamespaceGroup0>::Some(NamespaceGroup0::Alt0(NamespaceGroup0Alt0 {
+        group_0_inner = Option::Some(NamespaceGroup0::Alt0(NamespaceGroup0Alt0 {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-        group_0_inner = Option::<NamespaceGroup0>::Some(NamespaceGroup0::Alt1(NamespaceGroup0Alt1 {
+        group_0_inner = Option::Some(NamespaceGroup0::Alt1(NamespaceGroup0Alt1 {
             url,
         }));
     }
@@ -33935,7 +33935,7 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
     let ws_3 = _parse_ws(p, follow)?;
-    return Result::<NamespaceNode, ParseError>::Ok(NamespaceNode::goodNamespace(NamespacegoodNamespace {
+    return Result::Ok(NamespaceNode::goodNamespace(NamespacegoodNamespace {
         span: Span::new(start, i32::max(start, p.last_end())),
         namespace,
         ws,
@@ -34016,7 +34016,7 @@ fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EM
             namespace_prefix,
             ws,
         };
-        Option::<NamespacePrefixWsItem>::Some(namespace_prefix_ws)
+        Option::Some(namespace_prefix_ws)
     } else {
         null
     };
@@ -34024,18 +34024,18 @@ fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EM
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
-        group_1_inner = Option::<NamespaceGroup1>::Some(NamespaceGroup1::Alt0(NamespaceGroup1Alt0 {
+        group_1_inner = Option::Some(NamespaceGroup1::Alt0(NamespaceGroup1Alt0 {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-        group_1_inner = Option::<NamespaceGroup1>::Some(NamespaceGroup1::Alt1(NamespaceGroup1Alt1 {
+        group_1_inner = Option::Some(NamespaceGroup1::Alt1(NamespaceGroup1Alt1 {
             url,
         }));
     }
     let group_1 = group_1_inner;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<NamespaceNode, ParseError>::Ok(NamespaceNode::badNamespace(NamespacebadNamespace {
+    return Result::Ok(NamespaceNode::badNamespace(NamespacebadNamespace {
         span: Span::new(start, i32::max(start, p.last_end())),
         namespace,
         ws,
@@ -34114,7 +34114,7 @@ fn _parse_namespace___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
         return _parse_namespace___inner_alt_1(p, follow);
     }
-    return Result::<NamespaceNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected namespace_",
         p.peek().span,
         ["TK_Namespace"],
@@ -34128,7 +34128,7 @@ fn _parse_namespace_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 fn _parse_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<NamespacePrefixNode, ParseError> {
     let start = p.peek().span.start;
     let ident = _parse_ident(p, follow)?;
-    return Result::<NamespacePrefixNode, ParseError>::Ok(NamespacePrefixNode {
+    return Result::Ok(NamespacePrefixNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ident,
     });
@@ -34145,7 +34145,7 @@ fn _parse_media__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_7)?;
     let group_rule_body = _parse_group_rule_body(p, follow)?;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<MediaNode, ParseError>::Ok(MediaNode {
+    return Result::Ok(MediaNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         media,
         ws,
@@ -34225,12 +34225,12 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             media_query,
             comma_ws_media_query_list,
         };
-        Option::<MediaQueryItemListItem>::Some(media_query_item)
+        Option::Some(media_query_item)
     } else {
         null
     };
     let ws = _parse_ws(p, follow)?;
-    return Result::<MediaQueryListNode, ParseError>::Ok(MediaQueryListNode {
+    return Result::Ok(MediaQueryListNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         media_query_item,
         ws,
@@ -34269,7 +34269,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }
         let mediaonly_or_not: Option<Token> = if opt_scan_pos >= 0 {
             let mediaonly_or_not = p.match_set([TK_MediaOnly, TK_Not])?;
-            Option::<Token>::Some(mediaonly_or_not)
+            Option::Some(mediaonly_or_not)
         } else {
             null
         };
@@ -34309,7 +34309,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             };
             and_ws_media_expression_list.push(and_ws_media_expression);
         }
-        return Result::<MediaQueryNode, ParseError>::Ok(MediaQueryNode::Alt0(MediaQueryAlt0 {
+        return Result::Ok(MediaQueryNode::Alt0(MediaQueryAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             mediaonly_or_not,
             ws,
@@ -34353,13 +34353,13 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             };
             and_ws_media_expression_list.push(and_ws_media_expression);
         }
-        return Result::<MediaQueryNode, ParseError>::Ok(MediaQueryNode::Alt1(MediaQueryAlt1 {
+        return Result::Ok(MediaQueryNode::Alt1(MediaQueryAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             media_expression,
             and_ws_media_expression_list,
         }));
     }
-    return Result::<MediaQueryNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected mediaQuery",
         p.peek().span,
         ["TK_MediaOnly", "TK_Not", "TK_Comment", "TK_Space", "TK_LIT_LPAREN"],
@@ -34373,7 +34373,7 @@ fn _parse_media_query(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 fn _parse_media_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<MediaTypeNode, ParseError> {
     let start = p.peek().span.start;
     let ident = _parse_ident(p, follow)?;
-    return Result::<MediaTypeNode, ParseError>::Ok(MediaTypeNode {
+    return Result::Ok(MediaTypeNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ident,
     });
@@ -34397,13 +34397,13 @@ fn _parse_media_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             ws,
             expr,
         };
-        Option::<ColonWsExprItem>::Some(colon_ws_expr)
+        Option::Some(colon_ws_expr)
     } else {
         null
     };
     let rparen = p.expect(TK_LIT_RPAREN)?;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<MediaExpressionNode, ParseError>::Ok(MediaExpressionNode {
+    return Result::Ok(MediaExpressionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         ws,
@@ -34422,7 +34422,7 @@ fn _parse_media_feature__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek().span.start;
     let ident = _parse_ident(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<MediaFeatureNode, ParseError>::Ok(MediaFeatureNode {
+    return Result::Ok(MediaFeatureNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ident,
         ws,
@@ -34439,7 +34439,7 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     let ws = _parse_ws(p, &FOLLOW_MASK_12)?;
     let pseudo_page: Option<PseudoPageNode> = if p.peek_kind() == TK_LIT_COLON {
         let pseudo_page = _parse_pseudo_page(p, &EMPTY_FOLLOW)?;
-        Option::<PseudoPageNode>::Some(pseudo_page)
+        Option::Some(pseudo_page)
     } else {
         null
     };
@@ -34447,7 +34447,7 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_13)?;
     let declaration: Option<DeclarationNode> = if _gale_kind_set_8(p.peek_kind()) {
         let declaration = _parse_declaration(p, &EMPTY_FOLLOW)?;
-        Option::<DeclarationNode>::Some(declaration)
+        Option::Some(declaration)
     } else {
         null
     };
@@ -34482,7 +34482,7 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             null
         } else if _gale_kind_set_8(p.peek_kind()) {
             let declaration = _parse_declaration(p, &EMPTY_FOLLOW)?;
-            Option::<DeclarationNode>::Some(declaration)
+            Option::Some(declaration)
         } else {
             null
         };
@@ -34495,7 +34495,7 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_3 = _parse_ws(p, follow)?;
-    return Result::<PageNode, ParseError>::Ok(PageNode {
+    return Result::Ok(PageNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         page,
         ws,
@@ -34518,7 +34518,7 @@ fn _parse_pseudo_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let colon = p.expect(TK_LIT_COLON)?;
     let ident = _parse_ident(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<PseudoPageNode, ParseError>::Ok(PseudoPageNode {
+    return Result::Ok(PseudoPageNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         colon,
         ident,
@@ -34566,7 +34566,7 @@ fn _parse_selector_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         };
         comma_ws_selector_list.push(comma_ws_selector);
     }
-    return Result::<SelectorGroupNode, ParseError>::Ok(SelectorGroupNode {
+    return Result::Ok(SelectorGroupNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         selector,
         comma_ws_selector_list,
@@ -34614,7 +34614,7 @@ fn _parse_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         };
         combinator_simple_selector_sequence_ws_list.push(combinator_simple_selector_sequence_ws);
     }
-    return Result::<SelectorNode, ParseError>::Ok(SelectorNode {
+    return Result::Ok(SelectorNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         simple_selector_sequence,
         ws,
@@ -34632,7 +34632,7 @@ fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     if kind == TK_Plus {
         let plus = p.expect(TK_Plus)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt0(CombinatorAlt0 {
+        return Result::Ok(CombinatorNode::Alt0(CombinatorAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             plus,
             ws,
@@ -34641,7 +34641,7 @@ fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     if kind == TK_Greater {
         let greater = p.expect(TK_Greater)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt1(CombinatorAlt1 {
+        return Result::Ok(CombinatorNode::Alt1(CombinatorAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             greater,
             ws,
@@ -34650,7 +34650,7 @@ fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     if kind == TK_Tilde {
         let tilde = p.expect(TK_Tilde)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt2(CombinatorAlt2 {
+        return Result::Ok(CombinatorNode::Alt2(CombinatorAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             tilde,
             ws,
@@ -34659,13 +34659,13 @@ fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     if kind == TK_Space {
         let space = p.expect(TK_Space)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt3(CombinatorAlt3 {
+        return Result::Ok(CombinatorNode::Alt3(CombinatorAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             space,
             ws,
         }));
     }
-    return Result::<CombinatorNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected combinator",
         p.peek().span,
         ["TK_Plus", "TK_Greater", "TK_Tilde", "TK_Space"],
@@ -34696,10 +34696,10 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             }
             if gd_winner == 0 {
                 let type_selector = _parse_type_selector(p, &EMPTY_FOLLOW)?;
-                type_selector_or_universal_inner = Option::<TypeSelectorOrUniversalGroup>::Some(TypeSelectorOrUniversalGroup::TypeSelector(type_selector));
+                type_selector_or_universal_inner = Option::Some(TypeSelectorOrUniversalGroup::TypeSelector(type_selector));
             } else {
                 let universal = _parse_universal(p, &EMPTY_FOLLOW)?;
-                type_selector_or_universal_inner = Option::<TypeSelectorOrUniversalGroup>::Some(TypeSelectorOrUniversalGroup::Universal(universal));
+                type_selector_or_universal_inner = Option::Some(TypeSelectorOrUniversalGroup::Universal(universal));
             }
         }
         let type_selector_or_universal = type_selector_or_universal_inner;
@@ -34779,7 +34779,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             };
             group_0_list.push(group_0);
         }
-        return Result::<SimpleSelectorSequenceNode, ParseError>::Ok(SimpleSelectorSequenceNode::Alt0(SimpleSelectorSequenceAlt0 {
+        return Result::Ok(SimpleSelectorSequenceNode::Alt0(SimpleSelectorSequenceAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             type_selector_or_universal,
             group_0_list,
@@ -34866,12 +34866,12 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             };
             group_1_list.push(group_1);
         }
-        return Result::<SimpleSelectorSequenceNode, ParseError>::Ok(SimpleSelectorSequenceNode::Alt1(SimpleSelectorSequenceAlt1 {
+        return Result::Ok(SimpleSelectorSequenceNode::Alt1(SimpleSelectorSequenceAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             group_1_list,
         }));
     }
-    return Result::<SimpleSelectorSequenceNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected simpleSelectorSequence",
         p.peek().span,
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot"],
@@ -34886,12 +34886,12 @@ fn _parse_type_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek().span.start;
     let type_namespace_prefix: Option<TypeNamespacePrefixNode> = if _gale_kind_set_12(p.peek_kind()) {
         let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW)?;
-        Option::<TypeNamespacePrefixNode>::Some(type_namespace_prefix)
+        Option::Some(type_namespace_prefix)
     } else {
         null
     };
     let element_name = _parse_element_name(p, follow)?;
-    return Result::<TypeSelectorNode, ParseError>::Ok(TypeSelectorNode {
+    return Result::Ok(TypeSelectorNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         type_namespace_prefix,
         element_name,
@@ -34938,12 +34938,12 @@ fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> 
                 star,
             })
         };
-        Option::<TypeNamespacePrefixGroup0>::Some(group_0)
+        Option::Some(group_0)
     } else {
         null
     };
     let pipe = p.expect(TK_LIT_PIPE)?;
-    return Result::<TypeNamespacePrefixNode, ParseError>::Ok(TypeNamespacePrefixNode {
+    return Result::Ok(TypeNamespacePrefixNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         group_0,
         pipe,
@@ -34957,7 +34957,7 @@ fn _parse_type_namespace_prefix(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 fn _parse_element_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ElementNameNode, ParseError> {
     let start = p.peek().span.start;
     let ident = _parse_ident(p, follow)?;
-    return Result::<ElementNameNode, ParseError>::Ok(ElementNameNode {
+    return Result::Ok(ElementNameNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ident,
     });
@@ -34971,12 +34971,12 @@ fn _parse_universal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let start = p.peek().span.start;
     let type_namespace_prefix: Option<TypeNamespacePrefixNode> = if _gale_kind_set_14(p.peek_kind()) {
         let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW)?;
-        Option::<TypeNamespacePrefixNode>::Some(type_namespace_prefix)
+        Option::Some(type_namespace_prefix)
     } else {
         null
     };
     let star = p.expect(TK_LIT_STAR)?;
-    return Result::<UniversalNode, ParseError>::Ok(UniversalNode {
+    return Result::Ok(UniversalNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         type_namespace_prefix,
         star,
@@ -34991,7 +34991,7 @@ fn _parse_class_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let start = p.peek().span.start;
     let dot = p.expect(TK_LIT_DOT)?;
     let ident = _parse_ident(p, follow)?;
-    return Result::<ClassNameNode, ParseError>::Ok(ClassNameNode {
+    return Result::Ok(ClassNameNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         dot,
         ident,
@@ -35008,7 +35008,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     let ws = _parse_ws(p, &FOLLOW_MASK_15)?;
     let type_namespace_prefix: Option<TypeNamespacePrefixNode> = if _gale_kind_set_12(p.peek_kind()) {
         let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW)?;
-        Option::<TypeNamespacePrefixNode>::Some(type_namespace_prefix)
+        Option::Some(type_namespace_prefix)
     } else {
         null
     };
@@ -35090,12 +35090,12 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         let grp_kind = p.peek_kind();
         if _gale_kind_set_4(grp_kind) {
             let ident = _parse_ident(p, follow)?;
-            group_0_inner = Option::<AttribGroup0>::Some(AttribGroup0::Alt0(AttribGroup0Alt0 {
+            group_0_inner = Option::Some(AttribGroup0::Alt0(AttribGroup0Alt0 {
                 ident,
             }));
         } else if grp_kind == TK_String_ {
             let string_ = p.expect(TK_String_)?;
-            group_0_inner = Option::<AttribGroup0>::Some(AttribGroup0::Alt1(AttribGroup0Alt1 {
+            group_0_inner = Option::Some(AttribGroup0::Alt1(AttribGroup0Alt1 {
                 string_,
             }));
         }
@@ -35107,12 +35107,12 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             group_0,
             ws_2,
         };
-        Option::<ItemWsItemWsItem>::Some(item_ws_item_ws)
+        Option::Some(item_ws_item_ws)
     } else {
         null
     };
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
-    return Result::<AttribNode, ParseError>::Ok(AttribNode {
+    return Result::Ok(AttribNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lbracket,
         ws,
@@ -35133,7 +35133,7 @@ fn _parse_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     let colon = p.expect(TK_LIT_COLON)?;
     let colon_2: Option<Token> = if p.peek_kind() == TK_LIT_COLON {
         let colon = p.expect(TK_LIT_COLON)?;
-        Option::<Token>::Some(colon)
+        Option::Some(colon)
     } else {
         null
     };
@@ -35141,13 +35141,13 @@ fn _parse_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     let grp_kind = p.peek_kind();
     if _gale_kind_set_4(grp_kind) {
         let ident = _parse_ident(p, &EMPTY_FOLLOW)?;
-        ident_or_functional_pseudo_inner = Option::<IdentOrFunctionalPseudoGroup>::Some(IdentOrFunctionalPseudoGroup::Ident(ident));
+        ident_or_functional_pseudo_inner = Option::Some(IdentOrFunctionalPseudoGroup::Ident(ident));
     } else if grp_kind == TK_Function_ {
         let functional_pseudo = _parse_functional_pseudo(p, &EMPTY_FOLLOW)?;
-        ident_or_functional_pseudo_inner = Option::<IdentOrFunctionalPseudoGroup>::Some(IdentOrFunctionalPseudoGroup::FunctionalPseudo(functional_pseudo));
+        ident_or_functional_pseudo_inner = Option::Some(IdentOrFunctionalPseudoGroup::FunctionalPseudo(functional_pseudo));
     }
     let ident_or_functional_pseudo = ident_or_functional_pseudo_inner;
-    return Result::<PseudoNode, ParseError>::Ok(PseudoNode {
+    return Result::Ok(PseudoNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         colon,
         colon_2,
@@ -35165,7 +35165,7 @@ fn _parse_functional_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     let ws = _parse_ws(p, &FOLLOW_MASK_19)?;
     let expression = _parse_expression(p, &FOLLOW_MASK_20)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::<FunctionalPseudoNode, ParseError>::Ok(FunctionalPseudoNode {
+    return Result::Ok(FunctionalPseudoNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         function_,
         ws,
@@ -35256,37 +35256,37 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let grp_kind = p.peek_kind();
         if grp_kind == TK_Plus {
             let plus = p.expect(TK_Plus)?;
-            group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt0(ExpressionGroup0Alt0 {
+            group_0_inner = Option::Some(ExpressionGroup0::Alt0(ExpressionGroup0Alt0 {
                 plus,
             }));
         } else if grp_kind == TK_Minus {
             let minus = p.expect(TK_Minus)?;
-            group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt1(ExpressionGroup0Alt1 {
+            group_0_inner = Option::Some(ExpressionGroup0::Alt1(ExpressionGroup0Alt1 {
                 minus,
             }));
         } else if grp_kind == TK_Dimension {
             let dimension = p.expect(TK_Dimension)?;
-            group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt2(ExpressionGroup0Alt2 {
+            group_0_inner = Option::Some(ExpressionGroup0::Alt2(ExpressionGroup0Alt2 {
                 dimension,
             }));
         } else if grp_kind == TK_UnknownDimension {
             let unknowndimension = p.expect(TK_UnknownDimension)?;
-            group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt3(ExpressionGroup0Alt3 {
+            group_0_inner = Option::Some(ExpressionGroup0::Alt3(ExpressionGroup0Alt3 {
                 unknowndimension,
             }));
         } else if grp_kind == TK_Number {
             let number = p.expect(TK_Number)?;
-            group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt4(ExpressionGroup0Alt4 {
+            group_0_inner = Option::Some(ExpressionGroup0::Alt4(ExpressionGroup0Alt4 {
                 number,
             }));
         } else if grp_kind == TK_String_ {
             let string_ = p.expect(TK_String_)?;
-            group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt5(ExpressionGroup0Alt5 {
+            group_0_inner = Option::Some(ExpressionGroup0::Alt5(ExpressionGroup0Alt5 {
                 string_,
             }));
         } else if _gale_kind_set_4(grp_kind) {
             let ident = _parse_ident(p, follow)?;
-            group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt6(ExpressionGroup0Alt6 {
+            group_0_inner = Option::Some(ExpressionGroup0::Alt6(ExpressionGroup0Alt6 {
                 ident,
             }));
         }
@@ -35298,7 +35298,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         };
         item_ws_list.push(item_ws);
     }
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode {
+    return Result::Ok(ExpressionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         item_ws_list,
     });
@@ -35315,7 +35315,7 @@ fn _parse_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     let negation_arg = _parse_negation_arg(p, &FOLLOW_MASK_16)?;
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_20)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::<NegationNode, ParseError>::Ok(NegationNode {
+    return Result::Ok(NegationNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         pseudonot,
         ws,
@@ -35332,7 +35332,7 @@ fn _parse_negation(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 fn _parse_negation_arg__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<NegationArgNode, ParseError> {
     let start = p.peek().span.start;
     let type_selector = _parse_type_selector(p, follow)?;
-    return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt0(NegationArgAlt0 {
+    return Result::Ok(NegationArgNode::Alt0(NegationArgAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         type_selector,
     }));
@@ -35348,7 +35348,7 @@ fn _parse_negation_arg__inner_scan_0(tokens: &Array<Token>, pos: i32, follow: &L
 fn _parse_negation_arg__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<NegationArgNode, ParseError> {
     let start = p.peek().span.start;
     let universal = _parse_universal(p, follow)?;
-    return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt1(NegationArgAlt1 {
+    return Result::Ok(NegationArgNode::Alt1(NegationArgAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         universal,
     }));
@@ -35423,33 +35423,33 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     }
     if kind == TK_Hash {
         let hash = p.expect(TK_Hash)?;
-        return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt2(NegationArgAlt2 {
+        return Result::Ok(NegationArgNode::Alt2(NegationArgAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             hash,
         }));
     }
     if kind == TK_LIT_DOT {
         let class_name = _parse_class_name(p, follow)?;
-        return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt3(NegationArgAlt3 {
+        return Result::Ok(NegationArgNode::Alt3(NegationArgAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             class_name,
         }));
     }
     if kind == TK_LIT_LBRACKET {
         let attrib = _parse_attrib(p, follow)?;
-        return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt4(NegationArgAlt4 {
+        return Result::Ok(NegationArgNode::Alt4(NegationArgAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             attrib,
         }));
     }
     if kind == TK_LIT_COLON {
         let pseudo = _parse_pseudo(p, follow)?;
-        return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt5(NegationArgAlt5 {
+        return Result::Ok(NegationArgNode::Alt5(NegationArgAlt5 {
             span: Span::new(start, i32::max(start, p.last_end())),
             pseudo,
         }));
     }
-    return Result::<NegationArgNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected negationArg",
         p.peek().span,
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON"],
@@ -35466,7 +35466,7 @@ fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if kind == TK_LIT_SLASH {
         let slash = p.expect(TK_LIT_SLASH)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<OperatorNode, ParseError>::Ok(OperatorNode::goodOperator0(OperatorgoodOperator0 {
+        return Result::Ok(OperatorNode::goodOperator0(OperatorgoodOperator0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             slash,
             ws,
@@ -35475,7 +35475,7 @@ fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if kind == TK_Comma {
         let comma = p.expect(TK_Comma)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<OperatorNode, ParseError>::Ok(OperatorNode::goodOperator1(OperatorgoodOperator1 {
+        return Result::Ok(OperatorNode::goodOperator1(OperatorgoodOperator1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             comma,
             ws,
@@ -35484,7 +35484,7 @@ fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if kind == TK_Space {
         let space = p.expect(TK_Space)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<OperatorNode, ParseError>::Ok(OperatorNode::goodOperator2(OperatorgoodOperator2 {
+        return Result::Ok(OperatorNode::goodOperator2(OperatorgoodOperator2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             space,
             ws,
@@ -35493,13 +35493,13 @@ fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if kind == TK_LIT_EQ {
         let eq = p.expect(TK_LIT_EQ)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<OperatorNode, ParseError>::Ok(OperatorNode::badOperator(OperatorbadOperator {
+        return Result::Ok(OperatorNode::badOperator(OperatorbadOperator {
             span: Span::new(start, i32::max(start, p.last_end())),
             eq,
             ws,
         }));
     }
-    return Result::<OperatorNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected operator_",
         p.peek().span,
         ["TK_LIT_SLASH", "TK_Comma", "TK_Space", "TK_LIT_EQ"],
@@ -35516,7 +35516,7 @@ fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if _gale_kind_set_4(kind) {
         let ident = _parse_ident(p, follow)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<PropertyNode, ParseError>::Ok(PropertyNode::goodProperty0(PropertygoodProperty0 {
+        return Result::Ok(PropertyNode::goodProperty0(PropertygoodProperty0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ident,
             ws,
@@ -35525,7 +35525,7 @@ fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if kind == TK_Variable {
         let variable = p.expect(TK_Variable)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<PropertyNode, ParseError>::Ok(PropertyNode::goodProperty1(PropertygoodProperty1 {
+        return Result::Ok(PropertyNode::goodProperty1(PropertygoodProperty1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             variable,
             ws,
@@ -35534,7 +35534,7 @@ fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if kind == TK_LIT_STAR {
         let star = p.expect(TK_LIT_STAR)?;
         let ident = _parse_ident(p, follow)?;
-        return Result::<PropertyNode, ParseError>::Ok(PropertyNode::badProperty0(PropertybadProperty0 {
+        return Result::Ok(PropertyNode::badProperty0(PropertybadProperty0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             star,
             ident,
@@ -35543,13 +35543,13 @@ fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if kind == TK_LIT_U5f {
         let lit_u5f = p.expect(TK_LIT_U5f)?;
         let ident = _parse_ident(p, follow)?;
-        return Result::<PropertyNode, ParseError>::Ok(PropertyNode::badProperty1(PropertybadProperty1 {
+        return Result::Ok(PropertyNode::badProperty1(PropertybadProperty1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             lit_u5f,
             ident,
         }));
     }
-    return Result::<PropertyNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected property_",
         p.peek().span,
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
@@ -35588,13 +35588,13 @@ fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let ws = _parse_ws(p, &FOLLOW_MASK_13)?;
     let declaration_list: Option<DeclarationListNode> = if _gale_kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW)?;
-        Option::<DeclarationListNode>::Some(declaration_list)
+        Option::Some(declaration_list)
     } else {
         null
     };
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<RulesetNode, ParseError>::Ok(RulesetNode::unknownRuleset(RulesetunknownRuleset {
+    return Result::Ok(RulesetNode::unknownRuleset(RulesetunknownRuleset {
         span: Span::new(start, i32::max(start, p.last_end())),
         any__list,
         lbrace,
@@ -35636,13 +35636,13 @@ fn _parse_ruleset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let ws = _parse_ws(p, &FOLLOW_MASK_13)?;
     let declaration_list: Option<DeclarationListNode> = if _gale_kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW)?;
-        Option::<DeclarationListNode>::Some(declaration_list)
+        Option::Some(declaration_list)
     } else {
         null
     };
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<RulesetNode, ParseError>::Ok(RulesetNode::knownRuleset(RulesetknownRuleset {
+    return Result::Ok(RulesetNode::knownRuleset(RulesetknownRuleset {
         span: Span::new(start, i32::max(start, p.last_end())),
         selector_group,
         lbrace,
@@ -35704,7 +35704,7 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             return _parse_ruleset__inner_alt_1(p, follow);
         }
     }
-    return Result::<RulesetNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected ruleset",
         p.peek().span,
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACE"],
@@ -35779,7 +35779,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             null
         } else if _gale_kind_set_8(p.peek_kind()) {
             let declaration = _parse_declaration(p, &EMPTY_FOLLOW)?;
-            Option::<DeclarationNode>::Some(declaration)
+            Option::Some(declaration)
         } else {
             null
         };
@@ -35790,7 +35790,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         };
         semicolon_ws_declaration_list.push(semicolon_ws_declaration);
     }
-    return Result::<DeclarationListNode, ParseError>::Ok(DeclarationListNode {
+    return Result::Ok(DeclarationListNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         semicolon_ws_list,
         declaration,
@@ -35813,11 +35813,11 @@ fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &E
         null
     } else if p.peek_kind() == TK_Important {
         let prio = _parse_prio(p, &EMPTY_FOLLOW)?;
-        Option::<PrioNode>::Some(prio)
+        Option::Some(prio)
     } else {
         null
     };
-    return Result::<DeclarationNode, ParseError>::Ok(DeclarationNode::knownDeclaration(DeclarationknownDeclaration {
+    return Result::Ok(DeclarationNode::knownDeclaration(DeclarationknownDeclaration {
         span: Span::new(start, i32::max(start, p.last_end())),
         property_,
         colon,
@@ -35851,7 +35851,7 @@ fn _parse_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &E
     let colon = p.expect(TK_LIT_COLON)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_23)?;
     let value = _parse_value(p, follow)?;
-    return Result::<DeclarationNode, ParseError>::Ok(DeclarationNode::unknownDeclaration(DeclarationunknownDeclaration {
+    return Result::Ok(DeclarationNode::unknownDeclaration(DeclarationunknownDeclaration {
         span: Span::new(start, i32::max(start, p.last_end())),
         property_,
         colon,
@@ -35900,7 +35900,7 @@ fn _parse_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             return _parse_declaration__inner_alt_1(p, follow);
         }
     }
-    return Result::<DeclarationNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected declaration",
         p.peek().span,
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
@@ -35915,7 +35915,7 @@ fn _parse_prio__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     let start = p.peek().span.start;
     let important = p.expect(TK_Important)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<PrioNode, ParseError>::Ok(PrioNode {
+    return Result::Ok(PrioNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         important,
         ws,
@@ -35990,7 +35990,7 @@ fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         };
         group_0_list.push(group_0);
     }
-    return Result::<ValueNode, ParseError>::Ok(ValueNode {
+    return Result::Ok(ValueNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         group_0_list,
     });
@@ -36029,7 +36029,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         if rep_scan_pos < 0 { break; }
         let operator_: Option<OperatorNode> = if _gale_kind_set_22(p.peek_kind()) {
             let operator_ = _parse_operator_(p, &EMPTY_FOLLOW)?;
-            Option::<OperatorNode>::Some(operator_)
+            Option::Some(operator_)
         } else {
             null
         };
@@ -36040,7 +36040,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         };
         operator__term_list.push(operator__term);
     }
-    return Result::<ExprNode, ParseError>::Ok(ExprNode {
+    return Result::Ok(ExprNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         term,
         operator__term_list,
@@ -36055,7 +36055,7 @@ fn _parse_term__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let start = p.peek().span.start;
     let number = _parse_number(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm0(TermknownTerm0 {
+    return Result::Ok(TermNode::knownTerm0(TermknownTerm0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         number,
         ws,
@@ -36075,7 +36075,7 @@ fn _parse_term__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let start = p.peek().span.start;
     let percentage = _parse_percentage(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm1(TermknownTerm1 {
+    return Result::Ok(TermNode::knownTerm1(TermknownTerm1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         percentage,
         ws,
@@ -36095,7 +36095,7 @@ fn _parse_term__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let start = p.peek().span.start;
     let dimension = _parse_dimension(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm2(TermknownTerm2 {
+    return Result::Ok(TermNode::knownTerm2(TermknownTerm2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         dimension,
         ws,
@@ -36115,7 +36115,7 @@ fn _parse_term__inner_alt_11(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let start = p.peek().span.start;
     let unknown_dimension = _parse_unknown_dimension(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<TermNode, ParseError>::Ok(TermNode::unknownTerm(TermunknownTerm {
+    return Result::Ok(TermNode::unknownTerm(TermunknownTerm {
         span: Span::new(start, i32::max(start, p.last_end())),
         unknown_dimension,
         ws,
@@ -36168,7 +36168,7 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm3(TermknownTerm3 {
+        return Result::Ok(TermNode::knownTerm3(TermknownTerm3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             string_,
             ws,
@@ -36177,7 +36177,7 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if kind == TK_UnicodeRange {
         let unicoderange = p.expect(TK_UnicodeRange)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm4(TermknownTerm4 {
+        return Result::Ok(TermNode::knownTerm4(TermknownTerm4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             unicoderange,
             ws,
@@ -36186,7 +36186,7 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if _gale_kind_set_4(kind) {
         let ident = _parse_ident(p, follow)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm5(TermknownTerm5 {
+        return Result::Ok(TermNode::knownTerm5(TermknownTerm5 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ident,
             ws,
@@ -36194,7 +36194,7 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     }
     if kind == TK_Var {
         let var_ = _parse_var_(p, follow)?;
-        return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm6(TermknownTerm6 {
+        return Result::Ok(TermNode::knownTerm6(TermknownTerm6 {
             span: Span::new(start, i32::max(start, p.last_end())),
             var_,
         }));
@@ -36202,7 +36202,7 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if _gale_kind_set_2(kind) {
         let url = _parse_url(p, follow)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm7(TermknownTerm7 {
+        return Result::Ok(TermNode::knownTerm7(TermknownTerm7 {
             span: Span::new(start, i32::max(start, p.last_end())),
             url,
             ws,
@@ -36210,33 +36210,33 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     }
     if kind == TK_Hash {
         let hexcolor = _parse_hexcolor(p, follow)?;
-        return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm8(TermknownTerm8 {
+        return Result::Ok(TermNode::knownTerm8(TermknownTerm8 {
             span: Span::new(start, i32::max(start, p.last_end())),
             hexcolor,
         }));
     }
     if kind == TK_Calc {
         let calc = _parse_calc(p, follow)?;
-        return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm9(TermknownTerm9 {
+        return Result::Ok(TermNode::knownTerm9(TermknownTerm9 {
             span: Span::new(start, i32::max(start, p.last_end())),
             calc,
         }));
     }
     if kind == TK_Function_ {
         let function_ = _parse_function_(p, follow)?;
-        return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm10(TermknownTerm10 {
+        return Result::Ok(TermNode::knownTerm10(TermknownTerm10 {
             span: Span::new(start, i32::max(start, p.last_end())),
             function_,
         }));
     }
     if kind == TK_DxImageTransform {
         let dx_image_transform = _parse_dx_image_transform(p, follow)?;
-        return Result::<TermNode, ParseError>::Ok(TermNode::badTerm(TermbadTerm {
+        return Result::Ok(TermNode::badTerm(TermbadTerm {
             span: Span::new(start, i32::max(start, p.last_end())),
             dx_image_transform,
         }));
     }
-    return Result::<TermNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected term",
         p.peek().span,
         ["TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_String_", "TK_UnicodeRange", "TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Var", "TK_Url_", "TK_Url", "TK_Hash", "TK_Calc", "TK_Function_", "TK_UnknownDimension", "TK_DxImageTransform"],
@@ -36254,7 +36254,7 @@ fn _parse_function___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let expr = _parse_expr(p, &FOLLOW_MASK_20)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<FunctionNode, ParseError>::Ok(FunctionNode {
+    return Result::Ok(FunctionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         function_,
         ws,
@@ -36275,7 +36275,7 @@ fn _parse_dx_image_transform__inner(p: &mut Parser, follow: &List<List<i32>> = &
     let expr = _parse_expr(p, &FOLLOW_MASK_20)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<DxImageTransformNode, ParseError>::Ok(DxImageTransformNode {
+    return Result::Ok(DxImageTransformNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         dximagetransform,
         ws,
@@ -36293,7 +36293,7 @@ fn _parse_hexcolor__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     let start = p.peek().span.start;
     let hash = p.expect(TK_Hash)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<HexcolorNode, ParseError>::Ok(HexcolorNode {
+    return Result::Ok(HexcolorNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         hash,
         ws,
@@ -36330,12 +36330,12 @@ fn _parse_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     }
     let plus_or_minus: Option<Token> = if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
-        Option::<Token>::Some(plus_or_minus)
+        Option::Some(plus_or_minus)
     } else {
         null
     };
     let number = p.expect(TK_Number)?;
-    return Result::<NumberNode, ParseError>::Ok(NumberNode {
+    return Result::Ok(NumberNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         plus_or_minus,
         number,
@@ -36372,12 +36372,12 @@ fn _parse_percentage__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     }
     let plus_or_minus: Option<Token> = if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
-        Option::<Token>::Some(plus_or_minus)
+        Option::Some(plus_or_minus)
     } else {
         null
     };
     let percentage = p.expect(TK_Percentage)?;
-    return Result::<PercentageNode, ParseError>::Ok(PercentageNode {
+    return Result::Ok(PercentageNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         plus_or_minus,
         percentage,
@@ -36414,12 +36414,12 @@ fn _parse_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     }
     let plus_or_minus: Option<Token> = if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
-        Option::<Token>::Some(plus_or_minus)
+        Option::Some(plus_or_minus)
     } else {
         null
     };
     let dimension = p.expect(TK_Dimension)?;
-    return Result::<DimensionNode, ParseError>::Ok(DimensionNode {
+    return Result::Ok(DimensionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         plus_or_minus,
         dimension,
@@ -36456,12 +36456,12 @@ fn _parse_unknown_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     }
     let plus_or_minus: Option<Token> = if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
-        Option::<Token>::Some(plus_or_minus)
+        Option::Some(plus_or_minus)
     } else {
         null
     };
     let unknowndimension = p.expect(TK_UnknownDimension)?;
-    return Result::<UnknownDimensionNode, ParseError>::Ok(UnknownDimensionNode {
+    return Result::Ok(UnknownDimensionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         plus_or_minus,
         unknowndimension,
@@ -36476,7 +36476,7 @@ fn _parse_any___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let start = p.peek().span.start;
     let number = _parse_number(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt1(AnyAlt1 {
+    return Result::Ok(AnyNode::Alt1(AnyAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         number,
         ws,
@@ -36496,7 +36496,7 @@ fn _parse_any___inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let start = p.peek().span.start;
     let percentage = _parse_percentage(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt2(AnyAlt2 {
+    return Result::Ok(AnyNode::Alt2(AnyAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         percentage,
         ws,
@@ -36516,7 +36516,7 @@ fn _parse_any___inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let start = p.peek().span.start;
     let dimension = _parse_dimension(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt3(AnyAlt3 {
+    return Result::Ok(AnyNode::Alt3(AnyAlt3 {
         span: Span::new(start, i32::max(start, p.last_end())),
         dimension,
         ws,
@@ -36536,7 +36536,7 @@ fn _parse_any___inner_alt_4(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let start = p.peek().span.start;
     let unknown_dimension = _parse_unknown_dimension(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt4(AnyAlt4 {
+    return Result::Ok(AnyNode::Alt4(AnyAlt4 {
         span: Span::new(start, i32::max(start, p.last_end())),
         unknown_dimension,
         ws,
@@ -36558,7 +36558,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if _gale_kind_set_4(kind) {
         let ident = _parse_ident(p, follow)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt0(AnyAlt0 {
+        return Result::Ok(AnyNode::Alt0(AnyAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ident,
             ws,
@@ -36598,7 +36598,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt5(AnyAlt5 {
+        return Result::Ok(AnyNode::Alt5(AnyAlt5 {
             span: Span::new(start, i32::max(start, p.last_end())),
             string_,
             ws,
@@ -36607,7 +36607,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if _gale_kind_set_2(kind) {
         let url = _parse_url(p, follow)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt6(AnyAlt6 {
+        return Result::Ok(AnyNode::Alt6(AnyAlt6 {
             span: Span::new(start, i32::max(start, p.last_end())),
             url,
             ws,
@@ -36616,7 +36616,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if kind == TK_Hash {
         let hash = p.expect(TK_Hash)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt7(AnyAlt7 {
+        return Result::Ok(AnyNode::Alt7(AnyAlt7 {
             span: Span::new(start, i32::max(start, p.last_end())),
             hash,
             ws,
@@ -36625,7 +36625,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if kind == TK_UnicodeRange {
         let unicoderange = p.expect(TK_UnicodeRange)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt8(AnyAlt8 {
+        return Result::Ok(AnyNode::Alt8(AnyAlt8 {
             span: Span::new(start, i32::max(start, p.last_end())),
             unicoderange,
             ws,
@@ -36634,7 +36634,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if kind == TK_Includes {
         let includes = p.expect(TK_Includes)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt9(AnyAlt9 {
+        return Result::Ok(AnyNode::Alt9(AnyAlt9 {
             span: Span::new(start, i32::max(start, p.last_end())),
             includes,
             ws,
@@ -36643,7 +36643,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if kind == TK_DashMatch {
         let dashmatch = p.expect(TK_DashMatch)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt10(AnyAlt10 {
+        return Result::Ok(AnyNode::Alt10(AnyAlt10 {
             span: Span::new(start, i32::max(start, p.last_end())),
             dashmatch,
             ws,
@@ -36652,7 +36652,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     if kind == TK_LIT_COLON {
         let colon = p.expect(TK_LIT_COLON)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt11(AnyAlt11 {
+        return Result::Ok(AnyNode::Alt11(AnyAlt11 {
             span: Span::new(start, i32::max(start, p.last_end())),
             colon,
             ws,
@@ -36701,7 +36701,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
         let ws_2 = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt12(AnyAlt12 {
+        return Result::Ok(AnyNode::Alt12(AnyAlt12 {
             span: Span::new(start, i32::max(start, p.last_end())),
             function_,
             ws,
@@ -36753,7 +36753,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
         let ws_2 = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt13(AnyAlt13 {
+        return Result::Ok(AnyNode::Alt13(AnyAlt13 {
             span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
             ws,
@@ -36805,7 +36805,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         }
         let rbracket = p.expect(TK_LIT_RBRACKET)?;
         let ws_2 = _parse_ws(p, follow)?;
-        return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt14(AnyAlt14 {
+        return Result::Ok(AnyNode::Alt14(AnyAlt14 {
             span: Span::new(start, i32::max(start, p.last_end())),
             lbracket,
             ws,
@@ -36814,7 +36814,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             ws_2,
         }));
     }
-    return Result::<AnyNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected any_",
         p.peek().span,
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_Hash", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_LIT_COLON", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACKET"],
@@ -36855,19 +36855,19 @@ fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_LBRACE {
         let block = _parse_block(p, follow)?;
-        group_0_inner = Option::<AtRuleGroup0>::Some(AtRuleGroup0::Alt0(AtRuleGroup0Alt0 {
+        group_0_inner = Option::Some(AtRuleGroup0::Alt0(AtRuleGroup0Alt0 {
             block,
         }));
     } else if grp_kind == TK_LIT_SEMI {
         let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = _parse_ws(p, follow)?;
-        group_0_inner = Option::<AtRuleGroup0>::Some(AtRuleGroup0::Alt1(AtRuleGroup0Alt1 {
+        group_0_inner = Option::Some(AtRuleGroup0::Alt1(AtRuleGroup0Alt1 {
             semicolon,
             ws,
         }));
     }
     let group_0 = group_0_inner;
-    return Result::<AtRuleNode, ParseError>::Ok(AtRuleNode {
+    return Result::Ok(AtRuleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         atkeyword,
         ws,
@@ -36885,7 +36885,7 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACE {
         let block = _parse_block(p, follow)?;
-        return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt0(UnusedAlt0 {
+        return Result::Ok(UnusedNode::Alt0(UnusedAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             block,
         }));
@@ -36893,7 +36893,7 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     if kind == TK_AtKeyword {
         let atkeyword = p.expect(TK_AtKeyword)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt1(UnusedAlt1 {
+        return Result::Ok(UnusedNode::Alt1(UnusedAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             atkeyword,
             ws,
@@ -36902,7 +36902,7 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     if kind == TK_LIT_SEMI {
         let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt2(UnusedAlt2 {
+        return Result::Ok(UnusedNode::Alt2(UnusedAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             semicolon,
             ws,
@@ -36911,7 +36911,7 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     if kind == TK_Cdo {
         let cdo = p.expect(TK_Cdo)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt3(UnusedAlt3 {
+        return Result::Ok(UnusedNode::Alt3(UnusedAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             cdo,
             ws,
@@ -36920,13 +36920,13 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     if kind == TK_Cdc {
         let cdc = p.expect(TK_Cdc)?;
         let ws = _parse_ws(p, follow)?;
-        return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt4(UnusedAlt4 {
+        return Result::Ok(UnusedNode::Alt4(UnusedAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             cdc,
             ws,
         }));
     }
-    return Result::<UnusedNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected unused",
         p.peek().span,
         ["TK_LIT_LBRACE", "TK_AtKeyword", "TK_LIT_SEMI", "TK_Cdo", "TK_Cdc"],
@@ -37053,35 +37053,35 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             if gd_winner == 0 {
                 let atkeyword = p.expect(TK_AtKeyword)?;
                 let ws = _parse_ws(p, follow)?;
-                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt4(BlockGroup0Alt4 {
+                group_0_opt = Option::Some(BlockGroup0::Alt4(BlockGroup0Alt4 {
                     atkeyword,
                     ws,
                 }));
             } else if gd_winner == 1 {
                 let semicolon = p.expect(TK_LIT_SEMI)?;
                 let ws = _parse_ws(p, follow)?;
-                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt5(BlockGroup0Alt5 {
+                group_0_opt = Option::Some(BlockGroup0::Alt5(BlockGroup0Alt5 {
                     semicolon,
                     ws,
                 }));
             } else if gd_winner == 2 {
                 let declaration_list = _parse_declaration_list(p, follow)?;
-                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt0(BlockGroup0Alt0 {
+                group_0_opt = Option::Some(BlockGroup0::Alt0(BlockGroup0Alt0 {
                     declaration_list,
                 }));
             } else if gd_winner == 3 {
                 let nested_statement = _parse_nested_statement(p, follow)?;
-                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt1(BlockGroup0Alt1 {
+                group_0_opt = Option::Some(BlockGroup0::Alt1(BlockGroup0Alt1 {
                     nested_statement,
                 }));
             } else if gd_winner == 4 {
                 let any_ = _parse_any_(p, follow)?;
-                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt2(BlockGroup0Alt2 {
+                group_0_opt = Option::Some(BlockGroup0::Alt2(BlockGroup0Alt2 {
                     any_,
                 }));
             } else {
                 let block = _parse_block(p, follow)?;
-                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt3(BlockGroup0Alt3 {
+                group_0_opt = Option::Some(BlockGroup0::Alt3(BlockGroup0Alt3 {
                     block,
                 }));
             }
@@ -37094,7 +37094,7 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<BlockNode, ParseError>::Ok(BlockNode {
+    return Result::Ok(BlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lbrace,
         ws,
@@ -37113,75 +37113,75 @@ fn _parse_nested_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     let kind = p.peek_kind();
     if _gale_kind_set_29(kind) {
         let ruleset = _parse_ruleset(p, follow)?;
-        return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt0(NestedStatementAlt0 {
+        return Result::Ok(NestedStatementNode::Alt0(NestedStatementAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ruleset,
         }));
     }
     if kind == TK_Media {
         let media = _parse_media(p, follow)?;
-        return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt1(NestedStatementAlt1 {
+        return Result::Ok(NestedStatementNode::Alt1(NestedStatementAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             media,
         }));
     }
     if kind == TK_Page {
         let page = _parse_page(p, follow)?;
-        return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt2(NestedStatementAlt2 {
+        return Result::Ok(NestedStatementNode::Alt2(NestedStatementAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             page,
         }));
     }
     if kind == TK_FontFace {
         let font_face_rule = _parse_font_face_rule(p, follow)?;
-        return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt3(NestedStatementAlt3 {
+        return Result::Ok(NestedStatementNode::Alt3(NestedStatementAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             font_face_rule,
         }));
     }
     if kind == TK_Keyframes {
         let keyframes_rule = _parse_keyframes_rule(p, follow)?;
-        return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt4(NestedStatementAlt4 {
+        return Result::Ok(NestedStatementNode::Alt4(NestedStatementAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             keyframes_rule,
         }));
     }
     if kind == TK_Supports {
         let supports_rule = _parse_supports_rule(p, follow)?;
-        return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt5(NestedStatementAlt5 {
+        return Result::Ok(NestedStatementNode::Alt5(NestedStatementAlt5 {
             span: Span::new(start, i32::max(start, p.last_end())),
             supports_rule,
         }));
     }
     if kind == TK_Viewport {
         let viewport = _parse_viewport(p, follow)?;
-        return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt6(NestedStatementAlt6 {
+        return Result::Ok(NestedStatementNode::Alt6(NestedStatementAlt6 {
             span: Span::new(start, i32::max(start, p.last_end())),
             viewport,
         }));
     }
     if kind == TK_CounterStyle {
         let counter_style = _parse_counter_style(p, follow)?;
-        return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt7(NestedStatementAlt7 {
+        return Result::Ok(NestedStatementNode::Alt7(NestedStatementAlt7 {
             span: Span::new(start, i32::max(start, p.last_end())),
             counter_style,
         }));
     }
     if kind == TK_FontFeatureValues {
         let font_feature_values_rule = _parse_font_feature_values_rule(p, follow)?;
-        return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt8(NestedStatementAlt8 {
+        return Result::Ok(NestedStatementNode::Alt8(NestedStatementAlt8 {
             span: Span::new(start, i32::max(start, p.last_end())),
             font_feature_values_rule,
         }));
     }
     if kind == TK_AtKeyword {
         let at_rule = _parse_at_rule(p, follow)?;
-        return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt9(NestedStatementAlt9 {
+        return Result::Ok(NestedStatementNode::Alt9(NestedStatementAlt9 {
             span: Span::new(start, i32::max(start, p.last_end())),
             at_rule,
         }));
     }
-    return Result::<NestedStatementNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected nestedStatement",
         p.peek().span,
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACE", "TK_Media", "TK_Page", "TK_FontFace", "TK_Keyframes", "TK_Supports", "TK_Viewport", "TK_CounterStyle", "TK_FontFeatureValues", "TK_AtKeyword"],
@@ -37220,7 +37220,7 @@ fn _parse_group_rule_body__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<GroupRuleBodyNode, ParseError>::Ok(GroupRuleBodyNode {
+    return Result::Ok(GroupRuleBodyNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lbrace,
         ws,
@@ -37241,7 +37241,7 @@ fn _parse_supports_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let supports_condition = _parse_supports_condition(p, &FOLLOW_MASK_16)?;
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_7)?;
     let group_rule_body = _parse_group_rule_body(p, follow)?;
-    return Result::<SupportsRuleNode, ParseError>::Ok(SupportsRuleNode {
+    return Result::Ok(SupportsRuleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports,
         ws,
@@ -37258,7 +37258,7 @@ fn _parse_supports_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 fn _parse_supports_condition__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SupportsConditionNode, ParseError> {
     let start = p.peek().span.start;
     let supports_conjunction = _parse_supports_conjunction(p, follow)?;
-    return Result::<SupportsConditionNode, ParseError>::Ok(SupportsConditionNode::Alt1(SupportsConditionAlt1 {
+    return Result::Ok(SupportsConditionNode::Alt1(SupportsConditionAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports_conjunction,
     }));
@@ -37274,7 +37274,7 @@ fn _parse_supports_condition__inner_scan_1(tokens: &Array<Token>, pos: i32, foll
 fn _parse_supports_condition__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SupportsConditionNode, ParseError> {
     let start = p.peek().span.start;
     let supports_disjunction = _parse_supports_disjunction(p, follow)?;
-    return Result::<SupportsConditionNode, ParseError>::Ok(SupportsConditionNode::Alt2(SupportsConditionAlt2 {
+    return Result::Ok(SupportsConditionNode::Alt2(SupportsConditionAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports_disjunction,
     }));
@@ -37290,7 +37290,7 @@ fn _parse_supports_condition__inner_scan_2(tokens: &Array<Token>, pos: i32, foll
 fn _parse_supports_condition__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SupportsConditionNode, ParseError> {
     let start = p.peek().span.start;
     let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow)?;
-    return Result::<SupportsConditionNode, ParseError>::Ok(SupportsConditionNode::Alt3(SupportsConditionAlt3 {
+    return Result::Ok(SupportsConditionNode::Alt3(SupportsConditionAlt3 {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports_condition_in_parens,
     }));
@@ -37308,7 +37308,7 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &
     let kind = p.peek_kind();
     if kind == TK_Not {
         let supports_negation = _parse_supports_negation(p, follow)?;
-        return Result::<SupportsConditionNode, ParseError>::Ok(SupportsConditionNode::Alt0(SupportsConditionAlt0 {
+        return Result::Ok(SupportsConditionNode::Alt0(SupportsConditionAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             supports_negation,
         }));
@@ -37346,7 +37346,7 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &
             return _parse_supports_condition__inner_alt_3(p, follow);
         }
     }
-    return Result::<SupportsConditionNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected supportsCondition",
         p.peek().span,
         ["TK_Not", "TK_LIT_LPAREN", "TK_Function_"],
@@ -37364,7 +37364,7 @@ fn _parse_supports_condition_in_parens__inner_alt_0(p: &mut Parser, follow: &Lis
     let supports_condition = _parse_supports_condition(p, &FOLLOW_MASK_16)?;
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_20)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::<SupportsConditionInParensNode, ParseError>::Ok(SupportsConditionInParensNode::Alt0(SupportsConditionInParensAlt0 {
+    return Result::Ok(SupportsConditionInParensNode::Alt0(SupportsConditionInParensAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         ws,
@@ -37392,7 +37392,7 @@ fn _parse_supports_condition_in_parens__inner_scan_0(tokens: &Array<Token>, pos:
 fn _parse_supports_condition_in_parens__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SupportsConditionInParensNode, ParseError> {
     let start = p.peek().span.start;
     let supports_declaration_condition = _parse_supports_declaration_condition(p, follow)?;
-    return Result::<SupportsConditionInParensNode, ParseError>::Ok(SupportsConditionInParensNode::Alt1(SupportsConditionInParensAlt1 {
+    return Result::Ok(SupportsConditionInParensNode::Alt1(SupportsConditionInParensAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports_declaration_condition,
     }));
@@ -37408,7 +37408,7 @@ fn _parse_supports_condition_in_parens__inner_scan_1(tokens: &Array<Token>, pos:
 fn _parse_supports_condition_in_parens__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SupportsConditionInParensNode, ParseError> {
     let start = p.peek().span.start;
     let general_enclosed = _parse_general_enclosed(p, follow)?;
-    return Result::<SupportsConditionInParensNode, ParseError>::Ok(SupportsConditionInParensNode::Alt2(SupportsConditionInParensAlt2 {
+    return Result::Ok(SupportsConditionInParensNode::Alt2(SupportsConditionInParensAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         general_enclosed,
     }));
@@ -37458,7 +37458,7 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List
             return _parse_supports_condition_in_parens__inner_alt_2(p, follow);
         }
     }
-    return Result::<SupportsConditionInParensNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected supportsConditionInParens",
         p.peek().span,
         ["TK_LIT_LPAREN", "TK_Function_"],
@@ -37476,7 +37476,7 @@ fn _parse_supports_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     let space = p.expect(TK_Space)?;
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_31)?;
     let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow)?;
-    return Result::<SupportsNegationNode, ParseError>::Ok(SupportsNegationNode {
+    return Result::Ok(SupportsNegationNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         not,
         ws,
@@ -37550,7 +37550,7 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: &List<List<i32>> =
         };
         ws_space_ws_and_ws_space_ws_supports_condition_in_parens_list.push(ws_space_ws_and_ws_space_ws_supports_condition_in_parens);
     }
-    return Result::<SupportsConjunctionNode, ParseError>::Ok(SupportsConjunctionNode {
+    return Result::Ok(SupportsConjunctionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports_condition_in_parens,
         ws_space_ws_and_ws_space_ws_supports_condition_in_parens_list,
@@ -37621,7 +37621,7 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: &List<List<i32>> =
         };
         ws_space_ws_or_ws_space_ws_supports_condition_in_parens_list.push(ws_space_ws_or_ws_space_ws_supports_condition_in_parens);
     }
-    return Result::<SupportsDisjunctionNode, ParseError>::Ok(SupportsDisjunctionNode {
+    return Result::Ok(SupportsDisjunctionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports_condition_in_parens,
         ws_space_ws_or_ws_space_ws_supports_condition_in_parens_list,
@@ -37638,7 +37638,7 @@ fn _parse_supports_declaration_condition__inner(p: &mut Parser, follow: &List<Li
     let ws = _parse_ws(p, &FOLLOW_MASK_34)?;
     let declaration = _parse_declaration(p, &FOLLOW_MASK_20)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::<SupportsDeclarationConditionNode, ParseError>::Ok(SupportsDeclarationConditionNode {
+    return Result::Ok(SupportsDeclarationConditionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
         ws,
@@ -37693,7 +37693,7 @@ fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         any__or_unused_list.push(any__or_unused);
     }
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::<GeneralEnclosedNode, ParseError>::Ok(GeneralEnclosedNode {
+    return Result::Ok(GeneralEnclosedNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         function__or_lparen,
         any__or_unused_list,
@@ -37714,7 +37714,7 @@ fn _parse_url__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
         let string_ = p.expect(TK_String_)?;
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_20)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
-        return Result::<UrlNode, ParseError>::Ok(UrlNode::Alt0(UrlAlt0 {
+        return Result::Ok(UrlNode::Alt0(UrlAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             url_,
             ws,
@@ -37725,12 +37725,12 @@ fn _parse_url__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
     }
     if kind == TK_Url {
         let url = p.expect(TK_Url)?;
-        return Result::<UrlNode, ParseError>::Ok(UrlNode::Alt1(UrlAlt1 {
+        return Result::Ok(UrlNode::Alt1(UrlAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             url,
         }));
     }
-    return Result::<UrlNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected url",
         p.peek().span,
         ["TK_Url_", "TK_Url"],
@@ -37749,7 +37749,7 @@ fn _parse_var___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_20)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     let ws_3 = _parse_ws(p, follow)?;
-    return Result::<VarNode, ParseError>::Ok(VarNode {
+    return Result::Ok(VarNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         var,
         ws,
@@ -37771,7 +37771,7 @@ fn _parse_calc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_20)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     let ws_2 = _parse_ws(p, follow)?;
-    return Result::<CalcNode, ParseError>::Ok(CalcNode {
+    return Result::Ok(CalcNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         calc,
         ws,
@@ -37851,7 +37851,7 @@ fn _parse_calc_sum__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         };
         space_ws_item_ws_space_ws_calc_product_list.push(space_ws_item_ws_space_ws_calc_product);
     }
-    return Result::<CalcSumNode, ParseError>::Ok(CalcSumNode {
+    return Result::Ok(CalcSumNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         calc_product,
         space_ws_item_ws_space_ws_calc_product_list,
@@ -37928,7 +37928,7 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         };
         group_0_list.push(group_0);
     }
-    return Result::<CalcProductNode, ParseError>::Ok(CalcProductNode {
+    return Result::Ok(CalcProductNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         calc_value,
         group_0_list,
@@ -37943,7 +37943,7 @@ fn _parse_calc_value__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
     let start = p.peek().span.start;
     let number = _parse_number(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt0(CalcValueAlt0 {
+    return Result::Ok(CalcValueNode::Alt0(CalcValueAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         number,
         ws,
@@ -37963,7 +37963,7 @@ fn _parse_calc_value__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EM
     let start = p.peek().span.start;
     let dimension = _parse_dimension(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt1(CalcValueAlt1 {
+    return Result::Ok(CalcValueNode::Alt1(CalcValueAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         dimension,
         ws,
@@ -37983,7 +37983,7 @@ fn _parse_calc_value__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EM
     let start = p.peek().span.start;
     let unknown_dimension = _parse_unknown_dimension(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt2(CalcValueAlt2 {
+    return Result::Ok(CalcValueNode::Alt2(CalcValueAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         unknown_dimension,
         ws,
@@ -38003,7 +38003,7 @@ fn _parse_calc_value__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EM
     let start = p.peek().span.start;
     let percentage = _parse_percentage(p, follow)?;
     let ws = _parse_ws(p, follow)?;
-    return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt3(CalcValueAlt3 {
+    return Result::Ok(CalcValueNode::Alt3(CalcValueAlt3 {
         span: Span::new(start, i32::max(start, p.last_end())),
         percentage,
         ws,
@@ -38059,7 +38059,7 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_20)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         let ws_2 = _parse_ws(p, follow)?;
-        return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt4(CalcValueAlt4 {
+        return Result::Ok(CalcValueNode::Alt4(CalcValueAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
             ws,
@@ -38068,7 +38068,7 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             ws_2,
         }));
     }
-    return Result::<CalcValueNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected calcValue",
         p.peek().span,
         ["TK_Plus", "TK_Minus", "TK_Number", "TK_Dimension", "TK_UnknownDimension", "TK_Percentage", "TK_LIT_LPAREN"],
@@ -38087,7 +38087,7 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_13)?;
     let font_face_declaration: Option<FontFaceDeclarationNode> = if _gale_kind_set_8(p.peek_kind()) {
         let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW)?;
-        Option::<FontFaceDeclarationNode>::Some(font_face_declaration)
+        Option::Some(font_face_declaration)
     } else {
         null
     };
@@ -38122,7 +38122,7 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             null
         } else if _gale_kind_set_8(p.peek_kind()) {
             let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW)?;
-            Option::<FontFaceDeclarationNode>::Some(font_face_declaration)
+            Option::Some(font_face_declaration)
         } else {
             null
         };
@@ -38135,7 +38135,7 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_3 = _parse_ws(p, follow)?;
-    return Result::<FontFaceRuleNode, ParseError>::Ok(FontFaceRuleNode {
+    return Result::Ok(FontFaceRuleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         fontface,
         ws,
@@ -38158,7 +38158,7 @@ fn _parse_font_face_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<
     let colon = p.expect(TK_LIT_COLON)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_11)?;
     let expr = _parse_expr(p, follow)?;
-    return Result::<FontFaceDeclarationNode, ParseError>::Ok(FontFaceDeclarationNode::knownFontFaceDeclaration(FontFaceDeclarationknownFontFaceDeclaration {
+    return Result::Ok(FontFaceDeclarationNode::knownFontFaceDeclaration(FontFaceDeclarationknownFontFaceDeclaration {
         span: Span::new(start, i32::max(start, p.last_end())),
         property_,
         colon,
@@ -38186,7 +38186,7 @@ fn _parse_font_face_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<
     let colon = p.expect(TK_LIT_COLON)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_23)?;
     let value = _parse_value(p, follow)?;
-    return Result::<FontFaceDeclarationNode, ParseError>::Ok(FontFaceDeclarationNode::unknownFontFaceDeclaration(FontFaceDeclarationunknownFontFaceDeclaration {
+    return Result::Ok(FontFaceDeclarationNode::unknownFontFaceDeclaration(FontFaceDeclarationunknownFontFaceDeclaration {
         span: Span::new(start, i32::max(start, p.last_end())),
         property_,
         colon,
@@ -38235,7 +38235,7 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: &List<List<i32>> 
             return _parse_font_face_declaration__inner_alt_1(p, follow);
         }
     }
-    return Result::<FontFaceDeclarationNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected fontFaceDeclaration",
         p.peek().span,
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
@@ -38280,7 +38280,7 @@ fn _parse_keyframes_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_5 = _parse_ws(p, follow)?;
-    return Result::<KeyframesRuleNode, ParseError>::Ok(KeyframesRuleNode {
+    return Result::Ok(KeyframesRuleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         keyframes,
         ws,
@@ -38307,7 +38307,7 @@ fn _parse_keyframe_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     let ws = _parse_ws(p, &FOLLOW_MASK_13)?;
     let declaration_list: Option<DeclarationListNode> = if _gale_kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW)?;
-        Option::<DeclarationListNode>::Some(declaration_list)
+        Option::Some(declaration_list)
     } else {
         null
     };
@@ -38321,7 +38321,7 @@ fn _parse_keyframe_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         rbrace,
         ws_2,
     };
-    return Result::<KeyframeBlockNode, ParseError>::Ok(KeyframeBlockNode {
+    return Result::Ok(KeyframeBlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         keyframe_selector_lbrace_ws_declaration_list_rbrace_ws,
     });
@@ -38392,7 +38392,7 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         };
         comma_ws_item_ws_list.push(comma_ws_item_ws);
     }
-    return Result::<KeyframeSelectorNode, ParseError>::Ok(KeyframeSelectorNode {
+    return Result::Ok(KeyframeSelectorNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         from__or_to_or_percentage,
         ws,
@@ -38412,13 +38412,13 @@ fn _parse_viewport__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_13)?;
     let declaration_list: Option<DeclarationListNode> = if _gale_kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW)?;
-        Option::<DeclarationListNode>::Some(declaration_list)
+        Option::Some(declaration_list)
     } else {
         null
     };
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_3 = _parse_ws(p, follow)?;
-    return Result::<ViewportNode, ParseError>::Ok(ViewportNode {
+    return Result::Ok(ViewportNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         viewport,
         ws,
@@ -38444,13 +38444,13 @@ fn _parse_counter_style__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let ws_3 = _parse_ws(p, &FOLLOW_MASK_13)?;
     let declaration_list: Option<DeclarationListNode> = if _gale_kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW)?;
-        Option::<DeclarationListNode>::Some(declaration_list)
+        Option::Some(declaration_list)
     } else {
         null
     };
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_4 = _parse_ws(p, follow)?;
-    return Result::<CounterStyleNode, ParseError>::Ok(CounterStyleNode {
+    return Result::Ok(CounterStyleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         counterstyle,
         ws,
@@ -38500,7 +38500,7 @@ fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: &List<List<i32
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_4 = _parse_ws(p, follow)?;
-    return Result::<FontFeatureValuesRuleNode, ParseError>::Ok(FontFeatureValuesRuleNode {
+    return Result::Ok(FontFeatureValuesRuleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         fontfeaturevalues,
         ws,
@@ -38558,7 +38558,7 @@ fn _parse_font_family_name_list__inner(p: &mut Parser, follow: &List<List<i32>> 
         };
         ws_comma_ws_font_family_name_list.push(ws_comma_ws_font_family_name);
     }
-    return Result::<FontFamilyNameListNode, ParseError>::Ok(FontFamilyNameListNode {
+    return Result::Ok(FontFamilyNameListNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         font_family_name,
         ws_comma_ws_font_family_name_list,
@@ -38574,7 +38574,7 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     let kind = p.peek_kind();
     if kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
-        return Result::<FontFamilyNameNode, ParseError>::Ok(FontFamilyNameNode::Alt0(FontFamilyNameAlt0 {
+        return Result::Ok(FontFamilyNameNode::Alt0(FontFamilyNameAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             string_,
         }));
@@ -38610,13 +38610,13 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             };
             ws_ident_list.push(ws_ident);
         }
-        return Result::<FontFamilyNameNode, ParseError>::Ok(FontFamilyNameNode::Alt1(FontFamilyNameAlt1 {
+        return Result::Ok(FontFamilyNameNode::Alt1(FontFamilyNameAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ident,
             ws_ident_list,
         }));
     }
-    return Result::<FontFamilyNameNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected fontFamilyName",
         p.peek().span,
         ["TK_String_", "TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To"],
@@ -38635,7 +38635,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_43)?;
     let feature_value_definition: Option<FeatureValueDefinitionNode> = if _gale_kind_set_4(p.peek_kind()) {
         let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW)?;
-        Option::<FeatureValueDefinitionNode>::Some(feature_value_definition)
+        Option::Some(feature_value_definition)
     } else {
         null
     };
@@ -38673,7 +38673,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
             null
         } else if _gale_kind_set_4(p.peek_kind()) {
             let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW)?;
-            Option::<FeatureValueDefinitionNode>::Some(feature_value_definition)
+            Option::Some(feature_value_definition)
         } else {
             null
         };
@@ -38687,7 +38687,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_3 = _parse_ws(p, follow)?;
-    return Result::<FeatureValueBlockNode, ParseError>::Ok(FeatureValueBlockNode {
+    return Result::Ok(FeatureValueBlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         feature_type,
         ws,
@@ -38707,7 +38707,7 @@ fn _parse_feature_value_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 fn _parse_feature_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FeatureTypeNode, ParseError> {
     let start = p.peek().span.start;
     let atkeyword = p.expect(TK_AtKeyword)?;
-    return Result::<FeatureTypeNode, ParseError>::Ok(FeatureTypeNode {
+    return Result::Ok(FeatureTypeNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         atkeyword,
     });
@@ -38753,7 +38753,7 @@ fn _parse_feature_value_definition__inner(p: &mut Parser, follow: &List<List<i32
         };
         ws_number_list.push(ws_number);
     }
-    return Result::<FeatureValueDefinitionNode, ParseError>::Ok(FeatureValueDefinitionNode {
+    return Result::Ok(FeatureValueDefinitionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ident,
         ws,
@@ -38773,12 +38773,12 @@ fn _parse_ident__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     let kind = p.peek_kind();
     if _gale_kind_set_4(kind) {
         let token = p.expect(kind)?;
-        return Result::<IdentNode, ParseError>::Ok(IdentNode {
+        return Result::Ok(IdentNode {
             span: Span::new(start, i32::max(start, p.last_end())),
             token,
         });
     }
-    return Result::<IdentNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected ident",
         p.peek().span,
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To"],
@@ -38821,7 +38821,7 @@ fn _parse_ws__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
         let comment_or_space = p.match_set([TK_Comment, TK_Space])?;
         comment_or_space_list.push(comment_or_space);
     }
-    return Result::<WsNode, ParseError>::Ok(WsNode {
+    return Result::Ok(WsNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         comment_or_space_list,
     });
@@ -38834,7 +38834,7 @@ fn _parse_ws(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result
 fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
         e.rule_stack.push(rule);
-        return Result::<T, ParseError>::Err(e);
+        return Result::Err(e);
     }
     return r;
 }
@@ -38843,7 +38843,7 @@ fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
-        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+        return Result::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }

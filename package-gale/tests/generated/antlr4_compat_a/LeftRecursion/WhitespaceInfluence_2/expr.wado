@@ -395,7 +395,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
     for let child of &parent.children {
         if let Node(n) = *child {
             if n.name == *name {
-                return Option::<CstNode>::Some(n);
+                return Option::Some(n);
             }
         }
     }
@@ -1592,7 +1592,7 @@ impl Parser {
     fn record_deeper(&mut self, e: ParseError) {
         let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::<ParseError>::Some(e);
+            self.pending = Option::Some(e);
         }
     }
 
@@ -1624,13 +1624,13 @@ impl Parser {
     fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
             if kind == TK_EOF {
-                return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                return Result::Ok(self.tokens[self.pos]);
             }
-            return Result::<Token, ParseError>::Ok(self.advance());
+            return Result::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
         let name = token_kind_name(kind);
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -1639,7 +1639,7 @@ impl Parser {
 
     fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -1648,10 +1648,10 @@ impl Parser {
 
     fn match_any(&mut self) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind != TK_EOF {
-            return Result::<Token, ParseError>::Ok(self.advance());
+            return Result::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `expected any token, got "{tok.text}"`,
             tok.span,
             ["any token"],
@@ -1669,11 +1669,11 @@ impl Parser {
                 }
             }
             if !blocked {
-                return Result::<Token, ParseError>::Ok(self.advance());
+                return Result::Ok(self.advance());
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["set complement"],
@@ -1685,13 +1685,13 @@ impl Parser {
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                    return Result::Ok(self.tokens[self.pos]);
                 }
-                return Result::<Token, ParseError>::Ok(self.advance());
+                return Result::Ok(self.advance());
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["token set"],
@@ -2192,7 +2192,7 @@ fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
     let expression = _parse_expression(p)?;
     let eof = p.expect(TK_EOF)?;
-    return Result::<ProgNode, ParseError>::Ok(ProgNode {
+    return Result::Ok(ProgNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression,
         eof,
@@ -2237,7 +2237,7 @@ fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<ExpressionNode, Pars
         comma_expression_list.push(comma_expression);
     }
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doFunction(ExpressiondoFunction {
+    return Result::Ok(ExpressionNode::doFunction(ExpressiondoFunction {
         span: Span::new(start, i32::max(start, p.last_end())),
         id,
         lparen,
@@ -2278,7 +2278,7 @@ fn _parse_expression__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
 fn _parse_expression__inner_alt_25(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::newIdentifier(ExpressionnewIdentifier {
+    return Result::Ok(ExpressionNode::newIdentifier(ExpressionnewIdentifier {
         span: Span::new(start, i32::max(start, p.last_end())),
         id,
     }));
@@ -2321,7 +2321,7 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let expression = _parse_expression(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doParenthesis(ExpressiondoParenthesis {
+        return Result::Ok(ExpressionNode::doParenthesis(ExpressiondoParenthesis {
             span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
             expression,
@@ -2331,7 +2331,7 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
     if kind == TK_LIT_BANG {
         let bang = p.expect(TK_LIT_BANG)?;
         let expression = _parse_expression(p, 16)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doNot(ExpressiondoNot {
+        return Result::Ok(ExpressionNode::doNot(ExpressiondoNot {
             span: Span::new(start, i32::max(start, p.last_end())),
             bang,
             expression,
@@ -2340,7 +2340,7 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
     if kind == TK_LIT_MINUS {
         let minus = p.expect(TK_LIT_MINUS)?;
         let expression = _parse_expression(p, 16)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doNegate(ExpressiondoNegate {
+        return Result::Ok(ExpressionNode::doNegate(ExpressiondoNegate {
             span: Span::new(start, i32::max(start, p.last_end())),
             minus,
             expression,
@@ -2349,7 +2349,7 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
     if kind == TK_LIT_PLUS {
         let plus = p.expect(TK_LIT_PLUS)?;
         let expression = _parse_expression(p, 16)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doPositiv(ExpressiondoPositiv {
+        return Result::Ok(ExpressionNode::doPositiv(ExpressiondoPositiv {
             span: Span::new(start, i32::max(start, p.last_end())),
             plus,
             expression,
@@ -2387,7 +2387,7 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
             comma_expression_list.push(comma_expression);
         }
         let rbracket = p.expect(TK_LIT_RBRACKET)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::newArray(ExpressionnewArray {
+        return Result::Ok(ExpressionNode::newArray(ExpressionnewArray {
             span: Span::new(start, i32::max(start, p.last_end())),
             lbracket,
             expression,
@@ -2397,47 +2397,47 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
     }
     if kind == TK_K_TRUE {
         let k_true = p.expect(TK_K_TRUE)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::newTrueBoolean(ExpressionnewTrueBoolean {
+        return Result::Ok(ExpressionNode::newTrueBoolean(ExpressionnewTrueBoolean {
             span: Span::new(start, i32::max(start, p.last_end())),
             k_true,
         }));
     }
     if kind == TK_K_FALSE {
         let k_false = p.expect(TK_K_FALSE)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::newFalseBoolean(ExpressionnewFalseBoolean {
+        return Result::Ok(ExpressionNode::newFalseBoolean(ExpressionnewFalseBoolean {
             span: Span::new(start, i32::max(start, p.last_end())),
             k_false,
         }));
     }
     if kind == TK_NUMBER {
         let number = p.expect(TK_NUMBER)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::newNumber(ExpressionnewNumber {
+        return Result::Ok(ExpressionNode::newNumber(ExpressionnewNumber {
             span: Span::new(start, i32::max(start, p.last_end())),
             number,
         }));
     }
     if kind == TK_DATE {
         let date = p.expect(TK_DATE)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::newDateTime(ExpressionnewDateTime {
+        return Result::Ok(ExpressionNode::newDateTime(ExpressionnewDateTime {
             span: Span::new(start, i32::max(start, p.last_end())),
             date,
         }));
     }
     if kind == TK_SQ_STRING {
         let sq_string = p.expect(TK_SQ_STRING)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::newString(ExpressionnewString {
+        return Result::Ok(ExpressionNode::newString(ExpressionnewString {
             span: Span::new(start, i32::max(start, p.last_end())),
             sq_string,
         }));
     }
     if kind == TK_K_NULL {
         let k_null = p.expect(TK_K_NULL)?;
-        return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::newNull(ExpressionnewNull {
+        return Result::Ok(ExpressionNode::newNull(ExpressionnewNull {
             span: Span::new(start, i32::max(start, p.last_end())),
             k_null,
         }));
     }
-    return Result::<ExpressionNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected expression",
         p.peek().span,
         ["TK_ID", "TK_LIT_LPAREN", "TK_LIT_BANG", "TK_LIT_MINUS", "TK_LIT_PLUS", "TK_LIT_LBRACKET", "TK_K_TRUE", "TK_K_FALSE", "TK_NUMBER", "TK_DATE", "TK_SQ_STRING", "TK_K_NULL"],
@@ -2447,7 +2447,7 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
 fn _parse_expression__inner_lr_5(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let caret = p.expect(TK_LIT_CARET)?;
     let expression_2 = _parse_expression__inner(p, 16)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doPower(ExpressiondoPower {
+    return Result::Ok(ExpressionNode::doPower(ExpressiondoPower {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         caret,
@@ -2458,7 +2458,7 @@ fn _parse_expression__inner_lr_5(p: &mut Parser, left: ExpressionNode, start: i3
 fn _parse_expression__inner_lr_6(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let star = p.expect(TK_LIT_STAR)?;
     let expression_2 = _parse_expression__inner(p, 15)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doMultipy(ExpressiondoMultipy {
+    return Result::Ok(ExpressionNode::doMultipy(ExpressiondoMultipy {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         star,
@@ -2469,7 +2469,7 @@ fn _parse_expression__inner_lr_6(p: &mut Parser, left: ExpressionNode, start: i3
 fn _parse_expression__inner_lr_7(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let slash = p.expect(TK_LIT_SLASH)?;
     let expression_2 = _parse_expression__inner(p, 14)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doDivide(ExpressiondoDivide {
+    return Result::Ok(ExpressionNode::doDivide(ExpressiondoDivide {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         slash,
@@ -2480,7 +2480,7 @@ fn _parse_expression__inner_lr_7(p: &mut Parser, left: ExpressionNode, start: i3
 fn _parse_expression__inner_lr_8(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let percent = p.expect(TK_LIT_PERCENT)?;
     let expression_2 = _parse_expression__inner(p, 13)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doModulo(ExpressiondoModulo {
+    return Result::Ok(ExpressionNode::doModulo(ExpressiondoModulo {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         percent,
@@ -2491,7 +2491,7 @@ fn _parse_expression__inner_lr_8(p: &mut Parser, left: ExpressionNode, start: i3
 fn _parse_expression__inner_lr_9(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let minus = p.expect(TK_LIT_MINUS)?;
     let expression_2 = _parse_expression__inner(p, 12)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doMinus(ExpressiondoMinus {
+    return Result::Ok(ExpressionNode::doMinus(ExpressiondoMinus {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         minus,
@@ -2502,7 +2502,7 @@ fn _parse_expression__inner_lr_9(p: &mut Parser, left: ExpressionNode, start: i3
 fn _parse_expression__inner_lr_10(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let plus = p.expect(TK_LIT_PLUS)?;
     let expression_2 = _parse_expression__inner(p, 11)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doPlus(ExpressiondoPlus {
+    return Result::Ok(ExpressionNode::doPlus(ExpressiondoPlus {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         plus,
@@ -2513,7 +2513,7 @@ fn _parse_expression__inner_lr_10(p: &mut Parser, left: ExpressionNode, start: i
 fn _parse_expression__inner_lr_11(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let eq = p.expect(TK_LIT_EQ)?;
     let expression_2 = _parse_expression__inner(p, 10)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doEqual(ExpressiondoEqual {
+    return Result::Ok(ExpressionNode::doEqual(ExpressiondoEqual {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         eq,
@@ -2524,7 +2524,7 @@ fn _parse_expression__inner_lr_11(p: &mut Parser, left: ExpressionNode, start: i
 fn _parse_expression__inner_lr_12(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let lit_bangeq = p.expect(TK_LIT_BANGEQ)?;
     let expression_2 = _parse_expression__inner(p, 9)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doNotEqual(ExpressiondoNotEqual {
+    return Result::Ok(ExpressionNode::doNotEqual(ExpressiondoNotEqual {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         lit_bangeq,
@@ -2535,7 +2535,7 @@ fn _parse_expression__inner_lr_12(p: &mut Parser, left: ExpressionNode, start: i
 fn _parse_expression__inner_lr_13(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let gt = p.expect(TK_LIT_GT)?;
     let expression_2 = _parse_expression__inner(p, 8)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doGreather(ExpressiondoGreather {
+    return Result::Ok(ExpressionNode::doGreather(ExpressiondoGreather {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         gt,
@@ -2546,7 +2546,7 @@ fn _parse_expression__inner_lr_13(p: &mut Parser, left: ExpressionNode, start: i
 fn _parse_expression__inner_lr_14(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let lit_gteq = p.expect(TK_LIT_GTEQ)?;
     let expression_2 = _parse_expression__inner(p, 7)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doGreatherEqual(ExpressiondoGreatherEqual {
+    return Result::Ok(ExpressionNode::doGreatherEqual(ExpressiondoGreatherEqual {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         lit_gteq,
@@ -2557,7 +2557,7 @@ fn _parse_expression__inner_lr_14(p: &mut Parser, left: ExpressionNode, start: i
 fn _parse_expression__inner_lr_15(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let lt = p.expect(TK_LIT_LT)?;
     let expression_2 = _parse_expression__inner(p, 6)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doLesser(ExpressiondoLesser {
+    return Result::Ok(ExpressionNode::doLesser(ExpressiondoLesser {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         lt,
@@ -2568,7 +2568,7 @@ fn _parse_expression__inner_lr_15(p: &mut Parser, left: ExpressionNode, start: i
 fn _parse_expression__inner_lr_16(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let lit_lteq = p.expect(TK_LIT_LTEQ)?;
     let expression_2 = _parse_expression__inner(p, 5)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doLesserEqual(ExpressiondoLesserEqual {
+    return Result::Ok(ExpressionNode::doLesserEqual(ExpressiondoLesserEqual {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         lit_lteq,
@@ -2609,7 +2609,7 @@ fn _parse_expression__inner_lr_17(p: &mut Parser, left: ExpressionNode, start: i
         comma_expression_list.push(comma_expression);
     }
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doIn(ExpressiondoIn {
+    return Result::Ok(ExpressionNode::doIn(ExpressiondoIn {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         k_in,
@@ -2623,7 +2623,7 @@ fn _parse_expression__inner_lr_17(p: &mut Parser, left: ExpressionNode, start: i
 fn _parse_expression__inner_lr_18(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let amp_or_k_and = p.match_set([TK_LIT_AMP, TK_K_AND])?;
     let expression_2 = _parse_expression__inner(p, 3)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doAnd(ExpressiondoAnd {
+    return Result::Ok(ExpressionNode::doAnd(ExpressiondoAnd {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         amp_or_k_and,
@@ -2634,7 +2634,7 @@ fn _parse_expression__inner_lr_18(p: &mut Parser, left: ExpressionNode, start: i
 fn _parse_expression__inner_lr_19(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let pipe_or_k_or = p.match_set([TK_LIT_PIPE, TK_K_OR])?;
     let expression_2 = _parse_expression__inner(p, 2)?;
-    return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::doOr(ExpressiondoOr {
+    return Result::Ok(ExpressionNode::doOr(ExpressiondoOr {
         span: Span::new(start, i32::max(start, p.last_end())),
         expression: left,
         pipe_or_k_or,
@@ -2786,7 +2786,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             break;
         }
     }
-    return Result::<ExpressionNode, ParseError>::Ok(result);
+    return Result::Ok(result);
 }
 
 fn _parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode, ParseError> {
@@ -2796,7 +2796,7 @@ fn _parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode
 fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
         e.rule_stack.push(rule);
-        return Result::<T, ParseError>::Err(e);
+        return Result::Err(e);
     }
     return r;
 }
@@ -2805,7 +2805,7 @@ fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
-        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+        return Result::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }

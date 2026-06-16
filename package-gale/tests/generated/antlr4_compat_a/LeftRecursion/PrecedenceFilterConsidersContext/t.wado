@@ -395,7 +395,7 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
     for let child of &parent.children {
         if let Node(n) = *child {
             if n.name == *name {
-                return Option::<CstNode>::Some(n);
+                return Option::Some(n);
             }
         }
     }
@@ -660,7 +660,7 @@ impl Parser {
     fn record_deeper(&mut self, e: ParseError) {
         let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::<ParseError>::Some(e);
+            self.pending = Option::Some(e);
         }
     }
 
@@ -692,13 +692,13 @@ impl Parser {
     fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
             if kind == TK_EOF {
-                return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                return Result::Ok(self.tokens[self.pos]);
             }
-            return Result::<Token, ParseError>::Ok(self.advance());
+            return Result::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
         let name = token_kind_name(kind);
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -707,7 +707,7 @@ impl Parser {
 
     fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -716,10 +716,10 @@ impl Parser {
 
     fn match_any(&mut self) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind != TK_EOF {
-            return Result::<Token, ParseError>::Ok(self.advance());
+            return Result::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `expected any token, got "{tok.text}"`,
             tok.span,
             ["any token"],
@@ -737,11 +737,11 @@ impl Parser {
                 }
             }
             if !blocked {
-                return Result::<Token, ParseError>::Ok(self.advance());
+                return Result::Ok(self.advance());
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["set complement"],
@@ -753,13 +753,13 @@ impl Parser {
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                    return Result::Ok(self.tokens[self.pos]);
                 }
-                return Result::<Token, ParseError>::Ok(self.advance());
+                return Result::Ok(self.advance());
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(self.error(
+        return Result::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["token set"],
@@ -848,7 +848,7 @@ fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
         statement_list.push(statement);
     }
     let eof = p.expect(TK_EOF)?;
-    return Result::<ProgNode, ParseError>::Ok(ProgNode {
+    return Result::Ok(ProgNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         statement_list,
         eof,
@@ -864,12 +864,12 @@ fn _parse_statement__inner_atom(p: &mut Parser) -> Result<StatementNode, ParseEr
     let kind = p.peek_kind();
     if kind == TK_LIT_A {
         let letter_a = _parse_letter_a(p)?;
-        return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt0(StatementAlt0 {
+        return Result::Ok(StatementNode::Alt0(StatementAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             letter_a,
         }));
     }
-    return Result::<StatementNode, ParseError>::Err(p.error(
+    return Result::Err(p.error(
         "expected statement",
         p.peek().span,
         ["TK_LIT_A"],
@@ -879,7 +879,7 @@ fn _parse_statement__inner_atom(p: &mut Parser) -> Result<StatementNode, ParseEr
 fn _parse_statement__inner_lr_1(p: &mut Parser, left: StatementNode, start: i32) -> Result<StatementNode, ParseError> {
     let letter_a = _parse_letter_a(p)?;
     let lit_b = p.expect(TK_LIT_B)?;
-    return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt1(StatementAlt1 {
+    return Result::Ok(StatementNode::Alt1(StatementAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         statement: left,
         letter_a,
@@ -905,7 +905,7 @@ fn _parse_statement__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Statemen
             break;
         }
     }
-    return Result::<StatementNode, ParseError>::Ok(result);
+    return Result::Ok(result);
 }
 
 fn _parse_statement(p: &mut Parser, min_prec: i32 = 0) -> Result<StatementNode, ParseError> {
@@ -915,7 +915,7 @@ fn _parse_statement(p: &mut Parser, min_prec: i32 = 0) -> Result<StatementNode, 
 fn _parse_letter_a__inner(p: &mut Parser) -> Result<LetterANode, ParseError> {
     let start = p.peek().span.start;
     let lit_a = p.expect(TK_LIT_A)?;
-    return Result::<LetterANode, ParseError>::Ok(LetterANode {
+    return Result::Ok(LetterANode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lit_a,
     });
@@ -928,7 +928,7 @@ fn _parse_letter_a(p: &mut Parser) -> Result<LetterANode, ParseError> {
 fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r {
         e.rule_stack.push(rule);
-        return Result::<T, ParseError>::Err(e);
+        return Result::Err(e);
     }
     return r;
 }
@@ -937,7 +937,7 @@ fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
-        return Result::<T, ParseError>::Err(_gale_pick_error(&parser, _e));
+        return Result::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
