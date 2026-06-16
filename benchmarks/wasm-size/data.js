@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781580282914,
+  "lastUpdate": 1781608042009,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33497,6 +33497,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7431ff8f79be7ade745e87351e966bb83b9d3aba"
         },
         "date": 1781580282710,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 396125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7abf7b9971b13c7f09aef8bfbad74a75185cfc5d",
+          "message": "Merge pull request #1389 from wado-lang/claude/wado-cli-world-option-eodl66\n\nfeat(cli): support --world on check, document the option",
+          "timestamp": "2026-06-16T19:57:18+09:00",
+          "tree_id": "affd0efdbe8310b19b647d42e5790e60d48f088c",
+          "url": "https://github.com/wado-lang/wado/commit/7abf7b9971b13c7f09aef8bfbad74a75185cfc5d"
+        },
+        "date": 1781608041740,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
