@@ -1721,13 +1721,11 @@ impl FunctionTranslator<'_, '_> {
     /// that any subsequent type expectations in the same block are vacuously satisfied,
     /// so `never`-typed sub-expressions can appear in any value position (binary
     /// operands, struct fields, array elements, function arguments, …).
-    /// Handle a call whose `FunctionRef` could not be resolved to a generated
-    /// function. A `Type^Trait::method` name means `Type` does not implement
-    /// `Trait` — an unsatisfied trait bound that escaped earlier checks (a
-    /// forwarded generic parameter whose bound the caller never declared).
-    /// Record it (the driver reports it cleanly and bails before codegen) and
-    /// emit a polymorphic `Unreachable` so the build can finish. A name with no
-    /// trait segment is a genuine internal inconsistency — trap with `panic`.
+    /// Handle a `FunctionRef` that did not resolve to a generated function. A
+    /// `Type^Trait::method` name is an unsatisfied trait bound that escaped
+    /// earlier checks: record it and emit `Unreachable` so the build finishes
+    /// (the driver reports and bails). Any other name is an internal
+    /// inconsistency — `panic`.
     fn unresolved_trait_call_or_trap(
         &mut self,
         name: &str,

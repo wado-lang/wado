@@ -1,8 +1,6 @@
-// A deferred inference hole minted inside a trait *default method* body must
-// be concretised by the module-end sweep. Default-method bodies are walked
-// into a separate synthetic `ModuleSemantics` stashed under the (impl, method)
-// key; if the sweep only touched the main semantics, the hole's reserved-index
-// `TypeParam` would survive into reify and trap a later phase.
+// A deferred hole minted inside a trait default-method body must be swept.
+// Such bodies record into a separate synthetic semantics; if the sweep missed
+// it, the hole's reserved-index `TypeParam` would leak past reify.
 
 struct Box<T> {
     v: T,

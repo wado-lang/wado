@@ -2054,10 +2054,8 @@ impl TypeTable {
         }
     }
 
-    /// Whether `id` (recursively) contains an inference-hole `TypeParam` —
-    /// one whose `index` is at or above `base`. Inference holes are minted
-    /// with reserved high indices (see `elaborator::infer_hole`) so they
-    /// never collide with real type parameters and are distinguishable here.
+    /// Whether `id` (recursively) contains an inference-hole `TypeParam` — one
+    /// whose `index >= base` (see `elaborator::infer_hole`).
     pub fn contains_infer_hole(&self, id: TypeId, base: u32) -> bool {
         match self.get(id) {
             ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {

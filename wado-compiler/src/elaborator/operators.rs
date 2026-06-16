@@ -51,11 +51,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx,
             expected_type,
         );
-        // Deferred-inference: a generic-call operand whose type parameter is
-        // only in its return type (e.g. `m.get_num() + 1`) carries an inference
-        // hole. A binary op's operands share a type, so pin the holey side to
-        // the other operand's concrete type before operator dispatch (which
-        // would otherwise mangle a trait-method name against the hole).
+        // Operands share a type, so pin a holey side (`m.get_num() + 1`) to its
+        // concrete sibling before operator dispatch, which would otherwise
+        // mangle a trait-method name against the hole.
         if self.type_has_infer_hole(left.type_id) ^ self.type_has_infer_hole(right.type_id) {
             if self.type_has_infer_hole(left.type_id) {
                 self.solve_infer_holes_against(left.type_id, right.type_id);

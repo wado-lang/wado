@@ -1077,25 +1077,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.enforce_type_arg_bounds(&type_params, type_args, span);
     }
 
-    /// The single enforcement of trait bounds on a generic decl's type
-    /// arguments, shared by every generic-call kind (free function, static
-    /// method, instance method) so the rule cannot drift between them. For
-    /// each `(param, arg)` pair: a satisfied bound registers the associated
-    /// types so the monomorphizer can project them; an unsatisfied one raises
-    /// a clean `TraitBoundNotSatisfied`.
-    ///
-    /// Only fully concrete arguments are enforced here. A type argument that is
-    /// still a type parameter is *forwarded* from the caller's own generics; a
-    /// reliable call-site check would need every parameter's declared bounds in
-    /// scope, but impl-level parameters' bounds are not (see the note in
-    /// `item.rs`), so checking them here false-positives. Forwarded parameters
-    /// are therefore left to be verified once concrete. Skips:
-    /// - `fn(...)` / `fn mut(...)` closure-type bounds (realised eagerly to the
-    ///   bound's function type at `register_generic_params`, so the parameter
-    ///   is no longer a real generic needing a `Fn`-trait check);
-    /// - non-concrete args — inference holes (re-checked in
-    ///   [`Self::finalize_infer_holes`] once solved) and forwarded type
-    ///   parameters.
+    /// The single enforcement of trait bounds on a generic decl's type args,
+    /// shared by every generic-call kind so the rule cannot drift. Enforces only
+    /// fully concrete args: a still-parametric arg is forwarded from the caller
+    /// (verified once concrete, since impl-level bounds are not in scope here),
+    /// and `fn(...)`-bound params are realised eagerly elsewhere.
     pub(super) fn enforce_type_arg_bounds(
         &mut self,
         params: &[ast::GenericParam],
@@ -1107,8 +1093,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             if self.tysys.type_table.borrow().contains_type_param(type_arg) {
-                // Covers inference holes too (they are reserved-index type
-                // params); holes are re-checked in `finalize_infer_holes`.
+                // Also covers holes (reserved-index params), re-checked at finalize.
                 continue;
             }
             for bound in &param.bounds {
@@ -1120,12 +1105,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Check one concrete type argument against one trait bound — the single
-    /// primitive every bound-enforcement path funnels through (the type-arg
-    /// loops above, and the deferred-hole re-check in
-    /// [`Self::finalize_infer_holes`]). On success register the associated
-    /// types so the monomorphizer can project them; on failure raise a clean
-    /// `TraitBoundNotSatisfied`.
+    /// Check one concrete type argument against one trait bound — the primitive
+    /// every bound-enforcement path funnels through. On success registers the
+    /// associated types; on failure raises a clean `TraitBoundNotSatisfied`.
     pub(super) fn enforce_single_bound(
         &mut self,
         type_arg: TypeId,

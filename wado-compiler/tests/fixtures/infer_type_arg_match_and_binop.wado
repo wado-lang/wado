@@ -1,15 +1,6 @@
-// Deferred type inference into a `match` scrutinee and a binary-op operand.
-// A generic method call whose type parameter appears only in its return type
-// can sit in scrutinee / operand position (no expected type at the call) and
-// be inferred from the surrounding expression — the same inference-hole
-// machinery as the method-chain case (see `elaborator::infer_hole`).
-//
-// `match m.opt() { Some(x) => x, None => 0 }`: `opt`'s `T` is pinned by the
-// sibling arm's `0` (the arm-binding `x` is the same hole as the scrutinee).
-// `m.num() + 1`: `num`'s `T` is pinned by the other operand.
-//
-// Free-function scrutinees / operands (`match none_of() { … }`, `make() + 1`)
-// additionally need free-function deferral and are a follow-up.
+// Deferred inference into a `match` scrutinee (`match m.opt() { Some(x) => x,
+// None => 0 }`) and a binary-op operand (`m.num() + 1`): the call's `T`, only
+// in its return type, is pinned by the surrounding expression.
 
 trait Producer {
     fn make() -> Self;

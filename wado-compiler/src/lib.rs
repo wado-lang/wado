@@ -858,15 +858,11 @@ fn compile_after_load<H: CompilerHost>(
         wir_build::build_wir_package(&nir)
     };
 
-    // A `Type^Trait::method` call that WIR build could not resolve means `Type`
-    // does not implement `Trait` — an unsatisfied trait bound that escaped the
-    // front end (a generic parameter forwarded to a bounded call without the
-    // caller declaring the bound). Report it cleanly and bail before codegen
-    // instead of trapping the build. Well-formed programs collect nothing here.
+    // Unresolved `Type^Trait::method` calls are unsatisfied trait bounds that
+    // escaped the front end; report cleanly and bail instead of trapping. Empty
+    // for well-formed programs.
     if !wir_package.trait_bound_violations.is_empty() {
-        // Dedup by (call, site) so distinct call sites of the same unresolved
-        // method are each reported with their own location, rather than
-        // collapsing every site into one spanless message.
+        // Dedup by (call, site) so distinct sites each report their own location.
         let mut seen = std::collections::HashSet::new();
         for v in &wir_package.trait_bound_violations {
             if seen.insert((v.call_name.clone(), v.span)) {

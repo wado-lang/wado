@@ -1,12 +1,6 @@
-// Deferred type inference through a method chain. When a generic call's type
-// parameter appears only in its return type and the call sits in receiver
-// position (no expected type yet), the parameter is inferred from an enclosing
-// call's expected type — `let x: i32 = p.get().unwrap()` infers `get`'s `T`
-// from the `i32` annotation, just like Rust.
-//
-// The elaborator mints an inference hole for `get`'s `T`, lets `Option<hole>`
-// flow into `.unwrap()`, and solves the hole against the LHS `i32` before the
-// chain's facts are finalized (see `elaborator::infer_hole`).
+// Deferred inference through a method chain: `let x: i32 = p.get().unwrap()`
+// infers `get`'s `T` (only in its return type, receiver position) from the LHS
+// annotation via an inference hole solved at `.unwrap()`.
 
 trait Producer {
     fn make() -> Self;

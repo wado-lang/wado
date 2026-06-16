@@ -464,9 +464,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&method_type_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
-                // Check trait bounds and register assoc type resolutions for the
-                // static method's type args via the shared enforcement (same
-                // rule as the free-function / instance-method paths).
+                // Enforce the static method's type-arg bounds (shared rule).
                 if !method_type_args.is_empty() {
                     let mtype_params = self.lookup_static_method_type_params(prefix, suffix);
                     self.enforce_type_arg_bounds(&mtype_params, &method_type_args, call.span);
@@ -1084,11 +1082,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.infer_type_args_from_assoc_bounds(&callee, &mut type_args);
         }
 
-        // Defer (mint inference holes) or diagnose type parameters that could
-        // not be inferred. Deferral lets a generic call whose `T` is only in
-        // the return type be pinned later by an enclosing expression
-        // (`match none_of() { … }`, `make() + 1`); an unsolved hole still
-        // reports the same clean error in `finalize_infer_holes`.
+        // Defer (mint holes) or report uninferred type params.
         self.defer_or_report_uninferred_fn_type_args(
             &callee,
             &mut type_args,
@@ -1915,17 +1909,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Defer (mint inference holes) or report unresolved free-function type
-    /// parameters. Mirrors the instance-method deferral: when a parameter is
-    /// only in the return type and no expected type pins it yet, mint a hole
-    /// (carrying the parameter's bounds, re-checked once solved) and let the
-    /// holey type flow up to an enclosing solve point (`match` scrutinee,
-    /// binary operand, …) instead of erroring immediately.
-    ///
-    /// Deferral is gated on a hole-free argument list and no expected type
-    /// (otherwise inference / report handle it), and falls back to the plain
-    /// report for functions with default type parameters (whose missing slots
-    /// are not holes). The minted holes are placed in the dense type-argument
-    /// index space so the by-index return-type substitution lines up.
+    /// parameters, mirroring the instance-method deferral. Gated on a hole-free
+    /// argument list and no expected type; functions with default type params
+    /// fall back to the plain report.
     pub(super) fn defer_or_report_uninferred_fn_type_args(
         &mut self,
         callee: &CalleeRef,
@@ -1935,23 +1921,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: crate::token::Span,
     ) {
         let params = self.lookup_function_type_params(callee);
-        // The dense type-argument index space: non-effect, non-`fn`-bound
-        // params, in declaration order (matches `populate_generic_function_cache`
-        // and the by-index substitution).
+        // Dense type-argument index space (matches `populate_generic_function_cache`):
+        // non-effect, non-`fn`-bound params in declaration order.
         let space: Vec<&ast::GenericParam> = params
             .iter()
             .filter(|p| !p.is_effect && !p.bounds.iter().any(|b| b.fn_signature.is_some()))
             .collect();
         let n = space.len();
-        // Default type params have a non-hole fallback for their slot; leave
-        // those to the plain report path.
         if n == 0 || space.iter().any(|p| p.default.is_some()) {
             self.report_uninferred_fn_type_args(callee, type_args, span);
             return;
         }
-        // `type_args` is either full-length (some slots unbound) or empty
-        // (nothing inferred); any other length is a pack/effect interleaving we
-        // do not touch.
+        // Full-length (some slots unbound) or empty (nothing inferred); any other
+        // length is a pack/effect interleaving we do not touch.
         let from_empty = type_args.is_empty();
         if !from_empty && type_args.len() != n {
             self.report_uninferred_fn_type_args(callee, type_args, span);

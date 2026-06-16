@@ -141,10 +141,8 @@ pub struct WirContext<'a> {
     /// without re-deriving the aggregate shape.
     /// Computed from `package.functions` at WIR-build start.
     pub multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>,
-    /// `Type^Trait::method` calls that could not be resolved because `Type`
-    /// does not implement `Trait` (an unsatisfied trait bound that escaped
-    /// earlier checks). Collected here rather than trapping the build; the
-    /// compile driver emits clean diagnostics and bails before codegen.
+    /// Unresolved `Type^Trait::method` calls (unsatisfied trait bounds),
+    /// collected rather than trapping; the driver reports them and bails.
     pub trait_bound_violations: Vec<crate::wir::TraitBoundViolation>,
 }
 

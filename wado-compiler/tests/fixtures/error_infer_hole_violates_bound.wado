@@ -1,9 +1,6 @@
-// A deferred (inference-hole) type parameter solved to a type that does not
-// satisfy the parameter's trait bound must raise a clean trait-bound error,
-// not reach a later phase. `get<T: Producer>` is called as `m.get().unwrap()`
-// and the LHS annotation solves `T = String`, but `String` does not implement
-// `Producer`. Regression: before the hole's bound was re-checked after solving,
-// this panicked in WIR build ("unresolved Call String^Producer::make").
+// A deferred type parameter solved to a type that violates its bound must
+// raise a clean trait-bound error. `m.get().unwrap()` solves `get<T: Producer>`
+// to `T = String`, which is not `Producer`.
 
 trait Producer {
     fn make() -> Self;

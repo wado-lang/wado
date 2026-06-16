@@ -1,11 +1,7 @@
-// A deferred inference hole that resolves to an in-scope, bounded type
-// parameter must not be re-checked against its bound after the parameter's
-// scope has closed. `make<T: Producer>()` defers a hole (bound `Producer`);
-// `.unwrap_box()` lets the enclosing `let x: U` pin the hole to `U`. `U` is
-// itself `Producer` within `outer`, so the call is valid — but the deferred
-// bound re-check runs at module end, after `outer`'s scope (and `U`'s bound)
-// is gone. It must skip non-concrete solutions, exactly as the call-site bound
-// check skips forwarded type-param args.
+// A deferred hole solved to an in-scope bounded type parameter must not be
+// re-checked after that scope closes. `g.make().unwrap_box()` solves
+// `make<T: Producer>`'s hole to `outer`'s `U` (itself `Producer`); the
+// module-end re-check must skip the type-param solution, not fail it.
 
 struct Box<T> {
     v: T,

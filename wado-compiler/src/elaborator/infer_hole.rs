@@ -1,22 +1,16 @@
 //! Deferred type-argument inference via inference holes.
 //!
-//! When a generic call's type parameter appears only in its return type and
-//! the call site has no expected type yet (e.g. the receiver position of
-//! `p.get().unwrap()`), the parameter cannot be inferred at the call. Instead
-//! of erroring immediately, the elaborator mints an *inference hole* — a
-//! reserved-index `TypeParam` standing in for the unknown — and lets the
-//! holey type flow up the expression tree. When the hole later meets a
-//! concrete expected type (the enclosing `.unwrap()`'s `i32` annotation), it
-//! is solved. At the end of the module walk, solved holes are substituted
-//! into every recorded fact; an unsolved hole raises a clean "cannot infer"
-//! error and is pinned to `error` so nothing leaks to a later phase.
+//! When a generic call's type parameter appears only in its return type and the
+//! call site has no expected type yet (e.g. `p.get()` in `p.get().unwrap()`),
+//! the elaborator mints an *inference hole* and lets the holey type flow up
+//! until a concrete expected type solves it. The module-end sweep substitutes
+//! solved holes into recorded facts; an unsolved hole raises "cannot infer" and
+//! is pinned to `error`.
 //!
-//! Holes are `TypeParam`s with `index >= HOLE_INDEX_BASE`, so they reuse the
-//! existing substitution / unification machinery and never collide with real
-//! type parameters. A call is deferred only when its receiver and arguments
-//! are hole-free, which guarantees the mangled names recorded for it carry no
-//! hole — so a plain `TypeId` substitution sweep fully concretises every
-//! recorded fact without any name re-mangling.
+//! Holes are `TypeParam`s with `index >= HOLE_INDEX_BASE`, reusing the
+//! unification/substitution machinery without colliding with real parameters.
+//! Deferral fires only for hole-free receivers/args, so no recorded mangled
+//! name embeds a hole and a plain `TypeId` sweep suffices.
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
@@ -27,9 +21,8 @@ use super::Elaborator;
 use super::infer::unify;
 use super::types::TypeError;
 
-/// Reserved start of the inference-hole `TypeParam` index space. Real type
-/// parameters are indexed densely from 0, far below this, so the two never
-/// overlap.
+/// Reserved start of the inference-hole `TypeParam` index space, far above the
+/// dense-from-0 real type parameters so the two never overlap.
 pub(super) const HOLE_INDEX_BASE: u32 = 0x8000_0000;
 
 /// Per-module registry of inference holes and their (eventual) solutions.
@@ -39,12 +32,9 @@ pub(crate) struct InferHoleTable {
     solutions: IndexMap<TypeId, Option<TypeId>>,
     /// Hole `TypeId` → diagnostic raised if it is never solved.
     diags: IndexMap<TypeId, (Span, String)>,
-    /// Hole `TypeId` → the originating type parameter's `(name, trait-bound
-    /// names, span)`. Once the hole is solved to a concrete type, the solution
-    /// must satisfy those bounds — checked in [`Self::finalize_infer_holes`],
-    /// since the bound check at the call site only saw the (unconstrained)
-    /// hole. Without this a `get<T: Producer>()` solved to a non-`Producer`
-    /// type would reach codegen and trap.
+    /// Hole `TypeId` → originating parameter's `(name, trait-bound names, span)`,
+    /// re-verified against the solution in [`Self::finalize_infer_holes`] (the
+    /// call-site check only saw the unconstrained hole).
     bounds: IndexMap<TypeId, (String, Vec<String>, Span)>,
 }
 
@@ -65,8 +55,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: String,
         bound_names: Vec<String>,
     ) -> TypeId {
-        // Holes are only ever appended to `solutions` (never removed before the
-        // table is reset), so the next dense index is its current length.
+        // Holes are only appended, so the next dense index is the current count.
         let index = HOLE_INDEX_BASE + self.infer_holes.solutions.len() as u32;
         let name = format!("?{index}");
         let hole = self
@@ -84,7 +73,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         hole
     }
 
-    /// Whether `ty` contains any inference hole.
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
         if self.infer_holes.is_empty() {
             return false;
@@ -95,10 +83,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .contains_infer_hole(ty, HOLE_INDEX_BASE)
     }
 
-    /// Solve holes appearing in `holey` by unifying it against the concrete
-    /// `expected`, recording each newly discovered binding. A binding is only
-    /// taken when it is itself hole-free (a hole must resolve to a concrete
-    /// type, never to another hole).
+    /// Solve holes in `holey` by unifying against `expected`. A binding is taken
+    /// only when hole-free — a hole must resolve to a concrete type, not another.
     pub(super) fn solve_infer_holes_against(&mut self, holey: TypeId, expected: TypeId) {
         if !self.type_has_infer_hole(holey) {
             return;
@@ -118,9 +104,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Substitute already-solved holes into `ty` for in-flight concretisation
-    /// (used before a recording site that embeds a mangled name derived from
-    /// the type, where a later sweep could not fix the string).
+    /// Substitute solved holes into `ty` now — used before a site that records a
+    /// mangled name derived from the type, which a later sweep could not fix.
     pub(super) fn apply_infer_holes(&mut self, ty: TypeId) -> TypeId {
         if !self.type_has_infer_hole(ty) {
             return ty;
@@ -185,15 +170,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.infer_holes = InferHoleTable::default();
     }
 
-    /// For each solved hole that came from a bounded type parameter, verify the
-    /// solution satisfies the bound — the call-site check only saw the
-    /// unconstrained hole. On success register the associated types so the
-    /// monomorphizer can project them; on failure raise a clean trait-bound
-    /// error (instead of trapping a later phase).
+    /// Verify each solved bounded hole satisfies its bound (the call-site check
+    /// only saw the unconstrained hole), registering associated types on success
+    /// or raising a clean trait-bound error on failure.
     fn verify_solved_hole_bounds(&mut self) {
-        // Collect (solution, param_name, trait, span) for solved holes first so
-        // the immutable `type_implements_trait` borrow is released before the
-        // mutable register / diagnostic calls.
+        // Collect first so the `type_implements_trait` borrow is released before
+        // the mutable enforce calls.
         let tt = self.tysys.type_table.borrow();
         let checks: Vec<(TypeId, String, String, Span)> = self
             .infer_holes
@@ -201,13 +183,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter_map(|(hole, (param_name, trait_names, span))| {
                 let solution = (*self.infer_holes.solutions.get(hole)?)?;
-                // A solution that is still a (forwarded) type parameter — or
-                // itself a hole — has its bound verified where it becomes
-                // concrete (the owner's monomorphization), exactly as
-                // `enforce_type_arg_bounds` skips non-concrete args. The hole's
-                // bound scope is already closed by finalize, so re-checking a
-                // type-param solution here (`type_implements_trait` cannot see
-                // the now-gone bound) would spuriously fail.
+                // A still-parametric solution (forwarded param, or another hole)
+                // is checked when its owner is monomorphized; re-checking here,
+                // after the bound's scope closed, would spuriously fail.
                 if tt.contains_type_param(solution) {
                     return None;
                 }
@@ -222,23 +200,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         for (solution, param_name, trait_name, span) in checks {
-            // Same enforcement primitive the call-site type-arg loops use, so
-            // the deferred re-check cannot drift from the eager check.
             self.enforce_single_bound(solution, &trait_name, &param_name, span);
         }
     }
 
-    /// Substitute holes through every recorded fact map that can carry a
-    /// `TypeId`. Because deferral only fires for hole-free receivers/args and
-    /// enclosing calls are concretised before they record, no recorded
-    /// *mangled name* embeds a hole — a `TypeId` substitution alone suffices.
-    ///
-    /// A trait default-method body is walked into a *separate* synthetic
-    /// `ModuleSemantics` stashed under its `(impl, method)` key (see the
-    /// default-method synthesis in `resolve_module`); its recorded facts live
-    /// in `default_method_semantics`, not the module's main `types`. Sweep
-    /// those too, or a hole minted inside a default-method body would survive
-    /// into reify and trap a later phase.
+    /// Substitute holes through every recorded fact that can carry a `TypeId`.
+    /// Trait default-method bodies record into a separate synthetic semantics
+    /// stashed in `default_method_semantics`, not the main `types`; sweep those
+    /// too, or a hole minted in a default-method body leaks past reify.
     fn sweep_recorded_facts(&mut self, subst: &IndexMap<u32, TypeId>) {
         if subst.is_empty() {
             return;

@@ -212,10 +212,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// import scope), so queries stay suppressed to keep the owning walk's
     /// edge authoritative.
     pub(super) suppress_reference_recording: bool,
-    /// Per-module deferred-inference state: inference holes minted for
-    /// generic calls whose type parameter could not be inferred at the call
-    /// site (e.g. `p.get().unwrap()`'s receiver), pending a later expected
-    /// type. Solved and swept into the recorded facts in
+    /// Per-module deferred-inference state, solved and swept in
     /// [`Self::finalize_infer_holes`] at the end of the module walk. See
     /// [`infer_hole`].
     pub(super) infer_holes: infer_hole::InferHoleTable,
@@ -1796,10 +1793,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         drop(_resolve_funcs_span);
 
-        // Solve / sweep any inference holes minted during this module's body
-        // walk, raising "cannot infer" for the ones that never met an expected
-        // type. Runs after every function so all in-module solve points have
-        // fired.
+        // Solve / sweep holes minted in this module; unsolved ones raise
+        // "cannot infer". After every function, so all solve points have fired.
         self.finalize_infer_holes();
 
         self.logger.ok_or_bail(())

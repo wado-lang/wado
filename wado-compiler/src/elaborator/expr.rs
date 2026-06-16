@@ -1887,14 +1887,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
             .collect();
 
-        // Deferred-inference: an inference hole may have reached the scrutinee
-        // (a generic call in scrutinee position, e.g. `match gen() { … }`) and
-        // flowed through the pattern bindings into the arm bodies. Solve it
-        // against the match's expected type or a concrete sibling arm, then
-        // concretise the arm / scrutinee types so the result-type selection
-        // below picks the solved type rather than the hole. The arm-binding
-        // hole is the same `TypeId` as the scrutinee's, so solving one solves
-        // both.
+        // A hole from a generic scrutinee (`match gen() { … }`) flows through
+        // the bindings into the arm bodies (same `TypeId`). Solve it against the
+        // expected type or a concrete sibling arm and concretise before the
+        // result-type selection below.
         if arm_bodies.iter().any(|&(t, _)| self.type_has_infer_hole(t))
             || self.type_has_infer_hole(scrutinee_type)
         {
@@ -3590,11 +3586,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// For `Option<T>` in a function returning `Option<U>`:
     ///   match expr { Some(v) => v, None => return null }
-    /// Reconstruct the operand's expected type for a `?` expression from the
-    /// `?`-stripped expected payload `u` and the enclosing function's return
-    /// type. Returns `None` when there is no usable payload type or the return
-    /// type is not an Option/Result (the latter is a real `?`-misuse that
-    /// [`resolve_question_mark`] reports after resolving the operand).
+    /// Reconstruct the operand's expected type for `?` from the `?`-stripped
+    /// expected payload `u` and the function's return type: `Option<u>` or
+    /// `Result<u, F>`. `None` when there is no payload or the return type is not
+    /// an Option/Result (a `?`-misuse `resolve_question_mark` reports).
     fn question_mark_operand_expected(
         &mut self,
         expected_payload: Option<TypeId>,
@@ -3633,13 +3628,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        // Propagate the `?`-stripped expected type backward to the operand, so
-        // a generic call whose type parameter appears only in the Ok/Some
-        // payload can be inferred from an LHS annotation (`let v: U = call()?`)
-        // instead of demanding a turbofish. `?` requires the enclosing
-        // function to return the same Option/Result shape as the operand, so
-        // the operand's expected type is the wrapper reconstructed around `U`:
-        // `Option<U>` or `Result<U, F>` (F = the function's return error type).
+        // Propagate the `?`-stripped expected type backward to the operand, so a
+        // generic call whose `T` is only in the Ok/Some payload infers from an
+        // LHS annotation (`let v: U = call()?`) without a turbofish.
         let operand_expected = self.question_mark_operand_expected(expected_type, ctx.return_type);
         let inner_type = self.resolve_expr(&qm.expr, ctx, operand_expected);
         let tt = self.tysys.type_table.borrow();

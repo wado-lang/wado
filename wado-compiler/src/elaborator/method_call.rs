@@ -117,10 +117,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
-        // Get the base (non-ref) type for method lookup and struct name extraction.
-        // `mut` because deferred-inference may concretise the receiver below
-        // (after an inference hole flowing in from a generic receiver call is
-        // solved against this call's expected type).
+        // Base (non-ref) type for method lookup. `mut`: deferred-inference may
+        // concretise the receiver below.
         let mut base_type_id = self.tysys.get_base_type(receiver.type_id);
 
         // Get struct name and module source from base type
@@ -657,16 +655,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if !method_type_args.is_empty() {
             subst_ctx = subst_ctx.with_method_args(&method_type_args, impl_offset);
-            // Enforce the method's type-parameter trait bounds, mirroring the
-            // free-function path (`check_function_type_arg_bounds`). Without
-            // this an explicit/inferred concrete arg that violates a bound
-            // (e.g. `m.get::<String>()` where `String: Producer` does not hold)
-            // reaches WIR build and traps. Deferred (inference-hole) args are
-            // skipped here and re-checked once solved in `finalize_infer_holes`.
-            //
-            // Reuse the params `infer_method_type_args` already looked up
-            // (struct / generic-instance receiver); fall back to a fresh lookup
-            // on the explicit-turbofish path, where inference did not run.
+            // Enforce the method's type-arg bounds (shared rule); a violating
+            // concrete arg would otherwise trap WIR build. Hole args are skipped
+            // and re-checked in `finalize_infer_holes`. Reuse the params
+            // `infer_method_type_args` already looked up; the explicit-turbofish
+            // path (no inference) falls back to a fresh lookup.
             match reuse_params {
                 Some(params) => self.enforce_type_arg_bounds(&params, &method_type_args, span),
                 None => self.check_method_type_arg_bounds(
@@ -686,15 +679,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
         }
 
-        // Deferred-inference solve point. When the receiver was an uninferred
-        // generic call (e.g. `p.get()` in `p.get().unwrap()`), an inference
-        // hole reached this call's receiver/return type. With this call's
-        // expected type now in hand, solve the hole and concretise the
-        // receiver/return *before* the mangling + recording below, which embed
-        // the receiver type in mangled names a later TypeId sweep could not
-        // fix. The deferred inner call's own facts carry the hole only in
-        // TypeId fields (its name is hole-free) and are concretised by the
-        // module-end sweep.
+        // Deferred-inference solve point: a hole that flowed in from an
+        // uninferred generic receiver (`p.get()` in `p.get().unwrap()`) is
+        // solved against this call's expected type and concretised *before* the
+        // mangling/recording below embeds the receiver type in a name a later
+        // TypeId sweep could not fix.
         if let Some(expected) = expected_type
             && (self.type_has_infer_hole(return_type) || self.type_has_infer_hole(receiver.type_id))
         {
@@ -703,15 +692,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = self.apply_infer_holes(return_type);
             base_type_id = self.tysys.get_base_type(receiver.type_id);
         }
-
-        // A hole may still ride the receiver here (a deep chain whose
-        // intermediate call does not pin the parameter, e.g.
-        // `gen().keep().unwrap()`). That is fine: the mangled name recorded
-        // below embeds `Type<?hole>`, but the monomorphizer rebuilds method
-        // names from the (by then concrete) receiver type, not from this
-        // string — and the module-end sweep concretises the receiver type once
-        // the hole is solved further out. If the hole is never solved,
-        // `finalize_infer_holes` raises a clean "cannot infer".
+        // A hole may still ride the receiver (a deep chain's intermediate call,
+        // `gen().keep().unwrap()`): the recorded name embeds `Type<?hole>`, but
+        // the monomorphizer rebuilds names from the receiver type, which the
+        // module-end sweep concretises once the hole is solved further out.
 
         // Re-coerce literal-number args and typecheck each arg against the substituted
         // parameter type. This catches inference conflicts such as

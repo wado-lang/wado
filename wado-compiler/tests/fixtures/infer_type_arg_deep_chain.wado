@@ -1,11 +1,7 @@
-// Deferred inference through a deep method chain whose intermediate call does
-// not pin the type parameter. `g.make()` defers `Box<?>`; `.keep()` is an
-// intermediate that preserves the holey type (its receiver/return are
-// `Box<?>`); `.unwrap_box()` returns the element, and the LHS `i32` solves the
-// hole. The intermediate's recorded method name embeds `Box<?>`, but the
-// monomorphizer rebuilds method names from the (by-then concrete) receiver
-// type, and the module-end sweep concretises every recorded fact once the hole
-// is solved — so no stale name reaches codegen.
+// Deferred inference through a deep chain whose intermediate call does not pin
+// the parameter: `g.make().keep().unwrap_box()`. `keep` records `Box<?>::keep`
+// before the LHS `i32` solves the hole; the monomorphizer rebuilds names from
+// the receiver type the module-end sweep concretises, so no stale name leaks.
 
 struct Box<T> {
     v: T,

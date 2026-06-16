@@ -58,10 +58,8 @@ pub(super) struct MethodInferenceInput<'a> {
     /// surrounding call), used for back-inference.
     pub expected_return_type: Option<TypeId>,
     /// The dispatch-resolved trait, when this is a trait method. Disambiguates
-    /// the method-AST lookup for same-named methods on different traits (e.g.
-    /// `payload` on the Serialize vs Deserialize sides) so the solver reads the
-    /// type parameters of the method actually called, not whichever
-    /// declaration a name-only search finds first.
+    /// the method lookup for same-named methods on different traits (e.g.
+    /// `payload` on Serialize vs Deserialize).
     pub trait_name: Option<&'a str>,
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
@@ -1073,12 +1071,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let base_type_id = self.tysys.get_base_type(receiver_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
-        // Generic params looked up via the struct/generic-instance method
-        // lookup — the same lookup `check_method_type_arg_bounds` would
-        // repeat. Returned to the caller so the bound check can reuse it
-        // instead of looking the method up a second time. `None` for other
-        // receiver kinds (type-param / assoc-projection), where the bound
-        // check's struct lookup finds nothing anyway.
+        // Params from the struct/generic-instance lookup, returned so the bound
+        // check reuses them instead of repeating it. `None` for other receiver
+        // kinds, where the bound check's struct lookup finds nothing anyway.
         let mut bound_check_params: Option<Vec<ast::GenericParam>> = None;
 
         // Locate the method's AST just to recover the list of type parameter
@@ -1210,22 +1205,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                          add a turbofish (`{method_name}::<...>()`) or a type annotation"
                     );
 
-                    // Defer instead of erroring when no expected type is in
-                    // hand yet and the receiver/args are hole-free (so this
-                    // call's recorded mangled name stays hole-free): mint an
-                    // inference hole for each unresolved parameter and let the
-                    // holey result flow up to a later expected-type boundary
-                    // (e.g. `p.get().unwrap()` solves `get`'s `T` at `unwrap`).
-                    // An unsolved hole raises `message` in
-                    // `finalize_infer_holes`, so genuinely uninferable calls
-                    // still report the same diagnostic.
+                    // Defer (mint a hole per unresolved param) when no expected
+                    // type pins it yet and the receiver/args are hole-free, so
+                    // the holey result can be solved at an enclosing boundary
+                    // (`p.get().unwrap()`). An unsolved hole still raises
+                    // `message` in `finalize_infer_holes`.
                     let can_defer = expected_return_type.is_none()
                         && !self.type_has_infer_hole(receiver_type)
                         && args.iter().all(|a| !self.type_has_infer_hole(a.type_id));
                     if can_defer {
-                        // (slot, param name, trait-bound names) per unresolved
-                        // parameter; the bounds ride the hole so the solution
-                        // can be re-verified once it is known.
+                        // (slot, name, bound names) per unresolved param; bounds
+                        // ride the hole for re-verification once solved.
                         let slots: Vec<(usize, String, Vec<String>)> = method_type_params
                             .iter()
                             .zip(inferred.iter())
@@ -1351,10 +1341,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a trait declaration header by name through the module-
-    /// disambiguated canonical key (issue #1298), falling back to a
-    /// current-module match. Mirrors [`Self::find_trait_decl_type_params`]'
-    /// resolution so the method lookup and the type-param lookup agree on
-    /// which same-named trait is meant.
+    /// disambiguated canonical key (issue #1298), mirroring
+    /// [`Self::find_trait_decl_type_params`].
     fn resolve_trait_decl_header(
         &self,
         trait_name: &str,
@@ -1397,13 +1385,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         trait_name: Option<&str>,
     ) -> Option<Vec<ast::GenericParam>> {
-        // When the dispatch resolved a specific trait, prefer that trait's
-        // declaration of the method. Resolve the header through the
-        // module-disambiguated canonical key (the same lookup
-        // `find_trait_decl_type_params` uses, issue #1298), not a bare-name
-        // scan of `trait_decl_headers` — two modules can declare same-named
-        // traits, and a by-name scan would read whichever the map iterates
-        // first, defeating the very disambiguation `trait_name` adds.
+        // Prefer the resolved trait's declaration, via the module-disambiguated
+        // canonical key — a bare-name scan would read whichever same-named trait
+        // the map iterates first, defeating the disambiguation.
         if let Some(tn) = trait_name
             && let Some(header) = self.resolve_trait_decl_header(tn)
         {

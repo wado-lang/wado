@@ -1760,15 +1760,11 @@ impl Monomorphizer {
                                 let impl_type_arg_tids: Vec<TypeId> = type_table
                                     .generic_type_args(concrete_type_id)
                                     .unwrap_or_default();
-                                // A fully concrete, non-generic receiver
-                                // (`i32^Default::default`) is a direct function that
-                                // needs no instantiation. A generic-instance receiver
-                                // (`List<i32>^Default::default`) must still queue the
-                                // trait impl's instantiation even when the method has
-                                // no type args of its own — the type args are
-                                // impl-level (the receiver's). Without this, a
-                                // `T::trait_method()` whose `T` resolves to a generic
-                                // instance is never generated and traps at WIR build.
+                                // A generic-instance receiver
+                                // (`List<i32>^Default::default`) must queue its impl
+                                // instantiation even with no method type args of its
+                                // own — they are impl-level. A non-generic receiver
+                                // (`i32^Default::default`) is a direct function.
                                 let new_monomorph = if method_type_arg_tids.is_empty()
                                     && impl_type_arg_tids.is_empty()
                                 {

@@ -1,8 +1,5 @@
-// A method type argument that does not satisfy the parameter's trait bound
-// must raise a clean trait-bound error, like the free-function path already
-// does. Pre-existing bug: method type-arg bounds were never checked, so an
-// explicit `m.get::<String>()` (where `String` does not implement `Producer`)
-// reached WIR build and panicked ("unresolved Call String^Producer::make").
+// An explicit method type arg that violates its bound must raise a clean
+// trait-bound error: `m.get::<String>()` where `String` is not `Producer`.
 
 trait Producer {
     fn make() -> Self;

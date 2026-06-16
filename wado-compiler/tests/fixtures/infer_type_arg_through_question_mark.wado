@@ -1,10 +1,6 @@
-// Type inference through the `?` operator. When a generic call's type
-// parameter appears only in the Ok/Some payload of its return type, the
-// parameter must be inferred from the LHS annotation even though `?` strips
-// the wrapper. Before the fix the expected type was dropped at the `?`
-// operator (`resolve_question_mark` resolved its operand with `None`), so the
-// call required a turbofish — the `seq.next_element::<Value>()?` pattern in
-// `core:value` / `core:serde`.
+// Inference through `?`: a generic call whose `T` is only in the Ok/Some
+// payload is inferred from the LHS annotation even though `?` strips the
+// wrapper (`let v: U = call()?`, no turbofish).
 
 trait Producer {
     fn make() -> Self;
