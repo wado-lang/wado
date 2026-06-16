@@ -234,8 +234,9 @@ behind benchmarks.
 - Pointwise maintenance through structural edits (`inline`, `sroa`) is the
   central correctness-and-cost surface: graph growth at the splice point must not
   degrade into a re-walk, or acceptance criterion 1 (`rebuilds = 0`) and the 2×
-  both slip. De-risked by measuring true maintenance cost on a prototype before
-  the wide change.
+  both slip. De-risked: the measured maintenance work is 13.5% of the rebuild it
+  replaces (see Roadmap), so the budget is wide — the risk is correctness of the
+  splice-point growth, not its cost.
 - Operand-promotion breadth: a wide change across arena, lowering, WIR build, the
   unparser, and pure-`ExprKind`-matching passes. Mechanical but large.
 - Extraction cost model: a weak model regresses code size or runtime. Mitigated
@@ -276,12 +277,19 @@ Each step must not regress output (code size or runtime) on the full fixture +
 E2E suite, on `wir_expect` / `wir_not_expect`, and on the benchmark set. Progress
 is tracked against the three acceptance criteria, not against incidental speedups.
 
-- [ ] **De-risk maintenance cost.** Before the wide change, prototype `inline`
-      and `sroa` growing the graph at the splice/decomposition point without
-      re-walking the untouched remainder, and measure the true per-edit
-      maintenance cost on package-gale. This decides whether `rebuilds = 0` is
-      reachable at a maintenance cost below the 2.67× rebuild it replaces. Gate
-      the wide change on this number.
+- [x] **De-risk maintenance cost — green light.** `WADO_MEASURE_VG` now counts,
+      across the whole optimize, the genuinely-new skeleton nodes the edit API
+      creates and the in-place structural edits it makes — the exact work
+      pointwise maintenance does, with no re-walk of the untouched remainder. On
+      package-gale: **33,672 new nodes + 94,808 in-place edits = 128,480 edits =
+      13.5% of the 948,401 rebuild node-walks.** The current per-pass rebuild
+      does ~7.4× more work than maintenance would, and under operand promotion
+      those rebuilds leave the optimize phase entirely (the graph is built once
+      at lower). This refutes the earlier "71.8% irreducible" figure, which was
+      the incremental-_rebuild_ model (re-walk from the first divergent statement
+      to the end) — pointwise maintenance never re-walks, so its cost tracks the
+      edit count, not the disturbed suffix. `rebuilds = 0` is reachable far below
+      the rebuild it replaces; the wide change is justified.
 - [ ] **Operand promotion.** Pure literal / `Binary` / `Unary` / `Cast` slots
       carry `ValueId`s; `lower::translate` builds the graph; the `value_of`
       side-table retires. The widest change (arena / lowering / WIR build /

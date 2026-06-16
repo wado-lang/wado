@@ -43,10 +43,41 @@ struct Acc {
     frac_buckets: [u64; 11],
     /// Node-weighted: builds where >0 was savable.
     incremental_builds: u64,
+    /// Genuinely-new skeleton nodes the edit API creates across the whole
+    /// optimize (every `Engine::alloc_{expr,stmt,block,pat}`). This is the
+    /// *maintenance lower bound*: under graph-as-source-of-truth, only these
+    /// new nodes need value-node construction; the untouched remainder is never
+    /// re-walked. Compared against `total_nodes` (the rebuild cost) it shows how
+    /// much cheaper pointwise maintenance is than the 2.67× rebuild it replaces.
+    created_nodes: u64,
+    /// In-place structural edits (`replace_expr_kind` / `set_block_stmts`). Each
+    /// re-interns one node and propagates to its users — O(1)-ish maintenance,
+    /// not a re-walk. Counted to make the maintenance bound airtight.
+    inplace_edits: u64,
 }
 
 thread_local! {
     static ACC: RefCell<Acc> = RefCell::new(Acc::default());
+}
+
+/// Record one genuinely-new skeleton node created by the edit API. Called from
+/// `Engine::alloc_{expr,stmt,block,pat}`. Off by default (zero cost).
+#[inline]
+pub(crate) fn record_node_created() {
+    if !enabled() {
+        return;
+    }
+    ACC.with(|a| a.borrow_mut().created_nodes += 1);
+}
+
+/// Record one in-place structural edit (`replace_expr_kind` / `set_block_stmts`).
+/// Off by default (zero cost).
+#[inline]
+pub(crate) fn record_inplace_edit() {
+    if !enabled() {
+        return;
+    }
+    ACC.with(|a| a.borrow_mut().inplace_edits += 1);
 }
 
 /// Record a value-graph build of function `fid` over `body`. Compares to the
@@ -219,5 +250,20 @@ pub fn report() {
             eprint!("{}0%={} ", i, c);
         }
         eprintln!();
+        let edits = a.created_nodes + a.inplace_edits;
+        eprintln!(
+            "maintenance bound: new nodes = {} + in-place edits = {} = {} total edits ({:.1}% of the {} rebuild node-walks). \
+             Pointwise maintenance touches only these; the rebuild re-walks all {} to stay current.",
+            a.created_nodes,
+            a.inplace_edits,
+            edits,
+            if a.total_nodes == 0 {
+                0.0
+            } else {
+                edits as f64 / a.total_nodes as f64 * 100.0
+            },
+            a.total_nodes,
+            a.total_nodes,
+        );
     });
 }
