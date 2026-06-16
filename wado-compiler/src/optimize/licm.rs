@@ -198,7 +198,11 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         // body, reusing licm's build instead of rebuilding its own.
         let cond_changed = super::condition_implication::eliminate_at_root(&mut engine);
         let changed = licm_changed || cond_changed;
-        let parked = if changed { None } else { engine.into_analysis() };
+        let parked = if changed {
+            None
+        } else {
+            engine.into_analysis()
+        };
         (changed, parked)
     })
 }

@@ -104,7 +104,7 @@ fn is_assign_target(e: &Engine, expr: ExprId) -> bool {
 mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirLocal};
-    use crate::nir_arena::{Body, BlockNode, ExprNode, StmtKind, StmtNode};
+    use crate::nir_arena::{BlockNode, Body, ExprNode, StmtKind, StmtNode};
     use crate::nir_engine::EngineBuffers;
     use crate::tir::TypeTable;
     use crate::token::Span;
@@ -122,15 +122,43 @@ mod tests {
         // { a + b; 5; } — union the sum's class with the literal 5, then the
         // extractor rewrites the sum expression into `5`.
         let mut body = Body::empty();
-        let a = e(&mut body, ExprKind::Local { index: 0, name: "a".into() });
-        let b = e(&mut body, ExprKind::Local { index: 1, name: "b".into() });
-        let sum = e(&mut body, ExprKind::Binary { left: a, op: NirBinaryOp::Add, right: b });
+        let a = e(
+            &mut body,
+            ExprKind::Local {
+                index: 0,
+                name: "a".into(),
+            },
+        );
+        let b = e(
+            &mut body,
+            ExprKind::Local {
+                index: 1,
+                name: "b".into(),
+            },
+        );
+        let sum = e(
+            &mut body,
+            ExprKind::Binary {
+                left: a,
+                op: NirBinaryOp::Add,
+                right: b,
+            },
+        );
         let five = e(
             &mut body,
-            ExprKind::IntLiteral { value: 5, repr: "5".into() },
+            ExprKind::IntLiteral {
+                value: 5,
+                repr: "5".into(),
+            },
         );
-        let s0 = body.stmts.push(StmtNode { kind: StmtKind::Expr(sum), span: Span::default() });
-        let s1 = body.stmts.push(StmtNode { kind: StmtKind::Expr(five), span: Span::default() });
+        let s0 = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(sum),
+            span: Span::default(),
+        });
+        let s1 = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(five),
+            span: Span::default(),
+        });
         body.root = body.blocks.push(BlockNode {
             stmts: vec![s0, s1],
             span: Span::default(),
@@ -163,10 +191,32 @@ mod tests {
     fn leaves_non_constant_values_untouched() {
         // { a + b; } with no union — nothing to materialize.
         let mut body = Body::empty();
-        let a = e(&mut body, ExprKind::Local { index: 0, name: "a".into() });
-        let b = e(&mut body, ExprKind::Local { index: 1, name: "b".into() });
-        let sum = e(&mut body, ExprKind::Binary { left: a, op: NirBinaryOp::Add, right: b });
-        let s0 = body.stmts.push(StmtNode { kind: StmtKind::Expr(sum), span: Span::default() });
+        let a = e(
+            &mut body,
+            ExprKind::Local {
+                index: 0,
+                name: "a".into(),
+            },
+        );
+        let b = e(
+            &mut body,
+            ExprKind::Local {
+                index: 1,
+                name: "b".into(),
+            },
+        );
+        let sum = e(
+            &mut body,
+            ExprKind::Binary {
+                left: a,
+                op: NirBinaryOp::Add,
+                right: b,
+            },
+        );
+        let s0 = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(sum),
+            span: Span::default(),
+        });
         body.root = body.blocks.push(BlockNode {
             stmts: vec![s0],
             span: Span::default(),
