@@ -1084,11 +1084,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.infer_type_args_from_assoc_bounds(&callee, &mut type_args);
         }
 
-        // Diagnose type parameters that could not be inferred at all, so a
-        // generic call like `nothing()` (where `T` is unconstrained by the
-        // arguments) reports a clean error instead of trapping codegen with
-        // an "unsubstituted TypeParam" panic. Mirrors the method-call path.
-        self.report_uninferred_fn_type_args(&callee, &type_args, call.span);
+        // Defer (mint inference holes) or diagnose type parameters that could
+        // not be inferred. Deferral lets a generic call whose `T` is only in
+        // the return type be pinned later by an enclosing expression
+        // (`match none_of() { … }`, `make() + 1`); an unsolved hole still
+        // reports the same clean error in `finalize_infer_holes`.
+        self.defer_or_report_uninferred_fn_type_args(
+            &callee,
+            &mut type_args,
+            &args,
+            expected_type,
+            call.span,
+        );
 
         // Look up function return type
         let mut return_type = self.lookup_function_return_type(&callee);
@@ -1905,6 +1912,110 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
             span,
         });
+    }
+
+    /// Defer (mint inference holes) or report unresolved free-function type
+    /// parameters. Mirrors the instance-method deferral: when a parameter is
+    /// only in the return type and no expected type pins it yet, mint a hole
+    /// (carrying the parameter's bounds, re-checked once solved) and let the
+    /// holey type flow up to an enclosing solve point (`match` scrutinee,
+    /// binary operand, …) instead of erroring immediately.
+    ///
+    /// Deferral is gated on a hole-free argument list and no expected type
+    /// (otherwise inference / report handle it), and falls back to the plain
+    /// report for functions with default type parameters (whose missing slots
+    /// are not holes). The minted holes are placed in the dense type-argument
+    /// index space so the by-index return-type substitution lines up.
+    pub(super) fn defer_or_report_uninferred_fn_type_args(
+        &mut self,
+        callee: &CalleeRef,
+        type_args: &mut Vec<TypeId>,
+        args: &[TirExpr],
+        expected_type: Option<TypeId>,
+        span: crate::token::Span,
+    ) {
+        let params = self.lookup_function_type_params(callee);
+        // The dense type-argument index space: non-effect, non-`fn`-bound
+        // params, in declaration order (matches `populate_generic_function_cache`
+        // and the by-index substitution).
+        let space: Vec<&ast::GenericParam> = params
+            .iter()
+            .filter(|p| !p.is_effect && !p.bounds.iter().any(|b| b.fn_signature.is_some()))
+            .collect();
+        let n = space.len();
+        // Default type params have a non-hole fallback for their slot; leave
+        // those to the plain report path.
+        if n == 0 || space.iter().any(|p| p.default.is_some()) {
+            self.report_uninferred_fn_type_args(callee, type_args, span);
+            return;
+        }
+        // `type_args` is either full-length (some slots unbound) or empty
+        // (nothing inferred); any other length is a pack/effect interleaving we
+        // do not touch.
+        let from_empty = type_args.is_empty();
+        if !from_empty && type_args.len() != n {
+            self.report_uninferred_fn_type_args(callee, type_args, span);
+            return;
+        }
+        let scope_params: Vec<TypeId> = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .values()
+            .map(|&(_, tid)| tid)
+            .collect();
+
+        let unresolved = |this: &Self, i: usize| -> bool {
+            if from_empty {
+                return true;
+            }
+            let t = type_args[i];
+            this.is_unbound_type_param(t) && !scope_params.contains(&t)
+        };
+
+        let unresolved_names: Vec<String> = space
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| unresolved(self, i))
+            .map(|(_, p)| p.name.clone())
+            .collect();
+        if unresolved_names.is_empty() {
+            return;
+        }
+
+        let can_defer =
+            expected_type.is_none() && args.iter().all(|a| !self.type_has_infer_hole(a.type_id));
+        if !can_defer {
+            self.report_uninferred_fn_type_args(callee, type_args, span);
+            return;
+        }
+
+        let func_name = callee.name.as_str();
+        let message = format!(
+            "cannot infer type parameter {} of function `{func_name}`; \
+             add a turbofish (`{func_name}::<...>()`) or a type annotation",
+            unresolved_names
+                .iter()
+                .map(|n| format!("`{n}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        let mut new_args: Vec<TypeId> = Vec::with_capacity(n);
+        for (i, p) in space.iter().enumerate() {
+            if unresolved(self, i) {
+                let bounds: Vec<String> = p
+                    .bounds
+                    .iter()
+                    .filter(|b| b.fn_signature.is_none())
+                    .map(|b| b.name.clone())
+                    .collect();
+                new_args.push(self.mint_infer_hole(span, message.clone(), p.name.clone(), bounds));
+            } else {
+                new_args.push(type_args[i]);
+            }
+        }
+        *type_args = new_args;
     }
 
     /// Shared core of bound-driven inference: for each generic parameter in

@@ -25,19 +25,15 @@ available.
 - [x] associated-type-bound-driven inference
 - [x] backward inference through the `?` operator (this WEP, below)
 - [x] method-chain receiver — `let x: i32 = p.get().unwrap();` (this WEP, below)
-- [x] `match` scrutinee — `match m.get() { Some(x) => x, None => 0 }` (method
-      scrutinee; this WEP, below)
-- [x] binary-op operand — `m.num() + 1` (method operand; this WEP, below)
+- [x] `match` scrutinee — `match m.get() { … }` / `match none_of() { … }`
+      (method and free-function scrutinees; this WEP, below)
+- [x] binary-op operand — `m.num() + 1` / `make() + 1` (method and
+      free-function operands; this WEP, below)
+- [x] free-function deferral — `none_of()` / `make()` in scrutinee / operand
+      position (this WEP, below)
 
 ### Remaining gaps
 
-- [ ] free-function scrutinees / operands — `match none_of() { … }`,
-      `make() + 1`. The `match` / binary-op solve points already fire; what is
-      missing is _free-function_ deferral (today only generic _method_ calls
-      defer). Free-function deferral needs care the method path did not: a
-      deferred call's trait-bound check (`make<T: Producer>()`) must be
-      re-verified once the hole is solved, and the holey `type_args` vec must
-      align with the by-index return-type substitution.
 - [ ] deep method chains whose _intermediate_ call does not pin the parameter —
       `gen().filter(..).unwrap()` — currently a clean "cannot infer" error
       (see the taint rule below), not yet inferred
@@ -135,20 +131,30 @@ solve points pin it:
   solved against its concrete sibling before operator dispatch (which would
   otherwise mangle a trait-method name against the hole).
 
-Both fire for any deferred hole, so they work today for method-call scrutinees
-/ operands. The free-function forms (`match none_of() { … }`, `make() + 1`)
-wait on free-function deferral (above).
+Both fire for any deferred hole, so they cover method-call and free-function
+scrutinees / operands alike.
+
+### Shipped: free-function deferral
+
+`resolve_call` now mints holes for free-function calls too
+(`defer_or_report_uninferred_fn_type_args`), so `match none_of() { … }` and
+`make() + 1` work like their method forms. Two details the method path did not
+face: the minted holes are placed in the dense type-argument index space so the
+by-index return-type substitution lines up, and a deferred call's trait bound
+travels with its hole and is re-verified once solved — both handled by the
+shared hole infrastructure (the bound re-check is the same `enforce_single_bound`
+the eager paths use). Functions with default type parameters fall back to the
+plain "cannot infer" report.
 
 ## Consequences
 
-- The most common real-world omissions work today: `let v: T = call()?`, a
+- The common real-world omissions work today: `let v: T = call()?`, a
   single-level method chain `let v: T = call().unwrap()` (and `.expect(..)`, or
-  a call result passed directly as a typed argument), and a generic method call
-  in `match`-scrutinee or binary-operand position.
-- Free-function scrutinees / operands and deep chains whose intermediate call
-  does not pin the parameter still require a turbofish or an intermediate
-  annotated `let` — documented workarounds until the follow-up extends
-  deferral to free-function calls.
+  a call result passed directly as a typed argument), and a generic method _or
+  free_ function call in `match`-scrutinee or binary-operand position.
+- Deep chains whose intermediate call does not pin the parameter
+  (`gen().filter(..).unwrap()`) still require a turbofish or an intermediate
+  annotated `let` — a documented workaround.
 - Stdlib turbofishes such as `seq.next_element::<Value>()?` are _not_ removable
   by the `?` fix: they bind to a `let` with no annotation, so the turbofish is
   the only place the element type is named. They remain correct as written.

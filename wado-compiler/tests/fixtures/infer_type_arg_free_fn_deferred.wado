@@ -1,0 +1,55 @@
+// Deferred type inference for free-function calls in scrutinee / operand
+// position. `none_of<T>()` and `make<T>()` have their `T` only in the return
+// type, so a bare call has nothing to infer from — but `match none_of() { … }`
+// and `make() + 1` pin it from the surrounding expression, the same way the
+// method-call forms already do. Free-function deferral mints the inference
+// hole (the match / binary-op solve points then solve it).
+
+use { println, Stdout } from "core:cli";
+
+fn none_of<T>() -> Option<T> {
+    return null;
+}
+
+trait Producer {
+    fn make() -> Self;
+}
+impl Producer for i32 {
+    fn make() -> i32 { return 7; }
+}
+impl Producer for String {
+    fn make() -> String { return "hi"; }
+}
+
+fn produce<T: Producer>() -> T {
+    return T::make();
+}
+
+export fn run() with Stdout {
+    // match scrutinee: sibling arm pins T = i32.
+    let a = match none_of() {
+        Some(x) => x,
+        None => 0,
+    };
+    assert a == 0;
+
+    // match scrutinee: result annotation pins T = String.
+    let b: String = match none_of() {
+        Some(x) => x,
+        None => "fallback",
+    };
+    assert b == "fallback";
+
+    // binary-op operand: sibling literal pins T = i32.
+    let c = produce() + 1;
+    assert c == 8;
+
+    // LHS annotation through the chain still works for free fns too.
+    let d: i32 = produce();
+    assert d == 7;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
