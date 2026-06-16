@@ -325,9 +325,10 @@ fn eligible_value(
         StmtKind::Expr(e) => {
             if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
                 && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-                && elision_safe(body, *index, 1, value.expr(), value_copy_set, usage)
+                && let Some(ve) = value.as_expr()
+                && elision_safe(body, *index, 1, ve, value_copy_set, usage)
             {
-                Some(value.expr())
+                Some(ve)
             } else {
                 None
             }

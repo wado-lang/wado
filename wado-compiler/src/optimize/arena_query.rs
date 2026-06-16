@@ -6,7 +6,7 @@
 
 use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 
 /// If `expr` is a place rooted at a local — `x`, `x.f`, `x[i]`, `*x`, and any
 /// chain thereof — return that root local index; otherwise `None`. Used by
@@ -144,6 +144,42 @@ fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
 /// True when the expression at `id` and every sub-expression has no observable
 /// effect. The arena counterpart of `elide_local::is_pure_expr`; the two must
 /// agree, since both gate the same rewrites.
+/// [`is_pure_expr`] for an operand: a promoted constant is pure.
+pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
+    op.as_expr().map_or(true, |e| is_pure_expr(body, e))
+}
+
+/// Resolve an operand to a `Body` `ExprId`: an `Operand::Expr` is its id; a
+/// promoted constant is materialised as a fresh literal `ExprNode`. For passes
+/// that splice a value position into the skeleton without an `Engine` (they
+/// rebuild the engine after). See `Engine::materialize_operand` for the
+/// in-session counterpart.
+pub(super) fn materialize_operand_in_body(
+    body: &mut Body,
+    op: Operand,
+    span: crate::token::Span,
+    type_table: &crate::tir::TypeTable,
+) -> ExprId {
+    match op {
+        Operand::Expr(e) => e,
+        Operand::Value(v) => {
+            let ty = body
+                .values
+                .type_of(v)
+                .expect("promoted operand has a recorded type");
+            let prim = crate::const_eval::prim_of(ty, type_table);
+            let value = crate::nir_value_graph::value_kind_to_const(body.values.kind(v), prim)
+                .expect("promoted scalar materializes");
+            let kind = crate::const_eval::value_to_arena_kind(value);
+            body.exprs.push(crate::nir_arena::ExprNode {
+                kind,
+                type_id: ty,
+                span,
+            })
+        }
+    }
+}
+
 pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::IntLiteral { .. }
@@ -158,25 +194,25 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => true,
         ExprKind::Binary { left, right, .. } => {
-            is_pure_expr(body, left.expr()) && is_pure_expr(body, right.expr())
+            is_pure_operand(body, *left) && is_pure_operand(body, *right)
         }
-        ExprKind::Unary { expr: inner, .. } => is_pure_expr(body, inner.expr()),
+        ExprKind::Unary { expr: inner, .. } => is_pure_operand(body, *inner),
         ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(body, inner.expr()),
+        | ExprKind::VariantPayload { expr: inner, .. } => is_pure_operand(body, *inner),
         ExprKind::Index { expr: e, index: i } => {
-            is_pure_expr(body, e.expr()) && is_pure_expr(body, i.expr())
+            is_pure_operand(body, *e) && is_pure_operand(body, *i)
         }
         ExprKind::StructLiteral { fields, .. } => {
-            fields.iter().all(|f| is_pure_expr(body, f.value.expr()))
+            fields.iter().all(|f| is_pure_operand(body, f.value))
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            elements.iter().all(|e| is_pure_expr(body, e.expr()))
+            elements.iter().all(|&e| is_pure_operand(body, e))
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_none_or(|p| is_pure_expr(body, p.expr()))
+            payload.is_none_or(|p| is_pure_operand(body, p))
         }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             is_pure_block(body, *block)

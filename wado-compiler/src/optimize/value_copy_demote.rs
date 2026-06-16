@@ -37,7 +37,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, FunctionRef, NirFunction, NirParam, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeTable};
 
@@ -614,54 +614,61 @@ impl ElementClean<'_, '_> {
             } => {
                 let receiver = *receiver;
                 let key = (func.module_source.clone(), func.name.clone());
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-                // The receiver auto-refs to `&self` / `&mut self`, so strip
-                // the wrapping reference before matching the handle.
-                let recv = strip_refs(body, receiver.expr());
-                if is_local(body, recv, idx) {
-                    // Receiver is the handle itself: `x.method()`.
-                    let safe = match self.analyzer.callee_mutates_self(&key) {
-                        Some(false) => true, // &self
-                        Some(true) => self.analyzer.is_method_element_immutable(&key),
-                        None => false,
-                    };
-                    if !safe {
-                        self.clean = false;
-                        return;
-                    }
-                } else if expr_mentions_local(body, receiver.expr(), idx) {
-                    // The handle appears inside the receiver — an element
-                    // or field of it (`x[i].method()`, `x.get(i).method()`,
-                    // `x.field.method()`). A `&mut self` method there may
-                    // mutate an element, which a shallow copy would share.
-                    // A `&self` method is a read; recurse to vet the
-                    // receiver. (`x[i]` lowers to an `List::index` method
-                    // call, not a bare `Index`, so a structural root check
-                    // is not enough — match on the handle appearing at all.)
-                    if self.analyzer.callee_mutates_self(&key) != Some(false) {
-                        self.clean = false;
-                        return;
-                    }
-                    self.visit_expr(body, receiver.expr());
-                    if !self.clean {
-                        return;
-                    }
-                } else {
-                    self.visit_expr(body, receiver.expr());
-                    if !self.clean {
-                        return;
+                let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+                // A promoted constant receiver is never the demote candidate
+                // handle and has nothing to vet; only a skeleton receiver does.
+                if let Some(recv_e) = receiver.as_expr() {
+                    // The receiver auto-refs to `&self` / `&mut self`, so strip
+                    // the wrapping reference before matching the handle.
+                    let recv = strip_refs(body, recv_e);
+                    if is_local(body, recv, idx) {
+                        // Receiver is the handle itself: `x.method()`.
+                        let safe = match self.analyzer.callee_mutates_self(&key) {
+                            Some(false) => true, // &self
+                            Some(true) => self.analyzer.is_method_element_immutable(&key),
+                            None => false,
+                        };
+                        if !safe {
+                            self.clean = false;
+                            return;
+                        }
+                    } else if expr_mentions_local(body, recv_e, idx) {
+                        // The handle appears inside the receiver — an element
+                        // or field of it (`x[i].method()`, `x.get(i).method()`,
+                        // `x.field.method()`). A `&mut self` method there may
+                        // mutate an element, which a shallow copy would share.
+                        // A `&self` method is a read; recurse to vet the
+                        // receiver. (`x[i]` lowers to an `List::index` method
+                        // call, not a bare `Index`, so a structural root check
+                        // is not enough — match on the handle appearing at all.)
+                        if self.analyzer.callee_mutates_self(&key) != Some(false) {
+                            self.clean = false;
+                            return;
+                        }
+                        self.visit_expr(body, recv_e);
+                        if !self.clean {
+                            return;
+                        }
+                    } else {
+                        self.visit_expr(body, recv_e);
+                        if !self.clean {
+                            return;
+                        }
                     }
                 }
                 for a in args {
-                    self.visit_call_arg(body, a);
-                    if !self.clean {
-                        return;
+                    if let Some(ae) = a.as_expr() {
+                        self.visit_call_arg(body, ae);
+                        if !self.clean {
+                            return;
+                        }
                     }
                 }
             }
             ExprKind::Call { args, .. } => {
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+                let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 for a in args {
+                    let Some(a) = a.as_expr() else { continue };
                     self.visit_call_arg(body, a);
                     if !self.clean {
                         return;
@@ -839,11 +846,13 @@ impl ElementImmutable<'_, '_, '_> {
             } => {
                 let local_index = *local_index;
                 let value = *value;
-                self.visit_expr(body, value.expr());
-                if self.clean
-                    && is_self_derived(body, value.expr(), &self.tainted, self.analyzer.type_table)
-                {
-                    self.tainted.insert(local_index);
+                if let Some(ve) = value.as_expr() {
+                    self.visit_expr(body, ve);
+                    if self.clean
+                        && is_self_derived(body, ve, &self.tainted, self.analyzer.type_table)
+                    {
+                        self.tainted.insert(local_index);
+                    }
                 }
             }
             StmtKind::Expr(e) => {

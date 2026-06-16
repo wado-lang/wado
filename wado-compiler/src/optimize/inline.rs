@@ -795,9 +795,9 @@ fn inline_calls_in_block(
             cold = true;
         }
         let shape = match &body.stmts[stmt_id].kind {
-            StmtKind::Let { value, .. } => Shape::TopLevel(value.expr()),
+            StmtKind::Let { value, .. } => value.as_expr().map_or(Shape::None, Shape::TopLevel),
             StmtKind::Expr(expr) => Shape::TopLevel(*expr),
-            StmtKind::Return { value: Some(v) } => Shape::TopLevel(v.expr()),
+            StmtKind::Return { value: Some(v) } => v.as_expr().map_or(Shape::None, Shape::TopLevel),
             StmtKind::If {
                 condition,
                 then_block,
@@ -806,8 +806,10 @@ fn inline_calls_in_block(
             StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
                 Shape::Block(*b)
             }
-            StmtKind::Break { value: Some(v), .. } => Shape::Nested(v.expr()),
-            StmtKind::LetDestructure { value, .. } => Shape::Nested(value.expr()),
+            StmtKind::Break { value: Some(v), .. } => v.as_expr().map_or(Shape::None, Shape::Nested),
+            StmtKind::LetDestructure { value, .. } => {
+                value.as_expr().map_or(Shape::None, Shape::Nested)
+            }
             _ => Shape::None,
         };
         match shape {
@@ -1250,15 +1252,20 @@ fn try_inline_call_expr(
     inline_counter: &mut u32,
     cold: bool,
 ) -> Option<(ExprId, (ModuleSource, String))> {
-    let (module_source, func_name, arg_ids): (ModuleSource, String, Vec<ExprId>) =
+    let (module_source, func_name, arg_ops): (ModuleSource, String, Vec<Operand>) =
         match &caller.exprs[call_id].kind {
             ExprKind::Call { func, args, .. } => (
                 func.module_source.clone(),
                 func.name.clone(),
-                args.iter().map(|a| a.expr.expr()).collect(),
+                args.iter().map(|a| a.expr).collect(),
             ),
             _ => return None,
         };
+    let call_span = caller.exprs[call_id].span;
+    let arg_ids: Vec<ExprId> = arg_ops
+        .into_iter()
+        .map(|a| operand_to_caller_expr(caller, a, call_span, _type_table))
+        .collect();
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
     // A cold call site keeps the call: inlining there only bloats the hot
@@ -1309,11 +1316,11 @@ fn try_inline_method_call_expr(
     inline_counter: &mut u32,
     cold: bool,
 ) -> Option<(ExprId, (ModuleSource, String))> {
-    let (module_source, func_name, receiver_id, arg_ids): (
+    let (module_source, func_name, receiver_op, arg_ops): (
         ModuleSource,
         String,
-        ExprId,
-        Vec<ExprId>,
+        Operand,
+        Vec<Operand>,
     ) = match &caller.exprs[call_id].kind {
         ExprKind::MethodCall {
             receiver,
@@ -1323,11 +1330,17 @@ fn try_inline_method_call_expr(
         } => (
             func.module_source.clone(),
             func.name.clone(),
-            receiver.expr(),
-            args.iter().map(|a| a.expr.expr()).collect(),
+            *receiver,
+            args.iter().map(|a| a.expr).collect(),
         ),
         _ => return None,
     };
+    let call_span = caller.exprs[call_id].span;
+    let receiver_id = operand_to_caller_expr(caller, receiver_op, call_span, type_table);
+    let arg_ids: Vec<ExprId> = arg_ops
+        .into_iter()
+        .map(|a| operand_to_caller_expr(caller, a, call_span, type_table))
+        .collect();
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
     // A cold call site keeps the call: inlining there only bloats the hot
@@ -1336,7 +1349,6 @@ fn try_inline_method_call_expr(
         return None;
     }
     let callee = candidate.body.as_ref()?;
-    let call_span = caller.exprs[call_id].span;
 
     let first_param = &candidate.params[0];
     let recv_type = caller.exprs[receiver_id].type_id;
@@ -1665,14 +1677,51 @@ fn splice_pat(caller: &mut Body, callee: &Body, pid: PatId, ctx: &InlineCtx) -> 
 }
 
 /// Splice an operand from the callee into the caller. An effectful subtree is
-/// spliced as an expr; a promoted pure value would be re-interned into the
-/// caller's pool (operand-promotion Phase B — unreachable while all operands are
-/// `Expr`).
+/// spliced as an expr; a promoted pure value is re-interned into the caller's
+/// pool — `ValueId`s are pool-scoped, so a callee constant must be re-allocated
+/// against the caller's pool. Sound because only self-contained scalars are
+/// promoted (no child `ValueId`s to remap).
 fn splice_operand(caller: &mut Body, callee: &Body, op: Operand, ctx: &InlineCtx) -> Operand {
     match op {
         Operand::Expr(e) => Operand::Expr(splice_expr(caller, callee, e, ctx)),
-        Operand::Value(_) => {
-            unreachable!("operand-promotion Phase B: splice pure value across pools")
+        Operand::Value(v) => {
+            let kind = callee.values.kind(v).clone();
+            let ty = callee
+                .values
+                .type_of(v)
+                .expect("promoted operand has a recorded type");
+            Operand::Value(caller.values.alloc_unshared(kind, ty))
+        }
+    }
+}
+
+/// Resolve an operand to a caller-body `ExprId`: an `Operand::Expr` is its id;
+/// a promoted constant is materialised as a fresh literal `ExprNode` in the
+/// caller (inline binds params to caller-body exprs, so a constant arg must
+/// become one). The `value_of` graph is rebuilt with the engine after inlining,
+/// so a raw `exprs.push` here is consistent with the rest of the inline edits.
+fn operand_to_caller_expr(
+    caller: &mut Body,
+    op: Operand,
+    span: Span,
+    type_table: &TypeTable,
+) -> ExprId {
+    match op {
+        Operand::Expr(e) => e,
+        Operand::Value(v) => {
+            let ty = caller
+                .values
+                .type_of(v)
+                .expect("promoted operand has a recorded type");
+            let prim = crate::const_eval::prim_of(ty, type_table);
+            let value = crate::nir_value_graph::value_kind_to_const(caller.values.kind(v), prim)
+                .expect("promoted scalar materializes");
+            let kind = crate::const_eval::value_to_arena_kind(value);
+            caller.exprs.push(ExprNode {
+                kind,
+                type_id: ty,
+                span,
+            })
         }
     }
 }

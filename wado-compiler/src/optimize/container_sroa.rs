@@ -880,7 +880,9 @@ impl WhitelistChecker<'_> {
                 }
                 let elements = elements.clone();
                 for el in elements {
-                    self.visit_expr(body, el.expr());
+                    if let Some(e) = el.as_expr() {
+                        self.visit_expr(body, e);
+                    }
                 }
                 true
             }
@@ -912,9 +914,11 @@ impl WhitelistChecker<'_> {
                     }
                     seen[k] = true;
                 }
-                let field_vals: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
+                let field_vals: Vec<Operand> = fields.iter().map(|f| f.value).collect();
                 for v in field_vals {
-                    self.visit_expr(body, v);
+                    if let Some(e) = v.as_expr() {
+                        self.visit_expr(body, e);
+                    }
                 }
                 true
             }
@@ -977,9 +981,23 @@ impl WhitelistChecker<'_> {
                 ..
             } => {
                 let receiver = *receiver;
-                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+                let Some(recv_e) = receiver.as_expr() else {
+                    return;
+                };
+                let Some(arg_ids) = args
+                    .iter()
+                    .map(|a| a.expr.as_expr())
+                    .collect::<Option<Vec<ExprId>>>()
+                else {
+                    // A promoted constant arg is not a decomposable element
+                    // source; conservatively mark the receiver local unsafe.
+                    if let Some(rec_local) = receiver_local(body, recv_e) {
+                        self.mark(rec_local);
+                    }
+                    return;
+                };
                 let kind = list_method_kind(func, self.sig_kinds);
-                if let Some(rec_local) = receiver_local(body, receiver.expr())
+                if let Some(rec_local) = receiver_local(body, recv_e)
                     && self.safe.contains(&rec_local)
                 {
                     match (kind, arg_ids.len()) {
@@ -1068,7 +1086,9 @@ impl WhitelistChecker<'_> {
                 if let Some((rec_local, idx_arg)) = safe_read {
                     // Safe — just visit the index expression.
                     self.record_use(rec_local, ListMethodKind::IndexReader);
-                    self.visit_expr(body, idx_arg.expr());
+                    if let Some(e) = idx_arg.as_expr() {
+                        self.visit_expr(body, e);
+                    }
                     return;
                 }
                 self.visit_expr(body, inner.expr());

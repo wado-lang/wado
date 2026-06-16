@@ -626,7 +626,9 @@ fn rewrite_arg(
         && fields.len() == 1
     {
         let field_value = fields[0].value;
-        become_expr(body, arg, field_value.expr());
+        let span = body.exprs[arg].span;
+        let fv = super::arena_query::materialize_operand_in_body(body, field_value, span, type_table);
+        become_expr(body, arg, fv);
         return;
     }
 

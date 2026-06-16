@@ -82,7 +82,7 @@ fn classify(engine: &Engine, stmt: StmtId, stores_aliased: &IndexSet<u32>) -> Ac
             let (idx, value) = (*local_index, *value);
             if is_kept(engine, idx, stores_aliased) {
                 Action::Keep
-            } else if arena_query::is_pure_expr(engine.body, value.expr()) {
+            } else if arena_query::is_pure_operand(engine.body, value) {
                 Action::Drop
             } else {
                 Action::Demote(value.expr())
