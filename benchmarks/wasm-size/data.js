@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781608042009,
+  "lastUpdate": 1781612963278,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33541,6 +33541,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7abf7b9971b13c7f09aef8bfbad74a75185cfc5d"
         },
         "date": 1781608041740,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 396125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "26cc993318ba0e6666eadba00a8cbf060ebaa3d6",
+          "message": "Merge pull request #1390 from wado-lang/claude/turbofan-type-inference-ceedeu\n\nfeat(elaborator): turbofish omission via deferred type inference",
+          "timestamp": "2026-06-16T21:19:31+09:00",
+          "tree_id": "1668f0c858a05d770b7f298baf8c9f3cace6fec0",
+          "url": "https://github.com/wado-lang/wado/commit/26cc993318ba0e6666eadba00a8cbf060ebaa3d6"
+        },
+        "date": 1781612962894,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
