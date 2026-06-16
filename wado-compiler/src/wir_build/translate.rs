@@ -11,7 +11,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 
 /// Recursively collect variable names from Let statements.
 ///
@@ -1405,7 +1405,7 @@ impl FunctionTranslator<'_, '_> {
                     let then_block = *then_block;
                     let else_block = *else_block;
                     if let Some(result_type) = self.infer_stmts_result_type(then_block) {
-                        let cond = self.translate_expr(condition);
+                        let cond = self.translate_operand(condition);
                         self.label_stack.push(LabelEntry {
                             label: None,
                             is_loop_break: false,
@@ -1485,7 +1485,7 @@ impl FunctionTranslator<'_, '_> {
                 let then_branch = *then_branch;
                 let else_branch = *else_branch;
                 if let Some(result_type) = self.infer_stmts_result_type(then_branch) {
-                    let cond = self.translate_expr(condition);
+                    let cond = self.translate_operand(condition);
                     self.label_stack.push(LabelEntry {
                         label: None,
                         is_loop_break: false,
@@ -1540,17 +1540,17 @@ impl FunctionTranslator<'_, '_> {
                 // elements into N split locals via `MultiValueLocalBind`
                 // instead of trying to `LocalSet` the multi-value-Call
                 // result into a single local (which Wasm doesn't allow).
-                if let Some(instrs) = self.try_emit_multi_value_let(*local_index, *value) {
+                if let Some(instrs) = self.try_emit_multi_value_let(*local_index, value.expr()) {
                     return Some(instrs);
                 }
-                let value_instr = self.translate_expr(*value);
+                let value_instr = self.translate_operand(*value);
                 // If the initializer diverges (`never`), no value reaches the stack,
                 // so LocalSet would be invalid. `translate_expr` already appends
                 // `unreachable` for `never`-typed expressions, so just emit the
                 // diverging instruction; the local is declared but never assigned.
-                if arena.exprs[*value].type_id == TypeTable::NEVER {
+                if arena.exprs[value.expr()].type_id == TypeTable::NEVER {
                     Some(value_instr)
-                } else if arena.exprs[*value].type_id == TypeTable::UNIT {
+                } else if arena.exprs[value.expr()].type_id == TypeTable::UNIT {
                     // Unit-type locals have no Wasm representation; just emit
                     // the init expression for its side effects (usually Nop).
                     Some(value_instr)
@@ -1586,7 +1586,7 @@ impl FunctionTranslator<'_, '_> {
             }
             StmtKind::Return { value } => {
                 if let Some(expr) = value {
-                    let value_instr = self.translate_expr(*expr);
+                    let value_instr = self.translate_operand(*expr);
                     // For multi-value-ABI functions, unwrap leaf
                     // `StructNew` aggregate-constructions inside the
                     // return value so the function pushes the N field
@@ -1659,7 +1659,7 @@ impl FunctionTranslator<'_, '_> {
             StmtKind::Break { label, value } => {
                 let depth = self.compute_break_depth(label.as_deref());
                 if let Some(val) = value {
-                    let val_instr = self.translate_expr(*val);
+                    let val_instr = self.translate_operand(*val);
                     Some(WirInstr::Seq(vec![val_instr, WirInstr::Br { depth }]))
                 } else {
                     Some(WirInstr::Br { depth })
@@ -1675,7 +1675,7 @@ impl FunctionTranslator<'_, '_> {
                 else_block,
                 ..
             } => {
-                let cond = self.translate_expr(*condition);
+                let cond = self.translate_operand(*condition);
                 // Push a label entry for the if block scope
                 self.label_stack.push(LabelEntry {
                     label: None,
@@ -1709,7 +1709,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
-                self.translate_let_pattern(*pattern, *value)
+                self.translate_let_pattern(*pattern, value.expr())
             }
         }
     }
@@ -1728,6 +1728,14 @@ impl FunctionTranslator<'_, '_> {
         } else {
             instr
         }
+    }
+
+    /// Lower an operand to WIR. This is the extraction seam (WEP: The Live
+    /// ValueGraph): Phase A operands are all `Expr` and delegate to
+    /// `translate_expr`; Phase B materialises a promoted `Operand::Value` from
+    /// the graph here.
+    pub(super) fn translate_operand(&mut self, op: Operand) -> WirInstr {
+        self.translate_expr(op.expr())
     }
 
     fn translate_expr_inner(&mut self, expr_id: ExprId) -> WirInstr {
@@ -1811,7 +1819,7 @@ impl FunctionTranslator<'_, '_> {
                 value,
             } => {
                 let global_name = self.make_global_name(module_source, name);
-                let val = self.translate_expr(*value);
+                let val = self.translate_operand(*value);
                 WirInstr::GlobalSet {
                     name: WirName { fq: global_name },
                     value: Box::new(val),
@@ -1822,8 +1830,8 @@ impl FunctionTranslator<'_, '_> {
                 let (left, right) = (*left, *right);
                 // Short-circuit logical operators: defer right-side evaluation
                 if matches!(op, NirBinaryOp::And) {
-                    let l = self.translate_expr(left);
-                    let r = self.translate_expr(right);
+                    let l = self.translate_operand(left);
+                    let r = self.translate_operand(right);
                     // if left { right } else { 0 }
                     return WirInstr::If {
                         condition: Box::new(l),
@@ -1833,8 +1841,8 @@ impl FunctionTranslator<'_, '_> {
                     };
                 }
                 if matches!(op, NirBinaryOp::Or) {
-                    let l = self.translate_expr(left);
-                    let r = self.translate_expr(right);
+                    let l = self.translate_operand(left);
+                    let r = self.translate_operand(right);
                     // if left { 1 } else { right }
                     return WirInstr::If {
                         condition: Box::new(l),
@@ -1843,9 +1851,9 @@ impl FunctionTranslator<'_, '_> {
                         else_body: Some(vec![r]),
                     };
                 }
-                let l = Box::new(self.translate_expr(left));
-                let r = Box::new(self.translate_expr(right));
-                let result = self.translate_binary_op(op, l, r, arena.exprs[left].type_id);
+                let l = Box::new(self.translate_operand(left));
+                let r = Box::new(self.translate_operand(right));
+                let result = self.translate_binary_op(op, l, r, arena.exprs[left.expr()].type_id);
                 // Truncate sub-i32 arithmetic/bitwise results to the correct width.
                 // Comparisons and logical ops return bool (i32 0/1), so skip those.
                 if !matches!(
@@ -1861,7 +1869,7 @@ impl FunctionTranslator<'_, '_> {
                         | NirBinaryOp::RefEq
                         | NirBinaryOp::RefNotEq
                 ) && let ResolvedType::Primitive(prim) =
-                    self.type_table.get(arena.exprs[left].type_id)
+                    self.type_table.get(arena.exprs[left.expr()].type_id)
                 {
                     return Self::truncate_to_sub_i32(result, prim);
                 }
@@ -1869,16 +1877,16 @@ impl FunctionTranslator<'_, '_> {
             }
 
             ExprKind::Unary { op, expr: inner } => match op {
-                NirUnaryOp::Ref | NirUnaryOp::MutRef => self.translate_expr(*inner),
-                NirUnaryOp::Deref => self.translate_expr(*inner),
+                NirUnaryOp::Ref | NirUnaryOp::MutRef => self.translate_operand(*inner),
+                NirUnaryOp::Deref => self.translate_operand(*inner),
                 _ => {
                     let inner = *inner;
-                    let o = Box::new(self.translate_expr(inner));
-                    let result = self.translate_unary_op(op, o, arena.exprs[inner].type_id);
+                    let o = Box::new(self.translate_operand(inner));
+                    let result = self.translate_unary_op(op, o, arena.exprs[inner.expr()].type_id);
                     // Truncate sub-i32 results for Neg and BitNot.
                     if matches!(op, NirUnaryOp::Neg | NirUnaryOp::BitNot)
                         && let ResolvedType::Primitive(prim) =
-                            self.type_table.get(arena.exprs[inner].type_id)
+                            self.type_table.get(arena.exprs[inner.expr()].type_id)
                     {
                         return Self::truncate_to_sub_i32(result, prim);
                     }
@@ -1912,8 +1920,8 @@ impl FunctionTranslator<'_, '_> {
 
                 let translated_args: Vec<WirInstr> = args
                     .iter()
-                    .filter(|a| arena.exprs[a.expr].type_id != TypeTable::UNIT)
-                    .map(|a| self.translate_expr(a.expr))
+                    .filter(|a| arena.exprs[a.expr.expr()].type_id != TypeTable::UNIT)
+                    .map(|a| self.translate_operand(a.expr))
                     .collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
@@ -1937,7 +1945,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
                 if let Some(instr) =
-                    self.try_translate_canonical_method(*receiver, func, args, expr.type_id)
+                    self.try_translate_canonical_method(receiver.expr(), func, args, expr.type_id)
                 {
                     return instr;
                 }
@@ -1945,11 +1953,11 @@ impl FunctionTranslator<'_, '_> {
                 let mut translated_args: Vec<WirInstr> = Vec::new();
                 // Receiver is always included (self/&self/&mut self is never unit).
                 // Receivers are always reference types — do not copy them.
-                translated_args.push(self.translate_expr(*receiver));
+                translated_args.push(self.translate_operand(*receiver));
                 // params[0] is self; args[i] corresponds to params[i+1]
                 for arg in args {
-                    if arena.exprs[arg.expr].type_id != TypeTable::UNIT {
-                        translated_args.push(self.translate_expr(arg.expr));
+                    if arena.exprs[arg.expr.expr()].type_id != TypeTable::UNIT {
+                        translated_args.push(self.translate_operand(arg.expr));
                     }
                 }
 
@@ -1989,14 +1997,14 @@ impl FunctionTranslator<'_, '_> {
                     .filter(|f| {
                         !matches!(
                             self.ctx
-                                .type_id_to_wir_type(self.type_table, arena.exprs[f.value].type_id),
+                                .type_id_to_wir_type(self.type_table, arena.exprs[f.value.expr()].type_id),
                             WirType::Unit
                         )
                     })
                     .collect();
                 let field_instrs: Vec<WirInstr> = non_unit_fields
                     .iter()
-                    .map(|f| self.translate_expr(f.value))
+                    .map(|f| self.translate_operand(f.value))
                     .collect();
                 self.struct_new(type_id, field_instrs)
             }
@@ -2014,7 +2022,7 @@ impl FunctionTranslator<'_, '_> {
                 let receiver = *receiver;
                 if let ExprKind::Local {
                     index: tir_local, ..
-                } = &arena.exprs[receiver].kind
+                } = &arena.exprs[receiver.expr()].kind
                     && let Some(splits) = self.multi_value_split_locals.get(tir_local)
                     && let Some((name, ty)) = splits.get(field_name)
                 {
@@ -2026,17 +2034,17 @@ impl FunctionTranslator<'_, '_> {
                 // If the field's result type is unit, emit only the receiver
                 // for side effects and return Nop — unit has no Wasm representation.
                 if expr.type_id == TypeTable::UNIT {
-                    let recv = self.translate_expr(receiver);
+                    let recv = self.translate_operand(receiver);
                     return WirInstr::Seq(vec![WirInstr::Drop(Box::new(recv))]);
                 }
-                let recv = self.translate_expr(receiver);
+                let recv = self.translate_operand(receiver);
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, arena.exprs[receiver].type_id);
+                    .type_id_to_wir_type(self.type_table, arena.exprs[receiver.expr()].type_id);
                 let WirType::Ref { type_id, .. } = wir_type else {
                     panic!(
                         "[WIR] FieldAccess receiver expected Ref WirType, got {wir_type:?} (field={field_name}, type_id={:?})",
-                        arena.exprs[receiver].type_id
+                        arena.exprs[receiver.expr()].type_id
                     );
                 };
                 let result_ty = self.struct_field_wir_type(&type_id, field_name);
@@ -2050,7 +2058,7 @@ impl FunctionTranslator<'_, '_> {
 
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
-                let val = self.translate_expr(value);
+                let val = self.translate_operand(value);
                 match &arena.exprs[target].kind {
                     ExprKind::Local { index, .. } => {
                         // Unit-type locals have no Wasm representation
@@ -2086,7 +2094,7 @@ impl FunctionTranslator<'_, '_> {
                         // representation. Emit the receiver for side effects (then
                         // drop the ref), and emit val for side effects (it produces
                         // nothing because unit has no Wasm representation).
-                        let recv = self.translate_expr(*receiver);
+                        let recv = self.translate_operand(*receiver);
                         WirInstr::Seq(vec![val, WirInstr::Drop(Box::new(recv))])
                     }
                     ExprKind::FieldAccess {
@@ -2095,14 +2103,14 @@ impl FunctionTranslator<'_, '_> {
                         ..
                     } => {
                         let receiver = *receiver;
-                        let recv = self.translate_expr(receiver);
+                        let recv = self.translate_operand(receiver);
                         let wir_type = self
                             .ctx
-                            .type_id_to_wir_type(self.type_table, arena.exprs[receiver].type_id);
+                            .type_id_to_wir_type(self.type_table, arena.exprs[receiver.expr()].type_id);
                         let WirType::Ref { type_id, .. } = wir_type else {
                             panic!(
                                 "[WIR] FieldAccess assignment expected Ref receiver, got {wir_type:?} (field={field_name}, type_id={:?})",
-                                arena.exprs[receiver].type_id
+                                arena.exprs[receiver.expr()].type_id
                             );
                         };
                         self.struct_set(type_id, field_name.clone(), recv, val)
@@ -2110,7 +2118,7 @@ impl FunctionTranslator<'_, '_> {
                     ExprKind::Index {
                         expr: array_expr,
                         index: index_expr,
-                    } => self.translate_index_assign(*array_expr, *index_expr, val),
+                    } => self.translate_index_assign(array_expr.expr(), index_expr.expr(), val),
                     _ => {
                         // Unhandled assignment target
                         WirInstr::Drop(Box::new(val))
@@ -2123,7 +2131,7 @@ impl FunctionTranslator<'_, '_> {
                 target_type,
             } => {
                 // Type casts become appropriate conversion instructions
-                self.translate_cast(*inner, arena.exprs[*inner].type_id, *target_type)
+                self.translate_cast(inner.expr(), arena.exprs[inner.expr()].type_id, *target_type)
             }
 
             ExprKind::Block(block) => {
@@ -2140,7 +2148,7 @@ impl FunctionTranslator<'_, '_> {
                 then_branch,
                 else_branch,
             } => {
-                let cond = self.translate_expr(*condition);
+                let cond = self.translate_operand(*condition);
                 let has_result = expr.type_id != TypeTable::UNIT;
                 self.label_stack.push(LabelEntry {
                     label: None,
@@ -2176,12 +2184,12 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::Match {
                 expr: scrutinee,
                 arms,
-            } => self.translate_match(*scrutinee, arms, expr.type_id),
+            } => self.translate_match(scrutinee.expr(), arms, expr.type_id),
 
             ExprKind::Index {
                 expr: array_expr,
                 index: index_expr,
-            } => self.translate_index(*array_expr, *index_expr),
+            } => self.translate_index(array_expr.expr(), index_expr.expr()),
 
             ExprKind::TupleLiteral { elements } => {
                 // Lower to `struct.new` of the tuple struct type. The
@@ -2190,26 +2198,26 @@ impl FunctionTranslator<'_, '_> {
                 // enclosing function has `ReturnAbi::MultiValue`. For
                 // call-site destructures the heap struct is elided by
                 // `wir_optimize::elide_struct::elide_multi_field_struct_locals`.
-                let (type_id, fields) = self.tuple_constructor_args(expr.type_id, elements);
+                let (type_id, fields) = self.tuple_constructor_args(expr.type_id, &elements.iter().map(|e| e.expr()).collect::<Vec<_>>());
                 WirInstr::StructNew { type_id, fields }
             }
 
-            ExprKind::ArrayLiteral { elements } => self.build_array_literal(expr.type_id, elements),
+            ExprKind::ArrayLiteral { elements } => self.build_array_literal(expr.type_id, &elements.iter().map(|e| e.expr()).collect::<Vec<_>>()),
 
             ExprKind::Switch {
                 scrutinee,
                 min_value,
                 arms,
                 default,
-            } => self.translate_switch(*scrutinee, *min_value, arms, *default, expr.type_id),
+            } => self.translate_switch(scrutinee.expr(), *min_value, arms, *default, expr.type_id),
 
             ExprKind::VariantTag { expr: inner } => {
                 // Get discriminant field from variant base type
                 let inner = *inner;
-                let val = self.translate_expr(inner);
+                let val = self.translate_operand(inner);
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, arena.exprs[inner].type_id);
+                    .type_id_to_wir_type(self.type_table, arena.exprs[inner.expr()].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     WirInstr::StructGet {
                         type_id,
@@ -2231,12 +2239,12 @@ impl FunctionTranslator<'_, '_> {
                 expr: inner,
                 case_index,
                 case_name: _,
-            } => self.translate_variant_test(*inner, *case_index),
+            } => self.translate_variant_test(inner.expr(), *case_index),
             ExprKind::VariantPayload {
                 expr: inner,
                 case_index,
                 payload_type: _,
-            } => self.translate_variant_payload(*inner, *case_index),
+            } => self.translate_variant_payload(inner.expr(), *case_index),
             ExprKind::VariantConstruct {
                 variant_type,
                 case_index,
@@ -2246,7 +2254,7 @@ impl FunctionTranslator<'_, '_> {
                 *variant_type,
                 *case_index,
                 case_name,
-                *payload,
+                payload.map(|p| p.expr()),
                 expr.type_id,
             ),
             ExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
@@ -2255,7 +2263,7 @@ impl FunctionTranslator<'_, '_> {
                 local_name, args, ..
             } => {
                 let translated_args: Vec<WirInstr> =
-                    args.iter().map(|a| self.translate_expr(*a)).collect();
+                    args.iter().map(|a| self.translate_operand(*a)).collect();
                 // Look up in WASI imports (registered by register_imports from TIR imports)
                 let func_id = if let Some(func_id) =
                     self.ctx.func_map.get(&format!("wasi/{local_name}"))
@@ -2269,7 +2277,7 @@ impl FunctionTranslator<'_, '_> {
                         .iter()
                         .map(|a| {
                             self.ctx
-                                .type_id_to_wir_type(self.type_table, arena.exprs[*a].type_id)
+                                .type_id_to_wir_type(self.type_table, arena.exprs[a.expr()].type_id)
                         })
                         .collect();
                     let results =
@@ -2305,7 +2313,7 @@ impl FunctionTranslator<'_, '_> {
             }
 
             ExprKind::IndirectCall { callee, args } => {
-                self.translate_indirect_call(*callee, args, expr.type_id)
+                self.translate_indirect_call(callee.expr(), &args.iter().map(|a| a.expr()).collect::<Vec<_>>(), expr.type_id)
             }
             ExprKind::ClosureToCanonical {
                 functor,
@@ -2313,7 +2321,7 @@ impl FunctionTranslator<'_, '_> {
                 target_fn_type,
                 closure_module,
             } => self.translate_closure_to_canonical(
-                *functor,
+                functor.expr(),
                 *functor_id,
                 *target_fn_type,
                 closure_module,
