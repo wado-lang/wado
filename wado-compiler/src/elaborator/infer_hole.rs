@@ -48,12 +48,6 @@ pub(crate) struct InferHoleTable {
     /// hole. Without this a `get<T: Producer>()` solved to a non-`Producer`
     /// type would reach codegen and trap.
     bounds: IndexMap<TypeId, (String, Vec<String>, Span)>,
-    /// Holes that reached a recorded *mangled name* (e.g. a method call on a
-    /// still-holey receiver). A name is a string a later `TypeId` sweep cannot
-    /// rewrite, so a tainted hole must resolve to a clean "cannot infer" error
-    /// even if a sibling use later solved it — otherwise a stale mangled name
-    /// could reach codegen.
-    tainted: crate::hashmap::IndexSet<TypeId>,
 }
 
 impl InferHoleTable {
@@ -125,26 +119,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Mark every inference hole appearing in `ty` as tainted: it reached a
-    /// recorded mangled name and must error rather than be silently swept.
-    pub(super) fn taint_infer_holes_in(&mut self, ty: TypeId) {
-        if !self.type_has_infer_hole(ty) {
-            return;
-        }
-        let holes: Vec<TypeId> = {
-            let tt = self.tysys.type_table.borrow();
-            self.infer_holes
-                .solutions
-                .keys()
-                .copied()
-                .filter(|&hole| tt.contains_type_id(ty, hole))
-                .collect()
-        };
-        for hole in holes {
-            self.infer_holes.tainted.insert(hole);
-        }
-    }
-
     /// Substitute already-solved holes into `ty` for in-flight concretisation
     /// (used before a recording site that embeds a mangled name derived from
     /// the type, where a later sweep could not fix the string).
@@ -175,15 +149,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::TypeParam { index, .. } => *index,
                     _ => return None,
                 };
-                // A tainted hole is treated as unsolved: its solution (if any)
-                // is unsafe because a mangled name already embedded the hole.
-                let effective = if self.infer_holes.tainted.contains(hole) {
-                    None
-                } else {
-                    *sol
-                };
-                match effective {
-                    Some(concrete) => Some((index, concrete)),
+                match sol {
+                    Some(concrete) => Some((index, *concrete)),
                     None if pin_unsolved => Some((index, TypeTable::ERROR)),
                     None => None,
                 }
@@ -201,12 +168,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let diags = std::mem::take(&mut self.infer_holes.diags);
         let mut seen: std::collections::HashSet<(Span, String)> = std::collections::HashSet::new();
         for (hole, (span, message)) in diags {
-            let unsolved = self.infer_holes.tainted.contains(&hole)
-                || self
-                    .infer_holes
-                    .solutions
-                    .get(&hole)
-                    .is_some_and(Option::is_none);
+            let unsolved = self
+                .infer_holes
+                .solutions
+                .get(&hole)
+                .is_some_and(Option::is_none);
             // Several holes minted for one call share a message; emit it once.
             if unsolved && seen.insert((span, message.clone())) {
                 let _ = self
@@ -220,11 +186,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.infer_holes = InferHoleTable::default();
     }
 
-    /// For each solved (non-tainted) hole that came from a bounded type
-    /// parameter, verify the solution satisfies the bound — the call-site
-    /// check only saw the unconstrained hole. On success register the
-    /// associated types so the monomorphizer can project them; on failure
-    /// raise a clean trait-bound error (instead of trapping a later phase).
+    /// For each solved hole that came from a bounded type parameter, verify the
+    /// solution satisfies the bound — the call-site check only saw the
+    /// unconstrained hole. On success register the associated types so the
+    /// monomorphizer can project them; on failure raise a clean trait-bound
+    /// error (instead of trapping a later phase).
     fn verify_solved_hole_bounds(&mut self) {
         // Collect (solution, param_name, trait, span) for solved holes first so
         // the immutable `type_implements_trait` borrow is released before the
@@ -234,9 +200,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .bounds
             .iter()
             .filter_map(|(hole, (param_name, trait_names, span))| {
-                if self.infer_holes.tainted.contains(hole) {
-                    return None;
-                }
                 let solution = (*self.infer_holes.solutions.get(hole)?)?;
                 Some(
                     trait_names

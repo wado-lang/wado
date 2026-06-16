@@ -31,14 +31,12 @@ available.
       free-function operands; this WEP, below)
 - [x] free-function deferral — `none_of()` / `make()` in scrutinee / operand
       position (this WEP, below)
+- [x] deep method chains whose _intermediate_ call does not pin the parameter —
+      `gen().keep().unwrap()` (this WEP, below)
 
-### Remaining gaps
+### Out of scope
 
-- [ ] deep method chains whose _intermediate_ call does not pin the parameter —
-      `gen().filter(..).unwrap()` — currently a clean "cannot infer" error
-      (see the taint rule below), not yet inferred
-
-Two look similar but are out of scope:
+These look similar but are not gaps:
 
 - `def() as Meters` — Rust does not infer an operand's type _through_ an `as`
   cast either (the source type must be known independently), so erroring here
@@ -84,19 +82,21 @@ The pieces:
    type flow up. The hole-free-receiver guard guarantees the call's recorded
    _mangled name_ carries no hole, so its facts are fixable by a `TypeId`
    substitution alone.
-3. Solve before record. At an enclosing call with an expected type
+3. Solve at the nearest expected type. At a call with an expected type
    (`.unwrap()`'s `i32`), `resolve_method_call_with` unifies the holey return
-   against the expected, then concretises the receiver/return _before_ the
-   mangling + recording below — which embed the receiver type in name strings a
-   later sweep could not fix.
-4. Taint guard. If a hole still rides the receiver when a call records (its
-   intermediate did not pin the parameter, e.g. `gen().filter(..).unwrap()`, or
-   a holey binding is reused), the hole is _tainted_: it resolves to a clean
-   "cannot infer" error rather than risk a stale mangled name reaching codegen.
+   against the expected and concretises the receiver/return before recording.
+4. Deep chains. An intermediate call that does not pin the parameter
+   (`gen().keep().unwrap()`: `keep` is resolved as `unwrap`'s receiver with no
+   expected type) records a method name spelled `Type<?hole>::keep`. That is
+   harmless: the monomorphizer rebuilds method names from the receiver _type_,
+   not this string, and the module-end sweep concretises that receiver type
+   once the hole is solved further out — so codegen only ever sees
+   `Type<i32>::keep`. (No call-site taint is needed; an unsolved hole is still
+   caught at finalize.)
 5. Module-end finalize. `finalize_infer_holes` raises "cannot infer" for every
-   unsolved / tainted hole (same message as the immediate diagnostic, only
-   deferred) and substitutes all holes (solved → concrete, otherwise → `error`)
-   through every recorded fact map that can carry a `TypeId`.
+   unsolved hole (same message as the immediate diagnostic, only deferred) and
+   substitutes all holes (solved → concrete, otherwise → `error`) through every
+   recorded fact map that can carry a `TypeId`.
 
 ### Trait-bound enforcement (one rule, no drift)
 
@@ -115,7 +115,8 @@ when its owner is monomorphized; a hole is verified at finalize. Routing every
 path through one primitive is what makes the rule unable to diverge again.
 
 Fixtures: `tests/fixtures/infer_type_arg_through_method_chain.wado`,
-`tests/fixtures/infer_type_arg_match_and_binop.wado`.
+`tests/fixtures/infer_type_arg_match_and_binop.wado`,
+`tests/fixtures/infer_type_arg_deep_chain.wado`.
 
 ### Shipped: match scrutinee and binary-op operand (additional solve points)
 
@@ -148,13 +149,10 @@ plain "cannot infer" report.
 
 ## Consequences
 
-- The common real-world omissions work today: `let v: T = call()?`, a
-  single-level method chain `let v: T = call().unwrap()` (and `.expect(..)`, or
-  a call result passed directly as a typed argument), and a generic method _or
-  free_ function call in `match`-scrutinee or binary-operand position.
-- Deep chains whose intermediate call does not pin the parameter
-  (`gen().filter(..).unwrap()`) still require a turbofish or an intermediate
-  annotated `let` — a documented workaround.
+- The backward-flow omissions work today, for method and free-function calls
+  alike: `let v: T = call()?`, method/deep chains (`call().keep().unwrap()`,
+  `.expect(..)`, or a call result passed directly as a typed argument), and a
+  generic call in `match`-scrutinee or binary-operand position.
 - Stdlib turbofishes such as `seq.next_element::<Value>()?` are _not_ removable
   by the `?` fix: they bind to a `let` with no annotation, so the turbofish is
   the only place the element type is named. They remain correct as written.

@@ -694,18 +694,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id = self.tysys.get_base_type(receiver.type_id);
         }
 
-        // If an inference hole still rides the receiver, this call's mangled
-        // name (computed below from the receiver type) would embed it. A later
-        // `TypeId` sweep cannot rewrite a name string, so taint the hole: it
-        // must resolve to a clean "cannot infer" error rather than risk a stale
-        // mangled name reaching codegen. This makes deep chains whose
-        // intermediate calls don't pin the parameter (e.g.
-        // `gen().filter(..).unwrap()`) a clean error instead of a miscompile;
-        // the single-level chain (`gen().unwrap()`) is solved above first.
-        if self.type_has_infer_hole(receiver.type_id) {
-            let receiver_ty = receiver.type_id;
-            self.taint_infer_holes_in(receiver_ty);
-        }
+        // A hole may still ride the receiver here (a deep chain whose
+        // intermediate call does not pin the parameter, e.g.
+        // `gen().keep().unwrap()`). That is fine: the mangled name recorded
+        // below embeds `Type<?hole>`, but the monomorphizer rebuilds method
+        // names from the (by then concrete) receiver type, not from this
+        // string — and the module-end sweep concretises the receiver type once
+        // the hole is solved further out. If the hole is never solved,
+        // `finalize_infer_holes` raises a clean "cannot infer".
 
         // Re-coerce literal-number args and typecheck each arg against the substituted
         // parameter type. This catches inference conflicts such as
