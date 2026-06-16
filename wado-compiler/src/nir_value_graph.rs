@@ -270,6 +270,20 @@ impl ValuePool {
         self.types[id.0 as usize]
     }
 
+    /// Allocate a fresh, un-interned value carrying its use-site type. Unlike
+    /// [`ValuePool::intern`] this never shares — a same-valued constant of a
+    /// different type gets a distinct `ValueId`. Used by operand promotion,
+    /// which runs last (values feed only extraction, never CSE) and must keep a
+    /// constant's width: `ValueKind` is type-erased, so `7: i32` and `7: i64`
+    /// would otherwise hash-cons to one id with one recorded type.
+    pub fn alloc_unshared(&mut self, kind: ValueKind, type_id: TypeId) -> ValueId {
+        let id = ValueId(self.values.len() as u32);
+        self.values.push(kind);
+        self.parent.push(id.0);
+        self.types.push(Some(type_id));
+        id
+    }
+
     /// The class representative of `id`, with path halving.
     pub fn find(&mut self, id: ValueId) -> ValueId {
         let mut x = id.0;

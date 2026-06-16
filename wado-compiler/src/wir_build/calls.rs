@@ -975,7 +975,7 @@ impl FunctionTranslator<'_, '_> {
     pub(super) fn translate_indirect_call(
         &mut self,
         callee: ExprId,
-        args: &[ExprId],
+        args: &[Operand],
         result_type: TypeId,
     ) -> WirInstr {
         let callee_wir = self.translate_expr(callee);
@@ -1055,7 +1055,7 @@ impl FunctionTranslator<'_, '_> {
 
         let mut call_args = vec![env_arg];
         for arg in args {
-            call_args.push(self.translate_expr(*arg));
+            call_args.push(self.translate_operand(*arg));
         }
 
         // func_ref = struct.get $closure "func"

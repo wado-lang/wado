@@ -308,6 +308,14 @@ pub fn optimize(
     multi_value_return::classify_multi_value_returns(&mut project);
     profiler.span_end("nir/multi_value_return");
 
+    profiler.span_start("nir/promote");
+    for func in &project.functions {
+        if let Some(body) = func.borrow_mut().body.as_mut() {
+            promote::promote_literals(body);
+        }
+    }
+    profiler.span_end("nir/promote");
+
     project
 }
 

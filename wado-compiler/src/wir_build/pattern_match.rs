@@ -1408,7 +1408,7 @@ impl FunctionTranslator<'_, '_> {
         variant_type: TypeId,
         case_index: u32,
         case_name: &str,
-        payload: Option<ExprId>,
+        payload: Option<Operand>,
         result_type: TypeId,
     ) -> WirInstr {
         // Get the variant name and module source
@@ -1447,7 +1447,7 @@ impl FunctionTranslator<'_, '_> {
             // Build struct.new for the case type: (tag, payload?)
             let mut fields = vec![WirInstr::I32Const(case_index as i32)];
             if let Some(payload_expr) = payload {
-                fields.push(self.translate_expr(payload_expr));
+                fields.push(self.translate_operand(payload_expr));
             }
             self.struct_new(case_type_id, fields)
         } else {
@@ -1460,7 +1460,7 @@ impl FunctionTranslator<'_, '_> {
             };
             let mut fields = vec![WirInstr::I32Const(case_index as i32)];
             if let Some(payload_expr) = payload {
-                fields.push(self.translate_expr(payload_expr));
+                fields.push(self.translate_operand(payload_expr));
             }
             self.struct_new(type_id, fields)
         }

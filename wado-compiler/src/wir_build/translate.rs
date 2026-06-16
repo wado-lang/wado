@@ -1107,11 +1107,11 @@ impl FunctionTranslator<'_, '_> {
     fn tuple_constructor_args(
         &mut self,
         tuple_type_id: crate::tir::TypeId,
-        elements: &[ExprId],
+        elements: &[Operand],
     ) -> (WirTypeId, Vec<WirInstr>) {
         let elem_type_ids: Vec<crate::tir::TypeId> = elements
             .iter()
-            .map(|e| self.body.exprs[*e].type_id)
+            .map(|e| self.operand_type_id(*e))
             .collect();
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, tuple_type_id);
         let wir_type_id = match &wir_type {
@@ -1139,20 +1139,20 @@ impl FunctionTranslator<'_, '_> {
         // Filter out unit-typed elements before borrowing self mutably to
         // translate them; chaining the filter into the iterator below would
         // double-borrow self.
-        let non_unit: Vec<ExprId> = elements
+        let non_unit: Vec<Operand> = elements
             .iter()
             .copied()
             .filter(|e| {
                 !matches!(
                     self.ctx
-                        .type_id_to_wir_type(self.type_table, self.body.exprs[*e].type_id),
+                        .type_id_to_wir_type(self.type_table, self.operand_type_id(*e)),
                     WirType::Unit
                 )
             })
             .collect();
         let raw_fields: Vec<WirInstr> = non_unit
             .into_iter()
-            .map(|e| self.translate_expr(e))
+            .map(|e| self.translate_operand(e))
             .collect();
         let fields = self.cast_nonnull_fields(&type_id, raw_fields);
         (type_id, fields)
@@ -1171,7 +1171,7 @@ impl FunctionTranslator<'_, '_> {
     fn build_array_literal(
         &mut self,
         array_type_id: crate::tir::TypeId,
-        elements: &[ExprId],
+        elements: &[Operand],
     ) -> WirInstr {
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
         let WirType::Ref { type_id, .. } = wir_type else {
@@ -1188,7 +1188,7 @@ impl FunctionTranslator<'_, '_> {
             panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
         };
         let element_instrs: Vec<WirInstr> =
-            elements.iter().map(|e| self.translate_expr(*e)).collect();
+            elements.iter().map(|e| self.translate_operand(*e)).collect();
         let used = i32::try_from(element_instrs.len())
             .unwrap_or_else(|_| panic!("[WIR] array literal has more than i32::MAX elements"));
         self.struct_new(
@@ -2191,7 +2191,7 @@ impl FunctionTranslator<'_, '_> {
                     ExprKind::Index {
                         expr: array_expr,
                         index: index_expr,
-                    } => self.translate_index_assign(array_expr.expr(), index_expr.expr(), val),
+                    } => self.translate_index_assign(*array_expr, *index_expr, val),
                     _ => {
                         // Unhandled assignment target
                         WirInstr::Drop(Box::new(val))
@@ -2205,7 +2205,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 // Type casts become appropriate conversion instructions
                 self.translate_cast(
-                    inner.expr(),
+                    *inner,
                     self.operand_type_id(*inner),
                     *target_type,
                 )
@@ -2266,7 +2266,7 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::Index {
                 expr: array_expr,
                 index: index_expr,
-            } => self.translate_index(array_expr.expr(), index_expr.expr()),
+            } => self.translate_index(*array_expr, *index_expr),
 
             ExprKind::TupleLiteral { elements } => {
                 // Lower to `struct.new` of the tuple struct type. The
@@ -2275,17 +2275,13 @@ impl FunctionTranslator<'_, '_> {
                 // enclosing function has `ReturnAbi::MultiValue`. For
                 // call-site destructures the heap struct is elided by
                 // `wir_optimize::elide_struct::elide_multi_field_struct_locals`.
-                let (type_id, fields) = self.tuple_constructor_args(
-                    expr.type_id,
-                    &elements.iter().map(|e| e.expr()).collect::<Vec<_>>(),
-                );
+                let (type_id, fields) = self.tuple_constructor_args(expr.type_id, elements);
                 WirInstr::StructNew { type_id, fields }
             }
 
-            ExprKind::ArrayLiteral { elements } => self.build_array_literal(
-                expr.type_id,
-                &elements.iter().map(|e| e.expr()).collect::<Vec<_>>(),
-            ),
+            ExprKind::ArrayLiteral { elements } => {
+                self.build_array_literal(expr.type_id, elements)
+            }
 
             ExprKind::Switch {
                 scrutinee,
@@ -2337,7 +2333,7 @@ impl FunctionTranslator<'_, '_> {
                 *variant_type,
                 *case_index,
                 case_name,
-                payload.map(|p| p.expr()),
+                *payload,
                 expr.type_id,
             ),
             ExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
@@ -2397,7 +2393,7 @@ impl FunctionTranslator<'_, '_> {
 
             ExprKind::IndirectCall { callee, args } => self.translate_indirect_call(
                 callee.expr(),
-                &args.iter().map(|a| a.expr()).collect::<Vec<_>>(),
+                args,
                 expr.type_id,
             ),
             ExprKind::ClosureToCanonical {

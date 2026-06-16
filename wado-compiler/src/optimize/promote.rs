@@ -19,7 +19,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::nir_arena::{Body, ExprId, ExprKind, Operand};
-use crate::nir_value_graph::{ValueId, ValuePool};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::TypeId;
 
 /// Promote every literal operand in `body` to `Operand::Value`, interning the
@@ -33,8 +33,9 @@ pub fn promote_literals(body: &mut Body) {
         .collect();
     let mut promote: IndexMap<ExprId, ValueId> = IndexMap::default();
     for (id, kind, ty) in lits {
-        let v = intern_literal(&mut body.values, &kind);
-        body.values.set_type(v, ty);
+        // Un-shared so each literal keeps its own width: a same-valued constant
+        // of a different type must not collide (`ValueKind` is type-erased).
+        let v = body.values.alloc_unshared(literal_value_kind(&kind), ty);
         promote.insert(id, v);
     }
     body.map_operands(|op| match op {
@@ -56,15 +57,15 @@ fn is_literal(k: &ExprKind) -> bool {
     )
 }
 
-fn intern_literal(pool: &mut ValuePool, k: &ExprKind) -> ValueId {
+fn literal_value_kind(k: &ExprKind) -> ValueKind {
     match k {
-        ExprKind::IntLiteral { value, .. } => pool.int(*value),
-        ExprKind::FloatLiteral { value, .. } => pool.float(*value),
-        ExprKind::BoolLiteral(b) => pool.bool(*b),
-        ExprKind::CharLiteral(c) => pool.char(*c),
-        ExprKind::StringLiteral(s) => pool.string(s.clone()),
-        ExprKind::Null => pool.null(),
-        ExprKind::Unit => pool.unit(),
+        ExprKind::IntLiteral { value, .. } => ValueKind::Int(*value),
+        ExprKind::FloatLiteral { value, .. } => ValueKind::Float(value.to_bits()),
+        ExprKind::BoolLiteral(b) => ValueKind::Bool(*b),
+        ExprKind::CharLiteral(c) => ValueKind::Char(*c),
+        ExprKind::StringLiteral(s) => ValueKind::String(s.clone()),
+        ExprKind::Null => ValueKind::Null,
+        ExprKind::Unit => ValueKind::Unit,
         _ => unreachable!("not a literal"),
     }
 }
