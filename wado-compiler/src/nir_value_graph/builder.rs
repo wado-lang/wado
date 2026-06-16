@@ -618,6 +618,9 @@ impl<'a> Builder<'a> {
         let id = self.compute_value(expr);
         if let Some(id) = id {
             self.value_of.insert(expr, id);
+            // Record the source type so extraction can materialise this value
+            // once the typed `ExprNode` is promoted away.
+            self.pool.set_type(id, self.body.exprs[expr].type_id);
         }
         id
     }
@@ -3253,6 +3256,26 @@ mod tests {
             r.pool.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
+    }
+
+    #[test]
+    fn builder_records_value_types_for_extraction() {
+        // `let a = <i32 lit>;` — the value carries its source type so extraction
+        // can materialise it once the typed ExprNode is promoted away.
+        let mut body = empty_body();
+        let lit = body.exprs.push(ExprNode {
+            kind: ExprKind::IntLiteral {
+                value: 7,
+                repr: "7".to_string(),
+            },
+            type_id: TypeTable::I32,
+            span: Span::default(),
+        });
+        let s = let_stmt(&mut body, 0, lit, false);
+        root_with(&mut body, vec![s]);
+        let r = build_t(&body, &[]);
+        let v = r.value_of[&lit];
+        assert_eq!(r.pool.type_of(v), Some(TypeTable::I32));
     }
 
     #[test]

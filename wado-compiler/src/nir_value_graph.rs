@@ -206,6 +206,12 @@ pub struct ValuePool {
     /// Classes merged since the last [`ValuePool::rebuild`], pending congruence
     /// repair.
     pending: Vec<ValueId>,
+    /// Per-`ValueId` source type, indexed by raw id. `ValueKind` is type-erased
+    /// (an `Int(u64)` carries no width), so extraction — which materialises a
+    /// promoted `Operand::Value` back to WIR once the typed `ExprNode` is gone —
+    /// reads the value's type here. Populated by the builder / `lower` at
+    /// creation; `None` until set.
+    types: Vec<Option<TypeId>>,
 }
 
 impl ValuePool {
@@ -242,9 +248,26 @@ impl ValuePool {
         let id = ValueId(self.values.len() as u32);
         self.values.push(kind.clone());
         self.parent.push(id.0);
+        self.types.push(None);
         self.register_parent_links(id, &kind);
         self.interned.insert(kind, id);
         id
+    }
+
+    /// Record the source type of a value (its NIR `ExprNode` type before
+    /// promotion). Idempotent; a later call overwrites. Stored on `id`'s own raw
+    /// slot — resolve the representative with [`ValuePool::find`] before reading
+    /// if the class may have been unioned.
+    #[inline]
+    pub fn set_type(&mut self, id: ValueId, type_id: TypeId) {
+        self.types[id.0 as usize] = Some(type_id);
+    }
+
+    /// The recorded source type of `id`, if any. Prefer passing a representative
+    /// (`find(id)`); a non-representative slot may be unset.
+    #[inline]
+    pub fn type_of(&self, id: ValueId) -> Option<TypeId> {
+        self.types[id.0 as usize]
     }
 
     /// The class representative of `id`, with path halving.
@@ -275,6 +298,10 @@ impl ValuePool {
         let ra_wins = ra_rank < rb_rank || (ra_rank == rb_rank && ra.0 <= rb.0);
         let (win, lose) = if ra_wins { (ra, rb) } else { (rb, ra) };
         self.parent[lose.0 as usize] = win.0;
+        // Keep a known type on the surviving representative.
+        if self.types[win.0 as usize].is_none() {
+            self.types[win.0 as usize] = self.types[lose.0 as usize];
+        }
         if let Some(losers) = self.class_parents.swap_remove(&lose.0) {
             self.class_parents.entry(win.0).or_default().extend(losers);
         }
