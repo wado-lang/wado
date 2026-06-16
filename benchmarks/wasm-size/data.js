@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781579601763,
+  "lastUpdate": 1781580282914,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33453,6 +33453,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cfd68ff4efcd087053e71f537d63d068879ab6be"
         },
         "date": 1781579601190,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 396125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7431ff8f79be7ade745e87351e966bb83b9d3aba",
+          "message": "Merge pull request #1388 from wado-lang/claude/ci-tidy-gale-test-perf-d90fyg\n\nfeat(cli): default `wado test` to -O0",
+          "timestamp": "2026-06-16T12:11:38+09:00",
+          "tree_id": "604b1c9b30cbc40b563d17fc0b7f35a6a87ff72a",
+          "url": "https://github.com/wado-lang/wado/commit/7431ff8f79be7ade745e87351e966bb83b9d3aba"
+        },
+        "date": 1781580282710,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
