@@ -221,7 +221,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Substitute `subst` through one `TypeAnnotations` fact bundle.
     fn sweep_type_annotations(
-        mut tt: &mut TypeTable,
+        tt: &mut TypeTable,
         types: &mut super::sem::TypeAnnotations,
         subst: &IndexMap<u32, TypeId>,
     ) {
@@ -233,43 +233,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         for t in types.expression_types.values_mut() {
-            *t = sub(&mut tt, *t);
+            *t = sub(tt, *t);
         }
         for t in types.local_types.values_mut() {
-            *t = sub(&mut tt, *t);
+            *t = sub(tt, *t);
         }
         for t in types.let_annotated_types.values_mut() {
-            *t = sub(&mut tt, *t);
+            *t = sub(tt, *t);
         }
         for t in types.fn_return_types.values_mut() {
-            *t = sub(&mut tt, *t);
+            *t = sub(tt, *t);
         }
         for v in types.call_param_types.values_mut() {
-            sub_vec(&mut tt, v);
+            sub_vec(tt, v);
         }
         for v in types.fn_param_types.values_mut() {
-            sub_vec(&mut tt, v);
+            sub_vec(tt, v);
         }
         for v in types.struct_field_types.values_mut() {
-            sub_vec(&mut tt, v);
+            sub_vec(tt, v);
         }
         for gi in types.generic_instantiations.values_mut() {
-            sub_vec(&mut tt, &mut gi.type_args);
-            gi.instance_type = sub(&mut tt, gi.instance_type);
+            sub_vec(tt, &mut gi.type_args);
+            gi.instance_type = sub(tt, gi.instance_type);
         }
         for md in types.method_dispatch.values_mut() {
-            md.return_type = sub(&mut tt, md.return_type);
-            sub_vec(&mut tt, &mut md.method_type_args);
+            md.return_type = sub(tt, md.return_type);
+            sub_vec(tt, &mut md.method_type_args);
             if let Some(mi) = md.function_ref.monomorph_info.as_mut() {
-                sub_vec(&mut tt, &mut mi.impl_type_args);
-                sub_vec(&mut tt, &mut mi.method_type_args);
+                sub_vec(tt, &mut mi.impl_type_args);
+                sub_vec(tt, &mut mi.method_type_args);
             }
         }
         for sd in types.static_method_dispatch.values_mut() {
-            sub_vec(&mut tt, &mut sd.type_args);
+            sub_vec(tt, &mut sd.type_args);
             if let Some(mi) = sd.function_ref.monomorph_info.as_mut() {
-                sub_vec(&mut tt, &mut mi.impl_type_args);
-                sub_vec(&mut tt, &mut mi.method_type_args);
+                sub_vec(tt, &mut mi.impl_type_args);
+                sub_vec(tt, &mut mi.method_type_args);
             }
         }
     }
