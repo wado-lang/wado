@@ -249,6 +249,59 @@ pub fn build(
     }
 }
 
+/// Cross-check that two value-graph builds over the same body induce the *same
+/// value-equivalence partition* on `exprs`: every pair of expressions both
+/// builds value share a value in one iff they share it in the other. `ValueId`s
+/// are pool-scoped, so the check is by partition (a representative bijection),
+/// never by raw id.
+///
+/// This is the verification net for the build-once migration: a pass that
+/// maintains the live graph in place asserts, under `WADO_VERIFY_VG`, that its
+/// maintained graph agrees with a fresh build — catching any stale or wrong
+/// `value_of` entry before it can change output. A maintained graph may be
+/// *coarser* is not allowed here (both directions are checked); a migration that
+/// intends conservative coarsening must verify against a relation, not equality.
+/// `Err` names the first expression whose membership disagrees.
+// Wired into the build-once migration (guarded by `WADO_VERIFY_VG`); the first
+// production caller lands with operand promotion.
+#[allow(dead_code)]
+pub(crate) fn partitions_agree(
+    maintained: &mut ValueGraphBuild,
+    fresh: &mut ValueGraphBuild,
+    exprs: &[ExprId],
+) -> Result<(), String> {
+    // A rep in one build maps to exactly one rep in the other; a second expr
+    // that maps a known rep to a different partner proves the partitions differ.
+    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
+    let mut f_to_m: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
+    for &e in exprs {
+        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
+            continue;
+        };
+        let rm = maintained.pool.find(vm);
+        let rf = fresh.pool.find(vf);
+        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
+            if prev_rf != rf {
+                return Err(format!(
+                    "expr {prev_e:?} and expr {e:?} share a value in the maintained graph but a fresh build splits them"
+                ));
+            }
+        } else {
+            m_to_f.insert(rm, (rf, e));
+        }
+        if let Some(&(prev_rm, prev_e)) = f_to_m.get(&rf) {
+            if prev_rm != rm {
+                return Err(format!(
+                    "expr {prev_e:?} and expr {e:?} share a value in a fresh build but the maintained graph splits them"
+                ));
+            }
+        } else {
+            f_to_m.insert(rf, (rm, e));
+        }
+    }
+    Ok(())
+}
+
 struct Builder<'a> {
     body: &'a Body,
     pool: ValuePool,
@@ -3190,5 +3243,43 @@ mod tests {
             r.pool.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
+    }
+
+    #[test]
+    fn partitions_agree_on_identical_builds_and_detects_divergence() {
+        // { let a = 1 + 2; let b = 1 + 2; let c = 1 + 3; }
+        // a and b share a value; c is distinct.
+        let mut body = empty_body();
+        let (a_sum, b_sum, c_sum) = {
+            let l1 = int_lit(&mut body, 1);
+            let l2 = int_lit(&mut body, 2);
+            let a = binary(&mut body, NirBinaryOp::Add, l1, l2);
+            let l3 = int_lit(&mut body, 1);
+            let l4 = int_lit(&mut body, 2);
+            let b = binary(&mut body, NirBinaryOp::Add, l3, l4);
+            let l5 = int_lit(&mut body, 1);
+            let l6 = int_lit(&mut body, 3);
+            let c = binary(&mut body, NirBinaryOp::Add, l5, l6);
+            let sa = let_stmt(&mut body, 0, a, false);
+            let sb = let_stmt(&mut body, 1, b, false);
+            let sc = let_stmt(&mut body, 2, c, false);
+            root_with(&mut body, vec![sa, sb, sc]);
+            (a, b, c)
+        };
+        let exprs: Vec<ExprId> = body.exprs.keys().collect();
+
+        // Two fresh builds of the same body induce identical partitions.
+        let mut g1 = build_t(&body, &[]);
+        let mut g2 = build_t(&body, &[]);
+        assert!(partitions_agree(&mut g1, &mut g2, &exprs).is_ok());
+
+        // Corrupt g2 by unioning a's and c's classes — now g2 says a≡c where a
+        // fresh build splits them. The bijection check must reject it.
+        let va = g2.value_of[&a_sum];
+        let vc = g2.value_of[&c_sum];
+        g2.pool.union(va, vc);
+        g2.pool.rebuild();
+        let _ = b_sum;
+        assert!(partitions_agree(&mut g1, &mut g2, &exprs).is_err());
     }
 }
