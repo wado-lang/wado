@@ -310,9 +310,9 @@ fn init_local(body: &Body, stmt: StmtId) -> Option<u32> {
 
 fn init_value(body: &Body, stmt: StmtId) -> Option<ExprId> {
     match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. } => Some(value.expr()),
+        StmtKind::Let { value, .. } => value.as_expr(),
         StmtKind::Expr(e) => match &body.exprs[*e].kind {
-            ExprKind::Assign { value, .. } => Some(value.expr()),
+            ExprKind::Assign { value, .. } => value.as_expr(),
             _ => None,
         },
         _ => None,

@@ -106,9 +106,10 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirFunction, NirLiteralPattern, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, StmtId,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind, StmtId,
     StmtKind, StmtNode,
 };
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results.
@@ -583,6 +584,50 @@ impl<'a> Interpreter<'a> {
 
     /// Reads the bound env for locals and takes the SCCP join over
     /// `if` / `match` arms.
+    /// Lattice value of an operand: the promoted constant for `Operand::Value`,
+    /// else the skeleton subtree's lattice. Promoted pure values live in
+    /// `body.values`, so a literal that left the skeleton still folds.
+    pub fn operand_to_lattice_a(&self, body: &Body, op: Operand) -> Lattice {
+        match op {
+            Operand::Expr(e) => self.expr_to_lattice_a(body, e),
+            Operand::Value(v) => self.value_to_lattice(body, v),
+        }
+    }
+
+    /// Convert a promoted pure value to a `Lattice::Const` when it is a constant
+    /// kind of a known primitive type; `Unevaluated` otherwise (a derived
+    /// `Binary` / `Opaque` / non-primitive value niri does not evaluate here).
+    fn value_to_lattice(&self, body: &Body, v: ValueId) -> Lattice {
+        let Some(ty) = body.values.type_of(v) else {
+            return Lattice::Unevaluated;
+        };
+        match body.values.kind(v) {
+            ValueKind::Bool(b) => Lattice::Const(Value::Bool(*b)),
+            ValueKind::Char(c) => Lattice::Const(Value::Char(*c)),
+            ValueKind::Int(value) => {
+                let Some(prim) = prim_of(ty, self.type_table).filter(|p| is_int_prim(*p)) else {
+                    return Lattice::Unevaluated;
+                };
+                Lattice::Const(Value::Int {
+                    value: *value,
+                    prim,
+                })
+            }
+            ValueKind::Float(bits) => {
+                let prim = if is_f32_type(ty, self.type_table) {
+                    PrimitiveType::F32
+                } else {
+                    PrimitiveType::F64
+                };
+                Lattice::Const(Value::Float {
+                    value: f64::from_bits(*bits),
+                    prim,
+                })
+            }
+            _ => Lattice::Unevaluated,
+        }
+    }
+
     pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];
         match &node.kind {
@@ -638,7 +683,7 @@ impl<'a> Interpreter<'a> {
                 then_branch,
                 else_branch,
             } => {
-                let cond = self.expr_to_lattice_a(body, condition.expr());
+                let cond = self.operand_to_lattice_a(body, *condition);
                 match cond {
                     Lattice::Const(Value::Bool(true)) => self.block_lattice_a(body, *then_branch),
                     Lattice::Const(Value::Bool(false)) => match else_branch {
@@ -672,18 +717,18 @@ impl<'a> Interpreter<'a> {
         let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Binary { left, op, right } => {
-                let l = match self.expr_to_lattice_a(body, left.expr()) {
+                let l = match self.operand_to_lattice_a(body, *left) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
-                let r = match self.expr_to_lattice_a(body, right.expr()) {
+                let r = match self.operand_to_lattice_a(body, *right) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
                 option_to_lattice(eval_binary(l, *op, r))
             }
             ExprKind::Unary { op, expr: inner } => {
-                let v = match self.expr_to_lattice_a(body, inner.expr()) {
+                let v = match self.operand_to_lattice_a(body, *inner) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
@@ -693,7 +738,7 @@ impl<'a> Interpreter<'a> {
                 let Some(target) = prim_of(node.type_id, self.type_table) else {
                     return Lattice::Unevaluated;
                 };
-                match self.expr_to_lattice_a(body, inner.expr()) {
+                match self.operand_to_lattice_a(body, *inner) {
                     Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
                     other => other,
                 }
@@ -731,12 +776,12 @@ impl<'a> Interpreter<'a> {
                     self.pattern_matches_a(body, &scrut_v, arm.pattern)
                 };
                 let body_lat =
-                    arm_lattice_for_feasible_join(self.expr_to_lattice_a(body, arm.body.expr()));
+                    arm_lattice_for_feasible_join(self.operand_to_lattice_a(body, arm.body));
                 match pm {
                     PatternMatch::No => {}
                     PatternMatch::Yes => {
                         if candidates.is_empty() {
-                            return self.expr_to_lattice_a(body, arm.body.expr());
+                            return self.operand_to_lattice_a(body, arm.body);
                         }
                         candidates.push(body_lat);
                         yes_found = true;
@@ -756,7 +801,7 @@ impl<'a> Interpreter<'a> {
             let mut acc = Lattice::Unevaluated;
             for arm in arms {
                 acc = acc.join(arm_lattice_for_feasible_join(
-                    self.expr_to_lattice_a(body, arm.body.expr()),
+                    self.operand_to_lattice_a(body, arm.body),
                 ));
             }
             acc
@@ -826,7 +871,7 @@ impl<'a> Interpreter<'a> {
                 _ => PatternMatch::No,
             },
             PatKind::ConstantValue { expr } => {
-                match self.expr_to_lattice_a(body, expr.expr()).as_const() {
+                match self.operand_to_lattice_a(body, *expr).as_const() {
                     Some(v) if &v == value => PatternMatch::Yes,
                     Some(_) => PatternMatch::No,
                     None => PatternMatch::Unknown,
@@ -1124,7 +1169,7 @@ impl<'a> Interpreter<'a> {
             } => (*condition, *then_branch, *else_branch),
             _ => return false,
         };
-        let cond_lat = self.expr_to_lattice_a(sink.body(), condition.expr());
+        let cond_lat = self.operand_to_lattice_a(sink.body(), condition);
 
         // (1) Constant condition → splice the chosen arm.
         if let Lattice::Const(Value::Bool(b)) = cond_lat {
@@ -1197,7 +1242,7 @@ impl<'a> Interpreter<'a> {
             };
 
         // Rule 1: const scrutinee → splice the chosen arm.
-        if let Lattice::Const(scrut_v) = self.expr_to_lattice_a(sink.body(), scrutinee.expr()) {
+        if let Lattice::Const(scrut_v) = self.operand_to_lattice_a(sink.body(), scrutinee) {
             let mut chosen: Option<usize> = None;
             for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
                 if guard.is_some() {
@@ -1286,9 +1331,9 @@ impl<'a> Interpreter<'a> {
         let Some(callees) = self.callees else {
             return Lattice::Unevaluated;
         };
-        let (func, args): (crate::nir::FunctionRef, Vec<ExprId>) = match &body.exprs[e].kind {
+        let (func, args): (crate::nir::FunctionRef, Vec<Operand>) = match &body.exprs[e].kind {
             ExprKind::Call { func, args, .. } => {
-                (func.clone(), args.iter().map(|a| a.expr.expr()).collect())
+                (func.clone(), args.iter().map(|a| a.expr).collect())
             }
             _ => return Lattice::Unevaluated,
         };
@@ -1304,7 +1349,7 @@ impl<'a> Interpreter<'a> {
         };
         let mut bound: Vec<Value> = Vec::with_capacity(args.len());
         for arg in &args {
-            match self.expr_to_lattice_a(body, *arg).as_const() {
+            match self.operand_to_lattice_a(body, *arg).as_const() {
                 Some(v) => bound.push(v),
                 None => return Lattice::Unevaluated,
             }
