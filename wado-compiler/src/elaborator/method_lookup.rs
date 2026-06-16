@@ -57,6 +57,12 @@ pub(super) struct MethodInferenceInput<'a> {
     /// Expected return type at the call site (from a type annotation or
     /// surrounding call), used for back-inference.
     pub expected_return_type: Option<TypeId>,
+    /// The dispatch-resolved trait, when this is a trait method. Disambiguates
+    /// the method-AST lookup for same-named methods on different traits (e.g.
+    /// `payload` on the Serialize vs Deserialize sides) so the solver reads the
+    /// type parameters of the method actually called, not whichever
+    /// declaration a name-only search finds first.
+    pub trait_name: Option<&'a str>,
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
     pub span: Span,
@@ -1051,6 +1057,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             raw_args,
             decl_return_type,
             expected_return_type,
+            trait_name,
             span,
         } = input;
 
@@ -1071,7 +1078,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 ..
-            } => self.find_method_type_param_names(name, Some(module_source), method_name),
+            } => self.find_method_type_param_names(
+                name,
+                Some(module_source),
+                method_name,
+                trait_name,
+            ),
             ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => self
                 .annotate_ctx
                 .trait_ctx
@@ -1306,12 +1318,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         struct_module: &ModuleSource,
         method_name: &str,
+        trait_name: Option<&str>,
         method_type_args: &[TypeId],
         span: Span,
     ) {
-        let Some(params) =
-            self.find_method_type_param_names(struct_name, Some(struct_module), method_name)
-        else {
+        let Some(params) = self.find_method_type_param_names(
+            struct_name,
+            Some(struct_module),
+            method_name,
+            trait_name,
+        ) else {
             return;
         };
         self.enforce_type_arg_bounds(&params, method_type_args, span);
@@ -1322,7 +1338,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         struct_module_source: Option<&ModuleSource>,
         method_name: &str,
+        trait_name: Option<&str>,
     ) -> Option<Vec<ast::GenericParam>> {
+        // When the dispatch resolved a specific trait, prefer that trait's
+        // declaration of the method. This disambiguates same-named methods on
+        // different traits (e.g. `payload` declared on both the Serialize and
+        // Deserialize sides) so the type parameters returned belong to the
+        // method actually called — a name-only search would pick whichever
+        // declaration comes first and read the wrong bounds.
+        if let Some(tn) = trait_name {
+            for header in self.tysys.trait_env.trait_decl_headers.values() {
+                if header.name != tn {
+                    continue;
+                }
+                for m in &header.methods {
+                    if m.name == method_name
+                        && let Some(names) = Self::non_effect_generic_params(&m.type_params)
+                    {
+                        return Some(names);
+                    }
+                }
+            }
+        }
+
         // Impl-method passes read the digested headers (which cover every loaded
         // module, incl. the current one). Inherent impls first
         // (include_trait = false), preferring the receiver's home module.

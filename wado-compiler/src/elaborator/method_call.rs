@@ -647,6 +647,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 raw_args: args_ast,
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
+                trait_name: trait_name.as_deref(),
                 span,
             })
         } else {
@@ -665,6 +666,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &struct_name,
                 &struct_module,
                 method_name,
+                trait_name.as_deref(),
                 &method_type_args,
                 span,
             );
