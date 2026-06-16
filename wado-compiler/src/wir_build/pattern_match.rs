@@ -34,7 +34,7 @@ impl FunctionTranslator<'_, '_> {
     /// Translate switch expression using `br_table`.
     pub(super) fn translate_switch(
         &mut self,
-        scrutinee: ExprId,
+        scrutinee: Operand,
         min_value: i64,
         arms: &[BlockId],
         default: BlockId,
@@ -49,9 +49,9 @@ impl FunctionTranslator<'_, '_> {
         };
 
         // Translate scrutinee and adjust for min_value
-        let scrut = self.translate_expr(scrutinee);
+        let scrut = self.translate_operand(scrutinee);
         let is_i64 = matches!(
-            self.type_table.get(arena.exprs[scrutinee].type_id),
+            self.type_table.get(self.operand_type_id(scrutinee)),
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
 
@@ -264,7 +264,7 @@ impl FunctionTranslator<'_, '_> {
     /// Translate match expression as nested if-else chain.
     pub(super) fn translate_match(
         &mut self,
-        scrutinee: ExprId,
+        scrutinee: Operand,
         arms: &[ArmData],
         result_type: TypeId,
     ) -> WirInstr {
@@ -276,20 +276,20 @@ impl FunctionTranslator<'_, '_> {
         };
 
         // Store scrutinee in a local to avoid re-evaluation
-        let scrut = self.translate_expr(scrutinee);
+        let scrut = self.translate_operand(scrutinee);
         let match_id = self.match_counter;
         self.match_counter += 1;
         let scrut_local_name = format!("__match_scrut_{match_id}");
         let scrut_wir_type = self
             .ctx
-            .type_id_to_wir_type(self.type_table, self.body.exprs[scrutinee].type_id);
+            .type_id_to_wir_type(self.type_table, self.operand_type_id(scrutinee));
 
         // Precompute, per source-order arm, whether it will be lowered as
         // irrefutable (body only, no surrounding `If`). Both the `if_depths`
         // depth counter below and the emission loop that follows consume this
         // slice, so the two views cannot disagree.
         let emitted_as_irrefutable =
-            self.compute_emitted_as_irrefutable(self.body.exprs[scrutinee].type_id, arms);
+            self.compute_emitted_as_irrefutable(self.operand_type_id(scrutinee), arms);
 
         // Build the if-else chain from inside out (last arm first)
         let mut result = WirInstr::Unreachable; // fallback: non-exhaustive
@@ -347,7 +347,7 @@ impl FunctionTranslator<'_, '_> {
                 self.emit_pattern_bindings(
                     arm.pattern,
                     &scrut_local_name,
-                    self.body.exprs[scrutinee].type_id,
+                    self.operand_type_id(scrutinee),
                     &mut bindings,
                 );
                 let body = if has_result {
@@ -387,7 +387,7 @@ impl FunctionTranslator<'_, '_> {
             let condition = self.translate_pattern_condition(
                 arm.pattern,
                 &scrut_local_name,
-                self.body.exprs[scrutinee].type_id,
+                self.operand_type_id(scrutinee),
             );
 
             // `emitted_as_irrefutable[source_idx]` already folds in both the

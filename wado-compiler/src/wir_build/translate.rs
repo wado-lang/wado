@@ -2261,7 +2261,7 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::Match {
                 expr: scrutinee,
                 arms,
-            } => self.translate_match(scrutinee.expr(), arms, expr.type_id),
+            } => self.translate_match(*scrutinee, arms, expr.type_id),
 
             ExprKind::Index {
                 expr: array_expr,
@@ -2288,7 +2288,7 @@ impl FunctionTranslator<'_, '_> {
                 min_value,
                 arms,
                 default,
-            } => self.translate_switch(scrutinee.expr(), *min_value, arms, *default, expr.type_id),
+            } => self.translate_switch(*scrutinee, *min_value, arms, *default, expr.type_id),
 
             ExprKind::VariantTag { expr: inner } => {
                 // Get discriminant field from variant base type
