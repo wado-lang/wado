@@ -50,10 +50,10 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
-    gate.run_gated_cached(GatedPass::Cse, len, |fid, cached| {
+    gate.run_gated(GatedPass::Cse, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {
-            return (false, None);
+            return false;
         }
         let rule = CseRule {
             applied: Cell::new(false),
@@ -67,49 +67,30 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let mut engine = if let Some(cached) = cached {
-            Engine::with_analysis(body, &mut buffers, locals, &type_table, cached)
-        } else {
-            super::vg_measure::record_build(fid.index(), body);
-            let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
-                body,
-                locals,
-                address_taken_locals,
-                stores_aliased_locals,
-                &type_table,
-                &first_param_types,
-                &call_immutability,
-            );
-            // Seed params (loop-entry snapshots) so this graph is config-identical
-            // to licm's, letting `licm` + `condition_implication` reuse it through
-            // the gate's `vg_cache` when `const_fold` leaves the function
-            // unchanged between the two sessions. Seeding is equivalence-invariant
-            // for cse/slf (which test only `ValueId` equality), so output is
-            // unchanged.
-            let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-            let mut engine = Engine::new(body, &mut buffers, locals);
-            engine.set_alias_sets(aliased, untrackable, mut_escaped);
-            engine.set_value_graph_type_table(&type_table);
-            engine.set_param_locals(param_locals);
-            engine
-        };
+        super::vg_measure::record_build(fid.index(), body);
+        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+        );
+        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_value_graph_type_table(&type_table);
+        engine.set_param_locals(param_locals);
         let cse_changed = engine.run(&[&rule]);
         // Store-load forwarding shares cse's session: cse is graph-preserving
         // (it replaces matching subexpressions in place, so `value_of` stays
         // current), so forwarding runs on the same ValueGraph without a rebuild.
-        // cse and slf are adjacent in the loop, so this only merges their two
-        // sessions — no reordering — saving slf's separate engine setup + build.
         let mut unsafe_locals = address_taken_locals.clone();
         unsafe_locals.extend(stores_aliased_locals.iter().copied());
         unsafe_locals.extend(engine.body_address_taken().iter().copied());
         let slf_changed = super::store_load_forward::forward_at_root(&mut engine, &unsafe_locals);
-        let changed = cse_changed || slf_changed;
-        let parked = if changed {
-            None
-        } else {
-            engine.into_analysis()
-        };
-        (changed, parked)
+        cse_changed || slf_changed
     })
 }
 

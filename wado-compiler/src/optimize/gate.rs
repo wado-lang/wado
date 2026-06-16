@@ -47,7 +47,6 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::nir_arena::ExprKind;
-use crate::nir_engine::CachedAnalysis;
 use crate::nir_package::NirPackage;
 
 /// Stable identity of a function within one optimizer run: its index in
@@ -148,19 +147,6 @@ pub struct FunctionGate {
     revision: Vec<u64>,
     watermarks: [Vec<u64>; GatedPass::COUNT],
     graph: CallGraph,
-    /// Parked per-function engine analysis (`ValueGraph` + alias sets), tagged
-    /// with the `revision` it was built at. A pass reuses it when the function
-    /// is unchanged since the park (`revision` matches); `revision` bumps on the
-    /// function's own change *and* any neighbour change, which over-covers the
-    /// analysis's real dependency (body + callee immutability), so a reuse is
-    /// never stale. Kept live across the loop's two value-graph sessions: the
-    /// `cse` + `store_load_forward` session parks a param-seeded graph, and the
-    /// `licm` + `condition_implication` session reuses it for every function
-    /// `const_fold` leaves unchanged between them — so one build serves both
-    /// instead of two. (`cse` seeds params too, making the two configs identical;
-    /// seeding is equivalence-invariant for cse/slf, which test only `ValueId`
-    /// equality.) A function changed by `const_fold` falls back to a fresh build.
-    vg_cache: Vec<Option<(u64, CachedAnalysis)>>,
 }
 
 impl FunctionGate {
@@ -173,7 +159,6 @@ impl FunctionGate {
             revision: vec![1; n],
             watermarks: std::array::from_fn(|_| vec![0; n]),
             graph: CallGraph::build(project),
-            vg_cache: (0..n).map(|_| None).collect(),
         }
     }
 
@@ -192,9 +177,6 @@ impl FunctionGate {
             }
             self.graph.callees.push(Vec::new());
             self.graph.callers.push(Vec::new());
-        }
-        while self.vg_cache.len() < len {
-            self.vg_cache.push(None);
         }
     }
 
@@ -266,71 +248,6 @@ impl FunctionGate {
         any
     }
 
-    /// Like [`Self::run_gated`], for the value-graph passes that share the
-    /// [`vg_cache`](Self::vg_cache). For each dirty function it hands `f` the
-    /// parked analysis (if the function is unchanged since the park) and parks
-    /// the returned analysis back when `f` reports no change. A changed function
-    /// has its revision bumped, so its stale parked entry is never reused.
-    pub fn run_gated_cached(
-        &mut self,
-        pass: GatedPass,
-        len: usize,
-        mut f: impl FnMut(FunctionId, Option<CachedAnalysis>) -> (bool, Option<CachedAnalysis>),
-    ) -> bool {
-        let mut any = false;
-        for i in 0..len {
-            let fid = FunctionId::new(i);
-            if !self.needs(pass, fid) {
-                continue;
-            }
-            let cached = self.take_analysis(fid);
-            let (changed, analysis) = f(fid, cached);
-            self.seen(pass, fid);
-            if changed {
-                self.mark_changed(fid);
-                any = true;
-            }
-            // Park the returned analysis even when the pass changed the function:
-            // a pass that returns `Some` after a change asserts its edits left the
-            // graph valid (value-preserving), so the next value-graph pass reuses
-            // it instead of rebuilding. Tagged at the post-`mark_changed` revision.
-            if let Some(analysis) = analysis {
-                self.park_analysis(fid, analysis);
-            }
-        }
-        any
-    }
-
-    /// Re-tag the parked `ValueGraph` for `func` to its current revision,
-    /// asserting it survived the calling pass's value-preserving edits — so the
-    /// next value-graph pass reuses it instead of rebuilding. Used by
-    /// `const_fold`, whose folds are graph-preserving (the graph already holds
-    /// the folded constants via `current_value` / `fold_binary_const`). No-op if
-    /// nothing is parked for `func`.
-    pub fn carry_vg_cache(&mut self, func: FunctionId) {
-        let i = func.index();
-        let cur = self.revision[i];
-        if let Some(Some((rev, _))) = self.vg_cache.get_mut(i).map(|s| s.as_mut()) {
-            *rev = cur;
-        }
-    }
-
-    /// Take the parked analysis for `func` if it is still valid (parked at the
-    /// current revision). A stale entry is dropped.
-    fn take_analysis(&mut self, func: FunctionId) -> Option<CachedAnalysis> {
-        let i = func.index();
-        match self.vg_cache.get_mut(i)?.take() {
-            Some((rev, analysis)) if rev == self.revision[i] => Some(analysis),
-            _ => None,
-        }
-    }
-
-    /// Park `analysis` for `func`, tagged with its current revision.
-    fn park_analysis(&mut self, func: FunctionId, analysis: CachedAnalysis) {
-        self.ensure(func.index() + 1);
-        let i = func.index();
-        self.vg_cache[i] = Some((self.revision[i], analysis));
-    }
 }
 
 #[cfg(test)]
@@ -392,7 +309,6 @@ mod tests {
             revision: vec![1; n],
             watermarks: std::array::from_fn(|_| vec![0; n]),
             graph: CallGraph { callees, callers },
-            vg_cache: (0..n).map(|_| None).collect(),
         }
     }
 

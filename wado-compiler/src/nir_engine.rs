@@ -80,20 +80,6 @@ impl EngineBuffers {
     }
 }
 
-/// A parked engine analysis — the `ValueGraph` plus the alias-set inputs it was
-/// built from — that an unchanged function reuses across passes (see
-/// [`Engine::with_analysis`] / [`Engine::into_analysis`]). Owns its data (no
-/// body borrow), so it survives between the per-pass engine sessions. Only
-/// passes that configure the session identically may share one: same alias
-/// sets and the same (empty) `param_locals` seeding.
-pub struct CachedAnalysis {
-    value_graph: crate::nir_value_graph::builder::ValueGraphBuild,
-    aliased_locals: IndexSet<u32>,
-    untrackable_locals: IndexSet<u32>,
-    mut_escaped_locals: IndexSet<u32>,
-    body_address_taken: Option<IndexSet<u32>>,
-    param_locals: Vec<u32>,
-}
 
 /// An engine session over one function body: the arena plus the [`EngineBuffers`]
 /// scratch (parent map, use index, and worklist) the worklist discipline needs,
@@ -173,59 +159,7 @@ impl<'a> Engine<'a> {
         engine
     }
 
-    /// Build a session over `body`, seeding it with a previously-parked
-    /// [`CachedAnalysis`] instead of recomputing the alias sets and the
-    /// `ValueGraph`. Sound only when `body` is unchanged since the analysis was
-    /// parked (the caller gates this on a body-version). The parent map and use
-    /// index are still rebuilt — they are cheap and the buffers are scratch.
-    pub fn with_analysis(
-        body: &'a mut Body,
-        buf: &'a mut EngineBuffers,
-        locals: &'a mut Vec<NirLocal>,
-        type_table: &'a crate::tir::TypeTable,
-        cached: CachedAnalysis,
-    ) -> Self {
-        buf.reset_for(body);
-        let mut engine = Self {
-            body,
-            buf,
-            locals,
-            value_graph: Some(cached.value_graph),
-            body_address_taken: cached.body_address_taken,
-            aliased_locals: cached.aliased_locals,
-            untrackable_locals: cached.untrackable_locals,
-            mut_escaped_locals: cached.mut_escaped_locals,
-            param_locals: cached.param_locals,
-            vg_type_table: Some(type_table),
-        };
-        engine.build_parents();
-        engine.build_uses();
-        engine.seed_post_order();
-        engine
-    }
 
-    /// Extract the session's `ValueGraph` + alias analysis for parking, or
-    /// `None` if an edit invalidated the value graph (then a reuse would be
-    /// stale, so the caller must not park it).
-    pub fn into_analysis(self) -> Option<CachedAnalysis> {
-        let Engine {
-            value_graph,
-            aliased_locals,
-            untrackable_locals,
-            mut_escaped_locals,
-            body_address_taken,
-            param_locals,
-            ..
-        } = self;
-        Some(CachedAnalysis {
-            value_graph: value_graph?,
-            aliased_locals,
-            untrackable_locals,
-            mut_escaped_locals,
-            body_address_taken,
-            param_locals,
-        })
-    }
 
     /// Return the [`ValueId`] of `expr` if the per-function `ValueGraph`
     /// assigned one. Returns `None` for impure / allocation-bearing /

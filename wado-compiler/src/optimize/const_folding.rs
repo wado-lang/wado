@@ -111,18 +111,6 @@ fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionG
         }
         changed |= func_changed;
     }
-    // Carry the cse-parked ValueGraph through const_fold: its folds are
-    // graph-preserving (the graph already holds the folded constants), and the
-    // graph is intra-procedural, so neighbour-change revision bumps don't affect
-    // it. Re-tagging every parked graph to its final revision lets the licm
-    // session reuse it instead of rebuilding — including for functions
-    // const_fold changed. Done after the loop so intra-loop neighbour bumps
-    // don't undo a re-tag. Skipped when ungated.
-    if let Some(g) = gate.as_deref_mut() {
-        for i in 0..project.functions.len() {
-            g.carry_vg_cache(FunctionId::new(i));
-        }
-    }
     changed
 }
 

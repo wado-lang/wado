@@ -23,7 +23,7 @@ use std::cell::Cell;
 use crate::hashmap::IndexSet;
 use crate::nir::NirFunction;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
-use crate::nir_engine::{CachedAnalysis, Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
 /// Ungated variant: forwards stores to loads in every function. Used by the
@@ -45,15 +45,13 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
             &first_param_types,
             &call_immutability,
             &mut buffers,
-            None,
-        )
-        .0;
+        );
     }
     changed
 }
 
 /// Run store→load forwarding over one function body. Returns whether anything
-/// changed. Shared by the gated loop pass and the ungated post-scalarize run.
+/// changed.
 fn forward_one(
     func: &mut NirFunction,
     type_table: &crate::tir::TypeTable,
@@ -63,10 +61,9 @@ fn forward_one(
     >,
     call_immutability: &super::alias::CallImmutability,
     buffers: &mut EngineBuffers,
-    cached: Option<CachedAnalysis>,
-) -> (bool, Option<CachedAnalysis>) {
+) -> bool {
     if func.body.is_none() {
-        return (false, None);
+        return false;
     }
     // `Local`-read forwarding excludes address-taken / `stores`-aliased
     // locals: the canonical sets plus the engine's body scan — the
@@ -82,35 +79,24 @@ fn forward_one(
         ..
     } = &mut *func;
     let body = body.as_mut().expect("checked above");
-    let mut engine = if let Some(cached) = cached {
-        Engine::with_analysis(body, buffers, locals, type_table, cached)
-    } else {
-        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
-            body,
-            locals,
-            address_taken_locals,
-            stores_aliased_locals,
-            type_table,
-            first_param_types,
-            call_immutability,
-        );
-        let mut engine = Engine::new(body, buffers, locals);
-        engine.set_alias_sets(aliased, untrackable, mut_escaped);
-        engine.set_value_graph_type_table(type_table);
-        engine
-    };
+    let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+        body,
+        locals,
+        address_taken_locals,
+        stores_aliased_locals,
+        type_table,
+        first_param_types,
+        call_immutability,
+    );
+    let mut engine = Engine::new(body, buffers, locals);
+    engine.set_alias_sets(aliased, untrackable, mut_escaped);
+    engine.set_value_graph_type_table(type_table);
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
     let rule = StoreLoadForwardRule {
         applied: Cell::new(false),
         unsafe_locals,
     };
-    let changed = engine.run(&[&rule]);
-    let parked = if changed {
-        None
-    } else {
-        engine.into_analysis()
-    };
-    (changed, parked)
+    engine.run(&[&rule])
 }
 
 /// Standalone-session rule whose single `apply_block` performs the whole-
