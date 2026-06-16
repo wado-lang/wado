@@ -107,7 +107,7 @@ The CLI is implemented in `wado-cli/` as a subcommand-style CLI. The sections be
 
 In the examples below, `wado` is shorthand for `cargo run --bin wado --`.
 
-A Wado program targets a Wasm _world_: the CLI command (`wasi:cli/command`, the default), the HTTP service (`wasi:http/service`, run via `wado serve`), or the test world (`wasi:test`, used by E2E tests). Several defaults — including the allocator — depend on the target world.
+A Wado program targets a Wasm _world_: the CLI command (`wasi:cli/command`, the default), the HTTP service (`wasi:http/service`, run via `wado serve`), or the synthetic test world (selected with `--world test`, used by E2E tests). Several defaults — including the allocator — depend on the target world.
 
 ### Compile Command
 
@@ -125,6 +125,15 @@ wado compile --no-validate --wat-to-stdout file.wado
 ```
 
 Optimization levels: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip symbols).
+
+#### Target World
+
+`--world <name>` overrides the target world (default: `wasi:cli/command`). `--world test` selects the test world, exporting the entry module's `test` blocks and dropping everything else. `compile` and `check` accept it; `serve` and `test` pick their world automatically.
+
+```sh
+wado compile --world test file.wado  # compile against the test world
+wado check --world test file.wado    # type-check against the test world
+```
 
 #### Allocators
 
