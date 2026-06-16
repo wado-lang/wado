@@ -955,8 +955,9 @@ impl WhitelistChecker<'_> {
                 if !layouts_compatible(expected_layout, other_layout) {
                     return false;
                 }
-                // The rewrite clones the index expression N times (once per field).
-                if !is_duplicable_expr(body, arg0.expr()) {
+                // The rewrite clones the index expression N times (once per
+                // field). A promoted constant index is trivially duplicable.
+                if !arg0.as_expr().map_or(true, |e| is_duplicable_expr(body, e)) {
                     // Fall through to a normal visit so `other` gets marked
                     // escaped via the bare `index_value` branch in `visit_expr`.
                     self.visit_expr(body, e);

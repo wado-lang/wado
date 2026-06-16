@@ -45,7 +45,7 @@
 
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::hashmap::IndexSet;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
@@ -340,8 +340,8 @@ fn collect_array_targets(
                     StmtKind::Let { value, .. } => Some(*value),
                     _ => None,
                 });
-            if let Some(value) = value {
-                collect_array_targets(body, value.expr(), path, out);
+            if let Some(value) = value.and_then(Operand::as_expr) {
+                collect_array_targets(body, value, path, out);
             }
         }
         ExprKind::StructLiteral { fields, .. } => {

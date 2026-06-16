@@ -784,7 +784,7 @@ fn inline_calls_in_block(
     enum Shape {
         TopLevel(ExprId),
         Nested(ExprId),
-        If(ExprId, BlockId, Option<BlockId>),
+        If(Option<ExprId>, BlockId, Option<BlockId>),
         Block(BlockId),
         None,
     }
@@ -802,7 +802,7 @@ fn inline_calls_in_block(
                 condition,
                 then_block,
                 else_block,
-            } => Shape::If(condition.expr(), *then_block, *else_block),
+            } => Shape::If(condition.as_expr(), *then_block, *else_block),
             StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
                 Shape::Block(*b)
             }
@@ -846,18 +846,20 @@ fn inline_calls_in_block(
                 cold,
             ),
             Shape::If(cond, tb, eb) => {
-                inline_calls_in_expr(
-                    body,
-                    cond,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                    cold,
-                );
+                if let Some(cond) = cond {
+                    inline_calls_in_expr(
+                        body,
+                        cond,
+                        candidates,
+                        current_module,
+                        local_count,
+                        locals,
+                        type_table,
+                        inlined_funcs,
+                        inline_counter,
+                        cold,
+                    );
+                }
                 inline_calls_in_block(
                     body,
                     tb,

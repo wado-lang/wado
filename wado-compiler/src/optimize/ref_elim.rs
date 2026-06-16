@@ -380,7 +380,8 @@ fn deref_collect_stmt(body: &Body, stmt: StmtId, refs: &mut IndexMap<u32, DerefO
     if let StmtKind::Let {
         local_index, value, ..
     } = &body.stmts[stmt].kind
-        && let ExprKind::Unary { op, expr } = &body.exprs[value.expr()].kind
+        && let Some(ve) = value.as_expr()
+        && let ExprKind::Unary { op, expr } = &body.exprs[ve].kind
         && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
         && matches!(
             body.exprs[expr.expr()].kind,

@@ -231,7 +231,7 @@ impl ValidateCtx<'_> {
             let (call_key, scan): (Option<FnKey>, Vec<ExprId>) = match &body.exprs[e].kind {
                 ExprKind::Call { func, args, .. } => (
                     Some((func.module_source.clone(), func.name.clone())),
-                    args.iter().map(|a| a.expr.expr()).collect(),
+                    args.iter().filter_map(|a| a.expr.as_expr()).collect(),
                 ),
                 ExprKind::MethodCall {
                     func,
@@ -239,8 +239,8 @@ impl ValidateCtx<'_> {
                     args,
                     ..
                 } => {
-                    let mut scan = vec![receiver.expr()];
-                    scan.extend(args.iter().map(|a| a.expr.expr()));
+                    let mut scan: Vec<ExprId> = receiver.as_expr().into_iter().collect();
+                    scan.extend(args.iter().filter_map(|a| a.expr.as_expr()));
                     (Some((func.module_source.clone(), func.name.clone())), scan)
                 }
                 // Not a top-level call: the whole expression is a use.

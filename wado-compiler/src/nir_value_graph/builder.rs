@@ -429,13 +429,25 @@ impl<'a> Builder<'a> {
     /// mixed-prim op (which niri refuses) is not folded. Returns `None` when an
     /// operand is non-constant, a type is unavailable, or the op is not
     /// foldable — the caller then builds the structural `Binary` node.
+    /// Type of an operand during the build: from the skeleton expr, or from the
+    /// build pool for a promoted constant (its source type was seeded there).
+    fn operand_type(&self, op: Operand) -> crate::tir::TypeId {
+        match op {
+            Operand::Expr(e) => self.body.exprs[e].type_id,
+            Operand::Value(v) => self
+                .pool
+                .type_of(v)
+                .expect("promoted operand has a recorded type"),
+        }
+    }
+
     fn fold_binary_const(
         &mut self,
         op: NirBinaryOp,
         lhs: ValueId,
         rhs: ValueId,
-        left: ExprId,
-        right: ExprId,
+        left: Operand,
+        right: Operand,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
         // Reflexivity: operands sharing a `ValueId` are the same value, so
@@ -446,7 +458,7 @@ impl<'a> Builder<'a> {
         if lhs == rhs
             && matches!(op, NirBinaryOp::Eq | NirBinaryOp::NotEq)
             && !matches!(
-                crate::const_eval::prim_of(self.body.exprs[left].type_id, tt),
+                crate::const_eval::prim_of(self.operand_type(left), tt),
                 Some(
                     crate::tir::PrimitiveType::F32
                         | crate::tir::PrimitiveType::F64
@@ -469,7 +481,7 @@ impl<'a> Builder<'a> {
         &mut self,
         op: NirUnaryOp,
         operand: ValueId,
-        inner: ExprId,
+        inner: Operand,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
         let v = self.value_to_const(operand, inner, tt)?;
@@ -483,10 +495,10 @@ impl<'a> Builder<'a> {
     fn value_to_const(
         &self,
         vn: ValueId,
-        expr: ExprId,
+        op: Operand,
         tt: &crate::tir::TypeTable,
     ) -> Option<crate::const_eval::Value> {
-        let prim = crate::const_eval::prim_of(self.body.exprs[expr].type_id, tt);
+        let prim = crate::const_eval::prim_of(self.operand_type(op), tt);
         super::value_kind_to_const(self.pool.kind(vn), prim)
     }
 
@@ -548,7 +560,9 @@ impl<'a> Builder<'a> {
     fn receiver_root(&self, recv_expr: ExprId) -> Option<u32> {
         match &self.body.exprs[recv_expr].kind {
             ExprKind::Local { index, .. } => Some(*index),
-            ExprKind::FieldAccess { expr, .. } => self.receiver_root(expr.expr()),
+            ExprKind::FieldAccess { expr, .. } => {
+                expr.as_expr().and_then(|e| self.receiver_root(e))
+            }
             _ => None,
         }
     }
@@ -593,8 +607,11 @@ impl<'a> Builder<'a> {
                 self.current_value.insert(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
-                self.seed_struct_literal_fields(local_index, v, value.expr());
-                self.update_ref_target(local_index, value.expr());
+                // A promoted constant binding has no struct fields / ref target.
+                if let Some(ve) = value.as_expr() {
+                    self.seed_struct_literal_fields(local_index, v, ve);
+                    self.update_ref_target(local_index, ve);
+                }
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
                 self.walk_operand(value);
@@ -759,17 +776,17 @@ impl<'a> Builder<'a> {
                     self.drop_ref_targets_for(&changed);
                     // Invalidate only what the rhs writes, not a blanket
                     // `bump_all`: a pure rhs leaves unrelated fields intact.
-                    let eff = collect_node_heap_effects(self.body, NodeRef::Expr(right.expr()));
-                    self.apply_loop_heap_effects(&eff);
+                    if let Some(re) = right.as_expr() {
+                        let eff = collect_node_heap_effects(self.body, NodeRef::Expr(re));
+                        self.apply_loop_heap_effects(&eff);
+                    }
                     rhs
                 } else {
                     self.walk_operand(right)
                 };
                 let lhs = lhs?;
                 let rhs = rhs?;
-                if let Some(folded) =
-                    self.fold_binary_const(op, lhs, rhs, left.expr(), right.expr())
-                {
+                if let Some(folded) = self.fold_binary_const(op, lhs, rhs, left, right) {
                     return Some(folded);
                 }
                 Some(self.pool.binary(op, lhs, rhs))
@@ -784,7 +801,7 @@ impl<'a> Builder<'a> {
                     None
                 } else {
                     let operand = self.walk_operand(inner)?;
-                    if let Some(folded) = self.fold_unary_const(op, operand, inner.expr()) {
+                    if let Some(folded) = self.fold_unary_const(op, operand, inner) {
                         return Some(folded);
                     }
                     Some(self.pool.unary(op, operand))
