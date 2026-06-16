@@ -2128,26 +2128,28 @@ fn inline_calls_in_expr(
             }
         }
         Call::Method => {
-            let (receiver, args): (ExprId, Vec<ExprId>) = match &body.exprs[e].kind {
-                ExprKind::MethodCall { receiver, args, .. } => (
-                    receiver.expr(),
-                    args.iter().map(|a| a.expr.expr()).collect(),
-                ),
+            let (receiver, args): (Operand, Vec<Operand>) = match &body.exprs[e].kind {
+                ExprKind::MethodCall { receiver, args, .. } => {
+                    (*receiver, args.iter().map(|a| a.expr).collect())
+                }
                 _ => unreachable!(),
             };
-            inline_calls_in_expr(
-                body,
-                receiver,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                inlined_funcs,
-                inline_counter,
-                cold,
-            );
+            if let Some(receiver) = receiver.as_expr() {
+                inline_calls_in_expr(
+                    body,
+                    receiver,
+                    candidates,
+                    current_module,
+                    local_count,
+                    locals,
+                    type_table,
+                    inlined_funcs,
+                    inline_counter,
+                    cold,
+                );
+            }
             for a in args {
+                let Some(a) = a.as_expr() else { continue };
                 inline_calls_in_expr(
                     body,
                     a,

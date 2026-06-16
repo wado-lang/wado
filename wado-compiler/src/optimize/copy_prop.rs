@@ -319,8 +319,10 @@ fn analyze_expr(
             analyze_expr(body, inner.expr(), result, type_table, fpt);
         }
         ExprKind::Call { args, .. } => {
-            let arg_data: Vec<(ExprId, bool)> =
-                args.iter().map(|a| (a.expr.expr(), a.is_mut)).collect();
+            let arg_data: Vec<(ExprId, bool)> = args
+                .iter()
+                .filter_map(|a| a.expr.as_expr().map(|e| (e, a.is_mut)))
+                .collect();
             for (arg, is_mut) in arg_data {
                 if is_mut && may_mutate_through_arg(body, arg, type_table) {
                     mark_potentially_mutated_local(body, arg, result);
@@ -335,8 +337,10 @@ fn analyze_expr(
             ..
         } => {
             let receiver = *receiver;
-            let arg_data: Vec<(ExprId, bool)> =
-                args.iter().map(|a| (a.expr.expr(), a.is_mut)).collect();
+            let arg_data: Vec<(ExprId, bool)> = args
+                .iter()
+                .filter_map(|a| a.expr.as_expr().map(|e| (e, a.is_mut)))
+                .collect();
             // Copy propagation: a callee absent from `fpt` is assumed *not* to
             // mutate the receiver (`conservative_on_unknown = false`); the
             // receiver-type guard below still protects value receivers.

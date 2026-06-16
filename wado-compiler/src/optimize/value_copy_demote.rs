@@ -1082,6 +1082,17 @@ impl ElementImmutable<'_, '_, '_> {
 ///
 /// A primitive-typed value is excluded: reading `self.used` (an `i32`)
 /// produces an independent copy, so passing it around cannot reach `self`.
+/// [`is_self_derived`] for an operand: a promoted constant is never self-derived.
+fn is_self_derived_op(
+    body: &Body,
+    op: Operand,
+    tainted: &IndexSet<u32>,
+    tt: &Rc<RefCell<TypeTable>>,
+) -> bool {
+    op.as_expr()
+        .is_some_and(|e| is_self_derived(body, e, tainted, tt))
+}
+
 fn is_self_derived(
     body: &Body,
     id: ExprId,
@@ -1099,7 +1110,7 @@ fn is_self_derived(
         ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. } => is_self_derived(body, inner.expr(), tainted, tt),
+        | ExprKind::Unary { expr: inner, .. } => is_self_derived_op(body, *inner, tainted, tt),
         ExprKind::Call { func, args, .. } => {
             // `array_get(spine, _)` yields an element of the spine; other
             // array builtins (`array_clone`, `array_new`) produce fresh
@@ -1107,7 +1118,7 @@ fn is_self_derived(
             builtin_gname(func).as_deref() == Some("builtin::array_get")
                 && args
                     .first()
-                    .is_some_and(|a| is_self_derived(body, a.expr.expr(), tainted, tt))
+                    .is_some_and(|a| is_self_derived_op(body, a.expr, tainted, tt))
         }
         // An aggregate / closure that embeds a self-derived value carries
         // that aliasing storage. Tainting it lets the mutation checks below
@@ -1115,15 +1126,15 @@ fn is_self_derived(
         // aggregate / closure too.
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .any(|f| is_self_derived(body, f.value.expr(), tainted, tt)),
+            .any(|f| is_self_derived_op(body, f.value, tainted, tt)),
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .any(|e| is_self_derived(body, e.expr(), tainted, tt)),
+            .any(|e| is_self_derived_op(body, *e, tainted, tt)),
         ExprKind::VariantConstruct { payload, .. } => payload
             .as_ref()
-            .is_some_and(|p| is_self_derived(body, p.expr(), tainted, tt)),
+            .is_some_and(|p| is_self_derived_op(body, *p, tainted, tt)),
         ExprKind::ClosureToCanonical { functor, .. } => {
-            is_self_derived(body, functor.expr(), tainted, tt)
+            is_self_derived_op(body, *functor, tainted, tt)
         }
         _ => false,
     }

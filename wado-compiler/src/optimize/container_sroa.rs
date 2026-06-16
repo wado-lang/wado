@@ -1337,11 +1337,11 @@ impl Rewriter<'_, '_> {
         let ctx = self.ctx;
         // Classify the source shape from a read-only inspection first.
         enum Source {
-            Tuple(Vec<ExprId>),
-            Struct(Vec<(u32, ExprId)>),
+            Tuple(Vec<Operand>),
+            Struct(Vec<(u32, Operand)>),
             IndexRead {
                 other: u32,
-                idx: ExprId,
+                idx: Operand,
                 sig: SigKey,
                 span: Span,
             },
@@ -1354,7 +1354,7 @@ impl Rewriter<'_, '_> {
                 if elements.len() != expected_arity {
                     return None;
                 }
-                Source::Tuple(elements.iter().map(|o| o.expr()).collect())
+                Source::Tuple(elements.clone())
             }
             ExprKind::StructLiteral {
                 struct_type,
@@ -1373,12 +1373,7 @@ impl Rewriter<'_, '_> {
                 if fields.len() != expected_arity {
                     return None;
                 }
-                Source::Struct(
-                    fields
-                        .iter()
-                        .map(|f| (f.field_index, f.value.expr()))
-                        .collect(),
-                )
+                Source::Struct(fields.iter().map(|f| (f.field_index, f.value)).collect())
             }
             ExprKind::MethodCall {
                 receiver,
@@ -1400,13 +1395,16 @@ impl Rewriter<'_, '_> {
                     return None;
                 }
                 let idx_expr = args[0].expr;
-                if !is_duplicable_expr(engine.body, idx_expr.expr()) {
+                if !idx_expr
+                    .as_expr()
+                    .map_or(true, |e| is_duplicable_expr(engine.body, e))
+                {
                     return None;
                 }
                 let sig = sig_key_of(func)?;
                 Source::IndexRead {
                     other,
-                    idx: idx_expr.expr(),
+                    idx: idx_expr,
                     sig,
                     span: engine.body.exprs[expr].span,
                 }
@@ -1414,13 +1412,19 @@ impl Rewriter<'_, '_> {
             _ => return None,
         };
 
+        let src_span = engine.body.exprs[expr].span;
+        // Deep-clone a skeleton element, or re-materialize a promoted constant.
+        let clone_or_materialize = |engine: &mut Engine, op: Operand| match op {
+            Operand::Expr(e) => engine.clone_expr(e),
+            Operand::Value(_) => engine.materialize_operand(op, src_span),
+        };
         match source {
             Source::Tuple(elements) => {
                 // Each element becomes one per-field value, deep-cloned then
                 // rewritten to propagate nested decomposed reads.
                 let mut out = Vec::with_capacity(expected_arity);
                 for el in elements {
-                    let c = engine.clone_expr(el);
+                    let c = clone_or_materialize(engine, el);
                     self.rewrite_expr(engine, c);
                     out.push(c);
                 }
@@ -1438,7 +1442,7 @@ impl Rewriter<'_, '_> {
                     if out[k].is_some() {
                         return None;
                     }
-                    let c = engine.clone_expr(value);
+                    let c = clone_or_materialize(engine, value);
                     self.rewrite_expr(engine, c);
                     out[k] = Some(c);
                 }
@@ -1458,7 +1462,7 @@ impl Rewriter<'_, '_> {
                     let (other_field_name, other_arr_ty) =
                         ctx.field_info_map[&(other, k as u32)].clone();
                     let other_elem_ty = other_elem_types[k];
-                    let idx_clone = engine.clone_expr(idx);
+                    let idx_clone = clone_or_materialize(engine, idx);
                     let call = build_index_reader_call(
                         engine,
                         other_elem_ty,

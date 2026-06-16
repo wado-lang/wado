@@ -249,8 +249,9 @@ fn analyze_stmt(
     if let StmtKind::Let {
         local_index, value, ..
     } = &body.stmts[stmt].kind
+        && let Some(ve) = value.as_expr()
     {
-        register_let_binding(body, *local_index, value.expr(), rebound, refs);
+        register_let_binding(body, *local_index, ve, rebound, refs);
     }
     // Then classify uses in the statement's children (the value, nested blocks).
     let mut kids = Vec::new();
