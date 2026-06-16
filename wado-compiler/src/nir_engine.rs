@@ -22,8 +22,8 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::NirLocal;
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, PatId, PatKind,
-    PatNode, StmtId, StmtKind, StmtNode,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
+    PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -323,8 +323,8 @@ impl<'a> Engine<'a> {
             ExprKind::Null => vg.pool.null(),
             ExprKind::Unit => vg.pool.unit(),
             ExprKind::Binary { left, op, right } => {
-                let lhs = vg.value_of.get(&left).copied()?;
-                let rhs = vg.value_of.get(&right).copied()?;
+                let lhs = vg.value_of.get(&left.expr()).copied()?;
+                let rhs = vg.value_of.get(&right.expr()).copied()?;
                 vg.pool.binary(op, lhs, rhs)
             }
             ExprKind::Unary { op, expr: inner } => {
@@ -332,14 +332,14 @@ impl<'a> Engine<'a> {
                 if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
                     return None;
                 }
-                let operand = vg.value_of.get(&inner).copied()?;
+                let operand = vg.value_of.get(&inner.expr()).copied()?;
                 vg.pool.unary(op, operand)
             }
             ExprKind::Cast {
                 expr: inner,
                 target_type,
             } => {
-                let operand = vg.value_of.get(&inner).copied()?;
+                let operand = vg.value_of.get(&inner.expr()).copied()?;
                 vg.pool.cast(operand, target_type)
             }
             _ => return None,
@@ -819,6 +819,16 @@ impl<'a> Engine<'a> {
         self.alloc_expr(kind, node.type_id, node.span)
     }
 
+    /// Deep-copy an operand: a promoted pure value is shared (same pool); an
+    /// effectful subtree is cloned through the engine's use-index-maintaining
+    /// `clone_expr`.
+    fn clone_operand(&mut self, op: Operand) -> Operand {
+        match op {
+            Operand::Value(v) => Operand::Value(v),
+            Operand::Expr(e) => Operand::Expr(self.clone_expr(e)),
+        }
+    }
+
     /// Deep-copy the block subtree rooted at `id` into fresh arena nodes,
     /// returning the new root. Recurses through every nested stmt / expr / pat
     /// via the engine's `alloc_*` and `clone_*` paths, so the new subtree is
@@ -852,23 +862,23 @@ impl<'a> Engine<'a> {
             } => ExprKind::GlobalVarSet {
                 module_source,
                 name,
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
             },
             ExprKind::Binary { left, op, right } => ExprKind::Binary {
-                left: self.clone_expr(left),
+                left: self.clone_operand(left),
                 op,
-                right: self.clone_expr(right),
+                right: self.clone_operand(right),
             },
             ExprKind::Unary { op, expr } => ExprKind::Unary {
                 op,
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
             },
             ExprKind::Assign { target, value } => ExprKind::Assign {
                 target: self.clone_expr(target),
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
             },
             ExprKind::Cast { expr, target_type } => ExprKind::Cast {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 target_type,
             },
             ExprKind::Call {
@@ -881,14 +891,14 @@ impl<'a> Engine<'a> {
                 args: args
                     .into_iter()
                     .map(|a| crate::nir_arena::ArenaCallArg {
-                        expr: self.clone_expr(a.expr),
+                        expr: self.clone_operand(a.expr),
                         is_mut: a.is_mut,
                     })
                     .collect(),
             },
             ExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
                 local_name,
-                args: args.into_iter().map(|a| self.clone_expr(a)).collect(),
+                args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
             },
             ExprKind::MethodCall {
                 receiver,
@@ -896,13 +906,13 @@ impl<'a> Engine<'a> {
                 type_args,
                 args,
             } => ExprKind::MethodCall {
-                receiver: self.clone_expr(receiver),
+                receiver: self.clone_operand(receiver),
                 func,
                 type_args,
                 args: args
                     .into_iter()
                     .map(|a| crate::nir_arena::ArenaCallArg {
-                        expr: self.clone_expr(a.expr),
+                        expr: self.clone_operand(a.expr),
                         is_mut: a.is_mut,
                     })
                     .collect(),
@@ -912,13 +922,13 @@ impl<'a> Engine<'a> {
                 field_index,
                 field_name,
             } => ExprKind::FieldAccess {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 field_index,
                 field_name,
             },
             ExprKind::Index { expr, index } => ExprKind::Index {
-                expr: self.clone_expr(expr),
-                index: self.clone_expr(index),
+                expr: self.clone_operand(expr),
+                index: self.clone_operand(index),
             },
             ExprKind::Block(b) => ExprKind::Block(self.clone_block(b)),
             ExprKind::If {
@@ -926,18 +936,18 @@ impl<'a> Engine<'a> {
                 then_branch,
                 else_branch,
             } => ExprKind::If {
-                condition: self.clone_expr(condition),
+                condition: self.clone_operand(condition),
                 then_branch: self.clone_block(then_branch),
                 else_branch: else_branch.map(|b| self.clone_block(b)),
             },
             ExprKind::Match { expr, arms } => ExprKind::Match {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 arms: arms
                     .into_iter()
                     .map(|a| ArmData {
                         pattern: self.clone_pat(a.pattern),
-                        guard: a.guard.map(|g| self.clone_expr(g)),
-                        body: self.clone_expr(a.body),
+                        guard: a.guard.map(|g| self.clone_operand(g)),
+                        body: self.clone_operand(a.body),
                         span: a.span,
                     })
                     .collect(),
@@ -953,20 +963,20 @@ impl<'a> Engine<'a> {
                     .into_iter()
                     .map(|f| crate::nir_arena::ArenaStructField {
                         name: f.name,
-                        value: self.clone_expr(f.value),
+                        value: self.clone_operand(f.value),
                         field_index: f.field_index,
                     })
                     .collect(),
             },
             ExprKind::TupleLiteral { elements } => ExprKind::TupleLiteral {
-                elements: elements.into_iter().map(|e| self.clone_expr(e)).collect(),
+                elements: elements.into_iter().map(|e| self.clone_operand(e)).collect(),
             },
             ExprKind::ArrayLiteral { elements } => ExprKind::ArrayLiteral {
-                elements: elements.into_iter().map(|e| self.clone_expr(e)).collect(),
+                elements: elements.into_iter().map(|e| self.clone_operand(e)).collect(),
             },
             ExprKind::IndirectCall { callee, args } => ExprKind::IndirectCall {
-                callee: self.clone_expr(callee),
-                args: args.into_iter().map(|a| self.clone_expr(a)).collect(),
+                callee: self.clone_operand(callee),
+                args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
             },
             ExprKind::ClosureToCanonical {
                 functor,
@@ -974,7 +984,7 @@ impl<'a> Engine<'a> {
                 target_fn_type,
                 closure_module,
             } => ExprKind::ClosureToCanonical {
-                functor: self.clone_expr(functor),
+                functor: self.clone_operand(functor),
                 functor_id,
                 target_fn_type,
                 closure_module,
@@ -988,7 +998,7 @@ impl<'a> Engine<'a> {
                 variant_type,
                 case_index,
                 case_name,
-                payload: payload.map(|p| self.clone_expr(p)),
+                payload: payload.map(|p| self.clone_operand(p)),
             },
             ExprKind::LabeledBlock {
                 label,
@@ -1000,14 +1010,14 @@ impl<'a> Engine<'a> {
                 result_type,
             },
             ExprKind::VariantTag { expr } => ExprKind::VariantTag {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
             },
             ExprKind::VariantTest {
                 expr,
                 case_index,
                 case_name,
             } => ExprKind::VariantTest {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 case_index,
                 case_name,
             },
@@ -1016,7 +1026,7 @@ impl<'a> Engine<'a> {
                 case_index,
                 payload_type,
             } => ExprKind::VariantPayload {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 case_index,
                 payload_type,
             },
@@ -1026,7 +1036,7 @@ impl<'a> Engine<'a> {
                 arms,
                 default,
             } => ExprKind::Switch {
-                scrutinee: self.clone_expr(scrutinee),
+                scrutinee: self.clone_operand(scrutinee),
                 min_value,
                 arms: arms.into_iter().map(|a| self.clone_block(a)).collect(),
                 default: self.clone_block(default),
@@ -1052,19 +1062,19 @@ impl<'a> Engine<'a> {
                 is_mut,
                 is_reactive,
                 type_id,
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
                 skip_value_copy,
             },
             StmtKind::Expr(e) => StmtKind::Expr(self.clone_expr(e)),
             StmtKind::Return { value } => StmtKind::Return {
-                value: value.map(|e| self.clone_expr(e)),
+                value: value.map(|e| self.clone_operand(e)),
             },
             StmtKind::If {
                 condition,
                 then_block,
                 else_block,
             } => StmtKind::If {
-                condition: self.clone_expr(condition),
+                condition: self.clone_operand(condition),
                 then_block: self.clone_block(then_block),
                 else_block: else_block.map(|b| self.clone_block(b)),
             },
@@ -1073,7 +1083,7 @@ impl<'a> Engine<'a> {
             },
             StmtKind::Break { label, value } => StmtKind::Break {
                 label,
-                value: value.map(|e| self.clone_expr(e)),
+                value: value.map(|e| self.clone_operand(e)),
             },
             StmtKind::Continue => StmtKind::Continue,
             StmtKind::LabeledBlock { label, block } => StmtKind::LabeledBlock {
@@ -1087,7 +1097,7 @@ impl<'a> Engine<'a> {
             } => StmtKind::LetDestructure {
                 pattern: self.clone_pat(pattern),
                 is_mut,
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
             },
         }
     }
@@ -1126,7 +1136,7 @@ impl<'a> Engine<'a> {
                 has_rest,
             },
             PatKind::ConstantValue { expr } => PatKind::ConstantValue {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
             },
             // Leaves carry no id children.
             leaf => leaf,
