@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781612963278,
+  "lastUpdate": 1781653796789,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33585,6 +33585,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/26cc993318ba0e6666eadba00a8cbf060ebaa3d6"
         },
         "date": 1781612962894,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 396125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b44a8bbc619d6f19769e597c72632638085a04f",
+          "message": "Merge pull request #1391 from wado-lang/claude/package-gale-css3-profiling-lfyt5r\n\nperf(elaborator): index-driven method &amp; trait lookup",
+          "timestamp": "2026-06-17T08:39:59+09:00",
+          "tree_id": "57c64514b97edb51afe80cde1bcbb555a8b9775d",
+          "url": "https://github.com/wado-lang/wado/commit/1b44a8bbc619d6f19769e597c72632638085a04f"
+        },
+        "date": 1781653796207,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
