@@ -183,7 +183,7 @@ pub enum ValueKind {
 /// Hash-consed pure-value pool. One instance per function. Also owns the
 /// `OpaqueId` counter, so [`ValuePool::fresh_opaque`] returns a
 /// pool-unique identity each call.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ValuePool {
     /// Allocated values, in `ValueId` order. `values[id.index() as usize]`
     /// is the kind for `id`, with its children canonicalized to their class

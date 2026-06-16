@@ -17,8 +17,25 @@ use cranelift_entity::{PrimaryMap, entity_impl};
 
 use crate::hashmap::IndexSet;
 use crate::nir::{FunctionRef, NirBinaryOp, NirLocal, NirUnaryOp};
+use crate::nir_value_graph::{ValueId, ValuePool};
 use crate::tir::TypeId;
 use crate::token::Span;
+
+/// An operand position in the skeleton — an expression's value, after operand
+/// promotion (WEP: The Live ValueGraph). It is either a pure value living in the
+/// function's [`ValuePool`] (literals, `Binary`, pure `Unary`, `Cast`, and the
+/// `Local` / `FieldAccess` reads the graph resolves to a value), or an effectful
+/// / control subtree kept in the skeleton (`Call`, `MethodCall`, allocation
+/// literals, `If` / `Match` / `Block` value positions). Pure values no longer
+/// occupy `ExprId` slots; the slot holds their `ValueId` directly, so the
+/// `value_of: ExprId → ValueId` side-table retires.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Operand {
+    /// A pure value in the function's [`ValuePool`].
+    Value(ValueId),
+    /// An effectful or control subtree kept in the skeleton.
+    Expr(ExprId),
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ExprId(u32);
@@ -338,6 +355,13 @@ pub struct Body {
     pub locals: Vec<NirLocal>,
     pub address_taken_locals: IndexSet<u32>,
     pub stores_aliased_locals: IndexSet<u32>,
+    /// The function's pure-value graph — the source of truth for every
+    /// [`Operand::Value`] in the skeleton (WEP: The Live ValueGraph). Built once
+    /// by `lower::translate` and maintained in place by the optimizer's edits, it
+    /// is never re-derived from the skeleton; the per-pass rebuild and the
+    /// `value_of` side-table retire. Empty on a body built before the operand-
+    /// promotion migration populates it.
+    pub values: ValuePool,
 }
 
 impl Body {
@@ -355,6 +379,7 @@ impl Body {
             locals: Vec::new(),
             address_taken_locals: IndexSet::default(),
             stores_aliased_locals: IndexSet::default(),
+            values: ValuePool::new(),
         }
     }
 
@@ -372,6 +397,7 @@ impl Body {
             locals: Vec::new(),
             address_taken_locals: IndexSet::default(),
             stores_aliased_locals: IndexSet::default(),
+            values: self.values.clone(),
         }
     }
 
