@@ -1187,7 +1187,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         && !self.type_has_infer_hole(receiver_type)
                         && args.iter().all(|a| !self.type_has_infer_hole(a.type_id));
                     if can_defer {
-                        let slots: Vec<usize> = method_type_params
+                        // (slot, param name, trait-bound names) per unresolved
+                        // parameter; the bounds ride the hole so the solution
+                        // can be re-verified once it is known.
+                        let slots: Vec<(usize, String, Vec<String>)> = method_type_params
                             .iter()
                             .zip(inferred.iter())
                             .enumerate()
@@ -1202,10 +1205,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     )
                                     && !scope_params.contains(&tid)
                             })
-                            .map(|(i, _)| i)
+                            .map(|(i, (param, _))| {
+                                let bound_names: Vec<String> = param
+                                    .bounds
+                                    .iter()
+                                    .filter(|b| b.fn_signature.is_none())
+                                    .map(|b| b.name.clone())
+                                    .collect();
+                                (i, param.name.clone(), bound_names)
+                            })
                             .collect();
-                        for i in slots {
-                            inferred[i] = self.mint_infer_hole(span, message.clone());
+                        for (i, param_name, bound_names) in slots {
+                            inferred[i] = self.mint_infer_hole(
+                                span,
+                                message.clone(),
+                                param_name,
+                                bound_names,
+                            );
                         }
                         return inferred;
                     }
@@ -1281,6 +1297,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Returning just the names (rather than cloning the whole
     /// `ast::Function`) keeps this cheap, since the names are all the
     /// solver needs to materialise the method-level `TypeParam` ids.
+    /// Enforce an instance method's type-parameter trait bounds, looking up
+    /// the method's generic params and delegating to the shared
+    /// [`Self::enforce_type_arg_bounds`] (the same rule the free-function and
+    /// static-method paths use, so the three cannot drift).
+    pub(super) fn check_method_type_arg_bounds(
+        &mut self,
+        struct_name: &str,
+        struct_module: &ModuleSource,
+        method_name: &str,
+        method_type_args: &[TypeId],
+        span: Span,
+    ) {
+        let Some(params) =
+            self.find_method_type_param_names(struct_name, Some(struct_module), method_name)
+        else {
+            return;
+        };
+        self.enforce_type_arg_bounds(&params, method_type_args, span);
+    }
+
     fn find_method_type_param_names(
         &self,
         struct_name: &str,

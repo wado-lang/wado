@@ -41,6 +41,13 @@ pub(crate) struct InferHoleTable {
     solutions: IndexMap<TypeId, Option<TypeId>>,
     /// Hole `TypeId` → diagnostic raised if it is never solved.
     diags: IndexMap<TypeId, (Span, String)>,
+    /// Hole `TypeId` → the originating type parameter's `(name, trait-bound
+    /// names, span)`. Once the hole is solved to a concrete type, the solution
+    /// must satisfy those bounds — checked in [`Self::finalize_infer_holes`],
+    /// since the bound check at the call site only saw the (unconstrained)
+    /// hole. Without this a `get<T: Producer>()` solved to a non-`Producer`
+    /// type would reach codegen and trap.
+    bounds: IndexMap<TypeId, (String, Vec<String>, Span)>,
     /// Holes that reached a recorded *mangled name* (e.g. a method call on a
     /// still-holey receiver). A name is a string a later `TypeId` sweep cannot
     /// rewrite, so a tainted hole must resolve to a clean "cannot infer" error
@@ -59,7 +66,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Mint a fresh inference hole, remembering the diagnostic to raise if it
     /// is never solved (mirrors the immediate "cannot infer" error so the
     /// user-facing message is unchanged, only deferred).
-    pub(super) fn mint_infer_hole(&mut self, span: Span, message: String) -> TypeId {
+    pub(super) fn mint_infer_hole(
+        &mut self,
+        span: Span,
+        message: String,
+        param_name: String,
+        bound_names: Vec<String>,
+    ) -> TypeId {
         let index = HOLE_INDEX_BASE + self.infer_holes.next;
         self.infer_holes.next += 1;
         let name = format!("?{index}");
@@ -70,6 +83,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .make_type_param(name, index);
         self.infer_holes.solutions.insert(hole, None);
         self.infer_holes.diags.insert(hole, (span, message));
+        if !bound_names.is_empty() {
+            self.infer_holes
+                .bounds
+                .insert(hole, (param_name, bound_names, span));
+        }
         hole
     }
 
@@ -196,9 +214,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .error(TypeError::CannotInferType { message, span });
             }
         }
+        self.verify_solved_hole_bounds();
         let subst = self.solved_hole_subst(true);
         self.sweep_recorded_facts(&subst);
         self.infer_holes = InferHoleTable::default();
+    }
+
+    /// For each solved (non-tainted) hole that came from a bounded type
+    /// parameter, verify the solution satisfies the bound — the call-site
+    /// check only saw the unconstrained hole. On success register the
+    /// associated types so the monomorphizer can project them; on failure
+    /// raise a clean trait-bound error (instead of trapping a later phase).
+    fn verify_solved_hole_bounds(&mut self) {
+        // Collect (solution, param_name, trait, span) for solved holes first so
+        // the immutable `type_implements_trait` borrow is released before the
+        // mutable register / diagnostic calls.
+        let checks: Vec<(TypeId, String, String, Span)> = self
+            .infer_holes
+            .bounds
+            .iter()
+            .filter_map(|(hole, (param_name, trait_names, span))| {
+                if self.infer_holes.tainted.contains(hole) {
+                    return None;
+                }
+                let solution = (*self.infer_holes.solutions.get(hole)?)?;
+                Some(
+                    trait_names
+                        .iter()
+                        .map(move |t| (solution, param_name.clone(), t.clone(), *span)),
+                )
+            })
+            .flatten()
+            .collect();
+
+        for (solution, param_name, trait_name, span) in checks {
+            // Same enforcement primitive the call-site type-arg loops use, so
+            // the deferred re-check cannot drift from the eager check.
+            self.enforce_single_bound(solution, &trait_name, &param_name, span);
+        }
     }
 
     /// Substitute holes through every recorded fact map that can carry a

@@ -1073,39 +1073,78 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &[TypeId],
         span: Span,
     ) {
-        // Look up function's type params from AST
         let type_params = self.lookup_function_type_params(callee);
-        for (i, param) in type_params.iter().enumerate() {
-            if let Some(&type_arg) = type_args.get(i) {
-                for bound in &param.bounds {
-                    // Skip `fn(...)` / `fn mut(...)` closure-type bounds: they
-                    // are eagerly realised to the bound's function type at
-                    // `register_generic_params`, so the parameter is no longer
-                    // a real generic that needs `type_implements_trait` to
-                    // satisfy a synthetic `Fn` trait.
-                    if bound.fn_signature.is_some() {
-                        continue;
-                    }
-                    if self.type_implements_trait(&self.annotate_ctx, type_arg, &bound.name) {
-                        // Register associated type resolutions so the monomorphizer can
-                        // substitute e.g. I::Iter → ListIter<u8> when I = List<u8>.
-                        self.register_assoc_types_for_concrete_type_and_trait(
-                            type_arg,
-                            &bound.name.clone(),
-                        );
-                    } else {
-                        let type_name = self.tysys.type_id_to_string(type_arg);
-                        let reason = self.trait_unimpl_reason_chain(type_arg, &bound.name);
-                        let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
-                            type_name,
-                            trait_name: bound.name.clone(),
-                            param_name: param.name.clone(),
-                            reason,
-                            span,
-                        });
-                    }
-                }
+        self.enforce_type_arg_bounds(&type_params, type_args, span);
+    }
+
+    /// The single enforcement of trait bounds on a generic decl's type
+    /// arguments, shared by every generic-call kind (free function, static
+    /// method, instance method) so the rule cannot drift between them. For
+    /// each `(param, arg)` pair: a satisfied bound registers the associated
+    /// types so the monomorphizer can project them; an unsatisfied one raises
+    /// a clean `TraitBoundNotSatisfied`.
+    ///
+    /// Only fully concrete arguments are enforced here. A type argument that is
+    /// still a type parameter is *forwarded* from the caller's own generics and
+    /// is verified when that caller is monomorphized (where it becomes
+    /// concrete); enforcing it here would consult the current scope's bounds,
+    /// which is fragile and call-kind-dependent — the exact inconsistency that
+    /// let the three paths drift. Skips:
+    /// - `fn(...)` / `fn mut(...)` closure-type bounds (realised eagerly to the
+    ///   bound's function type at `register_generic_params`, so the parameter
+    ///   is no longer a real generic needing a `Fn`-trait check);
+    /// - non-concrete args — inference holes (re-checked in
+    ///   [`Self::finalize_infer_holes`] once solved) and forwarded type
+    ///   parameters (verified at monomorphization).
+    pub(super) fn enforce_type_arg_bounds(
+        &mut self,
+        params: &[ast::GenericParam],
+        type_args: &[TypeId],
+        span: Span,
+    ) {
+        for (i, param) in params.iter().enumerate() {
+            let Some(&type_arg) = type_args.get(i) else {
+                continue;
+            };
+            if self.tysys.type_table.borrow().contains_type_param(type_arg) {
+                // Covers inference holes too (they are reserved-index type
+                // params); holes are re-checked in `finalize_infer_holes`.
+                continue;
             }
+            for bound in &param.bounds {
+                if bound.fn_signature.is_some() {
+                    continue;
+                }
+                self.enforce_single_bound(type_arg, &bound.name, &param.name, span);
+            }
+        }
+    }
+
+    /// Check one concrete type argument against one trait bound — the single
+    /// primitive every bound-enforcement path funnels through (the type-arg
+    /// loops above, and the deferred-hole re-check in
+    /// [`Self::finalize_infer_holes`]). On success register the associated
+    /// types so the monomorphizer can project them; on failure raise a clean
+    /// `TraitBoundNotSatisfied`.
+    pub(super) fn enforce_single_bound(
+        &mut self,
+        type_arg: TypeId,
+        trait_name: &str,
+        param_name: &str,
+        span: Span,
+    ) {
+        if self.type_implements_trait(&self.annotate_ctx, type_arg, trait_name) {
+            self.register_assoc_types_for_concrete_type_and_trait(type_arg, trait_name);
+        } else {
+            let type_name = self.tysys.type_id_to_string(type_arg);
+            let reason = self.trait_unimpl_reason_chain(type_arg, trait_name);
+            let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
+                type_name,
+                trait_name: trait_name.to_string(),
+                param_name: param_name.to_string(),
+                reason,
+                span,
+            });
         }
     }
 

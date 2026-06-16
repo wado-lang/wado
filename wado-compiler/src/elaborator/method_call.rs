@@ -655,6 +655,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if !method_type_args.is_empty() {
             subst_ctx = subst_ctx.with_method_args(&method_type_args, impl_offset);
+            // Enforce the method's type-parameter trait bounds, mirroring the
+            // free-function path (`check_function_type_arg_bounds`). Without
+            // this an explicit/inferred concrete arg that violates a bound
+            // (e.g. `m.get::<String>()` where `String: Producer` does not hold)
+            // reaches WIR build and traps. Deferred (inference-hole) args are
+            // skipped here and re-checked once solved in `finalize_infer_holes`.
+            self.check_method_type_arg_bounds(
+                &struct_name,
+                &struct_module,
+                method_name,
+                &method_type_args,
+                span,
+            );
         }
 
         // Apply unified substitution

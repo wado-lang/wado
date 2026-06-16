@@ -464,41 +464,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&method_type_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
-                // Check trait bounds and register assoc type resolutions for inferred type args
+                // Check trait bounds and register assoc type resolutions for the
+                // static method's type args via the shared enforcement (same
+                // rule as the free-function / instance-method paths).
                 if !method_type_args.is_empty() {
                     let mtype_params = self.lookup_static_method_type_params(prefix, suffix);
-                    for (i, param) in mtype_params.iter().enumerate() {
-                        if let Some(&type_arg) = method_type_args.get(i) {
-                            for bound in &param.bounds {
-                                // Skip `fn(...)` / `fn mut(...)` bounds:
-                                // realised eagerly, not real traits.
-                                if bound.fn_signature.is_some() {
-                                    continue;
-                                }
-                                if self.type_implements_trait(
-                                    &self.annotate_ctx,
-                                    type_arg,
-                                    &bound.name,
-                                ) {
-                                    self.register_assoc_types_for_concrete_type_and_trait(
-                                        type_arg,
-                                        &bound.name.clone(),
-                                    );
-                                } else {
-                                    let type_name = self.tysys.type_id_to_string(type_arg);
-                                    let reason =
-                                        self.trait_unimpl_reason_chain(type_arg, &bound.name);
-                                    let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
-                                        type_name,
-                                        trait_name: bound.name.clone(),
-                                        param_name: param.name.clone(),
-                                        reason,
-                                        span: call.span,
-                                    });
-                                }
-                            }
-                        }
-                    }
+                    self.enforce_type_arg_bounds(&mtype_params, &method_type_args, call.span);
                 }
                 // Handle From conversions with no explicit impl: reflexive and newtype.
                 if suffix == "from" && args.len() == 1 {

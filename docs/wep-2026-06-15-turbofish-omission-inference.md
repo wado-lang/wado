@@ -102,6 +102,22 @@ The pieces:
    deferred) and substitutes all holes (solved → concrete, otherwise → `error`)
    through every recorded fact map that can carry a `TypeId`.
 
+### Trait-bound enforcement (one rule, no drift)
+
+A deferred parameter's bound is unknown until the hole is solved, so the
+solution must be re-verified — `get<T: Producer>()` solved to a non-`Producer`
+type would otherwise reach codegen and trap. Adding that check exposed a
+pre-existing drift: the trait-bound + associated-type-registration loop was
+duplicated across the free-function, static-method, and instance-method call
+paths (and the instance path simply omitted it, so a bad method type arg
+trapped WIR). All four paths — the three call kinds plus the deferred-hole
+re-check — now funnel through one primitive, `enforce_single_bound`
+(`type_implements_trait` → register assoc types, else `TraitBoundNotSatisfied`),
+driven by the shared `enforce_type_arg_bounds`. Enforcement is _concrete-only_
+at the call site: a still-parametric argument is a forwarded generic, verified
+when its owner is monomorphized; a hole is verified at finalize. Routing every
+path through one primitive is what makes the rule unable to diverge again.
+
 Fixtures: `tests/fixtures/infer_type_arg_through_method_chain.wado`,
 `tests/fixtures/infer_type_arg_match_and_binop.wado`.
 
