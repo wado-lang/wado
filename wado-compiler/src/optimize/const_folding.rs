@@ -278,21 +278,21 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
                 .iter()
                 .rev()
                 .find_map(|s| match &body.stmts[*s].kind {
-                    StmtKind::Let { value, .. } => const_seq_len_a(body, *value),
+                    StmtKind::Let { value, .. } => const_seq_len_a(body, value.expr()),
                     StmtKind::Expr(ex) => const_seq_len_a(body, *ex),
                     _ => None,
                 })
         }
         ExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
             if f.name == SeqField::Len.field_name()
-                && let ExprKind::IntLiteral { value, .. } = &body.exprs[f.value].kind
+                && let ExprKind::IntLiteral { value, .. } = &body.exprs[f.value.expr()].kind
             {
                 return i32::try_from(*value).ok();
             }
             None
         }),
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            const_seq_len_a(body, *inner)
+            const_seq_len_a(body, inner.expr())
         }
         _ => None,
     }
@@ -375,7 +375,7 @@ impl SeqLenCollector<'_> {
             let key = (module_source.clone(), name.clone());
             let value = *value;
             if self.immutable.contains(&key)
-                && let Some(n) = const_seq_len_a(body, value)
+                && let Some(n) = const_seq_len_a(body, value.expr())
             {
                 record_seq_len(self.env, key, n);
             }
@@ -410,14 +410,14 @@ fn expr_shape(body: &Body, e: ExprId) -> ExprShape {
             condition,
             then_branch,
             else_branch,
-        } => ExprShape::If(*condition, *then_branch, *else_branch),
-        ExprKind::Match { expr, arms } => ExprShape::Match(*expr, arms.clone()),
+        } => ExprShape::If(condition.expr(), *then_branch, *else_branch),
+        ExprKind::Match { expr, arms } => ExprShape::Match(expr.expr(), arms.clone()),
         ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
-        } => ExprShape::Switch(*scrutinee, arms.clone(), *default),
+        } => ExprShape::Switch(scrutinee.expr(), arms.clone(), *default),
         ExprKind::Block(b) => ExprShape::Block(*b),
         ExprKind::LabeledBlock { block, label, .. } => ExprShape::Labeled(*block, label.clone()),
         _ => ExprShape::None,
@@ -484,7 +484,7 @@ impl ConstFoldVisitor<'_> {
                 let condition = *condition;
                 let then_block = *then_block;
                 let else_block = *else_block;
-                let mut changed = self.visit_expr(engine, condition);
+                let mut changed = self.visit_expr(engine, condition.expr());
                 changed |= self.visit_block(engine, then_block);
                 if let Some(eb) = else_block {
                     changed |= self.visit_block(engine, eb);
@@ -527,9 +527,9 @@ impl ConstFoldVisitor<'_> {
                 let mut changed = self.visit_expr(engine, scrutinee);
                 for arm in &arms {
                     if let Some(g) = arm.guard {
-                        changed |= self.visit_expr(engine, g);
+                        changed |= self.visit_expr(engine, g.expr());
                     }
-                    changed |= self.visit_expr(engine, arm.body);
+                    changed |= self.visit_expr(engine, arm.body.expr());
                 }
                 changed |= self.reduce_local(engine, e);
                 changed
@@ -609,7 +609,7 @@ impl ConstFoldVisitor<'_> {
             ExprKind::Assign { target, value } => (*target, *value),
             _ => unreachable!("visit_assign called on non-Assign"),
         };
-        let mut changed = self.visit_expr(engine, value);
+        let mut changed = self.visit_expr(engine, value.expr());
         let inner_to_walk = match &engine.body.exprs[target].kind {
             ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
                 Some(*inner)
@@ -617,7 +617,7 @@ impl ConstFoldVisitor<'_> {
             _ => None,
         };
         if let Some(inner) = inner_to_walk {
-            changed |= self.visit_expr(engine, inner);
+            changed |= self.visit_expr(engine, inner.expr());
         }
         // A bare `local = …` reassignment drops the local's lattice to
         // unknown. A field / deref / index store needs nothing here — the
@@ -648,7 +648,7 @@ impl ConstFoldVisitor<'_> {
             // conservative up front.
             Lattice::NonConst
         } else {
-            self.interpreter.reduce_to_lattice_a(body, value)
+            self.interpreter.reduce_to_lattice_a(body, value.expr())
         };
         // Drop any prior knowledge keyed by this index (rare — a fresh
         // `let` typically introduces a unique index, but defensive).
@@ -724,7 +724,7 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
                 effects.mut_borrowed.insert(*index);
             }
         }
@@ -732,19 +732,19 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
         ExprKind::Call { args, .. } => {
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr.expr()].kind
                 {
                     effects.mut_borrowed.insert(*index);
                 }
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[receiver.expr()].kind {
                 effects.mut_borrowed.insert(*index);
             }
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr.expr()].kind
                 {
                     effects.mut_borrowed.insert(*index);
                 }

@@ -220,7 +220,7 @@ fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsag
                 ..
             } => {
                 let (inner, field_index) = (*inner, *field_index);
-                if let Some(idx) = extract_local_index(body, inner)
+                if let Some(idx) = extract_local_index(body, inner.expr())
                     && cx.struct_params.contains(&idx)
                 {
                     cx.field_sets.entry(idx).or_default().insert(field_index);
@@ -242,20 +242,20 @@ fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsag
             // so it is left to the generic descent (never marked).
             ExprKind::Call { args, .. } => {
                 for arg in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                    mark_if_param_passed(body, arg, cx);
+                    mark_if_param_passed(body, arg.expr(), cx);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 let receiver = *receiver;
                 let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-                mark_if_param_passed(body, receiver, cx);
+                mark_if_param_passed(body, receiver.expr(), cx);
                 for arg in arg_ids {
                     mark_if_param_passed(body, arg, cx);
                 }
             }
             ExprKind::IndirectCall { args, .. } => {
                 for arg in args.clone() {
-                    mark_if_param_passed(body, arg, cx);
+                    mark_if_param_passed(body, arg.expr(), cx);
                 }
             }
             _ => {}
@@ -280,7 +280,7 @@ fn extract_local_index(body: &Body, e: ExprId) -> Option<u32> {
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
                 Some(*index)
             } else {
                 None
@@ -305,9 +305,9 @@ fn mark_if_param_passed(body: &Body, e: ExprId, cx: &mut ParamUsageCtx) {
             expr: inner,
         } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
                 && cx.struct_params.contains(index)
-                && is_gc_heap_type(body.exprs[inner].type_id, cx.type_table)
+                && is_gc_heap_type(body.exprs[inner.expr()].type_id, cx.type_table)
             {
                 cx.conservative_params.insert(*index);
             }
@@ -609,7 +609,7 @@ fn scalarize_loop(
         let field = push_expr(
             body,
             ExprKind::FieldAccess {
-                expr: base,
+                expr: base.into(),
                 field_index: c.field_index,
                 field_name: c.field_name.clone(),
             },
@@ -624,7 +624,7 @@ fn scalarize_loop(
                 is_mut: true,
                 is_reactive: false,
                 type_id: c.type_id,
-                value: field,
+                value: field.into(),
                 skip_value_copy: true,
             },
             span,
@@ -700,7 +700,7 @@ fn field_access_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token
     push_expr(
         body,
         ExprKind::FieldAccess {
-            expr: base,
+            expr: base.into(),
             field_index: c.field_index,
             field_name: c.field_name.clone(),
         },
@@ -717,7 +717,7 @@ fn make_write_back_stmt(
 ) -> StmtId {
     let target = field_access_expr(body, c, span);
     let value = scalar_local_expr(body, c, span);
-    let assign = push_expr(body, ExprKind::Assign { target, value }, c.type_id, span);
+    let assign = push_expr(body, ExprKind::Assign { target, value.into() }, c.type_id, span);
     push_stmt(body, StmtKind::Expr(assign), span)
 }
 
@@ -725,7 +725,7 @@ fn make_write_back_stmt(
 fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> StmtId {
     let target = scalar_local_expr(body, c, span);
     let value = field_access_expr(body, c, span);
-    let assign = push_expr(body, ExprKind::Assign { target, value }, c.type_id, span);
+    let assign = push_expr(body, ExprKind::Assign { target, value.into() }, c.type_id, span);
     push_stmt(body, StmtKind::Expr(assign), span)
 }
 
@@ -821,15 +821,15 @@ fn visit_stmt_for_alias(
 ) {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            mark_whole_gc_ref_copy_source(body, *value, type_table, out);
-            visit_expr_for_alias(body, *value, false, type_table, out);
+            mark_whole_gc_ref_copy_source(body, value.expr(), type_table, out);
+            visit_expr_for_alias(body, value.expr(), false, type_table, out);
         }
         StmtKind::Expr(expr) => {
             visit_expr_for_alias(body, *expr, false, type_table, out);
         }
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
             if let Some(v) = *value {
-                visit_expr_for_alias(body, v, false, type_table, out);
+                visit_expr_for_alias(body, v.expr(), false, type_table, out);
             }
         }
         StmtKind::If {
@@ -838,7 +838,7 @@ fn visit_stmt_for_alias(
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            visit_expr_for_alias(body, condition, false, type_table, out);
+            visit_expr_for_alias(body, condition.expr(), false, type_table, out);
             visit_block_for_alias(body, then_block, type_table, out);
             if let Some(eb) = else_block {
                 visit_block_for_alias(body, eb, type_table, out);
@@ -867,59 +867,59 @@ fn visit_expr_for_alias(
             // around the call), then stop — the inner `Local` is the place
             // we take the address of, not a value-position read.
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && matches!(&body.exprs[inner].kind, ExprKind::Local { .. })
+                && matches!(&body.exprs[inner.expr()].kind, ExprKind::Local { .. })
             {
                 if !in_call_arg
-                    && is_gc_heap_type(body.exprs[inner].type_id, type_table)
-                    && let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+                    && is_gc_heap_type(body.exprs[inner.expr()].type_id, type_table)
+                    && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
                 {
                     out.insert(*index);
                 }
                 return;
             }
-            visit_expr_for_alias(body, inner, false, type_table, out);
+            visit_expr_for_alias(body, inner.expr(), false, type_table, out);
         }
         ExprKind::Call { args, .. } => {
             for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                visit_expr_for_alias(body, aid, true, type_table, out);
+                visit_expr_for_alias(body, aid.expr(), true, type_table, out);
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
             let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            visit_expr_for_alias(body, receiver, true, type_table, out);
+            visit_expr_for_alias(body, receiver.expr(), true, type_table, out);
             for aid in arg_ids {
                 visit_expr_for_alias(body, aid, true, type_table, out);
             }
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
-                visit_expr_for_alias(body, aid, true, type_table, out);
+                visit_expr_for_alias(body, aid.expr(), true, type_table, out);
             }
         }
         ExprKind::IndirectCall { callee, args, .. } => {
             let callee = *callee;
             let arg_ids = args.clone();
-            visit_expr_for_alias(body, callee, false, type_table, out);
+            visit_expr_for_alias(body, callee.expr(), false, type_table, out);
             for aid in arg_ids {
-                visit_expr_for_alias(body, aid, true, type_table, out);
+                visit_expr_for_alias(body, aid.expr(), true, type_table, out);
             }
         }
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            visit_expr_for_alias(body, left, false, type_table, out);
-            visit_expr_for_alias(body, right, false, type_table, out);
+            visit_expr_for_alias(body, left.expr(), false, type_table, out);
+            visit_expr_for_alias(body, right.expr(), false, type_table, out);
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
-            mark_whole_gc_ref_copy_source(body, value, type_table, out);
+            mark_whole_gc_ref_copy_source(body, value.expr(), type_table, out);
             visit_expr_for_alias(body, target, false, type_table, out);
-            visit_expr_for_alias(body, value, false, type_table, out);
+            visit_expr_for_alias(body, value.expr(), false, type_table, out);
         }
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
-            visit_expr_for_alias(body, expr, false, type_table, out);
-            visit_expr_for_alias(body, index, false, type_table, out);
+            visit_expr_for_alias(body, expr.expr(), false, type_table, out);
+            visit_expr_for_alias(body, index.expr(), false, type_table, out);
         }
         ExprKind::Cast { expr, .. }
         | ExprKind::FieldAccess { expr, .. }
@@ -929,7 +929,7 @@ fn visit_expr_for_alias(
         | ExprKind::GlobalVarSet { value: expr, .. }
         | ExprKind::ClosureToCanonical { functor: expr, .. } => {
             let expr = *expr;
-            visit_expr_for_alias(body, expr, false, type_table, out);
+            visit_expr_for_alias(body, expr.expr(), false, type_table, out);
         }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             let block = *block;
@@ -941,7 +941,7 @@ fn visit_expr_for_alias(
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            visit_expr_for_alias(body, condition, false, type_table, out);
+            visit_expr_for_alias(body, condition.expr(), false, type_table, out);
             visit_block_for_alias(body, then_branch, type_table, out);
             if let Some(eb) = else_branch {
                 visit_block_for_alias(body, eb, type_table, out);
@@ -950,27 +950,27 @@ fn visit_expr_for_alias(
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
             let arms = arms.clone();
-            visit_expr_for_alias(body, expr, false, type_table, out);
+            visit_expr_for_alias(body, expr.expr(), false, type_table, out);
             for arm in &arms {
                 if let Some(g) = arm.guard {
-                    visit_expr_for_alias(body, g, false, type_table, out);
+                    visit_expr_for_alias(body, g.expr(), false, type_table, out);
                 }
-                visit_expr_for_alias(body, arm.body, false, type_table, out);
+                visit_expr_for_alias(body, arm.body.expr(), false, type_table, out);
             }
         }
         ExprKind::StructLiteral { fields, .. } => {
             for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                visit_expr_for_alias(body, fid, false, type_table, out);
+                visit_expr_for_alias(body, fid.expr(), false, type_table, out);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             for eid in elements.clone() {
-                visit_expr_for_alias(body, eid, false, type_table, out);
+                visit_expr_for_alias(body, eid.expr(), false, type_table, out);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = *payload {
-                visit_expr_for_alias(body, p, false, type_table, out);
+                visit_expr_for_alias(body, p.expr(), false, type_table, out);
             }
         }
         ExprKind::Switch {
@@ -982,7 +982,7 @@ fn visit_expr_for_alias(
             let scrutinee = *scrutinee;
             let default = *default;
             let arms = arms.clone();
-            visit_expr_for_alias(body, scrutinee, false, type_table, out);
+            visit_expr_for_alias(body, scrutinee.expr(), false, type_table, out);
             for arm in arms {
                 visit_block_for_alias(body, arm, type_table, out);
             }
@@ -1095,19 +1095,19 @@ fn count_field_accesses_in_stmt(
             // this creates an alias. Any field modifications through the alias
             // won't be tracked by the scalarization, so mark the original as aliased.
             let value = *value;
-            if let ExprKind::Local { index, .. } = &body.exprs[value].kind
-                && is_gc_heap_type(body.exprs[value].type_id, type_table)
+            if let ExprKind::Local { index, .. } = &body.exprs[value.expr()].kind
+                && is_gc_heap_type(body.exprs[value.expr()].type_id, type_table)
             {
                 mark_local_aliased(*index, counts);
             }
-            count_field_accesses_in_expr(body, value, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, value.expr(), counts, false, false, type_table);
         }
         StmtKind::Expr(expr) => {
             count_field_accesses_in_expr(body, *expr, counts, false, false, type_table);
         }
         StmtKind::Return { value } => {
             if let Some(v) = *value {
-                count_field_accesses_in_expr(body, v, counts, false, false, type_table);
+                count_field_accesses_in_expr(body, v.expr(), counts, false, false, type_table);
             }
         }
         StmtKind::If {
@@ -1116,7 +1116,7 @@ fn count_field_accesses_in_stmt(
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            count_field_accesses_in_expr(body, condition, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, condition.expr(), counts, false, false, type_table);
             count_field_accesses_in_block(body, then_block, counts, type_table);
             if let Some(eb) = else_block {
                 count_field_accesses_in_block(body, eb, counts, type_table);
@@ -1134,12 +1134,12 @@ fn count_field_accesses_in_stmt(
         }
         StmtKind::Break { value, .. } => {
             if let Some(v) = *value {
-                count_field_accesses_in_expr(body, v, counts, false, false, type_table);
+                count_field_accesses_in_expr(body, v.expr(), counts, false, false, type_table);
             }
         }
         StmtKind::Continue => {}
         StmtKind::LetDestructure { value, .. } => {
-            count_field_accesses_in_expr(body, *value, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, value.expr(), counts, false, false, type_table);
         }
     }
 }
@@ -1164,14 +1164,14 @@ fn count_field_accesses_in_expr(
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
             count_field_accesses_in_expr(body, target, counts, true, false, type_table);
-            count_field_accesses_in_expr(body, value, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, value.expr(), counts, false, false, type_table);
             // If target is a direct local assignment, mark it fully assigned
             if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
                 mark_local_fully_assigned(*index, counts);
             }
             // If value is a local reference (e.g., `other = pos`), the source is aliased
-            if let ExprKind::Local { index, .. } = &body.exprs[value].kind
-                && is_gc_heap_type(body.exprs[value].type_id, type_table)
+            if let ExprKind::Local { index, .. } = &body.exprs[value.expr()].kind
+                && is_gc_heap_type(body.exprs[value.expr()].type_id, type_table)
             {
                 mark_local_aliased(*index, counts);
             }
@@ -1185,17 +1185,17 @@ fn count_field_accesses_in_expr(
             // The latter occurs for `&mut local.field` which NIR represents as
             // FieldAccess { expr: Unary { MutRef, Local { ... } }, field }.
             let (inner, field_index, field_name) = (*inner, *field_index, field_name.clone());
-            let local_info = match &body.exprs[inner].kind {
+            let local_info = match &body.exprs[inner.expr()].kind {
                 ExprKind::Local { index, name } => {
-                    Some((*index, name.clone(), body.exprs[inner].type_id))
+                    Some((*index, name.clone(), body.exprs[inner.expr()].type_id))
                 }
                 ExprKind::Unary {
                     op: NirUnaryOp::MutRef,
                     expr: ref_inner,
                 } => {
                     let ref_inner = *ref_inner;
-                    if let ExprKind::Local { index, name } = &body.exprs[ref_inner].kind {
-                        Some((*index, name.clone(), body.exprs[ref_inner].type_id))
+                    if let ExprKind::Local { index, name } = &body.exprs[ref_inner.expr()].kind {
+                        Some((*index, name.clone(), body.exprs[ref_inner.expr()].type_id))
                     } else {
                         None
                     }
@@ -1221,13 +1221,13 @@ fn count_field_accesses_in_expr(
                     info.read_count += 1;
                 }
             } else {
-                count_field_accesses_in_expr(body, inner, counts, false, false, type_table);
+                count_field_accesses_in_expr(body, inner.expr(), counts, false, false, type_table);
             }
         }
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            count_field_accesses_in_expr(body, left, counts, false, false, type_table);
-            count_field_accesses_in_expr(body, right, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, left.expr(), counts, false, false, type_table);
+            count_field_accesses_in_expr(body, right.expr(), counts, false, false, type_table);
         }
         ExprKind::Unary { op, expr } => {
             // `&local` / `&mut local` taken outside a direct call-argument
@@ -1248,40 +1248,40 @@ fn count_field_accesses_in_expr(
             // re-read mechanism).
             let (op, inner) = (*op, *expr);
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
             {
-                if !in_call_arg && is_gc_heap_type(body.exprs[inner].type_id, type_table) {
+                if !in_call_arg && is_gc_heap_type(body.exprs[inner.expr()].type_id, type_table) {
                     mark_local_aliased(*index, counts);
                 }
                 return;
             }
-            count_field_accesses_in_expr(body, inner, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, inner.expr(), counts, false, false, type_table);
         }
         ExprKind::Cast { expr, .. } => {
-            count_field_accesses_in_expr(body, *expr, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
         }
         ExprKind::Call { args, .. } => {
             for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                count_field_accesses_in_expr(body, aid, counts, false, true, type_table);
+                count_field_accesses_in_expr(body, aid.expr(), counts, false, true, type_table);
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
             let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            count_field_accesses_in_expr(body, receiver, counts, false, true, type_table);
+            count_field_accesses_in_expr(body, receiver.expr(), counts, false, true, type_table);
             for aid in arg_ids {
                 count_field_accesses_in_expr(body, aid, counts, false, true, type_table);
             }
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
-                count_field_accesses_in_expr(body, aid, counts, false, true, type_table);
+                count_field_accesses_in_expr(body, aid.expr(), counts, false, true, type_table);
             }
         }
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
-            count_field_accesses_in_expr(body, expr, counts, false, false, type_table);
-            count_field_accesses_in_expr(body, index, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
+            count_field_accesses_in_expr(body, index.expr(), counts, false, false, type_table);
         }
         ExprKind::Block(block) => {
             count_field_accesses_in_block(body, *block, counts, type_table);
@@ -1292,7 +1292,7 @@ fn count_field_accesses_in_expr(
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            count_field_accesses_in_expr(body, condition, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, condition.expr(), counts, false, false, type_table);
             count_field_accesses_in_block(body, then_branch, counts, type_table);
             if let Some(eb) = else_branch {
                 count_field_accesses_in_block(body, eb, counts, type_table);
@@ -1300,41 +1300,41 @@ fn count_field_accesses_in_expr(
         }
         ExprKind::StructLiteral { fields, .. } => {
             for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                count_field_accesses_in_expr(body, fid, counts, false, false, type_table);
+                count_field_accesses_in_expr(body, fid.expr(), counts, false, false, type_table);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             for eid in elements.clone() {
-                count_field_accesses_in_expr(body, eid, counts, false, false, type_table);
+                count_field_accesses_in_expr(body, eid.expr(), counts, false, false, type_table);
             }
         }
         ExprKind::IndirectCall { callee, args, .. } => {
             let callee = *callee;
             let arg_ids = args.clone();
-            count_field_accesses_in_expr(body, callee, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, callee.expr(), counts, false, false, type_table);
             for aid in arg_ids {
-                count_field_accesses_in_expr(body, aid, counts, false, true, type_table);
+                count_field_accesses_in_expr(body, aid.expr(), counts, false, true, type_table);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
-            count_field_accesses_in_expr(body, *functor, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, functor.expr(), counts, false, false, type_table);
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = *payload {
-                count_field_accesses_in_expr(body, p, counts, false, false, type_table);
+                count_field_accesses_in_expr(body, p.expr(), counts, false, false, type_table);
             }
         }
         ExprKind::LabeledBlock { block, .. } => {
             count_field_accesses_in_block(body, *block, counts, type_table);
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            count_field_accesses_in_expr(body, *value, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, value.expr(), counts, false, false, type_table);
         }
         ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
-            count_field_accesses_in_expr(body, *expr, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
         }
         ExprKind::VariantPayload { expr, .. } => {
-            count_field_accesses_in_expr(body, *expr, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
         }
         ExprKind::Switch {
             scrutinee,
@@ -1345,7 +1345,7 @@ fn count_field_accesses_in_expr(
             let scrutinee = *scrutinee;
             let default = *default;
             let arms = arms.clone();
-            count_field_accesses_in_expr(body, scrutinee, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, scrutinee.expr(), counts, false, false, type_table);
             for arm in arms {
                 count_field_accesses_in_block(body, arm, counts, type_table);
             }
@@ -1389,12 +1389,12 @@ fn count_field_accesses_in_expr(
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
             let arms = arms.clone();
-            count_field_accesses_in_expr(body, expr, counts, false, false, type_table);
+            count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
             for arm in &arms {
                 if let Some(guard) = arm.guard {
-                    count_field_accesses_in_expr(body, guard, counts, false, false, type_table);
+                    count_field_accesses_in_expr(body, guard.expr(), counts, false, false, type_table);
                 }
-                count_field_accesses_in_expr(body, arm.body, counts, false, false, type_table);
+                count_field_accesses_in_expr(body, arm.body.expr(), counts, false, false, type_table);
             }
         }
     }
@@ -1580,8 +1580,8 @@ fn collect_call_touched_node(
                 expr: base,
                 field_index,
                 ..
-            } = &body.exprs[*inner].kind
-            && let ExprKind::Local { index, .. } = &body.exprs[*base].kind
+            } = &body.exprs[inner.expr()].kind
+            && let ExprKind::Local { index, .. } = &body.exprs[base.expr()].kind
         {
             touched.insert((*index, *field_index));
         }
@@ -1872,7 +1872,7 @@ fn append_sync_preserving_block_value(
             is_mut: false,
             is_reactive: false,
             type_id: body_type,
-            value: value_expr,
+            value: value_expr.into(),
             skip_value_copy: true,
         },
         last_span,
@@ -1948,7 +1948,7 @@ fn walk_stmt(
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            walk_expr(body, condition, states, true, out, ctx);
+            walk_expr(body, condition.expr(), states, true, out, ctx);
             walk_branching_block_if(body, sid, then_block, else_block, states, ctx, span);
             out.push(sid);
         }
@@ -1968,7 +1968,7 @@ fn walk_stmt(
         StmtKind::Return { value } => {
             let value = *value;
             if let Some(v) = value {
-                walk_expr(body, v, states, true, out, ctx);
+                walk_expr(body, v.expr(), states, true, out, ctx);
             }
             // Escape: commit every ScalarOnly candidate to the field
             // before the return. After commit, only the field is
@@ -1988,7 +1988,7 @@ fn walk_stmt(
                 value.is_some() && states.contains(&CanonState::ScalarOnly);
             if needs_post_eval_writeback {
                 let return_value = value.expect("checked Some above");
-                let return_type = body.exprs[return_value].type_id;
+                let return_type = body.exprs[return_value.expr()].type_id;
                 let tmp_idx = ctx.alloc_temp(return_type);
                 let tmp_name = ctx.temp_name(tmp_idx);
                 let let_sid = push_stmt(
@@ -2016,7 +2016,7 @@ fn walk_stmt(
                     span,
                 );
                 body.stmts[sid].kind = StmtKind::Return {
-                    value: Some(local_e),
+                    value: Some(local_e.into()),
                 };
                 out.push(sid);
                 ctx.free_temp(tmp_idx, return_type);
@@ -2028,7 +2028,7 @@ fn walk_stmt(
         StmtKind::Break { value, label } => {
             let (value, label) = (*value, label.clone());
             if let Some(v) = value {
-                walk_expr(body, v, states, true, out, ctx);
+                walk_expr(body, v.expr(), states, true, out, ctx);
             }
             // Unlabeled `break` exits the innermost loop; at the HFS-loop
             // top level (the common case) this leaves the HFS scope, so
@@ -2075,12 +2075,12 @@ fn walk_stmt(
         }
         StmtKind::Let { value, .. } => {
             let value = *value;
-            walk_expr(body, value, states, true, out, ctx);
+            walk_expr(body, value.expr(), states, true, out, ctx);
             out.push(sid);
         }
         StmtKind::LetDestructure { value, .. } => {
             let value = *value;
-            walk_expr(body, value, states, true, out, ctx);
+            walk_expr(body, value.expr(), states, true, out, ctx);
             out.push(sid);
         }
         StmtKind::Expr(expr) => {
@@ -2268,7 +2268,7 @@ fn walk_expr(
         let (target, value) = (*target, *value);
         if let Some((cand_idx, c)) = field_assign_to_candidate(body, target, ctx) {
             // Walk RHS first (state may transition through it).
-            walk_expr(body, value, states, true, out, ctx);
+            walk_expr(body, value.expr(), states, true, out, ctx);
             // Commit the assignment: rewrite target in place and update state.
             body.exprs[target].kind = ExprKind::Local {
                 index: c.new_local_index,
@@ -2280,7 +2280,7 @@ fn walk_expr(
         }
         // Not a scalarized field assign. Fall through to general recursion.
         walk_expr(body, target, states, true, out, ctx);
-        walk_expr(body, value, states, true, out, ctx);
+        walk_expr(body, value.expr(), states, true, out, ctx);
         return;
     }
 
@@ -2327,7 +2327,7 @@ fn field_assign_to_candidate(
         field_index,
         ..
     } = &body.exprs[target].kind
-        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
     {
         for (i, c) in ctx.candidates.iter().enumerate() {
             if c.local_index == *index && c.field_index == *field_index {
@@ -2348,7 +2348,7 @@ fn field_read_to_candidate(
         field_index,
         ..
     } = &body.exprs[e].kind
-        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
     {
         for (i, c) in ctx.candidates.iter().enumerate() {
             if c.local_index == *index && c.field_index == *field_index {
@@ -2410,9 +2410,9 @@ fn recurse_into_call_args(
         match &body.exprs[e].kind {
             ExprKind::Call { args, .. } => (None, None, args.iter().map(|a| a.expr).collect()),
             ExprKind::MethodCall { receiver, args, .. } => {
-                (Some(*receiver), None, args.iter().map(|a| a.expr).collect())
+                (Some(receiver.expr()), None, args.iter().map(|a| a.expr).collect())
             }
-            ExprKind::IndirectCall { callee, args, .. } => (None, Some(*callee), args.clone()),
+            ExprKind::IndirectCall { callee, args, .. } => (None, Some(callee.expr()), args.clone()),
             _ => unreachable!("recurse_into_call_args called on non-call expr"),
         };
     if let Some(callee) = callee {
@@ -2512,9 +2512,9 @@ fn accumulate_call_sync(
             let func = func.clone();
             let receiver = *receiver;
             let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            let immut_ref = is_immut_ref_arg(body, receiver, type_table);
+            let immut_ref = is_immut_ref_arg(body, receiver.expr(), type_table);
             add_sync_fields_for_arg(
-                body, receiver, &func, 0, candidates, type_table, cache, immut_ref, result,
+                body, receiver.expr(), &func, 0, candidates, type_table, cache, immut_ref, result,
             );
             for (arg_position, aid) in arg_ids.into_iter().enumerate() {
                 let immut_ref = is_immut_ref_arg(body, aid, type_table);
@@ -2533,9 +2533,9 @@ fn accumulate_call_sync(
         }
         ExprKind::IndirectCall { args, .. } => {
             for aid in args.clone() {
-                if let Some(local_idx) = extract_gc_local_index(body, aid, type_table) {
+                if let Some(local_idx) = extract_gc_local_index(body, aid.expr(), type_table) {
                     add_all_fields_for_local(local_idx, candidates, &mut result.write_back);
-                    if !is_immut_ref_arg(body, aid, type_table) {
+                    if !is_immut_ref_arg(body, aid.expr(), type_table) {
                         add_all_fields_for_local(local_idx, candidates, &mut result.re_read);
                     }
                 }
@@ -2571,25 +2571,25 @@ fn walk_other_expr_kinds(
     match &body.exprs[e].kind {
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            walk_expr(body, inner, states, true, out, ctx);
+            walk_expr(body, inner.expr(), states, true, out, ctx);
         }
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            walk_expr(body, left, states, true, out, ctx);
-            walk_expr(body, right, states, true, out, ctx);
+            walk_expr(body, left.expr(), states, true, out, ctx);
+            walk_expr(body, right.expr(), states, true, out, ctx);
         }
         ExprKind::Unary { expr: inner, .. } => {
             let inner = *inner;
-            walk_expr(body, inner, states, true, out, ctx);
+            walk_expr(body, inner.expr(), states, true, out, ctx);
         }
         ExprKind::Cast { expr: inner, .. } => {
             let inner = *inner;
-            walk_expr(body, inner, states, true, out, ctx);
+            walk_expr(body, inner.expr(), states, true, out, ctx);
         }
         ExprKind::Index { expr: inner, index } => {
             let (inner, index) = (*inner, *index);
-            walk_expr(body, inner, states, true, out, ctx);
-            walk_expr(body, index, states, true, out, ctx);
+            walk_expr(body, inner.expr(), states, true, out, ctx);
+            walk_expr(body, index.expr(), states, true, out, ctx);
         }
         ExprKind::Block(block) => {
             let block = *block;
@@ -2601,7 +2601,7 @@ fn walk_other_expr_kinds(
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            walk_expr(body, condition, states, true, out, ctx);
+            walk_expr(body, condition.expr(), states, true, out, ctx);
             walk_expr_branches_if(
                 body,
                 e,
@@ -2615,21 +2615,21 @@ fn walk_other_expr_kinds(
         }
         ExprKind::StructLiteral { fields, .. } => {
             for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                walk_expr(body, fid, states, true, out, ctx);
+                walk_expr(body, fid.expr(), states, true, out, ctx);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             for eid in elements.clone() {
-                walk_expr(body, eid, states, true, out, ctx);
+                walk_expr(body, eid.expr(), states, true, out, ctx);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
             let functor = *functor;
-            walk_expr(body, functor, states, true, out, ctx);
+            walk_expr(body, functor.expr(), states, true, out, ctx);
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = *payload {
-                walk_expr(body, p, states, true, out, ctx);
+                walk_expr(body, p.expr(), states, true, out, ctx);
             }
         }
         ExprKind::LabeledBlock { label, block, .. } => {
@@ -2638,15 +2638,15 @@ fn walk_other_expr_kinds(
         }
         ExprKind::GlobalVarSet { value, .. } => {
             let value = *value;
-            walk_expr(body, value, states, true, out, ctx);
+            walk_expr(body, value.expr(), states, true, out, ctx);
         }
         ExprKind::VariantTag { expr: inner } | ExprKind::VariantTest { expr: inner, .. } => {
             let inner = *inner;
-            walk_expr(body, inner, states, true, out, ctx);
+            walk_expr(body, inner.expr(), states, true, out, ctx);
         }
         ExprKind::VariantPayload { expr: inner, .. } => {
             let inner = *inner;
-            walk_expr(body, inner, states, true, out, ctx);
+            walk_expr(body, inner.expr(), states, true, out, ctx);
         }
         ExprKind::Switch {
             scrutinee,
@@ -2657,7 +2657,7 @@ fn walk_other_expr_kinds(
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            walk_expr(body, scrutinee, states, true, out, ctx);
+            walk_expr(body, scrutinee.expr(), states, true, out, ctx);
             walk_expr_branches_switch(body, &arms, default, states, ctx, span);
         }
         ExprKind::Match {
@@ -2666,12 +2666,12 @@ fn walk_other_expr_kinds(
         } => {
             let scrutinee = *scrutinee;
             let arms = arms.clone();
-            walk_expr(body, scrutinee, states, true, out, ctx);
+            walk_expr(body, scrutinee.expr(), states, true, out, ctx);
             walk_expr_branches_match(body, &arms, states, result_used, ctx, span);
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
-                walk_expr(body, aid, states, true, out, ctx);
+                walk_expr(body, aid.expr(), states, true, out, ctx);
             }
         }
         ExprKind::IntLiteral { .. }
@@ -2856,9 +2856,9 @@ fn walk_expr_branches_match(
         let has_guard = arm.guard.is_some();
         if let Some(guard) = arm.guard {
             let mut guard_pre: Vec<StmtId> = Vec::new();
-            walk_expr(body, guard, &mut s, true, &mut guard_pre, ctx);
+            walk_expr(body, guard.expr(), &mut s, true, &mut guard_pre, ctx);
             if !guard_pre.is_empty() {
-                wrap_expr_with_prefix(body, guard, guard_pre);
+                wrap_expr_with_prefix(body, guard.expr(), guard_pre);
             }
         }
         // After the guard ran (whether matched or not), state for
@@ -2874,9 +2874,9 @@ fn walk_expr_branches_match(
         // the body's value-producing expression; wrap the body in a
         // Block to hold them.
         let mut body_pre: Vec<StmtId> = Vec::new();
-        walk_expr(body, arm.body, &mut s, result_used, &mut body_pre, ctx);
+        walk_expr(body, arm.body.expr(), &mut s, result_used, &mut body_pre, ctx);
         if !body_pre.is_empty() {
-            wrap_expr_with_prefix(body, arm.body, body_pre);
+            wrap_expr_with_prefix(body, arm.body.expr(), body_pre);
         }
         arm_states.push(s);
     }
@@ -2884,7 +2884,7 @@ fn walk_expr_branches_match(
     let target = pick_join_targets(&arm_refs);
     for (arm, exit) in arms.iter().zip(arm_states.iter()) {
         // Emit convergence sync at the end of the arm body.
-        emit_convergence_at_arm_body_end(body, arm.body, exit, &target, ctx, span);
+        emit_convergence_at_arm_body_end(body, arm.body.expr(), exit, &target, ctx, span);
     }
     *states = target;
 }
@@ -2971,7 +2971,7 @@ fn emit_convergence_at_arm_body_end(
             is_mut: false,
             is_reactive: false,
             type_id: body_type,
-            value: original,
+            value: original.into(),
             // The temp captures a fresh r-value; no deep value-copy is
             // appropriate (we just bind whatever the arm body produced).
             skip_value_copy: true,
@@ -3109,8 +3109,8 @@ fn extract_gc_local_index(body: &Body, e: ExprId, type_table: &TypeTable) -> Opt
             expr: inner,
         } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
-                if is_gc_heap_type(body.exprs[inner].type_id, type_table) {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
+                if is_gc_heap_type(body.exprs[inner.expr()].type_id, type_table) {
                     Some(*index)
                 } else {
                     None

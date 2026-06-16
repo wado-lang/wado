@@ -751,7 +751,7 @@ fn scan_inspect_signatures_block(
         {
             // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the
             // boxing pass); peel both to read the function's arity + return type.
-            let recv_type = type_table.peel_refs_and_box(body.exprs[*receiver].type_id);
+            let recv_type = type_table.peel_refs_and_box(body.exprs[receiver.expr()].type_id);
             if let ResolvedType::Function {
                 params,
                 return_type,
@@ -1298,7 +1298,7 @@ impl DceWalker<'_> {
                 match &body.exprs[e].kind {
                     ExprKind::Call { func, .. } => self.record_call(func),
                     ExprKind::MethodCall { receiver, func, .. } => {
-                        self.record_method_call(body.exprs[*receiver].type_id, func);
+                        self.record_method_call(body.exprs[receiver.expr()].type_id, func);
                     }
                     ExprKind::CmRawCall { local_name, .. } => self.record_cm_raw_call(local_name),
                     ExprKind::ClosureToCanonical {
@@ -1894,9 +1894,9 @@ fn remove_dead_global_sets_block(
             // Dead global: keep the value expression only if it has side
             // effects (e.g. panic() / unreachable — detected via never type).
             // The discarded GlobalVarSet owned `value`, so reuse its id here.
-            if expr_has_side_effects(body, value) {
+            if expr_has_side_effects(body, value.expr()) {
                 let new_s = body.stmts.push(StmtNode {
-                    kind: StmtKind::Expr(value),
+                    kind: StmtKind::Expr(value.expr()),
                     span,
                 });
                 new_stmts.push(new_s);
@@ -1925,15 +1925,15 @@ fn expr_has_side_effects(body: &Body, e: ExprId) -> bool {
             then_branch,
             else_branch,
         } => {
-            expr_has_side_effects(body, *condition)
+            expr_has_side_effects(body, condition.expr())
                 || block_has_side_effects(body, *then_branch)
                 || else_branch.is_some_and(|b| block_has_side_effects(body, b))
         }
         ExprKind::Match { expr, arms } => {
-            expr_has_side_effects(body, *expr)
+            expr_has_side_effects(body, expr.expr())
                 || arms.iter().any(|a| {
-                    a.guard.is_some_and(|g| expr_has_side_effects(body, g))
-                        || expr_has_side_effects(body, a.body)
+                    a.guard.is_some_and(|g| expr_has_side_effects(body, g.expr()))
+                        || expr_has_side_effects(body, a.body.expr())
                 })
         }
         ExprKind::Switch {
@@ -1942,7 +1942,7 @@ fn expr_has_side_effects(body: &Body, e: ExprId) -> bool {
             default,
             ..
         } => {
-            expr_has_side_effects(body, *scrutinee)
+            expr_has_side_effects(body, scrutinee.expr())
                 || arms.iter().any(|a| block_has_side_effects(body, *a))
                 || block_has_side_effects(body, *default)
         }
@@ -1956,22 +1956,22 @@ fn block_has_side_effects(body: &Body, block: BlockId) -> bool {
         .iter()
         .any(|s| match &body.stmts[*s].kind {
             StmtKind::Expr(e) | StmtKind::Let { value: e, .. } => expr_has_side_effects(body, *e),
-            StmtKind::Return { value } => value.is_some_and(|v| expr_has_side_effects(body, v)),
+            StmtKind::Return { value } => value.is_some_and(|v| expr_has_side_effects(body, v.expr())),
             StmtKind::If {
                 condition,
                 then_block,
                 else_block,
             } => {
-                expr_has_side_effects(body, *condition)
+                expr_has_side_effects(body, condition.expr())
                     || block_has_side_effects(body, *then_block)
                     || else_block.is_some_and(|b| block_has_side_effects(body, b))
             }
             StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
                 block_has_side_effects(body, *b)
             }
-            StmtKind::Break { value, .. } => value.is_some_and(|v| expr_has_side_effects(body, v)),
+            StmtKind::Break { value, .. } => value.is_some_and(|v| expr_has_side_effects(body, v.expr())),
             StmtKind::Continue => false,
-            StmtKind::LetDestructure { value, .. } => expr_has_side_effects(body, *value),
+            StmtKind::LetDestructure { value, .. } => expr_has_side_effects(body, value.expr()),
         })
 }
 
@@ -1990,7 +1990,7 @@ fn remove_dead_global_sets_stmt(body: &mut Body, s: StmtId, used: &IndexSet<(Str
         } => W::Blocks(*then_block, *else_block),
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => W::Blocks(*b, None),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => match value {
-            Some(expr) => W::Expr(*expr),
+            Some(expr) => W::Expr(expr.expr()),
             None => W::None,
         },
         StmtKind::Continue | StmtKind::LetDestructure { .. } => W::None,
@@ -2022,8 +2022,8 @@ fn remove_dead_global_sets_expr(body: &mut Body, e: ExprId, used: &IndexSet<(Str
             condition,
             then_branch,
             else_branch,
-        } => W::If(*condition, *then_branch, *else_branch),
-        ExprKind::Match { expr, arms } => W::Match(*expr, arms.iter().map(|a| a.body).collect()),
+        } => W::If(condition.expr(), *then_branch, *else_branch),
+        ExprKind::Match { expr, arms } => W::Match(expr.expr(), arms.iter().map(|a| a.body).collect()),
         ExprKind::Switch { arms, default, .. } => W::Switch(arms.clone(), *default),
         _ => W::None,
     };

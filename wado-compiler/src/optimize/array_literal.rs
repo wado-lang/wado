@@ -254,8 +254,8 @@ impl Collapser<'_> {
         if !self.push_names.contains(&func.name) || args.len() != 1 {
             return None;
         }
-        let path = place_path(body, *receiver, local)?;
-        Some((path, args[0].expr))
+        let path = place_path(body, receiver.expr(), local)?;
+        Some((path, args[0].expr.expr()))
     }
 }
 
@@ -274,7 +274,7 @@ fn temp_binding(body: &Body, stmt: StmtId, allow_impure: bool) -> Option<(u32, E
     match &body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
-        } if allow_impure || is_pure_expr(body, *value) => Some((*local_index, *value)),
+        } if allow_impure || is_pure_expr(body, value.expr()) => Some((*local_index, value.expr())),
         _ => None,
     }
 }
@@ -305,9 +305,9 @@ fn init_local(body: &Body, stmt: StmtId) -> Option<u32> {
 
 fn init_value(body: &Body, stmt: StmtId) -> Option<ExprId> {
     match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. } => Some(*value),
+        StmtKind::Let { value, .. } => Some(value.expr()),
         StmtKind::Expr(e) => match &body.exprs[*e].kind {
-            ExprKind::Assign { value, .. } => Some(*value),
+            ExprKind::Assign { value, .. } => Some(value.expr()),
             _ => None,
         },
         _ => None,
@@ -336,7 +336,7 @@ fn collect_array_targets(
                     _ => None,
                 });
             if let Some(value) = value {
-                collect_array_targets(body, value, path, out);
+                collect_array_targets(body, value.expr(), path, out);
             }
         }
         ExprKind::StructLiteral { fields, .. } => {
@@ -375,10 +375,10 @@ fn match_list_struct(body: &Body, expr: ExprId) -> Option<usize> {
     }
     let repr = fields.iter().find(|f| f.name == REPR_FIELD)?;
     let used = fields.iter().find(|f| f.name == USED_FIELD)?;
-    if !is_zero_int(body, used.value) {
+    if !is_zero_int(body, used.value.expr()) {
         return None;
     }
-    array_new_capacity(body, repr.value)
+    array_new_capacity(body, repr.value.expr())
 }
 
 /// If `expr` is a `builtin::array_new(N)` call with a constant `N`, return N.
@@ -397,7 +397,7 @@ fn array_new_capacity(body: &Body, expr: ExprId) -> Option<usize> {
     if !is_array_new || args.len() != 1 {
         return None;
     }
-    match &body.exprs[args[0].expr].kind {
+    match &body.exprs[args[0].expr.expr()].kind {
         ExprKind::IntLiteral { value, .. } => usize::try_from(*value).ok(),
         _ => None,
     }
@@ -423,7 +423,7 @@ fn place_path(body: &Body, receiver: ExprId, local: u32) -> Option<Vec<u32>> {
                 expr, field_index, ..
             } => {
                 path.push(*field_index);
-                cur = *expr;
+                cur = expr.expr();
             }
             _ => return None,
         }
@@ -435,7 +435,7 @@ fn peel_ref(body: &Body, expr: ExprId) -> ExprId {
         ExprKind::Unary {
             op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
             expr: inner,
-        } => peel_ref(body, *inner),
+        } => peel_ref(body, inner.expr()),
         _ => expr,
     }
 }

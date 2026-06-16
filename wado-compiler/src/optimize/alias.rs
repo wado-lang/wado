@@ -384,14 +384,14 @@ fn collect_mut_escaped_node(
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let Some(r) = projection_root_local(body, *inner) {
+            if let Some(r) = projection_root_local(body, inner.expr()) {
                 out.insert(r);
             }
         }
         ExprKind::Call { args, .. } => {
             for arg in args {
                 if arg.is_mut
-                    && let Some(r) = projection_root_local(body, arg.expr)
+                    && let Some(r) = projection_root_local(body, arg.expr.expr())
                 {
                     out.insert(r);
                 }
@@ -405,14 +405,14 @@ fn collect_mut_escaped_node(
         } => {
             // Unknown callee (builtin / extern not in the project) → assume it
             // may mutate the receiver (`conservative_on_unknown = true`).
-            if method_mutates_receiver(body, *receiver, func, first_param_types, type_table, true)
-                && let Some(r) = projection_root_local(body, *receiver)
+            if method_mutates_receiver(body, receiver.expr(), func, first_param_types, type_table, true)
+                && let Some(r) = projection_root_local(body, receiver.expr())
             {
                 out.insert(r);
             }
             for arg in args {
                 if arg.is_mut
-                    && let Some(r) = projection_root_local(body, arg.expr)
+                    && let Some(r) = projection_root_local(body, arg.expr.expr())
                 {
                     out.insert(r);
                 }
@@ -592,8 +592,8 @@ fn collect_alias_edges_node(
             if let StmtKind::Let {
                 local_index, value, ..
             } = &body.stmts[s].kind
-                && let ExprKind::Local { index: src, .. } = &body.exprs[*value].kind
-                && type_creates_alias(body.exprs[*value].type_id, type_table)
+                && let ExprKind::Local { index: src, .. } = &body.exprs[value.expr()].kind
+                && type_creates_alias(body.exprs[value.expr()].type_id, type_table)
             {
                 edges.push((*local_index, *src));
             }
@@ -601,8 +601,8 @@ fn collect_alias_edges_node(
         NodeRef::Expr(e) => {
             if let ExprKind::Assign { target, value } = &body.exprs[e].kind
                 && let ExprKind::Local { index: dst, .. } = &body.exprs[*target].kind
-                && let ExprKind::Local { index: src, .. } = &body.exprs[*value].kind
-                && type_creates_alias(body.exprs[*value].type_id, type_table)
+                && let ExprKind::Local { index: src, .. } = &body.exprs[value.expr()].kind
+                && type_creates_alias(body.exprs[value.expr()].type_id, type_table)
             {
                 edges.push((*dst, *src));
             }
@@ -631,7 +631,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             StmtKind::Let {
                 local_index, value, ..
             } => {
-                if let Some(src) = local(*value) {
+                if let Some(src) = local(value.expr()) {
                     out.insert(*local_index);
                     out.insert(src);
                 }
@@ -640,7 +640,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             StmtKind::Expr(expr) => {
                 if let ExprKind::Assign { target, value } = &body.exprs[*expr].kind
                     && let Some(dst) = local(*target)
-                    && let Some(src) = local(*value)
+                    && let Some(src) = local(value.expr())
                 {
                     out.insert(dst);
                     out.insert(src);
@@ -664,7 +664,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
                 op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
                 expr: inner,
             } => {
-                if let Some(index) = local(*inner) {
+                if let Some(index) = local(inner.expr()) {
                     out.insert(index);
                 }
             }
@@ -672,7 +672,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             ExprKind::Call { args, .. } => {
                 for arg in args {
                     if arg.is_mut
-                        && let Some(index) = local(arg.expr)
+                        && let Some(index) = local(arg.expr.expr())
                     {
                         out.insert(index);
                     }
@@ -680,12 +680,12 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 // Auto-ref: receiver may be passed as `&mut self`.
-                if let Some(index) = local(*receiver) {
+                if let Some(index) = local(receiver.expr()) {
                     out.insert(index);
                 }
                 for arg in args {
                     if arg.is_mut
-                        && let Some(index) = local(arg.expr)
+                        && let Some(index) = local(arg.expr.expr())
                     {
                         out.insert(index);
                     }
@@ -697,14 +697,14 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             // references) may modify them. Mark aliased.
             ExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
-                    if let Some(index) = local(field.value) {
+                    if let Some(index) = local(field.value.expr()) {
                         out.insert(index);
                     }
                 }
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for &elem in elements {
-                    if let Some(index) = local(elem) {
+                    if let Some(index) = local(elem.expr()) {
                         out.insert(index);
                     }
                 }
@@ -712,7 +712,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             ExprKind::VariantConstruct {
                 payload: Some(p), ..
             } => {
-                if let Some(index) = local(*p) {
+                if let Some(index) = local(p.expr()) {
                     out.insert(index);
                 }
             }

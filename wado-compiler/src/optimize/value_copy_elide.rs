@@ -84,7 +84,7 @@ impl Rule for ValueCopyElideRule<'_> {
             let Some(arg) = args.first().map(|a| a.expr) else {
                 continue;
             };
-            let arg_kind = engine.body.exprs[arg].kind.clone();
+            let arg_kind = engine.body.exprs[arg.expr()].kind.clone();
             engine.replace_expr_kind(value, arg_kind);
             changed = true;
         }
@@ -151,7 +151,7 @@ fn classify_expr(
                 usage.entry(*index).or_default().assign_count += 1;
             }
             ExprKind::FieldAccess { expr: inner, .. } => {
-                mark_root_field_mutated(body, *inner, usage);
+                mark_root_field_mutated(body, inner.expr(), usage);
             }
             _ => {}
         },
@@ -159,12 +159,12 @@ fn classify_expr(
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            mark_root_field_mutated(body, *inner, usage);
+            mark_root_field_mutated(body, inner.expr(), usage);
         }
         ExprKind::Call { args, .. } => {
             for arg in args {
-                if arg.is_mut || is_mut_ref_type(body.exprs[arg.expr].type_id, type_table) {
-                    mark_root_field_mutated(body, arg.expr, usage);
+                if arg.is_mut || is_mut_ref_type(body.exprs[arg.expr.expr()].type_id, type_table) {
+                    mark_root_field_mutated(body, arg.expr.expr(), usage);
                 }
             }
         }
@@ -172,17 +172,17 @@ fn classify_expr(
             // Auto-ref: the receiver carries `T` even for `&mut self`
             // methods, so be conservative and treat any local receiver as
             // potentially field-mutated by the call.
-            mark_root_field_mutated(body, *receiver, usage);
+            mark_root_field_mutated(body, receiver.expr(), usage);
             for arg in args {
-                if arg.is_mut || is_mut_ref_type(body.exprs[arg.expr].type_id, type_table) {
-                    mark_root_field_mutated(body, arg.expr, usage);
+                if arg.is_mut || is_mut_ref_type(body.exprs[arg.expr.expr()].type_id, type_table) {
+                    mark_root_field_mutated(body, arg.expr.expr(), usage);
                 }
             }
         }
         ExprKind::IndirectCall { args, .. } => {
             for &arg in args {
-                if is_mut_ref_type(body.exprs[arg].type_id, type_table) {
-                    mark_root_field_mutated(body, arg, usage);
+                if is_mut_ref_type(body.exprs[arg.expr()].type_id, type_table) {
+                    mark_root_field_mutated(body, arg.expr(), usage);
                 }
             }
         }
@@ -203,7 +203,7 @@ fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, 
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. } => {
-            mark_root_field_mutated(body, *inner, usage);
+            mark_root_field_mutated(body, inner.expr(), usage);
         }
         _ => {}
     }
@@ -238,7 +238,7 @@ fn arg_source_root(body: &Body, expr: ExprId) -> Option<u32> {
         ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. } => arg_source_root(body, *inner),
+        | ExprKind::Unary { expr: inner, .. } => arg_source_root(body, inner.expr()),
         _ => None,
     }
 }
@@ -270,7 +270,7 @@ fn elision_safe(
     let Some(arg) = args.first() else {
         return false;
     };
-    match arg_source_root(body, arg.expr) {
+    match arg_source_root(body, arg.expr.expr()) {
         Some(root) => match usage.get(&root) {
             Some(u) => !u.is_assigned() && !u.has_field_mutation,
             None => true,
@@ -304,9 +304,9 @@ fn eligible_value(
         } => {
             if !*is_mut
                 && !*skip_value_copy
-                && elision_safe(body, *local_index, 0, *value, value_copy_set, usage)
+                && elision_safe(body, *local_index, 0, value.expr(), value_copy_set, usage)
             {
-                Some(*value)
+                Some(value.expr())
             } else {
                 None
             }
@@ -316,9 +316,9 @@ fn eligible_value(
         StmtKind::Expr(e) => {
             if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
                 && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-                && elision_safe(body, *index, 1, *value, value_copy_set, usage)
+                && elision_safe(body, *index, 1, value.expr(), value_copy_set, usage)
             {
-                Some(*value)
+                Some(value.expr())
             } else {
                 None
             }

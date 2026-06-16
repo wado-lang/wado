@@ -26,24 +26,24 @@ fn extract_i32_const(kind: &ExprKind) -> u8 {
 /// locals and literals) and wraps them in the given `WirInstr` variant.
 macro_rules! unary {
     ($self:expr, $args:expr, $variant:path) => {{
-        let a = $self.translate_expr($args[0].expr);
+        let a = $self.translate_expr($args[0].expr.expr());
         $variant(Box::new(a))
     }};
 }
 
 macro_rules! binary {
     ($self:expr, $args:expr, $variant:path) => {{
-        let a = $self.translate_expr($args[0].expr);
-        let b = $self.translate_expr($args[1].expr);
+        let a = $self.translate_expr($args[0].expr.expr());
+        let b = $self.translate_expr($args[1].expr.expr());
         $variant(Box::new(a), Box::new(b))
     }};
 }
 
 macro_rules! ternary {
     ($self:expr, $args:expr, $variant:path) => {{
-        let a = $self.translate_expr($args[0].expr);
-        let b = $self.translate_expr($args[1].expr);
-        let c = $self.translate_expr($args[2].expr);
+        let a = $self.translate_expr($args[0].expr.expr());
+        let b = $self.translate_expr($args[1].expr.expr());
+        let c = $self.translate_expr($args[2].expr.expr());
         $variant(Box::new(a), Box::new(b), Box::new(c))
     }};
 }
@@ -51,17 +51,17 @@ macro_rules! ternary {
 /// SIMD lane access — the lane index is a compile-time constant operand.
 macro_rules! extract_lane {
     ($self:expr, $args:expr, $variant:path) => {{
-        let lane = extract_i32_const(&$self.body.exprs[$args[0].expr].kind);
-        let a = $self.translate_expr($args[1].expr);
+        let lane = extract_i32_const(&$self.body.exprs[$args[0].expr.expr()].kind);
+        let a = $self.translate_expr($args[1].expr.expr());
         $variant(lane, Box::new(a))
     }};
 }
 
 macro_rules! replace_lane {
     ($self:expr, $args:expr, $variant:path) => {{
-        let lane = extract_i32_const(&$self.body.exprs[$args[0].expr].kind);
-        let a = $self.translate_expr($args[1].expr);
-        let v = $self.translate_expr($args[2].expr);
+        let lane = extract_i32_const(&$self.body.exprs[$args[0].expr.expr()].kind);
+        let a = $self.translate_expr($args[1].expr.expr());
+        let v = $self.translate_expr($args[2].expr.expr());
         $variant(lane, Box::new(a), Box::new(v))
     }};
 }
@@ -171,7 +171,7 @@ impl FunctionTranslator<'_, '_> {
 
         match builtin_name {
             "builtin::i32_load" => {
-                let addr = self.translate_expr(args[0].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
                 Some(WirInstr::I32Load {
                     offset: 0,
                     align: 2,
@@ -179,7 +179,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             "builtin::i32_load8_u" => {
-                let addr = self.translate_expr(args[0].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
                 Some(WirInstr::I32Load8U {
                     offset: 0,
                     align: 0,
@@ -187,7 +187,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             "builtin::i32_load8_s" => {
-                let addr = self.translate_expr(args[0].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
                 Some(WirInstr::I32Load8S {
                     offset: 0,
                     align: 0,
@@ -195,7 +195,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             "builtin::i32_load16_u" => {
-                let addr = self.translate_expr(args[0].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
                 Some(WirInstr::I32Load16U {
                     offset: 0,
                     align: 1,
@@ -203,7 +203,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             "builtin::i32_load16_s" => {
-                let addr = self.translate_expr(args[0].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
                 Some(WirInstr::I32Load16S {
                     offset: 0,
                     align: 1,
@@ -212,7 +212,7 @@ impl FunctionTranslator<'_, '_> {
             }
 
             "builtin::i64_load" => {
-                let addr = self.translate_expr(args[0].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
                 Some(WirInstr::I64Load {
                     offset: 0,
                     align: 3,
@@ -221,8 +221,8 @@ impl FunctionTranslator<'_, '_> {
             }
 
             "builtin::i32_store" => {
-                let addr = self.translate_expr(args[0].expr);
-                let val = self.translate_expr(args[1].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
+                let val = self.translate_expr(args[1].expr.expr());
                 Some(WirInstr::I32Store {
                     offset: 0,
                     align: 2,
@@ -231,8 +231,8 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             "builtin::i32_store8" => {
-                let addr = self.translate_expr(args[0].expr);
-                let val = self.translate_expr(args[1].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
+                let val = self.translate_expr(args[1].expr.expr());
                 Some(WirInstr::I32Store8 {
                     offset: 0,
                     align: 0,
@@ -241,8 +241,8 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             "builtin::i32_store16" => {
-                let addr = self.translate_expr(args[0].expr);
-                let val = self.translate_expr(args[1].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
+                let val = self.translate_expr(args[1].expr.expr());
                 Some(WirInstr::I32Store16 {
                     offset: 0,
                     align: 1,
@@ -251,8 +251,8 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             "builtin::i64_store" => {
-                let addr = self.translate_expr(args[0].expr);
-                let val = self.translate_expr(args[1].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
+                let val = self.translate_expr(args[1].expr.expr());
                 Some(WirInstr::I64Store {
                     offset: 0,
                     align: 3,
@@ -261,7 +261,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             "builtin::v128_load" => {
-                let addr = self.translate_expr(args[0].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
                 Some(WirInstr::V128Load {
                     offset: 0,
                     align: 4,
@@ -269,8 +269,8 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             "builtin::v128_store" => {
-                let addr = self.translate_expr(args[0].expr);
-                let val = self.translate_expr(args[1].expr);
+                let addr = self.translate_expr(args[0].expr.expr());
+                let val = self.translate_expr(args[1].expr.expr());
                 Some(WirInstr::V128Store {
                     offset: 0,
                     align: 4,
@@ -281,7 +281,7 @@ impl FunctionTranslator<'_, '_> {
 
             "builtin::array_new" => {
                 // array.new_default: creates a new array of the given element type
-                let len = self.translate_expr(args[0].expr);
+                let len = self.translate_expr(args[0].expr.expr());
                 let wir_type = self
                     .ctx
                     .type_id_to_wir_type(self.type_table, result_type_id);
@@ -295,8 +295,8 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "builtin::array_get_u8" => {
-                let arr = self.translate_expr(args[0].expr);
-                let idx = self.translate_expr(args[1].expr);
+                let arr = self.translate_expr(args[0].expr.expr());
+                let idx = self.translate_expr(args[1].expr.expr());
                 self.ctx
                     .array_type_by_name
                     .get("u8")
@@ -308,9 +308,9 @@ impl FunctionTranslator<'_, '_> {
                     })
             }
             "builtin::array_set_u8" => {
-                let arr = self.translate_expr(args[0].expr);
-                let idx = self.translate_expr(args[1].expr);
-                let val = self.translate_expr(args[2].expr);
+                let arr = self.translate_expr(args[0].expr.expr());
+                let idx = self.translate_expr(args[1].expr.expr());
+                let val = self.translate_expr(args[2].expr.expr());
                 self.ctx
                     .array_type_by_name
                     .get("u8")
@@ -322,11 +322,11 @@ impl FunctionTranslator<'_, '_> {
                     })
             }
             "builtin::array_get" => {
-                let arr = self.translate_expr(args[0].expr);
-                let idx = self.translate_expr(args[1].expr);
+                let arr = self.translate_expr(args[0].expr.expr());
+                let idx = self.translate_expr(args[1].expr.expr());
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr].type_id);
+                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr.expr()].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayGet {
                         type_id: type_id.clone(),
@@ -339,12 +339,12 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "builtin::array_set" => {
-                let arr = self.translate_expr(args[0].expr);
-                let idx = self.translate_expr(args[1].expr);
-                let val = self.translate_expr(args[2].expr);
+                let arr = self.translate_expr(args[0].expr.expr());
+                let idx = self.translate_expr(args[1].expr.expr());
+                let val = self.translate_expr(args[2].expr.expr());
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr].type_id);
+                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr.expr()].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArraySet {
                         type_id,
@@ -357,14 +357,14 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "builtin::array_copy" => {
-                let dst = self.translate_expr(args[0].expr);
-                let dst_offset = self.translate_expr(args[1].expr);
-                let src = self.translate_expr(args[2].expr);
-                let src_offset = self.translate_expr(args[3].expr);
-                let len = self.translate_expr(args[4].expr);
+                let dst = self.translate_expr(args[0].expr.expr());
+                let dst_offset = self.translate_expr(args[1].expr.expr());
+                let src = self.translate_expr(args[2].expr.expr());
+                let src_offset = self.translate_expr(args[3].expr.expr());
+                let len = self.translate_expr(args[4].expr.expr());
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr].type_id);
+                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr.expr()].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayCopy {
                         dest_type_id: type_id.clone(),
@@ -381,13 +381,13 @@ impl FunctionTranslator<'_, '_> {
             }
             "builtin::array_clone" => {
                 let src_expr = args[0].expr;
-                let src = self.translate_expr(src_expr);
+                let src = self.translate_expr(src_expr.expr());
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[src_expr].type_id);
+                    .type_id_to_wir_type(self.type_table, self.body.exprs[src_expr.expr()].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     let element_copy_func =
-                        self.array_element_copy_func(self.body.exprs[src_expr].type_id);
+                        self.array_element_copy_func(self.body.exprs[src_expr.expr()].type_id);
                     Some(WirInstr::ArrayClone {
                         type_id,
                         src: Box::new(src),
@@ -403,10 +403,10 @@ impl FunctionTranslator<'_, '_> {
             // shared elements are never mutated through either alias.
             "builtin::array_clone_shallow" => {
                 let src_expr = args[0].expr;
-                let src = self.translate_expr(src_expr);
+                let src = self.translate_expr(src_expr.expr());
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[src_expr].type_id);
+                    .type_id_to_wir_type(self.type_table, self.body.exprs[src_expr.expr()].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayClone {
                         type_id,
@@ -418,13 +418,13 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "builtin::array_fill" => {
-                let arr = self.translate_expr(args[0].expr);
-                let offset = self.translate_expr(args[1].expr);
-                let val = self.translate_expr(args[2].expr);
-                let len = self.translate_expr(args[3].expr);
+                let arr = self.translate_expr(args[0].expr.expr());
+                let offset = self.translate_expr(args[1].expr.expr());
+                let val = self.translate_expr(args[2].expr.expr());
+                let len = self.translate_expr(args[3].expr.expr());
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr].type_id);
+                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[0].expr.expr()].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayFill {
                         type_id,
@@ -440,7 +440,7 @@ impl FunctionTranslator<'_, '_> {
 
             "builtin::v128_const" => {
                 // The argument is an i128 literal interpreted as v128 bit pattern
-                let o = self.translate_expr(args[0].expr);
+                let o = self.translate_expr(args[0].expr.expr());
                 // Extract the constant value - it should be an IntLiteral
                 if let WirInstr::I32Const(v) = &o {
                     Some(WirInstr::V128Const(i128::from(*v)))
@@ -452,9 +452,9 @@ impl FunctionTranslator<'_, '_> {
             }
             "builtin::memory_size" => Some(WirInstr::MemorySize),
             "builtin::memory_fill" => {
-                let dst = self.translate_expr(args[0].expr);
-                let value = self.translate_expr(args[1].expr);
-                let len = self.translate_expr(args[2].expr);
+                let dst = self.translate_expr(args[0].expr.expr());
+                let value = self.translate_expr(args[1].expr.expr());
+                let len = self.translate_expr(args[2].expr.expr());
                 Some(WirInstr::MemoryFill {
                     dst: Box::new(dst),
                     value: Box::new(value),
@@ -476,12 +476,12 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "builtin::select" => {
-                let cond = self.translate_expr(args[0].expr);
-                let a = self.translate_expr(args[1].expr);
-                let b = self.translate_expr(args[2].expr);
+                let cond = self.translate_expr(args[0].expr.expr());
+                let a = self.translate_expr(args[1].expr.expr());
+                let b = self.translate_expr(args[2].expr.expr());
                 let result_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[1].expr].type_id);
+                    .type_id_to_wir_type(self.type_table, self.body.exprs[args[1].expr.expr()].type_id);
                 Some(WirInstr::Select {
                     condition: Box::new(cond),
                     if_true: Box::new(a),
@@ -491,37 +491,37 @@ impl FunctionTranslator<'_, '_> {
             }
 
             "builtin::i64_add128" => {
-                let a_lo = Box::new(self.translate_expr(args[0].expr));
-                let a_hi = Box::new(self.translate_expr(args[1].expr));
-                let b_lo = Box::new(self.translate_expr(args[2].expr));
-                let b_hi = Box::new(self.translate_expr(args[3].expr));
+                let a_lo = Box::new(self.translate_expr(args[0].expr.expr()));
+                let a_hi = Box::new(self.translate_expr(args[1].expr.expr()));
+                let b_lo = Box::new(self.translate_expr(args[2].expr.expr()));
+                let b_hi = Box::new(self.translate_expr(args[3].expr.expr()));
                 Some(self.wrap_multivalue_i64(
                     WirInstr::I64Add128(a_lo, a_hi, b_lo, b_hi),
                     result_type_id,
                 ))
             }
             "builtin::i64_sub128" => {
-                let a_lo = Box::new(self.translate_expr(args[0].expr));
-                let a_hi = Box::new(self.translate_expr(args[1].expr));
-                let b_lo = Box::new(self.translate_expr(args[2].expr));
-                let b_hi = Box::new(self.translate_expr(args[3].expr));
+                let a_lo = Box::new(self.translate_expr(args[0].expr.expr()));
+                let a_hi = Box::new(self.translate_expr(args[1].expr.expr()));
+                let b_lo = Box::new(self.translate_expr(args[2].expr.expr()));
+                let b_hi = Box::new(self.translate_expr(args[3].expr.expr()));
                 Some(self.wrap_multivalue_i64(
                     WirInstr::I64Sub128(a_lo, a_hi, b_lo, b_hi),
                     result_type_id,
                 ))
             }
             "builtin::i64_mul_wide_u" => {
-                let a = Box::new(self.translate_expr(args[0].expr));
-                let b = Box::new(self.translate_expr(args[1].expr));
+                let a = Box::new(self.translate_expr(args[0].expr.expr()));
+                let b = Box::new(self.translate_expr(args[1].expr.expr()));
                 Some(self.wrap_multivalue_i64(WirInstr::I64MulWideU(a, b), result_type_id))
             }
             "builtin::i64_mul_wide_s" => {
-                let a = Box::new(self.translate_expr(args[0].expr));
-                let b = Box::new(self.translate_expr(args[1].expr));
+                let a = Box::new(self.translate_expr(args[0].expr.expr()));
+                let b = Box::new(self.translate_expr(args[1].expr.expr()));
                 Some(self.wrap_multivalue_i64(WirInstr::I64MulWideS(a, b), result_type_id))
             }
 
-            "builtin::i32_as_char" => Some(self.translate_expr(args[0].expr)),
+            "builtin::i32_as_char" => Some(self.translate_expr(args[0].expr.expr())),
 
             "builtin::call_indirect_stdout_write_via_stream"
             | "builtin::call_indirect_stderr_write_via_stream" => {
@@ -560,7 +560,7 @@ impl FunctionTranslator<'_, '_> {
                 let key = format!("wasi/{wasi_func_name}");
                 if let Some(func_id) = self.ctx.func_map.get(&key).cloned() {
                     let call_args: Vec<WirInstr> =
-                        args.iter().map(|a| self.translate_expr(a.expr)).collect();
+                        args.iter().map(|a| self.translate_expr(a.expr.expr())).collect();
                     Some(WirInstr::Call {
                         func_id,
                         args: call_args,

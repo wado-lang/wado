@@ -98,7 +98,7 @@ fn unwrap_copy_value(body: &Body, expr: ExprId) -> ExprId {
         && func.name == "copy_value"
         && args.len() == 1
     {
-        return args[0].expr;
+        return args[0].expr.expr();
     }
     expr
 }
@@ -117,7 +117,7 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
     if skip_value_copy {
         return None;
     }
-    let value = unwrap_copy_value(body, value);
+    let value = unwrap_copy_value(body, value.expr());
     let value_type = body.exprs[value].type_id;
 
     let source = match &body.exprs[value].kind {
@@ -140,8 +140,8 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
         {
             let inner = *inner;
             let is_ref = matches!(op, NirUnaryOp::Ref);
-            if let ExprKind::Local { index, name } = &body.exprs[inner].kind {
-                let inner_type_id = body.exprs[inner].type_id;
+            if let ExprKind::Local { index, name } = &body.exprs[inner.expr()].kind {
+                let inner_type_id = body.exprs[inner.expr()].type_id;
                 if is_ref {
                     CopySource::Ref {
                         index: *index,
@@ -190,18 +190,18 @@ fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if place_root_local(body, *inner) == Some(local) {
+                if place_root_local(body, inner.expr()) == Some(local) {
                     return true;
                 }
             }
             ExprKind::MethodCall { receiver, .. } => {
-                if place_root_local(body, *receiver) == Some(local) {
+                if place_root_local(body, receiver.expr()) == Some(local) {
                     return true;
                 }
             }
             ExprKind::Call { args, .. } => {
                 for arg in args {
-                    if arg.is_mut && place_root_local(body, arg.expr) == Some(local) {
+                    if arg.is_mut && place_root_local(body, arg.expr.expr()) == Some(local) {
                         return true;
                     }
                 }
@@ -298,17 +298,17 @@ fn analyze_expr(
                 result.usage.entry(*index).or_default().is_assigned = true;
             }
             if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
             {
                 result.usage.entry(*index).or_default().has_field_mutation = true;
             }
             analyze_expr(body, target, result, type_table, fpt);
-            analyze_expr(body, value, result, type_table, fpt);
+            analyze_expr(body, value.expr(), result, type_table, fpt);
         }
         ExprKind::Unary { op, expr: inner } => {
             let (op, inner) = (*op, *inner);
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
             {
                 let index = *index;
                 result.usage.entry(index).or_default().address_taken = true;
@@ -316,7 +316,7 @@ fn analyze_expr(
                     result.usage.entry(index).or_default().has_field_mutation = true;
                 }
             }
-            analyze_expr(body, inner, result, type_table, fpt);
+            analyze_expr(body, inner.expr(), result, type_table, fpt);
         }
         ExprKind::Call { args, .. } => {
             let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
@@ -338,10 +338,10 @@ fn analyze_expr(
             // Copy propagation: a callee absent from `fpt` is assumed *not* to
             // mutate the receiver (`conservative_on_unknown = false`); the
             // receiver-type guard below still protects value receivers.
-            if super::alias::method_mutates_receiver(body, receiver, func, fpt, type_table, false) {
-                mark_potentially_mutated_local(body, receiver, result);
+            if super::alias::method_mutates_receiver(body, receiver.expr(), func, fpt, type_table, false) {
+                mark_potentially_mutated_local(body, receiver.expr(), result);
             }
-            analyze_expr(body, receiver, result, type_table, fpt);
+            analyze_expr(body, receiver.expr(), result, type_table, fpt);
             for (arg, is_mut) in arg_data {
                 if is_mut && may_mutate_through_arg(body, arg, type_table) {
                     mark_potentially_mutated_local(body, arg, result);
@@ -567,7 +567,7 @@ fn emit_ref(
 ) {
     let span = engine.body.exprs[id].span;
     let inner = engine.alloc_expr(ExprKind::Local { index, name }, inner_type_id, span);
-    engine.replace_expr_kind(id, ExprKind::Unary { op, expr: inner });
+    engine.replace_expr_kind(id, ExprKind::Unary { op, expr: inner.into() });
 }
 
 /// Whole-function copy-propagation fixpoint driven from the engine session

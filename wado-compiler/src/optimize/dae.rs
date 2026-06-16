@@ -301,7 +301,7 @@ fn validate_call(
                     continue;
                 }
                 match args.get(i) {
-                    Some(arg) if arena_query::is_pure_expr(body, arg.expr) => {}
+                    Some(arg) if arena_query::is_pure_expr(body, arg.expr.expr()) => {}
                     _ => {
                         rejected.insert(key.clone());
                         break;
@@ -325,7 +325,7 @@ fn validate_call(
             // If the rewriter drops the receiver, the MethodCall collapses to
             // a `Call` and the receiver is discarded — it must be pure.
             let drops_receiver = dead.first() == Some(&true);
-            if drops_receiver && !arena_query::is_pure_expr(body, *receiver) {
+            if drops_receiver && !arena_query::is_pure_expr(body, receiver.expr()) {
                 rejected.insert(key.clone());
             } else {
                 // params[i+1] maps to args[i] regardless of whether position 0
@@ -335,7 +335,7 @@ fn validate_call(
                         continue;
                     }
                     match args.get(i - 1) {
-                        Some(arg) if arena_query::is_pure_expr(body, arg.expr) => {}
+                        Some(arg) if arena_query::is_pure_expr(body, arg.expr.expr()) => {}
                         _ => {
                             rejected.insert(key.clone());
                             break;

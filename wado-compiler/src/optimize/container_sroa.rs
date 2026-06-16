@@ -608,7 +608,7 @@ fn collect_candidates(
             continue;
         }
         // Initializer must be one of the recognized forms.
-        let Some(init) = recognize_init(body, *value, sig_kinds) else {
+        let Some(init) = recognize_init(body, value.expr(), sig_kinds) else {
             continue;
         };
         out.push(Candidate {
@@ -691,10 +691,10 @@ fn recognize_init(body: &Body, value: ExprId, sig_kinds: &SigKindIndex) -> Optio
     let cap = args[0].expr;
     // The capacity expression is cloned once per per-field constructor
     // call during rewrite, so it must be side-effect-free.
-    if !is_duplicable_expr(body, cap) {
+    if !is_duplicable_expr(body, cap.expr()) {
         return None;
     }
-    Some(CandidateInit { capacity: cap })
+    Some(CandidateInit { capacity: cap.expr() })
 }
 
 /// Unwrap a labeled block of shape
@@ -739,19 +739,19 @@ fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
     let brk_val = *brk_val;
     // Break value must be a zero-argument method call whose receiver is `__b`
     // (possibly wrapped in `&`/`&mut`).
-    let ExprKind::MethodCall { receiver, args, .. } = &body.exprs[brk_val].kind else {
+    let ExprKind::MethodCall { receiver, args, .. } = &body.exprs[brk_val.expr()].kind else {
         return None;
     };
     if !args.is_empty() {
         return None;
     }
-    let receiver_local = match &body.exprs[*receiver].kind {
+    let receiver_local = match &body.exprs[receiver.expr()].kind {
         ExprKind::Local { index, .. } => *index,
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner_ref,
         } => {
-            let ExprKind::Local { index, .. } = &body.exprs[*inner_ref].kind else {
+            let ExprKind::Local { index, .. } = &body.exprs[inner_ref.expr()].kind else {
                 return None;
             };
             *index
@@ -761,7 +761,7 @@ fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
     if receiver_local != b_local {
         return None;
     }
-    Some(inner)
+    Some(inner.expr())
 }
 
 /// Look up the `ListMethodKind` of a call target by signature, via the
@@ -872,7 +872,7 @@ impl WhitelistChecker<'_> {
                 }
                 let elements = elements.clone();
                 for el in elements {
-                    self.visit_expr(body, el);
+                    self.visit_expr(body, el.expr());
                 }
                 true
             }
@@ -922,7 +922,7 @@ impl WhitelistChecker<'_> {
                 }
                 let receiver = *receiver;
                 let arg0 = args[0].expr;
-                let Some(other) = receiver_local(body, receiver) else {
+                let Some(other) = receiver_local(body, receiver.expr()) else {
                     // Receiver isn't a bare local — recurse normally.
                     self.visit_expr(body, e);
                     return false;
@@ -942,14 +942,14 @@ impl WhitelistChecker<'_> {
                     return false;
                 }
                 // The rewrite clones the index expression N times (once per field).
-                if !is_duplicable_expr(body, arg0) {
+                if !is_duplicable_expr(body, arg0.expr()) {
                     // Fall through to a normal visit so `other` gets marked
                     // escaped via the bare `index_value` branch in `visit_expr`.
                     self.visit_expr(body, e);
                     return false;
                 }
                 // Index expression must be visited as a normal expression.
-                self.visit_expr(body, arg0);
+                self.visit_expr(body, arg0.expr());
                 // Record that `other` is being read via IndexReader so it
                 // needs that method monomorphization during rewrite.
                 self.record_use(other, ListMethodKind::IndexReader);
@@ -971,7 +971,7 @@ impl WhitelistChecker<'_> {
                 let receiver = *receiver;
                 let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
                 let kind = list_method_kind(func, self.sig_kinds);
-                if let Some(rec_local) = receiver_local(body, receiver)
+                if let Some(rec_local) = receiver_local(body, receiver.expr())
                     && self.safe.contains(&rec_local)
                 {
                     match (kind, arg_ids.len()) {
@@ -1034,7 +1034,7 @@ impl WhitelistChecker<'_> {
                     }
                 }
                 // Fall through: recurse into receiver and args normally.
-                self.visit_expr(body, receiver);
+                self.visit_expr(body, receiver.expr());
                 for a in arg_ids {
                     self.visit_expr(body, a);
                 }
@@ -1047,10 +1047,10 @@ impl WhitelistChecker<'_> {
                     func,
                     args,
                     ..
-                } = &body.exprs[inner].kind
+                } = &body.exprs[inner.expr()].kind
                     && list_method_kind(func, self.sig_kinds) == Some(ListMethodKind::IndexReader)
                     && args.len() == 1
-                    && let Some(rec_local) = receiver_local(body, *receiver)
+                    && let Some(rec_local) = receiver_local(body, receiver.expr())
                     && self.safe.contains(&rec_local)
                 {
                     Some((rec_local, args[0].expr))
@@ -1060,10 +1060,10 @@ impl WhitelistChecker<'_> {
                 if let Some((rec_local, idx_arg)) = safe_read {
                     // Safe — just visit the index expression.
                     self.record_use(rec_local, ListMethodKind::IndexReader);
-                    self.visit_expr(body, idx_arg);
+                    self.visit_expr(body, idx_arg.expr());
                     return;
                 }
-                self.visit_expr(body, inner);
+                self.visit_expr(body, inner.expr());
             }
             // Bare Local reference to a candidate → escape.
             ExprKind::Local { index, .. } => {
@@ -1073,12 +1073,12 @@ impl WhitelistChecker<'_> {
             ExprKind::Unary { op, expr: inner } => {
                 let inner = *inner;
                 if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                    && let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+                    && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
                 {
                     self.mark(*index);
                     return;
                 }
-                self.visit_expr(body, inner);
+                self.visit_expr(body, inner.expr());
             }
             _ => self.walk(body, NodeRef::Expr(e)),
         }
@@ -1104,7 +1104,7 @@ fn receiver_local(body: &Body, e: ExprId) -> Option<u32> {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
                 Some(*index)
             } else {
                 None
@@ -1188,7 +1188,7 @@ impl Rewriter<'_, '_> {
                     is_mut,
                     is_reactive: false,
                     type_id: arr_ty,
-                    value: init,
+                    value: init.into(),
                     skip_value_copy: false,
                 },
                 span,
@@ -1220,7 +1220,7 @@ impl Rewriter<'_, '_> {
             ),
             _ => return None,
         };
-        let rec_local = receiver_local(engine.body, receiver)?;
+        let rec_local = receiver_local(engine.body, receiver.expr())?;
         if !ctx.decomposed.contains(&rec_local) {
             return None;
         }
@@ -1233,7 +1233,7 @@ impl Rewriter<'_, '_> {
         match (kind, arg_ids.len()) {
             // Case 1: v.ElementWriter(source) — e.g. push
             (Some(ListMethodKind::ElementWriter), 1) => {
-                let per_field = self.decompose_source(engine, arg_ids[0], arity, &layout)?;
+                let per_field = self.decompose_source(engine, arg_ids[0].expr(), arity, &layout)?;
                 let sig = sig_key_of(&func)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
@@ -1260,17 +1260,17 @@ impl Rewriter<'_, '_> {
             (Some(ListMethodKind::IndexWriter), 2) => {
                 let idx = arg_ids[0];
                 let src = arg_ids[1];
-                if !is_duplicable_expr(engine.body, idx) {
+                if !is_duplicable_expr(engine.body, idx.expr()) {
                     return None;
                 }
-                let per_field = self.decompose_source(engine, src, arity, &layout)?;
+                let per_field = self.decompose_source(engine, src.expr(), arity, &layout)?;
                 let sig = sig_key_of(&func)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                     let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
                     let elem_ty = element_types[k];
-                    let idx_clone = engine.clone_expr(idx);
+                    let idx_clone = engine.clone_expr(idx.expr());
                     let call = build_index_writer_call(
                         engine,
                         elem_ty,
@@ -1349,7 +1349,7 @@ impl Rewriter<'_, '_> {
             } if list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1 =>
             {
-                let other = receiver_local(engine.body, *receiver)?;
+                let other = receiver_local(engine.body, receiver.expr())?;
                 if !ctx.decomposed.contains(&other) {
                     return None;
                 }
@@ -1361,13 +1361,13 @@ impl Rewriter<'_, '_> {
                     return None;
                 }
                 let idx_expr = args[0].expr;
-                if !is_duplicable_expr(engine.body, idx_expr) {
+                if !is_duplicable_expr(engine.body, idx_expr.expr()) {
                     return None;
                 }
                 let sig = sig_key_of(func)?;
                 Source::IndexRead {
                     other,
-                    idx: idx_expr,
+                    idx: idx_expr.expr(),
                     sig,
                     span: engine.body.exprs[expr].span,
                 }
@@ -1457,10 +1457,10 @@ impl Rewriter<'_, '_> {
                 func,
                 args,
                 ..
-            } = &engine.body.exprs[inner].kind
+            } = &engine.body.exprs[inner.expr()].kind
                 && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1
-                && let Some(rec_local) = receiver_local(engine.body, *receiver)
+                && let Some(rec_local) = receiver_local(engine.body, receiver.expr())
                 && ctx.decomposed.contains(&rec_local)
             {
                 sig_key_of(func).map(|sig| (rec_local, field_index, args[0].expr, sig))
@@ -1480,7 +1480,7 @@ impl Rewriter<'_, '_> {
                 let elem_ty = info.element_types[k];
                 let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                 let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
-                let idx_clone = engine.clone_expr(idx_arg);
+                let idx_clone = engine.clone_expr(idx_arg.expr());
                 self.rewrite_expr(engine, idx_clone);
                 let span = engine.body.exprs[e].span;
                 let new_call = build_index_reader_call(
@@ -1511,7 +1511,7 @@ impl Rewriter<'_, '_> {
             ..
         } = &engine.body.exprs[e].kind
         {
-            if let Some(rec_local) = receiver_local(engine.body, *receiver)
+            if let Some(rec_local) = receiver_local(engine.body, receiver.expr())
                 && ctx.decomposed.contains(&rec_local)
                 && args.is_empty()
                 && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::Query)
@@ -1541,7 +1541,7 @@ impl Rewriter<'_, '_> {
             engine.replace_expr_kind(
                 e,
                 ExprKind::MethodCall {
-                    receiver: new_receiver,
+                    receiver: new_receiver.into(),
                     func: new_func,
                     type_args: Vec::new(),
                     args: Vec::new(),
@@ -1591,7 +1591,7 @@ fn build_receiver(
     } else {
         NirUnaryOp::Ref
     };
-    engine.alloc_expr(ExprKind::Unary { op, expr: local }, arr_ty, span)
+    engine.alloc_expr(ExprKind::Unary { op, expr: local.into() }, arr_ty, span)
 }
 
 /// Build a `List<T_k>::Constructor(cap)` NIR call — e.g. `with_capacity(cap)`.
@@ -1620,7 +1620,7 @@ fn build_with_capacity_call(
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
-                expr: cap,
+                expr: cap.into(),
                 is_mut: false,
             }],
         },
@@ -1650,11 +1650,11 @@ fn build_element_writer_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            receiver,
+            receiver.into(),
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
-                expr: value,
+                expr: value.into(),
                 is_mut: false,
             }],
         },
@@ -1685,16 +1685,16 @@ fn build_index_writer_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            receiver,
+            receiver.into(),
             func,
             type_args: Vec::new(),
             args: vec![
                 ArenaCallArg {
-                    expr: index,
+                    expr: index.into(),
                     is_mut: false,
                 },
                 ArenaCallArg {
-                    expr: value,
+                    expr: value.into(),
                     is_mut: false,
                 },
             ],
@@ -1725,11 +1725,11 @@ fn build_index_reader_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, false, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            receiver,
+            receiver.into(),
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
-                expr: index,
+                expr: index.into(),
                 is_mut: false,
             }],
         },
@@ -1751,16 +1751,16 @@ fn is_duplicable_expr(body: &Body, e: ExprId) -> bool {
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. } => true,
         ExprKind::Binary { left, right, .. } => {
-            is_duplicable_expr(body, *left) && is_duplicable_expr(body, *right)
+            is_duplicable_expr(body, left.expr()) && is_duplicable_expr(body, right.expr())
         }
         ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) && is_duplicable_expr(body, *inner)
+            !matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) && is_duplicable_expr(body, inner.expr())
         }
-        ExprKind::Cast { expr: inner, .. } => is_duplicable_expr(body, *inner),
+        ExprKind::Cast { expr: inner, .. } => is_duplicable_expr(body, inner.expr()),
         // FieldAccess is only duplicable if its inner is too (most commonly a Local).
         // We deliberately exclude MethodCall / Call / Index / etc. because they
         // may allocate, trap, or have side effects.
-        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_expr(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_expr(body, inner.expr()),
         _ => false,
     }
 }

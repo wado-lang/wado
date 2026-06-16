@@ -111,7 +111,7 @@ impl Rule for RefElimRule {
             // `r.field` for an eliminable ref `r` → resolved referent.
             ExprKind::FieldAccess { expr: inner, .. } => {
                 let inner = *inner;
-                let ExprKind::Local { index, .. } = &engine.body.exprs[inner].kind else {
+                let ExprKind::Local { index, .. } = &engine.body.exprs[inner.expr()].kind else {
                     return false;
                 };
                 let index = *index;
@@ -124,7 +124,7 @@ impl Rule for RefElimRule {
                 // keeping `inner`'s type_id / span — the surrounding code was
                 // sized to the ref-type tag `r` had at this position.
                 let kind = engine.body.exprs[resolved].kind.clone();
-                engine.replace_expr_kind(inner, kind);
+                engine.replace_expr_kind(inner.expr(), kind);
                 true
             }
             // `*r` for a single-use deref-only ref `r` → inline the literal.
@@ -133,7 +133,7 @@ impl Rule for RefElimRule {
                 expr: inner,
             } => {
                 let inner = *inner;
-                let ExprKind::Local { index, .. } = &engine.body.exprs[inner].kind else {
+                let ExprKind::Local { index, .. } = &engine.body.exprs[inner.expr()].kind else {
                     return false;
                 };
                 let Some(&source_e) = self.deref_sources.get(index) else {
@@ -170,7 +170,7 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
             field_index,
             field_name,
         } => Step::Field(
-            *inner,
+            inner.expr(),
             *field_index,
             field_name.clone(),
             engine.body.exprs[e].type_id,
@@ -184,7 +184,7 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
             let resolved_inner = resolve_via_engine(engine, inner, refs);
             engine.alloc_expr(
                 ExprKind::FieldAccess {
-                    expr: resolved_inner,
+                    expr: resolved_inner.into(),
                     field_index,
                     field_name,
                 },
@@ -201,7 +201,7 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
 fn is_valid_referent(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_valid_referent(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => is_valid_referent(body, inner.expr()),
         _ => false,
     }
 }
@@ -250,7 +250,7 @@ fn analyze_stmt(
         local_index, value, ..
     } = &body.stmts[stmt].kind
     {
-        register_let_binding(body, *local_index, *value, rebound, refs);
+        register_let_binding(body, *local_index, value.expr(), rebound, refs);
     }
     // Then classify uses in the statement's children (the value, nested blocks).
     let mut kids = Vec::new();
@@ -273,13 +273,13 @@ fn register_let_binding(
     // Pattern (1): `let r = &E` / `let r = &mut E` with E a pure-read referent.
     if let ExprKind::Unary { op, expr } = &body.exprs[value].kind
         && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-        && is_valid_referent(body, *expr)
+        && is_valid_referent(body, expr.expr())
     {
         let referent_e = *expr;
         refs.insert(
             local_index,
             RefInfo {
-                referent_e,
+                referent_e.expr(),
                 eliminable: true,
             },
         );
@@ -330,12 +330,12 @@ fn analyze_expr(
         // non-Local inner so nested ref uses are still classified.
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
                 && refs.contains_key(index)
             {
                 return;
             }
-            analyze_expr(body, inner, rebound, refs);
+            analyze_expr(body, inner.expr(), rebound, refs);
         }
         // Direct (non-field-access) use of a tracked ref local: non-eliminable.
         ExprKind::Local { index, .. } => {
@@ -379,17 +379,17 @@ fn deref_collect_stmt(body: &Body, stmt: StmtId, refs: &mut IndexMap<u32, DerefO
     if let StmtKind::Let {
         local_index, value, ..
     } = &body.stmts[stmt].kind
-        && let ExprKind::Unary { op, expr } = &body.exprs[*value].kind
+        && let ExprKind::Unary { op, expr } = &body.exprs[value.expr()].kind
         && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
         && matches!(
-            body.exprs[*expr].kind,
+            body.exprs[expr.expr()].kind,
             ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
         )
     {
         refs.insert(
             *local_index,
             DerefOnlyRef {
-                source_e: *expr,
+                source_e: expr.expr(),
                 eliminable: true,
                 use_count: 0,
             },
@@ -425,14 +425,14 @@ fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnl
             expr: inner,
         } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
                 let index = *index;
                 if let Some(info) = refs.get_mut(&index) {
                     info.use_count += 1;
                     return;
                 }
             }
-            deref_collect_expr(body, inner, refs);
+            deref_collect_expr(body, inner.expr(), refs);
         }
         // Any other bare use of r disqualifies it.
         ExprKind::Local { index, .. } => {

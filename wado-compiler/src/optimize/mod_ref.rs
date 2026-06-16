@@ -279,7 +279,7 @@ impl ModRef {
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
                 self.accumulate_assign_target(body, target, scope);
-                self.accumulate_expr(body, value, scope);
+                self.accumulate_expr(body, value.expr(), scope);
             }
 
             // === Globals ===
@@ -298,7 +298,7 @@ impl ModRef {
                 self.global_writes
                     .insert((module_source.clone(), name.clone()));
                 let value = *value;
-                self.accumulate_expr(body, value, scope);
+                self.accumulate_expr(body, value.expr(), scope);
             }
 
             // === Heap reads ===
@@ -306,70 +306,70 @@ impl ModRef {
                 self.heap.reads = true;
                 self.may_trap = true; // null receiver
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
             }
             ExprKind::Index { expr, index } => {
                 self.heap.reads = true;
                 self.may_trap = true; // null + OOB
                 let (expr, index) = (*expr, *index);
-                self.accumulate_expr(body, expr, scope);
-                self.accumulate_expr(body, index, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
+                self.accumulate_expr(body, index.expr(), scope);
             }
 
             // === Heap allocations ===
             ExprKind::StructLiteral { fields, .. } => {
                 self.allocates = true;
                 for f in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                    self.accumulate_expr(body, f, scope);
+                    self.accumulate_expr(body, f.expr(), scope);
                 }
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 self.allocates = true;
                 for e in elements.clone() {
-                    self.accumulate_expr(body, e, scope);
+                    self.accumulate_expr(body, e.expr(), scope);
                 }
             }
             ExprKind::VariantConstruct { payload, .. } => {
                 self.allocates = true;
                 if let Some(p) = *payload {
-                    self.accumulate_expr(body, p, scope);
+                    self.accumulate_expr(body, p.expr(), scope);
                 }
             }
             ExprKind::ClosureToCanonical { functor, .. } => {
                 self.allocates = true;
                 let functor = *functor;
-                self.accumulate_expr(body, functor, scope);
+                self.accumulate_expr(body, functor.expr(), scope);
             }
 
             // === Calls ===
             ExprKind::Call { args, .. } => {
                 self.calls = true;
                 for a in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                    self.accumulate_expr(body, a, scope);
+                    self.accumulate_expr(body, a.expr(), scope);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 self.calls = true;
                 let receiver = *receiver;
                 let args: Vec<_> = args.iter().map(|a| a.expr).collect();
-                self.accumulate_expr(body, receiver, scope);
+                self.accumulate_expr(body, receiver.expr(), scope);
                 for a in args {
-                    self.accumulate_expr(body, a, scope);
+                    self.accumulate_expr(body, a.expr(), scope);
                 }
             }
             ExprKind::IndirectCall { callee, args } => {
                 self.calls = true;
                 let callee = *callee;
                 let args = args.clone();
-                self.accumulate_expr(body, callee, scope);
+                self.accumulate_expr(body, callee.expr(), scope);
                 for a in args {
-                    self.accumulate_expr(body, a, scope);
+                    self.accumulate_expr(body, a.expr(), scope);
                 }
             }
             ExprKind::CmRawCall { args, .. } => {
                 self.calls = true;
                 for a in args.clone() {
-                    self.accumulate_expr(body, a, scope);
+                    self.accumulate_expr(body, a.expr(), scope);
                 }
             }
 
@@ -379,8 +379,8 @@ impl ModRef {
                     self.may_trap = true;
                 }
                 let (left, right) = (*left, *right);
-                self.accumulate_expr(body, left, scope);
-                self.accumulate_expr(body, right, scope);
+                self.accumulate_expr(body, left.expr(), scope);
+                self.accumulate_expr(body, right.expr(), scope);
             }
             ExprKind::Unary { op, expr } => {
                 match op {
@@ -392,14 +392,14 @@ impl ModRef {
                     NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot => {}
                 }
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
             }
             ExprKind::Cast { expr, .. } => {
                 // v1: conservatively trap-capable (numeric narrowing /
                 // ref.cast). Refine when a consumer needs the precision.
                 self.may_trap = true;
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
             }
 
             // === Variant projection ===
@@ -415,13 +415,13 @@ impl ModRef {
                 self.heap.reads = true;
                 self.may_trap = true; // null receiver + case mismatch
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
             }
             ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
                 self.heap.reads = true;
                 self.may_trap = true; // null receiver
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
             }
             ExprKind::EnumConstruct { .. } => {}
 
@@ -441,7 +441,7 @@ impl ModRef {
             } => {
                 let (condition, then_branch, else_branch) =
                     (*condition, *then_branch, *else_branch);
-                self.accumulate_expr(body, condition, scope);
+                self.accumulate_expr(body, condition.expr(), scope);
                 self.accumulate_block(body, then_branch, scope);
                 if let Some(eb) = else_branch {
                     self.accumulate_block(body, eb, scope);
@@ -453,7 +453,7 @@ impl ModRef {
             ExprKind::Match { expr, arms } => {
                 let expr = *expr;
                 let arms = arms.clone();
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
                 for arm in &arms {
                     // The arm's pattern can bind locals (`Binding`,
                     // `Tuple`, `Variant`, `Struct`, `Or`) and can carry
@@ -465,9 +465,9 @@ impl ModRef {
                     // for any consumer reasoning across a match.
                     self.accumulate_pattern_writes(body, arm.pattern, scope);
                     if let Some(g) = arm.guard {
-                        self.accumulate_expr(body, g, scope);
+                        self.accumulate_expr(body, g.expr(), scope);
                     }
-                    self.accumulate_expr(body, arm.body, scope);
+                    self.accumulate_expr(body, arm.body.expr(), scope);
                 }
                 if self.control < Control::NonLocal {
                     self.control = Control::Conditional;
@@ -482,7 +482,7 @@ impl ModRef {
                 let scrutinee = *scrutinee;
                 let default = *default;
                 let arms = arms.clone();
-                self.accumulate_expr(body, scrutinee, scope);
+                self.accumulate_expr(body, scrutinee.expr(), scope);
                 for arm in arms {
                     self.accumulate_block(body, arm, scope);
                 }
@@ -522,14 +522,14 @@ impl ModRef {
                 self.heap.writes = true;
                 self.may_trap = true; // null receiver
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
             }
             ExprKind::Index { expr, index } => {
                 self.heap.writes = true;
                 self.may_trap = true; // null + OOB
                 let (expr, index) = (*expr, *index);
-                self.accumulate_expr(body, expr, scope);
-                self.accumulate_expr(body, index, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
+                self.accumulate_expr(body, index.expr(), scope);
             }
             ExprKind::Unary {
                 op: NirUnaryOp::Deref,
@@ -538,7 +538,7 @@ impl ModRef {
                 self.heap.writes = true;
                 self.may_trap = true;
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
             }
             ExprKind::GlobalVarGet {
                 module_source,
@@ -560,7 +560,7 @@ impl ModRef {
             } => {
                 self.local_writes.insert(*local_index);
                 let value = *value;
-                self.accumulate_expr(body, value, scope);
+                self.accumulate_expr(body, value.expr(), scope);
             }
             StmtKind::Expr(e) => {
                 let e = *e;
@@ -569,7 +569,7 @@ impl ModRef {
             StmtKind::Return { value } => {
                 self.control.join(Control::NonLocal);
                 if let Some(v) = *value {
-                    self.accumulate_expr(body, v, scope);
+                    self.accumulate_expr(body, v.expr(), scope);
                 }
             }
             StmtKind::If {
@@ -578,7 +578,7 @@ impl ModRef {
                 else_block,
             } => {
                 let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-                self.accumulate_expr(body, condition, scope);
+                self.accumulate_expr(body, condition.expr(), scope);
                 self.accumulate_block(body, then_block, scope);
                 if let Some(eb) = else_block {
                     self.accumulate_block(body, eb, scope);
@@ -611,7 +611,7 @@ impl ModRef {
                     self.control.join(Control::NonLocal);
                 }
                 if let Some(v) = *value {
-                    self.accumulate_expr(body, v, scope);
+                    self.accumulate_expr(body, v.expr(), scope);
                 }
             }
             StmtKind::Continue => {
@@ -636,7 +636,7 @@ impl ModRef {
             StmtKind::LetDestructure { pattern, value, .. } => {
                 let (pattern, value) = (*pattern, *value);
                 self.accumulate_pattern_writes(body, pattern, scope);
-                self.accumulate_expr(body, value, scope);
+                self.accumulate_expr(body, value.expr(), scope);
             }
         }
     }
@@ -674,7 +674,7 @@ impl ModRef {
             }
             PatKind::ConstantValue { expr } => {
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_expr(body, expr.expr(), scope);
             }
             PatKind::Wildcard
             | PatKind::Literal(_)

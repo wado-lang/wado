@@ -138,7 +138,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         (*receiver, args[0].expr)
     };
 
-    if !is_duplicable_receiver(&*engine.body, receiver) {
+    if !is_duplicable_receiver(&*engine.body, receiver.expr()) {
         return None;
     }
 
@@ -150,11 +150,11 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         let ExprKind::Unary {
             op: NirUnaryOp::Ref,
             expr: inner,
-        } = &engine.body.exprs[arg0].kind
+        } = &engine.body.exprs[arg0.expr()].kind
         else {
             return None;
         };
-        let ExprKind::StringLiteral(s) = &engine.body.exprs[*inner].kind else {
+        let ExprKind::StringLiteral(s) = &engine.body.exprs[inner.expr()].kind else {
             return None;
         };
         s.clone()
@@ -167,15 +167,15 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     let mut stmts = Vec::with_capacity(s.len());
     for byte in s.bytes() {
         let ch = char::from(byte);
-        let recv_clone = engine.clone_expr(receiver);
+        let recv_clone = engine.clone_expr(receiver.expr());
         let char_arg = engine.alloc_expr(ExprKind::CharLiteral(ch), TypeTable::CHAR, span);
         let call = engine.alloc_expr(
             ExprKind::MethodCall {
-                receiver: recv_clone,
+                receiver: recv_clone.into(),
                 func: ctx.push_char.clone(),
                 type_args: Vec::new(),
                 args: vec![ArenaCallArg {
-                    expr: char_arg,
+                    expr: char_arg.into(),
                     is_mut: false,
                 }],
             },
@@ -201,11 +201,11 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
 fn is_duplicable_receiver(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_receiver(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_receiver(body, inner.expr()),
         ExprKind::Unary {
             op: NirUnaryOp::Deref | NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => is_duplicable_receiver(body, *inner),
+        } => is_duplicable_receiver(body, inner.expr()),
         _ => false,
     }
 }

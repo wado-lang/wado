@@ -16,12 +16,12 @@ pub(super) fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
         ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
-            place_root_local(body, *inner)
+            place_root_local(body, inner.expr())
         }
         ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr: inner,
-        } => place_root_local(body, *inner),
+        } => place_root_local(body, inner.expr()),
         _ => None,
     }
 }
@@ -37,7 +37,7 @@ pub(super) fn projection_root_local(body: &Body, expr: ExprId) -> Option<u32> {
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. } => projection_root_local(body, *inner),
+        | ExprKind::Index { expr: inner, .. } => projection_root_local(body, inner.expr()),
         _ => None,
     }
 }
@@ -68,7 +68,7 @@ pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr: inner,
-        } => strip_refs(body, *inner),
+        } => strip_refs(body, inner.expr()),
         _ => id,
     }
 }
@@ -96,7 +96,7 @@ fn collect_reads_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
                 if !matches!(&body.exprs[target].kind, ExprKind::Local { .. }) {
                     collect_reads_node(body, NodeRef::Expr(target), out);
                 }
-                collect_reads_node(body, NodeRef::Expr(value), out);
+                collect_reads_node(body, NodeRef::Expr(value.expr()), out);
                 return;
             }
             _ => {}
@@ -158,22 +158,22 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => true,
         ExprKind::Binary { left, right, .. } => {
-            is_pure_expr(body, *left) && is_pure_expr(body, *right)
+            is_pure_expr(body, left.expr()) && is_pure_expr(body, right.expr())
         }
-        ExprKind::Unary { expr: inner, .. } => is_pure_expr(body, *inner),
+        ExprKind::Unary { expr: inner, .. } => is_pure_expr(body, inner.expr()),
         ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(body, *inner),
-        ExprKind::Index { expr: e, index: i } => is_pure_expr(body, *e) && is_pure_expr(body, *i),
+        | ExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(body, inner.expr()),
+        ExprKind::Index { expr: e, index: i } => is_pure_expr(body, e.expr()) && is_pure_expr(body, i.expr()),
         ExprKind::StructLiteral { fields, .. } => {
-            fields.iter().all(|f| is_pure_expr(body, f.value))
+            fields.iter().all(|f| is_pure_expr(body, f.value.expr()))
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            elements.iter().all(|e| is_pure_expr(body, *e))
+            elements.iter().all(|e| is_pure_expr(body, e.expr()))
         }
-        ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(|p| is_pure_expr(body, p)),
+        ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(|p| is_pure_expr(body, p.expr())),
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             is_pure_block(body, *block)
         }
@@ -182,7 +182,7 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
             then_branch,
             else_branch,
         } => {
-            is_pure_expr(body, *condition)
+            is_pure_expr(body, condition.expr())
                 && is_pure_block(body, *then_branch)
                 && else_branch.is_none_or(|b| is_pure_block(body, b))
         }

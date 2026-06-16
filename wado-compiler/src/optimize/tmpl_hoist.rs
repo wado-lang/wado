@@ -212,15 +212,15 @@ fn collect_escaping_locals(body: &Body, block: BlockId) -> IndexSet<u32> {
 fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>) {
     match &body.stmts[s].kind {
         StmtKind::Let { value, .. } => {
-            collect_escaping_in_expr(body, *value, escaping);
+            collect_escaping_in_expr(body, value.expr(), escaping);
         }
         StmtKind::Expr(expr) => {
             collect_escaping_in_expr(body, *expr, escaping);
         }
         StmtKind::Return { value: Some(expr) } => {
             // Returning a value means it escapes the loop
-            collect_local_refs(body, *expr, escaping);
-            collect_escaping_in_expr(body, *expr, escaping);
+            collect_local_refs(body, expr.expr(), escaping);
+            collect_escaping_in_expr(body, expr.expr(), escaping);
         }
         StmtKind::If {
             condition,
@@ -230,7 +230,7 @@ fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>
             let condition = *condition;
             let then_block = *then_block;
             let else_block = *else_block;
-            collect_escaping_in_expr(body, condition, escaping);
+            collect_escaping_in_expr(body, condition.expr(), escaping);
             for s in &body.blocks[then_block].stmts {
                 collect_escaping_in_stmt(body, *s, escaping);
             }
@@ -256,12 +256,12 @@ fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>
         StmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 let v = *v;
-                collect_local_refs(body, v, escaping);
-                collect_escaping_in_expr(body, v, escaping);
+                collect_local_refs(body, v.expr(), escaping);
+                collect_escaping_in_expr(body, v.expr(), escaping);
             }
         }
         StmtKind::LetDestructure { value, .. } => {
-            collect_escaping_in_expr(body, *value, escaping);
+            collect_escaping_in_expr(body, value.expr(), escaping);
         }
     }
 }
@@ -281,7 +281,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             // Receiver (self) doesn't escape — only non-self args escape
             let receiver = *receiver;
             let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            collect_escaping_in_expr(body, receiver, escaping);
+            collect_escaping_in_expr(body, receiver.expr(), escaping);
             for arg in args {
                 collect_local_refs(body, arg, escaping);
                 collect_escaping_in_expr(body, arg, escaping);
@@ -290,19 +290,19 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let args = args.clone();
-            collect_escaping_in_expr(body, callee, escaping);
+            collect_escaping_in_expr(body, callee.expr(), escaping);
             for arg in args {
-                collect_local_refs(body, arg, escaping);
-                collect_escaping_in_expr(body, arg, escaping);
+                collect_local_refs(body, arg.expr(), escaping);
+                collect_escaping_in_expr(body, arg.expr(), escaping);
             }
         }
         // Assignment: the value escapes (stored in target location)
         ExprKind::Assign { target, value } => {
             let target = *target;
             let value = *value;
-            collect_local_refs(body, value, escaping);
+            collect_local_refs(body, value.expr(), escaping);
             collect_escaping_in_expr(body, target, escaping);
-            collect_escaping_in_expr(body, value, escaping);
+            collect_escaping_in_expr(body, value.expr(), escaping);
         }
         // Struct literal fields: all field values escape
         ExprKind::StructLiteral { fields, .. } => {
@@ -316,21 +316,21 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::Index { expr: inner, index } => {
             let inner = *inner;
             let index = *index;
-            collect_escaping_in_expr(body, inner, escaping);
-            collect_escaping_in_expr(body, index, escaping);
+            collect_escaping_in_expr(body, inner.expr(), escaping);
+            collect_escaping_in_expr(body, index.expr(), escaping);
         }
         // Binary/unary: recurse
         ExprKind::Binary { left, right, .. } => {
             let left = *left;
             let right = *right;
-            collect_escaping_in_expr(body, left, escaping);
-            collect_escaping_in_expr(body, right, escaping);
+            collect_escaping_in_expr(body, left.expr(), escaping);
+            collect_escaping_in_expr(body, right.expr(), escaping);
         }
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            collect_escaping_in_expr(body, *inner, escaping);
+            collect_escaping_in_expr(body, inner.expr(), escaping);
         }
         ExprKind::FieldAccess { expr: inner, .. } => {
-            collect_escaping_in_expr(body, *inner, escaping);
+            collect_escaping_in_expr(body, inner.expr(), escaping);
         }
         ExprKind::If {
             condition,
@@ -340,7 +340,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let condition = *condition;
             let then_branch = *then_branch;
             let else_branch = *else_branch;
-            collect_escaping_in_expr(body, condition, escaping);
+            collect_escaping_in_expr(body, condition.expr(), escaping);
             for s in &body.blocks[then_branch].stmts {
                 collect_escaping_in_stmt(body, *s, escaping);
             }
@@ -368,7 +368,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
                 .iter()
                 .flat_map(|arm| arm.guard.into_iter().chain(std::iter::once(arm.body)))
                 .collect();
-            collect_escaping_in_expr(body, inner, escaping);
+            collect_escaping_in_expr(body, inner.expr(), escaping);
             for ae in arm_exprs {
                 collect_escaping_in_expr(body, ae, escaping);
             }
@@ -382,7 +382,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            collect_escaping_in_expr(body, scrutinee, escaping);
+            collect_escaping_in_expr(body, scrutinee.expr(), escaping);
             for arm in arms {
                 for s in &body.blocks[arm].stmts {
                     collect_escaping_in_stmt(body, *s, escaping);
@@ -395,34 +395,34 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::CmRawCall { args, .. } => {
             let args = args.clone();
             for arg in args {
-                collect_local_refs(body, arg, escaping);
-                collect_escaping_in_expr(body, arg, escaping);
+                collect_local_refs(body, arg.expr(), escaping);
+                collect_escaping_in_expr(body, arg.expr(), escaping);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements = elements.clone();
             for elem in elements {
-                collect_local_refs(body, elem, escaping);
-                collect_escaping_in_expr(body, elem, escaping);
+                collect_local_refs(body, elem.expr(), escaping);
+                collect_escaping_in_expr(body, elem.expr(), escaping);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 let p = *p;
-                collect_local_refs(body, p, escaping);
-                collect_escaping_in_expr(body, p, escaping);
+                collect_local_refs(body, p.expr(), escaping);
+                collect_escaping_in_expr(body, p.expr(), escaping);
             }
         }
         ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::ClosureToCanonical { functor: inner, .. } => {
-            collect_escaping_in_expr(body, *inner, escaping);
+            collect_escaping_in_expr(body, inner.expr(), escaping);
         }
         ExprKind::GlobalVarSet { value, .. } => {
             let value = *value;
-            collect_local_refs(body, value, escaping);
-            collect_escaping_in_expr(body, value, escaping);
+            collect_local_refs(body, value.expr(), escaping);
+            collect_escaping_in_expr(body, value.expr(), escaping);
         }
         // Leaf nodes
         ExprKind::Local { .. }
@@ -466,7 +466,7 @@ fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
             }
         }
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            collect_local_refs(body, *inner, locals);
+            collect_local_refs(body, inner.expr(), locals);
         }
         // FieldAccess (e.g., s.repr) — accessing a subfield doesn't mean the whole
         // local escapes. Skip to avoid false positives with iterator construction.
@@ -504,7 +504,7 @@ fn transform_stmt(
         None
     };
     if let Some((local_index, value)) = let_info {
-        let tmpl_block = match &engine.body.exprs[value].kind {
+        let tmpl_block = match &engine.body.exprs[value.expr()].kind {
             ExprKind::LabeledBlock { label, block, .. } if label == "__tmpl" => Some(*block),
             _ => None,
         };
@@ -525,7 +525,7 @@ fn transform_stmt(
             return;
         }
         // Recurse into the value expression
-        transform_expr(engine, value, escaping_locals, hoist_stmts, type_table);
+        transform_expr(engine, value.expr(), escaping_locals, hoist_stmts, type_table);
         return;
     }
 
@@ -543,9 +543,9 @@ fn transform_stmt(
             condition,
             then_block,
             else_block,
-        } => Shape::If(*condition, *then_block, *else_block),
+        } => Shape::If(condition.expr(), *then_block, *else_block),
         StmtKind::LabeledBlock { block, .. } => Shape::Labeled(*block),
-        StmtKind::Break { value: Some(e), .. } => Shape::Break(*e),
+        StmtKind::Break { value: Some(e), .. } => Shape::Break(e.expr()),
         // Don't recurse into nested loops.
         _ => Shape::None,
     };
@@ -589,16 +589,16 @@ fn transform_expr(
             v.extend(args.iter().map(|a| a.expr));
             Walk::Exprs(v)
         }
-        ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![*left, *right]),
+        ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![left.expr(), right.expr()]),
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![*inner]),
-        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, *value]),
+        | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![inner.expr()]),
+        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, value.expr()]),
         ExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } => Walk::CondBlocks(*condition, *then_branch, *else_branch),
+        } => Walk::CondBlocks(condition.expr(), *then_branch, *else_branch),
         ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
         _ => Walk::None,
     };
@@ -646,15 +646,15 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
             let local_index = *local_index;
             let value = *value;
             let type_id = *type_id;
-            let value_span = body.exprs[value].span;
+            let value_span = body.exprs[value.expr()].span;
             // Try pre-lowered form: String::with_capacity(N)
-            if let ExprKind::Call { func, .. } = &body.exprs[value].kind
+            if let ExprKind::Call { func, .. } = &body.exprs[value.expr()].kind
                 && func.method_info.is_some()
                 && func.name == "String::with_capacity"
             {
                 return Some(TmplCandidate {
                     buf_local_index: local_index,
-                    init_value: value,
+                    init_value: value.expr(),
                     string_type: type_id,
                     span: value_span,
                 });
@@ -664,14 +664,14 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
                 struct_name,
                 fields,
                 ..
-            } = &body.exprs[value].kind
+            } = &body.exprs[value.expr()].kind
             {
                 if struct_name == "String" {
                     // Verify the repr field contains an array_new call
                     let repr_field = fields
                         .iter()
                         .find(|f| f.name == SeqField::Backing.field_name())?;
-                    if !array_new_has_capacity(body, repr_field.value) {
+                    if !array_new_has_capacity(body, repr_field.value.expr()) {
                         return None;
                     }
                     // Verify used field is 0
@@ -679,7 +679,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
                         .iter()
                         .find(|f| f.name == SeqField::Len.field_name())?;
                     if !matches!(
-                        &body.exprs[used_field.value].kind,
+                        &body.exprs[used_field.value.expr()].kind,
                         ExprKind::IntLiteral { value: 0, .. }
                     ) {
                         return None;
@@ -701,7 +701,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
         StmtKind::Break {
             label: Some(label),
             value: Some(val),
-        } if label == "__tmpl" => match &body.exprs[*val].kind {
+        } if label == "__tmpl" => match &body.exprs[val.expr()].kind {
             ExprKind::Local { index, .. } if *index == buf_local_index => {}
             _ => return None,
         },
@@ -710,7 +710,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
 
     Some(TmplCandidate {
         buf_local_index,
-        init_value,
+        init_value.expr(),
         string_type,
         span,
     })
@@ -766,11 +766,11 @@ fn extract_fmt_candidates(
                     let ExprKind::Local { index, .. } = &engine.body.exprs[*target].kind else {
                         continue;
                     };
-                    (*index, *value)
+                    (*index, value.expr())
                 }
                 StmtKind::Let {
                     local_index, value, ..
-                } => (*local_index, *value),
+                } => (*local_index, value.expr()),
                 _ => continue,
             };
 
@@ -839,7 +839,7 @@ fn extract_fmt_candidates(
                 engine.alloc_expr(
                     ExprKind::Unary {
                         op: NirUnaryOp::MutRef,
-                        expr: local,
+                        expr: local.into(),
                     },
                     buf_ty,
                     value_span,
@@ -851,7 +851,7 @@ fn extract_fmt_candidates(
             };
             init_fields.push(ArenaStructField {
                 name: name.clone(),
-                value: new_value,
+                value: new_value.into(),
                 field_index: *field_index,
             });
         }
@@ -896,7 +896,7 @@ fn extract_formatter_fields(
             struct_type,
         } => {
             let buf_field = fields.iter().find(|f| f.name == "buf")?;
-            if !buf_field_references_local(body, buf_field.value, hoisted_buf_index) {
+            if !buf_field_references_local(body, buf_field.value.expr(), hoisted_buf_index) {
                 return None;
             }
             Some(FmtFields {
@@ -922,7 +922,7 @@ fn extract_formatter_fields(
             extract_formatter_fields_from_block(
                 body,
                 block,
-                break_value,
+                break_value.expr(),
                 hoisted_buf_index,
                 value_type_id,
                 value_span,
@@ -990,12 +990,12 @@ fn extract_formatter_fields_from_block(
 
     // Check if buf traces to hoisted buffer (directly or via intermediate local)
     let buf_field = fields.iter().find(|f| f.name == "buf")?;
-    if buf_field_references_local(body, buf_field.value, hoisted_buf_index) {
+    if buf_field_references_local(body, buf_field.value.expr(), hoisted_buf_index) {
         return Some(make());
     }
 
     // Trace through intermediate local in the block
-    let buf_inner_local = extract_local_from_ref(body, buf_field.value)?;
+    let buf_inner_local = extract_local_from_ref(body, buf_field.value.expr())?;
     for s in &body.blocks[block].stmts {
         match &body.stmts[*s].kind {
             StmtKind::Let {
@@ -1003,7 +1003,7 @@ fn extract_formatter_fields_from_block(
                 value: let_value,
                 ..
             } if *local_index == buf_inner_local => {
-                if references_local(body, *let_value, hoisted_buf_index) {
+                if references_local(body, let_value.expr(), hoisted_buf_index) {
                     return Some(make());
                 }
             }
@@ -1011,7 +1011,7 @@ fn extract_formatter_fields_from_block(
                 if let ExprKind::Assign { target, value: av } = &body.exprs[*expr].kind
                     && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
                     && *index == buf_inner_local
-                    && references_local(body, *av, hoisted_buf_index)
+                    && references_local(body, av.expr(), hoisted_buf_index)
                 {
                     return Some(make());
                 }
@@ -1030,12 +1030,12 @@ fn extract_local_from_ref(body: &Body, e: ExprId) -> Option<u32> {
         ExprKind::Unary {
             op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
             expr: inner,
-        } => match &body.exprs[*inner].kind {
+        } => match &body.exprs[inner.expr()].kind {
             ExprKind::Local { index, .. } => Some(*index),
             _ => None,
         },
         ExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
-            args.first().and_then(|a| match &body.exprs[a.expr].kind {
+            args.first().and_then(|a| match &body.exprs[a.expr.expr()].kind {
                 ExprKind::Local { index, .. } => Some(*index),
                 _ => None,
             })
@@ -1058,7 +1058,7 @@ fn references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => references_local(body, *inner, local_index),
+        } => references_local(body, inner.expr(), local_index),
         _ => false,
     }
 }
@@ -1071,12 +1071,12 @@ fn buf_field_references_local(body: &Body, e: ExprId, local_index: u32) -> bool 
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => is_local(body, *inner, local_index),
+        } => is_local(body, inner.expr(), local_index),
         // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
         ExprKind::Call { func, args, .. } => {
             func.name.contains("ref.as_non_null")
                 && args.len() == 1
-                && is_local(body, args[0].expr, local_index)
+                && is_local(body, args[0].expr.expr(), local_index)
         }
         _ => false,
     }
@@ -1132,7 +1132,7 @@ fn transform_tmpl_block(
             is_mut: true,
             is_reactive: false,
             type_id: string_type,
-            value: candidate.init_value,
+            value: candidate.init_value.into(),
             skip_value_copy: false,
         },
         span,
@@ -1191,7 +1191,7 @@ fn build_field_reset(
     );
     let field = engine.alloc_expr(
         ExprKind::FieldAccess {
-            expr: local,
+            expr: local.into(),
             field_index,
             field_name: field_name.to_string(),
         },
@@ -1209,7 +1209,7 @@ fn build_field_reset(
     let assign = engine.alloc_expr(
         ExprKind::Assign {
             target: field,
-            value: zero,
+            value: zero.into(),
         },
         TypeTable::UNIT,
         span,
@@ -1298,7 +1298,7 @@ fn transform_fmts_in_tmpl_block(
                 is_mut: true,
                 is_reactive: false,
                 type_id: info.formatter_type,
-                value: info.init_value,
+                value: info.init_value.into(),
                 skip_value_copy: false,
             },
             info.span,
@@ -1356,19 +1356,19 @@ fn rename_local_in_stmt(
         None,
     }
     let shape = match &engine.body.stmts[s].kind {
-        StmtKind::Let { value, .. } => Shape::Expr(*value),
+        StmtKind::Let { value, .. } => Shape::Expr(value.expr()),
         StmtKind::Expr(expr) => Shape::Expr(*expr),
-        StmtKind::Return { value: Some(expr) } => Shape::Expr(*expr),
+        StmtKind::Return { value: Some(expr) } => Shape::Expr(expr.expr()),
         StmtKind::If {
             condition,
             then_block,
             else_block,
-        } => Shape::If(*condition, *then_block, *else_block),
+        } => Shape::If(condition.expr(), *then_block, *else_block),
         StmtKind::LabeledBlock { block, .. } => Shape::Block(*block),
         StmtKind::Loop { body } => Shape::Block(*body),
         StmtKind::Break {
             value: Some(expr), ..
-        } => Shape::Expr(*expr),
+        } => Shape::Expr(expr.expr()),
         _ => Shape::None,
     };
     match shape {
@@ -1424,20 +1424,20 @@ fn rename_local_in_expr(
             v.extend(args.iter().copied());
             Walk::Exprs(v)
         }
-        ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![*left, *right]),
+        ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![left.expr(), right.expr()]),
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![*inner]),
-        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, *value]),
+        | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![inner.expr()]),
+        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, value.expr()]),
         ExprKind::StructLiteral { fields, .. } => {
             Walk::Exprs(fields.iter().map(|f| f.value).collect())
         }
-        ExprKind::Index { expr: inner, index } => Walk::Exprs(vec![*inner, *index]),
+        ExprKind::Index { expr: inner, index } => Walk::Exprs(vec![inner.expr(), index.expr()]),
         ExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } => Walk::CondBlocks(*condition, *then_branch, *else_branch),
+        } => Walk::CondBlocks(condition.expr(), *then_branch, *else_branch),
         ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
         _ => Walk::None,
     };

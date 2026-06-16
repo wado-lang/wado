@@ -203,7 +203,7 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
     // ValueId. We intentionally restrict candidates to `Binary` so a single-
     // local read (whose VN is just an `Opaque` / `Local` reaching def) does
     // not get hoisted — there is no benefit in CSE'ing a single local read.
-    let candidates = collect_binary_candidates(engine, guard_expr);
+    let candidates = collect_binary_candidates(engine, guard_expr.expr());
     if candidates.is_empty() {
         return false;
     }
@@ -234,7 +234,7 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
                 is_mut: false,
                 is_reactive: false,
                 type_id,
-                value,
+                value.into(),
                 skip_value_copy: false,
             },
             span,
@@ -286,13 +286,13 @@ fn collect_binary_candidates(
             match &body.exprs[e].kind {
                 ExprKind::Binary { left, op, right } => {
                     binary_exprs.push((e, body.exprs[e].type_id, body.exprs[e].span));
-                    stack.push(*left);
+                    stack.push(left.expr());
                     if !matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
-                        stack.push(*right);
+                        stack.push(right.expr());
                     }
                 }
                 ExprKind::Unary { expr: inner, .. } => {
-                    stack.push(*inner);
+                    stack.push(inner.expr());
                 }
                 _ => {}
             }
@@ -361,14 +361,14 @@ fn collect_exprs_in_stmt(body: &Body, stmt: StmtId, out: &mut Vec<ExprId>) {
     match &body.stmts[stmt].kind {
         StmtKind::Expr(e) => collect_exprs_in_expr(body, *e, out),
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            collect_exprs_in_expr(body, *value, out);
+            collect_exprs_in_expr(body, value.expr(), out);
         }
         StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            collect_exprs_in_expr(body, *condition, out);
+            collect_exprs_in_expr(body, condition.expr(), out);
             collect_exprs_in_block(body, *then_block, out);
             if let Some(eb) = else_block {
                 collect_exprs_in_block(body, *eb, out);
@@ -379,7 +379,7 @@ fn collect_exprs_in_stmt(body: &Body, stmt: StmtId, out: &mut Vec<ExprId>) {
         StmtKind::LabeledBlock { block, .. } => collect_exprs_in_block(body, *block, out),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                collect_exprs_in_expr(body, *v, out);
+                collect_exprs_in_expr(body, v.expr(), out);
             }
         }
         StmtKind::Continue => {}

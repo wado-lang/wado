@@ -222,11 +222,11 @@ fn body_is_list_wrapper_copy(body: &Body) -> bool {
     // `return StructLiteral { fields: [.., repr: Call(array_clone, ..), ..] }`
     for s in &body.blocks[body.root].stmts {
         if let StmtKind::Return { value: Some(v) } = &body.stmts[*s].kind
-            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[*v].kind
+            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[v.expr()].kind
         {
             return fields.iter().any(|fld| {
                 fld.name == SeqField::Backing.field_name()
-                    && matches!(&body.exprs[fld.value].kind,
+                    && matches!(&body.exprs[fld.value.expr()].kind,
                         ExprKind::Call { func, .. }
                             if builtin_gname(func).as_deref() == Some("builtin::array_clone"))
             });
@@ -274,12 +274,12 @@ fn stmt_binding(body: &Body, s: StmtId) -> Option<(ExprId, u32)> {
     match &body.stmts[s].kind {
         StmtKind::Let {
             local_index, value, ..
-        } => Some((*value, *local_index)),
+        } => Some((value.expr(), *local_index)),
         StmtKind::Expr(e) => {
             if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
                 && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
             {
-                Some((*value, *index))
+                Some((value.expr(), *index))
             } else {
                 None
             }
@@ -333,7 +333,7 @@ fn arg_source_root(body: &Body, id: ExprId) -> Option<u32> {
         | ExprKind::Index { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::Unary { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => arg_source_root(body, *inner),
+        | ExprKind::VariantPayload { expr: inner, .. } => arg_source_root(body, inner.expr()),
         _ => None,
     }
 }
@@ -375,7 +375,7 @@ fn demote_candidate(
     // The argument side: a fresh rvalue (`None` root) is uniquely owned;
     // an immutable-ref parameter cannot be mutated; otherwise every use of
     // the root local must itself be element-clean.
-    match arg_source_root(body, arg0) {
+    match arg_source_root(body, arg0.expr()) {
         None => true,
         Some(root) => {
             let clean = is_immutable_ref_param(params, an.type_table, root)
@@ -434,10 +434,10 @@ fn retarget_block(
 /// The binding value of a `let` / `Assign` statement.
 fn stmt_binding_value(body: &Body, s: StmtId) -> Option<ExprId> {
     match &body.stmts[s].kind {
-        StmtKind::Let { value, .. } => Some(*value),
+        StmtKind::Let { value, .. } => Some(value.expr()),
         StmtKind::Expr(e) => {
             if let ExprKind::Assign { value, .. } = &body.exprs[*e].kind {
-                Some(*value)
+                Some(value.expr())
             } else {
                 None
             }
@@ -617,7 +617,7 @@ impl ElementClean<'_, '_> {
                 let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
                 // The receiver auto-refs to `&self` / `&mut self`, so strip
                 // the wrapping reference before matching the handle.
-                let recv = strip_refs(body, receiver);
+                let recv = strip_refs(body, receiver.expr());
                 if is_local(body, recv, idx) {
                     // Receiver is the handle itself: `x.method()`.
                     let safe = match self.analyzer.callee_mutates_self(&key) {
@@ -629,7 +629,7 @@ impl ElementClean<'_, '_> {
                         self.clean = false;
                         return;
                     }
-                } else if expr_mentions_local(body, receiver, idx) {
+                } else if expr_mentions_local(body, receiver.expr(), idx) {
                     // The handle appears inside the receiver — an element
                     // or field of it (`x[i].method()`, `x.get(i).method()`,
                     // `x.field.method()`). A `&mut self` method there may
@@ -642,12 +642,12 @@ impl ElementClean<'_, '_> {
                         self.clean = false;
                         return;
                     }
-                    self.visit_expr(body, receiver);
+                    self.visit_expr(body, receiver.expr());
                     if !self.clean {
                         return;
                     }
                 } else {
-                    self.visit_expr(body, receiver);
+                    self.visit_expr(body, receiver.expr());
                     if !self.clean {
                         return;
                     }
@@ -671,12 +671,12 @@ impl ElementClean<'_, '_> {
             ExprKind::IndirectCall { callee, args } => {
                 let callee = *callee;
                 let args = args.clone();
-                self.visit_expr(body, callee);
+                self.visit_expr(body, callee.expr());
                 if !self.clean {
                     return;
                 }
                 for a in args {
-                    self.visit_call_arg(body, a);
+                    self.visit_call_arg(body, a.expr());
                     if !self.clean {
                         return;
                     }
@@ -689,7 +689,7 @@ impl ElementClean<'_, '_> {
                 // `&mut x`, `&mut x[i]`, `&mut x.field` — a mutable
                 // reference into the handle escapes our control.
                 let inner = *inner;
-                if expr_mentions_local(body, inner, idx) {
+                if expr_mentions_local(body, inner.expr(), idx) {
                     self.clean = false;
                 }
             }
@@ -697,18 +697,18 @@ impl ElementClean<'_, '_> {
                 // Index read: `x[i]` produces an element copy.
                 let base = *base;
                 let index = *index;
-                if !is_local(body, base, idx) {
-                    self.visit_expr(body, base);
+                if !is_local(body, base.expr(), idx) {
+                    self.visit_expr(body, base.expr());
                     if !self.clean {
                         return;
                     }
                 }
-                self.visit_expr(body, index);
+                self.visit_expr(body, index.expr());
             }
             ExprKind::FieldAccess { expr: base, .. } => {
                 let base = *base;
-                if !is_local(body, base, idx) {
-                    self.visit_expr(body, base);
+                if !is_local(body, base.expr(), idx) {
+                    self.visit_expr(body, base.expr());
                 }
             }
             ExprKind::Assign { target, value } => {
@@ -719,7 +719,7 @@ impl ElementClean<'_, '_> {
                     self.clean = false;
                     return;
                 }
-                self.visit_expr(body, value);
+                self.visit_expr(body, value.expr());
             }
             // Every other shape — operators, casts, aggregates, control flow,
             // and the patterns reached through it — is a plain read; recurse
@@ -741,7 +741,7 @@ impl ElementClean<'_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if expr_mentions_local(body, inner, idx) {
+                if expr_mentions_local(body, inner.expr(), idx) {
                     self.clean = false;
                 }
             }
@@ -750,8 +750,8 @@ impl ElementClean<'_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if !is_local(body, inner, idx) {
-                    self.visit_expr(body, inner);
+                if !is_local(body, inner.expr(), idx) {
+                    self.visit_expr(body, inner.expr());
                 }
             }
             _ => self.visit_expr(body, arg),
@@ -839,9 +839,9 @@ impl ElementImmutable<'_, '_, '_> {
             } => {
                 let local_index = *local_index;
                 let value = *value;
-                self.visit_expr(body, value);
+                self.visit_expr(body, value.expr());
                 if self.clean
-                    && is_self_derived(body, value, &self.tainted, self.analyzer.type_table)
+                    && is_self_derived(body, value.expr(), &self.tainted, self.analyzer.type_table)
                 {
                     self.tainted.insert(local_index);
                 }
@@ -859,7 +859,7 @@ impl ElementImmutable<'_, '_, '_> {
                     let value = *value;
                     if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
                         let index = *index;
-                        if is_self_derived(body, value, &self.tainted, self.analyzer.type_table) {
+                        if is_self_derived(body, value.expr(), &self.tainted, self.analyzer.type_table) {
                             self.tainted.insert(index);
                         }
                     }
@@ -884,7 +884,7 @@ impl ElementImmutable<'_, '_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if is_self_derived(body, inner, &self.tainted, tt) {
+                if is_self_derived(body, inner.expr(), &self.tainted, tt) {
                     crate::compiler_trace!("demote", "verify reject: &mut of self-derived");
                     self.clean = false;
                     return;
@@ -900,11 +900,11 @@ impl ElementImmutable<'_, '_, '_> {
                 let bad = match &body.exprs[target].kind {
                     ExprKind::FieldAccess { expr: base, .. } => {
                         let base = *base;
-                        is_self_derived(body, base, &self.tainted, tt)
-                            && !matches!(&body.exprs[base].kind, ExprKind::Local { index: 0, .. })
+                        is_self_derived(body, base.expr(), &self.tainted, tt)
+                            && !matches!(&body.exprs[base.expr()].kind, ExprKind::Local { index: 0, .. })
                     }
                     ExprKind::Index { expr: base, .. } => {
-                        is_self_derived(body, *base, &self.tainted, tt)
+                        is_self_derived(body, base.expr(), &self.tainted, tt)
                     }
                     _ => false,
                 };
@@ -917,7 +917,7 @@ impl ElementImmutable<'_, '_, '_> {
                 if !self.clean {
                     return;
                 }
-                self.visit_expr(body, value);
+                self.visit_expr(body, value.expr());
             }
             ExprKind::MethodCall {
                 receiver,
@@ -932,7 +932,7 @@ impl ElementImmutable<'_, '_, '_> {
                 // unless the callee is known `&self` (cannot mutate) or a
                 // verified element-immutable `&mut self` method. An
                 // unresolvable callee is conservatively unsafe.
-                if is_self_derived(body, receiver, &self.tainted, tt) {
+                if is_self_derived(body, receiver.expr(), &self.tainted, tt) {
                     let ok = match self.analyzer.callee_mutates_self(&key) {
                         Some(false) => true,
                         Some(true) => self.analyzer.verify(&key, self.visiting),
@@ -948,7 +948,7 @@ impl ElementImmutable<'_, '_, '_> {
                         return;
                     }
                 }
-                self.visit_expr(body, receiver);
+                self.visit_expr(body, receiver.expr());
                 if !self.clean {
                     return;
                 }
@@ -984,9 +984,9 @@ impl ElementImmutable<'_, '_, '_> {
                                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                                 expr,
                             } => *expr,
-                            _ => a,
+                            _ => a.into(),
                         };
-                        self.visit_expr(body, inner);
+                        self.visit_expr(body, inner.expr());
                     } else {
                         self.visit_call_arg(body, a);
                     }
@@ -1005,7 +1005,7 @@ impl ElementImmutable<'_, '_, '_> {
                 // its (unverified) body with access to `self`'s elements.
                 let callee = *callee;
                 let args = args.clone();
-                if is_self_derived(body, callee, &self.tainted, tt) {
+                if is_self_derived(body, callee.expr(), &self.tainted, tt) {
                     crate::compiler_trace!(
                         "demote",
                         "verify reject: indirect call of self-capturing closure"
@@ -1013,12 +1013,12 @@ impl ElementImmutable<'_, '_, '_> {
                     self.clean = false;
                     return;
                 }
-                self.visit_expr(body, callee);
+                self.visit_expr(body, callee.expr());
                 if !self.clean {
                     return;
                 }
                 for a in args {
-                    self.visit_call_arg(body, a);
+                    self.visit_call_arg(body, a.expr());
                     if !self.clean {
                         crate::compiler_trace!(
                             "demote",
@@ -1079,7 +1079,7 @@ fn is_self_derived(
         ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. } => is_self_derived(body, *inner, tainted, tt),
+        | ExprKind::Unary { expr: inner, .. } => is_self_derived(body, inner.expr(), tainted, tt),
         ExprKind::Call { func, args, .. } => {
             // `array_get(spine, _)` yields an element of the spine; other
             // array builtins (`array_clone`, `array_new`) produce fresh
@@ -1087,7 +1087,7 @@ fn is_self_derived(
             builtin_gname(func).as_deref() == Some("builtin::array_get")
                 && args
                     .first()
-                    .is_some_and(|a| is_self_derived(body, a.expr, tainted, tt))
+                    .is_some_and(|a| is_self_derived(body, a.expr.expr(), tainted, tt))
         }
         // An aggregate / closure that embeds a self-derived value carries
         // that aliasing storage. Tainting it lets the mutation checks below
@@ -1095,15 +1095,15 @@ fn is_self_derived(
         // aggregate / closure too.
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .any(|f| is_self_derived(body, f.value, tainted, tt)),
+            .any(|f| is_self_derived(body, f.value.expr(), tainted, tt)),
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .any(|e| is_self_derived(body, *e, tainted, tt)),
+            .any(|e| is_self_derived(body, e.expr(), tainted, tt)),
         ExprKind::VariantConstruct { payload, .. } => payload
             .as_ref()
-            .is_some_and(|p| is_self_derived(body, *p, tainted, tt)),
+            .is_some_and(|p| is_self_derived(body, p.expr(), tainted, tt)),
         ExprKind::ClosureToCanonical { functor, .. } => {
-            is_self_derived(body, *functor, tainted, tt)
+            is_self_derived(body, functor.expr(), tainted, tt)
         }
         _ => false,
     }

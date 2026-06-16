@@ -294,10 +294,10 @@ fn check_expr(
         ExprKind::Local { index, .. } if *index == idx => false,
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if matches!(&body.exprs[inner].kind, ExprKind::Local { index, .. } if *index == idx) {
+            if matches!(&body.exprs[inner.expr()].kind, ExprKind::Local { index, .. } if *index == idx) {
                 return true;
             }
-            check_expr(body, inner, idx, candidates)
+            check_expr(body, inner.expr(), idx, candidates)
         }
         ExprKind::Call { func, args, .. } => {
             let key: FnKey = (func.module_source.clone(), func.name.clone());
@@ -315,7 +315,7 @@ fn check_expr(
             let key: FnKey = (func.module_source.clone(), func.name.clone());
             let receiver = *receiver;
             let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            check_call_arg(body, &key, 0, receiver, idx, candidates)
+            check_call_arg(body, &key, 0, receiver.expr(), idx, candidates)
                 && args
                     .iter()
                     .enumerate()
@@ -326,7 +326,7 @@ fn check_expr(
             if place_root_local(body, target) == Some(idx) {
                 return false;
             }
-            check_expr(body, target, idx, candidates) && check_expr(body, value, idx, candidates)
+            check_expr(body, target, idx, candidates) && check_expr(body, value.expr(), idx, candidates)
         }
         _ => {
             let mut kids = Vec::new();
@@ -395,7 +395,7 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)
             ..
         } = &body.exprs[id].kind
         {
-            matches!(&body.exprs[*inner].kind, ExprKind::Local { index, .. }
+            matches!(&body.exprs[inner.expr()].kind, ExprKind::Local { index, .. }
                 if affected.iter().any(|(li, fname)| li == index && fname == field_name))
         } else {
             false
@@ -407,7 +407,7 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)
             let inner = *inner;
             // The node keeps its (field-scalar) type_id / span; its kind becomes
             // the inner Local.
-            body.exprs[id].kind = body.exprs[inner].kind.clone();
+            body.exprs[id].kind = body.exprs[inner.expr()].kind.clone();
             return;
         }
     }
@@ -533,7 +533,7 @@ fn rewrite_call_expr(
                     unreachable!();
                 };
                 if let Some(info) = positions.get(&0) {
-                    rewrite_arg(body, receiver, info, scalar_param_struct, type_table);
+                    rewrite_arg(body, receiver.expr(), info, scalar_param_struct, type_table);
                 }
                 for (pi, info) in &positions {
                     if *pi == 0 {
@@ -543,7 +543,7 @@ fn rewrite_call_expr(
                     if arg_idx < args.len() {
                         rewrite_arg(
                             body,
-                            args[arg_idx].expr,
+                            args[arg_idx].expr.expr(),
                             info,
                             scalar_param_struct,
                             type_table,
@@ -593,7 +593,7 @@ fn rewrite_arg(
     } = &body.exprs[arg].kind
     {
         let inner = *inner;
-        become_expr(body, arg, inner);
+        become_expr(body, arg, inner.expr());
     }
 
     // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap.
@@ -606,7 +606,7 @@ fn rewrite_arg(
         && fields.len() == 1
     {
         let field_value = fields[0].value;
-        become_expr(body, arg, field_value);
+        become_expr(body, arg, field_value.expr());
         return;
     }
 
@@ -628,7 +628,7 @@ fn rewrite_arg(
         span,
     });
     body.exprs[arg].kind = ExprKind::FieldAccess {
-        expr: orig,
+        expr: orig.into(),
         field_index: 0,
         field_name: info.field_name.clone(),
     };

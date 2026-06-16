@@ -499,12 +499,12 @@ fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<(GuardF
     let ExprKind::Unary {
         op: NirUnaryOp::Not,
         expr: inner,
-    } = &engine.body.exprs[condition].kind
+    } = &engine.body.exprs[condition.expr()].kind
     else {
         return None;
     };
     let inner = *inner;
-    let (lhs_vn, rhs_vn, is_strict) = lt_comparison(engine, inner)?;
+    let (lhs_vn, rhs_vn, is_strict) = lt_comparison(engine, inner.expr())?;
     // Loop guards keep the plain-variable shape: the induction variable is
     // compared directly (`i < bound`), so any `Add` decomposition would
     // describe a different program object. Restrict to offset 0.
@@ -540,7 +540,7 @@ fn extract_early_exit_guard(engine: &mut Engine, s: StmtId) -> Option<GuardFact>
         left,
         op: NirBinaryOp::GtEq,
         right,
-    } = &engine.body.exprs[condition].kind
+    } = &engine.body.exprs[condition.expr()].kind
     else {
         return None;
     };
@@ -608,8 +608,8 @@ fn eliminate_panic_check(engine: &mut Engine, s: StmtId, fact: &GuardFact) -> bo
         return false;
     };
     let (condition, then_block) = (*condition, *then_block);
-    if is_panic_block(engine, then_block) && fact.implies_false(engine, condition) {
-        set_false(engine, condition);
+    if is_panic_block(engine, then_block) && fact.implies_false(engine, condition.expr()) {
+        set_false(engine, condition.expr());
         return true;
     }
     false
@@ -650,16 +650,16 @@ impl ArenaOptVisitor for ConditionEliminator {
             // Check if this statement is a bounds check that can be eliminated.
             if else_block.is_none()
                 && is_panic_block(engine, then_block)
-                && self.implied_false(engine, condition)
+                && self.implied_false(engine, condition.expr())
             {
-                set_false(engine, condition);
+                set_false(engine, condition.expr());
                 return true;
             }
 
             // Extract a dominating guard from the condition to extend
             // elimination into the then-block.
-            let mut changed = self.visit_expr(engine, condition);
-            let dom = extract_dominating_guard(engine, condition);
+            let mut changed = self.visit_expr(engine, condition.expr());
+            let dom = extract_dominating_guard(engine, condition.expr());
             let scope_len = self.dom_guards.len();
             if let Some(dg) = dom {
                 self.dom_guards.push(dg);
@@ -686,8 +686,8 @@ impl ArenaOptVisitor for ConditionEliminator {
             _ => None,
         };
         if let Some((condition, then_branch, else_branch)) = if_ids {
-            let mut changed = self.visit_expr(engine, condition);
-            let dom = extract_dominating_guard(engine, condition);
+            let mut changed = self.visit_expr(engine, condition.expr());
+            let dom = extract_dominating_guard(engine, condition.expr());
             let scope_len = self.dom_guards.len();
             if let Some(dg) = dom {
                 self.dom_guards.push(dg);
@@ -734,9 +734,9 @@ impl ArenaOptVisitor for BitmaskEliminator {
         };
         if let Some((condition, then_block)) = if_ids
             && is_panic_block(engine, then_block)
-            && is_bitmask_bounded(engine, condition)
+            && is_bitmask_bounded(engine, condition.expr())
         {
-            set_false(engine, condition);
+            set_false(engine, condition.expr());
             return true;
         }
         arena_opt_walk(self, engine, NodeRef::Stmt(s))
@@ -759,12 +759,12 @@ impl ArenaOptVisitor for ShortCircuitEliminator {
             _ => None,
         };
         if let Some((left, right)) = or_ids {
-            let mut changed = self.visit_expr(engine, left);
+            let mut changed = self.visit_expr(engine, left.expr());
             let fact = if let ExprKind::Binary {
                 left: cmp_l,
                 op: NirBinaryOp::GtEq,
                 right: cmp_r,
-            } = &engine.body.exprs[left].kind
+            } = &engine.body.exprs[left.expr()].kind
             {
                 let (cmp_l, cmp_r) = (*cmp_l, *cmp_r);
                 GuardFact::from_comparison(engine, cmp_l, cmp_r, true)
@@ -772,9 +772,9 @@ impl ArenaOptVisitor for ShortCircuitEliminator {
                 None
             };
             if let Some(fact) = fact {
-                changed |= GuardEliminator { fact }.visit_expr(engine, right);
+                changed |= GuardEliminator { fact }.visit_expr(engine, right.expr());
             }
-            changed |= self.visit_expr(engine, right);
+            changed |= self.visit_expr(engine, right.expr());
             return changed;
         }
         arena_opt_walk(self, engine, NodeRef::Expr(e))

@@ -90,11 +90,11 @@ impl Rule for SelectLoweringRule<'_> {
                         is_mut: false,
                     },
                     ArenaCallArg {
-                        expr: true_val,
+                        expr: true_val.into(),
                         is_mut: false,
                     },
                     ArenaCallArg {
-                        expr: false_val,
+                        expr: false_val.into(),
                         is_mut: false,
                     },
                 ],
@@ -133,19 +133,19 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
         | ExprKind::Local { .. } => true,
         ExprKind::Unary { op, expr: inner } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
-                && is_select_eligible(body, *inner, type_table)
+                && is_select_eligible(body, inner.expr(), type_table)
         }
         ExprKind::Binary { op, left, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_select_eligible(body, *left, type_table)
-                && is_select_eligible(body, *right, type_table)
+                && is_select_eligible(body, left.expr(), type_table)
+                && is_select_eligible(body, right.expr(), type_table)
         }
         ExprKind::Cast {
             expr: inner,
             target_type,
         } => {
-            !is_trapping_cast(body.exprs[*inner].type_id, *target_type, type_table)
-                && is_select_eligible(body, *inner, type_table)
+            !is_trapping_cast(body.exprs[inner.expr()].type_id, *target_type, type_table)
+                && is_select_eligible(body, inner.expr(), type_table)
         }
         _ => false,
     }

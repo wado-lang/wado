@@ -128,10 +128,10 @@ fn candidate_inner(body: &Body, stmt: StmtId) -> ExprId {
     let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
         unreachable!("guarded by describe_candidate");
     };
-    let ExprKind::StructLiteral { fields, .. } = &body.exprs[*value].kind else {
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value.expr()].kind else {
         unreachable!("guarded by describe_candidate");
     };
-    fields[0].value
+    fields[0].value.expr()
 }
 
 /// The leftmost `candidate.field_name` field-access expression reachable from
@@ -149,7 +149,7 @@ fn find_subst_target(
             ..
         } = &body.exprs[id].kind
         && fname == field_name
-        && matches!(&body.exprs[*fa_inner].kind, ExprKind::Local { index, .. } if *index == candidate)
+        && matches!(&body.exprs[fa_inner.expr()].kind, ExprKind::Local { index, .. } if *index == candidate)
     {
         return Some(id);
     }
@@ -198,12 +198,12 @@ fn stats_stmt(body: &Body, stmt: StmtId, stats: &mut IndexMap<u32, LocalStats>) 
         } => {
             let (local_index, value) = (*local_index, *value);
             stats.entry(local_index).or_default().defs += 1;
-            stats_node(body, NodeRef::Expr(value), stats);
+            stats_node(body, NodeRef::Expr(value.expr()), stats);
         }
         StmtKind::LetDestructure { pattern, value, .. } => {
             let (pattern, value) = (*pattern, *value);
             record_pattern_defs(body, pattern, stats);
-            stats_node(body, NodeRef::Expr(value), stats);
+            stats_node(body, NodeRef::Expr(value.expr()), stats);
         }
         _ => {
             let mut kids = Vec::new();
@@ -224,14 +224,14 @@ fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
         } => {
             let inner = *inner;
             let field_name = field_name.clone();
-            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
                 let index = *index;
                 let s = stats.entry(index).or_default();
                 s.total_reads += 1;
                 s.fieldaccess_reads += 1;
                 s.field_names.insert(field_name);
             } else {
-                stats_node(body, NodeRef::Expr(inner), stats);
+                stats_node(body, NodeRef::Expr(inner.expr()), stats);
             }
         }
         ExprKind::Local { index, .. } => {
@@ -242,10 +242,10 @@ fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
             if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
                 let index = *index;
                 stats.entry(index).or_default().defs += 1;
-                stats_node(body, NodeRef::Expr(value), stats);
+                stats_node(body, NodeRef::Expr(value.expr()), stats);
             } else {
                 stats_node(body, NodeRef::Expr(target), stats);
-                stats_node(body, NodeRef::Expr(value), stats);
+                stats_node(body, NodeRef::Expr(value.expr()), stats);
             }
         }
         _ => {
@@ -316,7 +316,7 @@ fn describe_candidate(
     if s.field_names.len() != 1 {
         return None;
     }
-    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value].kind else {
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value.expr()].kind else {
         return None;
     };
     if fields.len() != 1 {
@@ -324,7 +324,7 @@ fn describe_candidate(
     }
     let inner_value = fields[0].value;
     let field_name = s.field_names.iter().next().unwrap().clone();
-    let inner_mr = ModRef::of_expr(body, inner_value);
+    let inner_mr = ModRef::of_expr(body, inner_value.expr());
     Some((local_index, field_name, inner_mr))
 }
 
@@ -381,14 +381,14 @@ fn walk_stmt_for_leftmost(
 ) -> LeftmostWalk {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            match walk_expr_for_leftmost(body, *value, candidate, field_name) {
+            match walk_expr_for_leftmost(body, value.expr(), candidate, field_name) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
         }
         StmtKind::Expr(e) => walk_expr_for_leftmost(body, *e, candidate, field_name),
         StmtKind::Return { value: Some(v) } | StmtKind::Break { value: Some(v), .. } => {
-            match walk_expr_for_leftmost(body, *v, candidate, field_name) {
+            match walk_expr_for_leftmost(body, v.expr(), candidate, field_name) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
@@ -414,7 +414,7 @@ fn walk_expr_for_leftmost(
         ..
     } = &body.exprs[expr].kind
         && fname == field_name
-        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
         && *index == candidate
     {
         return LeftmostWalk::Found;
@@ -433,7 +433,7 @@ fn walk_expr_for_leftmost(
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 LeftmostWalk::Blocked => LeftmostWalk::Blocked,
                 LeftmostWalk::Pure => {
-                    match walk_expr_for_leftmost(body, value, candidate, field_name) {
+                    match walk_expr_for_leftmost(body, value.expr(), candidate, field_name) {
                         LeftmostWalk::Found => LeftmostWalk::Found,
                         _ => LeftmostWalk::Blocked,
                     }
@@ -441,7 +441,7 @@ fn walk_expr_for_leftmost(
             }
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            match walk_expr_for_leftmost(body, *value, candidate, field_name) {
+            match walk_expr_for_leftmost(body, value.expr(), candidate, field_name) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
@@ -478,11 +478,11 @@ fn walk_expr_for_leftmost(
                 // operand the same way as an `if` branch — a Found there
                 // must block elision, not anchor it.
                 NirBinaryOp::And | NirBinaryOp::Or => {
-                    match walk_expr_for_leftmost(body, left, candidate, field_name) {
+                    match walk_expr_for_leftmost(body, left.expr(), candidate, field_name) {
                         LeftmostWalk::Found => LeftmostWalk::Found,
                         LeftmostWalk::Blocked => LeftmostWalk::Blocked,
                         LeftmostWalk::Pure => {
-                            match walk_expr_for_leftmost(body, right, candidate, field_name) {
+                            match walk_expr_for_leftmost(body, right.expr(), candidate, field_name) {
                                 LeftmostWalk::Pure => LeftmostWalk::Pure,
                                 _ => LeftmostWalk::Blocked,
                             }
@@ -507,20 +507,20 @@ fn walk_expr_for_leftmost(
                 // Deref may trap on a null receiver; the op itself is
                 // observable.
                 NirUnaryOp::Deref => {
-                    observable_propagate(walk_expr_for_leftmost(body, inner, candidate, field_name))
+                    observable_propagate(walk_expr_for_leftmost(body, inner.expr(), candidate, field_name))
                 }
                 // Arithmetic / logical / address-taking unaries are pure.
                 NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot => {
-                    walk_expr_for_leftmost(body, inner, candidate, field_name)
+                    walk_expr_for_leftmost(body, inner.expr(), candidate, field_name)
                 }
                 NirUnaryOp::Ref | NirUnaryOp::MutRef => {
-                    walk_expr_for_leftmost(body, inner, candidate, field_name)
+                    walk_expr_for_leftmost(body, inner.expr(), candidate, field_name)
                 }
             }
         }
         // `as` lowers to `ref.cast` / numeric narrowing — both may trap.
         ExprKind::Cast { expr: inner, .. } => {
-            observable_propagate(walk_expr_for_leftmost(body, *inner, candidate, field_name))
+            observable_propagate(walk_expr_for_leftmost(body, inner.expr(), candidate, field_name))
         }
         // FieldAccess on a non-candidate receiver: a fresh `struct.get`
         // on a possibly-null reference, so the op itself may trap. A
@@ -528,7 +528,7 @@ fn walk_expr_for_leftmost(
         // (the FieldAccess applies AFTER the substituted inner), but
         // a Pure receiver does NOT make this subtree Pure.
         ExprKind::FieldAccess { expr: inner, .. } => {
-            observable_propagate(walk_expr_for_leftmost(body, *inner, candidate, field_name))
+            observable_propagate(walk_expr_for_leftmost(body, inner.expr(), candidate, field_name))
         }
         // `List<T>::index_value`-shaped Index may trap on a null base
         // and on OOB; the op itself is observable.
@@ -550,11 +550,11 @@ fn walk_expr_for_leftmost(
             walk_children_pure(body, elements.into_iter(), candidate, field_name)
         }
         ExprKind::VariantConstruct { payload, .. } => match *payload {
-            Some(p) => walk_expr_for_leftmost(body, p, candidate, field_name),
+            Some(p) => walk_expr_for_leftmost(body, p.expr(), candidate, field_name),
             None => LeftmostWalk::Pure,
         },
         ExprKind::ClosureToCanonical { functor, .. } => {
-            walk_expr_for_leftmost(body, *functor, candidate, field_name)
+            walk_expr_for_leftmost(body, functor.expr(), candidate, field_name)
         }
         // `VariantTag` / `VariantTest` / `VariantPayload` all read the
         // discriminant or payload via `ref.cast` + `struct.get` on a
@@ -562,7 +562,7 @@ fn walk_expr_for_leftmost(
         ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. } => {
-            observable_propagate(walk_expr_for_leftmost(body, *inner, candidate, field_name))
+            observable_propagate(walk_expr_for_leftmost(body, inner.expr(), candidate, field_name))
         }
 
         ExprKind::Local { .. }
@@ -588,7 +588,7 @@ fn walk_assign_target(
     match &body.exprs[target].kind {
         ExprKind::Local { .. } => LeftmostWalk::Pure,
         ExprKind::FieldAccess { expr, .. } => {
-            walk_expr_for_leftmost(body, *expr, candidate, field_name)
+            walk_expr_for_leftmost(body, expr.expr(), candidate, field_name)
         }
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
@@ -597,7 +597,7 @@ fn walk_assign_target(
         ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr,
-        } => walk_expr_for_leftmost(body, *expr, candidate, field_name),
+        } => walk_expr_for_leftmost(body, expr.expr(), candidate, field_name),
         _ => walk_expr_for_leftmost(body, target, candidate, field_name),
     }
 }

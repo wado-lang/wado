@@ -616,7 +616,7 @@ impl<'a> Interpreter<'a> {
                 expr: inner,
                 field_name,
                 ..
-            } => match &body.exprs[*inner].kind {
+            } => match &body.exprs[inner.expr()].kind {
                 ExprKind::GlobalVarGet {
                     module_source,
                     name,
@@ -638,7 +638,7 @@ impl<'a> Interpreter<'a> {
                 then_branch,
                 else_branch,
             } => {
-                let cond = self.expr_to_lattice_a(body, *condition);
+                let cond = self.expr_to_lattice_a(body, condition.expr());
                 match cond {
                     Lattice::Const(Value::Bool(true)) => self.block_lattice_a(body, *then_branch),
                     Lattice::Const(Value::Bool(false)) => match else_branch {
@@ -661,7 +661,7 @@ impl<'a> Interpreter<'a> {
             ExprKind::Match {
                 expr: scrutinee,
                 arms,
-            } => self.match_lattice_a(body, *scrutinee, arms),
+            } => self.match_lattice_a(body, scrutinee.expr(), arms),
             _ => Lattice::Unevaluated,
         }
     }
@@ -672,18 +672,18 @@ impl<'a> Interpreter<'a> {
         let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Binary { left, op, right } => {
-                let l = match self.expr_to_lattice_a(body, *left) {
+                let l = match self.expr_to_lattice_a(body, left.expr()) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
-                let r = match self.expr_to_lattice_a(body, *right) {
+                let r = match self.expr_to_lattice_a(body, right.expr()) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
                 option_to_lattice(eval_binary(l, *op, r))
             }
             ExprKind::Unary { op, expr: inner } => {
-                let v = match self.expr_to_lattice_a(body, *inner) {
+                let v = match self.expr_to_lattice_a(body, inner.expr()) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
@@ -693,7 +693,7 @@ impl<'a> Interpreter<'a> {
                 let Some(target) = prim_of(node.type_id, self.type_table) else {
                     return Lattice::Unevaluated;
                 };
-                match self.expr_to_lattice_a(body, *inner) {
+                match self.expr_to_lattice_a(body, inner.expr()) {
                     Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
                     other => other,
                 }
@@ -731,12 +731,12 @@ impl<'a> Interpreter<'a> {
                     self.pattern_matches_a(body, &scrut_v, arm.pattern)
                 };
                 let body_lat =
-                    arm_lattice_for_feasible_join(self.expr_to_lattice_a(body, arm.body));
+                    arm_lattice_for_feasible_join(self.expr_to_lattice_a(body, arm.body.expr()));
                 match pm {
                     PatternMatch::No => {}
                     PatternMatch::Yes => {
                         if candidates.is_empty() {
-                            return self.expr_to_lattice_a(body, arm.body);
+                            return self.expr_to_lattice_a(body, arm.body.expr());
                         }
                         candidates.push(body_lat);
                         yes_found = true;
@@ -756,7 +756,7 @@ impl<'a> Interpreter<'a> {
             let mut acc = Lattice::Unevaluated;
             for arm in arms {
                 acc = acc.join(arm_lattice_for_feasible_join(
-                    self.expr_to_lattice_a(body, arm.body),
+                    self.expr_to_lattice_a(body, arm.body.expr()),
                 ));
             }
             acc
@@ -826,7 +826,7 @@ impl<'a> Interpreter<'a> {
                 _ => PatternMatch::No,
             },
             PatKind::ConstantValue { expr } => {
-                match self.expr_to_lattice_a(body, *expr).as_const() {
+                match self.expr_to_lattice_a(body, expr.expr()).as_const() {
                     Some(v) if &v == value => PatternMatch::Yes,
                     Some(_) => PatternMatch::No,
                     None => PatternMatch::Unknown,
@@ -857,7 +857,7 @@ impl<'a> Interpreter<'a> {
             matches!(
                 &body.stmts[*s].kind,
                 StmtKind::If { condition, .. }
-                    if matches!(body.exprs[*condition].kind, ExprKind::BoolLiteral(_))
+                    if matches!(body.exprs[condition.expr()].kind, ExprKind::BoolLiteral(_))
             )
         });
         if !has_constant_if {
@@ -873,7 +873,7 @@ impl<'a> Interpreter<'a> {
                 else_block,
             } = &body.stmts[s].kind
             {
-                if let ExprKind::BoolLiteral(value) = body.exprs[*condition].kind {
+                if let ExprKind::BoolLiteral(value) = body.exprs[condition.expr()].kind {
                     Some((value, *then_block, *else_block))
                 } else {
                     None
@@ -1000,13 +1000,13 @@ impl<'a> Interpreter<'a> {
         let mut changed = match &body.exprs[e].kind {
             ExprKind::Binary { left, right, .. } => {
                 let (l, r) = (*left, *right);
-                let a = self.reduce_in_place_a(body, l);
-                let b = self.reduce_in_place_a(body, r);
+                let a = self.reduce_in_place_a(body, l.expr());
+                let b = self.reduce_in_place_a(body, r.expr());
                 a || b
             }
             ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
                 let i = *inner;
-                self.reduce_in_place_a(body, i)
+                self.reduce_in_place_a(body, i.expr())
             }
             ExprKind::If {
                 condition,
@@ -1014,7 +1014,7 @@ impl<'a> Interpreter<'a> {
                 else_branch,
             } => {
                 let (c, t, e2) = (*condition, *then_branch, *else_branch);
-                let mut ch = self.reduce_in_place_a(body, c);
+                let mut ch = self.reduce_in_place_a(body, c.expr());
                 ch |= self.reduce_in_place_block_a(body, t);
                 if let Some(eb) = e2 {
                     ch |= self.reduce_in_place_block_a(body, eb);
@@ -1028,7 +1028,7 @@ impl<'a> Interpreter<'a> {
                 let scrutinee = *scrutinee;
                 let arm_data: Vec<(Option<ExprId>, ExprId)> =
                     arms.iter().map(|a| (a.guard, a.body)).collect();
-                let mut ch = self.reduce_in_place_a(body, scrutinee);
+                let mut ch = self.reduce_in_place_a(body, scrutinee.expr());
                 for (guard, arm_body) in arm_data {
                     if let Some(g) = guard {
                         ch |= self.reduce_in_place_a(body, g);
@@ -1063,10 +1063,10 @@ impl<'a> Interpreter<'a> {
             }
             StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
                 let v = *value;
-                self.reduce_in_place_a(body, v)
+                self.reduce_in_place_a(body, v.expr())
             }
             StmtKind::Return { value } | StmtKind::Break { value, .. } => match *value {
-                Some(v) => self.reduce_in_place_a(body, v),
+                Some(v) => self.reduce_in_place_a(body, v.expr()),
                 None => false,
             },
             StmtKind::If {
@@ -1075,7 +1075,7 @@ impl<'a> Interpreter<'a> {
                 else_block,
             } => {
                 let (c, t, e2) = (*condition, *then_block, *else_block);
-                let mut ch = self.reduce_in_place_a(body, c);
+                let mut ch = self.reduce_in_place_a(body, c.expr());
                 ch |= self.reduce_in_place_block_a(body, t);
                 if let Some(eb) = e2 {
                     ch |= self.reduce_in_place_block_a(body, eb);
@@ -1122,7 +1122,7 @@ impl<'a> Interpreter<'a> {
             } => (*condition, *then_branch, *else_branch),
             _ => return false,
         };
-        let cond_lat = self.expr_to_lattice_a(sink.body(), condition);
+        let cond_lat = self.expr_to_lattice_a(sink.body(), condition.expr());
 
         // (1) Constant condition → splice the chosen arm.
         if let Lattice::Const(Value::Bool(b)) = cond_lat {
@@ -1153,7 +1153,7 @@ impl<'a> Interpreter<'a> {
             && t_b != e_b
         {
             if t_b {
-                let cond_kind = sink.body().exprs[condition].kind.clone();
+                let cond_kind = sink.body().exprs[condition.expr()].kind.clone();
                 sink.replace_kind(e, cond_kind);
             } else {
                 sink.replace_kind(
@@ -1171,7 +1171,7 @@ impl<'a> Interpreter<'a> {
         if t != ev {
             return false;
         }
-        if !is_speculatable_a(sink.body(), condition) {
+        if !is_speculatable_a(sink.body(), condition.expr()) {
             return false;
         }
         sink.replace_kind(e, value_to_arena_kind(t));
@@ -1195,7 +1195,7 @@ impl<'a> Interpreter<'a> {
             };
 
         // Rule 1: const scrutinee → splice the chosen arm.
-        if let Lattice::Const(scrut_v) = self.expr_to_lattice_a(sink.body(), scrutinee) {
+        if let Lattice::Const(scrut_v) = self.expr_to_lattice_a(sink.body(), scrutinee.expr()) {
             let mut chosen: Option<usize> = None;
             for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
                 if guard.is_some() {
@@ -1239,14 +1239,14 @@ impl<'a> Interpreter<'a> {
                 ExprKind::Binary {
                     left: scrutinee,
                     op: NirBinaryOp::Eq,
-                    right,
+                    right.into(),
                 },
             );
             return true;
         }
 
         // Rule 3: non-const speculatable scrutinee, all-arms-equal.
-        if !is_speculatable_a(sink.body(), scrutinee) {
+        if !is_speculatable_a(sink.body(), scrutinee.expr()) {
             return false;
         }
         if arms_data.iter().any(|(g, _, _, _)| g.is_some()) {
@@ -1372,7 +1372,7 @@ fn single_tail_expression_a(body: &Body) -> Option<ExprId> {
         return None;
     };
     match body.stmts[*single].kind {
-        StmtKind::Return { value: Some(e) } | StmtKind::Expr(e) => Some(e),
+        StmtKind::Return { value: Some(e) } | StmtKind::Expr(e.into()) => Some(e.expr()),
         _ => None,
     }
 }
@@ -1548,7 +1548,7 @@ fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
     let body = sink.body();
     let keep = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
-            match (&body.exprs[*left].kind, *op, &body.exprs[*right].kind) {
+            match (&body.exprs[left.expr()].kind, *op, &body.exprs[right.expr()].kind) {
                 (ExprKind::BoolLiteral(false), NirBinaryOp::Or, _)
                 | (ExprKind::BoolLiteral(true), NirBinaryOp::And, _) => *right,
                 (_, NirBinaryOp::Or, ExprKind::BoolLiteral(false))
@@ -1559,7 +1559,7 @@ fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
         _ => return false,
     };
     // Become the kept operand. The other operand is left orphaned.
-    sink.become_expr(e, keep);
+    sink.become_expr(e, keep.expr());
     true
 }
 
@@ -1610,14 +1610,14 @@ fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
         | ExprKind::Unit => true,
         ExprKind::Binary { left, op, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_speculatable_a(body, *left)
-                && is_speculatable_a(body, *right)
+                && is_speculatable_a(body, left.expr())
+                && is_speculatable_a(body, right.expr())
         }
         ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Deref) && is_speculatable_a(body, *inner)
+            !matches!(op, NirUnaryOp::Deref) && is_speculatable_a(body, inner.expr())
         }
-        ExprKind::Cast { expr: inner, .. } => is_speculatable_a(body, *inner),
-        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_a(body, *inner),
+        ExprKind::Cast { expr: inner, .. } => is_speculatable_a(body, inner.expr()),
+        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_a(body, inner.expr()),
         _ => false,
     }
 }

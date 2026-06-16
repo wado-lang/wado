@@ -190,19 +190,19 @@ impl FunctionTranslator<'_, '_> {
             }
             "future-write" => {
                 let value_expr = args[0].expr;
-                let value_type_id = self.body.exprs[value_expr].type_id;
+                let value_type_id = self.body.exprs[value_expr.expr()].type_id;
                 let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
                 // Variant-shaped futures (used for trailers): pattern-match on
                 // TIR because general variant→CM lowering is not yet implemented.
-                if let Some(resource_expr) = match_ok_some_resource(self.body, value_expr) {
+                if let Some(resource_expr) = match_ok_some_resource(self.body, value_expr.expr()) {
                     let resource_handle = self.translate_expr(resource_expr);
                     return Some(self.emit_future_write_ok_some_resource(handle, resource_handle));
                 }
-                if match_ok_none(self.body, value_expr) {
+                if match_ok_none(self.body, value_expr.expr()) {
                     return Some(self.emit_future_write_ok_none(handle));
                 }
                 // Scalar primitives are evaluated and lowered generically.
-                let value_arg = self.translate_expr(value_expr);
+                let value_arg = self.translate_expr(value_expr.expr());
                 Some(self.emit_future_write(handle, value_arg, value_type_id, payload))
             }
             "future-cancel-read" => {
@@ -1449,14 +1449,14 @@ fn match_ok_some_resource(body: &Body, expr_id: ExprId) -> Option<ExprId> {
         case_name: inner,
         payload: Some(inner_payload),
         ..
-    } = &body.exprs[*outer_payload].kind
+    } = &body.exprs[outer_payload.expr()].kind
     else {
         return None;
     };
     if inner != "Some" {
         return None;
     }
-    Some(*inner_payload)
+    Some(inner_payload.expr())
 }
 
 /// Detect `Result::Ok(Option::None)` or `Result::Ok(null)` at TIR level.
@@ -1473,7 +1473,7 @@ fn match_ok_none(body: &Body, expr_id: ExprId) -> bool {
     if outer != "Ok" {
         return false;
     }
-    match &body.exprs[*outer_payload].kind {
+    match &body.exprs[outer_payload.expr()].kind {
         ExprKind::Null => true,
         ExprKind::VariantConstruct {
             case_name: inner,

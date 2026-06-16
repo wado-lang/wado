@@ -351,16 +351,16 @@ impl FunctionTranslator<'_, '_> {
                     &mut bindings,
                 );
                 let body = if has_result {
-                    self.translate_expr_as_value(arm.body)
+                    self.translate_expr_as_value(arm.body.expr())
                 } else {
-                    let instr = self.translate_expr(arm.body);
+                    let instr = self.translate_expr(arm.body.expr());
                     // If the arm body produces a non-unit value (e.g. after inlining
                     // transforms a Block into a bare call), drop it to avoid leaving
                     // values on the Wasm stack. Guard with `produces_stack_value()` to
                     // avoid emitting `drop` after instructions that produce no value
                     // (e.g. `Block{result: None}` from LabeledBlock fusion).
-                    if self.body.exprs[arm.body].type_id != TypeTable::UNIT
-                        && self.body.exprs[arm.body].type_id != TypeTable::NEVER
+                    if self.body.exprs[arm.body.expr()].type_id != TypeTable::UNIT
+                        && self.body.exprs[arm.body.expr()].type_id != TypeTable::NEVER
                         && instr.produces_stack_value()
                     {
                         WirInstr::Drop(Box::new(instr))
@@ -419,7 +419,7 @@ impl FunctionTranslator<'_, '_> {
                     // (Binding/Wildcard), these bindings are safe to emit unconditionally.
                     // We embed bindings into the condition via Seq so that the If is the
                     // top-level instruction (required for value-producing match expressions).
-                    let guard_expr = self.translate_expr(*guard);
+                    let guard_expr = self.translate_expr(guard.expr());
                     let condition_with_bindings = if bindings.is_empty() {
                         guard_expr
                     } else {
@@ -437,7 +437,7 @@ impl FunctionTranslator<'_, '_> {
                     };
                 } else {
                     let mut inner_then = bindings.clone();
-                    let guard_expr = self.translate_expr(*guard);
+                    let guard_expr = self.translate_expr(guard.expr());
                     // Bindings run once, before the guard, in the
                     // `inner_then` prefix below — the guard may reference
                     // them. The inner-if's `then_body` is the arm body

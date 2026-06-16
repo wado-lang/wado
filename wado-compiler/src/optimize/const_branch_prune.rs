@@ -148,7 +148,7 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
             };
             let n = engine.body.blocks[block].stmts.len();
             let prefix = &engine.body.blocks[block].stmts[..n - 1];
-            let prefix_clean = !expr_has_break_to(engine.body, brk_value, &label)
+            let prefix_clean = !expr_has_break_to(engine.body, brk_value.expr(), &label)
                 && !prefix
                     .iter()
                     .any(|&s| stmt_has_break_to(engine.body, s, &label));
@@ -157,10 +157,10 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
                 let mut stmts = engine.body.blocks[block].stmts.clone();
                 stmts.pop();
                 if stmts.is_empty() {
-                    engine.become_expr(id, brk_value);
+                    engine.become_expr(id, brk_value.expr());
                 } else {
-                    let tail_span = engine.body.exprs[brk_value].span;
-                    let tail = engine.alloc_stmt(StmtKind::Expr(brk_value), tail_span);
+                    let tail_span = engine.body.exprs[brk_value.expr()].span;
+                    let tail = engine.alloc_stmt(StmtKind::Expr(brk_value.expr()), tail_span);
                     stmts.push(tail);
                     engine.set_block_stmts(block, stmts);
                     engine.replace_expr_kind(id, ExprKind::Block(block));
@@ -189,9 +189,9 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
             // value to promote, so leave it untouched (return `false` so the
             // engine does not spin on it).
             if let Some(inner) = value
-                && !expr_has_break_to(engine.body, inner, &label)
+                && !expr_has_break_to(engine.body, inner.expr(), &label)
             {
-                engine.become_expr(id, inner);
+                engine.become_expr(id, inner.expr());
                 return true;
             }
         }

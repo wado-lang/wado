@@ -266,7 +266,7 @@ fn licm_block(
             StmtKind::LabeledBlock { block, .. } => Shape::Labeled(*block),
             StmtKind::Let {
                 local_index, value, ..
-            } => Shape::Let(*local_index, *value),
+            } => Shape::Let(*local_index, value.expr()),
             _ => Shape::Other,
         };
 
@@ -412,7 +412,7 @@ fn licm_loop(
             );
             let field_access_expr = engine.alloc_expr(
                 ExprKind::FieldAccess {
-                    expr: local_expr,
+                    expr: local_expr.into(),
                     field_index: candidate.field_index,
                     field_name: candidate.field_name.clone(),
                 },
@@ -426,7 +426,7 @@ fn licm_loop(
                     is_mut: false,
                     is_reactive: false,
                     type_id: candidate.type_id,
-                    value: field_access_expr,
+                    value: field_access_expr.into(),
                     skip_value_copy: true,
                 },
                 Span::new(0, 0, 0, 0),
@@ -468,7 +468,7 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
         | ExprKind::GlobalVarSet { value: inner, .. }
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => vec![Child::Expr(*inner)],
+        | ExprKind::VariantPayload { expr: inner, .. } => vec![Child::Expr(inner.expr())],
         ExprKind::Binary { left, right, .. }
         | ExprKind::Assign {
             target: left,
@@ -477,14 +477,14 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
         | ExprKind::Index {
             expr: left,
             index: right,
-        } => vec![Child::Expr(*left), Child::Expr(*right)],
-        ExprKind::Call { args, .. } => args.iter().map(|a| Child::Expr(a.expr)).collect(),
-        ExprKind::MethodCall { receiver, args, .. } => std::iter::once(Child::Expr(*receiver))
-            .chain(args.iter().map(|a| Child::Expr(a.expr)))
+        } => vec![Child::Expr(left.expr()), Child::Expr(right.expr())],
+        ExprKind::Call { args, .. } => args.iter().map(|a| Child::Expr(a.expr.expr())).collect(),
+        ExprKind::MethodCall { receiver, args, .. } => std::iter::once(Child::Expr(receiver.expr()))
+            .chain(args.iter().map(|a| Child::Expr(a.expr.expr())))
             .collect(),
-        ExprKind::CmRawCall { args, .. } => args.iter().map(|a| Child::Expr(*a)).collect(),
-        ExprKind::IndirectCall { callee, args } => std::iter::once(Child::Expr(*callee))
-            .chain(args.iter().map(|a| Child::Expr(*a)))
+        ExprKind::CmRawCall { args, .. } => args.iter().map(|a| Child::Expr(a.expr())).collect(),
+        ExprKind::IndirectCall { callee, args } => std::iter::once(Child::Expr(callee.expr()))
+            .chain(args.iter().map(|a| Child::Expr(a.expr())))
             .collect(),
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => vec![Child::Block(*b)],
         ExprKind::If {
@@ -492,36 +492,36 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
             then_branch,
             else_branch,
         } => {
-            let mut v = vec![Child::Expr(*condition), Child::Block(*then_branch)];
+            let mut v = vec![Child::Expr(condition.expr()), Child::Block(*then_branch)];
             if let Some(eb) = else_branch {
                 v.push(Child::Block(*eb));
             }
             v
         }
         ExprKind::StructLiteral { fields, .. } => {
-            fields.iter().map(|f| Child::Expr(f.value)).collect()
+            fields.iter().map(|f| Child::Expr(f.value.expr())).collect()
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            elements.iter().map(|e| Child::Expr(*e)).collect()
+            elements.iter().map(|e| Child::Expr(e.expr())).collect()
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.iter().map(|p| Child::Expr(*p)).collect()
+            payload.iter().map(|p| Child::Expr(p.expr())).collect()
         }
         ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
-        } => std::iter::once(Child::Expr(*scrutinee))
+        } => std::iter::once(Child::Expr(scrutinee.expr()))
             .chain(arms.iter().map(|a| Child::Block(*a)))
             .chain(std::iter::once(Child::Block(*default)))
             .collect(),
         ExprKind::Match { expr, arms } => {
-            let mut v = vec![Child::Expr(*expr)];
+            let mut v = vec![Child::Expr(expr.expr())];
             for arm in arms {
-                v.push(Child::Expr(arm.body));
+                v.push(Child::Expr(arm.body.expr()));
                 if let Some(g) = arm.guard {
-                    v.push(Child::Expr(g));
+                    v.push(Child::Expr(g.expr()));
                 }
             }
             v
@@ -548,16 +548,16 @@ fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
     match &body.stmts[s].kind {
         StmtKind::Let { value, .. }
         | StmtKind::Expr(value)
-        | StmtKind::LetDestructure { value, .. } => vec![Child::Expr(*value)],
+        | StmtKind::LetDestructure { value, .. } => vec![Child::Expr(value.expr())],
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            value.iter().map(|v| Child::Expr(*v)).collect()
+            value.iter().map(|v| Child::Expr(v.expr())).collect()
         }
         StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            let mut v = vec![Child::Expr(*condition), Child::Block(*then_block)];
+            let mut v = vec![Child::Expr(condition.expr()), Child::Block(*then_block)];
             if let Some(eb) = else_block {
                 v.push(Child::Block(*eb));
             }
@@ -615,7 +615,7 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => extract_alias_source(body, *inner),
+        } => extract_alias_source(body, inner.expr()),
         ExprKind::Block(block) => {
             let tail = *body.blocks[*block].stmts.last()?;
             let StmtKind::Expr(tail_expr) = &body.stmts[tail].kind else {
@@ -635,7 +635,7 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
             if brk_label != label {
                 return None;
             }
-            extract_alias_source(body, *brk_value)
+            extract_alias_source(body, brk_value.expr())
         }
         _ => None,
     }
@@ -660,7 +660,7 @@ fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedV
             modified.insert_full(*index);
         }
         ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Unary { expr: inner, .. } => {
-            mark_local_as_fully_modified(body, *inner, modified);
+            mark_local_as_fully_modified(body, inner.expr(), modified);
         }
         _ => {}
     }
@@ -671,7 +671,7 @@ fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedV
 fn is_pure_field_chain(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_pure_field_chain(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => is_pure_field_chain(body, inner.expr()),
         _ => false,
     }
 }
@@ -725,7 +725,7 @@ fn record_written_field_type(
         ..
     } = &body.exprs[target].kind
     {
-        let pointee = strip_references(body.exprs[*inner].type_id, type_table);
+        let pointee = strip_references(body.exprs[inner.expr()].type_id, type_table);
         modified.insert_written_field_type(pointee, *field_index);
     }
 }
@@ -749,16 +749,16 @@ fn mark_assignment_target_as_modified(
             let inner = *inner;
             let field_index = *field_index;
             record_written_field_type(body, e, modified, type_table);
-            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
                 modified.insert_field(*index, field_index);
-            } else if is_pure_field_chain(body, inner) {
+            } else if is_pure_field_chain(body, inner.expr()) {
                 // `a.b.c = x` mutates `*a.b`, not a field of the root `a`.
             } else {
-                mark_local_as_fully_modified(body, inner, modified);
+                mark_local_as_fully_modified(body, inner.expr(), modified);
             }
         }
         ExprKind::Unary { expr: inner, .. } => {
-            mark_local_as_fully_modified(body, *inner, modified);
+            mark_local_as_fully_modified(body, inner.expr(), modified);
         }
         _ => {}
     }
@@ -777,19 +777,19 @@ fn collect_modified_vars_in_stmt(
             let local_index = *local_index;
             let value = *value;
             modified.insert_full(local_index);
-            if let Some(src_idx) = extract_alias_source(body, value)
-                && is_gc_heap_type(body.exprs[value].type_id, type_table)
+            if let Some(src_idx) = extract_alias_source(body, value.expr())
+                && is_gc_heap_type(body.exprs[value.expr()].type_id, type_table)
             {
                 modified.add_alias(local_index, src_idx);
             }
-            collect_modified_vars_in_expr(body, value, modified, type_table);
+            collect_modified_vars_in_expr(body, value.expr(), modified, type_table);
         }
         StmtKind::Expr(expr) => {
             collect_modified_vars_in_expr(body, *expr, modified, type_table);
         }
         StmtKind::Return { value } => {
             if let Some(v) = value {
-                collect_modified_vars_in_expr(body, *v, modified, type_table);
+                collect_modified_vars_in_expr(body, v.expr(), modified, type_table);
             }
         }
         StmtKind::If {
@@ -800,7 +800,7 @@ fn collect_modified_vars_in_stmt(
             let condition = *condition;
             let then_block = *then_block;
             let else_block = *else_block;
-            collect_modified_vars_in_expr(body, condition, modified, type_table);
+            collect_modified_vars_in_expr(body, condition.expr(), modified, type_table);
             collect_modified_vars_in_block(body, then_block, modified, type_table);
             if let Some(eb) = else_block {
                 collect_modified_vars_in_block(body, eb, modified, type_table);
@@ -814,7 +814,7 @@ fn collect_modified_vars_in_stmt(
         }
         StmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                collect_modified_vars_in_expr(body, *v, modified, type_table);
+                collect_modified_vars_in_expr(body, v.expr(), modified, type_table);
             }
         }
         StmtKind::Continue => {}
@@ -822,7 +822,7 @@ fn collect_modified_vars_in_stmt(
             let pattern = *pattern;
             let value = *value;
             collect_pattern_bindings(body, pattern, modified);
-            collect_modified_vars_in_expr(body, value, modified, type_table);
+            collect_modified_vars_in_expr(body, value.expr(), modified, type_table);
         }
     }
 }
@@ -881,25 +881,25 @@ fn collect_modified_vars_in_expr(
             let value = *value;
             mark_assignment_target_as_modified(body, target, modified, type_table);
             collect_modified_vars_in_expr(body, target, modified, type_table);
-            collect_modified_vars_in_expr(body, value, modified, type_table);
+            collect_modified_vars_in_expr(body, value.expr(), modified, type_table);
         }
         ExprKind::Binary { left, right, .. } => {
             let left = *left;
             let right = *right;
-            collect_modified_vars_in_expr(body, left, modified, type_table);
-            collect_modified_vars_in_expr(body, right, modified, type_table);
+            collect_modified_vars_in_expr(body, left.expr(), modified, type_table);
+            collect_modified_vars_in_expr(body, right.expr(), modified, type_table);
         }
         ExprKind::Unary { op, expr: inner } => {
             let inner = *inner;
             if matches!(op, NirUnaryOp::MutRef)
-                && matches!(body.exprs[inner].kind, ExprKind::Local { .. })
+                && matches!(body.exprs[inner.expr()].kind, ExprKind::Local { .. })
             {
-                mark_local_as_fully_modified(body, inner, modified);
+                mark_local_as_fully_modified(body, inner.expr(), modified);
             }
-            collect_modified_vars_in_expr(body, inner, modified, type_table);
+            collect_modified_vars_in_expr(body, inner.expr(), modified, type_table);
         }
         ExprKind::Cast { expr: inner, .. } => {
-            collect_modified_vars_in_expr(body, *inner, modified, type_table);
+            collect_modified_vars_in_expr(body, inner.expr(), modified, type_table);
         }
         ExprKind::Call { args, .. } => {
             let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
@@ -912,9 +912,9 @@ fn collect_modified_vars_in_expr(
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
             let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            mark_gc_local_as_fully_modified(body, receiver, modified, type_table);
-            record_mut_ref_clobber(body, receiver, modified, type_table);
-            collect_modified_vars_in_expr(body, receiver, modified, type_table);
+            mark_gc_local_as_fully_modified(body, receiver.expr(), modified, type_table);
+            record_mut_ref_clobber(body, receiver.expr(), modified, type_table);
+            collect_modified_vars_in_expr(body, receiver.expr(), modified, type_table);
             for a in arg_ids {
                 mark_gc_local_as_fully_modified(body, a, modified, type_table);
                 record_mut_ref_clobber(body, a, modified, type_table);
@@ -924,17 +924,17 @@ fn collect_modified_vars_in_expr(
         ExprKind::CmRawCall { args, .. } => {
             let arg_ids = args.clone();
             for a in arg_ids {
-                collect_modified_vars_in_expr(body, a, modified, type_table);
+                collect_modified_vars_in_expr(body, a.expr(), modified, type_table);
             }
         }
         ExprKind::FieldAccess { expr: inner, .. } => {
-            collect_modified_vars_in_expr(body, *inner, modified, type_table);
+            collect_modified_vars_in_expr(body, inner.expr(), modified, type_table);
         }
         ExprKind::Index { expr: inner, index } => {
             let inner = *inner;
             let index = *index;
-            collect_modified_vars_in_expr(body, inner, modified, type_table);
-            collect_modified_vars_in_expr(body, index, modified, type_table);
+            collect_modified_vars_in_expr(body, inner.expr(), modified, type_table);
+            collect_modified_vars_in_expr(body, index.expr(), modified, type_table);
         }
         ExprKind::Block(block) => {
             collect_modified_vars_in_block(body, *block, modified, type_table);
@@ -947,7 +947,7 @@ fn collect_modified_vars_in_expr(
             let condition = *condition;
             let then_branch = *then_branch;
             let else_branch = *else_branch;
-            collect_modified_vars_in_expr(body, condition, modified, type_table);
+            collect_modified_vars_in_expr(body, condition.expr(), modified, type_table);
             collect_modified_vars_in_block(body, then_branch, modified, type_table);
             if let Some(eb) = else_branch {
                 collect_modified_vars_in_block(body, eb, modified, type_table);
@@ -962,37 +962,37 @@ fn collect_modified_vars_in_expr(
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements = elements.clone();
             for el in elements {
-                collect_modified_vars_in_expr(body, el, modified, type_table);
+                collect_modified_vars_in_expr(body, el.expr(), modified, type_table);
             }
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let arg_ids = args.clone();
-            collect_modified_vars_in_expr(body, callee, modified, type_table);
+            collect_modified_vars_in_expr(body, callee.expr(), modified, type_table);
             for a in arg_ids {
-                mark_gc_local_as_fully_modified(body, a, modified, type_table);
-                collect_modified_vars_in_expr(body, a, modified, type_table);
+                mark_gc_local_as_fully_modified(body, a.expr(), modified, type_table);
+                collect_modified_vars_in_expr(body, a.expr(), modified, type_table);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
-            collect_modified_vars_in_expr(body, *functor, modified, type_table);
+            collect_modified_vars_in_expr(body, functor.expr(), modified, type_table);
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                collect_modified_vars_in_expr(body, *p, modified, type_table);
+                collect_modified_vars_in_expr(body, p.expr(), modified, type_table);
             }
         }
         ExprKind::LabeledBlock { block, .. } => {
             collect_modified_vars_in_block(body, *block, modified, type_table);
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            collect_modified_vars_in_expr(body, *value, modified, type_table);
+            collect_modified_vars_in_expr(body, value.expr(), modified, type_table);
         }
         ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
-            collect_modified_vars_in_expr(body, *expr, modified, type_table);
+            collect_modified_vars_in_expr(body, expr.expr(), modified, type_table);
         }
         ExprKind::VariantPayload { expr, .. } => {
-            collect_modified_vars_in_expr(body, *expr, modified, type_table);
+            collect_modified_vars_in_expr(body, expr.expr(), modified, type_table);
         }
         ExprKind::Switch {
             scrutinee,
@@ -1003,7 +1003,7 @@ fn collect_modified_vars_in_expr(
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            collect_modified_vars_in_expr(body, scrutinee, modified, type_table);
+            collect_modified_vars_in_expr(body, scrutinee.expr(), modified, type_table);
             for arm in arms {
                 collect_modified_vars_in_block(body, arm, modified, type_table);
             }
@@ -1024,7 +1024,7 @@ fn collect_modified_vars_in_expr(
             let expr = *expr;
             let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, ExprId)> =
                 arms.iter().map(|a| (a.pattern, a.guard, a.body)).collect();
-            collect_modified_vars_in_expr(body, expr, modified, type_table);
+            collect_modified_vars_in_expr(body, expr.expr(), modified, type_table);
             for (pattern, guard, body_expr) in arm_data {
                 collect_pattern_bindings(body, pattern, modified);
                 if let Some(g) = guard {
@@ -1088,11 +1088,11 @@ fn collect_licm_ref_bindings_in_stmt(
             && let ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr: source,
-            } = &body.exprs[value].kind
+            } = &body.exprs[value.expr()].kind
             && let ExprKind::Local {
                 index: source_idx,
                 name: source_name,
-            } = &body.exprs[*source].kind
+            } = &body.exprs[source.expr()].kind
         {
             bindings.insert(
                 local_index,
@@ -1211,7 +1211,7 @@ fn find_hoist_candidates_in_expr(
         field_index,
         field_name,
     } = &body.exprs[e].kind
-        && let ExprKind::Local { index, name } = &body.exprs[*inner].kind
+        && let ExprKind::Local { index, name } = &body.exprs[inner.expr()].kind
     {
         let field_index = *field_index;
         // Case 1: direct access on a loop-invariant local.
@@ -1323,12 +1323,12 @@ fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
         | ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             is_hoistable_binop(*op)
-                && is_hoistable_arith_shape(body, *left)
-                && is_hoistable_arith_shape(body, *right)
+                && is_hoistable_arith_shape(body, left.expr())
+                && is_hoistable_arith_shape(body, right.expr())
         }
         ExprKind::Unary { op, expr } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
-                && is_hoistable_arith_shape(body, *expr)
+                && is_hoistable_arith_shape(body, expr.expr())
         }
         _ => false,
     }
@@ -1339,10 +1339,10 @@ fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => out.push((e, *index)),
         ExprKind::Binary { left, right, .. } => {
-            collect_arith_local_leaves(body, *left, out);
-            collect_arith_local_leaves(body, *right, out);
+            collect_arith_local_leaves(body, left.expr(), out);
+            collect_arith_local_leaves(body, right.expr(), out);
         }
-        ExprKind::Unary { expr, .. } => collect_arith_local_leaves(body, *expr, out),
+        ExprKind::Unary { expr, .. } => collect_arith_local_leaves(body, expr.expr(), out),
         _ => {}
     }
 }
@@ -1501,7 +1501,7 @@ fn hoist_invariant_arith(
                 is_mut: false,
                 is_reactive: false,
                 type_id,
-                value,
+                value.into(),
                 skip_value_copy: true,
             },
             Span::new(0, 0, 0, 0),
@@ -1563,7 +1563,7 @@ fn replace_hoisted_in_expr(
         field_index,
         ..
     } = &engine.body.exprs[e].kind
-        && let ExprKind::Local { index, .. } = &engine.body.exprs[*inner].kind
+        && let ExprKind::Local { index, .. } = &engine.body.exprs[inner.expr()].kind
     {
         let index = *index;
         let field_index = *field_index;

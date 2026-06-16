@@ -109,14 +109,14 @@ impl Rule for MatchToSwitchRule<'_> {
         let scrutinee = *scrutinee;
         let arms = arms.clone();
 
-        let scrut_type = engine.body.exprs[scrutinee].type_id;
+        let scrut_type = engine.body.exprs[scrutinee.expr()].type_id;
         let scrut_resolved = self.type_table.get(scrut_type);
         let Some(analysis) = analyze(scrut_resolved, &arms, &*engine.body) else {
             return false;
         };
 
         let span = engine.body.exprs[id].span;
-        let new_kind = build_switch(engine, scrutinee, &arms, analysis, span);
+        let new_kind = build_switch(engine, scrutinee.expr(), &arms, analysis, span);
         engine.replace_expr_kind(id, new_kind);
         true
     }
@@ -235,12 +235,12 @@ fn build_switch(
         .iter()
         .map(|maybe_arm_idx| {
             let arm_idx = maybe_arm_idx.unwrap_or_else(|| analysis.default_arm.unwrap_or(0));
-            arm_body_block(engine, arms[arm_idx].body)
+            arm_body_block(engine, arms[arm_idx].body.expr())
         })
         .collect();
 
     let default_block = if let Some(default_idx) = analysis.default_arm {
-        arm_body_block(engine, arms[default_idx].body)
+        arm_body_block(engine, arms[default_idx].body.expr())
     } else {
         // The default of an exhaustive match is the unreachable arm. Mark it
         // `cold_path()` so the inliner skips it and codegen hints it unlikely,
@@ -285,7 +285,7 @@ fn build_switch(
     };
 
     ExprKind::Switch {
-        scrutinee,
+        scrutinee.into(),
         min_value: analysis.min_value,
         arms: switch_arms,
         default: default_block,

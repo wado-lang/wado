@@ -269,7 +269,7 @@ fn mark_ref_field_locals_as_aliased(
             } = &body.stmts[s].kind
             && decomposed.contains(local_index)
         {
-            collect_ref_locals_in_fields(body, *value, stores_aliased);
+            collect_ref_locals_in_fields(body, value.expr(), stores_aliased);
         }
         body.for_each_child(node, |c| stack.push(c));
     }
@@ -286,7 +286,7 @@ fn collect_ref_locals_in_fields(body: &Body, expr: ExprId, stores_aliased: &mut 
         ExprKind::TupleLiteral { elements, .. } => {
             let elems = elements.clone();
             for e in elems {
-                extract_ref_local(body, e, stores_aliased);
+                extract_ref_local(body, e.expr(), stores_aliased);
             }
         }
         _ => {}
@@ -299,7 +299,7 @@ fn extract_ref_local(body: &Body, expr: ExprId, stores_aliased: &mut IndexSet<u3
             op,
             crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef
         )
-        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
     {
         stores_aliased.insert(*index);
     }
@@ -339,8 +339,8 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
         return;
     };
     let (name, local_index, is_mut, value) = (name.clone(), *local_index, *is_mut, *value);
-    let aggregate_type_id = body.exprs[value].type_id;
-    match &body.exprs[value].kind {
+    let aggregate_type_id = body.exprs[value.expr()].type_id;
+    match &body.exprs[value.expr()].kind {
         ExprKind::StructLiteral {
             struct_name,
             fields,
@@ -348,7 +348,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
         } => {
             let field_info: Vec<(String, TypeId)> = fields
                 .iter()
-                .map(|f| (f.name.clone(), body.exprs[f.value].type_id))
+                .map(|f| (f.name.clone(), body.exprs[f.value.expr()].type_id))
                 .collect();
             candidates.push(SroaCandidate {
                 local_index,
@@ -363,7 +363,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
             let field_info: Vec<(String, TypeId)> = elements
                 .iter()
                 .enumerate()
-                .map(|(i, e)| (i.to_string(), body.exprs[*e].type_id))
+                .map(|(i, e)| (i.to_string(), body.exprs[e.expr()].type_id))
                 .collect();
             candidates.push(SroaCandidate {
                 local_index,
@@ -394,7 +394,7 @@ fn is_candidate_local(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> 
 fn is_immut_ref_to_candidate(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> bool {
     if let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind
         && matches!(op, crate::nir::NirUnaryOp::Ref)
-        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
         && candidates.contains(index)
     {
         return true;
@@ -431,21 +431,21 @@ fn escape_expr(body: &Body, id: ExprId, candidates: &IndexSet<u32>, escaped: &mu
     match &body.exprs[id].kind {
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if is_candidate_local(body, inner, candidates).is_some() {
+            if is_candidate_local(body, inner.expr(), candidates).is_some() {
                 return;
             }
-            escape_expr(body, inner, candidates, escaped);
+            escape_expr(body, inner.expr(), candidates, escaped);
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
             if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                && is_candidate_local(body, *inner, candidates).is_some()
+                && is_candidate_local(body, inner.expr(), candidates).is_some()
             {
-                escape_expr(body, value, candidates, escaped);
+                escape_expr(body, value.expr(), candidates, escaped);
                 return;
             }
             escape_expr(body, target, candidates, escaped);
-            escape_expr(body, value, candidates, escaped);
+            escape_expr(body, value.expr(), candidates, escaped);
         }
         ExprKind::Local { index, .. } => {
             if candidates.contains(index) {
@@ -457,13 +457,13 @@ fn escape_expr(body: &Body, id: ExprId, candidates: &IndexSet<u32>, escaped: &mu
             if matches!(
                 op,
                 crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef
-            ) && let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+            ) && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
                 && candidates.contains(index)
             {
                 escaped.insert(*index);
                 return;
             }
-            escape_expr(body, inner, candidates, escaped);
+            escape_expr(body, inner.expr(), candidates, escaped);
         }
         _ => {
             let mut kids = Vec::new();
@@ -525,23 +525,23 @@ fn field_access_node(
         match &body.exprs[id].kind {
             ExprKind::FieldAccess { expr: inner, .. } => {
                 let inner = *inner;
-                if let Some(idx) = is_candidate_local(body, inner, candidates) {
+                if let Some(idx) = is_candidate_local(body, inner.expr(), candidates) {
                     has_access.insert(idx);
                     return;
                 }
-                field_access_node(body, NodeRef::Expr(inner), candidates, has_access);
+                field_access_node(body, NodeRef::Expr(inner.expr()), candidates, has_access);
             }
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
                 if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                    && let Some(idx) = is_candidate_local(body, *inner, candidates)
+                    && let Some(idx) = is_candidate_local(body, inner.expr(), candidates)
                 {
                     has_access.insert(idx);
-                    field_access_node(body, NodeRef::Expr(value), candidates, has_access);
+                    field_access_node(body, NodeRef::Expr(value.expr()), candidates, has_access);
                     return;
                 }
                 field_access_node(body, NodeRef::Expr(target), candidates, has_access);
-                field_access_node(body, NodeRef::Expr(value), candidates, has_access);
+                field_access_node(body, NodeRef::Expr(value.expr()), candidates, has_access);
             }
             _ => {
                 let mut kids = Vec::new();
@@ -574,7 +574,7 @@ fn soft_node(
                 let v = *v;
                 soft_expr(
                     body,
-                    v,
+                    v.expr(),
                     true,
                     candidates,
                     stores_lookup,
@@ -629,12 +629,12 @@ fn soft_expr(
     match &body.exprs[id].kind {
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if is_candidate_local(body, inner, candidates).is_some() {
+            if is_candidate_local(body, inner.expr(), candidates).is_some() {
                 return;
             }
             soft_expr(
                 body,
-                inner,
+                inner.expr(),
                 false,
                 candidates,
                 stores_lookup,
@@ -645,11 +645,11 @@ fn soft_expr(
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
             if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                && is_candidate_local(body, *inner, candidates).is_some()
+                && is_candidate_local(body, inner.expr(), candidates).is_some()
             {
                 soft_expr(
                     body,
-                    value,
+                    value.expr(),
                     false,
                     candidates,
                     stores_lookup,
@@ -669,7 +669,7 @@ fn soft_expr(
             );
             soft_expr(
                 body,
-                value,
+                value.expr(),
                 false,
                 candidates,
                 stores_lookup,
@@ -687,7 +687,7 @@ fn soft_expr(
             if matches!(
                 op,
                 crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef
-            ) && let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+            ) && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
                 && candidates.contains(index)
             {
                 hard_escaped.insert(*index);
@@ -695,7 +695,7 @@ fn soft_expr(
             }
             soft_expr(
                 body,
-                inner,
+                inner.expr(),
                 false,
                 candidates,
                 stores_lookup,
@@ -732,12 +732,12 @@ fn soft_expr(
             let receiver = *receiver;
             let func = func.clone();
             let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            if !is_immut_ref_to_candidate(body, receiver, candidates)
+            if !is_immut_ref_to_candidate(body, receiver.expr(), candidates)
                 || callee_stores_param_at(&func, 0, current_module, stores_lookup)
             {
                 soft_expr(
                     body,
-                    receiver,
+                    receiver.expr(),
                     false,
                     candidates,
                     stores_lookup,
@@ -826,7 +826,7 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
                 unreachable!("candidate must be Let statement");
             };
             let value = *value;
-            expand_struct_let(engine, value, local_idx, is_mut, span, ctx, &mut new_stmts);
+            expand_struct_let(engine, value.expr(), local_idx, is_mut, span, ctx, &mut new_stmts);
             continue;
         }
         rewrite_node(engine, NodeRef::Stmt(stmt), ctx);
@@ -858,7 +858,7 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
     } = &engine.body.exprs[id].kind
     {
         let (inner, field_index) = (*inner, *field_index);
-        if let Some(local_idx) = is_candidate_local(engine.body, inner, ctx.safe_set) {
+        if let Some(local_idx) = is_candidate_local(engine.body, inner.expr(), ctx.safe_set) {
             let key = (local_idx, field_index);
             if let Some(&new_local) = ctx.field_map.get(&key) {
                 let new_name = ctx.info_map[&key].0.clone();
@@ -884,7 +884,7 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
         } = &engine.body.exprs[target].kind
         {
             let (inner, field_index) = (*inner, *field_index);
-            if let Some(local_idx) = is_candidate_local(engine.body, inner, ctx.safe_set) {
+            if let Some(local_idx) = is_candidate_local(engine.body, inner.expr(), ctx.safe_set) {
                 let key = (local_idx, field_index);
                 if let Some(&new_local) = ctx.field_map.get(&key) {
                     let new_name = ctx.info_map[&key].0.clone();
@@ -895,7 +895,7 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
                             name: new_name,
                         },
                     );
-                    rewrite_expr(engine, value, ctx);
+                    rewrite_expr(engine, value.expr(), ctx);
                     return;
                 }
             }
@@ -976,7 +976,7 @@ fn push_field_let(
             is_mut,
             is_reactive: false,
             type_id: field_type,
-            value,
+            value.into(),
             // The original literal was a fresh value, so its fields don't need
             // value_copy — see the original pass comment.
             skip_value_copy: true,
@@ -1029,7 +1029,7 @@ fn reconstruct_aggregate(engine: &mut Engine, id: ExprId, local_idx: u32, ctx: &
             );
             fields.push(ArenaStructField {
                 name: name.clone(),
-                value,
+                value.into(),
                 field_index: i as u32,
             });
         }

@@ -106,7 +106,7 @@ impl Collector<'_> {
             // `array_clone(&agg.repr)` copies a `List<T>` / `String` backing
             // array; recover the owning aggregate type from the argument.
             Some("builtin::array_clone" | "builtin::array_clone_shallow") => {
-                args.first().map(|a| clone_source_type(body, a.expr))
+                args.first().map(|a| clone_source_type(body, a.expr.expr()))
             }
             // `copy_value(v)` deep-copies a value directly, so the call's result
             // type is the copied type.
@@ -188,10 +188,10 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr,
         } => *expr,
-        _ => arg,
+        _ => arg.into(),
     };
-    match &body.exprs[inner].kind {
-        ExprKind::FieldAccess { expr, .. } => body.exprs[*expr].type_id,
-        _ => body.exprs[inner].type_id,
+    match &body.exprs[inner.expr()].kind {
+        ExprKind::FieldAccess { expr, .. } => body.exprs[expr.expr()].type_id,
+        _ => body.exprs[inner.expr()].type_id,
     }
 }
