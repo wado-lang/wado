@@ -3028,6 +3028,7 @@ mod tests {
             imported_cm_interfaces: Vec::new(),
             import_plan: Vec::new(),
             defined_func_base: 0,
+            trait_bound_violations: Vec::new(),
         }
     }
 
