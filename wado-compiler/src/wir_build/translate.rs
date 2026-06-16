@@ -1109,10 +1109,8 @@ impl FunctionTranslator<'_, '_> {
         tuple_type_id: crate::tir::TypeId,
         elements: &[Operand],
     ) -> (WirTypeId, Vec<WirInstr>) {
-        let elem_type_ids: Vec<crate::tir::TypeId> = elements
-            .iter()
-            .map(|e| self.operand_type_id(*e))
-            .collect();
+        let elem_type_ids: Vec<crate::tir::TypeId> =
+            elements.iter().map(|e| self.operand_type_id(*e)).collect();
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, tuple_type_id);
         let wir_type_id = match &wir_type {
             WirType::Ref { type_id, .. } => Some(type_id.clone()),
@@ -1187,8 +1185,10 @@ impl FunctionTranslator<'_, '_> {
         else {
             panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
         };
-        let element_instrs: Vec<WirInstr> =
-            elements.iter().map(|e| self.translate_operand(*e)).collect();
+        let element_instrs: Vec<WirInstr> = elements
+            .iter()
+            .map(|e| self.translate_operand(*e))
+            .collect();
         let used = i32::try_from(element_instrs.len())
             .unwrap_or_else(|_| panic!("[WIR] array literal has more than i32::MAX elements"));
         self.struct_new(
@@ -1989,8 +1989,10 @@ impl FunctionTranslator<'_, '_> {
                     .filter(|a| self.operand_type_id(a.expr) != TypeTable::UNIT)
                     .map(|a| a.expr)
                     .collect();
-                let translated_args: Vec<WirInstr> =
-                    kept.into_iter().map(|op| self.translate_operand(op)).collect();
+                let translated_args: Vec<WirInstr> = kept
+                    .into_iter()
+                    .map(|op| self.translate_operand(op))
+                    .collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
                     WirInstr::Call {
@@ -2176,10 +2178,9 @@ impl FunctionTranslator<'_, '_> {
                     } => {
                         let receiver = *receiver;
                         let recv = self.translate_operand(receiver);
-                        let wir_type = self.ctx.type_id_to_wir_type(
-                            self.type_table,
-                            self.operand_type_id(receiver),
-                        );
+                        let wir_type = self
+                            .ctx
+                            .type_id_to_wir_type(self.type_table, self.operand_type_id(receiver));
                         let WirType::Ref { type_id, .. } = wir_type else {
                             panic!(
                                 "[WIR] FieldAccess assignment expected Ref receiver, got {wir_type:?} (field={field_name}, type_id={:?})",
@@ -2204,11 +2205,7 @@ impl FunctionTranslator<'_, '_> {
                 target_type,
             } => {
                 // Type casts become appropriate conversion instructions
-                self.translate_cast(
-                    *inner,
-                    self.operand_type_id(*inner),
-                    *target_type,
-                )
+                self.translate_cast(*inner, self.operand_type_id(*inner), *target_type)
             }
 
             ExprKind::Block(block) => {
@@ -2279,9 +2276,7 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::StructNew { type_id, fields }
             }
 
-            ExprKind::ArrayLiteral { elements } => {
-                self.build_array_literal(expr.type_id, elements)
-            }
+            ExprKind::ArrayLiteral { elements } => self.build_array_literal(expr.type_id, elements),
 
             ExprKind::Switch {
                 scrutinee,
@@ -2391,11 +2386,9 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            ExprKind::IndirectCall { callee, args } => self.translate_indirect_call(
-                callee.expr(),
-                args,
-                expr.type_id,
-            ),
+            ExprKind::IndirectCall { callee, args } => {
+                self.translate_indirect_call(callee.expr(), args, expr.type_id)
+            }
             ExprKind::ClosureToCanonical {
                 functor,
                 functor_id,

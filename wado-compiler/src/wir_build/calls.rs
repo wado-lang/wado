@@ -336,10 +336,9 @@ impl FunctionTranslator<'_, '_> {
             "builtin::array_get" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
-                let wir_type = self.ctx.type_id_to_wir_type(
-                    self.type_table,
-                    self.operand_type_id(args[0].expr),
-                );
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr));
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayGet {
                         type_id: type_id.clone(),
@@ -355,10 +354,9 @@ impl FunctionTranslator<'_, '_> {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let val = self.translate_operand(args[2].expr);
-                let wir_type = self.ctx.type_id_to_wir_type(
-                    self.type_table,
-                    self.operand_type_id(args[0].expr),
-                );
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr));
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArraySet {
                         type_id,
@@ -376,10 +374,9 @@ impl FunctionTranslator<'_, '_> {
                 let src = self.translate_operand(args[2].expr);
                 let src_offset = self.translate_operand(args[3].expr);
                 let len = self.translate_operand(args[4].expr);
-                let wir_type = self.ctx.type_id_to_wir_type(
-                    self.type_table,
-                    self.operand_type_id(args[0].expr),
-                );
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr));
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayCopy {
                         dest_type_id: type_id.clone(),
@@ -437,10 +434,9 @@ impl FunctionTranslator<'_, '_> {
                 let offset = self.translate_operand(args[1].expr);
                 let val = self.translate_operand(args[2].expr);
                 let len = self.translate_operand(args[3].expr);
-                let wir_type = self.ctx.type_id_to_wir_type(
-                    self.type_table,
-                    self.operand_type_id(args[0].expr),
-                );
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr));
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayFill {
                         type_id,
@@ -495,10 +491,9 @@ impl FunctionTranslator<'_, '_> {
                 let cond = self.translate_operand(args[0].expr);
                 let a = self.translate_operand(args[1].expr);
                 let b = self.translate_operand(args[2].expr);
-                let result_type = self.ctx.type_id_to_wir_type(
-                    self.type_table,
-                    self.operand_type_id(args[1].expr),
-                );
+                let result_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[1].expr));
                 Some(WirInstr::Select {
                     condition: Box::new(cond),
                     if_true: Box::new(a),

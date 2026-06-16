@@ -112,8 +112,13 @@ mod tests {
         let StmtKind::Let { value, .. } = &body.stmts[s].kind else {
             panic!("expected let");
         };
-        let v = value.as_value().expect("literal operand promoted to a value");
-        assert_eq!(body.values.kind(v), &crate::nir_value_graph::ValueKind::Int(7));
+        let v = value
+            .as_value()
+            .expect("literal operand promoted to a value");
+        assert_eq!(
+            body.values.kind(v),
+            &crate::nir_value_graph::ValueKind::Int(7)
+        );
         assert_eq!(body.values.type_of(v), Some(TypeTable::I32));
     }
 

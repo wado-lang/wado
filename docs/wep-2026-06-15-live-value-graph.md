@@ -297,24 +297,33 @@ is tracked against the three acceptance criteria, not against incidental speedup
       `walk_operand`) are in place. All operands are `Operand::Expr`, so behavior
       is unchanged — the full suite (769 lib + 2958 e2e) is green. This is the
       safe scaffold; it meets no acceptance criterion yet.
-- [~] **Phase B — make values live.** In progress. Landed: `ValuePool` records a
-  per-value source type (`set_type` / `type_of`), since `ValueKind` is
-  type-erased and extraction needs the width; a constant-value extractor
-  (`extract_value`) that materialises `Int`/`Float`/`Bool`/`Char`/`String`/
-  `Null`/`Unit` from the pool; `Body::map_operands` for in-place operand
-  rewrite. Two design findings shape the rest:
-  - **Single pool.** Promotion writes values into `Body::values`, but the per-pass
-    `builder::build` makes a _fresh_ pool, so a promoted `Operand::Value` it never
-    interned is unresolvable. Phase B must unify on `Body::values` as the one
-    owned pool — built once, the builder retired or repurposed to populate it,
-    the value-graph passes reading it. Promotion cannot be a standalone
-    byte-identical step before this.
-  - **Scheduling extraction.** Materialising a _non-constant_ value
-    (`Binary(Opaque, 1)`) needs the skeleton computation behind the `Opaque`
-    operand (a `Local` read, a `Call` result). The graph alone cannot re-emit it,
-    so the effectful sub-results must stay scheduled in the skeleton and the
-    extractor reads them — the WEP's "extraction is the main regression risk."
-    Constants extract without this; non-constants need the scheduler.
+- [x] **Phase B.1 — extraction proven (constants), end-to-end.** `ValuePool`
+      records a per-value source type (`set_type` / `type_of`) and allocates each
+      promoted literal un-shared (`alloc_unshared`) so a type-erased `7: i32` and
+      `7: i64` keep distinct widths. `extract_value` materialises constant value
+      kinds back to WIR; the builder seeds its pool from `Body::values` so a
+      promoted id resolves. The whole WIR-build dispatch now takes `Operand`
+      (`translate_operand` / `operand_type_id`; index / cast / match / switch /
+      tuple+array literals / variant-construct payload / indirect-call args /
+      SIMD lane / canonical-ABI). `promote_literals` is wired as the last optimize
+      step (promote-late). Result: package-gale -O2 is **byte-identical**
+      (740267 bytes) and the **full e2e suite (2982 fixtures) is green** — the
+      WEP's flagged "main regression risk" (extraction) is de-risked on a real
+      workload. This is necessary groundwork; promote-late runs after every pass,
+      so it moves no acceptance criterion yet (`rebuilds` unchanged at 2796).
+- [ ] **Phase B.2 — promote early + migrate the literal-matching passes.** Move
+      promotion ahead of the value passes so they read `Operand::Value`. The ~10
+      passes that structurally match operand literals (`const_fold`, `peephole`,
+      `const_object_globalization`, `container_sroa`, `copy_prop`,
+      `condition_implication`, `array_literal`, `elide_box_local`, …) must read a
+      promoted constant from the pool instead, or they regress (miss folds). This
+      is the gating migration for build-once.
+- [ ] **Phase B.3 — scheduling extraction for non-constant values.** Materialising
+      a `Binary(Opaque, 1)` needs the skeleton computation behind the `Opaque`
+      operand (a `Local` read, a `Call` result). The graph alone cannot re-emit
+      it, so the effectful sub-results stay scheduled in the skeleton and the
+      extractor reads them. Constants extract without this; non-constants need the
+      scheduler. Required to fully retire `value_of`.
 - [ ] **Maintain the graph through structural passes.** `inline` / `sroa` /
       `dae` / `drve` grow or union the live graph through their edits; no pass
       triggers a rebuild. Drives `rebuilds` toward 0.
