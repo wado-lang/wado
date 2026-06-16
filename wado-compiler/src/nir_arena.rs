@@ -37,6 +37,36 @@ pub enum Operand {
     Expr(ExprId),
 }
 
+impl Operand {
+    /// The skeleton subtree, if this operand is one. `None` for a promoted
+    /// pure value (which has no `ExprId`).
+    #[inline]
+    pub fn as_expr(self) -> Option<ExprId> {
+        match self {
+            Operand::Expr(e) => Some(e),
+            Operand::Value(_) => None,
+        }
+    }
+
+    /// The promoted pure value, if this operand is one.
+    #[inline]
+    pub fn as_value(self) -> Option<ValueId> {
+        match self {
+            Operand::Value(v) => Some(v),
+            Operand::Expr(_) => None,
+        }
+    }
+
+    /// The skeleton subtree, asserting this operand is not a promoted value.
+    /// Used on migration paths not yet taught about `Operand::Value`.
+    #[inline]
+    #[track_caller]
+    pub fn expr(self) -> ExprId {
+        self.as_expr()
+            .expect("operand is a promoted pure value, not a skeleton expr")
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ExprId(u32);
 entity_impl!(ExprId, "expr");
