@@ -61,8 +61,8 @@ fn walk_call_args_for_uses(
 ) {
     let args: Vec<ExprId> = match &body.exprs[expr].kind {
         ExprKind::Call { args, .. } => args.iter().map(|a| a.expr.expr()).collect(),
-        ExprKind::MethodCall { receiver, args, .. } => std::iter::once(*receiver)
-            .chain(args.iter().map(|a| a.expr))
+        ExprKind::MethodCall { receiver, args, .. } => std::iter::once(receiver.expr())
+            .chain(args.iter().map(|a| a.expr.expr()))
             .collect(),
         _ => return,
     };
@@ -452,8 +452,11 @@ fn validate_stmt(
             }
             walk_expr_for_uses(body, value.expr(), candidate_names, candidates, invalid, tracked);
         }
-        StmtKind::Expr(e) | StmtKind::Return { value: Some(e) } => {
+        StmtKind::Expr(e) => {
             walk_expr_for_uses(body, *e, candidate_names, candidates, invalid, tracked);
+        }
+        StmtKind::Return { value: Some(e) } => {
+            walk_expr_for_uses(body, e.expr(), candidate_names, candidates, invalid, tracked);
         }
         StmtKind::Return { value: None } | StmtKind::Continue => {}
         StmtKind::Break { value, .. } => {

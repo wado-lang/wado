@@ -59,7 +59,7 @@
 //! `inline` copying the helper body into the caller.
 
 use crate::nir::NirLocal;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -1302,9 +1302,8 @@ fn transform_lb_in_stmt_kind(
     span: Span,
 ) {
     let target = match &engine.body.stmts[s].kind {
-        StmtKind::Let { value, .. }
-        | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Expr(value) => Some(*value),
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => Some(*value),
+        StmtKind::Expr(value) => Some(Operand::Expr(*value)),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => *value,
         StmtKind::If { .. }
         | StmtKind::Loop { .. }
@@ -1711,8 +1710,8 @@ fn stmt_contains_loop(body: &Body, s: StmtId) -> bool {
         }
         StmtKind::Let { value, .. }
         | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Expr(value)
         | StmtKind::Return { value: Some(value) } => expr_contains_loop(body, value.expr()),
+        StmtKind::Expr(value) => expr_contains_loop(body, *value),
         _ => false,
     }
 }
@@ -1758,11 +1757,11 @@ fn stmt_has_free_unlabeled_loop_exit(body: &Body, s: StmtId, loop_depth: u32) ->
         }
         StmtKind::Let { value, .. }
         | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Expr(value)
         | StmtKind::Return { value: Some(value) }
         | StmtKind::Break {
             value: Some(value), ..
         } => expr_has_free_unlabeled_loop_exit(body, value.expr(), loop_depth),
+        StmtKind::Expr(value) => expr_has_free_unlabeled_loop_exit(body, *value, loop_depth),
         _ => false,
     }
 }

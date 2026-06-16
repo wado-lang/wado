@@ -436,6 +436,7 @@ fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<S
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             collect_callees_from_expr(body, value.expr(), callees);
         }
+        StmtKind::Expr(value) => collect_callees_from_expr(body, *value, callees),
         StmtKind::Return { value } => {
             if let Some(expr) = *value {
                 collect_callees_from_expr(body, expr.expr(), callees);
@@ -966,7 +967,7 @@ fn inline_top_level(
 fn inline_expr_children(body: &Body, e: ExprId) -> (Vec<ExprId>, Vec<BlockId>) {
     let mut exprs = Vec::new();
     let mut blocks = Vec::new();
-    let mut push_op = |exprs: &mut Vec<ExprId>, o: Operand| {
+    let push_op = |exprs: &mut Vec<ExprId>, o: Operand| {
         if let Some(x) = o.as_expr() {
             exprs.push(x);
         }
@@ -1410,7 +1411,7 @@ fn splice_block_into(
             StmtKind::Return { value } => {
                 let v = *value;
                 let span = callee.stmts[sid].span;
-                let value = v.map(|x| splice_expr(caller, callee, x.expr(), ctx));
+                let value = v.map(|x| splice_operand(caller, callee, x, ctx));
                 out.push(caller.stmts.push(StmtNode {
                     kind: StmtKind::Break {
                         label: Some(ctx.label.to_string()),

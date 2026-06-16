@@ -451,19 +451,19 @@ fn walk_expr_for_leftmost(
             walk_children_observable(body, args.into_iter(), candidate, field_name)
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            let children: Vec<ExprId> = std::iter::once(*receiver)
-                .chain(args.iter().map(|a| a.expr))
+            let children: Vec<ExprId> = std::iter::once(receiver.expr())
+                .chain(args.iter().map(|a| a.expr.expr()))
                 .collect();
             walk_children_observable(body, children.into_iter(), candidate, field_name)
         }
         ExprKind::IndirectCall { callee, args } => {
-            let children: Vec<ExprId> = std::iter::once(*callee)
-                .chain(args.iter().copied())
+            let children: Vec<ExprId> = std::iter::once(callee.expr())
+                .chain(args.iter().map(|o| o.expr()))
                 .collect();
             walk_children_observable(body, children.into_iter(), candidate, field_name)
         }
         ExprKind::CmRawCall { args, .. } => {
-            let args = args.clone();
+            let args: Vec<ExprId> = args.iter().map(|o| o.expr()).collect();
             walk_children_observable(body, args.into_iter(), candidate, field_name)
         }
 
@@ -494,11 +494,11 @@ fn walk_expr_for_leftmost(
                 // not make the surrounding context Pure.
                 NirBinaryOp::Div | NirBinaryOp::Mod => observable_propagate(walk_children_pure(
                     body,
-                    [left, right].into_iter(),
+                    [left.expr(), right.expr()].into_iter(),
                     candidate,
                     field_name,
                 )),
-                _ => walk_children_pure(body, [left, right].into_iter(), candidate, field_name),
+                _ => walk_children_pure(body, [left.expr(), right.expr()].into_iter(), candidate, field_name),
             }
         }
         ExprKind::Unary { expr: inner, op } => {
@@ -536,7 +536,7 @@ fn walk_expr_for_leftmost(
             let (inner, index) = (*inner, *index);
             observable_propagate(walk_children_pure(
                 body,
-                [inner, index].into_iter(),
+                [inner.expr(), index.expr()].into_iter(),
                 candidate,
                 field_name,
             ))
@@ -546,7 +546,7 @@ fn walk_expr_for_leftmost(
             walk_children_pure(body, fields.into_iter(), candidate, field_name)
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            let elements = elements.clone();
+            let elements: Vec<ExprId> = elements.iter().map(|o| o.expr()).collect();
             walk_children_pure(body, elements.into_iter(), candidate, field_name)
         }
         ExprKind::VariantConstruct { payload, .. } => match *payload {
@@ -592,7 +592,7 @@ fn walk_assign_target(
         }
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
-            walk_children_pure(body, [expr, index].into_iter(), candidate, field_name)
+            walk_children_pure(body, [expr.expr(), index.expr()].into_iter(), candidate, field_name)
         }
         ExprKind::Unary {
             op: NirUnaryOp::Deref,

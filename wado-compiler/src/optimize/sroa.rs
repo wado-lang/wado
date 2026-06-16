@@ -939,7 +939,7 @@ fn expand_struct_let(
         ExprKind::TupleLiteral { elements, .. } => elements
             .iter()
             .enumerate()
-            .map(|(i, e)| (i as u32, *e))
+            .map(|(i, e)| (i as u32, e.expr()))
             .collect(),
         _ => unreachable!("candidate must be struct or tuple literal"),
     };

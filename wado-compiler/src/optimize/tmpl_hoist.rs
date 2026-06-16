@@ -366,7 +366,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let inner = *inner;
             let arm_exprs: Vec<ExprId> = arms
                 .iter()
-                .flat_map(|arm| arm.guard.into_iter().chain(std::iter::once(arm.body)))
+                .flat_map(|arm| arm.guard.into_iter().chain(std::iter::once(arm.body)).map(|o| o.expr()))
                 .collect();
             collect_escaping_in_expr(body, inner.expr(), escaping);
             for ae in arm_exprs {
@@ -457,7 +457,7 @@ fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
                 .filter_map(|s| match &body.stmts[*s].kind {
                     StmtKind::Break {
                         value: Some(val), ..
-                    } => Some(*val),
+                    } => Some(val.expr()),
                     _ => None,
                 })
                 .collect();
@@ -585,8 +585,8 @@ fn transform_expr(
     let walk = match &engine.body.exprs[e].kind {
         ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr.expr()).collect()),
         ExprKind::MethodCall { receiver, args, .. } => {
-            let mut v = vec![*receiver];
-            v.extend(args.iter().map(|a| a.expr));
+            let mut v = vec![receiver.expr()];
+            v.extend(args.iter().map(|a| a.expr.expr()));
             Walk::Exprs(v)
         }
         ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![left.expr(), right.expr()]),
@@ -903,7 +903,7 @@ fn extract_formatter_fields(
                 struct_name: struct_name.clone(),
                 fields: fields
                     .iter()
-                    .map(|f| (f.name.clone(), f.field_index, f.value))
+                    .map(|f| (f.name.clone(), f.field_index, f.value.expr()))
                     .collect(),
                 struct_type: *struct_type,
                 value_type_id,
@@ -981,7 +981,7 @@ fn extract_formatter_fields_from_block(
         struct_name: struct_name.clone(),
         fields: fields
             .iter()
-            .map(|f| (f.name.clone(), f.field_index, f.value))
+            .map(|f| (f.name.clone(), f.field_index, f.value.expr()))
             .collect(),
         struct_type: *struct_type,
         value_type_id,
@@ -1415,13 +1415,13 @@ fn rename_local_in_expr(
         ExprKind::Local { index, .. } if *index == old_index => Walk::Local,
         ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr.expr()).collect()),
         ExprKind::MethodCall { receiver, args, .. } => {
-            let mut v = vec![*receiver];
-            v.extend(args.iter().map(|a| a.expr));
+            let mut v = vec![receiver.expr()];
+            v.extend(args.iter().map(|a| a.expr.expr()));
             Walk::Exprs(v)
         }
         ExprKind::IndirectCall { callee, args } => {
-            let mut v = vec![*callee];
-            v.extend(args.iter().copied());
+            let mut v = vec![callee.expr()];
+            v.extend(args.iter().map(|o| o.expr()));
             Walk::Exprs(v)
         }
         ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![left.expr(), right.expr()]),
