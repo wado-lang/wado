@@ -297,6 +297,60 @@ impl<'a> Engine<'a> {
         }
     }
 
+    /// Maintain the live graph after a value-preserving edit introduced the pure
+    /// expression `expr`: compute its `ValueId` from its operands' already-recorded
+    /// values, hash-cons it, and record it — no rebuild. Returns the value, or
+    /// `None` when the graph is not built, `expr` is impure, or an operand has no
+    /// recorded value (a flow-sensitive `Local` / `FieldAccess`, conservatively
+    /// skipped — a later query then sees no identity, never a wrong one).
+    ///
+    /// Sound exactly for the nodes whose value is fixed by their operands'
+    /// values — the operand-promotion slots: literals, `Binary`, `Unary` (not the
+    /// address-taking `Ref` / `MutRef` / `Deref`), `Cast`. It does not fold
+    /// (`2 + 3` stays a `Binary` rather than `5`), so the maintained graph is
+    /// never more precise than a fresh build, only equal or conservatively less —
+    /// never wrong. This is the primitive structural passes will call at a splice
+    /// point to grow the graph instead of forcing a rebuild.
+    pub fn maintain_pure_value(
+        &mut self,
+        expr: ExprId,
+    ) -> Option<crate::nir_value_graph::ValueId> {
+        let kind = self.body.exprs[expr].kind.clone();
+        let vg = self.value_graph.as_mut()?;
+        let v = match kind {
+            ExprKind::IntLiteral { value, .. } => vg.pool.int(value),
+            ExprKind::FloatLiteral { value, .. } => vg.pool.float(value),
+            ExprKind::BoolLiteral(b) => vg.pool.bool(b),
+            ExprKind::CharLiteral(c) => vg.pool.char(c),
+            ExprKind::StringLiteral(s) => vg.pool.string(s),
+            ExprKind::Null => vg.pool.null(),
+            ExprKind::Unit => vg.pool.unit(),
+            ExprKind::Binary { left, op, right } => {
+                let lhs = vg.value_of.get(&left).copied()?;
+                let rhs = vg.value_of.get(&right).copied()?;
+                vg.pool.binary(op, lhs, rhs)
+            }
+            ExprKind::Unary { op, expr: inner } => {
+                use crate::nir::NirUnaryOp;
+                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
+                    return None;
+                }
+                let operand = vg.value_of.get(&inner).copied()?;
+                vg.pool.unary(op, operand)
+            }
+            ExprKind::Cast {
+                expr: inner,
+                target_type,
+            } => {
+                let operand = vg.value_of.get(&inner).copied()?;
+                vg.pool.cast(operand, target_type)
+            }
+            _ => return None,
+        };
+        vg.value_of.insert(expr, v);
+        Some(v)
+    }
+
     /// The class representative of `id` in the session's value graph. Two ids
     /// with the same representative denote the same value. See
     /// [`crate::nir_value_graph::ValuePool::find`].
@@ -1251,6 +1305,79 @@ mod tests {
         // Pinning it keeps it resolvable without a rebuild.
         eng.set_value(fresh, v7);
         assert_eq!(eng.value(fresh), Some(v7));
+    }
+
+    #[test]
+    fn maintain_pure_value_matches_the_built_value_without_rebuild() {
+        // { let x = 1 + 2; return x; } — build the graph, then introduce a fresh
+        // `1 + 2` as a structural pass would and maintain it pointwise. Hash-
+        // consing makes the maintained sum share the original's identity, exactly
+        // what a full rebuild would yield, with no rebuild.
+        let mut body = sample_body();
+        let add = {
+            let st = body.blocks[body.root].stmts[0];
+            let StmtKind::Let { value, .. } = body.stmts[st].kind else {
+                unreachable!()
+            };
+            value
+        };
+        let mut buf = EngineBuffers::default();
+        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let v_add = eng.value(add).unwrap();
+
+        let one = eng.alloc_expr(
+            ExprKind::IntLiteral {
+                value: 1,
+                repr: "1".to_string(),
+            },
+            TypeTable::UNIT,
+            Span::default(),
+        );
+        let two = eng.alloc_expr(
+            ExprKind::IntLiteral {
+                value: 2,
+                repr: "2".to_string(),
+            },
+            TypeTable::UNIT,
+            Span::default(),
+        );
+        let sum = eng.alloc_expr(
+            ExprKind::Binary {
+                left: one,
+                op: NirBinaryOp::Add,
+                right: two,
+            },
+            TypeTable::UNIT,
+            Span::default(),
+        );
+        // Operands first, then the parent: each resolves from its children.
+        assert!(eng.maintain_pure_value(one).is_some());
+        assert!(eng.maintain_pure_value(two).is_some());
+        let v_sum = eng.maintain_pure_value(sum).unwrap();
+        assert_eq!(v_sum, v_add);
+        assert_eq!(eng.value(sum), Some(v_add));
+
+        // A flow-sensitive operand (an un-valued `Local`) is conservatively
+        // skipped — no value, never a wrong one.
+        let lx = eng.alloc_expr(
+            ExprKind::Local {
+                index: 9,
+                name: "u".to_string(),
+            },
+            TypeTable::UNIT,
+            Span::default(),
+        );
+        let mixed = eng.alloc_expr(
+            ExprKind::Binary {
+                left: lx,
+                op: NirBinaryOp::Add,
+                right: two,
+            },
+            TypeTable::UNIT,
+            Span::default(),
+        );
+        assert_eq!(eng.maintain_pure_value(mixed), None);
     }
 
     #[test]
