@@ -545,6 +545,98 @@ impl Body {
         })
     }
 
+    /// Apply `f` to every operand slot in the body, replacing it in place. Used
+    /// by promotion to lift pure operands to `Operand::Value` (WEP: The Live
+    /// ValueGraph). `f` is the only mutator; it does not borrow the body.
+    pub fn map_operands(&mut self, mut f: impl FnMut(Operand) -> Operand) {
+        let eids: Vec<ExprId> = self.exprs.keys().collect();
+        for id in eids {
+            match &mut self.exprs[id].kind {
+                ExprKind::GlobalVarSet { value, .. } => *value = f(*value),
+                ExprKind::Binary { left, right, .. } => {
+                    *left = f(*left);
+                    *right = f(*right);
+                }
+                ExprKind::Unary { expr, .. }
+                | ExprKind::Cast { expr, .. }
+                | ExprKind::FieldAccess { expr, .. }
+                | ExprKind::VariantTag { expr }
+                | ExprKind::VariantTest { expr, .. }
+                | ExprKind::VariantPayload { expr, .. } => *expr = f(*expr),
+                ExprKind::Assign { value, .. } => *value = f(*value),
+                ExprKind::Index { expr, index } => {
+                    *expr = f(*expr);
+                    *index = f(*index);
+                }
+                ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
+                    for a in args {
+                        a.expr = f(a.expr);
+                    }
+                }
+                ExprKind::CmRawCall { args, .. } => {
+                    for a in args {
+                        *a = f(*a);
+                    }
+                }
+                ExprKind::If { condition, .. } => *condition = f(*condition),
+                ExprKind::Match { expr, arms } => {
+                    *expr = f(*expr);
+                    for arm in arms {
+                        if let Some(g) = arm.guard {
+                            arm.guard = Some(f(g));
+                        }
+                        arm.body = f(arm.body);
+                    }
+                }
+                ExprKind::StructLiteral { fields, .. } => {
+                    for fld in fields {
+                        fld.value = f(fld.value);
+                    }
+                }
+                ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                    for el in elements {
+                        *el = f(*el);
+                    }
+                }
+                ExprKind::IndirectCall { callee, args } => {
+                    *callee = f(*callee);
+                    for a in args {
+                        *a = f(*a);
+                    }
+                }
+                ExprKind::ClosureToCanonical { functor, .. } => *functor = f(*functor),
+                ExprKind::VariantConstruct { payload, .. } => {
+                    if let Some(p) = payload {
+                        *payload = Some(f(*p));
+                    }
+                }
+                ExprKind::Switch { scrutinee, .. } => *scrutinee = f(*scrutinee),
+                _ => {}
+            }
+        }
+        let sids: Vec<StmtId> = self.stmts.keys().collect();
+        for id in sids {
+            match &mut self.stmts[id].kind {
+                StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+                    *value = f(*value)
+                }
+                StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+                    if let Some(v) = value {
+                        *value = Some(f(*v));
+                    }
+                }
+                StmtKind::If { condition, .. } => *condition = f(*condition),
+                _ => {}
+            }
+        }
+        let pids: Vec<PatId> = self.pats.keys().collect();
+        for id in pids {
+            if let PatKind::ConstantValue { expr } = &mut self.pats[id].kind {
+                *expr = f(*expr);
+            }
+        }
+    }
+
     /// Deep-copy an operand. A promoted pure value is shared (the same pool
     /// backs the clone, so its `ValueId` stays valid); an effectful subtree is
     /// cloned into fresh nodes.
