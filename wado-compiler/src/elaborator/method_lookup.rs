@@ -592,13 +592,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // permits it), so search every module that hosts an
             // `impl <struct_name>` — disambiguated by type identity below so
             // a same-named type declared in a different module is not matched.
-            let entries: Vec<(ModuleSource, usize)> = self
-                .tysys
-                .trait_env
-                .inherent_impl_index
-                .get(&struct_name)
-                .cloned()
-                .unwrap_or_default();
+            let entries: Vec<(ModuleSource, usize)> =
+                self.tysys.trait_env.inherent_impl_keys(&struct_name);
             for (impl_module, item_idx) in &entries {
                 let Item::Impl(impl_block) = &self.loaded_modules[impl_module].items[*item_idx]
                 else {
@@ -810,13 +805,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if struct_module_source.is_none() {
             // No specific module: fetch every inherent impl registered for
             // this type name across all loaded modules from the index.
-            let entries: Vec<(ModuleSource, usize)> = self
-                .tysys
-                .trait_env
-                .inherent_impl_index
-                .get(&struct_name)
-                .cloned()
-                .unwrap_or_default();
+            let entries: Vec<(ModuleSource, usize)> =
+                self.tysys.trait_env.inherent_impl_keys(&struct_name);
             for (search_module_source, item_idx) in &entries {
                 let Item::Impl(impl_block) =
                     &self.loaded_modules[search_module_source].items[*item_idx]
@@ -1532,23 +1522,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         include_trait: bool,
         only_module: Option<&ModuleSource>,
     ) -> Option<Vec<ast::GenericParam>> {
-        // Candidate impl-header keys for this receiver type from the pre-built
-        // indices, both keyed by the bare receiver name `get_type_name_static`
-        // yields — the same name the former scan compared against. Inherent and
-        // trait impls live in disjoint indices, so selecting by `include_trait`
-        // reproduces the old `trait_name.is_some()` skip without touching every
-        // impl in the program.
-        let mut candidates: Vec<&(ModuleSource, usize)> = Vec::new();
-        if let Some(entries) = self.tysys.trait_env.inherent_impl_index.get(struct_name) {
-            candidates.extend(entries.iter());
-        }
-        if include_trait && let Some(entries) = self.tysys.trait_env.impl_index.get(struct_name) {
-            candidates.extend(entries.iter());
-        }
-        // Restore the original global insertion order so a tie between two
-        // impls defining the same method keeps the previous winner.
-        candidates.sort_by_key(|key| self.tysys.trait_env.impl_headers.get_index_of(*key));
-
+        // Candidate impl-header keys for this receiver type, in global build
+        // order, keyed by the bare receiver name `get_type_name_static` yields
+        // (the same name the former scan compared against). Iterating
+        // `all_impl_index` directly preserves the original order — and the
+        // original `!include_trait` `trait_name.is_some()` skip — with no merge
+        // or per-call sort.
+        let Some(candidates) = self.tysys.trait_env.all_impl_index.get(struct_name) else {
+            return None;
+        };
         for key in candidates {
             if let Some(m) = only_module
                 && &key.0 != m
@@ -1558,6 +1540,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(header) = self.tysys.trait_env.impl_headers.get(key) else {
                 continue;
             };
+            if !include_trait && header.trait_name.is_some() {
+                continue;
+            }
             for method in &header.methods {
                 if method.name == method_name
                     && let Some(names) = Self::non_effect_generic_params(&method.type_params)

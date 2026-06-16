@@ -2400,34 +2400,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Impl blocks whose receiver base name is `struct_name`, from the
-    /// pre-built inherent + trait impl indices, ordered current-module-first to
-    /// preserve the former "current items, then loaded modules" scan
-    /// precedence. Replaces an O(all items in all modules) walk per call.
+    /// pre-built `all_impl_index`, ordered current-module-first to preserve the
+    /// former "current items, then loaded modules" scan precedence. Replaces an
+    /// O(all items in all modules) walk per call. `all_impl_index` is already
+    /// in global order, so partitioning by module needs no per-call sort.
     fn impl_blocks_for_type<'b>(&'b self, struct_name: &str) -> Vec<&'b ast::ImplBlock> {
-        let env = &self.tysys.trait_env;
-        let mut keys: Vec<&(ModuleSource, usize)> = Vec::new();
-        if let Some(entries) = env.inherent_impl_index.get(struct_name) {
-            keys.extend(entries.iter());
+        let Some(keys) = self.tysys.trait_env.all_impl_index.get(struct_name) else {
+            return Vec::new();
+        };
+        let mut current: Vec<&ast::ImplBlock> = Vec::new();
+        let mut others: Vec<&ast::ImplBlock> = Vec::new();
+        for key in keys {
+            let Some(Item::Impl(impl_block)) = self
+                .loaded_modules
+                .get(&key.0)
+                .and_then(|m| m.items.get(key.1))
+            else {
+                continue;
+            };
+            if key.0 == self.current_module_source {
+                current.push(impl_block);
+            } else {
+                others.push(impl_block);
+            }
         }
-        if let Some(entries) = env.impl_index.get(struct_name) {
-            keys.extend(entries.iter());
-        }
-        keys.sort_by_key(|key| {
-            // false (current module) sorts before true; within each group keep
-            // the original global insertion order via the header index.
-            (
-                key.0 != self.current_module_source,
-                env.impl_headers.get_index_of(*key),
-            )
-        });
-        keys.into_iter()
-            .filter_map(
-                |key| match self.loaded_modules.get(&key.0)?.items.get(key.1) {
-                    Some(Item::Impl(impl_block)) => Some(impl_block),
-                    _ => None,
-                },
-            )
-            .collect()
+        current.extend(others);
+        current
     }
 
     /// Look up whether each non-self parameter of an instance method is `mut`.
