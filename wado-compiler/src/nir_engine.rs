@@ -311,10 +311,7 @@ impl<'a> Engine<'a> {
     /// never more precise than a fresh build, only equal or conservatively less —
     /// never wrong. This is the primitive structural passes will call at a splice
     /// point to grow the graph instead of forcing a rebuild.
-    pub fn maintain_pure_value(
-        &mut self,
-        expr: ExprId,
-    ) -> Option<crate::nir_value_graph::ValueId> {
+    pub fn maintain_pure_value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         let kind = self.body.exprs[expr].kind.clone();
         let vg = self.value_graph.as_mut()?;
         let v = match kind {

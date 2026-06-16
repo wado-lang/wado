@@ -313,6 +313,38 @@ is tracked against the three acceptance criteria, not against incidental speedup
 - [ ] **Retire the intra-procedural iteration count.** The graph and worklist
       self-converge; keep an outer round count only for the interprocedural cycle.
 
+## Operand-promotion migration order
+
+The representation change is wide and lands red across the pipeline. The order
+below keeps each layer's intent clear so the work is resumable mid-change. The
+verify harness (`partitions_agree`) and `maintain_pure_value` are in place.
+
+- [x] **IR foundation.** `Operand { Value(ValueId), Expr(ExprId) }`;
+      `Body::values: ValuePool` (function-owned graph). Compiles; nothing
+      consumes them yet.
+- [ ] **Arena.** Remove the pure `ExprKind` variants (`IntLiteral`, `FloatLiteral`,
+      `BoolLiteral`, `CharLiteral`, `StringLiteral`, `Null`, `Unit`, `Binary`,
+      `Cast`, and the pure `Unary` ops `Neg` / `Not` / `BitNot` — `Ref` / `MutRef`
+      / `Deref` stay). Operand-bearing fields (`Assign.value`, `Let.value`,
+      `Return.value`, call args, receivers, conditions, scrutinees, literal
+      elements, …) become `Operand`. Update `for_each_child` / `clone_*` to recurse
+      only into `Operand::Expr`. A skeleton placeholder replaces `ExprKind::Unit`'s
+      dead-node role (`become_expr`).
+- [ ] **lower::translate.** Build the graph while lowering: a pure expression
+      interns into `Body::values` and yields `Operand::Value`; an effectful one
+      stays an `ExprId`. Thread `current_value` / heap versions as the old
+      `builder` did — this merges the value-graph build into lowering. `value_of`
+      and `nir_value_graph::builder` retire (the builder's flow walk moves here).
+- [ ] **Engine.** `value()` resolves an `Operand`; the edit API maintains
+      `Body::values` in place (`maintain_pure_value` for new pure nodes, `set_value`
+      for flow-sensitive ones); drop the lazy `value_graph` cache and the
+      `CachedAnalysis` / `vg_cache` / `run_gated_cached` plumbing.
+- [ ] **Passes.** Each pass matching a pure `ExprKind` switches to `Operand` /
+      `Body::values` queries; structural passes maintain the graph at splice
+      points. cse / copy-prop / slf collapse into graph identity.
+- [ ] **WIR build + unparser + niri + type-repr.** Consume `Operand`: a `Value`
+      extracts from the graph (the extractor), an `Expr` lowers the subtree.
+
 ## See also
 
 - [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md) — the direction; equality saturation stays deferred there.
