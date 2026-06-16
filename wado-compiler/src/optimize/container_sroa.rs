@@ -1320,7 +1320,7 @@ impl Rewriter<'_, '_> {
                 if elements.len() != expected_arity {
                     return None;
                 }
-                Source::Tuple(elements.clone())
+                Source::Tuple(elements.iter().map(|o| o.expr()).collect())
             }
             ExprKind::StructLiteral {
                 struct_type,

@@ -239,8 +239,8 @@ impl ValidateCtx<'_> {
                     args,
                     ..
                 } => {
-                    let mut scan = vec![*receiver];
-                    scan.extend(args.iter().map(|a| a.expr));
+                    let mut scan = vec![receiver.expr()];
+                    scan.extend(args.iter().map(|a| a.expr.expr()));
                     (Some((func.module_source.clone(), func.name.clone())), scan)
                 }
                 // Not a top-level call: the whole expression is a use.

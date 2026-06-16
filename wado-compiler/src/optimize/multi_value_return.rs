@@ -378,9 +378,8 @@ fn stmt_break_values_match(body: &Body, stmt: StmtId, expected: &ExpectedShape) 
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             expr_break_values_match(body, value.expr(), expected)
         }
-        StmtKind::Expr(e) | StmtKind::Return { value: Some(e) } => {
-            expr_break_values_match(body, *e, expected)
-        }
+        StmtKind::Expr(e) => expr_break_values_match(body, *e, expected),
+        StmtKind::Return { value: Some(e) } => expr_break_values_match(body, e.expr(), expected),
         StmtKind::Return { value: None } => true,
     }
 }

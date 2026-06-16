@@ -433,9 +433,7 @@ fn collect_callees_from_block(body: &Body, block: BlockId, callees: &mut IndexSe
 
 fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<String>) {
     match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. }
-        | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Expr(value) => {
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             collect_callees_from_expr(body, value.expr(), callees);
         }
         StmtKind::Return { value } => {
@@ -968,18 +966,23 @@ fn inline_top_level(
 fn inline_expr_children(body: &Body, e: ExprId) -> (Vec<ExprId>, Vec<BlockId>) {
     let mut exprs = Vec::new();
     let mut blocks = Vec::new();
+    let mut push_op = |exprs: &mut Vec<ExprId>, o: Operand| {
+        if let Some(x) = o.as_expr() {
+            exprs.push(x);
+        }
+    };
     match &body.exprs[e].kind {
         ExprKind::Binary { left, right, .. }
-        | ExprKind::Assign {
-            target: left,
-            value: right,
-        }
         | ExprKind::Index {
             expr: left,
             index: right,
         } => {
-            exprs.push(*left);
-            exprs.push(*right);
+            push_op(&mut exprs, *left);
+            push_op(&mut exprs, *right);
+        }
+        ExprKind::Assign { target, value } => {
+            exprs.push(*target);
+            push_op(&mut exprs, *value);
         }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
@@ -988,36 +991,52 @@ fn inline_expr_children(body: &Body, e: ExprId) -> (Vec<ExprId>, Vec<BlockId>) {
         | ExprKind::GlobalVarSet { value: inner, .. }
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => exprs.push(*inner),
-        ExprKind::CmRawCall { args, .. } => exprs.extend(args.iter().copied()),
+        | ExprKind::VariantPayload { expr: inner, .. } => push_op(&mut exprs, *inner),
+        ExprKind::CmRawCall { args, .. } => {
+            for a in args {
+                push_op(&mut exprs, *a);
+            }
+        }
         ExprKind::IndirectCall { callee, args } => {
-            exprs.push(*callee);
-            exprs.extend(args.iter().copied());
+            push_op(&mut exprs, *callee);
+            for a in args {
+                push_op(&mut exprs, *a);
+            }
         }
-        ExprKind::StructLiteral { fields, .. } => exprs.extend(fields.iter().map(|f| f.value)),
+        ExprKind::StructLiteral { fields, .. } => {
+            for f in fields {
+                push_op(&mut exprs, f.value);
+            }
+        }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            exprs.extend(elements.iter().copied());
+            for el in elements {
+                push_op(&mut exprs, *el);
+            }
         }
-        ExprKind::VariantConstruct { payload, .. } => exprs.extend(payload.iter().copied()),
+        ExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                push_op(&mut exprs, *p);
+            }
+        }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => blocks.push(*block),
         ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            exprs.push(*condition);
+            push_op(&mut exprs, *condition);
             blocks.push(*then_branch);
             if let Some(eb) = else_branch {
                 blocks.push(*eb);
             }
         }
         ExprKind::Match { expr, arms } => {
-            exprs.push(*expr);
+            push_op(&mut exprs, *expr);
             for arm in arms {
                 if let Some(g) = arm.guard {
-                    exprs.push(g);
+                    push_op(&mut exprs, g);
                 }
-                exprs.push(arm.body);
+                push_op(&mut exprs, arm.body);
             }
         }
         ExprKind::Switch {
@@ -1026,7 +1045,7 @@ fn inline_expr_children(body: &Body, e: ExprId) -> (Vec<ExprId>, Vec<BlockId>) {
             default,
             ..
         } => {
-            exprs.push(*scrutinee);
+            push_op(&mut exprs, *scrutinee);
             blocks.extend(arms.iter().copied());
             blocks.push(*default);
         }
@@ -1475,7 +1494,7 @@ fn splice_stmt(caller: &mut Body, callee: &Body, sid: StmtId, ctx: &InlineCtx) -
             let v = *value;
             StmtKind::Break {
                 label: Some(ctx.label.to_string()),
-                value: v.map(|x| splice_expr(caller, callee, x.expr(), ctx)),
+                value: v.map(|x| splice_operand(caller, callee, x, ctx)),
             }
         }
         StmtKind::If {
@@ -1507,7 +1526,7 @@ fn splice_stmt(caller: &mut Body, callee: &Body, sid: StmtId, ctx: &InlineCtx) -
             let (l, v) = (label.clone(), *value);
             StmtKind::Break {
                 label: l.map(|x| ctx.lbl(&x)),
-                value: v.map(|x| splice_expr(caller, callee, x.expr(), ctx)),
+                value: v.map(|x| splice_operand(caller, callee, x, ctx)),
             }
         }
         StmtKind::Continue => StmtKind::Continue,

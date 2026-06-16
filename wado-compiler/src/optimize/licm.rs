@@ -470,14 +470,13 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
         | ExprKind::VariantTest { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. } => vec![Child::Expr(inner.expr())],
         ExprKind::Binary { left, right, .. }
-        | ExprKind::Assign {
-            target: left,
-            value: right,
-        }
         | ExprKind::Index {
             expr: left,
             index: right,
         } => vec![Child::Expr(left.expr()), Child::Expr(right.expr())],
+        ExprKind::Assign { target, value } => {
+            vec![Child::Expr(*target), Child::Expr(value.expr())]
+        }
         ExprKind::Call { args, .. } => args.iter().map(|a| Child::Expr(a.expr.expr())).collect(),
         ExprKind::MethodCall { receiver, args, .. } => std::iter::once(Child::Expr(receiver.expr()))
             .chain(args.iter().map(|a| Child::Expr(a.expr.expr())))
@@ -546,9 +545,10 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
 /// `collect_licm_ref` statement walks).
 fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
     match &body.stmts[s].kind {
-        StmtKind::Let { value, .. }
-        | StmtKind::Expr(value)
-        | StmtKind::LetDestructure { value, .. } => vec![Child::Expr(value.expr())],
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+            vec![Child::Expr(value.expr())]
+        }
+        StmtKind::Expr(value) => vec![Child::Expr(*value)],
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
             value.iter().map(|v| Child::Expr(v.expr())).collect()
         }

@@ -1955,7 +1955,8 @@ fn block_has_side_effects(body: &Body, block: BlockId) -> bool {
         .stmts
         .iter()
         .any(|s| match &body.stmts[*s].kind {
-            StmtKind::Expr(e) | StmtKind::Let { value: e, .. } => expr_has_side_effects(body, *e),
+            StmtKind::Expr(e) => expr_has_side_effects(body, *e),
+            StmtKind::Let { value, .. } => expr_has_side_effects(body, value.expr()),
             StmtKind::Return { value } => value.is_some_and(|v| expr_has_side_effects(body, v.expr())),
             StmtKind::If {
                 condition,
@@ -1982,7 +1983,8 @@ fn remove_dead_global_sets_stmt(body: &mut Body, s: StmtId, used: &IndexSet<(Str
         None,
     }
     let w = match &body.stmts[s].kind {
-        StmtKind::Expr(expr) | StmtKind::Let { value: expr, .. } => W::Expr(*expr),
+        StmtKind::Expr(expr) => W::Expr(*expr),
+        StmtKind::Let { value, .. } => W::Expr(value.expr()),
         StmtKind::If {
             then_block,
             else_block,

@@ -286,9 +286,8 @@ fn contains_aggregate(body: &Body, expr: ExprId) -> bool {
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             let stmts = body.blocks[*block].stmts.clone();
             stmts.iter().any(|&s| match &body.stmts[s].kind {
-                StmtKind::Let { value, .. } | StmtKind::Expr(value) => {
-                    contains_aggregate(body, value.expr())
-                }
+                StmtKind::Let { value, .. } => contains_aggregate(body, value.expr()),
+                StmtKind::Expr(value) => contains_aggregate(body, *value),
                 _ => false,
             })
         }

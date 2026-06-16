@@ -545,7 +545,7 @@ fn extract_early_exit_guard(engine: &mut Engine, s: StmtId) -> Option<GuardFact>
         return None;
     };
     let (left, right) = (*left, *right);
-    GuardFact::from_comparison(engine, left, right, true)
+    GuardFact::from_comparison(engine, left.expr(), right.expr(), true)
 }
 
 fn block_always_exits(engine: &Engine, block: BlockId) -> bool {
@@ -569,7 +569,7 @@ fn extract_dominating_guard(engine: &mut Engine, condition: ExprId) -> Option<Gu
         return None;
     };
     let (left, right) = (*left, *right);
-    GuardFact::from_comparison(engine, left, right, true)
+    GuardFact::from_comparison(engine, left.expr(), right.expr(), true)
 }
 
 /// Replace the expression at `cond` with `false`, preserving its type and span.
@@ -767,7 +767,7 @@ impl ArenaOptVisitor for ShortCircuitEliminator {
             } = &engine.body.exprs[left.expr()].kind
             {
                 let (cmp_l, cmp_r) = (*cmp_l, *cmp_r);
-                GuardFact::from_comparison(engine, cmp_l, cmp_r, true)
+                GuardFact::from_comparison(engine, cmp_l.expr(), cmp_r.expr(), true)
             } else {
                 None
             };

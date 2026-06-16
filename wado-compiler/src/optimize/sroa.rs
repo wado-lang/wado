@@ -1012,7 +1012,7 @@ fn reconstruct_aggregate(engine: &mut Engine, id: ExprId, local_idx: u32, ctx: &
             );
             elements.push(e);
         }
-        engine.replace_expr_kind(id, ExprKind::TupleLiteral { elements });
+        engine.replace_expr_kind(id, ExprKind::TupleLiteral { elements: elements.into_iter().map(crate::nir_arena::Operand::Expr).collect() });
     } else {
         let mut fields: Vec<ArenaStructField> = Vec::with_capacity(field_specs.len());
         for (i, (name, type_id)) in field_specs.iter().enumerate() {

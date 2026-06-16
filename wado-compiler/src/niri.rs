@@ -1189,7 +1189,7 @@ impl<'a> Interpreter<'a> {
             match &body.exprs[e].kind {
                 ExprKind::Match { arms, .. } => arms
                     .iter()
-                    .map(|a| (a.guard, a.pattern, a.body, a.span))
+                    .map(|a| (a.guard.map(|g| g.expr()), a.pattern, a.body.expr(), a.span))
                     .collect(),
                 _ => unreachable!(),
             };

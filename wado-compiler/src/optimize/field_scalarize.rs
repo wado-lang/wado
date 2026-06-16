@@ -2412,7 +2412,7 @@ fn recurse_into_call_args(
             ExprKind::MethodCall { receiver, args, .. } => {
                 (Some(receiver.expr()), None, args.iter().map(|a| a.expr.expr()).collect())
             }
-            ExprKind::IndirectCall { callee, args, .. } => (None, Some(callee.expr()), args.clone()),
+            ExprKind::IndirectCall { callee, args, .. } => (None, Some(callee.expr()), args.iter().map(|a| a.expr()).collect()),
             _ => unreachable!("recurse_into_call_args called on non-call expr"),
         };
     if let Some(callee) = callee {
