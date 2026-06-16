@@ -1720,7 +1720,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // via an AstId collision in `bindings.references` (cf.
         // `lookup_method_info` which suppresses for the same reason).
         self.with_reference_recording_suppressed(|s| {
-            s.find_trait_method_for_type_unrecorded(
+            s.find_trait_method_for_type_inner(
                 struct_name,
                 method_name,
                 struct_module,
@@ -1733,7 +1733,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `struct_name` plus the base names of its newtype chain
     /// (`type Alias = Base` → `Base`, `Flags` → `u32`), so a trait impl on a
     /// base type is reachable through the alias. Phase A of
-    /// [`Self::find_trait_method_for_type_unrecorded`].
+    /// [`Self::find_trait_method_for_type_inner`].
     fn newtype_chain_names(&self, struct_name: &str) -> Vec<String> {
         let mut names = vec![struct_name.to_string()];
         if let Some(newtype_id) = self.lookup_newtype(struct_name) {
@@ -1756,7 +1756,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         names
     }
 
-    /// Candidate trait impls for [`Self::find_trait_method_for_type_unrecorded`]
+    /// Candidate trait impls for [`Self::find_trait_method_for_type_inner`]
     /// (Phase A): every trait impl on one of `names_to_check`, plus blanket
     /// impls (`impl<T: Bound> Trait for T`) whose bound the receiver satisfies.
     fn trait_method_candidates(&mut self, names_to_check: &[String]) -> Vec<ImplBlockRef> {
@@ -1797,7 +1797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_refs
     }
 
-    /// Phase B of [`Self::find_trait_method_for_type_unrecorded`]: decide whether
+    /// Phase B of [`Self::find_trait_method_for_type_inner`]: decide whether
     /// a candidate impl applies to the receiver. Returns the impl's receiver
     /// name and whether it is a blanket type-param impl (both consumed by
     /// Phase C), or `None` to skip the candidate.
@@ -1972,13 +1972,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The body of [`Self::find_trait_method_for_type`], run with use→def
-    /// reference recording suppressed (foreign impl signatures are walked
-    /// here; see the wrapper). Despite the former `_uncached` name there is no
-    /// cache — the pre-built impl indices are the shared memo. Orchestrates
-    /// candidate collection, per-candidate receiver matching, projection, and
-    /// final selection across the dedicated helpers below.
-    fn find_trait_method_for_type_unrecorded(
+    /// The body of [`Self::find_trait_method_for_type`] (the wrapper runs it
+    /// with use→def reference recording suppressed, since foreign impl
+    /// signatures are walked here). Orchestrates candidate collection,
+    /// per-candidate receiver matching, projection, and final selection across
+    /// the dedicated helpers below.
+    fn find_trait_method_for_type_inner(
         &mut self,
         struct_name: &str,
         method_name: &str,
@@ -2035,7 +2034,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Project one candidate trait impl into 0+ [`TraitMethodMatch`]es
-    /// (Phase C of [`Self::find_trait_method_for_type_unrecorded`]). Sets up the
+    /// (Phase C of [`Self::find_trait_method_for_type_inner`]). Sets up the
     /// impl's type-parameter / associated-type scope, then emits a match for the
     /// impl's own method (if it defines `method_name`) or, failing that, for any
     /// matching trait default method with a body.
@@ -2504,7 +2503,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Phase D of [`Self::find_trait_method_for_type_unrecorded`]: choose the
+    /// Phase D of [`Self::find_trait_method_for_type_inner`]: choose the
     /// winning match from the collected candidates. Prefers a trait impl in the
     /// current module, deduplicates `(trait, module)` pairs, and returns the
     /// first remaining (multiple survivors are ambiguous, resolved later by
