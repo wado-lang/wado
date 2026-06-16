@@ -252,7 +252,7 @@ impl<'a> Engine<'a> {
         id: crate::nir_value_graph::ValueId,
     ) -> &crate::nir_value_graph::ValueKind {
         self.ensure_value_graph();
-        self.value_graph.as_ref().unwrap().pool.kind(id)
+        self.body.values.kind(id)
     }
 
     /// First `ExprId` observed producing the given literal `ValueId`. Returns
@@ -312,39 +312,45 @@ impl<'a> Engine<'a> {
     /// never wrong. This is the primitive structural passes will call at a splice
     /// point to grow the graph instead of forcing a rebuild.
     pub fn maintain_pure_value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
+        self.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
-        let vg = self.value_graph.as_mut()?;
-        let v = match kind {
-            ExprKind::IntLiteral { value, .. } => vg.pool.int(value),
-            ExprKind::FloatLiteral { value, .. } => vg.pool.float(value),
-            ExprKind::BoolLiteral(b) => vg.pool.bool(b),
-            ExprKind::CharLiteral(c) => vg.pool.char(c),
-            ExprKind::StringLiteral(s) => vg.pool.string(s),
-            ExprKind::Null => vg.pool.null(),
-            ExprKind::Unit => vg.pool.unit(),
-            ExprKind::Binary { left, op, right } => {
-                let lhs = vg.value_of.get(&left.expr()).copied()?;
-                let rhs = vg.value_of.get(&right.expr()).copied()?;
-                vg.pool.binary(op, lhs, rhs)
-            }
-            ExprKind::Unary { op, expr: inner } => {
-                use crate::nir::NirUnaryOp;
-                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
-                    return None;
+        // The pool lives on the body, `value_of` on the cached graph — disjoint
+        // fields, borrowed separately so interning and operand lookups coexist.
+        let v = {
+            let pool = &mut self.body.values;
+            let value_of = &self.value_graph.as_ref().unwrap().value_of;
+            match kind {
+                ExprKind::IntLiteral { value, .. } => pool.int(value),
+                ExprKind::FloatLiteral { value, .. } => pool.float(value),
+                ExprKind::BoolLiteral(b) => pool.bool(b),
+                ExprKind::CharLiteral(c) => pool.char(c),
+                ExprKind::StringLiteral(s) => pool.string(s),
+                ExprKind::Null => pool.null(),
+                ExprKind::Unit => pool.unit(),
+                ExprKind::Binary { left, op, right } => {
+                    let lhs = value_of.get(&left.expr()).copied()?;
+                    let rhs = value_of.get(&right.expr()).copied()?;
+                    pool.binary(op, lhs, rhs)
                 }
-                let operand = vg.value_of.get(&inner.expr()).copied()?;
-                vg.pool.unary(op, operand)
+                ExprKind::Unary { op, expr: inner } => {
+                    use crate::nir::NirUnaryOp;
+                    if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
+                        return None;
+                    }
+                    let operand = value_of.get(&inner.expr()).copied()?;
+                    pool.unary(op, operand)
+                }
+                ExprKind::Cast {
+                    expr: inner,
+                    target_type,
+                } => {
+                    let operand = value_of.get(&inner.expr()).copied()?;
+                    pool.cast(operand, target_type)
+                }
+                _ => return None,
             }
-            ExprKind::Cast {
-                expr: inner,
-                target_type,
-            } => {
-                let operand = vg.value_of.get(&inner.expr()).copied()?;
-                vg.pool.cast(operand, target_type)
-            }
-            _ => return None,
         };
-        vg.value_of.insert(expr, v);
+        self.value_graph.as_mut().unwrap().value_of.insert(expr, v);
         Some(v)
     }
 
@@ -356,7 +362,7 @@ impl<'a> Engine<'a> {
         id: crate::nir_value_graph::ValueId,
     ) -> crate::nir_value_graph::ValueId {
         self.ensure_value_graph();
-        self.value_graph.as_mut().unwrap().pool.find(id)
+        self.body.values.find(id)
     }
 
     /// Prove `a ≡ b` in the session's value graph by merging their classes,
@@ -374,14 +380,14 @@ impl<'a> Engine<'a> {
         b: crate::nir_value_graph::ValueId,
     ) -> crate::nir_value_graph::ValueId {
         self.ensure_value_graph();
-        self.value_graph.as_mut().unwrap().pool.union(a, b)
+        self.body.values.union(a, b)
     }
 
     /// Restore congruence after a batch of [`Engine::value_union`] calls. See
     /// [`crate::nir_value_graph::ValuePool::rebuild`].
     pub fn rebuild_value_congruence(&mut self) {
         self.ensure_value_graph();
-        self.value_graph.as_mut().unwrap().pool.rebuild();
+        self.body.values.rebuild();
     }
 
     /// Drop the cached `ValueGraph` so the next [`Engine::value`] call
@@ -460,7 +466,7 @@ impl<'a> Engine<'a> {
             return;
         }
         let build = crate::nir_value_graph::builder::build(
-            &*self.body,
+            &mut *self.body,
             &self.param_locals,
             &self.aliased_locals,
             &self.untrackable_locals,

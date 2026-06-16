@@ -189,7 +189,6 @@ struct FlowArm {
 /// value-graph identity available" rather than panicking.
 #[derive(Debug)]
 pub struct ValueGraphBuild {
-    pub pool: ValuePool,
     pub value_of: IndexMap<ExprId, ValueId>,
     /// For each literal `ValueId`, the first `ExprId` we observed producing
     /// it. Lets a consumer (e.g. store-load-forward) clone the original
@@ -231,32 +230,29 @@ pub struct ValueGraphBuild {
 /// these across a call; a reference-aliased local whose every escape is an
 /// immutable `&v` keeps its forwarded fields, since no callee can mutate it.
 pub fn build(
-    body: &Body,
+    body: &mut Body,
     param_locals: &[u32],
     aliased: &crate::hashmap::IndexSet<u32>,
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
-    // Seed the pool from the body's owned values so a promoted `Operand::Value`
-    // (interned at lower / promotion into `body.values`) resolves through the
-    // same ids. Empty until promotion populates `body.values`, so this is a
-    // no-op clone for an unpromoted body.
-    let mut b = Builder::new(
-        body,
-        aliased,
-        untrackable,
-        mut_escaped,
-        type_table,
-        body.values.clone(),
-    );
-    b.seed_params(param_locals);
-    b.walk_block(body.root);
+    // Build into the body's own pool: take it out as the seed (so a promoted
+    // `Operand::Value` resolves through the same ids), grow it during the walk,
+    // and write it back. `body.values` is the one persistent pool — ids stay
+    // stable across builds (it only grows), the prerequisite for build-once.
+    let seed = std::mem::take(&mut body.values);
+    let (pool, value_of, literal_source, loop_entry_values) = {
+        let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
+        b.seed_params(param_locals);
+        b.walk_block(body.root);
+        (b.pool, b.value_of, b.literal_source, b.loop_entry_values)
+    };
+    body.values = pool;
     ValueGraphBuild {
-        pool: b.pool,
-        value_of: b.value_of,
-        literal_source: b.literal_source,
-        loop_entry_values: b.loop_entry_values,
+        value_of,
+        literal_source,
+        loop_entry_values,
     }
 }
 
@@ -277,20 +273,22 @@ pub fn build(
 // production caller lands with operand promotion.
 #[allow(dead_code)]
 pub(crate) fn partitions_agree(
-    maintained: &mut ValueGraphBuild,
-    fresh: &mut ValueGraphBuild,
+    pool: &mut ValuePool,
+    maintained: &ValueGraphBuild,
+    fresh: &ValueGraphBuild,
     exprs: &[ExprId],
 ) -> Result<(), String> {
     // A rep in one build maps to exactly one rep in the other; a second expr
     // that maps a known rep to a different partner proves the partitions differ.
+    // Both builds share the body's pool, so `find` resolves either's id.
     let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
     let mut f_to_m: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
     for &e in exprs {
         let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
             continue;
         };
-        let rm = maintained.pool.find(vm);
-        let rf = fresh.pool.find(vf);
+        let rm = pool.find(vm);
+        let rf = pool.find(vf);
         if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
             if prev_rf != rf {
                 return Err(format!(
@@ -1859,7 +1857,7 @@ mod tests {
 
     // ----- Body builders for tests -----
 
-    fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
+    fn build_t(body: &mut Body, params: &[NirParam]) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
         build(body, &param_locals, &empty, &empty, &empty, None)
@@ -1869,7 +1867,7 @@ mod tests {
     /// aliased set doubles as `mut_escaped` so these tests exercise the
     /// call-invalidation path (a mutably-aliased local is clobbered by calls).
     fn build_aliased(
-        body: &Body,
+        body: &mut Body,
         params: &[NirParam],
         aliased: &crate::hashmap::IndexSet<u32>,
     ) -> ValueGraphBuild {
@@ -2032,9 +2030,9 @@ mod tests {
         let lit = int_lit(&mut body, 42);
         let s = alloc_stmt(&mut body, StmtKind::Expr(lit));
         root_with(&mut body, vec![s]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         let v = r.value_of[&lit];
-        assert_eq!(r.pool.kind(v), &ValueKind::Int(42));
+        assert_eq!(body.values.kind(v), &ValueKind::Int(42));
     }
 
     #[test]
@@ -2046,11 +2044,11 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s2 = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, s2]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         let lit_v = r.value_of[&lit];
         let read_v = r.value_of[&read];
         assert_eq!(lit_v, read_v);
-        assert_eq!(r.pool.kind(read_v), &ValueKind::Int(1));
+        assert_eq!(body.values.kind(read_v), &ValueKind::Int(1));
     }
 
     #[test]
@@ -2066,7 +2064,7 @@ mod tests {
         let add_b = binary(&mut body, NirBinaryOp::Add, one_b, two_b);
         let let_b = let_stmt(&mut body, 1, add_b, false);
         root_with(&mut body, vec![let_a, let_b]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert_eq!(r.value_of[&add_a], r.value_of[&add_b]);
     }
 
@@ -2081,8 +2079,8 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, assign, s_read]);
-        let r = build_t(&body, &[]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
+        let r = build_t(&mut body, &[]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(2));
     }
 
     #[test]
@@ -2109,13 +2107,13 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         let read_v = r.value_of[&read];
-        match r.pool.kind(read_v) {
+        match body.values.kind(read_v) {
             ValueKind::Select { cond, then, else_ } => {
-                assert_eq!(r.pool.kind(*cond), &ValueKind::Bool(true));
-                assert_eq!(r.pool.kind(*then), &ValueKind::Int(2));
-                assert_eq!(r.pool.kind(*else_), &ValueKind::Int(3));
+                assert_eq!(body.values.kind(*cond), &ValueKind::Bool(true));
+                assert_eq!(body.values.kind(*then), &ValueKind::Int(2));
+                assert_eq!(body.values.kind(*else_), &ValueKind::Int(3));
             }
             other => panic!("expected Select, got {other:?}"),
         }
@@ -2142,12 +2140,12 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build_t(&body, &[]);
-        match r.pool.kind(r.value_of[&read]) {
+        let r = build_t(&mut body, &[]);
+        match body.values.kind(r.value_of[&read]) {
             ValueKind::Select { cond, then, else_ } => {
-                assert_eq!(r.pool.kind(*cond), &ValueKind::Bool(true));
-                assert_eq!(r.pool.kind(*then), &ValueKind::Int(2));
-                assert_eq!(r.pool.kind(*else_), &ValueKind::Int(1));
+                assert_eq!(body.values.kind(*cond), &ValueKind::Bool(true));
+                assert_eq!(body.values.kind(*then), &ValueKind::Int(2));
+                assert_eq!(body.values.kind(*else_), &ValueKind::Int(1));
             }
             other => panic!("expected Select, got {other:?}"),
         }
@@ -2177,9 +2175,9 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         // Both arms wrote Int(2); the merge picks that without a Select.
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(2));
     }
 
     #[test]
@@ -2197,9 +2195,9 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, loop_s, s_read]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
         ));
     }
@@ -2221,9 +2219,9 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_x, let_i, loop_s, s_read]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         // `x` is not touched by the loop, so it retains its Int(1).
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(1));
     }
 
     #[test]
@@ -2242,11 +2240,11 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build_t(&body, &[param]);
+        let r = build_t(&mut body, &[param]);
         let v1 = r.value_of[&read1];
         let v2 = r.value_of[&read2];
         assert_eq!(v1, v2);
-        assert!(matches!(r.pool.kind(v1), ValueKind::Opaque(_)));
+        assert!(matches!(body.values.kind(v1), ValueKind::Opaque(_)));
     }
 
     #[test]
@@ -2269,7 +2267,7 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build_t(&body, &[param]);
+        let r = build_t(&mut body, &[param]);
         // Both `x + 1` expressions share a ValueId because `x` is a stable
         // (write-once) Opaque and `1` is hash-consed.
         assert_eq!(r.value_of[&add_a], r.value_of[&add_b]);
@@ -2300,9 +2298,9 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_s, s]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
         ));
         // The call itself has no value_of entry.
@@ -2322,10 +2320,10 @@ mod tests {
         let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1));
         let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2));
         root_with(&mut body, vec![s1, s2]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         assert_eq!(r.value_of[&read1], r.value_of[&read2]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read1]),
+            body.values.kind(r.value_of[&read1]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2361,7 +2359,7 @@ mod tests {
         let let_b2 = let_stmt(&mut body, 4, read_b2, false);
 
         root_with(&mut body, vec![let_a, let_b, write, let_a2, let_b2]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
 
         // `obj.f` reads straddle a write of `f`: different heap versions, distinct VN.
         assert_ne!(r.value_of[&read_a], r.value_of[&read_a2]);
@@ -2390,7 +2388,7 @@ mod tests {
             if let Some(idx) = aliased {
                 set.insert(idx);
             }
-            let r = build_aliased(&body, &[param_seed()], &set);
+            let r = build_aliased(&mut body, &[param_seed()], &set);
             (r.value_of[&read1], r.value_of[&read2])
         };
         // Aliased `obj`: the call invalidates its field.
@@ -2409,7 +2407,7 @@ mod tests {
         let fa = field_access(&mut body, call, 0);
         let s = alloc_stmt(&mut body, StmtKind::Expr(fa));
         root_with(&mut body, vec![s]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(!r.value_of.contains_key(&fa));
     }
 
@@ -2462,7 +2460,7 @@ mod tests {
         let switch_s = alloc_stmt(&mut body, StmtKind::Expr(switch_e));
 
         root_with(&mut body, vec![let_pre, switch_s]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         // The read inside arm 1 must share a VN with the pre-switch read.
         assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_arm]);
     }
@@ -2503,7 +2501,7 @@ mod tests {
             },
         );
         root_with(&mut body, vec![let_pre, if_s]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_else]);
     }
 
@@ -2553,11 +2551,11 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
         root_with(&mut body, vec![let_x, lb_stmt, s_read]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         // Post-LB `x` must be Opaque — the break-path write of 2 means the
         // value is unknown, even though fall-through never observes it.
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
         ));
     }
@@ -2602,7 +2600,7 @@ mod tests {
         let let_b = let_stmt(&mut body, 2, read_b, false);
 
         root_with(&mut body, vec![let_a, if_s, let_b]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         assert_eq!(r.value_of[&read_a], r.value_of[&read_b]);
     }
 
@@ -2637,7 +2635,7 @@ mod tests {
         let let_b = let_stmt(&mut body, 2, read_b, false);
 
         root_with(&mut body, vec![let_a, if_s, let_b]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         assert_ne!(r.value_of[&read_a], r.value_of[&read_b]);
     }
 
@@ -2680,7 +2678,7 @@ mod tests {
         let let_f2 = let_stmt(&mut body, 4, read_f2, false);
 
         root_with(&mut body, vec![let_g0, if_s, let_g1, let_f1, let_f2]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         // `g` untouched across the if: same VN.
         assert_eq!(r.value_of[&read_g0], r.value_of[&read_g1]);
         // `f` reads after the merge are at one fresh post-merge version.
@@ -2703,9 +2701,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, let_y]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         let read_v = r.value_of[&read];
-        assert_eq!(r.pool.kind(read_v), &ValueKind::Int(7));
+        assert_eq!(body.values.kind(read_v), &ValueKind::Int(7));
         assert_eq!(read_v, r.value_of[&seven]);
     }
 
@@ -2723,8 +2721,8 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write1, write2, let_y]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(9));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(9));
     }
 
     #[test]
@@ -2744,9 +2742,9 @@ mod tests {
         root_with(&mut body, vec![write, call_s, let_y]);
         let mut aliased = crate::hashmap::IndexSet::default();
         aliased.insert(0u32);
-        let r = build_aliased(&body, &[param_seed()], &aliased);
+        let r = build_aliased(&mut body, &[param_seed()], &aliased);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2766,8 +2764,8 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, call_s, let_y]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(7));
     }
 
     #[test]
@@ -2800,8 +2798,8 @@ mod tests {
         let read = field_access(&mut body, recv, 0);
         let let_n = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![let_x, let_n]);
-        let r = build_t(&body, &[]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(5));
+        let r = build_t(&mut body, &[]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(5));
     }
 
     /// `let v = S { f0: 7 }` then a one-field struct literal helper.
@@ -2845,8 +2843,8 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![let_v, let_r, let_y]);
-        let r = build_t(&body, &[]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+        let r = build_t(&mut body, &[]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(7));
     }
 
     #[test]
@@ -2867,9 +2865,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![let_v, let_r, reassign, let_y]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2897,9 +2895,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 3, read, false);
         root_with(&mut body, vec![let_v1, let_v2, let_r, loop_s, let_y]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2935,9 +2933,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 3, read, false);
         root_with(&mut body, vec![let_v1, let_v2, let_r, if_s, let_y]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2967,8 +2965,8 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![let_v, let_r, if_s, let_y]);
-        let r = build_t(&body, &[]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+        let r = build_t(&mut body, &[]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(7));
     }
 
     #[test]
@@ -3005,8 +3003,8 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 3, read, false);
         root_with(&mut body, vec![let_v, let_w, let_r, if_s, let_y]);
-        let r = build_t(&body, &[]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
+        let r = build_t(&mut body, &[]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(2));
     }
 
     #[test]
@@ -3044,9 +3042,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 4, read, false);
         root_with(&mut body, vec![let_v1, let_v2, let_r, let_b, let_y]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -3089,11 +3087,11 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build_t(&body, &[param]);
+        let r = build_t(&mut body, &[param]);
         // x.f0 forwards n = limit + 1.
         assert_eq!(r.value_of[&read], r.value_of[&n_value]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::Binary {
                 op: NirBinaryOp::Add,
                 ..
@@ -3115,8 +3113,8 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, let_y]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(7));
     }
 
     // ----- Loop-entry value snapshots -----
@@ -3148,10 +3146,10 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build_t(&body, &[n]);
+        let r = build_t(&mut body, &[n]);
         let entries = &r.loop_entry_values[&lb];
         assert_eq!(entries.get(&0).copied(), Some(r.value_of[&n_read]));
-        assert_eq!(r.pool.kind(entries[&1]), &ValueKind::Int(0));
+        assert_eq!(body.values.kind(entries[&1]), &ValueKind::Int(0));
         assert_ne!(entries[&1], r.value_of[&i_read]);
     }
 
@@ -3170,8 +3168,8 @@ mod tests {
         let lb = block_with(&mut body, vec![write, let_x]);
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         root_with(&mut body, vec![loop_s]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(1));
     }
 
     #[test]
@@ -3192,8 +3190,8 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, loop_s, let_y]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(7));
     }
 
     #[test]
@@ -3214,9 +3212,9 @@ mod tests {
         root_with(&mut body, vec![write, loop_s, let_y]);
         let mut aliased = crate::hashmap::IndexSet::default();
         aliased.insert(0u32);
-        let r = build_aliased(&body, &[param_seed()], &aliased);
+        let r = build_aliased(&mut body, &[param_seed()], &aliased);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -3239,9 +3237,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, loop_s, let_y]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -3263,8 +3261,8 @@ mod tests {
         let read = field_access(&mut body, recv_a_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![write_a, write_b, let_y]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(1));
     }
 
     #[test]
@@ -3287,9 +3285,9 @@ mod tests {
         root_with(&mut body, vec![write_a, write_b, let_y]);
         let mut aliased = crate::hashmap::IndexSet::default();
         aliased.insert(1u32);
-        let r = build_aliased(&body, &[param_seed()], &aliased);
+        let r = build_aliased(&mut body, &[param_seed()], &aliased);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -3309,9 +3307,9 @@ mod tests {
         });
         let s = let_stmt(&mut body, 0, lit, false);
         root_with(&mut body, vec![s]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         let v = r.value_of[&lit];
-        assert_eq!(r.pool.type_of(v), Some(TypeTable::I32));
+        assert_eq!(body.values.type_of(v), Some(TypeTable::I32));
     }
 
     #[test]
@@ -3337,18 +3335,17 @@ mod tests {
         };
         let exprs: Vec<ExprId> = body.exprs.keys().collect();
 
-        // Two fresh builds of the same body induce identical partitions.
-        let mut g1 = build_t(&body, &[]);
-        let mut g2 = build_t(&body, &[]);
-        assert!(partitions_agree(&mut g1, &mut g2, &exprs).is_ok());
+        // Two builds of the same body (sharing the body's pool) induce identical
+        // partitions.
+        let g1 = build_t(&mut body, &[]);
+        let mut g2 = build_t(&mut body, &[]);
+        assert!(partitions_agree(&mut body.values, &g1, &g2, &exprs).is_ok());
 
-        // Corrupt g2 by unioning a's and c's classes — now g2 says a≡c where a
-        // fresh build splits them. The bijection check must reject it.
-        let va = g2.value_of[&a_sum];
+        // Corrupt g2's `value_of`: point `a_sum` at `c_sum`'s value, so g2 says
+        // a≡c where g1 splits them. The bijection check must reject it.
         let vc = g2.value_of[&c_sum];
-        g2.pool.union(va, vc);
-        g2.pool.rebuild();
+        g2.value_of.insert(a_sum, vc);
         let _ = b_sum;
-        assert!(partitions_agree(&mut g1, &mut g2, &exprs).is_err());
+        assert!(partitions_agree(&mut body.values, &g1, &g2, &exprs).is_err());
     }
 }
