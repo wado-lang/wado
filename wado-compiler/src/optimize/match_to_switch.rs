@@ -23,7 +23,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirLiteralPattern};
-use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, PatKind, StmtKind};
+use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatKind, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
@@ -109,14 +109,15 @@ impl Rule for MatchToSwitchRule<'_> {
         let scrutinee = *scrutinee;
         let arms = arms.clone();
 
-        let scrut_type = engine.body.exprs[scrutinee.expr()].type_id;
+        let scrut_type = engine.body.operand_type(scrutinee);
         let scrut_resolved = self.type_table.get(scrut_type);
         let Some(analysis) = analyze(scrut_resolved, &arms, &*engine.body) else {
             return false;
         };
 
         let span = engine.body.exprs[id].span;
-        let new_kind = build_switch(engine, scrutinee.expr(), &arms, analysis, span);
+        let scrut_expr = engine.materialize_operand(scrutinee, span);
+        let new_kind = build_switch(engine, scrut_expr, &arms, analysis, span);
         engine.replace_expr_kind(id, new_kind);
         true
     }
@@ -235,12 +236,12 @@ fn build_switch(
         .iter()
         .map(|maybe_arm_idx| {
             let arm_idx = maybe_arm_idx.unwrap_or_else(|| analysis.default_arm.unwrap_or(0));
-            arm_body_block(engine, arms[arm_idx].body.expr())
+            arm_body_block(engine, arms[arm_idx].body, arms[arm_idx].span)
         })
         .collect();
 
     let default_block = if let Some(default_idx) = analysis.default_arm {
-        arm_body_block(engine, arms[default_idx].body.expr())
+        arm_body_block(engine, arms[default_idx].body, arms[default_idx].span)
     } else {
         // The default of an exhaustive match is the unreachable arm. Mark it
         // `cold_path()` so the inliner skips it and codegen hints it unlikely,
@@ -294,9 +295,14 @@ fn build_switch(
 
 /// Deep-clone an arm body expression and wrap it in a fresh block holding a
 /// single `Expr` statement.
-fn arm_body_block(engine: &mut Engine, body: ExprId) -> BlockId {
-    let clone = engine.clone_expr(body);
-    let span = engine.body.exprs[clone].span;
-    let stmt = engine.alloc_stmt(StmtKind::Expr(clone), span);
+fn arm_body_block(engine: &mut Engine, body: Operand, arm_span: Span) -> BlockId {
+    // Each switch arm needs its own copy: clone a skeleton body, or materialize
+    // a fresh literal for a promoted constant arm body.
+    let expr = match body {
+        Operand::Expr(e) => engine.clone_expr(e),
+        Operand::Value(_) => engine.materialize_operand(body, arm_span),
+    };
+    let span = engine.body.exprs[expr].span;
+    let stmt = engine.alloc_stmt(StmtKind::Expr(expr), span);
     engine.alloc_block(vec![stmt], span)
 }

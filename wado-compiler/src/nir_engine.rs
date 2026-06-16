@@ -788,6 +788,34 @@ impl<'a> Engine<'a> {
         id
     }
 
+    /// Materialize an operand into a skeleton `ExprId`: `Operand::Expr` returns
+    /// its id; `Operand::Value` synthesizes a literal `ExprNode` from the pool —
+    /// the constant extractor for the promoted numeric / bool / char scalars
+    /// (WEP: The Live ValueGraph). A pass restructuring the skeleton (cloning a
+    /// value position into a new statement / block) calls this to put a promoted
+    /// constant back in the tree. Panics on a non-constant value (needs the
+    /// scheduling extractor — a later step).
+    pub fn materialize_operand(&mut self, op: Operand, span: Span) -> ExprId {
+        match op {
+            Operand::Expr(e) => e,
+            Operand::Value(v) => {
+                let ty = self
+                    .body
+                    .values
+                    .type_of(v)
+                    .expect("promoted operand has a recorded type");
+                let prim = self
+                    .value_graph_type_table()
+                    .and_then(|tt| crate::const_eval::prim_of(ty, tt));
+                let vk = self.body.values.kind(v).clone();
+                let value = crate::nir_value_graph::value_kind_to_const(&vk, prim)
+                    .expect("promoted constant operand must materialize");
+                let kind = crate::const_eval::value_to_arena_kind(value);
+                self.alloc_expr(kind, ty, span)
+            }
+        }
+    }
+
     /// Edit API: allocate a fresh statement node.
     pub fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
         crate::optimize::vg_measure::record_node_created();

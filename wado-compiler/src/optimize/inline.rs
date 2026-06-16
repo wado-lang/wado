@@ -438,12 +438,12 @@ fn collect_callees_from_block(body: &Body, block: BlockId, callees: &mut IndexSe
 fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<String>) {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            collect_callees_from_expr(body, value.expr(), callees);
+            collect_callees_from_operand(body, *value, callees);
         }
         StmtKind::Expr(value) => collect_callees_from_expr(body, *value, callees),
         StmtKind::Return { value } => {
             if let Some(expr) = *value {
-                collect_callees_from_expr(body, expr.expr(), callees);
+                collect_callees_from_operand(body, expr, callees);
             }
         }
         StmtKind::If {
@@ -452,7 +452,7 @@ fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<S
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            collect_callees_from_expr(body, condition.expr(), callees);
+            collect_callees_from_operand(body, condition, callees);
             collect_callees_from_block(body, then_block, callees);
             if let Some(else_blk) = else_block {
                 collect_callees_from_block(body, else_blk, callees);
@@ -468,12 +468,18 @@ fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<S
     }
 }
 
+fn collect_callees_from_operand(body: &Body, op: Operand, callees: &mut IndexSet<String>) {
+    if let Some(e) = op.as_expr() {
+        collect_callees_from_expr(body, e, callees);
+    }
+}
+
 fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<String>) {
     match &body.exprs[id].kind {
         ExprKind::Call { func, args, .. } => {
             callees.insert(func_ref_inline_key(func));
             for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                collect_callees_from_expr(body, aid.expr(), callees);
+                collect_callees_from_operand(body, aid, callees);
             }
         }
         ExprKind::MethodCall {
@@ -485,34 +491,34 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
             callees.insert(func_ref_inline_key(func));
             let receiver = *receiver;
             let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-            collect_callees_from_expr(body, receiver.expr(), callees);
+            collect_callees_from_operand(body, receiver, callees);
             for aid in arg_ids {
                 collect_callees_from_expr(body, aid, callees);
             }
         }
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            collect_callees_from_expr(body, left.expr(), callees);
-            collect_callees_from_expr(body, right.expr(), callees);
+            collect_callees_from_operand(body, left, callees);
+            collect_callees_from_operand(body, right, callees);
         }
         ExprKind::Unary { expr, .. } => {
-            collect_callees_from_expr(body, expr.expr(), callees);
+            collect_callees_from_operand(body, *expr, callees);
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
             collect_callees_from_expr(body, target, callees);
-            collect_callees_from_expr(body, value.expr(), callees);
+            collect_callees_from_operand(body, value, callees);
         }
         ExprKind::Cast { expr, .. } => {
-            collect_callees_from_expr(body, expr.expr(), callees);
+            collect_callees_from_operand(body, *expr, callees);
         }
         ExprKind::FieldAccess { expr, .. } => {
-            collect_callees_from_expr(body, expr.expr(), callees);
+            collect_callees_from_operand(body, *expr, callees);
         }
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
-            collect_callees_from_expr(body, expr.expr(), callees);
-            collect_callees_from_expr(body, index.expr(), callees);
+            collect_callees_from_operand(body, expr, callees);
+            collect_callees_from_operand(body, index, callees);
         }
         ExprKind::Block(block) => {
             collect_callees_from_block(body, *block, callees);
@@ -523,7 +529,7 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            collect_callees_from_expr(body, condition.expr(), callees);
+            collect_callees_from_operand(body, condition, callees);
             collect_callees_from_block(body, then_branch, callees);
             if let Some(else_blk) = else_branch {
                 collect_callees_from_block(body, else_blk, callees);
@@ -531,56 +537,56 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
         }
         ExprKind::StructLiteral { fields, .. } => {
             for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                collect_callees_from_expr(body, fid.expr(), callees);
+                collect_callees_from_operand(body, fid, callees);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             for eid in elements.clone() {
-                collect_callees_from_expr(body, eid.expr(), callees);
+                collect_callees_from_operand(body, eid, callees);
             }
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let arg_ids = args.clone();
-            collect_callees_from_expr(body, callee.expr(), callees);
+            collect_callees_from_operand(body, callee, callees);
             for aid in arg_ids {
-                collect_callees_from_expr(body, aid.expr(), callees);
+                collect_callees_from_operand(body, aid, callees);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
-            collect_callees_from_expr(body, functor.expr(), callees);
+            collect_callees_from_operand(body, *functor, callees);
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
-                collect_callees_from_expr(body, aid.expr(), callees);
+                collect_callees_from_operand(body, aid, callees);
             }
         }
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
             let arms = arms.clone();
-            collect_callees_from_expr(body, expr.expr(), callees);
+            collect_callees_from_operand(body, expr, callees);
             for arm in &arms {
                 if let Some(guard) = arm.guard {
-                    collect_callees_from_expr(body, guard.expr(), callees);
+                    collect_callees_from_operand(body, guard, callees);
                 }
                 collect_callees_from_expr(body, arm.body.expr(), callees);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = *payload {
-                collect_callees_from_expr(body, payload_expr.expr(), callees);
+                collect_callees_from_operand(body, payload_expr, callees);
             }
         }
         ExprKind::LabeledBlock { block, .. } => {
             collect_callees_from_block(body, *block, callees);
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            collect_callees_from_expr(body, value.expr(), callees);
+            collect_callees_from_operand(body, *value, callees);
         }
         ExprKind::VariantTag { expr }
         | ExprKind::VariantTest { expr, .. }
         | ExprKind::VariantPayload { expr, .. } => {
-            collect_callees_from_expr(body, expr.expr(), callees);
+            collect_callees_from_operand(body, *expr, callees);
         }
         ExprKind::Switch {
             scrutinee,
@@ -591,7 +597,7 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
             let scrutinee = *scrutinee;
             let default = *default;
             let arms = arms.clone();
-            collect_callees_from_expr(body, scrutinee.expr(), callees);
+            collect_callees_from_operand(body, scrutinee, callees);
             for arm in arms {
                 collect_callees_from_block(body, arm, callees);
             }

@@ -148,7 +148,9 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
             };
             let n = engine.body.blocks[block].stmts.len();
             let prefix = &engine.body.blocks[block].stmts[..n - 1];
-            let prefix_clean = !expr_has_break_to(engine.body, brk_value.expr(), &label)
+            let prefix_clean = !brk_value
+                .as_expr()
+                .is_some_and(|e| expr_has_break_to(engine.body, e, &label))
                 && !prefix
                     .iter()
                     .any(|&s| stmt_has_break_to(engine.body, s, &label));

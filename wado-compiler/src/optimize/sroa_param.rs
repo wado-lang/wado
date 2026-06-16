@@ -30,7 +30,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, ExprNode, NodeRef};
+use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -294,15 +294,17 @@ fn check_expr(
         ExprKind::Local { index, .. } if *index == idx => false,
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if matches!(&body.exprs[inner.expr()].kind, ExprKind::Local { index, .. } if *index == idx)
+            if inner
+                .as_expr()
+                .is_some_and(|e| matches!(&body.exprs[e].kind, ExprKind::Local { index, .. } if *index == idx))
             {
                 return true;
             }
-            check_expr(body, inner.expr(), idx, candidates)
+            check_operand(body, inner, idx, candidates)
         }
         ExprKind::Call { func, args, .. } => {
             let key: FnKey = (func.module_source.clone(), func.name.clone());
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
             args.iter()
                 .enumerate()
                 .all(|(i, &a)| check_call_arg(body, &key, i, a, idx, candidates))
@@ -315,8 +317,8 @@ fn check_expr(
         } => {
             let key: FnKey = (func.module_source.clone(), func.name.clone());
             let receiver = *receiver;
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-            check_call_arg(body, &key, 0, receiver.expr(), idx, candidates)
+            let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+            check_call_arg(body, &key, 0, receiver, idx, candidates)
                 && args
                     .iter()
                     .enumerate()
@@ -343,14 +345,30 @@ fn check_call_arg(
     body: &Body,
     callee: &FnKey,
     pos: usize,
-    arg: ExprId,
+    arg: Operand,
     idx: u32,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
 ) -> bool {
+    // A promoted constant arg never references the SROA candidate local.
+    let Some(arg) = arg.as_expr() else {
+        return true;
+    };
     if matches!(&body.exprs[arg].kind, ExprKind::Local { index, .. } if *index == idx) {
         return candidates.contains_key(&(callee.clone(), pos));
     }
     check_expr(body, arg, idx, candidates)
+}
+
+/// [`check_expr`] for an operand: a promoted constant never references the SROA
+/// candidate local, so it never blocks.
+fn check_operand(
+    body: &Body,
+    op: Operand,
+    idx: u32,
+    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
+) -> bool {
+    op.as_expr()
+        .is_none_or(|e| check_expr(body, e, idx, candidates))
 }
 
 // -----------------------------------------------------------------------

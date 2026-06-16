@@ -159,12 +159,16 @@ fn classify_expr(
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            mark_root_field_mutated(body, inner.expr(), usage);
+            if let Some(e) = inner.as_expr() {
+                mark_root_field_mutated(body, e, usage);
+            }
         }
         ExprKind::Call { args, .. } => {
             for arg in args {
-                if arg.is_mut || is_mut_ref_type(body.exprs[arg.expr.expr()].type_id, type_table) {
-                    mark_root_field_mutated(body, arg.expr.expr(), usage);
+                if let Some(ae) = arg.expr.as_expr()
+                    && (arg.is_mut || is_mut_ref_type(body.exprs[ae].type_id, type_table))
+                {
+                    mark_root_field_mutated(body, ae, usage);
                 }
             }
         }

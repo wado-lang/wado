@@ -1041,17 +1041,24 @@ impl<'a> Interpreter<'a> {
     /// [`Self::reduce_local_a`] at each node so a child fold is observable at
     /// its parent. Used by CTFE (`try_call_fold_a`) to evaluate a callee tail
     /// whose children no outer walk has pre-reduced.
+    /// Reduce an operand in place: a no-op (`false`) for a promoted pure value
+    /// (already reduced), else reduce the skeleton subtree.
+    fn reduce_in_place_operand_a(&mut self, body: &mut Body, op: Operand) -> bool {
+        op.as_expr()
+            .is_some_and(|e| self.reduce_in_place_a(body, e))
+    }
+
     pub fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         let mut changed = match &body.exprs[e].kind {
             ExprKind::Binary { left, right, .. } => {
                 let (l, r) = (*left, *right);
-                let a = self.reduce_in_place_a(body, l.expr());
-                let b = self.reduce_in_place_a(body, r.expr());
+                let a = self.reduce_in_place_operand_a(body, l);
+                let b = self.reduce_in_place_operand_a(body, r);
                 a || b
             }
             ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
                 let i = *inner;
-                self.reduce_in_place_a(body, i.expr())
+                self.reduce_in_place_operand_a(body, i)
             }
             ExprKind::If {
                 condition,
@@ -1059,7 +1066,7 @@ impl<'a> Interpreter<'a> {
                 else_branch,
             } => {
                 let (c, t, e2) = (*condition, *then_branch, *else_branch);
-                let mut ch = self.reduce_in_place_a(body, c.expr());
+                let mut ch = self.reduce_in_place_operand_a(body, c);
                 ch |= self.reduce_in_place_block_a(body, t);
                 if let Some(eb) = e2 {
                     ch |= self.reduce_in_place_block_a(body, eb);
@@ -1071,16 +1078,14 @@ impl<'a> Interpreter<'a> {
                 arms,
             } => {
                 let scrutinee = *scrutinee;
-                let arm_data: Vec<(Option<ExprId>, ExprId)> = arms
-                    .iter()
-                    .map(|a| (a.guard.map(|g| g.expr()), a.body.expr()))
-                    .collect();
-                let mut ch = self.reduce_in_place_a(body, scrutinee.expr());
+                let arm_data: Vec<(Option<Operand>, Operand)> =
+                    arms.iter().map(|a| (a.guard, a.body)).collect();
+                let mut ch = self.reduce_in_place_operand_a(body, scrutinee);
                 for (guard, arm_body) in arm_data {
                     if let Some(g) = guard {
-                        ch |= self.reduce_in_place_a(body, g);
+                        ch |= self.reduce_in_place_operand_a(body, g);
                     }
-                    ch |= self.reduce_in_place_a(body, arm_body);
+                    ch |= self.reduce_in_place_operand_a(body, arm_body);
                 }
                 ch
             }
@@ -1419,7 +1424,7 @@ fn single_tail_expression_a(body: &Body) -> Option<ExprId> {
         return None;
     };
     match body.stmts[*single].kind {
-        StmtKind::Return { value: Some(e) } => Some(e.expr()),
+        StmtKind::Return { value: Some(e) } => e.as_expr(),
         StmtKind::Expr(e) => Some(e),
         _ => None,
     }

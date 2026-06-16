@@ -45,15 +45,18 @@ pub fn promote_literals(body: &mut Body) {
 }
 
 fn is_literal(k: &ExprKind) -> bool {
+    // Scalars that materialise cleanly from the pool (numeric width via the
+    // operand's type, bool, char). `String` / `Null` / `Unit` are deferred to a
+    // later promotion step: their extraction differs (string data registration,
+    // null/unit representation), so promoting them now would force every
+    // skeleton consumer to handle a non-numeric `Operand::Value` before the
+    // extractor supports it.
     matches!(
         k,
         ExprKind::IntLiteral { .. }
             | ExprKind::FloatLiteral { .. }
             | ExprKind::BoolLiteral(_)
             | ExprKind::CharLiteral(_)
-            | ExprKind::StringLiteral(_)
-            | ExprKind::Null
-            | ExprKind::Unit
     )
 }
 
