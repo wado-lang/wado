@@ -1735,7 +1735,58 @@ impl FunctionTranslator<'_, '_> {
     /// `translate_expr`; Phase B materialises a promoted `Operand::Value` from
     /// the graph here.
     pub(super) fn translate_operand(&mut self, op: Operand) -> WirInstr {
-        self.translate_expr(op.expr())
+        match op {
+            Operand::Expr(e) => self.translate_expr(e),
+            Operand::Value(v) => self.extract_value(v),
+        }
+    }
+
+    /// Materialise a promoted pure [`Operand::Value`] back to WIR (the extractor;
+    /// WEP: The Live ValueGraph). Constant value kinds lower directly from the
+    /// pool, using the source type recorded by the builder. Non-constant kinds
+    /// (`Binary`, `Opaque`, …) are not promoted yet — their materialisation
+    /// needs source recovery and is a later step — so reaching one is a bug.
+    fn extract_value(&mut self, v: crate::nir_value_graph::ValueId) -> WirInstr {
+        use crate::nir_value_graph::ValueKind;
+        use crate::wir::WirAbstractHeapType;
+        let kind = self.body.values.kind(v).clone();
+        let type_id = self
+            .body
+            .values
+            .type_of(v)
+            .expect("promoted value has no recorded type");
+        match kind {
+            ValueKind::Int(value) => match self.type_table.get(type_id) {
+                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+                    WirInstr::I64Const(value as i64)
+                }
+                _ => WirInstr::I32Const(value as i32),
+            },
+            ValueKind::Float(bits) => match self.type_table.get(type_id) {
+                ResolvedType::Primitive(PrimitiveType::F32) => {
+                    WirInstr::F32Const(f64::from_bits(bits) as f32)
+                }
+                _ => WirInstr::F64Const(f64::from_bits(bits)),
+            },
+            ValueKind::Bool(b) => WirInstr::I32Const(i32::from(b)),
+            ValueKind::Char(c) => WirInstr::I32Const(c as i32),
+            ValueKind::String(s) => self.translate_string_literal(&s),
+            ValueKind::Null => {
+                if let Some(inner) = self.type_table.as_option(type_id) {
+                    assert!(
+                        !matches!(self.type_table.get(inner), ResolvedType::Unknown),
+                        "[WIR] promoted Null with unresolved Option inner type"
+                    );
+                    self.translate_variant_construct(type_id, 1, "None", None, type_id)
+                } else {
+                    WirInstr::RefNull {
+                        heap_type: WirAbstractHeapType::None,
+                    }
+                }
+            }
+            ValueKind::Unit => WirInstr::Nop,
+            other => panic!("extract_value: non-constant kind not promotable yet: {other:?}"),
+        }
     }
 
     fn translate_expr_inner(&mut self, expr_id: ExprId) -> WirInstr {
