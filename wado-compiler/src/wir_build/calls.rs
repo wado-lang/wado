@@ -11,7 +11,19 @@ use crate::wir::{WirInstr, WirType};
 
 use super::context::WirContext;
 use super::translate::FunctionTranslator;
-use crate::nir_arena::{ArenaCallArg, ExprId, ExprKind};
+use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, Operand};
+
+/// The compile-time constant of a SIMD lane operand — a literal `ExprKind` or a
+/// promoted `Operand::Value` constant in the function's value pool.
+fn operand_lane_const(body: &Body, op: Operand) -> u8 {
+    match op {
+        Operand::Expr(e) => extract_i32_const(&body.exprs[e].kind),
+        Operand::Value(v) => match body.values.kind(v) {
+            crate::nir_value_graph::ValueKind::Int(n) => *n as u8,
+            k => panic!("SIMD lane operand is not an int constant: {k:?}"),
+        },
+    }
+}
 
 /// Extract a compile-time constant i32 from a TIR expression (for SIMD lane indices).
 fn extract_i32_const(kind: &ExprKind) -> u8 {
@@ -51,7 +63,7 @@ macro_rules! ternary {
 /// SIMD lane access — the lane index is a compile-time constant operand.
 macro_rules! extract_lane {
     ($self:expr, $args:expr, $variant:path) => {{
-        let lane = extract_i32_const(&$self.body.exprs[$args[0].expr.expr()].kind);
+        let lane = operand_lane_const($self.body, $args[0].expr);
         let a = $self.translate_operand($args[1].expr);
         $variant(lane, Box::new(a))
     }};
@@ -59,7 +71,7 @@ macro_rules! extract_lane {
 
 macro_rules! replace_lane {
     ($self:expr, $args:expr, $variant:path) => {{
-        let lane = extract_i32_const(&$self.body.exprs[$args[0].expr.expr()].kind);
+        let lane = operand_lane_const($self.body, $args[0].expr);
         let a = $self.translate_operand($args[1].expr);
         let v = $self.translate_operand($args[2].expr);
         $variant(lane, Box::new(a), Box::new(v))

@@ -11,7 +11,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::{FunctionTranslator, LabelEntry};
-use crate::nir_arena::{ArmData, BlockId, Body, ExprId, PatId, PatKind};
+use crate::nir_arena::{ArmData, BlockId, Body, ExprId, Operand, PatId, PatKind};
 
 /// Case enumeration for a variant or enum scrutinee, used to check whether a
 /// set of match arms exhaustively covers every case.
@@ -351,7 +351,10 @@ impl FunctionTranslator<'_, '_> {
                     &mut bindings,
                 );
                 let body = if has_result {
-                    self.translate_expr_as_value(arm.body.expr())
+                    match arm.body {
+                        Operand::Value(v) => self.extract_value(v),
+                        Operand::Expr(e) => self.translate_expr_as_value(e),
+                    }
                 } else {
                     let instr = self.translate_operand(arm.body);
                     // If the arm body produces a non-unit value (e.g. after inlining

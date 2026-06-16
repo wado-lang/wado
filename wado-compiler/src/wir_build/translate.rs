@@ -1540,7 +1540,9 @@ impl FunctionTranslator<'_, '_> {
                 // elements into N split locals via `MultiValueLocalBind`
                 // instead of trying to `LocalSet` the multi-value-Call
                 // result into a single local (which Wasm doesn't allow).
-                if let Some(instrs) = self.try_emit_multi_value_let(*local_index, value.expr()) {
+                if let Some(e) = value.as_expr()
+                    && let Some(instrs) = self.try_emit_multi_value_let(*local_index, e)
+                {
                     return Some(instrs);
                 }
                 let value_instr = self.translate_operand(*value);
@@ -1759,7 +1761,7 @@ impl FunctionTranslator<'_, '_> {
     /// pool, using the source type recorded by the builder. Non-constant kinds
     /// (`Binary`, `Opaque`, …) are not promoted yet — their materialisation
     /// needs source recovery and is a later step — so reaching one is a bug.
-    fn extract_value(&mut self, v: crate::nir_value_graph::ValueId) -> WirInstr {
+    pub(super) fn extract_value(&mut self, v: crate::nir_value_graph::ValueId) -> WirInstr {
         use crate::nir_value_graph::ValueKind;
         use crate::wir::WirAbstractHeapType;
         let kind = self.body.values.kind(v).clone();
@@ -2010,8 +2012,9 @@ impl FunctionTranslator<'_, '_> {
                 ..
             } => {
                 // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
-                if let Some(instr) =
-                    self.try_translate_canonical_method(receiver.expr(), func, args, expr.type_id)
+                if let Some(re) = receiver.as_expr()
+                    && let Some(instr) =
+                        self.try_translate_canonical_method(re, func, args, expr.type_id)
                 {
                     return instr;
                 }
@@ -2088,9 +2091,10 @@ impl FunctionTranslator<'_, '_> {
                 // as a struct ref — a `StructGet` here would read an
                 // uninitialised slot.
                 let receiver = *receiver;
-                if let ExprKind::Local {
-                    index: tir_local, ..
-                } = &arena.exprs[receiver.expr()].kind
+                if let Some(re) = receiver.as_expr()
+                    && let ExprKind::Local {
+                        index: tir_local, ..
+                    } = &arena.exprs[re].kind
                     && let Some(splits) = self.multi_value_split_locals.get(tir_local)
                     && let Some((name, ty)) = splits.get(field_name)
                 {
