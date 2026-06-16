@@ -350,7 +350,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut test_name_filters: Vec<String> = Vec::new();
     let mut cli_excludes: Vec<String> = Vec::new();
     let mut jobs: Option<usize> = None;
-    let mut opt_level = OptLevel::default();
+    // `wado test` defaults to -O0, not the `wado compile` production O2. The
+    // NIR optimizer buys nothing for test correctness, and on large generated
+    // modules (e.g. package-gale fixtures) it dominates compile time —
+    // `store_load_forward` / `condition_implication` run superlinearly, e.g.
+    // ~96s at O2 vs ~5s at O0 for the generated css3 parser. Pass `-O2`
+    // explicitly to test optimized codegen.
+    let mut opt_level = OptLevel::O0;
     let mut log_level = args::DEFAULT_LOG_LEVEL;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;

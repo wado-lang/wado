@@ -497,6 +497,24 @@ fn test_with_exclude_drops_matching_explicit_file() {
 }
 
 #[test]
+fn test_defaults_to_o0() {
+    // `wado test` defaults to -O0: the heavy NIR optimizer (production
+    // default for `wado compile`) buys nothing for test correctness and
+    // dominates compile time on large generated modules (e.g. package-gale
+    // fixtures). Tests opt into a higher level explicitly when they need it.
+    let parser = Parser::from_args(&["a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.opt_level, OptLevel::O0);
+}
+
+#[test]
+fn test_opt_level_override() {
+    let parser = Parser::from_args(&["-O2", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.opt_level, OptLevel::O2);
+}
+
+#[test]
 fn test_with_parallel() {
     let parser = Parser::from_args(&["-p", "4", "a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
