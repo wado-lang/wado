@@ -6,6 +6,7 @@
 use lexopt::Parser;
 
 use wado_cli::args::CliExit;
+use wado_cli::check;
 use wado_cli::compile::{self, OptLevel, OutputFormat};
 
 /// Assert that a `Result<T, CliExit>` is an error with exit code 1
@@ -118,6 +119,20 @@ fn compile_world() {
     let parser = Parser::from_args(&["--world", "test", "input.wado"]);
     let opts = compile::parse_args(parser).unwrap();
     assert_eq!(opts.target_world, Some("test".to_string()));
+}
+
+#[test]
+fn check_world() {
+    let parser = Parser::from_args(&["--world", "test", "input.wado"]);
+    let opts = check::parse_args(parser).unwrap();
+    assert_eq!(opts.target_world, Some("test".to_string()));
+}
+
+#[test]
+fn check_world_defaults_to_none() {
+    let parser = Parser::from_args(&["input.wado"]);
+    let opts = check::parse_args(parser).unwrap();
+    assert_eq!(opts.target_world, None);
 }
 
 #[test]

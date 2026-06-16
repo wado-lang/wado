@@ -60,6 +60,67 @@ fn test_compile_wat_to_stdout() {
 }
 
 #[test]
+fn test_compile_world_test_exports_tests() {
+    // `--world test` targets the synthetic test world: the entry module's
+    // `test` blocks become component exports (kebab-cased, plus a
+    // `wado:test-names` custom section), and no `run` entry point is required.
+    wado()
+        .args([
+            "compile",
+            "--world",
+            "test",
+            "--wat-to-stdout",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test-0-simple"))
+        .stdout(predicate::str::contains("wado:test-names"));
+}
+
+#[test]
+fn test_compile_world_default_requires_run() {
+    // Without `--world test` the same file targets `wasi:cli/command`, which
+    // requires a `run` entry point the fixture does not define — proof the
+    // world selection actually changes compilation.
+    wado()
+        .args([
+            "compile",
+            "--wat-to-stdout",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("run"));
+}
+
+#[test]
+fn test_check_world_test_accepts_test_only_module() {
+    // `wado check --world test` type-checks against the test world, so a
+    // module with only `test` blocks (no `run`) passes.
+    wado()
+        .args([
+            "check",
+            "--world",
+            "test",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_check_world_default_requires_run() {
+    // Without `--world test`, `wado check` targets `wasi:cli/command` and the
+    // missing `run` entry point makes the check fail.
+    wado()
+        .args(["check", "wado-compiler/tests/fixtures/test_decl.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("run"));
+}
+
+#[test]
 fn test_run_hello() {
     wado()
         .args(["run", "example/hello.wado"])

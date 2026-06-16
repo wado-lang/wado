@@ -24,18 +24,22 @@ pub struct CheckOptions {
     /// `false` (default) → Kiln warnings produce a non-zero exit. `true`
     /// → keep them as warnings (developer-friendly local triage).
     pub warn_only: bool,
+    /// Target world to check against (default: `wasi:cli/command`). `Some("test")`
+    /// type-checks the entry module as the synthetic test world.
+    pub target_world: Option<String>,
     pub log_level: LogLevel,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Warn,
+    World,
     LogLevel,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::Warn, Self::LogLevel, Self::Help];
+    const ALL: &[Self] = &[Self::Warn, Self::World, Self::LogLevel, Self::Help];
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -45,6 +49,7 @@ impl Opt {
                 value: None,
                 desc: "Keep Kiln warnings as warnings instead of promoting them to errors",
             },
+            Self::World => args::WORLD_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::Help => args::HELP_SPEC,
         }
@@ -82,11 +87,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;
     let mut warn_only = false;
+    let mut target_world: Option<String> = None;
     let mut log_level = args::DEFAULT_LOG_LEVEL;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Warn => warn_only = true,
+                Opt::World => target_world = Some(args::require_string(&mut parser)?),
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Help => {
                     return Err(CliExit::help(usage));
@@ -103,6 +110,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
     Ok(CheckOptions {
         input,
         warn_only,
+        target_world,
         log_level,
     })
 }
@@ -157,6 +165,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     })?;
     let compiler_options = wado_compiler::CompilerOptions {
         log_level: Some(opts.log_level),
+        target_world: opts.target_world.clone(),
         invocations: outcome.invocations.clone(),
         ..Default::default()
     };
