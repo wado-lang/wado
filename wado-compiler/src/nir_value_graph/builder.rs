@@ -32,7 +32,7 @@
 use crate::hashmap::IndexMap;
 use crate::nir::{FunctionRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 
 use super::{HeapVersion, ValueId, ValuePool};
@@ -462,7 +462,7 @@ impl<'a> Builder<'a> {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr: inner,
-            } => match &self.body.exprs[*inner].kind {
+            } => match &self.body.exprs[inner.expr()].kind {
                 ExprKind::Local { index, .. } => Some(*index),
                 _ => None,
             },
@@ -498,7 +498,7 @@ impl<'a> Builder<'a> {
     fn receiver_root(&self, recv_expr: ExprId) -> Option<u32> {
         match &self.body.exprs[recv_expr].kind {
             ExprKind::Local { index, .. } => Some(*index),
-            ExprKind::FieldAccess { expr, .. } => self.receiver_root(*expr),
+            ExprKind::FieldAccess { expr, .. } => self.receiver_root(expr.expr()),
             _ => None,
         }
     }
@@ -538,16 +538,16 @@ impl<'a> Builder<'a> {
                 local_index, value, ..
             } => {
                 let v = self
-                    .walk_expr(value)
+                    .walk_operand(value)
                     .unwrap_or_else(|| self.pool.fresh_opaque());
                 self.current_value.insert(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
-                self.seed_struct_literal_fields(local_index, v, value);
-                self.update_ref_target(local_index, value);
+                self.seed_struct_literal_fields(local_index, v, value.expr());
+                self.update_ref_target(local_index, value.expr());
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
-                self.walk_expr(value);
+                self.walk_operand(value);
                 // Destructured bindings are Opaque for now; field-projection
                 // Value kinds for them are a follow-up.
                 self.bind_pattern_opaque(pattern);
@@ -557,12 +557,12 @@ impl<'a> Builder<'a> {
             }
             StmtKind::Return { value } => {
                 if let Some(v) = value {
-                    self.walk_expr(v);
+                    self.walk_operand(v);
                 }
             }
             StmtKind::Break { value, .. } => {
                 if let Some(v) = value {
-                    self.walk_expr(v);
+                    self.walk_operand(v);
                 }
             }
             StmtKind::Continue => {}
@@ -571,7 +571,7 @@ impl<'a> Builder<'a> {
                 then_block,
                 else_block,
             } => {
-                let cond_v = self.walk_expr(condition);
+                let cond_v = self.walk_operand(condition);
                 let pre = self.flow_snapshot();
                 self.walk_block(then_block);
                 let then_arm = FlowArm {
@@ -620,6 +620,16 @@ impl<'a> Builder<'a> {
             self.value_of.insert(expr, id);
         }
         id
+    }
+
+    /// Walk an operand: a promoted pure value resolves through the pool; an
+    /// effectful subtree walks as before. (Phase A operands are all `Expr`; this
+    /// is the seam Phase B uses once `lower` interns pure values.)
+    fn walk_operand(&mut self, op: Operand) -> Option<ValueId> {
+        match op {
+            Operand::Value(v) => Some(self.pool.find(v)),
+            Operand::Expr(e) => self.walk_expr(e),
+        }
     }
 
     fn compute_value(&mut self, expr: ExprId) -> Option<ValueId> {
@@ -671,7 +681,7 @@ impl<'a> Builder<'a> {
                 // impure (a `?` short-circuit on `lhs` would skip the rhs
                 // walk and miss any local assignments / heap writes inside
                 // it).
-                let lhs = self.walk_expr(left);
+                let lhs = self.walk_operand(left);
                 let rhs = if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
                     // Short-circuit `&&` / `||`: the rhs runs conditionally, so
                     // its effects "may or may not have happened" — any local it
@@ -679,7 +689,7 @@ impl<'a> Builder<'a> {
                     // invalidated (both below). Else `false && { x = 2; true }`
                     // would commit `x = 2` and forward the never-stored value.
                     let saved_cur = self.current_value.clone();
-                    let rhs = self.walk_expr(right);
+                    let rhs = self.walk_operand(right);
                     let changed: crate::hashmap::IndexSet<u32> = self
                         .current_value
                         .iter()
@@ -696,15 +706,15 @@ impl<'a> Builder<'a> {
                     self.drop_ref_targets_for(&changed);
                     // Invalidate only what the rhs writes, not a blanket
                     // `bump_all`: a pure rhs leaves unrelated fields intact.
-                    let eff = collect_node_heap_effects(self.body, NodeRef::Expr(right));
+                    let eff = collect_node_heap_effects(self.body, NodeRef::Expr(right.expr()));
                     self.apply_loop_heap_effects(&eff);
                     rhs
                 } else {
-                    self.walk_expr(right)
+                    self.walk_operand(right)
                 };
                 let lhs = lhs?;
                 let rhs = rhs?;
-                if let Some(folded) = self.fold_binary_const(op, lhs, rhs, left, right) {
+                if let Some(folded) = self.fold_binary_const(op, lhs, rhs, left.expr(), right.expr()) {
                     return Some(folded);
                 }
                 Some(self.pool.binary(op, lhs, rhs))
@@ -715,11 +725,11 @@ impl<'a> Builder<'a> {
                 // subtrees still land in `value_of`) but do not assign an id
                 // to this expr.
                 if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
-                    self.walk_expr(inner);
+                    self.walk_operand(inner);
                     None
                 } else {
-                    let operand = self.walk_expr(inner)?;
-                    if let Some(folded) = self.fold_unary_const(op, operand, inner) {
+                    let operand = self.walk_operand(inner)?;
+                    if let Some(folded) = self.fold_unary_const(op, operand, inner.expr()) {
                         return Some(folded);
                     }
                     Some(self.pool.unary(op, operand))
@@ -729,7 +739,7 @@ impl<'a> Builder<'a> {
                 expr: inner,
                 target_type,
             } => {
-                let operand = self.walk_expr(inner)?;
+                let operand = self.walk_operand(inner)?;
                 Some(self.pool.cast(operand, target_type))
             }
 
@@ -747,9 +757,9 @@ impl<'a> Builder<'a> {
                     ExprKind::Local { .. } => None,
                     ExprKind::FieldAccess { expr: recv, .. } => {
                         let bare_local =
-                            matches!(&self.body.exprs[*recv].kind, ExprKind::Local { .. });
-                        let root = self.receiver_root(*recv);
-                        let recv_v = self.walk_expr(*recv);
+                            matches!(&self.body.exprs[recv.expr()].kind, ExprKind::Local { .. });
+                        let root = self.receiver_root(recv.expr());
+                        let recv_v = self.walk_operand(*recv);
                         Some((root, recv_v, bare_local))
                     }
                     _ => {
@@ -758,7 +768,7 @@ impl<'a> Builder<'a> {
                     }
                 };
                 let v = self
-                    .walk_expr(value)
+                    .walk_operand(value)
                     .unwrap_or_else(|| self.pool.fresh_opaque());
                 match target_kind {
                     ExprKind::Local { index, .. } => {
@@ -766,8 +776,8 @@ impl<'a> Builder<'a> {
                         // `local = S { f: lit, … }` rebinds `local` to a fresh
                         // object; seed each pure field like the `Let` case so a
                         // later `local.f` read forwards the literal.
-                        self.seed_struct_literal_fields(index, v, value);
-                        self.update_ref_target(index, value);
+                        self.seed_struct_literal_fields(index, v, value.expr());
+                        self.update_ref_target(index, value.expr());
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
                         let (root, recv_v, bare_local) = field_place.expect("field target");
@@ -801,7 +811,7 @@ impl<'a> Builder<'a> {
                 None
             }
             ExprKind::GlobalVarSet { value, .. } => {
-                self.walk_expr(value);
+                self.walk_operand(value);
                 // Globals share the heap from the optimizer's perspective.
                 self.heap_state.bump_all();
                 None
@@ -833,7 +843,7 @@ impl<'a> Builder<'a> {
                 then_branch,
                 else_branch,
             } => {
-                let cond_v = self.walk_expr(condition);
+                let cond_v = self.walk_operand(condition);
                 let pre = self.flow_snapshot();
                 self.walk_block(then_branch);
                 let then_arm = FlowArm {
@@ -866,7 +876,7 @@ impl<'a> Builder<'a> {
                 None
             }
             ExprKind::Match { expr: scrut, arms } => {
-                self.walk_expr(scrut);
+                self.walk_operand(scrut);
                 self.walk_match_arms(&arms);
                 None
             }
@@ -876,7 +886,7 @@ impl<'a> Builder<'a> {
                 default,
                 ..
             } => {
-                self.walk_expr(scrutinee);
+                self.walk_operand(scrutinee);
                 let pre = self.flow_snapshot();
                 let mut flow_arms: Vec<FlowArm> = Vec::with_capacity(arms.len() + 1);
                 for arm in arms.iter().copied().chain(std::iter::once(default)) {
@@ -900,13 +910,13 @@ impl<'a> Builder<'a> {
                 // The receiver must be a pure value for the FieldAccess to
                 // get a ValueId — an impure receiver (a Call result, for
                 // instance) propagates None.
-                let walked = self.walk_expr(inner)?;
+                let walked = self.walk_operand(inner)?;
                 // Reference look-through: a read `r.f` where `r = &v` forwards
                 // from `v`'s field slot (the pointee's current VN / root),
                 // using `v`'s live slot state so a stale forward is impossible.
-                let (recv, root) = match self.reference_lookthrough(inner) {
+                let (recv, root) = match self.reference_lookthrough(inner.expr()) {
                     Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
-                    None => (walked, self.receiver_root(inner)),
+                    None => (walked, self.receiver_root(inner.expr())),
                 };
                 let heap_ver = self.heap_state.version_of(root, field_index);
                 // Store→load forwarding: a value stored to this exact
@@ -917,70 +927,70 @@ impl<'a> Builder<'a> {
                 Some(self.pool.field_access(recv, field_index, heap_ver))
             }
             ExprKind::Index { expr: inner, index } => {
-                self.walk_expr(inner);
-                self.walk_expr(index);
+                self.walk_operand(inner);
+                self.walk_operand(index);
                 None
             }
             ExprKind::VariantTag { expr: inner }
             | ExprKind::VariantTest { expr: inner, .. }
             | ExprKind::VariantPayload { expr: inner, .. } => {
-                self.walk_expr(inner);
+                self.walk_operand(inner);
                 None
             }
 
             // ---- Allocation-bearing constructors (Skel-side per Q1) ----
             ExprKind::StructLiteral { fields, .. } => {
                 for f in fields {
-                    self.walk_expr(f.value);
+                    self.walk_operand(f.value);
                 }
                 None
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for e in elements {
-                    self.walk_expr(e);
+                    self.walk_operand(e);
                 }
                 None
             }
             ExprKind::VariantConstruct { payload, .. } => {
                 if let Some(p) = payload {
-                    self.walk_expr(p);
+                    self.walk_operand(p);
                 }
                 None
             }
             ExprKind::EnumConstruct { .. } => None,
             ExprKind::ClosureToCanonical { functor, .. } => {
-                self.walk_expr(functor);
+                self.walk_operand(functor);
                 None
             }
 
             // ---- Calls (effectful, may write the heap) ----
             ExprKind::Call { args, .. } => {
                 for a in args {
-                    self.walk_expr(a.expr);
+                    self.walk_operand(a.expr);
                 }
                 self.bump_call_effects();
                 None
             }
             ExprKind::CmRawCall { args, .. } => {
                 for a in args {
-                    self.walk_expr(a);
+                    self.walk_operand(a);
                 }
                 // Raw CM calls have opaque captures; stay fully conservative.
                 self.heap_state.bump_all();
                 None
             }
             ExprKind::MethodCall { receiver, args, .. } => {
-                self.walk_expr(receiver);
+                self.walk_operand(receiver);
                 for a in args {
-                    self.walk_expr(a.expr);
+                    self.walk_operand(a.expr);
                 }
                 self.bump_call_effects();
                 None
             }
             ExprKind::IndirectCall { callee, args } => {
-                self.walk_expr(callee);
+                self.walk_operand(callee);
                 for a in args {
-                    self.walk_expr(a);
+                    self.walk_operand(a);
                 }
                 self.heap_state.bump_all();
                 None
@@ -1054,11 +1064,11 @@ impl<'a> Builder<'a> {
                         .iter()
                         .any(|s| block_breaks_to_node(self.body, NodeRef::Stmt(*s), &label));
                     if earlier_break
-                        || block_breaks_to_node(self.body, NodeRef::Expr(value), &label)
+                        || block_breaks_to_node(self.body, NodeRef::Expr(value.expr()), &label)
                     {
                         return;
                     }
-                    producer = value;
+                    producer = value.expr();
                 }
                 _ => return,
             }
@@ -1068,7 +1078,7 @@ impl<'a> Builder<'a> {
         };
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
-        let pairs: Vec<(u32, ExprId)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
+        let pairs: Vec<(u32, ExprId)> = fields.iter().map(|f| (f.field_index, f.value.expr())).collect();
         for (field_index, field_value) in pairs {
             if let Some(&fv) = self.value_of.get(&field_value) {
                 let ver = self.heap_state.version_of(Some(root), field_index);
@@ -1155,7 +1165,7 @@ impl<'a> Builder<'a> {
                 }
             }
             PatKind::ConstantValue { expr } => {
-                self.walk_expr(expr);
+                self.walk_operand(expr);
             }
             PatKind::Wildcard
             | PatKind::Literal(_)
@@ -1471,7 +1481,7 @@ impl<'a> Builder<'a> {
         for arm in arms {
             if let Some(g) = arm.guard {
                 any_guard = true;
-                collect_writes_in_expr(self.body, g, &mut guard_writes);
+                collect_writes_in_expr(self.body, g.expr(), &mut guard_writes);
             }
         }
         for idx in &guard_writes {
@@ -1491,9 +1501,9 @@ impl<'a> Builder<'a> {
             self.flow_restore(&pre);
             self.bind_pattern_opaque(arm.pattern);
             if let Some(g) = arm.guard {
-                self.walk_expr(g);
+                self.walk_operand(g);
             }
-            self.walk_expr(arm.body);
+            self.walk_operand(arm.body);
             // Match arm bodies are expressions; without a `TypeTable` the
             // builder cannot detect a never-typed (`=> return …`) body, so
             // every arm is conservatively treated as falling through. A
@@ -1637,7 +1647,7 @@ fn is_builtin_pure_call(func: &FunctionRef) -> bool {
 fn root_local_of(body: &Body, e: ExprId) -> Option<u32> {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. } => root_local_of(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => root_local_of(body, inner.expr()),
         _ => None,
     }
 }
@@ -1675,7 +1685,7 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
                 expr: inner,
                 field_index,
                 ..
-            } => match &body.exprs[*inner].kind {
+            } => match &body.exprs[inner.expr()].kind {
                 ExprKind::Local { index, .. } => {
                     eff.written_fields.insert((*index, *field_index));
                 }
@@ -1689,7 +1699,7 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => match &body.exprs[*inner].kind {
+        } => match &body.exprs[inner.expr()].kind {
             ExprKind::Local { index, .. } => {
                 eff.mut_borrowed.insert(*index);
             }
@@ -1697,11 +1707,11 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
                 expr: receiver,
                 field_index,
                 ..
-            } => match &body.exprs[*receiver].kind {
+            } => match &body.exprs[receiver.expr()].kind {
                 ExprKind::Local { index, .. } => {
                     eff.written_fields.insert((*index, *field_index));
                 }
-                _ => match root_local_of(body, *receiver) {
+                _ => match root_local_of(body, receiver.expr()) {
                     Some(root) => {
                         eff.mut_borrowed.insert(root);
                     }
@@ -1713,7 +1723,7 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
         ExprKind::Call { func, args, .. } => {
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr.expr()].kind
                 {
                     eff.mut_borrowed.insert(*index);
                 }
@@ -1723,12 +1733,12 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[receiver.expr()].kind {
                 eff.mut_borrowed.insert(*index);
             }
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr.expr()].kind
                 {
                     eff.mut_borrowed.insert(*index);
                 }
@@ -1763,11 +1773,11 @@ fn collect_writes_in_stmt(body: &Body, stmt: StmtId, out: &mut crate::hashmap::I
             local_index, value, ..
         } => {
             out.insert(*local_index);
-            collect_writes_in_expr(body, *value, out);
+            collect_writes_in_expr(body, value.expr(), out);
         }
         StmtKind::LetDestructure { pattern, value, .. } => {
             collect_writes_in_pattern(body, *pattern, out);
-            collect_writes_in_expr(body, *value, out);
+            collect_writes_in_expr(body, value.expr(), out);
         }
         _ => {
             let mut kids = Vec::new();
