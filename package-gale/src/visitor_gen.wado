@@ -1,75 +1,120 @@
-use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind } from "./ir.wado";
+use { Grammar, Alternative } from "./ir.wado";
 use {
-    to_pascal_case,
-    literal_field_name,
-    case_names_for_rule,
-    is_simple_cst_group,
-    is_token_only_group,
-    is_single_alt_group,
-    is_general_group,
-    group_field_base_name,
-    general_group_field_name,
-    token_group_field_name,
-    single_alt_group_field_name,
-    count_element_groups,
-    not_element_field_name,
-    all_alts_are_single_token,
-    dedup_name,
-} from "./gen_util.wado";
+    LoweredGrammar,
+    Rule,
+    RuleHeader,
+    MultiAltRule,
+    LeftRecursiveRule,
+    AltBody,
+    Op,
+    GroupOp,
+    rule_header,
+} from "./gir.wado";
+use { all_alts_are_single_token } from "./gen_util.wado";
 use { CodeWriter, FnSpec } from "./wadopoet.wado";
 
-/// Generate Visitor walk functions and to_tree for a grammar.
-pub fn gen_visitor(w: &mut CodeWriter, grammar: &Grammar) {
-    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
-        gen_walk_fn(w, &grammar.parser_rules[i], &grammar.parser_rules[i].name, i);
+/// Generate Visitor walk functions and `to_tree` for a grammar.
+///
+/// Driven entirely by GIR (`LoweredGrammar`), the same pre-classified
+/// source `gen_cst_types` reads: field names come from each `Op`'s
+/// `field` / the `GroupShape`'s `field`, and group/variant case names
+/// from `AltBody.case_name`. This keeps the walk in lockstep with the
+/// emitted CST structs without a second surface-IR walk or an
+/// independent group-counter (whose drift produced non-compiling field
+/// names). `grammar` is needed only for the `all_alts_are_single_token`
+/// screen, mirroring `gen_cst_types`.
+pub fn gen_visitor(w: &mut CodeWriter, lowered: &LoweredGrammar, grammar: &Grammar) {
+    for let mut i = 0; i < lowered.parser_rules.len(); i += 1 {
+        gen_walk_fn(w, &lowered.parser_rules[i], &grammar.parser_rules[i].alternatives, i);
     }
-    gen_to_tree_fn(w, grammar);
+    gen_to_tree_fn(w, lowered);
 }
 
-fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule, rule_name: &String, rule_id: i32) {
-    let type_name = rule.type_name;
-    let mut f = FnSpec::new(&`walk_{rule.name}`);
+fn gen_walk_fn(w: &mut CodeWriter, rule: &Rule, surface_alts: &List<Alternative>, rule_id: i32) {
+    let header = rule_header(rule);
+    let mut f = FnSpec::new(&`walk_{header.name}`);
     f.set_pub();
     f.add_generic(&"V: Visitor");
     f.add_param(&"v", &"&mut V");
-    f.add_param(&"node", &`&{type_name}`);
+    f.add_param(&"node", &`&{header.type_name}`);
     f.emit_begin(w);
 
-    let mut group_counter: i32 = 0;
-    if rule.alternatives.len() > 1 && all_alts_are_single_token(&rule.alternatives) {
-        // Compact single-token node (`gen_multi_alt_cst` single-token path):
-        // the node is a `{ span, token }` struct, so the walk visits its one
-        // token directly instead of matching N variant arms. Restricted to
-        // multi-alt rules — a single-alt single-token rule stays a `Simple`
-        // struct whose field is named after the rule, not `token`.
-        w.line(&`v.enter_rule({rule_id}, &"{rule.name}", &node.span);`);
-        w.line(&"v.visit_token(&node.token);");
-        w.line(&`v.exit_rule({rule_id}, &"{rule.name}", &node.span);`);
-    } else if rule.alternatives.len() == 1 {
-        w.line(&`v.enter_rule({rule_id}, &"{rule.name}", &node.span);`);
-        gen_walk_alt_body(w, &rule.alternatives[0], &"node", rule_name, &mut group_counter);
-        w.line(&`v.exit_rule({rule_id}, &"{rule.name}", &node.span);`);
-    } else {
-        let case_names = case_names_for_rule(&rule.alternatives);
-        w.begin(&"match node");
-        for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-            let alt = &rule.alternatives[i];
-            w.begin(&`{case_names[i]}(n) =>`);
-            w.line(&`v.enter_rule({rule_id}, &"{rule.name}", &n.span);`);
-            gen_walk_alt_body(w, alt, &"n", rule_name, &mut group_counter);
-            w.line(&`v.exit_rule({rule_id}, &"{rule.name}", &n.span);`);
-            w.end();
-        }
-        w.end();  // match
+    match rule {
+        Simple(s) => {
+            w.line(&`v.enter_rule({rule_id}, &"{header.name}", &node.span);`);
+            gen_walk_ops(w, &s.body.ops, &"node");
+            w.line(&`v.exit_rule({rule_id}, &"{header.name}", &node.span);`);
+        },
+        MultiAlt(m) => gen_walk_multi_alt(w, m, surface_alts, rule_id, header),
+        LeftRecursive(l) => gen_walk_lr(w, l, rule_id, header),
     }
 
     w.end();  // fn
     w.blank();
 }
 
-fn gen_walk_alt_body(w: &mut CodeWriter, alt: &Alternative, var: &String, rule_name: &String, group_counter: &mut i32) {
-    let fields = collect_walk_fields(&alt.elements, rule_name, group_counter);
-    for let field of &fields {
+fn gen_walk_multi_alt(
+    w: &mut CodeWriter,
+    m: &MultiAltRule,
+    surface_alts: &List<Alternative>,
+    rule_id: i32,
+    header: &RuleHeader,
+) {
+    if all_alts_are_single_token(surface_alts) {
+        // Compact single-token node (`gen_multi_alt_cst` single-token path):
+        // the node is a `{ span, token }` struct, so the walk visits its one
+        // token directly instead of matching N variant arms.
+        w.line(&`v.enter_rule({rule_id}, &"{header.name}", &node.span);`);
+        w.line(&"v.visit_token(&node.token);");
+        w.line(&`v.exit_rule({rule_id}, &"{header.name}", &node.span);`);
+        return;
+    }
+    w.begin(&"match node");
+    for let alt of &m.alts {
+        w.begin(&`{alt.case_name}(n) =>`);
+        w.line(&`v.enter_rule({rule_id}, &"{header.name}", &n.span);`);
+        gen_walk_ops(w, &alt.ops, &"n");
+        w.line(&`v.exit_rule({rule_id}, &"{header.name}", &n.span);`);
+        w.end();
+    }
+    w.end();  // match
+}
+
+fn gen_walk_lr(w: &mut CodeWriter, l: &LeftRecursiveRule, rule_id: i32, header: &RuleHeader) {
+    // The CST variant interleaves atom and LR alts by original alt index
+    // (see `gen_lr_cst`). Walk them in the same order so the match arms
+    // line up with the emitted variant cases.
+    let total = l.atom.alts.len() + l.lr_alts.len();
+    w.begin(&"match node");
+    for let mut idx = 0; idx < total; idx += 1 {
+        for let a of &l.atom.alts {
+            if a.alt_index == idx {
+                w.begin(&`{a.case_name}(n) =>`);
+                w.line(&`v.enter_rule({rule_id}, &"{header.name}", &n.span);`);
+                gen_walk_ops(w, &a.ops, &"n");
+                w.line(&`v.exit_rule({rule_id}, &"{header.name}", &n.span);`);
+                w.end();
+            }
+        }
+        for let lr of &l.lr_alts {
+            if lr.alt_index == idx {
+                w.begin(&`{lr.case_name}(n) =>`);
+                w.line(&`v.enter_rule({rule_id}, &"{header.name}", &n.span);`);
+                // The LR rewrite stripped the leading self-reference from
+                // `suffix.ops`; the CST struct still carries it as the left
+                // operand (`prefix_self_ref`), walked via this rule.
+                w.line(&`walk_{header.name}(v, &n.{lr.prefix_self_ref.name});`);
+                gen_walk_ops(w, &lr.suffix.ops, &"n");
+                w.line(&`v.exit_rule({rule_id}, &"{header.name}", &n.span);`);
+                w.end();
+            }
+        }
+    }
+    w.end();  // match
+}
+
+fn gen_walk_ops(w: &mut CodeWriter, ops: &List<Op>, var: &String) {
+    for let field of &collect_walk_fields(ops) {
         gen_walk_field(w, field, var);
     }
 }
@@ -118,55 +163,6 @@ fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
     }
 }
 
-fn repeat_inner_walk_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<WalkField> {
-    if let Group(g) = elem {
-        let alts = &g.alternatives;
-        if is_simple_cst_group(alts) {
-            let mut cases: List<GroupCaseInfo> = [];
-            for let alt of alts {
-                if let RuleRef(r) = &alt.elements[0] {
-                    cases.push(GroupCaseInfo {
-                        case_name: to_pascal_case(&r.name),
-                        rule_name: r.name,
-                    });
-                }
-            }
-            return Option::Some(WalkField {
-                name: group_field_base_name(alts),
-                action: WalkAction::WalkGroup(cases),
-                wrapper: WalkWrapper::Direct,
-            });
-        }
-        if is_token_only_group(alts) {
-            return Option::Some(WalkField {
-                name: token_group_field_name(alts),
-                action: WalkAction::VisitToken,
-                wrapper: WalkWrapper::Direct,
-            });
-        }
-        if is_single_alt_group(alts) {
-            return Option::Some(WalkField {
-                name: single_alt_group_field_name(&alts[0]),
-                action: build_struct_walk_action(&alts[0], rule_name, group_counter),
-                wrapper: WalkWrapper::Direct,
-            });
-        }
-        if is_general_group(alts) {
-            let idx = *group_counter;
-            *group_counter += 1;
-            return Option::Some(WalkField {
-                name: general_group_field_name(idx),
-                action: build_general_group_walk_action(alts, rule_name, group_counter),
-                wrapper: WalkWrapper::Direct,
-            });
-        }
-        // Non-storable group: advance counter for nested general groups
-        *group_counter += count_element_groups(elem);
-        return null;
-    }
-    return element_to_walk_field(elem, rule_name, group_counter);
-}
-
 fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &List<GroupCaseInfo>) {
     w.begin(&`match {expr}`);
     for let c of cases {
@@ -189,20 +185,19 @@ fn gen_walk_general_group_match(w: &mut CodeWriter, expr: &String, cases: &List<
     w.end();
 }
 
-fn gen_to_tree_fn(w: &mut CodeWriter, grammar: &Grammar) {
-    if grammar.parser_rules.is_empty() {
+fn gen_to_tree_fn(w: &mut CodeWriter, lowered: &LoweredGrammar) {
+    if lowered.parser_rules.is_empty() {
         return;
     }
-    let root_rule = &grammar.parser_rules[0];
-    let root_type = root_rule.type_name;
+    let header = rule_header(&lowered.parser_rules[0]);
 
     let mut f = FnSpec::new("to_tree");
     f.set_pub();
-    f.add_param(&"node", &`&{root_type}`);
+    f.add_param(&"node", &`&{header.type_name}`);
     f.set_return_type(&"CstNode");
     f.emit_begin(w);
     w.line(&"let mut recorder = TreeRecorder::new();");
-    w.line(&`walk_{root_rule.name}(&mut recorder, node);`);
+    w.line(&`walk_{header.name}(&mut recorder, node);`);
     w.line(&"return recorder.build();");
     w.end();
     w.blank();
@@ -238,160 +233,123 @@ struct WalkField {
     wrapper: WalkWrapper,
 }
 
-fn collect_walk_fields(elements: &List<Element>, rule_name: &String, group_counter: &mut i32) -> List<WalkField> {
+/// Walk an op list and produce the visit fields, reading each field name
+/// from the op / group shape. A `Transparent` group contributes no field
+/// of its own — its single alt's ops inline into the surrounding list.
+fn collect_walk_fields(ops: &List<Op>) -> List<WalkField> {
     let mut fields: List<WalkField> = [];
-    let mut name_counts: List<[String, i32]> = [];
-    for let elem of elements {
-        if let Some(field) = element_to_walk_field(elem, rule_name, group_counter) {
-            let final_name = dedup_name(&field.name, &mut name_counts);
-            fields.push(WalkField { name: final_name, action: field.action, wrapper: field.wrapper });
-        }
+    for let op of ops {
+        append_op_walk_fields(op, &mut fields);
     }
     return fields;
 }
 
-fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<WalkField> {
-    if let RuleRef(r) = elem {
-        return Option::Some(WalkField {
-            name: r.field_name,
-            action: WalkAction::WalkRule(r.name),
+fn append_op_walk_fields(op: &Op, out: &mut List<WalkField>) {
+    match *op {
+        Token(t) => out.push(leaf_field(&t.field)),
+        Literal(l) => out.push(leaf_field(&l.field)),
+        Wildcard(wc) => out.push(leaf_field(&wc.field)),
+        Excluded(e) => out.push(leaf_field(&e.field)),
+        RuleCall(rc) => out.push(WalkField {
+            name: rc.field,
+            action: WalkAction::WalkRule(rc.target_name),
             wrapper: WalkWrapper::Direct,
-        });
-    }
-    if let TokenRef(t) = elem {
-        return Option::Some(WalkField {
-            name: t.field_name,
-            action: WalkAction::VisitToken,
-            wrapper: WalkWrapper::Direct,
-        });
-    }
-    if let Literal(l) = elem {
-        return Option::Some(WalkField {
-            name: literal_field_name(&l.text),
-            action: WalkAction::VisitToken,
-            wrapper: WalkWrapper::Direct,
-        });
-    }
-    if let Wildcard(_) = elem {
-        return Option::Some(WalkField {
-            name: "wildcard",
-            action: WalkAction::VisitToken,
-            wrapper: WalkWrapper::Direct,
-        });
-    }
-    if let Not(ne) = elem {
-        return Option::Some(WalkField {
-            name: not_element_field_name(&ne.element),
-            action: WalkAction::VisitToken,
-            wrapper: WalkWrapper::Direct,
-        });
-    }
-    if let Repeat(rep) = elem {
-        if let Label(lab) = &rep.element {
-            if lab.list {
-                return element_to_walk_field(&rep.element, rule_name, group_counter);
+        }),
+        Repeat(rep) => {
+            if rep.body_has_field {
+                let wrapper = match rep.kind {
+                    Star | Plus => WalkWrapper::ArrayWrap,
+                    Optional => WalkWrapper::OptionalWrap,
+                };
+                out.push(WalkField { name: rep.field, action: op_walk_action(&rep.body), wrapper });
             }
-        }
-        let inner_field = repeat_inner_walk_field(&rep.element, rule_name, group_counter);
-        if let Some(inner) = inner_field {
-            match rep.kind {
-                Star | Plus => {
-                    return Option::Some(WalkField {
-                        name: `{inner.name}_list`,
-                        action: inner.action,
-                        wrapper: WalkWrapper::ArrayWrap,
-                    });
-                },
-                Optional => {
-                    return Option::Some(WalkField {
-                        name: inner.name,
-                        action: inner.action,
-                        wrapper: WalkWrapper::OptionalWrap,
-                    });
-                },
-            }
-        }
-        return null;
+        },
+        ListLabel(ll) => out.push(WalkField {
+            name: ll.field,
+            action: op_walk_action(&ll.inner),
+            wrapper: WalkWrapper::ArrayWrap,
+        }),
+        Group(g) => append_group_walk_fields(&g, out),
     }
-    if let Label(lab) = elem {
-        if let Some(inner) = element_to_walk_field(&lab.element, rule_name, group_counter) {
-            let wrapper = if lab.list { WalkWrapper::ArrayWrap } else { inner.wrapper };
-            return Option::Some(WalkField {
-                name: lab.field_name,
-                action: inner.action,
-                wrapper,
-            });
-        }
-        return null;
-    }
-    if let Group(g) = elem {
-        let alts = &g.alternatives;
-        if is_simple_cst_group(alts) {
-            let mut cases: List<GroupCaseInfo> = [];
-            for let alt of alts {
-                if let RuleRef(r) = &alt.elements[0] {
-                    cases.push(GroupCaseInfo {
-                        case_name: to_pascal_case(&r.name),
-                        rule_name: r.name,
-                    });
+}
+
+fn append_group_walk_fields(g: &GroupOp, out: &mut List<WalkField>) {
+    match &g.shape {
+        Transparent => {
+            if g.alts.len() > 0 {
+                for let f of &collect_walk_fields(&g.alts[0].ops) {
+                    out.push(*f);
                 }
             }
-            return Option::Some(WalkField {
-                name: group_field_base_name(alts),
-                action: WalkAction::WalkGroup(cases),
-                wrapper: WalkWrapper::OptionalWrap,
-            });
-        }
-        if is_token_only_group(alts) {
-            return Option::Some(WalkField {
-                name: token_group_field_name(alts),
-                action: WalkAction::VisitToken,
-                wrapper: WalkWrapper::Direct,
-            });
-        }
-        if is_single_alt_group(alts) {
-            return Option::Some(WalkField {
-                name: single_alt_group_field_name(&alts[0]),
-                action: build_struct_walk_action(&alts[0], rule_name, group_counter),
-                wrapper: WalkWrapper::Direct,
-            });
-        }
-        if is_general_group(alts) {
-            let idx = *group_counter;
-            *group_counter += 1;
-            return Option::Some(WalkField {
-                name: general_group_field_name(idx),
-                action: build_general_group_walk_action(alts, rule_name, group_counter),
-                wrapper: WalkWrapper::OptionalWrap,
-            });
-        }
-        // Non-storable group: advance counter for nested general groups
-        *group_counter += count_element_groups(elem);
-        return null;
+        },
+        TokenOnly(sh) => out.push(WalkField {
+            name: sh.field,
+            action: WalkAction::VisitToken,
+            wrapper: WalkWrapper::Direct,
+        }),
+        SimpleCst(sh) => out.push(WalkField {
+            name: sh.field,
+            action: WalkAction::WalkGroup(simple_cst_cases(&g.alts)),
+            wrapper: WalkWrapper::OptionalWrap,
+        }),
+        SingleAlt(sh) => out.push(WalkField {
+            name: sh.field,
+            action: WalkAction::WalkStruct(collect_walk_fields(&g.alts[0].ops)),
+            wrapper: WalkWrapper::Direct,
+        }),
+        General(sh) => out.push(WalkField {
+            name: sh.field,
+            action: WalkAction::WalkGeneralGroup(general_group_cases(&g.alts)),
+            wrapper: WalkWrapper::OptionalWrap,
+        }),
     }
-    return null;
 }
 
-fn build_struct_walk_action(alt: &Alternative, rule_name: &String, group_counter: &mut i32) -> WalkAction {
-    let fields = collect_walk_fields(&alt.elements, rule_name, group_counter);
-    return WalkAction::WalkStruct(fields);
+/// The visit action for an op used as a `Repeat` / `ListLabel` body —
+/// the field-name + wrapper come from the enclosing op, so only the
+/// inner action is needed here.
+fn op_walk_action(op: &Op) -> WalkAction {
+    return match *op {
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => WalkAction::VisitToken,
+        RuleCall(rc) => WalkAction::WalkRule(rc.target_name),
+        Group(g) => match &g.shape {
+            TokenOnly(_) => WalkAction::VisitToken,
+            SimpleCst(_) => WalkAction::WalkGroup(simple_cst_cases(&g.alts)),
+            SingleAlt(_) => WalkAction::WalkStruct(collect_walk_fields(&g.alts[0].ops)),
+            General(_) => WalkAction::WalkGeneralGroup(general_group_cases(&g.alts)),
+            Transparent => WalkAction::WalkStruct(collect_walk_fields(&g.alts[0].ops)),
+        },
+        Repeat(_) | ListLabel(_) => WalkAction::VisitToken,
+    };
 }
 
-fn build_general_group_walk_action(alts: &List<Alternative>, rule_name: &String, group_counter: &mut i32) -> WalkAction {
-    let gc_before = *group_counter;
-    let mut gc_max = gc_before;
-    let mut cases: List<GeneralGroupCaseInfo> = [];
-    for let mut i = 0; i < alts.len(); i += 1 {
-        let mut gc = gc_before;
-        let fields = collect_walk_fields(&alts[i].elements, rule_name, &mut gc);
-        if gc > gc_max {
-            gc_max = gc;
+fn simple_cst_cases(alts: &List<AltBody>) -> List<GroupCaseInfo> {
+    let mut cases: List<GroupCaseInfo> = [];
+    for let alt of alts {
+        // Each SimpleCst alt body is a single `RuleCall` (see
+        // `gen_simple_cst_enum_if_new`); the case payload is that rule's CST.
+        if let RuleCall(rc) = &alt.ops[0] {
+            cases.push(GroupCaseInfo { case_name: alt.case_name, rule_name: rc.target_name });
         }
+    }
+    return cases;
+}
+
+fn general_group_cases(alts: &List<AltBody>) -> List<GeneralGroupCaseInfo> {
+    let mut cases: List<GeneralGroupCaseInfo> = [];
+    for let alt of alts {
         cases.push(GeneralGroupCaseInfo {
-            case_name: `Alt{i}`,
-            fields,
+            case_name: alt.case_name,
+            fields: collect_walk_fields(&alt.ops),
         });
     }
-    *group_counter = gc_max;
-    return WalkAction::WalkGeneralGroup(cases);
+    return cases;
+}
+
+fn leaf_field(name: &String) -> WalkField {
+    return WalkField {
+        name: *name,
+        action: WalkAction::VisitToken,
+        wrapper: WalkWrapper::Direct,
+    };
 }
