@@ -167,7 +167,6 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Null
         | ExprKind::Unit
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }

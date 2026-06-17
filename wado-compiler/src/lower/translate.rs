@@ -881,6 +881,10 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::FloatLiteral { value, .. } => Some(ValueKind::Float(value.to_bits())),
             TirExprKind::BoolLiteral(b) => Some(ValueKind::Bool(*b)),
             TirExprKind::CharLiteral(c) => Some(ValueKind::Char(*c)),
+            // `Null` is a pure constant value too: its WIR materialisation
+            // (`None` variant or `ref.null`) depends only on the recorded type,
+            // which the extractor reads from the pool. Born as `Operand::Value`.
+            TirExprKind::Null => Some(ValueKind::Null),
             _ => None,
         };
         match vk {
@@ -1107,7 +1111,9 @@ impl FunctionTranslator<'_, '_> {
             }
             TirExprKind::StringLiteral(s) => ExprKind::StringLiteral(s.clone()),
             TirExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
-            TirExprKind::Null => ExprKind::Null,
+            TirExprKind::Null => {
+                unreachable!("Null is interned via convert_operand, never convert_expr")
+            }
             TirExprKind::Unit => ExprKind::Unit,
             TirExprKind::Local { index, name } => ExprKind::Local {
                 index: *index,

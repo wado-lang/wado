@@ -561,9 +561,6 @@ impl<'a> NirUnparser<'a> {
                 self.output
                     .push_str(&format!("#include_bytes(/* {} bytes */)", bytes.len()));
             }
-            ExprKind::Null => {
-                self.output.push_str("null");
-            }
             ExprKind::VariantConstruct {
                 case_name, payload, ..
             } => {

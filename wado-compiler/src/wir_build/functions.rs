@@ -640,7 +640,7 @@ fn translate_global_init(
     };
 
     match &body.exprs[id].kind {
-        ExprKind::Null | ExprKind::Unit => ref_null(),
+        ExprKind::Unit => ref_null(),
         ExprKind::Cast { expr: inner, .. } => {
             // For casts, evaluate the inner expression with the cast's target
             // type (propagate the current `type_id` downward).

@@ -159,8 +159,7 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
         | ExprKind::Local { .. }
-        | ExprKind::GlobalVarGet { .. }
-        | ExprKind::Null => 0,
+        | ExprKind::GlobalVarGet { .. } => 0,
         // Closure and effect-related expressions
         ExprKind::EnumConstruct { .. } => 0,
         ExprKind::CmRawCall { args, .. } => args
@@ -607,7 +606,6 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
         // Leaf nodes
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Null
         | ExprKind::Unit
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -1981,7 +1979,6 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
         }
         ExprKind::StringLiteral(s) => ExprKind::StringLiteral(s.clone()),
         ExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
-        ExprKind::Null => ExprKind::Null,
         ExprKind::Unit => ExprKind::Unit,
         ExprKind::GlobalVarGet {
             module_source,

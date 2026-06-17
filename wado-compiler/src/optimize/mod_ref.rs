@@ -512,7 +512,6 @@ impl ModRef {
             }
 
             // === Pure value-producing leaves ===
-            | ExprKind::Null
             | ExprKind::Unit => {}
         }
     }
@@ -1390,9 +1389,6 @@ mod tests {
         pe(body, ExprKind::BytesLiteral(vec![1, 2, 3]))
     }
 
-    fn null_lit(body: &mut Body) -> ExprId {
-        pe(body, ExprKind::Null)
-    }
 
     #[test]
     fn string_literal_allocates() {
@@ -1410,17 +1406,6 @@ mod tests {
         let mr = mr_expr(bytes_lit);
         assert!(mr.allocates);
         assert!(!mr.is_re_evaluation_safe());
-    }
-
-    #[test]
-    fn null_literal_is_pure() {
-        // `Null` at NIR alone is the bare null reference — no allocation.
-        // The Option-typed `None` lowering goes through VariantConstruct,
-        // which is already covered by struct_literal_allocates_*. So Null
-        // proper stays pure.
-        let mr = mr_expr(null_lit);
-        assert!(!mr.allocates);
-        assert!(mr.is_re_evaluation_safe());
     }
 
     // -----------------------------------------------------------------

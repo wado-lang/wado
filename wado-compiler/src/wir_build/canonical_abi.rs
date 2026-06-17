@@ -1460,8 +1460,9 @@ fn match_ok_some_resource(body: &Body, op: Operand) -> Option<ExprId> {
     inner_payload.as_expr()
 }
 
-/// Detect `Result::Ok(Option::None)` or `Result::Ok(null)` at TIR level.
-/// `null` stays as `ExprKind::Null` in TIR (coerced to `Option::None` later).
+/// Detect `Result::Ok(Option::None)` or `Result::Ok(null)`.
+/// A `null` is a promoted `ValueKind::Null` operand (coerced to `Option::None`
+/// later); a None is a `VariantConstruct`.
 fn match_ok_none(body: &Body, op: Operand) -> bool {
     let Some(expr_id) = op.as_expr() else {
         return false;
@@ -1481,7 +1482,6 @@ fn match_ok_none(body: &Body, op: Operand) -> bool {
         // `null` promotes to a value; recognise it as the None/null payload.
         Operand::Value(v) => matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Null),
         Operand::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Null => true,
             ExprKind::VariantConstruct {
                 case_name: inner,
                 payload,

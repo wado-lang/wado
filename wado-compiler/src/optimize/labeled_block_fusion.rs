@@ -450,11 +450,14 @@ fn find_break_case_index_for_name_in_stmt(
             label: Some(l),
             value: Some(v),
         } if l == label => {
-            if let ExprKind::VariantConstruct {
-                case_index,
-                case_name,
-                ..
-            } = &body.exprs[v.as_expr().expect("skeleton operand")].kind
+            // A promoted value break (e.g. a `Null` placeholder) is not a
+            // `VariantConstruct` — no case index.
+            if let Some(e) = v.as_expr()
+                && let ExprKind::VariantConstruct {
+                    case_index,
+                    case_name,
+                    ..
+                } = &body.exprs[e].kind
                 && case_name == variant_name
             {
                 return Some(*case_index);
@@ -610,29 +613,40 @@ fn check_lb_breaks_in_stmt(
         StmtKind::Break {
             label: Some(l),
             value,
-        } if l == label => match value.map(|v| &body.exprs[v.as_expr().expect("skeleton operand")].kind) {
-            None | Some(ExprKind::Null) => true,
-            Some(ExprKind::VariantConstruct {
-                case_index: ci,
-                payload,
-                ..
-            }) => {
-                let ci = *ci;
-                let payload = *payload;
-                if let Some(p) = payload
-                    && expr_has_break_to_operand(body, label, p)
-                {
-                    return false;
+        } if l == label => {
+            // A break carrying no value, or a promoted `Null` placeholder, is
+            // the empty/None break the fusion accepts.
+            let Some(e) = value.and_then(|v| v.as_expr()) else {
+                return value.is_none_or(|v| {
+                    v.as_value().is_some_and(|vid| {
+                        matches!(body.values.kind(vid), crate::nir_value_graph::ValueKind::Null)
+                    })
+                });
+            };
+            match &body.exprs[e].kind {
+                ExprKind::VariantConstruct {
+                    case_index: ci,
+                    payload,
+                    ..
+                } => {
+                    let ci = *ci;
+                    let payload = *payload;
+                    if let Some(p) = payload
+                        && expr_has_break_to_operand(body, label, p)
+                    {
+                        return false;
+                    }
+                    if ci == case_index
+                        && let Some(p) = payload
+                    {
+                        *payload_type =
+                            Some(body.exprs[p.as_expr().expect("skeleton operand")].type_id);
+                    }
+                    true
                 }
-                if ci == case_index
-                    && let Some(p) = payload
-                {
-                    *payload_type = Some(body.exprs[p.as_expr().expect("skeleton operand")].type_id);
-                }
-                true
+                _ => false,
             }
-            _ => false,
-        },
+        }
         StmtKind::LabeledBlock { label: l, .. } if l == label => true,
         StmtKind::If {
             condition,
@@ -1271,8 +1285,8 @@ fn transform_lb_stmt(
 
     if let Some(value) = break_value {
         let is_some_case = match value {
-            Some(v) => matches!(&engine.body.exprs[v.as_expr().expect("skeleton operand")].kind,
-                ExprKind::VariantConstruct { case_index: ci, .. } if *ci == case_index),
+            Some(v) => v.as_expr().is_some_and(|e| matches!(&engine.body.exprs[e].kind,
+                ExprKind::VariantConstruct { case_index: ci, .. } if *ci == case_index)),
             None => false,
         };
 
@@ -1666,7 +1680,7 @@ fn subst_variant_payload_in_stmt(
             Shape::ExprAndBlocks(None, vec![*b])
         }
         StmtKind::Break { value, .. } => match value {
-            Some(v) => Shape::Expr(v.as_expr().expect("skeleton operand")),
+            Some(v) => v.as_expr().map_or(Shape::None, Shape::Expr),
             None => Shape::None,
         },
         StmtKind::Continue => Shape::None,

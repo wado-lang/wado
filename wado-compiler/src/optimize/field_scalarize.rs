@@ -1031,7 +1031,6 @@ fn visit_expr_for_alias(
         }
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Null
         | ExprKind::Unit
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -1406,7 +1405,6 @@ fn count_field_accesses_in_expr(
         }
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Null
         | ExprKind::Unit
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => {}
@@ -2774,7 +2772,6 @@ fn walk_other_expr_kinds(
         }
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Null
         | ExprKind::Unit
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }

@@ -1823,30 +1823,6 @@ impl FunctionTranslator<'_, '_> {
                 // Bytes literals are constructed as List<u8> from data segments
                 self.translate_bytes_literal(b)
             }
-            ExprKind::Null => {
-                // For Option types, construct a None variant struct.
-                if let Some(inner) = self.type_table.as_option(expr.type_id) {
-                    if matches!(self.type_table.get(inner), ResolvedType::Unknown) {
-                        panic!(
-                            "[WIR] Null with unresolved Option inner type (type_id={:?})",
-                            expr.type_id
-                        );
-                    }
-                    self.translate_variant_construct(
-                        expr.type_id, // variant_type
-                        1,            // case_index: None is case 1
-                        "None",
-                        None, // no payload
-                        expr.type_id,
-                    )
-                } else {
-                    // Non-Option null: emit ref.null as a placeholder value.
-                    // Used by CM bindings for local initialization before conditional assignment.
-                    WirInstr::RefNull {
-                        heap_type: crate::wir::WirAbstractHeapType::None,
-                    }
-                }
-            }
             ExprKind::Unit => {
                 // Unit has no value; use nop
                 WirInstr::Nop

@@ -258,7 +258,6 @@ impl<'a> Engine<'a> {
             };
             match kind {
                 ExprKind::StringLiteral(s) => pool.string(s),
-                ExprKind::Null => pool.null(),
                 ExprKind::Unit => pool.unit(),
                 ExprKind::Binary { left, op, right } => {
                     let lhs = operand_value(left)?;

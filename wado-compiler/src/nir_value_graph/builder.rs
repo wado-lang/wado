@@ -695,7 +695,6 @@ impl<'a> Builder<'a> {
         match self.body.exprs[expr].kind.clone() {
             // ---- Literals ----
             ExprKind::StringLiteral(s) => Some(self.pool.string(s)),
-            ExprKind::Null => Some(self.pool.null()),
             ExprKind::Unit => Some(self.pool.unit()),
 
             // ---- Local read ----

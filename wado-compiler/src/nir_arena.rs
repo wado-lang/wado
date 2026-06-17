@@ -157,7 +157,6 @@ pub struct ArenaStructPatternField {
 pub enum ExprKind {
     StringLiteral(String),
     BytesLiteral(Vec<u8>),
-    Null,
     Unit,
     Local {
         index: u32,
@@ -465,6 +464,28 @@ impl Body {
         body
     }
 
+    /// Like [`Body::wrapping_expr`] but the sole statement is a promoted pure
+    /// value ([`Operand::Value`]) interned into the body's own pool. Used to
+    /// build a single-value global initializer (e.g. a `Null` placeholder)
+    /// directly in graph form, without a pure `ExprKind`.
+    pub fn wrapping_value(
+        kind: crate::nir_value_graph::ValueKind,
+        type_id: TypeId,
+        span: Span,
+    ) -> Self {
+        let mut body = Self::empty();
+        let v = body.values.alloc_unshared(kind, type_id);
+        let s = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Value(v)),
+            span,
+        });
+        body.root = body.blocks.push(BlockNode {
+            stmts: vec![s],
+            span,
+        });
+        body
+    }
+
     /// The value operand of a body that wraps a single expression — the form
     /// global initializers take, whose root block holds exactly one `Expr`
     /// statement. Panics if the body is not in that shape.
@@ -514,6 +535,18 @@ impl ExprBody {
     pub fn wrapping(kind: ExprKind, type_id: TypeId, span: Span) -> Self {
         Self {
             body: Body::wrapping_expr(kind, type_id, span),
+        }
+    }
+
+    /// Build an `ExprBody` whose sole statement is a promoted pure value (see
+    /// [`Body::wrapping_value`]).
+    pub fn wrapping_value(
+        kind: crate::nir_value_graph::ValueKind,
+        type_id: TypeId,
+        span: Span,
+    ) -> Self {
+        Self {
+            body: Body::wrapping_value(kind, type_id, span),
         }
     }
 
@@ -1183,7 +1216,6 @@ impl Body {
             NodeRef::Expr(e) => match &self.exprs[e].kind {
                 | ExprKind::StringLiteral(_)
                 | ExprKind::BytesLiteral(_)
-                | ExprKind::Null
                 | ExprKind::Unit
                 | ExprKind::Local { .. }
                 | ExprKind::GlobalVarGet { .. }

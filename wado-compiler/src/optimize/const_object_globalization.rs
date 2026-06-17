@@ -122,8 +122,8 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         project.globals.push(NirGlobal {
             name,
             ty: cand.ty,
-            initializer: ExprBody::wrapping(
-                ExprKind::Null,
+            initializer: ExprBody::wrapping_value(
+                crate::nir_value_graph::ValueKind::Null,
                 cand.ty,
                 crate::token::Span::new(0, 0, 1, 1),
             ),
@@ -215,7 +215,6 @@ fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<
 
 fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -> bool {
     match &body.exprs[expr].kind {
-        | ExprKind::Null
         | ExprKind::Unit
         | ExprKind::EnumConstruct { .. } => true,
         ExprKind::Local { index, .. } => bound.contains(index),
