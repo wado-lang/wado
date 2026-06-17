@@ -567,10 +567,49 @@ impl ConstFoldVisitor<'_> {
             ExprShape::None => {
                 // Bottom-up walk for the remaining expressions.
                 let mut changed = self.walk_children(engine, NodeRef::Expr(e));
+                changed |= self.project_struct_literal(engine, e);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
         }
+    }
+
+    /// Fold `Struct { f: v, .. }.f` into `v` when the construction is
+    /// immediate (the `FieldAccess` receiver is the literal itself) and every
+    /// non-projected field is a pooled value, so dropping the struct discards
+    /// no side effect. After copy-prop substitutes a pure single-field box
+    /// literal into its sole `.field` use this is the fold that removes the
+    /// otherwise-dead `struct.new` (issue: operand-promotion missed-opt).
+    fn project_struct_literal(&mut self, engine: &mut Engine, e: ExprId) -> bool {
+        let ExprKind::FieldAccess {
+            expr: recv,
+            field_name,
+            ..
+        } = &engine.body.exprs[e].kind
+        else {
+            return false;
+        };
+        let (recv, field_name) = (*recv, field_name.clone());
+        let Some(recv_e) = recv.as_expr() else {
+            return false;
+        };
+        let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[recv_e].kind else {
+            return false;
+        };
+        let mut projected = None;
+        for f in fields {
+            if f.name == field_name {
+                projected = Some(f.value);
+            } else if f.value.as_value().is_none() {
+                // A non-projected sibling may carry a side effect; keep the
+                // struct so its evaluation is preserved.
+                return false;
+            }
+        }
+        let Some(proj) = projected else {
+            return false;
+        };
+        engine.redirect_expr(e, proj)
     }
 
     /// Commit a single-node niri rewrite at `e` through the engine.
