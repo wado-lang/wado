@@ -598,8 +598,9 @@ fn collect_alias_edges_node(
             if let StmtKind::Let {
                 local_index, value, ..
             } = &body.stmts[s].kind
-                && let ExprKind::Local { index: src, .. } = &body.exprs[value.expr()].kind
-                && type_creates_alias(body.exprs[value.expr()].type_id, type_table)
+                && let Some(ve) = value.as_expr()
+                && let ExprKind::Local { index: src, .. } = &body.exprs[ve].kind
+                && type_creates_alias(body.exprs[ve].type_id, type_table)
             {
                 edges.push((*local_index, *src));
             }

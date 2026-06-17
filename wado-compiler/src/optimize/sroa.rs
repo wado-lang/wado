@@ -547,14 +547,19 @@ fn field_access_node(
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
                 if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                    && let Some(idx) = is_candidate_local(body, inner.expr(), candidates)
+                    && let Some(idx) =
+                        inner.as_expr().and_then(|e| is_candidate_local(body, e, candidates))
                 {
                     has_access.insert(idx);
-                    field_access_node(body, NodeRef::Expr(value.expr()), candidates, has_access);
+                    if let Some(ve) = value.as_expr() {
+                        field_access_node(body, NodeRef::Expr(ve), candidates, has_access);
+                    }
                     return;
                 }
                 field_access_node(body, NodeRef::Expr(target), candidates, has_access);
-                field_access_node(body, NodeRef::Expr(value.expr()), candidates, has_access);
+                if let Some(ve) = value.as_expr() {
+                    field_access_node(body, NodeRef::Expr(ve), candidates, has_access);
+                }
             }
             _ => {
                 let mut kids = Vec::new();
@@ -928,7 +933,9 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
                             name: new_name,
                         },
                     );
-                    rewrite_expr(engine, value.expr(), ctx);
+                    if let Some(ve) = value.as_expr() {
+                        rewrite_expr(engine, ve, ctx);
+                    }
                     return;
                 }
             }

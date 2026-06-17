@@ -335,7 +335,7 @@ fn validate_call(
                         continue;
                     }
                     match args.get(i - 1) {
-                        Some(arg) if arena_query::is_pure_expr(body, arg.expr.expr()) => {}
+                        Some(arg) if arena_query::is_pure_operand(body, arg.expr) => {}
                         _ => {
                             rejected.insert(key.clone());
                             break;

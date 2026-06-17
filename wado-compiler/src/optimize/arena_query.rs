@@ -96,7 +96,9 @@ fn collect_reads_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
                 if !matches!(&body.exprs[target].kind, ExprKind::Local { .. }) {
                     collect_reads_node(body, NodeRef::Expr(target), out);
                 }
-                collect_reads_node(body, NodeRef::Expr(value.expr()), out);
+                if let Some(ve) = value.as_expr() {
+                    collect_reads_node(body, NodeRef::Expr(ve), out);
+                }
                 return;
             }
             _ => {}

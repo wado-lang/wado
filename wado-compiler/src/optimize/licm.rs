@@ -1327,12 +1327,18 @@ fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
         | ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             is_hoistable_binop(*op)
-                && is_hoistable_arith_shape(body, left.expr())
-                && is_hoistable_arith_shape(body, right.expr())
+                && left
+                    .as_expr()
+                    .is_none_or(|e| is_hoistable_arith_shape(body, e))
+                && right
+                    .as_expr()
+                    .is_none_or(|e| is_hoistable_arith_shape(body, e))
         }
         ExprKind::Unary { op, expr } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
-                && is_hoistable_arith_shape(body, expr.expr())
+                && expr
+                    .as_expr()
+                    .is_none_or(|e| is_hoistable_arith_shape(body, e))
         }
         _ => false,
     }
@@ -1343,10 +1349,18 @@ fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => out.push((e, *index)),
         ExprKind::Binary { left, right, .. } => {
-            collect_arith_local_leaves(body, left.expr(), out);
-            collect_arith_local_leaves(body, right.expr(), out);
+            if let Some(le) = left.as_expr() {
+                collect_arith_local_leaves(body, le, out);
+            }
+            if let Some(re) = right.as_expr() {
+                collect_arith_local_leaves(body, re, out);
+            }
         }
-        ExprKind::Unary { expr, .. } => collect_arith_local_leaves(body, expr.expr(), out),
+        ExprKind::Unary { expr, .. } => {
+            if let Some(ie) = expr.as_expr() {
+                collect_arith_local_leaves(body, ie, out);
+            }
+        }
         _ => {}
     }
 }
