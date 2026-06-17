@@ -414,6 +414,20 @@ rule : ID ;";
     assert g.channels[1] == "CHAN_B";
 }
 
+test "channels block tolerates ANTLR3-style numbered assignments" {
+    // `tokens { NAME = INT }` has long been accepted (see "tokens block
+    // with numbered assignments"); the shared `parse_id_list_block` extends
+    // the same leniency to `channels`. The `= INT` suffix is ignored and
+    // both channel names are still registered.
+    let input = "lexer grammar Test;
+channels { CHAN_A = 1, CHAN_B = 2 }
+WS : ' ' -> channel(CHAN_A) ;";
+    let g = parse(input).unwrap();
+    assert g.channels.len() == 2;
+    assert g.channels[0] == "CHAN_A";
+    assert g.channels[1] == "CHAN_B";
+}
+
 test "lexer rule with undeclared channel name is rejected" {
     // ANTLR4 errors on a `channel(X)` whose name is neither a predefined
     // channel nor declared in `channels { }`. The old behavior silently

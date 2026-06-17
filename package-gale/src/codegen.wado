@@ -119,7 +119,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     gen_lexer(&mut w, grammar, &lit_tokens);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
-    gen_visitor(&mut w, grammar);
+    gen_visitor(&mut w, &lowered, grammar);
     if options.highlight {
         gen_highlight(&mut w, grammar, &lit_tokens);
     }

@@ -1,5 +1,6 @@
 use { Span, Token, LexerSlice } from "../runtime/lex.wado";
 use { G4Token, make_token } from "./token.wado";
+use { scan_line_comment, scan_block_comment, scan_char_class } from "./scan.wado";
 
 pub struct G4Lexer {
     chars: &List<char>,
@@ -54,25 +55,6 @@ impl G4Lexer {
         }
     }
 
-    fn skip_line_comment(&mut self) {
-        while !self.at_end() {
-            let c = self.advance();
-            if c == '\n' {
-                break;
-            }
-        }
-    }
-
-    fn skip_block_comment(&mut self) {
-        while !self.at_end() {
-            let c = self.advance();
-            if c == '*' && !self.at_end() && self.chars[self.pos] == '/' {
-                self.pos += 1;
-                return;
-            }
-        }
-    }
-
     fn skip_whitespace_and_comments(&mut self) {
         loop {
             self.skip_whitespace();
@@ -83,12 +65,10 @@ impl G4Lexer {
             if c == '/' {
                 if let Some(next) = self.peek_at(1) {
                     if next == '/' {
-                        self.pos += 2;
-                        self.skip_line_comment();
+                        self.pos = scan_line_comment(self.chars, self.pos);
                         continue;
                     } else if next == '*' {
-                        self.pos += 2;
-                        self.skip_block_comment();
+                        self.pos = scan_block_comment(self.chars, self.pos);
                         continue;
                     }
                 }
@@ -145,32 +125,18 @@ impl G4Lexer {
     }
 
     fn read_char_class(&mut self) -> Token {
-        // ANTLR4 char-set lexicon: only `\X` escapes are recognized; the
-        // first unescaped `]` ends the set. A literal `[` inside a set is
-        // just content (not a delimiter), so depth tracking would be wrong
-        // for sets like `[*[]` (used by e.g. TypeScript regex lexer rules).
-        // Argument-action style nesting (`[int[] arr]`) is handled by the
-        // parser via re-scanning, not at this layer.
+        // `scan_char_class` handles the ANTLR4 char-set lexicon; the text is
+        // a verbatim copy of its source span, so emit an owned token.
         let start = self.pos;
-        self.pos += 1;
-        // The char-class text is a verbatim copy of its source span (every
-        // char, including the backslash and its escaped successor, is kept
-        // as-is). Scan to the closing `]`, then copy the span once.
-        loop {
-            if self.at_end() {
+        match scan_char_class(self.chars, start) {
+            Some(end) => {
+                self.pos = end;
+                return self.owned_token(G4Token::CharClass, start, end);
+            },
+            None => {
+                self.pos = self.chars.len();
                 return make_token(G4Token::Error, "unterminated char class", start, self.pos);
-            }
-            let c = self.chars[self.pos];
-            self.pos += 1;
-            if c == '\\' {
-                if !self.at_end() {
-                    self.pos += 1;
-                }
-                continue;
-            }
-            if c == ']' {
-                return self.owned_token(G4Token::CharClass, start, self.pos);
-            }
+            },
         }
     }
 
@@ -280,7 +246,7 @@ impl G4Lexer {
 
 /// Tokenize directly from an already-collected char buffer. `parse` uses
 /// this to share the single `List<char>` collection between the lexer and
-/// the parser (which keeps it for `rescan_balanced`), instead of collecting
+/// the parser (which keeps it for `scan_balanced`), instead of collecting
 /// the whole input twice. Token text is owned (`owned_slice`), so
 /// the tokens do not alias `chars` and the buffer may be moved afterwards.
 pub fn tokenize_chars(chars: &List<char>) -> List<Token> {

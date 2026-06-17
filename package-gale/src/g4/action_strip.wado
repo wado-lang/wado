@@ -7,6 +7,14 @@
 //! Stripping action bodies before handing the grammar to the oracle
 //! works because actions are side-effecting host code; they don't
 //! affect what the parser matches.
+//!
+//! The char-level region scanners (`scan_string`, `scan_char_class`,
+//! `scan_line_comment`, `scan_block_comment`, `scan_balanced`) are shared
+//! with the lexer and parser via `scan.wado`, so string-/comment-handling
+//! lives in one place. Here a region that must be preserved is copied to
+//! `out` verbatim; an action body is skipped by advancing `i` past it.
+
+use { scan_string, scan_char_class, scan_line_comment, scan_block_comment, scan_balanced } from "./scan.wado";
 
 pub fn strip_action_bodies(grammar: &String) -> String {
     let chars: List<char> = grammar.chars().collect();
@@ -18,76 +26,43 @@ pub fn strip_action_bodies(grammar: &String) -> String {
         if c == '\'' {
             // `.g4` lexer doesn't recognise `"..."` outside actions, so
             // only single-quote strings need top-level skip protection.
-            out.push(c);
-            i += 1;
-            while i < n {
-                let cc = chars[i];
-                out.push(cc);
-                i += 1;
-                if cc == '\\' && i < n {
-                    out.push(chars[i]);
-                    i += 1;
-                    continue;
-                }
-                if cc == '\'' {
-                    break;
-                }
-            }
+            let end = scan_string(&chars, i);
+            push_span(&mut out, &chars, i, end);
+            i = end;
             continue;
         }
         if c == '[' {
             // Treat `[...]` as transparent: char-class brackets, rule
-            // args, and `catch [...]` brackets never legitimately
-            // contain action-body `{`s. ANTLR4 char sets do NOT nest —
-            // the set ends at the first UNESCAPED `]` and a literal `[`
-            // inside is content (lexer.wado:read_char_class). Depth
-            // tracking would stay "inside" past the real `]` for sets like
-            // TypeScript's `~[*...[]`, swallowing a following action.
-            out.push(c);
-            i += 1;
-            while i < n {
-                let cc = chars[i];
-                out.push(cc);
-                i += 1;
-                if cc == '\\' && i < n {
-                    out.push(chars[i]);
-                    i += 1;
-                    continue;
-                }
-                if cc == ']' {
-                    break;
-                }
-            }
+            // args, and `catch [...]` brackets never legitimately contain
+            // action-body `{`s. ANTLR4 char sets do NOT nest, so
+            // `scan_char_class` ends at the first unescaped `]` (a literal
+            // `[` inside is content). Depth tracking would stay "inside"
+            // past the real `]` for sets like TypeScript's `~[*...[]`,
+            // swallowing a following action.
+            let end = match scan_char_class(&chars, i) {
+                Some(e) => e,
+                None => n,
+            };
+            push_span(&mut out, &chars, i, end);
+            i = end;
             continue;
         }
         if c == '/' && i + 1 < n && chars[i + 1] == '/' {
-            while i < n && chars[i] != '\n' {
-                out.push(chars[i]);
-                i += 1;
-            }
+            let end = scan_line_comment(&chars, i);
+            push_span(&mut out, &chars, i, end);
+            i = end;
             continue;
         }
         if c == '/' && i + 1 < n && chars[i + 1] == '*' {
-            out.push(chars[i]);
-            out.push(chars[i + 1]);
-            i += 2;
-            while i < n {
-                let cc = chars[i];
-                out.push(cc);
-                i += 1;
-                if cc == '*' && i < n && chars[i] == '/' {
-                    out.push(chars[i]);
-                    i += 1;
-                    break;
-                }
-            }
+            let end = scan_block_comment(&chars, i);
+            push_span(&mut out, &chars, i, end);
+            i = end;
             continue;
         }
         if c == '@' {
             // Named actions: `@id { … }` or `@scope::id { … }`. Strip
             // the prefix and its body together. If no `{` follows,
             // fall through and copy the `@` verbatim.
-            let saved = i;
             let mut j = i + 1;
             if j < n && is_id_start_char(chars[j]) {
                 j += 1;
@@ -107,14 +82,12 @@ pub fn strip_action_bodies(grammar: &String) -> String {
                     j += 1;
                 }
                 if j < n && chars[j] == '{' {
-                    let body_end = find_balanced_close(&chars, j);
-                    if body_end > 0 {
-                        i = body_end + 1;
+                    if let Some(end) = scan_balanced(&chars, j, '{', '}') {
+                        i = end;
                         continue;
                     }
                 }
             }
-            i = saved;
             out.push(c);
             i += 1;
             continue;
@@ -125,16 +98,14 @@ pub fn strip_action_bodies(grammar: &String) -> String {
                 j += 1;
             }
             if j < n && chars[j] == '[' {
-                let bracket_end = find_balanced_close_bracket(&chars, j);
-                if bracket_end > 0 {
-                    let mut k = bracket_end + 1;
+                if let Some(bracket_end) = scan_balanced(&chars, j, '[', ']') {
+                    let mut k = bracket_end;
                     while k < n && is_whitespace_char(chars[k]) {
                         k += 1;
                     }
                     if k < n && chars[k] == '{' {
-                        let body_end = find_balanced_close(&chars, k);
-                        if body_end > 0 {
-                            i = body_end + 1;
+                        if let Some(end) = scan_balanced(&chars, k, '{', '}') {
+                            i = end;
                             continue;
                         }
                     }
@@ -147,9 +118,8 @@ pub fn strip_action_bodies(grammar: &String) -> String {
                 j += 1;
             }
             if j < n && chars[j] == '{' {
-                let body_end = find_balanced_close(&chars, j);
-                if body_end > 0 {
-                    i = body_end + 1;
+                if let Some(end) = scan_balanced(&chars, j, '{', '}') {
+                    i = end;
                     continue;
                 }
             }
@@ -162,24 +132,35 @@ pub fn strip_action_bodies(grammar: &String) -> String {
                 i += 1;
                 continue;
             }
-            let body_end = find_balanced_close(&chars, i);
-            if body_end < 0 {
-                out.push(c);
-                i += 1;
-                continue;
+            match scan_balanced(&chars, i, '{', '}') {
+                Some(end) => {
+                    let mut k = end;
+                    // `{…}?` is a semantic predicate — strip the `?` too.
+                    if k < n && chars[k] == '?' {
+                        k += 1;
+                    }
+                    i = k;
+                    continue;
+                },
+                None => {
+                    out.push(c);
+                    i += 1;
+                    continue;
+                },
             }
-            let mut k = body_end + 1;
-            // `{…}?` is a semantic predicate — strip the `?` too.
-            if k < n && chars[k] == '?' {
-                k += 1;
-            }
-            i = k;
-            continue;
         }
         out.push(c);
         i += 1;
     }
     return out;
+}
+
+fn push_span(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+    let mut i = start;
+    while i < end {
+        out.push(chars[i]);
+        i += 1;
+    }
 }
 
 fn is_id_start_char(c: char) -> bool {
@@ -212,95 +193,6 @@ fn starts_with_word(chars: &List<char>, i: i32, word: &String) -> bool {
         return false;
     }
     return true;
-}
-
-fn find_balanced_close(chars: &List<char>, open_idx: i32) -> i32 {
-    let n = chars.len();
-    let mut depth = 1;
-    let mut i = open_idx + 1;
-    while i < n {
-        let c = chars[i];
-        if c == '\'' {
-            i += 1;
-            while i < n {
-                let cc = chars[i];
-                i += 1;
-                if cc == '\\' && i < n {
-                    i += 1;
-                    continue;
-                }
-                if cc == '\'' {
-                    break;
-                }
-            }
-            continue;
-        }
-        if c == '"' {
-            i += 1;
-            while i < n {
-                let cc = chars[i];
-                i += 1;
-                if cc == '\\' && i < n {
-                    i += 1;
-                    continue;
-                }
-                if cc == '"' {
-                    break;
-                }
-            }
-            continue;
-        }
-        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
-            while i < n && chars[i] != '\n' {
-                i += 1;
-            }
-            continue;
-        }
-        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
-            i += 2;
-            while i + 1 < n {
-                if chars[i] == '*' && chars[i + 1] == '/' {
-                    i += 2;
-                    break;
-                }
-                i += 1;
-            }
-            continue;
-        }
-        if c == '{' {
-            depth += 1;
-        } else if c == '}' {
-            depth -= 1;
-            if depth == 0 {
-                return i;
-            }
-        }
-        i += 1;
-    }
-    return -1;
-}
-
-fn find_balanced_close_bracket(chars: &List<char>, open_idx: i32) -> i32 {
-    let n = chars.len();
-    let mut depth = 1;
-    let mut i = open_idx + 1;
-    while i < n {
-        let c = chars[i];
-        if c == '\\' && i + 1 < n {
-            i += 2;
-            continue;
-        }
-        if c == '[' {
-            depth += 1;
-        } else if c == ']' {
-            depth -= 1;
-            if depth == 0 {
-                return i;
-            }
-        }
-        i += 1;
-    }
-    return -1;
 }
 
 fn preceded_by_prequel_keyword(out: &String) -> bool {
