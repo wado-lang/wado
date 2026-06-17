@@ -137,8 +137,8 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
         }
         ExprKind::Binary { op, left, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_select_eligible(body, left.expr(), type_table)
-                && is_select_eligible(body, right.expr(), type_table)
+                && left.as_expr().is_none_or(|e| is_select_eligible(body, e, type_table))
+                && right.as_expr().is_none_or(|e| is_select_eligible(body, e, type_table))
         }
         ExprKind::Cast {
             expr: inner,

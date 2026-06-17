@@ -557,7 +557,7 @@ fn transform_stmt(
     // Other statement shapes that carry transformable expressions / blocks.
     enum Shape {
         Expr(ExprId),
-        If(ExprId, BlockId, Option<BlockId>),
+        If(Option<ExprId>, BlockId, Option<BlockId>),
         Labeled(BlockId),
         Break(ExprId),
         None,
@@ -568,9 +568,9 @@ fn transform_stmt(
             condition,
             then_block,
             else_block,
-        } => Shape::If(condition.expr(), *then_block, *else_block),
+        } => Shape::If(condition.as_expr(), *then_block, *else_block),
         StmtKind::LabeledBlock { block, .. } => Shape::Labeled(*block),
-        StmtKind::Break { value: Some(e), .. } => Shape::Break(e.expr()),
+        StmtKind::Break { value: Some(e), .. } => e.as_expr().map_or(Shape::None, Shape::Break),
         // Don't recurse into nested loops.
         _ => Shape::None,
     };
@@ -579,7 +579,9 @@ fn transform_stmt(
             transform_expr(engine, e, escaping_locals, hoist_stmts, type_table);
         }
         Shape::If(cond, tb, eb) => {
-            transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table);
+            if let Some(cond) = cond {
+                transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table);
+            }
             transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table);
             if let Some(eb) = eb {
                 transform_stmts_in_block(engine, eb, escaping_locals, hoist_stmts, type_table);
@@ -612,8 +614,8 @@ fn transform_expr(
             Walk::Exprs(args.iter().filter_map(|a| a.expr.as_expr()).collect())
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            let mut v = vec![receiver.expr()];
-            v.extend(args.iter().map(|a| a.expr.expr()));
+            let mut v: Vec<ExprId> = receiver.as_expr().into_iter().collect();
+            v.extend(args.iter().filter_map(|a| a.expr.as_expr()));
             Walk::Exprs(v)
         }
         ExprKind::Binary { left, right, .. } => {
@@ -621,8 +623,12 @@ fn transform_expr(
         }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![inner.expr()]),
-        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, value.expr()]),
+        | ExprKind::FieldAccess { expr: inner, .. } => {
+            Walk::Exprs(inner.as_expr().into_iter().collect())
+        }
+        ExprKind::Assign { target, value } => {
+            Walk::Exprs(std::iter::once(*target).chain(value.as_expr()).collect())
+        }
         ExprKind::If {
             condition,
             then_branch,
@@ -708,8 +714,8 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
                         .iter()
                         .find(|f| f.name == SeqField::Len.field_name())?;
                     if !matches!(
-                        &body.exprs[used_field.value.expr()].kind,
-                        ExprKind::IntLiteral { value: 0, .. }
+                        used_field.value.as_expr().map(|e| &body.exprs[e].kind),
+                        Some(ExprKind::IntLiteral { value: 0, .. })
                     ) {
                         return None;
                     }
@@ -1385,9 +1391,9 @@ fn rename_local_in_stmt(
         None,
     }
     let shape = match &engine.body.stmts[s].kind {
-        StmtKind::Let { value, .. } => Shape::Expr(value.expr()),
+        StmtKind::Let { value, .. } => value.as_expr().map_or(Shape::None, Shape::Expr),
         StmtKind::Expr(expr) => Shape::Expr(*expr),
-        StmtKind::Return { value: Some(expr) } => Shape::Expr(expr.expr()),
+        StmtKind::Return { value: Some(expr) } => expr.as_expr().map_or(Shape::None, Shape::Expr),
         StmtKind::If {
             condition,
             then_block,
@@ -1446,8 +1452,8 @@ fn rename_local_in_expr(
             Walk::Exprs(args.iter().filter_map(|a| a.expr.as_expr()).collect())
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            let mut v = vec![receiver.expr()];
-            v.extend(args.iter().map(|a| a.expr.expr()));
+            let mut v: Vec<ExprId> = receiver.as_expr().into_iter().collect();
+            v.extend(args.iter().filter_map(|a| a.expr.as_expr()));
             Walk::Exprs(v)
         }
         ExprKind::IndirectCall { callee, args } => {

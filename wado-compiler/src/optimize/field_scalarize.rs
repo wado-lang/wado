@@ -843,7 +843,9 @@ fn visit_stmt_for_alias(
 ) {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            mark_whole_gc_ref_copy_source(body, value.expr(), type_table, out);
+            if let Some(ve) = value.as_expr() {
+                mark_whole_gc_ref_copy_source(body, ve, type_table, out);
+            }
             visit_operand_for_alias(body, *value, false, type_table, out);
         }
         StmtKind::Expr(expr) => {

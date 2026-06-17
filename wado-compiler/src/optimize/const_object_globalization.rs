@@ -220,7 +220,7 @@ fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -
         | ExprKind::EnumConstruct { .. } => true,
         ExprKind::Local { index, .. } => bound.contains(index),
         ExprKind::StructLiteral { fields, .. } => {
-            let fields: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
+            let fields: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();
             fields
                 .iter()
                 .all(|&v| is_globalizable_const(body, v, bound))
