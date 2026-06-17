@@ -58,6 +58,11 @@ unpublishable package) all use `lib:nick`. Aliases are forbidden under any open
 `ns:`: that keeps a real coordinate (`from "foo:regexp"`, transparent) visually
 distinct from a local indirection (`from "lib:rx"`, "see the manifest").
 
+Bundling is a default, not a lock-in: because `lib:` resolution is pure
+indirection, a registry-hosted alternative to a bundled namespace (a forked or
+newer `wasi:`/`core:` package) is reachable by aliasing it under `lib:` —
+slightly ugly, but possible. Easy things stay easy; hard things stay possible.
+
 The `package` field bridges a `lib:` alias to its real coordinate:
 
 | Key (≡ specifier) | `package` | Source                                    |
