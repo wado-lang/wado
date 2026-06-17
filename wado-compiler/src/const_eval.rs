@@ -105,6 +105,45 @@ impl Value {
             _ => None,
         }
     }
+
+    /// Project an [`Operand`] to a `Value` when it is a pure scalar constant.
+    /// For `Operand::Value` the constant lives in the function's `ValuePool`
+    /// (the source of truth for pure scalars); for `Operand::Expr` it delegates
+    /// to [`Self::from_arena_literal`]. Mirrors that method's primitive filter:
+    /// only `Int` (tracked int prims), `Float` (`f32`/`f64`), `Bool`, and `Char`
+    /// project; `i128`/`u128` and non-primitive types yield `None`.
+    #[must_use]
+    pub fn from_operand(
+        body: &Body,
+        op: crate::nir_arena::Operand,
+        type_table: &TypeTable,
+    ) -> Option<Self> {
+        use crate::nir_arena::Operand;
+        use crate::nir_value_graph::ValueKind;
+        match op {
+            Operand::Expr(e) => Self::from_arena_literal(body, e, type_table),
+            Operand::Value(v) => {
+                let ty = body.values.type_of(v)?;
+                match body.values.kind(v) {
+                    ValueKind::Int(value) => {
+                        let prim = prim_of(ty, type_table).filter(|p| is_int_prim(*p))?;
+                        Some(Self::Int { value: *value, prim })
+                    }
+                    ValueKind::Float(bits) => {
+                        let prim = prim_of(ty, type_table)
+                            .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
+                        Some(Self::Float {
+                            value: f64::from_bits(*bits),
+                            prim,
+                        })
+                    }
+                    ValueKind::Bool(b) => Some(Self::Bool(*b)),
+                    ValueKind::Char(c) => Some(Self::Char(*c)),
+                    _ => None,
+                }
+            }
+        }
+    }
 }
 
 pub(crate) fn value_to_arena_kind(v: Value) -> ExprKind {

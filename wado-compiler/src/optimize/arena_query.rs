@@ -116,6 +116,18 @@ pub(super) fn is_local(body: &Body, id: ExprId, idx: u32) -> bool {
     matches!(&body.exprs[id].kind, ExprKind::Local { index, .. } if *index == idx)
 }
 
+/// Whether `op` is a bare `Local(idx)` reference. A promoted constant
+/// (`Operand::Value`) is never a local.
+pub(super) fn is_local_operand(body: &Body, op: Operand, idx: u32) -> bool {
+    op.as_expr().is_some_and(|e| is_local(body, e, idx))
+}
+
+/// Whether `idx` appears anywhere in the operand. A promoted constant mentions
+/// no local.
+pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
+    op.as_expr().is_some_and(|e| expr_mentions_local(body, e, idx))
+}
+
 /// Whether `idx` appears anywhere in the expression subtree at `id`. Matches
 /// the coverage of the tree `expr_mentions_local` (every nested statement,
 /// block, and `ConstantValue` pattern expression is walked).

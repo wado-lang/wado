@@ -547,7 +547,17 @@ impl<'a> NirUnparser<'a> {
 
     fn unparse_operand(&mut self, body: &Body, op: Operand) {
         match op {
-            Operand::Value(v) => self.output.push_str(&format!("%{}", v.index())),
+            Operand::Value(v) => {
+                // A pure scalar constant renders as its literal; other graph
+                // values (opaques, derived nodes) render as `%id`.
+                if let Some(value) =
+                    crate::const_eval::Value::from_operand(body, op, self.type_table)
+                {
+                    self.output.push_str(&value.format_repr());
+                } else {
+                    self.output.push_str(&format!("%{}", v.index()));
+                }
+            }
             Operand::Expr(e) => self.unparse_expr(body, e),
         }
     }
@@ -798,9 +808,9 @@ impl<'a> NirUnparser<'a> {
                 ..
             } => {
                 let struct_name = struct_name.clone();
-                let field_data: Vec<(String, ExprId)> = fields
+                let field_data: Vec<(String, Operand)> = fields
                     .iter()
-                    .map(|f| (f.name.clone(), f.value.as_expr().expect("skeleton operand")))
+                    .map(|f| (f.name.clone(), f.value))
                     .collect();
                 // Functor structs are rendered as `&Name { ... }` to mirror the
                 // reference type that the elaborator attached.
@@ -812,7 +822,7 @@ impl<'a> NirUnparser<'a> {
                 self.comma_sep(field_data, |s, (name, value)| {
                     s.output.push_str(&name);
                     s.output.push_str(": ");
-                    s.unparse_expr(body, value);
+                    s.unparse_operand(body, value);
                 });
                 self.output.push_str(" }");
             }

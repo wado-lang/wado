@@ -715,10 +715,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
                     let used_field = fields
                         .iter()
                         .find(|f| f.name == SeqField::Len.field_name())?;
-                    if !matches!(
-                        used_field.value.as_expr().map(|e| &body.exprs[e].kind),
-                        Some(ExprKind::IntLiteral { value: 0, .. })
-                    ) {
+                    if body.operand_const_int(used_field.value) != Some(0) {
                         return None;
                     }
                     (local_index, type_id, value, value_span)
@@ -757,7 +754,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
 /// arena so the candidacy decision needs no borrow held across construction.
 struct FmtFields {
     struct_name: String,
-    fields: Vec<(String, u32, ExprId)>,
+    fields: Vec<(String, u32, Operand)>,
     struct_type: TypeId,
     value_type_id: TypeId,
     value_span: Span,
@@ -803,11 +800,19 @@ fn extract_fmt_candidates(
                     let ExprKind::Local { index, .. } = &engine.body.exprs[*target].kind else {
                         continue;
                     };
-                    (*index, value.as_expr().expect("skeleton operand"))
+                    let Some(value_expr) = value.as_expr() else {
+                        continue;
+                    };
+                    (*index, value_expr)
                 }
                 StmtKind::Let {
                     local_index, value, ..
-                } => (*local_index, value.as_expr().expect("skeleton operand")),
+                } => {
+                    let Some(value_expr) = value.as_expr() else {
+                        continue;
+                    };
+                    (*local_index, value_expr)
+                }
                 _ => continue,
             };
 
@@ -833,7 +838,7 @@ fn extract_fmt_candidates(
                 if name == "buf" {
                     return true;
                 }
-                is_constant_expr(engine.body, *value)
+                is_constant_operand(engine.body, *value)
             });
             if !all_const {
                 continue;
@@ -862,9 +867,9 @@ fn extract_fmt_candidates(
         let struct_type = raw.ff.struct_type;
         let mut init_fields: Vec<ArenaStructField> = Vec::new();
         for (name, field_index, value) in &raw.ff.fields {
-            let new_value = if name == "buf" {
+            let new_value: Operand = if name == "buf" {
                 // Normalize buf to &mut __tmpl_buf
-                let buf_ty = engine.body.exprs[*value].type_id;
+                let buf_ty = engine.body.operand_type(*value);
                 let local = engine.alloc_expr(
                     ExprKind::Local {
                         index: hoisted_buf_index,
@@ -873,22 +878,31 @@ fn extract_fmt_candidates(
                     buf_ty,
                     value_span,
                 );
-                engine.alloc_expr(
-                    ExprKind::Unary {
-                        op: NirUnaryOp::MutRef,
-                        expr: local.into(),
-                    },
-                    buf_ty,
-                    value_span,
-                )
+                engine
+                    .alloc_expr(
+                        ExprKind::Unary {
+                            op: NirUnaryOp::MutRef,
+                            expr: local.into(),
+                        },
+                        buf_ty,
+                        value_span,
+                    )
+                    .into()
             } else {
-                // A verified constant leaf — a shallow node copy is a full copy.
-                let node = engine.body.exprs[*value].clone();
-                engine.alloc_expr(node.kind, node.type_id, node.span)
+                // A verified constant leaf. A promoted `Operand::Value` points
+                // into the shared pool and is reused directly; a skeleton literal
+                // is shallow-copied (a constant leaf has no children).
+                match value {
+                    Operand::Value(_) => *value,
+                    Operand::Expr(e) => {
+                        let node = engine.body.exprs[*e].clone();
+                        engine.alloc_expr(node.kind, node.type_id, node.span).into()
+                    }
+                }
             };
             init_fields.push(ArenaStructField {
                 name: name.clone(),
-                value: new_value.into(),
+                value: new_value,
                 field_index: *field_index,
             });
         }
@@ -941,7 +955,7 @@ fn extract_formatter_fields(
                 struct_name: struct_name.clone(),
                 fields: fields
                     .iter()
-                    .map(|f| (f.name.clone(), f.field_index, f.value.as_expr().expect("skeleton operand")))
+                    .map(|f| (f.name.clone(), f.field_index, f.value))
                     .collect(),
                 struct_type: *struct_type,
                 value_type_id,
@@ -1019,7 +1033,7 @@ fn extract_formatter_fields_from_block(
         struct_name: struct_name.clone(),
         fields: fields
             .iter()
-            .map(|f| (f.name.clone(), f.field_index, f.value.as_expr().expect("skeleton operand")))
+            .map(|f| (f.name.clone(), f.field_index, f.value))
             .collect(),
         struct_type: *struct_type,
         value_type_id,
@@ -1137,6 +1151,12 @@ fn is_constant_expr(body: &Body, e: ExprId) -> bool {
             | ExprKind::CharLiteral(_)
             | ExprKind::EnumConstruct { .. }
     )
+}
+
+/// Operand form of [`is_constant_expr`]: a promoted scalar (`Operand::Value`)
+/// is always a compile-time constant.
+fn is_constant_operand(body: &Body, op: Operand) -> bool {
+    op.as_expr().map_or(true, |e| is_constant_expr(body, e))
 }
 
 /// Whether `expr` is an `array_new<u8>(N)` call carrying a capacity argument.

@@ -49,7 +49,9 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKin
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
-use super::arena_query::{expr_mentions_local, is_local, is_pure_expr, stmt_mentions_local};
+use super::arena_query::{
+    is_local_operand, is_pure_operand, operand_mentions_local, stmt_mentions_local,
+};
 
 /// The builtin generic name of the raw array allocation (`builtin::array_new`).
 const ARRAY_NEW: &str = "array_new";
@@ -143,8 +145,8 @@ impl Collapser<'_> {
         // Collect each target's push elements *unresolved* (bare `Local(temp)`
         // for inlining's element temps); resolution happens after the window so
         // multi-use temps can be detected first.
-        let mut pushes_per_target: Vec<Vec<ExprId>> = vec![Vec::new(); targets.len()];
-        let mut bindings: Vec<(u32, ExprId)> = Vec::new();
+        let mut pushes_per_target: Vec<Vec<Operand>> = vec![Vec::new(); targets.len()];
+        let mut bindings: Vec<(u32, Operand)> = Vec::new();
         let mut consumed = 0;
         let mut all_done = false;
         // A single target keeps materialized elements in push order, so an
@@ -193,11 +195,11 @@ impl Collapser<'_> {
             let uses = pushes_per_target
                 .iter()
                 .flatten()
-                .filter(|e| is_local(body, **e, *idx))
+                .filter(|e| is_local_operand(body, **e, *idx))
                 .count();
             if uses == 1 {
                 for element in pushes_per_target.iter_mut().flatten() {
-                    if is_local(body, *element, *idx) {
+                    if is_local_operand(body, *element, *idx) {
                         *element = *value;
                     }
                 }
@@ -216,7 +218,7 @@ impl Collapser<'_> {
             pushes_per_target
                 .iter()
                 .flatten()
-                .any(|e| expr_mentions_local(body, *e, idx))
+                .any(|e| operand_mentions_local(body, *e, idx))
         };
         if bindings
             .iter()
@@ -230,12 +232,7 @@ impl Collapser<'_> {
         // push statements that owned them are dropped with the window). The
         // `body` immutable borrow ends here; the rewrite mutates the arena.
         for (target, elements) in targets.iter().zip(pushes_per_target) {
-            let array_lit = ExprKind::ArrayLiteral {
-                elements: elements
-                    .into_iter()
-                    .map(crate::nir_arena::Operand::Expr)
-                    .collect(),
-            };
+            let array_lit = ExprKind::ArrayLiteral { elements };
             engine.replace_expr_kind(target.struct_expr_id, array_lit);
         }
         consumed
@@ -243,7 +240,7 @@ impl Collapser<'_> {
 
     /// Match a `PLACE.push(elem)` statement where `PLACE` roots at `local`.
     /// Returns the field path from `local` to the array and the pushed element.
-    fn match_push(&self, body: &Body, stmt: StmtId, local: u32) -> Option<(Vec<u32>, ExprId)> {
+    fn match_push(&self, body: &Body, stmt: StmtId, local: u32) -> Option<(Vec<u32>, Operand)> {
         let StmtKind::Expr(e) = &body.stmts[stmt].kind else {
             return None;
         };
@@ -260,7 +257,7 @@ impl Collapser<'_> {
             return None;
         }
         let path = place_path_operand(body, *receiver, local)?;
-        Some((path, args[0].expr.as_expr().expect("skeleton operand")))
+        Some((path, args[0].expr))
     }
 }
 
@@ -275,11 +272,11 @@ impl Collapser<'_> {
 /// multiple interleaved targets (e.g. `Bag { keys, values }`) the per-field
 /// arrays materialize one after another, which would reorder side effects
 /// across fields, so only pure temps may be resolved there.
-fn temp_binding(body: &Body, stmt: StmtId, allow_impure: bool) -> Option<(u32, ExprId)> {
+fn temp_binding(body: &Body, stmt: StmtId, allow_impure: bool) -> Option<(u32, Operand)> {
     match &body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
-        } if allow_impure || is_pure_expr(body, value.as_expr().expect("skeleton operand")) => Some((*local_index, value.as_expr().expect("skeleton operand"))),
+        } if allow_impure || is_pure_operand(body, *value) => Some((*local_index, *value)),
         _ => None,
     }
 }
@@ -383,10 +380,11 @@ fn match_list_struct(body: &Body, expr: ExprId) -> Option<usize> {
     }
     let repr = fields.iter().find(|f| f.name == REPR_FIELD)?;
     let used = fields.iter().find(|f| f.name == USED_FIELD)?;
-    if !used.value.as_expr().is_some_and(|e| is_zero_int(body, e)) {
+    if body.operand_const_int(used.value) != Some(0) {
         return None;
     }
-    array_new_capacity(body, repr.value.as_expr().expect("skeleton operand"))
+    let repr_expr = repr.value.as_expr()?;
+    array_new_capacity(body, repr_expr)
 }
 
 /// If `expr` is a `builtin::array_new(N)` call with a constant `N`, return N.
@@ -405,14 +403,7 @@ fn array_new_capacity(body: &Body, expr: ExprId) -> Option<usize> {
     if !is_array_new || args.len() != 1 {
         return None;
     }
-    match &body.exprs[args[0].expr.as_expr().expect("skeleton operand")].kind {
-        ExprKind::IntLiteral { value, .. } => usize::try_from(*value).ok(),
-        _ => None,
-    }
-}
-
-fn is_zero_int(body: &Body, expr: ExprId) -> bool {
-    matches!(&body.exprs[expr].kind, ExprKind::IntLiteral { value, .. } if *value == 0)
+    usize::try_from(body.operand_const_int(args[0].expr)?).ok()
 }
 
 /// If `receiver` is `local` reached through zero or more field accesses,

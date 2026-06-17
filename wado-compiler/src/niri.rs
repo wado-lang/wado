@@ -1697,16 +1697,22 @@ fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
         | ExprKind::Unit => true,
         ExprKind::Binary { left, op, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_speculatable_a(body, left.as_expr().expect("skeleton operand"))
-                && is_speculatable_a(body, right.as_expr().expect("skeleton operand"))
+                && is_speculatable_operand_a(body, *left)
+                && is_speculatable_operand_a(body, *right)
         }
         ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Deref) && is_speculatable_a(body, inner.as_expr().expect("skeleton operand"))
+            !matches!(op, NirUnaryOp::Deref) && is_speculatable_operand_a(body, *inner)
         }
-        ExprKind::Cast { expr: inner, .. } => is_speculatable_a(body, inner.as_expr().expect("skeleton operand")),
-        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_a(body, inner.as_expr().expect("skeleton operand")),
+        ExprKind::Cast { expr: inner, .. } => is_speculatable_operand_a(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_operand_a(body, *inner),
         _ => false,
     }
+}
+
+/// Operand form of [`is_speculatable_a`]: a promoted pure value (constant)
+/// is always speculatable.
+fn is_speculatable_operand_a(body: &Body, op: crate::nir_arena::Operand) -> bool {
+    op.as_expr().map_or(true, |e| is_speculatable_a(body, e))
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -868,6 +868,30 @@ impl WhitelistChecker<'_> {
     }
 
     /// Check an expression used as a value-source for `push`/`index_assign`.
+    /// Visit an operand for escape analysis. A promoted constant
+    /// (`Operand::Value`) references no local, so there is nothing to visit.
+    fn visit_operand(&mut self, body: &Body, op: Operand) {
+        if let Some(e) = op.as_expr() {
+            self.visit_expr(body, e);
+        }
+    }
+
+    /// Operand form of [`Self::check_source`]: a promoted constant is a scalar,
+    /// never a decomposable tuple/struct source, so it is not a valid element
+    /// source for a candidate.
+    fn check_source_operand(
+        &mut self,
+        body: &Body,
+        op: Operand,
+        expected_arity: usize,
+        expected_layout: &ElementLayout,
+    ) -> bool {
+        match op.as_expr() {
+            Some(e) => self.check_source(body, e, expected_arity, expected_layout),
+            None => false,
+        }
+    }
+
     fn check_source(
         &mut self,
         body: &Body,
@@ -993,23 +1017,16 @@ impl WhitelistChecker<'_> {
                 let Some(recv_e) = receiver.as_expr() else {
                     return;
                 };
-                let Some(arg_ids) = args
-                    .iter()
-                    .map(|a| a.expr.as_expr())
-                    .collect::<Option<Vec<ExprId>>>()
-                else {
-                    // A promoted constant arg is not a decomposable element
-                    // source; conservatively mark the receiver local unsafe.
-                    if let Some(rec_local) = receiver_local(body, recv_e) {
-                        self.mark(rec_local);
-                    }
-                    return;
-                };
+                // Args are operands: a promoted constant (`Operand::Value`) is a
+                // valid index/source — duplicability and decomposability are
+                // judged per arg below, not by requiring every arg be a skeleton
+                // expression.
+                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 let kind = list_method_kind(func, self.sig_kinds);
                 if let Some(rec_local) = receiver_local(body, recv_e)
                     && self.safe.contains(&rec_local)
                 {
-                    match (kind, arg_ids.len()) {
+                    match (kind, arg_ops.len()) {
                         // v.push-shaped(source)
                         (Some(ListMethodKind::ElementWriter), 1) => {
                             let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
@@ -1018,7 +1035,7 @@ impl WhitelistChecker<'_> {
                                 .get(&rec_local)
                                 .cloned()
                                 .unwrap_or(ElementLayout::Tuple);
-                            if self.check_source(body, arg_ids[0], arity, &layout) {
+                            if self.check_source_operand(body, arg_ops[0], arity, &layout) {
                                 self.record_use(rec_local, ListMethodKind::ElementWriter);
                             } else {
                                 self.mark(rec_local);
@@ -1039,15 +1056,15 @@ impl WhitelistChecker<'_> {
                                 .cloned()
                                 .unwrap_or(ElementLayout::Tuple);
                             // The rewrite clones the destination index N times.
-                            if !is_duplicable_expr(body, arg_ids[0]) {
+                            if !is_duplicable_operand(body, arg_ops[0]) {
                                 self.mark(rec_local);
-                                self.visit_expr(body, arg_ids[0]);
-                                self.visit_expr(body, arg_ids[1]);
+                                self.visit_operand(body, arg_ops[0]);
+                                self.visit_operand(body, arg_ops[1]);
                                 return;
                             }
                             // index argument visited normally
-                            self.visit_expr(body, arg_ids[0]);
-                            if self.check_source(body, arg_ids[1], arity, &layout) {
+                            self.visit_operand(body, arg_ops[0]);
+                            if self.check_source_operand(body, arg_ops[1], arity, &layout) {
                                 self.record_use(rec_local, ListMethodKind::IndexWriter);
                             } else {
                                 self.mark(rec_local);
@@ -1059,7 +1076,7 @@ impl WhitelistChecker<'_> {
                         // here directly means the whole struct value escapes.
                         (Some(ListMethodKind::IndexReader), 1) => {
                             self.mark(rec_local);
-                            self.visit_expr(body, arg_ids[0]);
+                            self.visit_operand(body, arg_ops[0]);
                             return;
                         }
                         // Any other method call on a candidate → escape.
@@ -1069,9 +1086,9 @@ impl WhitelistChecker<'_> {
                     }
                 }
                 // Fall through: recurse into receiver and args normally.
-                self.visit_expr(body, receiver.as_expr().expect("skeleton operand"));
-                for a in arg_ids {
-                    self.visit_expr(body, a);
+                self.visit_expr(body, recv_e);
+                for a in arg_ops {
+                    self.visit_operand(body, a);
                 }
             }
             // v.IndexReader(i).K — safe read pattern
@@ -1274,7 +1291,7 @@ impl Rewriter<'_, '_> {
         match (kind, arg_ids.len()) {
             // Case 1: v.ElementWriter(source) — e.g. push
             (Some(ListMethodKind::ElementWriter), 1) => {
-                let per_field = self.decompose_source(engine, arg_ids[0].as_expr().expect("skeleton operand"), arity, &layout)?;
+                let per_field = self.decompose_source(engine, arg_ids[0].as_expr()?, arity, &layout)?;
                 let sig = sig_key_of(&func)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
@@ -1301,17 +1318,20 @@ impl Rewriter<'_, '_> {
             (Some(ListMethodKind::IndexWriter), 2) => {
                 let idx = arg_ids[0];
                 let src = arg_ids[1];
-                if !is_duplicable_expr(engine.body, idx.as_expr().expect("skeleton operand")) {
+                if !is_duplicable_operand(engine.body, idx) {
                     return None;
                 }
-                let per_field = self.decompose_source(engine, src.as_expr().expect("skeleton operand"), arity, &layout)?;
+                let per_field = self.decompose_source(engine, src.as_expr()?, arity, &layout)?;
                 let sig = sig_key_of(&func)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                     let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
                     let elem_ty = element_types[k];
-                    let idx_clone = engine.clone_expr(idx.as_expr().expect("skeleton operand"));
+                    let idx_clone = match idx {
+                        Operand::Expr(e) => engine.clone_expr(e),
+                        Operand::Value(_) => engine.materialize_operand(idx, span),
+                    };
                     let call = build_index_writer_call(
                         engine,
                         elem_ty,
@@ -1812,17 +1832,23 @@ fn is_duplicable_expr(body: &Body, e: ExprId) -> bool {
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. } => true,
         ExprKind::Binary { left, right, .. } => {
-            is_duplicable_expr(body, left.as_expr().expect("skeleton operand")) && is_duplicable_expr(body, right.as_expr().expect("skeleton operand"))
+            is_duplicable_operand(body, *left) && is_duplicable_operand(body, *right)
         }
         ExprKind::Unary { op, expr: inner } => {
             !matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && is_duplicable_expr(body, inner.as_expr().expect("skeleton operand"))
+                && is_duplicable_operand(body, *inner)
         }
-        ExprKind::Cast { expr: inner, .. } => is_duplicable_expr(body, inner.as_expr().expect("skeleton operand")),
+        ExprKind::Cast { expr: inner, .. } => is_duplicable_operand(body, *inner),
         // FieldAccess is only duplicable if its inner is too (most commonly a Local).
         // We deliberately exclude MethodCall / Call / Index / etc. because they
         // may allocate, trap, or have side effects.
-        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_expr(body, inner.as_expr().expect("skeleton operand")),
+        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_operand(body, *inner),
         _ => false,
     }
+}
+
+/// Operand form of [`is_duplicable_expr`]: a promoted constant (`Operand::Value`)
+/// is always duplicable.
+fn is_duplicable_operand(body: &Body, op: Operand) -> bool {
+    op.as_expr().map_or(true, |e| is_duplicable_expr(body, e))
 }

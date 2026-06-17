@@ -1,0 +1,142 @@
+
+running 3 tests
+test fixture_test_o2::tmpl_hoist_loop_wado ... FAILED
+test fixture_test_o2::opt_container_sroa_tuple_wado ... ok
+test fixture_test_o2::match_1_wado ... ok
+
+failures:
+
+---- fixture_test_o2::tmpl_hoist_loop_wado stdout ----
+
+thread 'fixture_test_o2::tmpl_hoist_loop_wado' (25231) panicked at wado-compiler/src/optimize/tmpl_hoist.rs:941:80:
+skeleton operand
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/std/src/panicking.rs:689:5
+   1: core::panicking::panic_fmt
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/panicking.rs:80:14
+   2: core::panicking::panic_display::<&str>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/panicking.rs:259:5
+   3: core::option::expect_failed
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/option.rs:2260:5
+   4: expect<wado_compiler::nir_arena::ExprId>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/option.rs:971:21
+   5: {closure#1}
+             at ./src/optimize/tmpl_hoist.rs:941:80
+   6: {closure#0}<&wado_compiler::nir_arena::ArenaStructField, (alloc::string::String, u32, wado_compiler::nir_arena::ExprId), (), wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>>>>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/iter/adapters/map.rs:88:28
+   7: fold<wado_compiler::nir_arena::ArenaStructField, (), core::iter::adapters::map::map_fold::{closure_env#0}<&wado_compiler::nir_arena::ArenaStructField, (alloc::string::String, u32, wado_compiler::nir_arena::ExprId), (), wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>>>>>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/slice/iter/macros.rs:279:27
+   8: fold<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>>>>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/iter/adapters/map.rs:128:19
+   9: for_each<core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>>>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/iter/traits/iterator.rs:889:14
+  10: extend_trusted<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/alloc/src/vec/mod.rs:4027:26
+  11: spec_extend<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>, alloc::alloc::Global>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/alloc/src/vec/spec_extend.rs:27:14
+  12: from_iter<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/alloc/src/vec/spec_from_iter_nested.rs:60:16
+  13: from_iter<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/alloc/src/vec/spec_from_iter.rs:33:9
+  14: from_iter<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/alloc/src/vec/mod.rs:3891:9
+  15: collect<core::iter::adapters::map::Map<core::slice::iter::Iter<wado_compiler::nir_arena::ArenaStructField>, wado_compiler::optimize::tmpl_hoist::extract_formatter_fields::{closure_env#1}>, alloc::vec::Vec<(alloc::string::String, u32, wado_compiler::nir_arena::ExprId), alloc::alloc::Global>>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/iter/traits/iterator.rs:2092:9
+  16: extract_formatter_fields
+             at ./src/optimize/tmpl_hoist.rs:942:22
+  17: extract_fmt_candidates
+             at ./src/optimize/tmpl_hoist.rs:811:28
+  18: transform_tmpl_block
+             at ./src/optimize/tmpl_hoist.rs:1210:26
+  19: transform_stmt
+             at ./src/optimize/tmpl_hoist.rs:536:13
+  20: transform_stmts_in_block
+             at ./src/optimize/tmpl_hoist.rs:505:9
+  21: hoist_tmpl_from_loop
+             at ./src/optimize/tmpl_hoist.rs:192:5
+  22: hoist_in_block
+             at ./src/optimize/tmpl_hoist.rs:124:31
+  23: run
+  24: {closure#0}
+             at ./src/optimize/tmpl_hoist.rs:79:16
+  25: run_gated<wado_compiler::optimize::tmpl_hoist::hoist_template_buffers::{closure_env#0}>
+             at ./src/optimize/gate.rs:241:27
+  26: hoist_template_buffers
+             at ./src/optimize/tmpl_hoist.rs:67:10
+  27: {closure#18}
+             at ./src/optimize.rs:530:64
+  28: run_pass<wado_compiler::optimize::run_optimization_passes::{closure_env#18}>
+             at ./src/optimize.rs:367:19
+  29: run_optimization_passes
+             at ./src/optimize.rs:530:25
+  30: optimize
+             at ./src/optimize.rs:265:13
+  31: compile_after_load<e2e::common::FilesystemHost>
+             at ./src/lib.rs:822:9
+  32: {async_fn#0}<e2e::common::FilesystemHost>
+             at ./src/lib.rs:427:18
+  33: poll<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/future/future.rs:133:9
+  34: {closure#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/scheduler/current_thread/mod.rs:778:70
+  35: with_budget<core::task::poll::Poll<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>, tokio::runtime::scheduler::current_thread::{impl#9}::block_on::{closure#0}::{closure#0}::{closure_env#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/task/coop/mod.rs:167:5
+  36: budget<core::task::poll::Poll<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>, tokio::runtime::scheduler::current_thread::{impl#9}::block_on::{closure#0}::{closure#0}::{closure_env#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/task/coop/mod.rs:133:5
+  37: {closure#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/scheduler/current_thread/mod.rs:778:25
+  38: enter<core::task::poll::Poll<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>, tokio::runtime::scheduler::current_thread::{impl#9}::block_on::{closure#0}::{closure_env#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/scheduler/current_thread/mod.rs:451:19
+  39: {closure#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/scheduler/current_thread/mod.rs:777:44
+  40: {closure#0}<tokio::runtime::scheduler::current_thread::{impl#9}::block_on::{closure_env#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/scheduler/current_thread/mod.rs:865:68
+  41: set<tokio::runtime::scheduler::Context, tokio::runtime::scheduler::current_thread::{impl#9}::enter::{closure_env#0}<tokio::runtime::scheduler::current_thread::{impl#9}::block_on::{closure_env#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>>, (alloc::boxed::Box<tokio::runtime::scheduler::current_thread::Core, alloc::alloc::Global>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>)>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/context/scoped.rs:40:9
+  42: {closure#0}<(alloc::boxed::Box<tokio::runtime::scheduler::current_thread::Core, alloc::alloc::Global>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>), tokio::runtime::scheduler::current_thread::{impl#9}::enter::{closure_env#0}<tokio::runtime::scheduler::current_thread::{impl#9}::block_on::{closure_env#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/context.rs:181:38
+  43: try_with<tokio::runtime::context::Context, tokio::runtime::context::set_scheduler::{closure_env#0}<(alloc::boxed::Box<tokio::runtime::scheduler::current_thread::Core, alloc::alloc::Global>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>), tokio::runtime::scheduler::current_thread::{impl#9}::enter::{closure_env#0}<tokio::runtime::scheduler::current_thread::{impl#9}::block_on::{closure_env#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>>>, (alloc::boxed::Box<tokio::runtime::scheduler::current_thread::Core, alloc::alloc::Global>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>)>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/std/src/thread/local.rs:462:12
+  44: with<tokio::runtime::context::Context, tokio::runtime::context::set_scheduler::{closure_env#0}<(alloc::boxed::Box<tokio::runtime::scheduler::current_thread::Core, alloc::alloc::Global>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>), tokio::runtime::scheduler::current_thread::{impl#9}::enter::{closure_env#0}<tokio::runtime::scheduler::current_thread::{impl#9}::block_on::{closure_env#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>>>, (alloc::boxed::Box<tokio::runtime::scheduler::current_thread::Core, alloc::alloc::Global>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>)>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/std/src/thread/local.rs:426:20
+  45: set_scheduler<(alloc::boxed::Box<tokio::runtime::scheduler::current_thread::Core, alloc::alloc::Global>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>), tokio::runtime::scheduler::current_thread::{impl#9}::enter::{closure_env#0}<tokio::runtime::scheduler::current_thread::{impl#9}::block_on::{closure_env#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/context.rs:181:17
+  46: enter<tokio::runtime::scheduler::current_thread::{impl#9}::block_on::{closure_env#0}<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>, core::option::Option<core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/scheduler/current_thread/mod.rs:865:27
+  47: block_on<core::pin::Pin<&mut wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/scheduler/current_thread/mod.rs:765:24
+  48: {closure#0}<wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/scheduler/current_thread/mod.rs:205:33
+  49: enter_runtime<tokio::runtime::scheduler::current_thread::{impl#0}::block_on::{closure_env#0}<wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>, core::result::Result<wado_compiler::CompileResult, wado_compiler::CompileFailure>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/context/runtime.rs:65:16
+  50: block_on<wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/scheduler/current_thread/mod.rs:193:9
+  51: block_on_inner<wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/runtime.rs:371:52
+  52: block_on<wado_compiler::compile_with_options::{async_fn_env#0}<e2e::common::FilesystemHost>>
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.52.3/src/runtime/runtime.rs:345:18
+  53: compile_capturing_warnings
+             at ./tests/common.rs:801:10
+  54: run_normal_test
+             at ./tests/e2e.rs:834:9
+  55: run_fixture_test_with_opt
+             at ./tests/e2e.rs:792:5
+  56: fixture_test_o2
+             at ./tests/e2e.rs:1033:5
+  57: tmpl_hoist_loop_wado
+             at ./tests/e2e.rs:1096:1
+  58: {closure#0}
+             at ./tests/e2e.rs:1112:2
+  59: call_once<e2e::fixture_test_o2::tmpl_hoist_loop_wado::{closure_env#0}, ()>
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/ops/function.rs:250:5
+  60: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96/library/core/src/ops/function.rs:250:5
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    fixture_test_o2::tmpl_hoist_loop_wado
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 7394 filtered out; finished in 1.02s
+

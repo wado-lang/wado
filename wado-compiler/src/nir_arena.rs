@@ -17,7 +17,7 @@ use cranelift_entity::{PrimaryMap, entity_impl};
 
 use crate::hashmap::IndexSet;
 use crate::nir::{FunctionRef, NirBinaryOp, NirLocal, NirUnaryOp};
-use crate::nir_value_graph::{ValueId, ValuePool};
+use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::tir::TypeId;
 use crate::token::Span;
 
@@ -404,6 +404,24 @@ impl Body {
                 .values
                 .type_of(v)
                 .expect("promoted operand has no recorded type"),
+        }
+    }
+
+    /// The raw integer bit pattern of a constant-int operand, reading the
+    /// `ValuePool` for `Operand::Value` and the literal node for `Operand::Expr`.
+    /// `None` for any non-int-constant operand. Width-agnostic (no type filter):
+    /// callers that only need the value (capacities, zero-tests) avoid threading
+    /// a `TypeTable`.
+    pub fn operand_const_int(&self, op: Operand) -> Option<u64> {
+        match op {
+            Operand::Value(v) => match self.values.kind(v) {
+                ValueKind::Int(value) => Some(*value),
+                _ => None,
+            },
+            Operand::Expr(e) => match &self.exprs[e].kind {
+                ExprKind::IntLiteral { value, .. } => Some(*value),
+                _ => None,
+            },
         }
     }
 
