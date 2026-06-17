@@ -1703,9 +1703,9 @@ This design aligns with TypeScript (primary target audience) and enables intuiti
 ```
 
 ```wado
-use config from "./config.json" with { type: "json" };
-// config::point is [i32, i32]
-// config::mixed is [i32, String, bool]
+// A JSON array maps naturally to a tuple (JSON file import is provided by Kiln):
+let point: [i32, i32] = [10, 20];
+let mixed: [i32, String, bool] = [1, "hello", true];
 ```
 
 See `docs/wep-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
@@ -3297,7 +3297,6 @@ use {format} from "core:fmt";
 
 // 3. Remote modules (https:)
 use {ApiClient} from "https://example.com/api.wado";
-use config from "https://example.com/data.json" with { type: "json" };
 
 // 4. Local files (relative path, extension required)
 use {Helper} from "./utils.wado";
@@ -3322,7 +3321,6 @@ use {Router} from "lib:router" with { git = "https://github.com/user/router.git"
 use {Parse}  from "lib:rx"     with { registry = "https://wa.dev", package = "docs:regex", version = "1.0.0" };
 
 // Type attribute (REQUIRED for non-.wado imports)
-use config from "./config.json" with { type: "json" };
 use {sin, cos} from "./libm.wasm" with { type: "wasm" };
 
 // WIT specification for Wasm imports (optional)
@@ -3336,22 +3334,23 @@ An inline `with` source and a `wado.toml` entry for the same specifier are mutua
 
 **Type Attribute Requirement**:
 
-| Import Source      | `type` Attribute | Notes                          |
-| ------------------ | ---------------- | ------------------------------ |
-| `.wado` files      | Optional         | Type inferred from Wado source |
-| `.wasm` files      | **Required**     | `type: "wasm"`                 |
-| `.json` files      | **Required**     | `type: "json"`                 |
-| `core:*`, `wasi:*` | Not applicable   | Bundled namespace handling     |
-| `https:` URLs      | **Required**     | Must specify content type      |
-| CM / `lib:` deps   | Optional         | Type inferred from package     |
+| Import Source      | `type` Attribute         | Notes                          |
+| ------------------ | ------------------------ | ------------------------------ |
+| `.wado` files      | Optional                 | Type inferred from Wado source |
+| `.wasm` files      | **Required**             | `type: "wasm"`                 |
+| `core:*`, `wasi:*` | Not applicable           | Bundled namespace handling     |
+| `https:` URLs      | Required for non-`.wado` | Must specify content type      |
+| CM / `lib:` deps   | Optional                 | Type inferred from package     |
 
 **Rationale**: Explicit type annotations prevent ambiguity and make dependencies clear, aligning with Wado's design philosophy of explicit imports.
+
+JSON and other schema files (`.json`, `.g4`, `.proto`, …) are not core import types — they are lowered by Kiln generators (below).
 
 ### Schema Imports (Kiln)
 
 See [WEP: Kiln](./wep-2026-04-12-kiln.md) and [WEP: Gale](./wep-2026-03-02-gale.md).
 
-A `use` clause whose source is a non-`.wado`, non-`.wasm`, non-`.json` schema file (e.g. `.g4`, `.proto`, `.graphql`, `.wit`) is processed by **Kiln** — a schema-driven code-generation pipeline that lowers the schema to ordinary Wado source which the compiler then handles like any user-authored module. The `with { generator: { ... } }` clause specifies which generator to invoke:
+A `use` clause whose source is a non-`.wado`, non-`.wasm` schema file (e.g. `.json`, `.g4`, `.proto`, `.graphql`, `.wit`) is processed by **Kiln** — a schema-driven code-generation pipeline that lowers the schema to ordinary Wado source which the compiler then handles like any user-authored module. (`.json` file import is provided this way, not as a core import type.) The `with { generator: { ... } }` clause specifies which generator to invoke:
 
 ```wado
 // Gale generates a parser from an ANTLR4 grammar
@@ -3416,13 +3415,9 @@ In hosts that cannot execute generators (today's wasm32-bundled LSP / browser pl
 Use `use name from "..."` (without curly braces) to import an entire module as a namespace:
 
 ```wado
-// Import JSON file as a namespace
-use config from "./config.json" with { type: "json" };
-let value = config::key; // not config["key"], as it's analyzed at compile time
-
 // Import a module as a namespace
 use utils from "./utils.wado";
-utils::helper_function();
+utils::helper_function();      // not utils["helper_function"], as it's analyzed at compile time
 ```
 
 A namespace import makes all pub symbols from the source module available. At the source level, symbols are accessed with the `ns::` prefix. Internally, the compiler desugars the prefix away during the desugar phase and registers all pub symbols from the source module as named imports:

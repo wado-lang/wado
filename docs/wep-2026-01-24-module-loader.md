@@ -183,11 +183,10 @@ Future versions may add:
 For non-Wado file imports:
 
 ```wado
-use config from "./config.json" with { type: "json" };
 use helper from "./helper.wasm" with { type: "wasm" };
 ```
 
-See WEP-2026-01-18-json-module-import and WEP-2026-01-10-wasm-import for details.
+See WEP-2026-01-10-wasm-import for details. JSON file import is no longer a core import type — it is lowered by a Kiln generator (WEP: Kiln).
 
 ## Implementation Status
 
