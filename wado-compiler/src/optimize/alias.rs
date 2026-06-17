@@ -384,14 +384,14 @@ fn collect_mut_escaped_node(
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let Some(r) = projection_root_local(body, inner.expr()) {
+            if let Some(r) = projection_root_local(body, inner.as_expr().expect("skeleton operand")) {
                 out.insert(r);
             }
         }
         ExprKind::Call { args, .. } => {
             for arg in args {
                 if arg.is_mut
-                    && let Some(r) = projection_root_local(body, arg.expr.expr())
+                    && let Some(r) = projection_root_local(body, arg.expr.as_expr().expect("skeleton operand"))
                 {
                     out.insert(r);
                 }
@@ -407,18 +407,18 @@ fn collect_mut_escaped_node(
             // may mutate the receiver (`conservative_on_unknown = true`).
             if method_mutates_receiver(
                 body,
-                receiver.expr(),
+                receiver.as_expr().expect("skeleton operand"),
                 func,
                 first_param_types,
                 type_table,
                 true,
-            ) && let Some(r) = projection_root_local(body, receiver.expr())
+            ) && let Some(r) = projection_root_local(body, receiver.as_expr().expect("skeleton operand"))
             {
                 out.insert(r);
             }
             for arg in args {
                 if arg.is_mut
-                    && let Some(r) = projection_root_local(body, arg.expr.expr())
+                    && let Some(r) = projection_root_local(body, arg.expr.as_expr().expect("skeleton operand"))
                 {
                     out.insert(r);
                 }
@@ -672,7 +672,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
                 op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
                 expr: inner,
             } => {
-                if let Some(index) = local(inner.expr()) {
+                if let Some(index) = local(inner.as_expr().expect("skeleton operand")) {
                     out.insert(index);
                 }
             }
@@ -680,7 +680,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             ExprKind::Call { args, .. } => {
                 for arg in args {
                     if arg.is_mut
-                        && let Some(index) = local(arg.expr.expr())
+                        && let Some(index) = local(arg.expr.as_expr().expect("skeleton operand"))
                     {
                         out.insert(index);
                     }
@@ -688,12 +688,12 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 // Auto-ref: receiver may be passed as `&mut self`.
-                if let Some(index) = local(receiver.expr()) {
+                if let Some(index) = local(receiver.as_expr().expect("skeleton operand")) {
                     out.insert(index);
                 }
                 for arg in args {
                     if arg.is_mut
-                        && let Some(index) = local(arg.expr.expr())
+                        && let Some(index) = local(arg.expr.as_expr().expect("skeleton operand"))
                     {
                         out.insert(index);
                     }

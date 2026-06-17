@@ -222,11 +222,11 @@ fn body_is_list_wrapper_copy(body: &Body) -> bool {
     // `return StructLiteral { fields: [.., repr: Call(array_clone, ..), ..] }`
     for s in &body.blocks[body.root].stmts {
         if let StmtKind::Return { value: Some(v) } = &body.stmts[*s].kind
-            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[v.expr()].kind
+            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[v.as_expr().expect("skeleton operand")].kind
         {
             return fields.iter().any(|fld| {
                 fld.name == SeqField::Backing.field_name()
-                    && matches!(&body.exprs[fld.value.expr()].kind,
+                    && matches!(&body.exprs[fld.value.as_expr().expect("skeleton operand")].kind,
                         ExprKind::Call { func, .. }
                             if builtin_gname(func).as_deref() == Some("builtin::array_clone"))
             });
@@ -256,6 +256,10 @@ fn rewrite_array_clone_to_shallow(body: &mut Body) {
 
 /// If the expression at `value` is a one-argument call to an array-wrapper
 /// `$value_copy$T` helper, return that helper's key.
+fn wrapper_call_key_operand(body: &Body, op: Operand, wrappers: &IndexSet<FuncKey>) -> Option<FuncKey> {
+    op.as_expr().map_or(None, |e| wrapper_call_key(body, e, wrappers))
+}
+
 fn wrapper_call_key(body: &Body, value: ExprId, wrappers: &IndexSet<FuncKey>) -> Option<FuncKey> {
     if let ExprKind::Call { func, args, .. } = &body.exprs[value].kind
         && args.len() == 1
@@ -333,7 +337,7 @@ fn arg_source_root(body: &Body, id: ExprId) -> Option<u32> {
         | ExprKind::Index { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::Unary { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => arg_source_root(body, inner.expr()),
+        | ExprKind::VariantPayload { expr: inner, .. } => arg_source_root(body, inner.as_expr().expect("skeleton operand")),
         _ => None,
     }
 }
@@ -353,6 +357,10 @@ fn is_immutable_ref_param(
 /// True when the binding `target_idx` and the source `value` reads from are
 /// both element-clean — i.e. demoting `value` (an array-wrapper value copy)
 /// to a shallow copy is observably equivalent to the deep copy.
+fn demote_candidate_operand(body: &Body, op: Operand, target_idx: u32, params: &[NirParam], an: &mut Analyzer) -> bool {
+    op.as_expr().map_or(false, |e| demote_candidate(body, e, target_idx, params, an))
+}
+
 fn demote_candidate(
     body: &Body,
     value: ExprId,
@@ -375,7 +383,7 @@ fn demote_candidate(
     // The argument side: a fresh rvalue (`None` root) is uniquely owned;
     // an immutable-ref parameter cannot be mutated; otherwise every use of
     // the root local must itself be element-clean.
-    match arg_source_root(body, arg0.expr()) {
+    match arg_source_root(body, arg0.as_expr().expect("skeleton operand")) {
         None => true,
         Some(root) => {
             let clean = is_immutable_ref_param(params, an.type_table, root)
@@ -434,10 +442,10 @@ fn retarget_block(
 /// The binding value of a `let` / `Assign` statement.
 fn stmt_binding_value(body: &Body, s: StmtId) -> Option<ExprId> {
     match &body.stmts[s].kind {
-        StmtKind::Let { value, .. } => Some(value.expr()),
+        StmtKind::Let { value, .. } => Some(value.as_expr().expect("skeleton operand")),
         StmtKind::Expr(e) => {
             if let ExprKind::Assign { value, .. } = &body.exprs[*e].kind {
-                Some(value.expr())
+                Some(value.as_expr().expect("skeleton operand"))
             } else {
                 None
             }
@@ -447,6 +455,10 @@ fn stmt_binding_value(body: &Body, s: StmtId) -> Option<ExprId> {
 }
 
 /// Rewrite a value-copy-wrapper call to its synthesized shallow sibling.
+fn retarget_wrapper_call_operand(body: &mut Body, op: Operand, wrappers: &IndexSet<FuncKey>, shallow_name: &IndexMap<FuncKey, String>)  {
+    if let Some(e) = op.as_expr() { retarget_wrapper_call(body, e, wrappers, shallow_name); }
+}
+
 fn retarget_wrapper_call(
     body: &mut Body,
     value: ExprId,
@@ -678,12 +690,12 @@ impl ElementClean<'_, '_> {
             ExprKind::IndirectCall { callee, args } => {
                 let callee = *callee;
                 let args = args.clone();
-                self.visit_expr(body, callee.expr());
+                self.visit_expr(body, callee.as_expr().expect("skeleton operand"));
                 if !self.clean {
                     return;
                 }
                 for a in args {
-                    self.visit_call_arg(body, a.expr());
+                    self.visit_call_arg(body, a.as_expr().expect("skeleton operand"));
                     if !self.clean {
                         return;
                     }
@@ -696,7 +708,7 @@ impl ElementClean<'_, '_> {
                 // `&mut x`, `&mut x[i]`, `&mut x.field` — a mutable
                 // reference into the handle escapes our control.
                 let inner = *inner;
-                if expr_mentions_local(body, inner.expr(), idx) {
+                if expr_mentions_local(body, inner.as_expr().expect("skeleton operand"), idx) {
                     self.clean = false;
                 }
             }
@@ -704,18 +716,18 @@ impl ElementClean<'_, '_> {
                 // Index read: `x[i]` produces an element copy.
                 let base = *base;
                 let index = *index;
-                if !is_local(body, base.expr(), idx) {
-                    self.visit_expr(body, base.expr());
+                if !is_local(body, base.as_expr().expect("skeleton operand"), idx) {
+                    self.visit_expr(body, base.as_expr().expect("skeleton operand"));
                     if !self.clean {
                         return;
                     }
                 }
-                self.visit_expr(body, index.expr());
+                self.visit_expr(body, index.as_expr().expect("skeleton operand"));
             }
             ExprKind::FieldAccess { expr: base, .. } => {
                 let base = *base;
-                if !is_local(body, base.expr(), idx) {
-                    self.visit_expr(body, base.expr());
+                if !is_local(body, base.as_expr().expect("skeleton operand"), idx) {
+                    self.visit_expr(body, base.as_expr().expect("skeleton operand"));
                 }
             }
             ExprKind::Assign { target, value } => {
@@ -750,7 +762,7 @@ impl ElementClean<'_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if expr_mentions_local(body, inner.expr(), idx) {
+                if expr_mentions_local(body, inner.as_expr().expect("skeleton operand"), idx) {
                     self.clean = false;
                 }
             }
@@ -759,8 +771,8 @@ impl ElementClean<'_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if !is_local(body, inner.expr(), idx) {
-                    self.visit_expr(body, inner.expr());
+                if !is_local(body, inner.as_expr().expect("skeleton operand"), idx) {
+                    self.visit_expr(body, inner.as_expr().expect("skeleton operand"));
                 }
             }
             _ => self.visit_expr(body, arg),
@@ -870,9 +882,7 @@ impl ElementImmutable<'_, '_, '_> {
                     let value = *value;
                     if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
                         let index = *index;
-                        if is_self_derived(
-                            body,
-                            value.expr(),
+                        if is_self_derived_operand(body, value,
                             &self.tainted,
                             self.analyzer.type_table,
                         ) {
@@ -900,7 +910,7 @@ impl ElementImmutable<'_, '_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if is_self_derived(body, inner.expr(), &self.tainted, tt) {
+                if is_self_derived_operand(body, inner, &self.tainted, tt) {
                     crate::compiler_trace!("demote", "verify reject: &mut of self-derived");
                     self.clean = false;
                     return;
@@ -916,14 +926,14 @@ impl ElementImmutable<'_, '_, '_> {
                 let bad = match &body.exprs[target].kind {
                     ExprKind::FieldAccess { expr: base, .. } => {
                         let base = *base;
-                        is_self_derived(body, base.expr(), &self.tainted, tt)
+                        is_self_derived_operand(body, base, &self.tainted, tt)
                             && !matches!(
-                                &body.exprs[base.expr()].kind,
+                                &body.exprs[base.as_expr().expect("skeleton operand")].kind,
                                 ExprKind::Local { index: 0, .. }
                             )
                     }
                     ExprKind::Index { expr: base, .. } => {
-                        is_self_derived(body, base.expr(), &self.tainted, tt)
+                        is_self_derived_operand(body, *base, &self.tainted, tt)
                     }
                     _ => false,
                 };
@@ -936,7 +946,7 @@ impl ElementImmutable<'_, '_, '_> {
                 if !self.clean {
                     return;
                 }
-                self.visit_expr(body, value.expr());
+                self.visit_expr(body, value.as_expr().expect("skeleton operand"));
             }
             ExprKind::MethodCall {
                 receiver,
@@ -946,12 +956,12 @@ impl ElementImmutable<'_, '_, '_> {
             } => {
                 let receiver = *receiver;
                 let key = (func.module_source.clone(), func.name.clone());
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+                let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
                 // A call whose receiver is self-derived may mutate an element
                 // unless the callee is known `&self` (cannot mutate) or a
                 // verified element-immutable `&mut self` method. An
                 // unresolvable callee is conservatively unsafe.
-                if is_self_derived(body, receiver.expr(), &self.tainted, tt) {
+                if is_self_derived_operand(body, receiver, &self.tainted, tt) {
                     let ok = match self.analyzer.callee_mutates_self(&key) {
                         Some(false) => true,
                         Some(true) => self.analyzer.verify(&key, self.visiting),
@@ -967,7 +977,7 @@ impl ElementImmutable<'_, '_, '_> {
                         return;
                     }
                 }
-                self.visit_expr(body, receiver.expr());
+                self.visit_expr(body, receiver.as_expr().expect("skeleton operand"));
                 if !self.clean {
                     return;
                 }
@@ -1006,7 +1016,7 @@ impl ElementImmutable<'_, '_, '_> {
                             } => *expr,
                             _ => a.into(),
                         };
-                        self.visit_expr(body, inner.expr());
+                        self.visit_expr(body, inner.as_expr().expect("skeleton operand"));
                     } else {
                         self.visit_call_arg(body, a);
                     }
@@ -1025,7 +1035,7 @@ impl ElementImmutable<'_, '_, '_> {
                 // its (unverified) body with access to `self`'s elements.
                 let callee = *callee;
                 let args = args.clone();
-                if is_self_derived(body, callee.expr(), &self.tainted, tt) {
+                if is_self_derived_operand(body, callee, &self.tainted, tt) {
                     crate::compiler_trace!(
                         "demote",
                         "verify reject: indirect call of self-capturing closure"
@@ -1033,12 +1043,12 @@ impl ElementImmutable<'_, '_, '_> {
                     self.clean = false;
                     return;
                 }
-                self.visit_expr(body, callee.expr());
+                self.visit_expr(body, callee.as_expr().expect("skeleton operand"));
                 if !self.clean {
                     return;
                 }
                 for a in args {
-                    self.visit_call_arg(body, a.expr());
+                    self.visit_call_arg(body, a.as_expr().expect("skeleton operand"));
                     if !self.clean {
                         crate::compiler_trace!(
                             "demote",
@@ -1091,6 +1101,10 @@ fn is_self_derived_op(
 ) -> bool {
     op.as_expr()
         .is_some_and(|e| is_self_derived(body, e, tainted, tt))
+}
+
+fn is_self_derived_operand(body: &Body, op: Operand, tainted: &IndexSet<u32>, tt: &Rc<RefCell<TypeTable>>) -> bool {
+    op.as_expr().map_or(false, |e| is_self_derived(body, e, tainted, tt))
 }
 
 fn is_self_derived(

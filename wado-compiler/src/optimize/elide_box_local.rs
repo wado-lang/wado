@@ -131,7 +131,7 @@ fn candidate_inner(body: &Body, stmt: StmtId) -> Operand {
     let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
         unreachable!("guarded by describe_candidate");
     };
-    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value.expr()].kind else {
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value.as_expr().expect("skeleton operand")].kind else {
         unreachable!("guarded by describe_candidate");
     };
     fields[0].value
@@ -152,7 +152,7 @@ fn find_subst_target(
             ..
         } = &body.exprs[id].kind
         && fname == field_name
-        && matches!(&body.exprs[fa_inner.expr()].kind, ExprKind::Local { index, .. } if *index == candidate)
+        && matches!(&body.exprs[fa_inner.as_expr().expect("skeleton operand")].kind, ExprKind::Local { index, .. } if *index == candidate)
     {
         return Some(id);
     }
@@ -208,7 +208,7 @@ fn stats_stmt(body: &Body, stmt: StmtId, stats: &mut IndexMap<u32, LocalStats>) 
         StmtKind::LetDestructure { pattern, value, .. } => {
             let (pattern, value) = (*pattern, *value);
             record_pattern_defs(body, pattern, stats);
-            stats_node(body, NodeRef::Expr(value.expr()), stats);
+            stats_node(body, NodeRef::Expr(value.as_expr().expect("skeleton operand")), stats);
         }
         _ => {
             let mut kids = Vec::new();
@@ -220,6 +220,10 @@ fn stats_stmt(body: &Body, stmt: StmtId, stats: &mut IndexMap<u32, LocalStats>) 
     }
 }
 
+fn stats_expr_operand(body: &Body, op: Operand, stats: &mut IndexMap<u32, LocalStats>)  {
+    if let Some(e) = op.as_expr() { stats_expr(body, e, stats); }
+}
+
 fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
     match &body.exprs[id].kind {
         ExprKind::FieldAccess {
@@ -229,14 +233,14 @@ fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
         } => {
             let inner = *inner;
             let field_name = field_name.clone();
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
                 let index = *index;
                 let s = stats.entry(index).or_default();
                 s.total_reads += 1;
                 s.fieldaccess_reads += 1;
                 s.field_names.insert(field_name);
             } else {
-                stats_node(body, NodeRef::Expr(inner.expr()), stats);
+                stats_node(body, NodeRef::Expr(inner.as_expr().expect("skeleton operand")), stats);
             }
         }
         ExprKind::Local { index, .. } => {
@@ -445,7 +449,7 @@ fn walk_expr_for_leftmost(
         ..
     } = &body.exprs[expr].kind
         && fname == field_name
-        && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
         && *index == candidate
     {
         return LeftmostWalk::Found;
@@ -545,7 +549,7 @@ fn walk_expr_for_leftmost(
                 // observable.
                 NirUnaryOp::Deref => observable_propagate(walk_expr_for_leftmost(
                     body,
-                    inner.expr(),
+                    inner.as_expr().expect("skeleton operand"),
                     candidate,
                     field_name,
                 )),
@@ -561,7 +565,7 @@ fn walk_expr_for_leftmost(
         // `as` lowers to `ref.cast` / numeric narrowing — both may trap.
         ExprKind::Cast { expr: inner, .. } => observable_propagate(walk_expr_for_leftmost(
             body,
-            inner.expr(),
+            inner.as_expr().expect("skeleton operand"),
             candidate,
             field_name,
         )),
@@ -572,7 +576,7 @@ fn walk_expr_for_leftmost(
         // a Pure receiver does NOT make this subtree Pure.
         ExprKind::FieldAccess { expr: inner, .. } => observable_propagate(walk_expr_for_leftmost(
             body,
-            inner.expr(),
+            inner.as_expr().expect("skeleton operand"),
             candidate,
             field_name,
         )),

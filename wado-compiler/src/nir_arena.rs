@@ -56,15 +56,6 @@ impl Operand {
             Operand::Expr(_) => None,
         }
     }
-
-    /// The skeleton subtree, asserting this operand is not a promoted value.
-    /// Used on migration paths not yet taught about `Operand::Value`.
-    #[inline]
-    #[track_caller]
-    pub fn expr(self) -> ExprId {
-        self.as_expr()
-            .expect("operand is a promoted pure value, not a skeleton expr")
-    }
 }
 
 impl From<ExprId> for Operand {

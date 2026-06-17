@@ -1711,7 +1711,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
-                self.translate_let_pattern(*pattern, value.expr())
+                self.translate_let_pattern(*pattern, value.as_expr().expect("skeleton operand"))
             }
         }
     }
@@ -2313,12 +2313,12 @@ impl FunctionTranslator<'_, '_> {
                 expr: inner,
                 case_index,
                 case_name: _,
-            } => self.translate_variant_test(inner.expr(), *case_index),
+            } => self.translate_variant_test(inner.as_expr().expect("skeleton operand"), *case_index),
             ExprKind::VariantPayload {
                 expr: inner,
                 case_index,
                 payload_type: _,
-            } => self.translate_variant_payload(inner.expr(), *case_index),
+            } => self.translate_variant_payload(inner.as_expr().expect("skeleton operand"), *case_index),
             ExprKind::VariantConstruct {
                 variant_type,
                 case_index,
@@ -2387,7 +2387,7 @@ impl FunctionTranslator<'_, '_> {
             }
 
             ExprKind::IndirectCall { callee, args } => {
-                self.translate_indirect_call(callee.expr(), args, expr.type_id)
+                self.translate_indirect_call(callee.as_expr().expect("skeleton operand"), args, expr.type_id)
             }
             ExprKind::ClosureToCanonical {
                 functor,
@@ -2395,7 +2395,7 @@ impl FunctionTranslator<'_, '_> {
                 target_fn_type,
                 closure_module,
             } => self.translate_closure_to_canonical(
-                functor.expr(),
+                functor.as_expr().expect("skeleton operand"),
                 *functor_id,
                 *target_fn_type,
                 closure_module,

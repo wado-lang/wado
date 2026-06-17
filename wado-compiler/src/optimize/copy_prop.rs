@@ -19,7 +19,7 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind, Operand};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -98,7 +98,7 @@ fn unwrap_copy_value(body: &Body, expr: ExprId) -> ExprId {
         && func.name == "copy_value"
         && args.len() == 1
     {
-        return args[0].expr.expr();
+        return args[0].expr.as_expr().expect("skeleton operand");
     }
     expr
 }
@@ -141,8 +141,8 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
         {
             let inner = *inner;
             let is_ref = matches!(op, NirUnaryOp::Ref);
-            if let ExprKind::Local { index, name } = &body.exprs[inner.expr()].kind {
-                let inner_type_id = body.exprs[inner.expr()].type_id;
+            if let ExprKind::Local { index, name } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
+                let inner_type_id = body.exprs[inner.as_expr().expect("skeleton operand")].type_id;
                 if is_ref {
                     CopySource::Ref {
                         index: *index,
@@ -191,18 +191,18 @@ fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if place_root_local(body, inner.expr()) == Some(local) {
+                if place_root_local(body, inner.as_expr().expect("skeleton operand")) == Some(local) {
                     return true;
                 }
             }
             ExprKind::MethodCall { receiver, .. } => {
-                if place_root_local(body, receiver.expr()) == Some(local) {
+                if place_root_local(body, receiver.as_expr().expect("skeleton operand")) == Some(local) {
                     return true;
                 }
             }
             ExprKind::Call { args, .. } => {
                 for arg in args {
-                    if arg.is_mut && place_root_local(body, arg.expr.expr()) == Some(local) {
+                    if arg.is_mut && place_root_local(body, arg.expr.as_expr().expect("skeleton operand")) == Some(local) {
                         return true;
                     }
                 }
@@ -282,6 +282,10 @@ fn analyze_stmt(
     }
 }
 
+fn analyze_expr_operand(body: &Body, op: Operand, result: &mut AnalysisResult, type_table: &TypeTable, fpt: &FirstParamTypes)  {
+    if let Some(e) = op.as_expr() { analyze_expr(body, e, result, type_table, fpt); }
+}
+
 fn analyze_expr(
     body: &Body,
     id: ExprId,
@@ -299,7 +303,7 @@ fn analyze_expr(
                 result.usage.entry(*index).or_default().is_assigned = true;
             }
             if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
             {
                 result.usage.entry(*index).or_default().has_field_mutation = true;
             }
@@ -311,7 +315,7 @@ fn analyze_expr(
         ExprKind::Unary { op, expr: inner } => {
             let (op, inner) = (*op, *inner);
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
             {
                 let index = *index;
                 result.usage.entry(index).or_default().address_taken = true;
@@ -319,7 +323,7 @@ fn analyze_expr(
                     result.usage.entry(index).or_default().has_field_mutation = true;
                 }
             }
-            analyze_expr(body, inner.expr(), result, type_table, fpt);
+            analyze_expr_operand(body, inner, result, type_table, fpt);
         }
         ExprKind::Call { args, .. } => {
             let arg_data: Vec<(ExprId, bool)> = args
@@ -349,15 +353,15 @@ fn analyze_expr(
             // receiver-type guard below still protects value receivers.
             if super::alias::method_mutates_receiver(
                 body,
-                receiver.expr(),
+                receiver.as_expr().expect("skeleton operand"),
                 func,
                 fpt,
                 type_table,
                 false,
             ) {
-                mark_potentially_mutated_local(body, receiver.expr(), result);
+                mark_potentially_mutated_local_operand(body, receiver, result);
             }
-            analyze_expr(body, receiver.expr(), result, type_table, fpt);
+            analyze_expr_operand(body, receiver, result, type_table, fpt);
             for (arg, is_mut) in arg_data {
                 if is_mut && may_mutate_through_arg(body, arg, type_table) {
                     mark_potentially_mutated_local(body, arg, result);
@@ -379,10 +383,18 @@ fn analyze_expr(
     }
 }
 
+fn mark_potentially_mutated_local_operand(body: &Body, op: Operand, result: &mut AnalysisResult)  {
+    if let Some(e) = op.as_expr() { mark_potentially_mutated_local(body, e, result); }
+}
+
 fn mark_potentially_mutated_local(body: &Body, expr: ExprId, result: &mut AnalysisResult) {
     if let Some(root) = projection_root_local(body, expr) {
         result.usage.entry(root).or_default().has_field_mutation = true;
     }
+}
+
+fn may_mutate_through_arg_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
+    op.as_expr().map_or(false, |e| may_mutate_through_arg(body, e, type_table))
 }
 
 fn may_mutate_through_arg(body: &Body, expr: ExprId, type_table: &TypeTable) -> bool {

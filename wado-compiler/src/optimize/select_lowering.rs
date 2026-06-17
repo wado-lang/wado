@@ -16,7 +16,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, MonomorphInfo, NirBinaryOp, NirFunction, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, StmtKind};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, StmtKind, Operand};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
@@ -124,6 +124,10 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
 /// duplicable leaf (`Local`, literal) or a single layer of pure leaf
 /// operators over leaf-pure operands, none of which traps. See the original
 /// pass doc for the full rationale.
+fn is_select_eligible_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
+    op.as_expr().map_or(false, |e| is_select_eligible(body, e, type_table))
+}
+
 fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
     match &body.exprs[id].kind {
         ExprKind::IntLiteral { .. }
@@ -133,7 +137,7 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
         | ExprKind::Local { .. } => true,
         ExprKind::Unary { op, expr: inner } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
-                && is_select_eligible(body, inner.expr(), type_table)
+                && is_select_eligible_operand(body, *inner, type_table)
         }
         ExprKind::Binary { op, left, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
@@ -144,8 +148,8 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
             expr: inner,
             target_type,
         } => {
-            !is_trapping_cast(body.exprs[inner.expr()].type_id, *target_type, type_table)
-                && is_select_eligible(body, inner.expr(), type_table)
+            !is_trapping_cast(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, *target_type, type_table)
+                && is_select_eligible_operand(body, *inner, type_table)
         }
         _ => false,
     }

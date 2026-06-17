@@ -678,7 +678,7 @@ impl<'a> NirUnparser<'a> {
                     format!("{}::{func_name}", module_path.join("::"))
                 };
                 let type_args = type_args.clone();
-                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+                let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
                 self.output.push_str(&Self::quote_if_needed(&full_name));
                 self.unparse_type_args(&type_args);
                 self.delimited("(", ")", arg_ids, |s, aid| s.unparse_expr(body, aid));
@@ -700,11 +700,11 @@ impl<'a> NirUnparser<'a> {
                 let receiver = *receiver;
                 let func_name = func.name.clone();
                 let type_args = type_args.clone();
-                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+                let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
                 // The elaborator wraps `self` receivers in `&`/`&mut`
                 // automatically; strip that wrapper so the rendering reflects the
                 // source value.
-                let actual_receiver = match &body.exprs[receiver.expr()].kind {
+                let actual_receiver = match &body.exprs[receiver.as_expr().expect("skeleton operand")].kind {
                     ExprKind::Unary {
                         op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                         expr: inner,
@@ -800,7 +800,7 @@ impl<'a> NirUnparser<'a> {
                 let struct_name = struct_name.clone();
                 let field_data: Vec<(String, ExprId)> = fields
                     .iter()
-                    .map(|f| (f.name.clone(), f.value.expr()))
+                    .map(|f| (f.name.clone(), f.value.as_expr().expect("skeleton operand")))
                     .collect();
                 // Functor structs are rendered as `&Name { ... }` to mirror the
                 // reference type that the elaborator attached.

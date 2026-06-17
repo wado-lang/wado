@@ -635,7 +635,7 @@ fn translate_global_init(
         ExprKind::Cast { expr: inner, .. } => {
             // For casts, evaluate the inner expression with the cast's target
             // type (propagate the current `type_id` downward).
-            translate_global_init(body, inner.expr(), type_id, type_table)
+            translate_global_init(body, inner.as_expr().expect("skeleton operand"), type_id, type_table)
         }
         ExprKind::Unary {
             op: crate::nir::NirUnaryOp::Neg,
@@ -646,8 +646,8 @@ fn translate_global_init(
             let inner = *inner;
             let inner_wir = translate_global_init(
                 body,
-                inner.expr(),
-                body.exprs[inner.expr()].type_id,
+                inner.as_expr().expect("skeleton operand"),
+                body.exprs[inner.as_expr().expect("skeleton operand")].type_id,
                 type_table,
             );
             match inner_wir {

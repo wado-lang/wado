@@ -56,7 +56,7 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind, Operand};
 use crate::nir_package::NirPackage;
 
 use super::arena_query;
@@ -280,6 +280,10 @@ fn validate_in_body(
     }
 }
 
+fn validate_call_operand(body: &Body, op: Operand, candidates: &IndexMap<FnKey, Vec<bool>>, rejected: &mut IndexSet<FnKey>)  {
+    if let Some(e) = op.as_expr() { validate_call(body, e, candidates, rejected); }
+}
+
 fn validate_call(
     body: &Body,
     id: ExprId,
@@ -301,7 +305,7 @@ fn validate_call(
                     continue;
                 }
                 match args.get(i) {
-                    Some(arg) if arena_query::is_pure_expr(body, arg.expr.expr()) => {}
+                    Some(arg) if arena_query::is_pure_expr(body, arg.expr.as_expr().expect("skeleton operand")) => {}
                     _ => {
                         rejected.insert(key.clone());
                         break;
@@ -325,7 +329,7 @@ fn validate_call(
             // If the rewriter drops the receiver, the MethodCall collapses to
             // a `Call` and the receiver is discarded — it must be pure.
             let drops_receiver = dead.first() == Some(&true);
-            if drops_receiver && !arena_query::is_pure_expr(body, receiver.expr()) {
+            if drops_receiver && !arena_query::is_pure_expr(body, receiver.as_expr().expect("skeleton operand")) {
                 rejected.insert(key.clone());
             } else {
                 // params[i+1] maps to args[i] regardless of whether position 0
@@ -409,6 +413,10 @@ fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>
         changed |= rewrite_call(body, id, confirmed);
     }
     changed
+}
+
+fn rewrite_call_operand(body: &mut Body, op: Operand, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
+    op.as_expr().map_or(false, |e| rewrite_call(body, e, confirmed))
 }
 
 fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {

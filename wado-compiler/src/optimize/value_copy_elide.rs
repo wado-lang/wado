@@ -26,7 +26,7 @@
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind, Operand};
 use crate::nir_engine::{Engine, Rule};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -84,7 +84,7 @@ impl Rule for ValueCopyElideRule<'_> {
             let Some(arg) = args.first().map(|a| a.expr) else {
                 continue;
             };
-            let arg_kind = engine.body.exprs[arg.expr()].kind.clone();
+            let arg_kind = engine.body.exprs[arg.as_expr().expect("skeleton operand")].kind.clone();
             engine.replace_expr_kind(value, arg_kind);
             changed = true;
         }
@@ -139,6 +139,10 @@ fn analyze_usage(body: &Body, type_table: &TypeTable) -> IndexMap<u32, LocalUsag
 /// Apply the usage-marking rules for a single expression node — the analog of
 /// the old `UsageAnalyzer::visit_expr` arms, minus the recursion (the caller's
 /// walk visits every node).
+fn classify_expr_operand(body: &Body, op: Operand, type_table: &TypeTable, usage: &mut IndexMap<u32, LocalUsage>)  {
+    if let Some(e) = op.as_expr() { classify_expr(body, e, type_table, usage); }
+}
+
 fn classify_expr(
     body: &Body,
     id: ExprId,
@@ -151,7 +155,7 @@ fn classify_expr(
                 usage.entry(*index).or_default().assign_count += 1;
             }
             ExprKind::FieldAccess { expr: inner, .. } => {
-                mark_root_field_mutated(body, inner.expr(), usage);
+                mark_root_field_mutated_operand(body, *inner, usage);
             }
             _ => {}
         },
@@ -189,8 +193,8 @@ fn classify_expr(
         }
         ExprKind::IndirectCall { args, .. } => {
             for &arg in args {
-                if is_mut_ref_type(body.exprs[arg.expr()].type_id, type_table) {
-                    mark_root_field_mutated(body, arg.expr(), usage);
+                if is_mut_ref_type(body.exprs[arg.as_expr().expect("skeleton operand")].type_id, type_table) {
+                    mark_root_field_mutated_operand(body, arg, usage);
                 }
             }
         }
@@ -202,6 +206,10 @@ fn classify_expr(
 /// potentially field-mutated, following pure projections (`FieldAccess`,
 /// `VariantPayload`, `Cast`, `Unary`). Mirrors `copy_prop`'s
 /// `mark_potentially_mutated_local`.
+fn mark_root_field_mutated_operand(body: &Body, op: Operand, usage: &mut IndexMap<u32, LocalUsage>)  {
+    if let Some(e) = op.as_expr() { mark_root_field_mutated(body, e, usage); }
+}
+
 fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, LocalUsage>) {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => {
@@ -211,7 +219,7 @@ fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, 
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. } => {
-            mark_root_field_mutated(body, inner.expr(), usage);
+            mark_root_field_mutated_operand(body, *inner, usage);
         }
         _ => {}
     }
@@ -220,6 +228,10 @@ fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, 
 // ──────────────────────────────────────────────────────────────────────────────
 // Wrapper stripping
 // ──────────────────────────────────────────────────────────────────────────────
+
+fn is_value_copy_call_operand(body: &Body, op: Operand, value_copy_set: &IndexMap<(ModuleSource, String), TypeId>) -> bool {
+    op.as_expr().map_or(false, |e| is_value_copy_call(body, e, value_copy_set))
+}
 
 fn is_value_copy_call(
     body: &Body,
@@ -246,7 +258,7 @@ fn arg_source_root(body: &Body, expr: ExprId) -> Option<u32> {
         ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. } => arg_source_root(body, inner.expr()),
+        | ExprKind::Unary { expr: inner, .. } => arg_source_root(body, inner.as_expr().expect("skeleton operand")),
         _ => None,
     }
 }
@@ -278,7 +290,7 @@ fn elision_safe(
     let Some(arg) = args.first() else {
         return false;
     };
-    match arg_source_root(body, arg.expr.expr()) {
+    match arg_source_root(body, arg.expr.as_expr().expect("skeleton operand")) {
         Some(root) => match usage.get(&root) {
             Some(u) => !u.is_assigned() && !u.has_field_mutation,
             None => true,

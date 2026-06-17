@@ -16,12 +16,12 @@ pub(super) fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
         ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
-            place_root_local(body, inner.expr())
+            place_root_local(body, inner.as_expr().expect("skeleton operand"))
         }
         ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr: inner,
-        } => place_root_local(body, inner.expr()),
+        } => place_root_local(body, inner.as_expr().expect("skeleton operand")),
         _ => None,
     }
 }
@@ -37,7 +37,7 @@ pub(super) fn projection_root_local(body: &Body, expr: ExprId) -> Option<u32> {
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. } => projection_root_local(body, inner.expr()),
+        | ExprKind::Index { expr: inner, .. } => projection_root_local(body, inner.as_expr().expect("skeleton operand")),
         _ => None,
     }
 }
@@ -68,7 +68,7 @@ pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr: inner,
-        } => strip_refs(body, inner.expr()),
+        } => strip_refs(body, inner.as_expr().expect("skeleton operand")),
         _ => id,
     }
 }
@@ -222,7 +222,7 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
             then_branch,
             else_branch,
         } => {
-            is_pure_expr(body, condition.expr())
+            is_pure_expr(body, condition.as_expr().expect("skeleton operand"))
                 && is_pure_block(body, *then_branch)
                 && else_branch.is_none_or(|b| is_pure_block(body, b))
         }

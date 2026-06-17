@@ -155,7 +155,7 @@ fn has_only_pure_returns_with_explicit_tail(body: &Body) -> bool {
             match &body.stmts[s].kind {
                 StmtKind::Return { value: None } => return false,
                 StmtKind::Return { value: Some(v) } => {
-                    if !arena_query::is_pure_expr(body, v.expr()) {
+                    if !arena_query::is_pure_expr(body, v.as_expr().expect("skeleton operand")) {
                         return false;
                     }
                 }

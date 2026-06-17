@@ -28,7 +28,7 @@
 //! flatten after the fixpoint converges).
 
 use crate::nir::NirFunction;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind, Operand};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
@@ -102,6 +102,10 @@ fn block_has_break_to(body: &Body, block: BlockId, label: &str) -> bool {
 
 fn stmt_has_break_to(body: &Body, stmt: StmtId, label: &str) -> bool {
     has_break_to(body, NodeRef::Stmt(stmt), label)
+}
+
+fn expr_has_break_to_operand(body: &Body, op: Operand, label: &str) -> bool {
+    op.as_expr().map_or(false, |e| expr_has_break_to(body, e, label))
 }
 
 fn expr_has_break_to(body: &Body, expr: ExprId, label: &str) -> bool {
@@ -196,9 +200,9 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
             // value to promote, so leave it untouched (return `false` so the
             // engine does not spin on it).
             if let Some(inner) = value
-                && !expr_has_break_to(engine.body, inner.expr(), &label)
+                && !expr_has_break_to(engine.body, inner.as_expr().expect("skeleton operand"), &label)
             {
-                engine.become_expr(id, inner.expr());
+                engine.become_expr(id, inner.as_expr().expect("skeleton operand"));
                 return true;
             }
         }

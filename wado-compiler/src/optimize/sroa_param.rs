@@ -73,6 +73,10 @@ pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut Functio
 }
 
 /// Move `src`'s node content into `id`; `src` is left as a dead `Unit`.
+fn become_expr_operand(body: &mut Body, op: Operand, src: ExprId)  {
+    if let Some(e) = op.as_expr() { become_expr(body, e, src); }
+}
+
 fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
     if id == src {
         return;
@@ -282,6 +286,10 @@ fn check_node(
     }
 }
 
+fn check_expr_operand(body: &Body, op: Operand, idx: u32, candidates: &IndexMap<(FnKey, usize), SroaInfo>) -> bool {
+    op.as_expr().map_or(false, |e| check_expr(body, e, idx, candidates))
+}
+
 fn check_expr(
     body: &Body,
     id: ExprId,
@@ -415,7 +423,7 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)
             ..
         } = &body.exprs[id].kind
         {
-            matches!(&body.exprs[inner.expr()].kind, ExprKind::Local { index, .. }
+            matches!(&body.exprs[inner.as_expr().expect("skeleton operand")].kind, ExprKind::Local { index, .. }
                 if affected.iter().any(|(li, fname)| li == index && fname == field_name))
         } else {
             false
@@ -427,7 +435,7 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)
             let inner = *inner;
             // The node keeps its (field-scalar) type_id / span; its kind becomes
             // the inner Local.
-            body.exprs[id].kind = body.exprs[inner.expr()].kind.clone();
+            body.exprs[id].kind = body.exprs[inner.as_expr().expect("skeleton operand")].kind.clone();
             return;
         }
     }
@@ -514,6 +522,10 @@ fn rewrite_calls_node(
     changed
 }
 
+fn rewrite_call_expr_operand(body: &mut Body, op: Operand, sroa_positions: &IndexMap<FnKey, IndexMap<usize, SroaInfo>>, scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>, type_table: &TypeTable) -> bool {
+    op.as_expr().map_or(false, |e| rewrite_call_expr(body, e, sroa_positions, scalar_param_struct, type_table))
+}
+
 fn rewrite_call_expr(
     body: &mut Body,
     id: ExprId,
@@ -553,7 +565,7 @@ fn rewrite_call_expr(
                     unreachable!();
                 };
                 if let Some(info) = positions.get(&0) {
-                    rewrite_arg(body, receiver.expr(), info, scalar_param_struct, type_table);
+                    rewrite_arg_operand(body, receiver, info, scalar_param_struct, type_table);
                 }
                 for (pi, info) in &positions {
                     if *pi == 0 {
@@ -563,7 +575,7 @@ fn rewrite_call_expr(
                     if arg_idx < args.len() {
                         rewrite_arg(
                             body,
-                            args[arg_idx].expr.expr(),
+                            args[arg_idx].expr.as_expr().expect("skeleton operand"),
                             info,
                             scalar_param_struct,
                             type_table,
@@ -601,6 +613,10 @@ fn rewrite_call_expr(
     }
 }
 
+fn rewrite_arg_operand(body: &mut Body, op: Operand, info: &SroaInfo, scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>, type_table: &TypeTable)  {
+    if let Some(e) = op.as_expr() { rewrite_arg(body, e, info, scalar_param_struct, type_table); }
+}
+
 fn rewrite_arg(
     body: &mut Body,
     arg: ExprId,
@@ -615,7 +631,7 @@ fn rewrite_arg(
     } = &body.exprs[arg].kind
     {
         let inner = *inner;
-        become_expr(body, arg, inner.expr());
+        become_expr(body, arg, inner.as_expr().expect("skeleton operand"));
     }
 
     // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap.

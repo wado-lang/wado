@@ -661,7 +661,7 @@ impl<'a> Interpreter<'a> {
                 expr: inner,
                 field_name,
                 ..
-            } => match &body.exprs[inner.expr()].kind {
+            } => match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
                 ExprKind::GlobalVarGet {
                     module_source,
                     name,
@@ -706,7 +706,7 @@ impl<'a> Interpreter<'a> {
             ExprKind::Match {
                 expr: scrutinee,
                 arms,
-            } => self.match_lattice_a(body, scrutinee.expr(), arms),
+            } => self.match_lattice_a(body, scrutinee.as_expr().expect("skeleton operand"), arms),
             _ => Lattice::Unevaluated,
         }
     }
@@ -1115,10 +1115,10 @@ impl<'a> Interpreter<'a> {
             }
             StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
                 let v = *value;
-                self.reduce_in_place_a(body, v.expr())
+                self.reduce_in_place_a(body, v.as_expr().expect("skeleton operand"))
             }
             StmtKind::Return { value } | StmtKind::Break { value, .. } => match *value {
-                Some(v) => self.reduce_in_place_a(body, v.expr()),
+                Some(v) => self.reduce_in_place_a(body, v.as_expr().expect("skeleton operand")),
                 None => false,
             },
             StmtKind::If {
@@ -1127,7 +1127,7 @@ impl<'a> Interpreter<'a> {
                 else_block,
             } => {
                 let (c, t, e2) = (*condition, *then_block, *else_block);
-                let mut ch = self.reduce_in_place_a(body, c.expr());
+                let mut ch = self.reduce_in_place_a(body, c.as_expr().expect("skeleton operand"));
                 ch |= self.reduce_in_place_block_a(body, t);
                 if let Some(eb) = e2 {
                     ch |= self.reduce_in_place_block_a(body, eb);
@@ -1205,7 +1205,7 @@ impl<'a> Interpreter<'a> {
             && t_b != e_b
         {
             if t_b {
-                let cond_kind = sink.body().exprs[condition.expr()].kind.clone();
+                let cond_kind = sink.body().exprs[condition.as_expr().expect("skeleton operand")].kind.clone();
                 sink.replace_kind(e, cond_kind);
             } else {
                 sink.replace_kind(
@@ -1223,7 +1223,7 @@ impl<'a> Interpreter<'a> {
         if t != ev {
             return false;
         }
-        if !is_speculatable_a(sink.body(), condition.expr()) {
+        if !is_speculatable_a(sink.body(), condition.as_expr().expect("skeleton operand")) {
             return false;
         }
         sink.replace_kind(e, value_to_arena_kind(t));
@@ -1314,7 +1314,7 @@ impl<'a> Interpreter<'a> {
         }
 
         // Rule 3: non-const speculatable scrutinee, all-arms-equal.
-        if !is_speculatable_a(sink.body(), scrutinee.expr()) {
+        if !is_speculatable_a(sink.body(), scrutinee.as_expr().expect("skeleton operand")) {
             return false;
         }
         if arms_data.iter().any(|(g, _, _, _)| g.is_some()) {
@@ -1697,14 +1697,14 @@ fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
         | ExprKind::Unit => true,
         ExprKind::Binary { left, op, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_speculatable_a(body, left.expr())
-                && is_speculatable_a(body, right.expr())
+                && is_speculatable_a(body, left.as_expr().expect("skeleton operand"))
+                && is_speculatable_a(body, right.as_expr().expect("skeleton operand"))
         }
         ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Deref) && is_speculatable_a(body, inner.expr())
+            !matches!(op, NirUnaryOp::Deref) && is_speculatable_a(body, inner.as_expr().expect("skeleton operand"))
         }
-        ExprKind::Cast { expr: inner, .. } => is_speculatable_a(body, inner.expr()),
-        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_a(body, inner.expr()),
+        ExprKind::Cast { expr: inner, .. } => is_speculatable_a(body, inner.as_expr().expect("skeleton operand")),
+        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_a(body, inner.as_expr().expect("skeleton operand")),
         _ => false,
     }
 }

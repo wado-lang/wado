@@ -43,6 +43,7 @@ fn candidate_call_idx_operand(
     op.as_expr().and_then(|e| candidate_call_idx(body, e, candidate_names))
 }
 
+
 fn candidate_call_idx(
     body: &Body,
     expr: ExprId,
@@ -59,6 +60,10 @@ fn candidate_call_idx(
 
 /// Walk the argument expressions of a (Method)Call so tracked-local escapes in
 /// the args invalidate the right candidate (the call's own ABI is accepted).
+fn walk_call_args_for_uses_operand(body: &Body, op: Operand, candidate_names: &IndexMap<(String, ModuleSource), usize>, candidates: &IndexMap<usize, CandidateInfo>, invalid: &mut IndexSet<usize>, tracked: &IndexMap<u32, usize>)  {
+    if let Some(e) = op.as_expr() { walk_call_args_for_uses(body, e, candidate_names, candidates, invalid, tracked); }
+}
+
 fn walk_call_args_for_uses(
     body: &Body,
     expr: ExprId,
@@ -309,11 +314,13 @@ fn expr_break_values_match_operand(body: &Body, op: Operand, expected: &Expected
     op.as_expr().is_some_and(|e| expr_break_values_match(body, e, expected))
 }
 
+
 fn nested_returns_in_expr_match(body: &Body, expr: ExprId, expected: &ExpectedShape) -> bool {
     let mut stmts = Vec::new();
     collect_stmts(body, NodeRef::Expr(expr), &mut stmts);
     stmts.iter().all(|&s| stmt_returns_match(body, s, expected))
 }
+
 
 fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape) -> bool {
     if body.exprs[expr].type_id == TypeTable::NEVER {
@@ -356,7 +363,7 @@ fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape) -> bo
                 })
         }
         ExprKind::Match { arms, .. } => {
-            let bodies: Vec<ExprId> = arms.iter().map(|a| a.body.expr()).collect();
+            let bodies: Vec<ExprId> = arms.iter().map(|a| a.body.as_expr().expect("skeleton operand")).collect();
             bodies
                 .iter()
                 .all(|&b| expr_returns_match(body, b, expected))
@@ -420,6 +427,7 @@ fn stmt_break_values_match(body: &Body, stmt: StmtId, expected: &ExpectedShape) 
         StmtKind::Return { value: None } => true,
     }
 }
+
 
 fn expr_break_values_match(body: &Body, expr: ExprId, expected: &ExpectedShape) -> bool {
     let mut stmts = Vec::new();
@@ -591,18 +599,7 @@ fn walk_expr_for_uses_operand(
         walk_expr_for_uses(body, e, candidate_names, candidates, invalid, tracked);
     }
 }
-fn walk_call_args_for_uses_operand(
-    body: &Body,
-    op: Operand,
-    candidate_names: &IndexMap<(String, ModuleSource), usize>,
-    candidates: &IndexMap<usize, CandidateInfo>,
-    invalid: &mut IndexSet<usize>,
-    tracked: &IndexMap<u32, usize>,
-) {
-    if let Some(e) = op.as_expr() {
-        walk_call_args_for_uses(body, e, candidate_names, candidates, invalid, tracked);
-    }
-}
+
 
 fn walk_expr_for_uses(
     body: &Body,
@@ -619,7 +616,7 @@ fn walk_expr_for_uses(
             ..
         } => {
             let source = *source;
-            if let ExprKind::Local { index, .. } = &body.exprs[source.expr()].kind
+            if let ExprKind::Local { index, .. } = &body.exprs[source.as_expr().expect("skeleton operand")].kind
                 && let Some(&candidate_idx) = tracked.get(index)
                 && let Some(info) = candidates.get(&candidate_idx)
                 && info.field_name_set.contains(field_name)

@@ -85,7 +85,7 @@ fn classify(engine: &Engine, stmt: StmtId, stores_aliased: &IndexSet<u32>) -> Ac
             } else if arena_query::is_pure_operand(engine.body, value) {
                 Action::Drop
             } else {
-                Action::Demote(value.expr())
+                Action::Demote(value.as_expr().expect("skeleton operand"))
             }
         }
         // `x = value;` (Assign at stmt position) where `x` is unread. This
@@ -106,7 +106,7 @@ fn classify(engine: &Engine, stmt: StmtId, stores_aliased: &IndexSet<u32>) -> Ac
                     return if arena_query::is_pure_operand(engine.body, value) {
                         Action::Drop
                     } else {
-                        Action::Demote(value.expr())
+                        Action::Demote(value.as_expr().expect("skeleton operand"))
                     };
                 }
             }

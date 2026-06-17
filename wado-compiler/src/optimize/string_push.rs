@@ -138,7 +138,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         (*receiver, args[0].expr)
     };
 
-    if !is_duplicable_receiver(&*engine.body, receiver.expr()) {
+    if !is_duplicable_receiver(&*engine.body, receiver.as_expr().expect("skeleton operand")) {
         return None;
     }
 
@@ -150,11 +150,11 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         let ExprKind::Unary {
             op: NirUnaryOp::Ref,
             expr: inner,
-        } = &engine.body.exprs[arg0.expr()].kind
+        } = &engine.body.exprs[arg0.as_expr().expect("skeleton operand")].kind
         else {
             return None;
         };
-        let ExprKind::StringLiteral(s) = &engine.body.exprs[inner.expr()].kind else {
+        let ExprKind::StringLiteral(s) = &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind else {
             return None;
         };
         s.clone()
@@ -167,7 +167,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     let mut stmts = Vec::with_capacity(s.len());
     for byte in s.bytes() {
         let ch = char::from(byte);
-        let recv_clone = engine.clone_expr(receiver.expr());
+        let recv_clone = engine.clone_expr(receiver.as_expr().expect("skeleton operand"));
         let char_arg = engine.alloc_expr(ExprKind::CharLiteral(ch), TypeTable::CHAR, span);
         let call = engine.alloc_expr(
             ExprKind::MethodCall {
@@ -201,11 +201,11 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
 fn is_duplicable_receiver(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_receiver(body, inner.expr()),
+        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_receiver(body, inner.as_expr().expect("skeleton operand")),
         ExprKind::Unary {
             op: NirUnaryOp::Deref | NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => is_duplicable_receiver(body, inner.expr()),
+        } => is_duplicable_receiver(body, inner.as_expr().expect("skeleton operand")),
         _ => false,
     }
 }

@@ -220,7 +220,7 @@ fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsag
                 ..
             } => {
                 let (inner, field_index) = (*inner, *field_index);
-                if let Some(idx) = extract_local_index(body, inner.expr())
+                if let Some(idx) = extract_local_index(body, inner.as_expr().expect("skeleton operand"))
                     && cx.struct_params.contains(&idx)
                 {
                     cx.field_sets.entry(idx).or_default().insert(field_index);
@@ -280,7 +280,7 @@ fn extract_local_index(body: &Body, e: ExprId) -> Option<u32> {
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
                 Some(*index)
             } else {
                 None
@@ -297,6 +297,7 @@ fn mark_if_param_passed_operand(body: &Body, op: Operand, cx: &mut ParamUsageCtx
     }
 }
 
+
 fn mark_if_param_passed(body: &Body, e: ExprId, cx: &mut ParamUsageCtx) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => {
@@ -311,9 +312,9 @@ fn mark_if_param_passed(body: &Body, e: ExprId, cx: &mut ParamUsageCtx) {
             expr: inner,
         } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
                 && cx.struct_params.contains(index)
-                && is_gc_heap_type(body.exprs[inner.expr()].type_id, cx.type_table)
+                && is_gc_heap_type(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, cx.type_table)
             {
                 cx.conservative_params.insert(*index);
             }
@@ -810,6 +811,10 @@ fn collect_function_aliased_locals(body: &Body, type_table: &TypeTable) -> Index
 /// source — record that source local as aliased. A deep value copy is
 /// wrapped in `copy_value(...)` (an `ExprKind::Call`), not a bare `Local`,
 /// so it does not match here.
+fn mark_whole_gc_ref_copy_source_operand(body: &Body, op: Operand, type_table: &TypeTable, out: &mut IndexSet<u32>)  {
+    if let Some(e) = op.as_expr() { mark_whole_gc_ref_copy_source(body, e, type_table, out); }
+}
+
 fn mark_whole_gc_ref_copy_source(
     body: &Body,
     value: ExprId,
@@ -888,6 +893,10 @@ fn visit_operand_for_alias(
     }
 }
 
+fn visit_expr_for_alias_operand(body: &Body, op: Operand, in_call_arg: bool, type_table: &TypeTable, out: &mut IndexSet<u32>)  {
+    if let Some(e) = op.as_expr() { visit_expr_for_alias(body, e, in_call_arg, type_table, out); }
+}
+
 fn visit_expr_for_alias(
     body: &Body,
     id: ExprId,
@@ -903,11 +912,11 @@ fn visit_expr_for_alias(
             // around the call), then stop — the inner `Local` is the place
             // we take the address of, not a value-position read.
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && matches!(&body.exprs[inner.expr()].kind, ExprKind::Local { .. })
+                && matches!(&body.exprs[inner.as_expr().expect("skeleton operand")].kind, ExprKind::Local { .. })
             {
                 if !in_call_arg
-                    && is_gc_heap_type(body.exprs[inner.expr()].type_id, type_table)
-                    && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
+                    && is_gc_heap_type(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, type_table)
+                    && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
                 {
                     out.insert(*index);
                 }
@@ -1204,6 +1213,7 @@ fn count_field_accesses_in_operand(
     }
 }
 
+
 fn count_field_accesses_in_expr(
     body: &Body,
     e: ExprId,
@@ -1238,17 +1248,17 @@ fn count_field_accesses_in_expr(
             // The latter occurs for `&mut local.field` which NIR represents as
             // FieldAccess { expr: Unary { MutRef, Local { ... } }, field }.
             let (inner, field_index, field_name) = (*inner, *field_index, field_name.clone());
-            let local_info = match &body.exprs[inner.expr()].kind {
+            let local_info = match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
                 ExprKind::Local { index, name } => {
-                    Some((*index, name.clone(), body.exprs[inner.expr()].type_id))
+                    Some((*index, name.clone(), body.exprs[inner.as_expr().expect("skeleton operand")].type_id))
                 }
                 ExprKind::Unary {
                     op: NirUnaryOp::MutRef,
                     expr: ref_inner,
                 } => {
                     let ref_inner = *ref_inner;
-                    if let ExprKind::Local { index, name } = &body.exprs[ref_inner.expr()].kind {
-                        Some((*index, name.clone(), body.exprs[ref_inner.expr()].type_id))
+                    if let ExprKind::Local { index, name } = &body.exprs[ref_inner.as_expr().expect("skeleton operand")].kind {
+                        Some((*index, name.clone(), body.exprs[ref_inner.as_expr().expect("skeleton operand")].type_id))
                     } else {
                         None
                     }
@@ -1301,9 +1311,9 @@ fn count_field_accesses_in_expr(
             // re-read mechanism).
             let (op, inner) = (*op, *expr);
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
             {
-                if !in_call_arg && is_gc_heap_type(body.exprs[inner.expr()].type_id, type_table) {
+                if !in_call_arg && is_gc_heap_type(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, type_table) {
                     mark_local_aliased(*index, counts);
                 }
                 return;
@@ -1445,9 +1455,7 @@ fn count_field_accesses_in_expr(
             count_field_accesses_in_operand(body, expr, counts, false, false, type_table);
             for arm in &arms {
                 if let Some(guard) = arm.guard {
-                    count_field_accesses_in_expr(
-                        body,
-                        guard.expr(),
+                    count_field_accesses_in_operand(body, guard,
                         counts,
                         false,
                         false,
@@ -1647,8 +1655,8 @@ fn collect_call_touched_node(
                 expr: base,
                 field_index,
                 ..
-            } = &body.exprs[inner.expr()].kind
-            && let ExprKind::Local { index, .. } = &body.exprs[base.expr()].kind
+            } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            && let ExprKind::Local { index, .. } = &body.exprs[base.as_expr().expect("skeleton operand")].kind
         {
             touched.insert((*index, *field_index));
         }
@@ -2055,7 +2063,7 @@ fn walk_stmt(
                 value.is_some() && states.contains(&CanonState::ScalarOnly);
             if needs_post_eval_writeback {
                 let return_value = value.expect("checked Some above");
-                let return_type = body.exprs[return_value.expr()].type_id;
+                let return_type = body.exprs[return_value.as_expr().expect("skeleton operand")].type_id;
                 let tmp_idx = ctx.alloc_temp(return_type);
                 let tmp_name = ctx.temp_name(tmp_idx);
                 let let_sid = push_stmt(
@@ -2333,6 +2341,10 @@ fn walk_operand(
     }
 }
 
+fn walk_expr_operand(body: &mut Body, op: Operand, states: &mut ScalarStates, result_used: bool, out: &mut Vec<StmtId>, ctx: &mut WalkCtx)  {
+    if let Some(e) = op.as_expr() { walk_expr(body, e, states, result_used, out, ctx); }
+}
+
 fn walk_expr(
     body: &mut Body,
     e: ExprId,
@@ -2397,6 +2409,10 @@ fn walk_expr(
 /// in an assignment. Returns the candidate index + a clone of the
 /// candidate. (Cloning avoids holding a borrow on `ctx` across the
 /// caller's mutations.)
+fn field_assign_to_candidate_operand(body: &Body, op: Operand, ctx: &WalkCtx) -> Option<(usize, ScalarizeCandidate)> {
+    op.as_expr().map_or(None, |e| field_assign_to_candidate(body, e, ctx))
+}
+
 fn field_assign_to_candidate(
     body: &Body,
     target: ExprId,
@@ -2407,7 +2423,7 @@ fn field_assign_to_candidate(
         field_index,
         ..
     } = &body.exprs[target].kind
-        && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
     {
         for (i, c) in ctx.candidates.iter().enumerate() {
             if c.local_index == *index && c.field_index == *field_index {
@@ -2416,6 +2432,10 @@ fn field_assign_to_candidate(
         }
     }
     None
+}
+
+fn field_read_to_candidate_operand(body: &Body, op: Operand, ctx: &WalkCtx) -> Option<(usize, ScalarizeCandidate)> {
+    op.as_expr().map_or(None, |e| field_read_to_candidate(body, e, ctx))
 }
 
 fn field_read_to_candidate(
@@ -2428,7 +2448,7 @@ fn field_read_to_candidate(
         field_index,
         ..
     } = &body.exprs[e].kind
-        && let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
     {
         for (i, c) in ctx.candidates.iter().enumerate() {
             if c.local_index == *index && c.field_index == *field_index {
@@ -2446,6 +2466,10 @@ fn field_read_to_candidate(
 /// field-canonical, and updates state to `FieldOnly` for `&mut`-touched
 /// candidates. The call expression itself is left in place; the wrap
 /// (if any) is just the pre-call write-back stmts.
+fn walk_call_expr_operand(body: &mut Body, op: Operand, states: &mut ScalarStates, out: &mut Vec<StmtId>, ctx: &mut WalkCtx)  {
+    if let Some(e) = op.as_expr() { walk_call_expr(body, e, states, out, ctx); }
+}
+
 fn walk_call_expr(
     body: &mut Body,
     e: ExprId,
@@ -2479,6 +2503,10 @@ fn walk_call_expr(
     // level). All sync sits at stmt level via `out`.
 }
 
+fn recurse_into_call_args_operand(body: &mut Body, op: Operand, states: &mut ScalarStates, out: &mut Vec<StmtId>, ctx: &mut WalkCtx)  {
+    if let Some(e) = op.as_expr() { recurse_into_call_args(body, e, states, out, ctx); }
+}
+
 fn recurse_into_call_args(
     body: &mut Body,
     e: ExprId,
@@ -2498,8 +2526,8 @@ fn recurse_into_call_args(
         ),
         ExprKind::IndirectCall { callee, args, .. } => (
             None,
-            Some(callee.expr()),
-            args.iter().map(|a| a.expr()).collect(),
+            Some(callee.as_expr().expect("skeleton operand")),
+            args.iter().filter_map(|a| a.as_expr()).collect(),
         ),
         _ => unreachable!("recurse_into_call_args called on non-call expr"),
     };
@@ -2564,6 +2592,10 @@ struct SyncFields {
     re_read: IndexSet<(u32, u32)>,
 }
 
+fn accumulate_call_sync_operand(body: &Body, op: Operand, candidates: &[ScalarizeCandidate], type_table: &TypeTable, cache: &FieldUsageCache, result: &mut SyncFields)  {
+    if let Some(e) = op.as_expr() { accumulate_call_sync(body, e, candidates, type_table, cache, result); }
+}
+
 fn accumulate_call_sync(
     body: &Body,
     call: ExprId,
@@ -2600,10 +2632,8 @@ fn accumulate_call_sync(
             let func = func.clone();
             let receiver = *receiver;
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            let immut_ref = is_immut_ref_arg(body, receiver.expr(), type_table);
-            add_sync_fields_for_arg(
-                body,
-                receiver.expr(),
+            let immut_ref = is_immut_ref_arg_operand(body, receiver, type_table);
+            add_sync_fields_for_arg_operand(body, receiver,
                 &func,
                 0,
                 candidates,
@@ -2629,9 +2659,9 @@ fn accumulate_call_sync(
         }
         ExprKind::IndirectCall { args, .. } => {
             for aid in args.clone() {
-                if let Some(local_idx) = extract_gc_local_index(body, aid.expr(), type_table) {
+                if let Some(local_idx) = extract_gc_local_index_operand(body, aid, type_table) {
                     add_all_fields_for_local(local_idx, candidates, &mut result.write_back);
-                    if !is_immut_ref_arg(body, aid.expr(), type_table) {
+                    if !is_immut_ref_arg_operand(body, aid, type_table) {
                         add_all_fields_for_local(local_idx, candidates, &mut result.re_read);
                     }
                 }
@@ -2655,6 +2685,10 @@ fn accumulate_call_sync(
 /// rewrites and call wrappings are handled by the higher-level
 /// `walk_expr`; this helper just propagates the walk through structural
 /// kinds.
+fn walk_other_expr_kinds_operand(body: &mut Body, op: Operand, states: &mut ScalarStates, result_used: bool, out: &mut Vec<StmtId>, ctx: &mut WalkCtx)  {
+    if let Some(e) = op.as_expr() { walk_other_expr_kinds(body, e, states, result_used, out, ctx); }
+}
+
 fn walk_other_expr_kinds(
     body: &mut Body,
     e: ExprId,
@@ -2855,6 +2889,10 @@ fn walk_labeled_block(
 /// is the `If` expression whose `else_branch` is updated when the implicit
 /// no-op path needs a synthesized else.
 #[allow(clippy::too_many_arguments)]
+fn walk_expr_branches_if_operand(body: &mut Body, op: Operand, then_branch: BlockId, else_branch: Option<BlockId>, states: &mut ScalarStates, _result_used: bool, ctx: &mut WalkCtx, span: crate::token::Span)  {
+    if let Some(e) = op.as_expr() { walk_expr_branches_if(body, e, then_branch, else_branch, states, _result_used, ctx, span); }
+}
+
 fn walk_expr_branches_if(
     body: &mut Body,
     if_e: ExprId,
@@ -2952,9 +2990,9 @@ fn walk_expr_branches_match(
         let has_guard = arm.guard.is_some();
         if let Some(guard) = arm.guard {
             let mut guard_pre: Vec<StmtId> = Vec::new();
-            walk_expr(body, guard.expr(), &mut s, true, &mut guard_pre, ctx);
+            walk_expr_operand(body, guard, &mut s, true, &mut guard_pre, ctx);
             if !guard_pre.is_empty() {
-                wrap_expr_with_prefix(body, guard.expr(), guard_pre);
+                wrap_expr_with_prefix_operand(body, guard, guard_pre);
             }
         }
         // After the guard ran (whether matched or not), state for
@@ -2970,16 +3008,14 @@ fn walk_expr_branches_match(
         // the body's value-producing expression; wrap the body in a
         // Block to hold them.
         let mut body_pre: Vec<StmtId> = Vec::new();
-        walk_expr(
-            body,
-            arm.body.expr(),
+        walk_expr_operand(body, arm.body,
             &mut s,
             result_used,
             &mut body_pre,
             ctx,
         );
         if !body_pre.is_empty() {
-            wrap_expr_with_prefix(body, arm.body.expr(), body_pre);
+            wrap_expr_with_prefix_operand(body, arm.body, body_pre);
         }
         arm_states.push(s);
     }
@@ -2987,7 +3023,7 @@ fn walk_expr_branches_match(
     let target = pick_join_targets(&arm_refs);
     for (arm, exit) in arms.iter().zip(arm_states.iter()) {
         // Emit convergence sync at the end of the arm body.
-        emit_convergence_at_arm_body_end(body, arm.body.expr(), exit, &target, ctx, span);
+        emit_convergence_at_arm_body_end_operand(body, arm.body, exit, &target, ctx, span);
     }
     *states = target;
 }
@@ -2997,6 +3033,10 @@ fn walk_expr_branches_match(
 /// followed by the original expression (moved to a fresh node) as its
 /// value-producing stmt. The node id `e` is preserved so its parent still
 /// references it; it now carries a `Block` of the same type id.
+fn wrap_expr_with_prefix_operand(body: &mut Body, op: Operand, prefix: Vec<StmtId>)  {
+    if let Some(e) = op.as_expr() { wrap_expr_with_prefix(body, e, prefix); }
+}
+
 fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
     let expr_type = body.exprs[e].type_id;
     let expr_span = body.exprs[e].span;
@@ -3020,6 +3060,10 @@ fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
 /// (when body is unit-typed) or Block { let __tmp = body; sync; __tmp }
 /// (when non-unit, so the temp preserves the value across the trailing
 /// sync). The temp uses the per-type pool.
+fn emit_convergence_at_arm_body_end_operand(body: &mut Body, op: Operand, from: &ScalarStates, to: &ScalarStates, ctx: &mut WalkCtx, span: crate::token::Span)  {
+    if let Some(e) = op.as_expr() { emit_convergence_at_arm_body_end(body, e, from, to, ctx, span); }
+}
+
 fn emit_convergence_at_arm_body_end(
     body: &mut Body,
     arm_e: ExprId,
@@ -3109,6 +3153,10 @@ fn emit_convergence_at_arm_body_end(
 
 /// Check if an expression is an immutable ref to a local (`Unary{Ref, Local}`).
 /// Also returns true for bare locals with `Ref(T)` type (after `ref_elim`).
+fn is_immut_ref_arg_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
+    op.as_expr().map_or(false, |e| is_immut_ref_arg(body, e, type_table))
+}
+
 fn is_immut_ref_arg(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Unary {
@@ -3126,6 +3174,10 @@ fn is_immut_ref_arg(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
 /// For a call argument that might be a scalarized local, determine which
 /// fields need syncing based on the callee's field usage cache.
 #[allow(clippy::too_many_arguments)]
+fn add_sync_fields_for_arg_operand(body: &Body, op: Operand, func_ref: &FunctionRef, param_position: u32, candidates: &[ScalarizeCandidate], type_table: &TypeTable, cache: &FieldUsageCache, is_immut_ref: bool, result: &mut SyncFields)  {
+    if let Some(e) = op.as_expr() { add_sync_fields_for_arg(body, e, func_ref, param_position, candidates, type_table, cache, is_immut_ref, result); }
+}
+
 fn add_sync_fields_for_arg(
     body: &Body,
     arg_expr: ExprId,
@@ -3198,6 +3250,10 @@ fn add_sync_fields_for_arg(
     }
 }
 
+fn extract_gc_local_index_operand(body: &Body, op: Operand, type_table: &TypeTable) -> Option<u32> {
+    op.as_expr().map_or(None, |e| extract_gc_local_index(body, e, type_table))
+}
+
 fn extract_gc_local_index(body: &Body, e: ExprId, type_table: &TypeTable) -> Option<u32> {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => {
@@ -3212,8 +3268,8 @@ fn extract_gc_local_index(body: &Body, e: ExprId, type_table: &TypeTable) -> Opt
             expr: inner,
         } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
-                if is_gc_heap_type(body.exprs[inner.expr()].type_id, type_table) {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
+                if is_gc_heap_type(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, type_table) {
                     Some(*index)
                 } else {
                     None

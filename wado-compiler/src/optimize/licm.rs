@@ -547,7 +547,7 @@ fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
             then_block,
             else_block,
         } => {
-            let mut v = vec![Child::Expr(condition.expr()), Child::Block(*then_block)];
+            let mut v = vec![Child::Expr(condition.as_expr().expect("skeleton operand")), Child::Block(*then_block)];
             if let Some(eb) = else_block {
                 v.push(Child::Block(*eb));
             }
@@ -578,6 +578,10 @@ fn collect_modified_vars_in_block(
 /// Mark a local as fully modified if it has a GC struct type and is passed to a
 /// function call (callees can mutate any field). Immutable `&T` locals are
 /// skipped — no callee can mutate the pointee through them.
+fn mark_gc_local_as_fully_modified_operand(body: &Body, op: Operand, modified: &mut ModifiedVars, type_table: &TypeTable)  {
+    if let Some(e) = op.as_expr() { mark_gc_local_as_fully_modified(body, e, modified, type_table); }
+}
+
 fn mark_gc_local_as_fully_modified(
     body: &Body,
     e: ExprId,
@@ -605,7 +609,7 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => extract_alias_source(body, inner.expr()),
+        } => extract_alias_source(body, inner.as_expr().expect("skeleton operand")),
         ExprKind::Block(block) => {
             let tail = *body.blocks[*block].stmts.last()?;
             let StmtKind::Expr(tail_expr) = &body.stmts[tail].kind else {
@@ -644,13 +648,17 @@ fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 
 /// Mark a local as fully modified, traversing through unary ops and nested
 /// field accesses to the root.
+fn mark_local_as_fully_modified_operand(body: &Body, op: Operand, modified: &mut ModifiedVars)  {
+    if let Some(e) = op.as_expr() { mark_local_as_fully_modified(body, e, modified); }
+}
+
 fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedVars) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => {
             modified.insert_full(*index);
         }
         ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Unary { expr: inner, .. } => {
-            mark_local_as_fully_modified(body, inner.expr(), modified);
+            mark_local_as_fully_modified_operand(body, *inner, modified);
         }
         _ => {}
     }
@@ -661,7 +669,7 @@ fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedV
 fn is_pure_field_chain(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_pure_field_chain(body, inner.expr()),
+        ExprKind::FieldAccess { expr: inner, .. } => is_pure_field_chain(body, inner.as_expr().expect("skeleton operand")),
         _ => false,
     }
 }
@@ -678,6 +686,10 @@ fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
 
 /// If `expr` is a `&mut`-reference to a struct passed to a call, record its
 /// pointee as clobbered.
+fn record_mut_ref_clobber_operand(body: &Body, op: Operand, modified: &mut ModifiedVars, type_table: &TypeTable)  {
+    if let Some(e) = op.as_expr() { record_mut_ref_clobber(body, e, modified, type_table); }
+}
+
 fn record_mut_ref_clobber(
     body: &Body,
     e: ExprId,
@@ -703,6 +715,10 @@ fn record_mut_ref_clobber(
 
 /// Record a field-access write into `written_field_types`, keyed by the pointee
 /// type of the assigned object.
+fn record_written_field_type_operand(body: &Body, op: Operand, modified: &mut ModifiedVars, type_table: &TypeTable)  {
+    if let Some(e) = op.as_expr() { record_written_field_type(body, e, modified, type_table); }
+}
+
 fn record_written_field_type(
     body: &Body,
     target: ExprId,
@@ -715,12 +731,16 @@ fn record_written_field_type(
         ..
     } = &body.exprs[target].kind
     {
-        let pointee = strip_references(body.exprs[inner.expr()].type_id, type_table);
+        let pointee = strip_references(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, type_table);
         modified.insert_written_field_type(pointee, *field_index);
     }
 }
 
 /// Mark what is modified by an assignment target.
+fn mark_assignment_target_as_modified_operand(body: &Body, op: Operand, modified: &mut ModifiedVars, type_table: &TypeTable)  {
+    if let Some(e) = op.as_expr() { mark_assignment_target_as_modified(body, e, modified, type_table); }
+}
+
 fn mark_assignment_target_as_modified(
     body: &Body,
     e: ExprId,
@@ -739,16 +759,16 @@ fn mark_assignment_target_as_modified(
             let inner = *inner;
             let field_index = *field_index;
             record_written_field_type(body, e, modified, type_table);
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.expr()].kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
                 modified.insert_field(*index, field_index);
-            } else if is_pure_field_chain(body, inner.expr()) {
+            } else if is_pure_field_chain(body, inner.as_expr().expect("skeleton operand")) {
                 // `a.b.c = x` mutates `*a.b`, not a field of the root `a`.
             } else {
-                mark_local_as_fully_modified(body, inner.expr(), modified);
+                mark_local_as_fully_modified_operand(body, inner, modified);
             }
         }
         ExprKind::Unary { expr: inner, .. } => {
-            mark_local_as_fully_modified(body, inner.expr(), modified);
+            mark_local_as_fully_modified_operand(body, *inner, modified);
         }
         _ => {}
     }
@@ -871,6 +891,7 @@ fn collect_modified_vars_in_operand(
     }
 }
 
+
 fn collect_modified_vars_in_expr(
     body: &Body,
     e: ExprId,
@@ -915,8 +936,8 @@ fn collect_modified_vars_in_expr(
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            mark_gc_local_as_fully_modified(body, receiver.expr(), modified, type_table);
-            record_mut_ref_clobber(body, receiver.expr(), modified, type_table);
+            mark_gc_local_as_fully_modified_operand(body, receiver, modified, type_table);
+            record_mut_ref_clobber_operand(body, receiver, modified, type_table);
             collect_modified_vars_in_operand(body, receiver, modified, type_table);
             for a in arg_ids {
                 mark_gc_local_as_fully_modified(body, a, modified, type_table);
@@ -973,7 +994,7 @@ fn collect_modified_vars_in_expr(
             let arg_ids = args.clone();
             collect_modified_vars_in_operand(body, callee, modified, type_table);
             for a in arg_ids {
-                mark_gc_local_as_fully_modified(body, a.expr(), modified, type_table);
+                mark_gc_local_as_fully_modified_operand(body, a, modified, type_table);
                 collect_modified_vars_in_operand(body, a, modified, type_table);
             }
         }
@@ -1095,11 +1116,11 @@ fn collect_licm_ref_bindings_in_stmt(
             && let ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr: source,
-            } = &body.exprs[value.expr()].kind
+            } = &body.exprs[value.as_expr().expect("skeleton operand")].kind
             && let ExprKind::Local {
                 index: source_idx,
                 name: source_name,
-            } = &body.exprs[source.expr()].kind
+            } = &body.exprs[source.as_expr().expect("skeleton operand")].kind
         {
             bindings.insert(
                 local_index,
@@ -1117,6 +1138,10 @@ fn collect_licm_ref_bindings_in_stmt(
             Child::Block(b) => collect_licm_ref_bindings_in_block(body, b, type_table, bindings),
         }
     }
+}
+
+fn collect_licm_ref_bindings_in_operand(body: &Body, op: Operand, type_table: &TypeTable, bindings: &mut IndexMap<u32, LicmRefBinding>)  {
+    if let Some(e) = op.as_expr() { collect_licm_ref_bindings_in_expr(body, e, type_table, bindings); }
 }
 
 fn collect_licm_ref_bindings_in_expr(
@@ -1203,6 +1228,10 @@ fn find_hoist_candidates_in_stmt(
     }
 }
 
+fn find_hoist_candidates_in_operand(body: &Body, op: Operand, modified_vars: &ModifiedVars, ref_bindings: &IndexMap<u32, LicmRefBinding>, candidates: &mut Vec<HoistCandidate>, seen: &mut IndexSet<(u32, u32)>, next_local: &mut u32)  {
+    if let Some(e) = op.as_expr() { find_hoist_candidates_in_expr(body, e, modified_vars, ref_bindings, candidates, seen, next_local); }
+}
+
 fn find_hoist_candidates_in_expr(
     body: &Body,
     e: ExprId,
@@ -1218,7 +1247,7 @@ fn find_hoist_candidates_in_expr(
         field_index,
         field_name,
     } = &body.exprs[e].kind
-        && let ExprKind::Local { index, name } = &body.exprs[inner.expr()].kind
+        && let ExprKind::Local { index, name } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
     {
         let field_index = *field_index;
         // Case 1: direct access on a loop-invariant local.
@@ -1348,6 +1377,10 @@ fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
 }
 
 /// Collect every `Local` leaf of a hoistable-arithmetic tree.
+fn collect_arith_local_leaves_operand(body: &Body, op: Operand, out: &mut Vec<(ExprId, u32)>)  {
+    if let Some(e) = op.as_expr() { collect_arith_local_leaves(body, e, out); }
+}
+
 fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32)>) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => out.push((e, *index)),
@@ -1584,7 +1617,7 @@ fn replace_hoisted_in_expr(
         field_index,
         ..
     } = &engine.body.exprs[e].kind
-        && let ExprKind::Local { index, .. } = &engine.body.exprs[inner.expr()].kind
+        && let ExprKind::Local { index, .. } = &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind
     {
         let index = *index;
         let field_index = *field_index;

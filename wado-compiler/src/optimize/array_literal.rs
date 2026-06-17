@@ -259,8 +259,8 @@ impl Collapser<'_> {
         if !self.push_names.contains(&func.name) || args.len() != 1 {
             return None;
         }
-        let path = place_path(body, receiver.expr(), local)?;
-        Some((path, args[0].expr.expr()))
+        let path = place_path_operand(body, *receiver, local)?;
+        Some((path, args[0].expr.as_expr().expect("skeleton operand")))
     }
 }
 
@@ -279,7 +279,7 @@ fn temp_binding(body: &Body, stmt: StmtId, allow_impure: bool) -> Option<(u32, E
     match &body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
-        } if allow_impure || is_pure_expr(body, value.expr()) => Some((*local_index, value.expr())),
+        } if allow_impure || is_pure_expr(body, value.as_expr().expect("skeleton operand")) => Some((*local_index, value.as_expr().expect("skeleton operand"))),
         _ => None,
     }
 }
@@ -323,6 +323,10 @@ fn init_value(body: &Body, stmt: StmtId) -> Option<ExprId> {
 /// struct with the field path from the value's root. Descends through the
 /// outer block tail (`{ …; *__b }` produced for direct literals) and through
 /// wrapper `StructLiteral` fields.
+fn collect_array_targets_operand(body: &Body, op: Operand, path: &mut Vec<u32>, out: &mut Vec<ArrayTarget>)  {
+    if let Some(e) = op.as_expr() { collect_array_targets(body, e, path, out); }
+}
+
 fn collect_array_targets(
     body: &Body,
     expr: ExprId,
@@ -385,7 +389,7 @@ fn match_list_struct(body: &Body, expr: ExprId) -> Option<usize> {
     if !used.value.as_expr().is_some_and(|e| is_zero_int(body, e)) {
         return None;
     }
-    array_new_capacity(body, repr.value.expr())
+    array_new_capacity(body, repr.value.as_expr().expect("skeleton operand"))
 }
 
 /// If `expr` is a `builtin::array_new(N)` call with a constant `N`, return N.
@@ -404,7 +408,7 @@ fn array_new_capacity(body: &Body, expr: ExprId) -> Option<usize> {
     if !is_array_new || args.len() != 1 {
         return None;
     }
-    match &body.exprs[args[0].expr.expr()].kind {
+    match &body.exprs[args[0].expr.as_expr().expect("skeleton operand")].kind {
         ExprKind::IntLiteral { value, .. } => usize::try_from(*value).ok(),
         _ => None,
     }
@@ -417,6 +421,10 @@ fn is_zero_int(body: &Body, expr: ExprId) -> bool {
 /// If `receiver` is `local` reached through zero or more field accesses,
 /// return the field-index path (`[]` for the bare local). The builder methods
 /// take `&mut self`, so peel a leading reference.
+fn place_path_operand(body: &Body, op: Operand, local: u32) -> Option<Vec<u32>> {
+    op.as_expr().map_or(None, |e| place_path(body, e, local))
+}
+
 fn place_path(body: &Body, receiver: ExprId, local: u32) -> Option<Vec<u32>> {
     let mut path = Vec::new();
     let mut cur = peel_ref(body, receiver);
@@ -430,7 +438,7 @@ fn place_path(body: &Body, receiver: ExprId, local: u32) -> Option<Vec<u32>> {
                 expr, field_index, ..
             } => {
                 path.push(*field_index);
-                cur = expr.expr();
+                cur = expr.as_expr().expect("skeleton operand");
             }
             _ => return None,
         }
@@ -442,7 +450,7 @@ fn peel_ref(body: &Body, expr: ExprId) -> ExprId {
         ExprKind::Unary {
             op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
             expr: inner,
-        } => peel_ref(body, inner.expr()),
+        } => peel_ref(body, inner.as_expr().expect("skeleton operand")),
         _ => expr,
     }
 }

@@ -184,7 +184,7 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
     // ValueId. We intentionally restrict candidates to `Binary` so a single-
     // local read (whose VN is just an `Opaque` / `Local` reaching def) does
     // not get hoisted — there is no benefit in CSE'ing a single local read.
-    let candidates = collect_binary_candidates(engine, guard_expr.expr());
+    let candidates = collect_binary_candidates(engine, guard_expr.as_expr().expect("skeleton operand"));
     if candidates.is_empty() {
         return false;
     }
@@ -357,7 +357,7 @@ fn collect_exprs_in_stmt(body: &Body, stmt: StmtId, out: &mut Vec<ExprId>) {
             then_block,
             else_block,
         } => {
-            collect_exprs_in_expr(body, condition.expr(), out);
+            collect_exprs_in_operand(body, *condition, out);
             collect_exprs_in_block(body, *then_block, out);
             if let Some(eb) = else_block {
                 collect_exprs_in_block(body, *eb, out);
@@ -380,6 +380,10 @@ fn collect_exprs_in_block(body: &Body, block: BlockId, out: &mut Vec<ExprId>) {
     for s in stmts {
         collect_exprs_in_stmt(body, s, out);
     }
+}
+
+fn collect_exprs_in_operand(body: &Body, op: Operand, out: &mut Vec<ExprId>)  {
+    if let Some(e) = op.as_expr() { collect_exprs_in_expr(body, e, out); }
 }
 
 fn collect_exprs_in_expr(body: &Body, expr: ExprId, out: &mut Vec<ExprId>) {
