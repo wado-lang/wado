@@ -1,0 +1,107 @@
+use { scan_line_comment, scan_block_comment, scan_string, scan_char_class, scan_balanced } from "./scan.wado";
+
+fn chars_of(s: String) -> List<char> {
+    return s.chars().collect();
+}
+
+test "scan_line_comment stops at the newline" {
+    let c = chars_of("// hi\nrest");
+    // index 5 is the '\n'
+    assert scan_line_comment(&c, 0) == 5;
+}
+
+test "scan_line_comment runs to end when no newline" {
+    let c = chars_of("// trailing");
+    assert scan_line_comment(&c, 0) == c.len();
+}
+
+test "scan_block_comment returns index past closing */" {
+    let c = chars_of("/* x */ y");
+    // '/* x */' occupies indices 0..7
+    assert scan_block_comment(&c, 0) == 7;
+}
+
+test "scan_block_comment runs to end when unterminated" {
+    let c = chars_of("/* open");
+    assert scan_block_comment(&c, 0) == c.len();
+}
+
+test "scan_string skips a single-quoted string" {
+    let c = chars_of("'abc' tail");
+    assert scan_string(&c, 0) == 5;
+}
+
+test "scan_string skips a double-quoted string" {
+    let c = chars_of("\"abc\" tail");
+    assert scan_string(&c, 0) == 5;
+}
+
+test "scan_string honors escaped quote" {
+    // `'a\'b'` — the escaped quote is not the terminator
+    let c = chars_of("'a\\'b' tail");
+    assert scan_string(&c, 0) == 6;
+}
+
+test "scan_string runs to end when unterminated" {
+    let c = chars_of("'open");
+    assert scan_string(&c, 0) == c.len();
+}
+
+test "scan_char_class ends at the first unescaped ]" {
+    let c = chars_of("[a-z] x");
+    assert scan_char_class(&c, 0) matches { Some(5) };
+}
+
+test "scan_char_class does not nest: literal [ is content" {
+    // ANTLR4 char sets do not nest; `[/[]` ends at the first ']'.
+    let c = chars_of("[/[] x");
+    assert scan_char_class(&c, 0) matches { Some(4) };
+}
+
+test "scan_char_class honors \\] escape" {
+    let c = chars_of("[a\\]b] x");
+    assert scan_char_class(&c, 0) matches { Some(6) };
+}
+
+test "scan_char_class returns None when unterminated" {
+    let c = chars_of("[a-z");
+    assert scan_char_class(&c, 0) matches { None };
+}
+
+test "scan_balanced handles a simple brace block" {
+    let c = chars_of("{ x } rest");
+    assert scan_balanced(&c, 0, '{', '}') matches { Some(5) };
+}
+
+test "scan_balanced nests braces" {
+    let c = chars_of("{ if (x) { y } } rest");
+    // outer '}' is at index 15, so the index just past it is 16
+    assert scan_balanced(&c, 0, '{', '}') matches { Some(16) };
+}
+
+test "scan_balanced ignores a close inside a string" {
+    let c = chars_of("{ s = \"}\" } rest");
+    // closing '}' is at index 10, so the index just past it is 11
+    assert scan_balanced(&c, 0, '{', '}') matches { Some(11) };
+}
+
+test "scan_balanced ignores a close inside a line comment" {
+    let c = chars_of("{ // }\n}");
+    // closing brace is the last char (index 7), so result is 8
+    assert scan_balanced(&c, 0, '{', '}') matches { Some(8) };
+}
+
+test "scan_balanced ignores a close inside a block comment" {
+    let c = chars_of("{ /* } */ }");
+    assert scan_balanced(&c, 0, '{', '}') matches { Some(11) };
+}
+
+test "scan_balanced nests brackets for arg-actions" {
+    let c = chars_of("[int[] arr] rest");
+    assert scan_balanced(&c, 0, '[', ']') matches { Some(11) };
+}
+
+test "scan_balanced returns None when unterminated" {
+    let c = chars_of("{ never closed");
+    assert scan_balanced(&c, 0, '{', '}') matches { None };
+}

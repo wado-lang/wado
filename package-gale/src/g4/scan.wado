@@ -1,0 +1,118 @@
+//! Char-level scanners shared across the g4 frontend.
+//!
+//! `.g4` source embeds host-language regions (action bodies `{...}`,
+//! arg-actions `[...]`) that the byte-level lexer cannot delimit on its
+//! own: a `}` or `]` may sit inside a host string or comment, or the
+//! brackets may nest. These scanners walk the raw char buffer with the
+//! awareness each region needs, with one implementation per concern so a
+//! fix to string- or comment-handling lands in a single place.
+//!
+//! Each scanner takes `pos` at the opening element and returns the index
+//! just past what it consumed. The two-delimiter scanners report an
+//! unterminated region as `None`; comment/string scanners run to
+//! end-of-input (ANTLR4 tolerates unterminated comments).
+
+/// Scan a `//` line comment. `pos` must point at the first `/`. Returns
+/// the index of the terminating `\n` (which it excludes), or `chars.len()`.
+pub fn scan_line_comment(chars: &List<char>, pos: i32) -> i32 {
+    let n = chars.len();
+    let mut i = pos + 2;  // skip `//`
+    while i < n && chars[i] != '\n' {
+        i += 1;
+    }
+    return i;
+}
+
+/// Scan a `/* ... */` block comment. `pos` must point at the first `/`.
+/// Returns the index just past the closing `*/`, or `chars.len()` if
+/// unterminated.
+pub fn scan_block_comment(chars: &List<char>, pos: i32) -> i32 {
+    let n = chars.len();
+    let mut i = pos + 2;  // skip `/*`
+    while i + 1 < n {
+        if chars[i] == '*' && chars[i + 1] == '/' {
+            return i + 2;
+        }
+        i += 1;
+    }
+    return n;
+}
+
+/// Scan a `'...'` or `"..."` host string. `pos` must point at the opening
+/// quote. Honors `\` escapes. Returns the index just past the closing
+/// quote, or `chars.len()` if unterminated.
+pub fn scan_string(chars: &List<char>, pos: i32) -> i32 {
+    let n = chars.len();
+    let quote = chars[pos];
+    let mut i = pos + 1;
+    while i < n {
+        let c = chars[i];
+        if c == '\\' && i + 1 < n {
+            i += 2;
+            continue;
+        }
+        i += 1;
+        if c == quote {
+            return i;
+        }
+    }
+    return n;
+}
+
+/// Scan an ANTLR4 char class `[...]`. `pos` must point at the opening `[`.
+/// Per the char-set lexicon, only `\X` escapes are recognized and the
+/// first unescaped `]` ends the set: brackets do not nest and host
+/// strings/comments are not interpreted. Returns the index just past the
+/// closing `]`, or `None` if unterminated.
+pub fn scan_char_class(chars: &List<char>, pos: i32) -> Option<i32> {
+    let n = chars.len();
+    let mut i = pos + 1;
+    while i < n {
+        let c = chars[i];
+        i += 1;
+        if c == '\\' {
+            if i < n {
+                i += 1;
+            }
+            continue;
+        }
+        if c == ']' {
+            return Option::<i32>::Some(i);
+        }
+    }
+    return null;
+}
+
+/// Scan a balanced host-code region delimited by `open`/`close`
+/// (`{...}` action body, `[...]` arg-action). `open_idx` must point at
+/// the opening delimiter. Host strings and `//` / `/* */` comments are
+/// skipped so a delimiter inside them does not affect depth; `open` /
+/// `close` nest. Returns the index just past the matching `close`, or
+/// `None` if depth never returns to zero before end-of-input.
+pub fn scan_balanced(chars: &List<char>, open_idx: i32, open: char, close: char) -> Option<i32> {
+    let n = chars.len();
+    let mut i = open_idx + 1;  // skip opening delimiter
+    let mut depth = 1;
+    while i < n {
+        let c = chars[i];
+        if c == '"' || c == '\'' {
+            i = scan_string(chars, i);
+        } else if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            i = scan_line_comment(chars, i);
+        } else if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            i = scan_block_comment(chars, i);
+        } else if c == open {
+            depth += 1;
+            i += 1;
+        } else if c == close {
+            depth -= 1;
+            i += 1;
+            if depth == 0 {
+                return Option::<i32>::Some(i);
+            }
+        } else {
+            i += 1;
+        }
+    }
+    return null;
+}
