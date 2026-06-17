@@ -1336,8 +1336,20 @@ mod tests {
                 .alloc_unshared(crate::nir_value_graph::ValueKind::Int(n), TypeTable::I32),
         )
     }
-    fn bin(body: &mut Body, left: Operand, op: NirBinaryOp, right: Operand) -> ExprId {
-        e(body, ExprKind::Binary { left, op, right })
+    fn bin(
+        body: &mut Body,
+        left: impl Into<Operand>,
+        op: NirBinaryOp,
+        right: impl Into<Operand>,
+    ) -> ExprId {
+        e(
+            body,
+            ExprKind::Binary {
+                left: left.into(),
+                op,
+                right: right.into(),
+            },
+        )
     }
     fn local0(body: &mut Body) -> ExprId {
         e(
@@ -1396,27 +1408,27 @@ mod tests {
         // pass would when creating a temp bound to a known value.
         let mut body = mk_body(|b| {
             let seven = lit(b, 7);
-            let st = s(b, StmtKind::Expr(seven.into()));
+            let st = s(b, StmtKind::Expr(seven));
             vec![st]
         });
-        let seven = {
+        // The promoted constant carries its own pool value.
+        let v7 = {
             let st = body.blocks[body.root].stmts[0];
-            let StmtKind::Expr(Operand::Expr(e)) = body.stmts[st].kind else {
+            let StmtKind::Expr(Operand::Value(v)) = body.stmts[st].kind else {
                 unreachable!()
             };
-            e
+            v
         };
         let mut buf = EngineBuffers::default();
         let mut locals: Vec<NirLocal> = Vec::new();
         let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
-        let v7 = eng.value(seven).unwrap();
         // A fresh orphan expr has no value in the already-built graph.
         let fresh = eng.alloc_expr(
-            ExprKind::IntLiteral {
-                value: 9,
-                repr: "9".to_string(),
+            ExprKind::Local {
+                index: 9,
+                name: "u".to_string(),
             },
-            TypeTable::UNIT,
+            TypeTable::I32,
             Span::default(),
         );
         assert_eq!(eng.value(fresh), None);
@@ -1442,36 +1454,24 @@ mod tests {
         let mut buf = EngineBuffers::default();
         let mut locals: Vec<NirLocal> = Vec::new();
         let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
-        let v_add = eng.value(add.as_expr().unwrap()).unwrap();
-
-        let one = eng.alloc_expr(
-            ExprKind::IntLiteral {
-                value: 1,
-                repr: "1".to_string(),
-            },
-            TypeTable::UNIT,
-            Span::default(),
-        );
-        let two = eng.alloc_expr(
-            ExprKind::IntLiteral {
-                value: 2,
-                repr: "2".to_string(),
-            },
-            TypeTable::UNIT,
-            Span::default(),
-        );
+        let add_e = add.as_expr().unwrap();
+        let v_add = eng.value(add_e).unwrap();
+        // Reuse the original sum's operands (pure-value pool ids): a freshly
+        // spliced `1 + 2` over the same operand values hash-conses to the same
+        // `ValueId` the build produced — pointwise maintenance, no rebuild.
+        let (one, two) = match &eng.body.exprs[add_e].kind {
+            ExprKind::Binary { left, right, .. } => (*left, *right),
+            other => panic!("expected Binary, got {other:?}"),
+        };
         let sum = eng.alloc_expr(
             ExprKind::Binary {
-                left: one.into(),
+                left: one,
                 op: NirBinaryOp::Add,
-                right: two.into(),
+                right: two,
             },
-            TypeTable::UNIT,
+            TypeTable::I32,
             Span::default(),
         );
-        // Operands first, then the parent: each resolves from its children.
-        assert!(eng.maintain_pure_value(one).is_some());
-        assert!(eng.maintain_pure_value(two).is_some());
         let v_sum = eng.maintain_pure_value(sum).unwrap();
         assert_eq!(v_sum, v_add);
         assert_eq!(eng.value(sum), Some(v_add));
@@ -1483,16 +1483,16 @@ mod tests {
                 index: 9,
                 name: "u".to_string(),
             },
-            TypeTable::UNIT,
+            TypeTable::I32,
             Span::default(),
         );
         let mixed = eng.alloc_expr(
             ExprKind::Binary {
                 left: lx.into(),
                 op: NirBinaryOp::Add,
-                right: two.into(),
+                right: two,
             },
-            TypeTable::UNIT,
+            TypeTable::I32,
             Span::default(),
         );
         assert_eq!(eng.maintain_pure_value(mixed), None);
@@ -1597,27 +1597,24 @@ mod tests {
                 ExprKind::Binary { left, op, right } => (*op, *left, *right),
                 _ => return false,
             };
-            let lv = match &e.body.exprs[l.as_expr().unwrap()].kind {
-                ExprKind::IntLiteral { value, .. } => *value,
-                _ => return false,
-            };
-            let rv = match &e.body.exprs[r.as_expr().unwrap()].kind {
-                ExprKind::IntLiteral { value, .. } => *value,
-                _ => return false,
+            let (Some(lv), Some(rv)) =
+                (e.body.operand_const_int(l), e.body.operand_const_int(r))
+            else {
+                return false;
             };
             let v = match op {
                 NirBinaryOp::Add => lv.wrapping_add(rv),
                 NirBinaryOp::Mul => lv.wrapping_mul(rv),
                 _ => return false,
             };
-            e.replace_expr_kind(
+            // Promote the folded scalar into the parent operand slot.
+            e.replace_expr_with_value(
                 id,
-                ExprKind::IntLiteral {
+                crate::const_eval::Value::Int {
                     value: v,
-                    repr: v.to_string(),
+                    prim: crate::tir::PrimitiveType::I32,
                 },
-            );
-            true
+            )
         }
     }
 
@@ -1639,16 +1636,19 @@ mod tests {
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.run(&[&FoldAddMulConst]);
         }
-        // The let's value is now a single IntLiteral(12).
+        // The let's value is now the promoted constant 12.
         let root = body.root;
         let s0 = body.blocks[root].stmts[0];
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
         };
-        match &body.exprs[value.as_expr().unwrap()].kind {
-            ExprKind::IntLiteral { value, .. } => assert_eq!(*value, 12),
-            other => panic!("expected folded IntLiteral(12), got {other:?}"),
-        }
+        let Operand::Value(v) = value else {
+            panic!("expected folded constant operand, got {value:?}");
+        };
+        assert!(matches!(
+            body.values.kind(*v),
+            crate::nir_value_graph::ValueKind::Int(12)
+        ));
     }
 
     #[test]
