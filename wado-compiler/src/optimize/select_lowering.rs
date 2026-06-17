@@ -148,7 +148,7 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
             expr: inner,
             target_type,
         } => {
-            !is_trapping_cast(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, *target_type, type_table)
+            !is_trapping_cast(body.operand_type(*inner), *target_type, type_table)
                 && is_select_eligible_operand(body, *inner, type_table)
         }
         _ => false,
