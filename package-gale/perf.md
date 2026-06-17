@@ -13,127 +13,190 @@ failed approaches) and [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 `benchmark/sqlite_parse`, 13366-byte realistic SQL fixture, guest run at
 `-O2` under wasmtime:
 
-| Parser                        |        per-iter | throughput |
-| ----------------------------- | --------------: | ---------: |
-| **Gale (generated)**          | **~20 ms/iter** |  ~660 KB/s |
-| Rust `sqlparser-rs` (release) |   ~1.64 ms/iter |  8.15 MB/s |
+| Parser                        |          per-iter | throughput |
+| ----------------------------- | ----------------: | ---------: |
+| **Gale (generated)**          | **~3.57 ms/iter** | ~3.75 MB/s |
+| Rust `sqlparser-rs` (release) |     ~1.90 ms/iter |  7.05 MB/s |
 
-Current gap ≈ **12×** vs `sqlparser-rs` release. (The earlier "5× gap"
-figure compared against `sqlparser-rs` _debug_, ~6.7 ms/iter; ~3× on
-that axis.) The fixture now parses **~6.6× faster** than the 137 ms/iter
-recorded when this section first lived in `TODO.md` — the lexer rework
-collapsed `tokenize` self-time, so the priorities below are re-derived
-from a fresh profile, not the historical one.
+Current gap ≈ **1.9×** vs `sqlparser-rs` release — down from the **12×**
+this table recorded one revision ago. Two things closed it: the lexer
+rework collapsed `tokenize` self-time, and the token list is now
+pre-sized (`List::with_capacity(chars.len()/4 + 1)` in `tokenize`), which
+all but eliminated `List<Token>::grow`. The fixture now parses **~38×
+faster** than the 137 ms/iter recorded when this section first lived in
+`TODO.md`, and **~5.6× faster** than the ~20 ms/iter of the previous
+revision — so the priorities below are re-derived from a fresh profile,
+not the historical one.
+
+> **Measurement note (read before trusting the percentages).** The
+> headline table above is from the release benchmark (`mise run
+> sqlite-parse`, host built `--release`). The **profile below was
+> captured with the dev-profile `wado`** (`cargo run`, per the
+> inner-dev-loop guidance in the root `CLAUDE.md` — no release rebuild).
+> `Cargo.toml` raises `opt-level` on `cranelift-codegen`, so the
+> JIT-compiled **guest code is near-release quality**, but the wasmtime
+> runtime, GC, and allocator host paths run at dev speed. Net effect: the
+> dev host is ~10× slower per iter than the release headline, and that
+> slack is concentrated in **allocation/GC host work**. So the profile
+> **over-weights allocation-heavy guest frames** (`List<Token>::push`,
+> the `_gale_rule` result copy) relative to pure-compute frames
+> (`scan_*`, `follow_yields`, the kind-set tests), which it
+> **under-weights**. Read the table as relative self-time with that
+> directional skew in mind; the _ordering within_ the compute frames and
+> within the allocation frames is reliable, the alloc-vs-compute split is
+> a soft upper bound on the alloc share.
 
 Reproduce:
 
 ```sh
 cd benchmark
-# both baselines:
+# both baselines (release host — slow rebuild):
 mise run sqlite-parse
-# Gale alone, with a guest profile (self-time sampling):
+# Gale alone, dev host, with a guest profile (self-time sampling):
 wado run --no-cache --profile guest,/tmp/p.json,1 -O2 sqlite_parse/sqlite_parse.wado
 ```
 
 (`wado` = `cargo run --bin wado --`. Analyze `p.json` with the
-`profiling-wado` skill's script, or upload to profiler.firefox.com.)
+`profiling-wado` skill's script, or upload to profiler.firefox.com. The
+table below merges **7 dev-host runs @1 ms = 1620 samples** to damp the
+per-run noise of a ~3.5 ms-of-guest-work-per-iter workload.)
 
-## Live profile (guest sampler, 1177 combined samples @1–5 ms)
+## Live profile (guest sampler, 7 runs merged, 1620 samples @1 ms)
 
-|   Pct | Symbol                     | role                                          |
-| ----: | -------------------------- | --------------------------------------------- |
-| 18.6% | `follow_yields`            | runtime FOLLOW gate (LL repair), parse + scan |
-| 15.3% | `List<Token>::grow`        | token-array reallocation                      |
-|  7.1% | `Parser::last_end`         | `Parser→List→Token→Span→end` load chain       |
-|  6.1% | `_gale_kind_set_8`         | membership test over the big keyword set      |
-|  5.0% | `List<Token>::push`        | per-token `struct.new Token`                  |
-|  4.3% | `List<char>::grow`         | lexer char-buffer reallocation                |
-|  4.2% | `char::to_ascii_lowercase` | case-insensitive keyword matching             |
-|  3.6% | `scan_any_name`            | scan (prediction)                             |
-|  3.2% | `scan_expr`                | scan (LR precedence climb)                    |
-|  2.7% | `Parser::expect`           | token read                                    |
-|  1.8% | `tokenize`                 | lexer driver (was 27.9% historically)         |
+|   Pct | Symbol                       | role                                          |
+| ----: | ---------------------------- | --------------------------------------------- |
+| 24.0% | `List<Token>::push`          | per-token `struct.new Token` + array store    |
+| 18.1% | `_gale_rule<ResultColumn..>` | rule-result subtree copy (result wrapper)     |
+|  5.7% | `Parser::last_end`           | `Parser→List→Token→Span→end` load chain       |
+|  4.3% | `_gale_kind_set_8`           | membership test over the big keyword set      |
+|  4.1% | `follow_yields`              | runtime FOLLOW gate (LL repair), parse + scan |
+|  3.9% | `scan_any_name`              | scan (prediction)                             |
+|  3.2% | `char::to_ascii_lowercase`   | case-insensitive keyword matching             |
+|  2.7% | `scan_expr`                  | scan (LR precedence climb)                    |
+|  2.5% | `StrCharIter::collect`       | `input.chars().collect()` into `List<char>`   |
+|  1.7% | `Parser::expect`             | token read                                    |
+|  1.7% | `tokenize`                   | lexer driver (was 27.9% historically)         |
+|  1.5% | `List<char>::push`           | lexer char-buffer fill                        |
+|  1.0% | `List<Token>::grow`          | token-array reallocation (now pre-sized away) |
+|  0.9% | `classify_keyword`           | keyword vs identifier disambiguation          |
 
-Rough buckets: token-stream construction (`grow`+`push`) ≈ **20%**; the
-FOLLOW gate ≈ **19%**; `Parser` token reads ≈ **11%**; kind-set
-membership ≈ **9–10%**; lexer char-level work
-(`to_ascii_lowercase` + `List<char>` + `classify_keyword`) ≈ **13%**;
-`scan_*` ≈ **8–10%**.
+Rough buckets (self-time): token-stream construction (`push`+`grow`) ≈
+**25%**; the rule-result copy (`_gale_rule<*>`, all variants) ≈ **21%**;
+lexer char-level work (`to_ascii_lowercase` + `List<char>` +
+`classify_keyword` + `collect` + `try_*`) ≈ **13%**; `scan_*` ≈ **11%**;
+kind-set membership ≈ **9%**; `Parser` token reads
+(`last_end`/`expect`/`advance`) ≈ **8%**; the FOLLOW gate ≈ **4%**.
+
+This is a different shape from the previous revision, where `follow_yields`
+led at 18.6% and `List<Token>::grow` at 15.3%. The pre-size killed `grow`,
+the per-loop FOLLOW prune dropped the gate to ~4%, and two
+allocation-bound costs rose to the top: per-token construction and a
+result-subtree copy in the generic rule wrapper (the latter not present
+in the old profile at all). Per the measurement note, the two leaders are
+exactly the frames the dev host inflates, so treat their _absolute_
+percentages as upper bounds — but both are real (the rule-copy is a
+genuine deep copy, §2, and per-token allocation is genuine `struct.new`,
+§1), so the _ordering_ holds.
 
 ## What would move the needle
 
 Ordered by current self-time. None are mutually exclusive; several
 multiply rather than add.
 
-### 1. The runtime FOLLOW gate — `follow_yields` (~19%)
+### 1. Token-stream construction — `push` 24.0% + `grow` 1.0% (~25%)
 
-New top cost since the LL repair moved to a runtime-threaded
-`follow: &List<List<i32>>` argument (see _LL Prediction_ in
-`AGENTS.md`). `follow_yields` runs at every tail-greedy `Repeat`
-iteration on **both** the parse and scan sides, walking the caller
-continuation at every depth. Levers, cheapest first:
+The dominant _category_, and now **allocation-bound** (`push`) rather
+than reallocation-bound — the pre-size (`List::with_capacity` in
+`tokenize`) already collapsed `grow` from 15.3% to ~1%, so that earlier
+"cheapest win" is **done**. What remains is the Wasm GC
+`(array (ref Token))` indirection plus a per-token `struct.new Token` on
+every `push` (each `Token` carries a `LexerSlice`, a `Span`, and a
+`leading_trivia: List<Token>`, so the struct is not trivial). The lever is
+**SoA decomposition of `List<Token>`**: parallel primitive arrays
+(`kinds` / `starts` / `ends` as `List<i32>`) so `peek_kind` becomes a
+single `array.get i32` (not `array.get (ref Token)` + `struct.get`) and
+per-token allocation disappears in the lex loop. Two ways to get there:
 
-- **Narrow where it is called.** It only needs to fire on `Repeat`s that
-  actually have a caller-FOLLOW conflict; tighten the `gate_caller_follow`
-  predicate in lowering so non-conflicting loops emit no gate at all
-  (the `emit_follow` prune already removes it grammar-wide when there is
-  no gate anywhere — this is the per-loop refinement).
-- **Cheapen the check.** It compares token kinds against small per-depth
-  sets; a flat `i32` representation or a depth-0 fast path (the common
-  K=1 case) avoids the nested `List<List<i32>>` walk.
-- **Hoist invariants.** The `follow` argument and `TK_EOF` are loop
-  invariant; ensure the loop guard does not re-fetch them per iteration.
+- **Gale-side:** redesign `Token` so hot fields are flat primitives,
+  with an opaque sidecar (or removal) for `text` / `leading_trivia`;
+  keep the public `Token` API as a view handle if needed.
+- **Wado-side:** extend `container_sroa` to handle (a) struct fields
+  (currently locals only), (b) inner structs with nested
+  struct/reference fields, (c) cross-function rewrites for the
+  `scan_*(&List<Token>, ...)` parameter pattern (1100+ sites in the
+  SQLite parser pass `&p.tokens` as a bare reference, always
+  escaping). Today the pass fires on zero candidates in
+  Gale-generated parsers.
 
-### 2. Token-stream construction — `grow` 15.3% + `push` 5.0% (~20%)
+### 2. Rule-result subtree copy — `_gale_rule<*>` (~21%)
 
-The dominant _category_, now reallocation-bound (`grow`) rather than
-lexer-bound. Two non-overlapping paths (carried from the original
-analysis, still valid):
+**New, and the second-largest self-time category.** Every parser rule is
+emitted as `_parse_X(p, follow) = _gale_rule(_parse_X__inner(p, follow),
+"X")`. `_gale_rule<T>` exists only to push the rule name onto the
+`ParseError.rule_stack` on the **error** path:
 
-1. **Pre-size the token list.** `grow` at 15% means the `List<Token>`
-   reallocates repeatedly while tokenizing. Reserve capacity up front
-   (e.g. proportional to input length) so the lex loop does at most one
-   or two growths. Cheapest available win.
-2. **SoA decomposition of `List<Token>`.** The deeper cost is Wasm GC
-   `(array (ref Token))` indirection plus per-token `struct.new Token`.
-   Decompose into parallel primitive arrays (`kinds` / `starts` / `ends`
-   as `List<i32>`) so `peek_kind` becomes a single `array.get i32` (not
-   `array.get (ref Token)` + `struct.get`) and per-token allocation
-   disappears in the lex loop. Two ways to get there:
-   - **Gale-side:** redesign `Token` so hot fields are flat primitives,
-     with an opaque sidecar (or removal) for `text` / `leading_trivia`;
-     keep the public `Token` API as a view handle if needed.
-   - **Wado-side:** extend `container_sroa` to handle (a) struct fields
-     (currently locals only), (b) inner structs with nested
-     struct/reference fields, (c) cross-function rewrites for the
-     `scan_*(&List<Token>, ...)` parameter pattern (1100+ sites in the
-     SQLite parser pass `&p.tokens` as a bare reference, always
-     escaping). Today the pass fires on zero candidates in
-     Gale-generated parsers.
+```wado
+fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
+    if let Err(mut e) = r { e.rule_stack.push(rule); return Result::Err(e); }
+    return r;   // success: the whole T is passed in by value and returned by value
+}
+```
 
-### 3. `Parser` token reads — `last_end` 7.1%, `expect`, `advance` (~11%)
+On the **success** path the freshly built node `T` is routed _by value_
+into the wrapper and returned _by value_. Value semantics make that a
+deep copy of the entire CST subtree — and `ResultColumnNode` is a
+`variant` whose arms embed `Token`s (each with a `LexerSlice`, a `Span`,
+and a `leading_trivia: List<Token>`), so the copy is not cheap.
+`result_column` is the single hottest rule on this fixture (SELECT lists
+dominate the corpus), so `_gale_rule<ResultColumnNode>` alone is 18.1%;
+the other `_gale_rule<*>` variants add ~3%. The frame is a pure leaf
+(inclusive == self), consistent with an inlined copy and no child calls.
+Two independent levers:
+
+- **Wado-side (copy/move elision).** A by-value parameter that is
+  returned unchanged on a path where the source is dead after the
+  `return` should **move**, not deep-copy. Teaching the optimizer to
+  elide this removes the cost grammar-wide, for every generated parser,
+  with no Gale change. This is the higher-leverage fix.
+- **Gale-side (keep the success path copy-free).** The wrapper only needs
+  to touch the value on `Err`. Restructure so the node never crosses a
+  generic by-value boundary on success — e.g. push rule context through a
+  side channel (the parser already threads `&mut Parser`), inline the
+  wrapper at the call site so the move is visible to the optimizer, or
+  carry the rule id on the error rather than wrapping the result.
+
+(Per the measurement note the dev host over-weights this allocation-bound
+frame; expect a smaller — but still material — share on a release host.)
+
+### 3. `Parser` token reads — `last_end` 5.7%, `expect`, `advance` (~8%)
 
 `Parser::last_end` is a 4-step `Parser→List→Token→Span→end` load chain.
 **Inlining / per-method micro-opt does not help** (see below): the cost
-is the actual loads, which the SoA decomposition in (2) removes by making
-the end offset a direct `array.get i32`.
+is the actual loads, which the SoA decomposition in (1) removes by making
+the end offset a direct `array.get i32`. This is the same lever as §1 —
+SoA pays off in two places at once.
 
-### 4. Kind-set membership — `_gale_kind_set_*` (~9–10%)
+### 4. Kind-set membership — `_gale_kind_set_*` (~9%)
 
-`_gale_kind_set_8` alone is 6.1%: a membership test over the large SQLite
-keyword set, called from scan dispatch and the parser's lookahead gates.
-Generated today as a branch/compare cascade. A compile-time **perfect
-hash** or a **bitset indexed by token kind** (`(kind >> 5)` word +
-`1 << (kind & 31)`) turns it into O(1) with no branch cascade — worth it
-because a handful of large sets dominate.
+`_gale_kind_set_8` alone is 4.3%: a `k matches { TK_… | TK_… | … }`
+membership test over the large SQLite keyword set (~125 kinds), called
+from scan dispatch and the parser's lookahead gates. Generated today as a
+branch/compare cascade (71 such helpers in the SQLite parser). A
+compile-time **perfect hash** or a **bitset indexed by token kind**
+(`(kind >> 5)` word + `1 << (kind & 31)`) turns it into O(1) with no
+branch cascade — worth it because a handful of large sets dominate. This
+is a pure-compute frame the dev host does _not_ inflate, so its release
+share is likely a touch higher than 9%.
 
-### 5. Lexer dispatch (~13%, independent secondary lever)
+### 5. Lexer char-level work (~13%, independent secondary lever)
 
 Inside lexing, work splits across `to_ascii_lowercase` (case-insensitive
-matching), `List<char>` buffer building, and `classify_keyword`. Pick by
-what profiling on the predicate-correct lexer says is hottest (after
-Stage C makes predicates real — a fast tokenizer is meaningless if it
-tokenizes incorrectly). Candidates:
+matching, 3.2%), `List<char>` buffer building, `classify_keyword` (0.9%),
+and the up-front `input.chars().collect()` into `List<char>`
+(`StrCharIter::collect`, 2.5%, in `_gale_new_parser`). Pick by what
+profiling on the predicate-correct lexer says is hottest (after Stage C
+makes predicates real — a fast tokenizer is meaningless if it tokenizes
+incorrectly). Candidates:
 
 - **Table-driven DFA** for the whole lexer (NFA → DFA → transition
   table). Replaces both per-character dispatch and `classify_keyword`;
@@ -155,7 +218,7 @@ tokenizes incorrectly). Candidates:
   function from the profile but does not move wall time — the cost is the
   loads (`Parser→List→Token→Span→end`), not call overhead. wasmtime +
   Cranelift handle small Wasm calls cheaply enough that inlinability is
-  not the lever. The real fix is removing the loads (SoA, §2).
+  not the lever. The real fix is removing the loads (SoA, §1).
 - **Data-driven / bytecode-VM scan** (see below).
 
 ## Failed approaches (do not repeat)
