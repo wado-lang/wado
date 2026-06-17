@@ -918,7 +918,7 @@ impl<'a> Interpreter<'a> {
                 else_block,
             } = &body.stmts[s].kind
             {
-                if let ExprKind::BoolLiteral(value) = body.exprs[condition.expr()].kind {
+                if let Some(value) = operand_bool(body, *condition) {
                     Some((value, *then_block, *else_block))
                 } else {
                     None

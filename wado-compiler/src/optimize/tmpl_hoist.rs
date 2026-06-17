@@ -600,7 +600,9 @@ fn transform_expr(
         None,
     }
     let walk = match &engine.body.exprs[e].kind {
-        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr.expr()).collect()),
+        ExprKind::Call { args, .. } => {
+            Walk::Exprs(args.iter().filter_map(|a| a.expr.as_expr()).collect())
+        }
         ExprKind::MethodCall { receiver, args, .. } => {
             let mut v = vec![receiver.expr()];
             v.extend(args.iter().map(|a| a.expr.expr()));
@@ -1432,7 +1434,9 @@ fn rename_local_in_expr(
     }
     let walk = match &engine.body.exprs[e].kind {
         ExprKind::Local { index, .. } if *index == old_index => Walk::Local,
-        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr.expr()).collect()),
+        ExprKind::Call { args, .. } => {
+            Walk::Exprs(args.iter().filter_map(|a| a.expr.as_expr()).collect())
+        }
         ExprKind::MethodCall { receiver, args, .. } => {
             let mut v = vec![receiver.expr()];
             v.extend(args.iter().map(|a| a.expr.expr()));

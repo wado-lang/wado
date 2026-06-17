@@ -536,7 +536,7 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
 fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
     match &body.stmts[s].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            vec![Child::Expr(value.expr())]
+            value.as_expr().map(Child::Expr).into_iter().collect()
         }
         StmtKind::Expr(value) => vec![Child::Expr(*value)],
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
@@ -1025,9 +1025,9 @@ fn collect_modified_vars_in_expr(
         | ExprKind::EnumConstruct { .. } => {}
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
-            let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, ExprId)> = arms
+            let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, Option<ExprId>)> = arms
                 .iter()
-                .map(|a| (a.pattern, a.guard.map(|g| g.expr()), a.body.expr()))
+                .map(|a| (a.pattern, a.guard.and_then(Operand::as_expr), a.body.as_expr()))
                 .collect();
             collect_modified_vars_in_operand(body, expr, modified, type_table);
             for (pattern, guard, body_expr) in arm_data {
@@ -1035,7 +1035,9 @@ fn collect_modified_vars_in_expr(
                 if let Some(g) = guard {
                     collect_modified_vars_in_expr(body, g, modified, type_table);
                 }
-                collect_modified_vars_in_expr(body, body_expr, modified, type_table);
+                if let Some(be) = body_expr {
+                    collect_modified_vars_in_expr(body, be, modified, type_table);
+                }
             }
         }
     }

@@ -1138,7 +1138,7 @@ impl<'a> Builder<'a> {
                         .iter()
                         .any(|s| block_breaks_to_node(self.body, NodeRef::Stmt(*s), &label));
                     if earlier_break
-                        || block_breaks_to_node(self.body, NodeRef::Expr(value.expr()), &label)
+                        || value.as_expr().is_some_and(|ve| block_breaks_to_node(self.body, NodeRef::Expr(ve), &label))
                     {
                         return;
                     }
