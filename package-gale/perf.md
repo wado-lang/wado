@@ -39,7 +39,7 @@ not the historical one.
 > dev host is ~10× slower per iter than the release headline, and that
 > slack is concentrated in **allocation/GC host work**. So the profile
 > **over-weights allocation-heavy guest frames** (`List<Token>::push`,
-> the `_gale_rule` result copy) relative to pure-compute frames
+> the `_gale_rule` per-call rule-name allocation) relative to pure-compute frames
 > (`scan_*`, `follow_yields`, the kind-set tests), which it
 > **under-weights**. Read the table as relative self-time with that
 > directional skew in mind; the _ordering within_ the compute frames and
@@ -63,26 +63,29 @@ per-run noise of a ~3.5 ms-of-guest-work-per-iter workload.)
 
 ## Live profile (guest sampler, 7 runs merged, 1620 samples @1 ms)
 
-|   Pct | Symbol                       | role                                          |
-| ----: | ---------------------------- | --------------------------------------------- |
-| 24.0% | `List<Token>::push`          | per-token `struct.new Token` + array store    |
-| 18.1% | `_gale_rule<ResultColumn..>` | rule-result subtree copy (result wrapper)     |
-|  5.7% | `Parser::last_end`           | `Parser→List→Token→Span→end` load chain       |
-|  4.3% | `_gale_kind_set_8`           | membership test over the big keyword set      |
-|  4.1% | `follow_yields`              | runtime FOLLOW gate (LL repair), parse + scan |
-|  3.9% | `scan_any_name`              | scan (prediction)                             |
-|  3.2% | `char::to_ascii_lowercase`   | case-insensitive keyword matching             |
-|  2.7% | `scan_expr`                  | scan (LR precedence climb)                    |
-|  2.5% | `StrCharIter::collect`       | `input.chars().collect()` into `List<char>`   |
-|  1.7% | `Parser::expect`             | token read                                    |
-|  1.7% | `tokenize`                   | lexer driver (was 27.9% historically)         |
-|  1.5% | `List<char>::push`           | lexer char-buffer fill                        |
-|  1.0% | `List<Token>::grow`          | token-array reallocation (now pre-sized away) |
-|  0.9% | `classify_keyword`           | keyword vs identifier disambiguation          |
+|   Pct | Symbol                       | role                                             |
+| ----: | ---------------------------- | ------------------------------------------------ |
+| 24.0% | `List<Token>::push`          | per-token `struct.new Token` + array store       |
+| 18.1% | `_gale_rule<ResultColumn..>` | per-call rule-name `String` alloc at the wrapper |
+|  5.7% | `Parser::last_end`           | `Parser→List→Token→Span→end` load chain          |
+|  4.3% | `_gale_kind_set_8`           | membership test over the big keyword set         |
+|  4.1% | `follow_yields`              | runtime FOLLOW gate (LL repair), parse + scan    |
+|  3.9% | `scan_any_name`              | scan (prediction)                                |
+|  3.2% | `char::to_ascii_lowercase`   | case-insensitive keyword matching                |
+|  2.7% | `scan_expr`                  | scan (LR precedence climb)                       |
+|  2.5% | `StrCharIter::collect`       | `input.chars().collect()` into `List<char>`      |
+|  1.7% | `Parser::expect`             | token read                                       |
+|  1.7% | `tokenize`                   | lexer driver (was 27.9% historically)            |
+|  1.5% | `List<char>::push`           | lexer char-buffer fill                           |
+|  1.0% | `List<Token>::grow`          | token-array reallocation (now pre-sized away)    |
+|  0.9% | `classify_keyword`           | keyword vs identifier disambiguation             |
 
 Rough buckets (self-time): token-stream construction (`push`+`grow`) ≈
-**25%**; the rule-result copy (`_gale_rule<*>`, all variants) ≈ **21%**;
-lexer char-level work (`to_ascii_lowercase` + `List<char>` +
+**25%**; the per-call rule-name `String` allocation at the `_gale_rule`
+boundary (`_gale_rule<*>`, all variants) ≈ **21%** — but see §2: a spike
+that removes only that allocation cuts ~40% of dev-host wall time, so the
+profile **under**-attributes it; lexer char-level work
+(`to_ascii_lowercase` + `List<char>` +
 `classify_keyword` + `collect` + `try_*`) ≈ **13%**; `scan_*` ≈ **11%**;
 kind-set membership ≈ **9%**; `Parser` token reads
 (`last_end`/`expect`/`advance`) ≈ **8%**; the FOLLOW gate ≈ **4%**.
@@ -90,13 +93,15 @@ kind-set membership ≈ **9%**; `Parser` token reads
 This is a different shape from the previous revision, where `follow_yields`
 led at 18.6% and `List<Token>::grow` at 15.3%. The pre-size killed `grow`,
 the per-loop FOLLOW prune dropped the gate to ~4%, and two
-allocation-bound costs rose to the top: per-token construction and a
-result-subtree copy in the generic rule wrapper (the latter not present
-in the old profile at all). Per the measurement note, the two leaders are
-exactly the frames the dev host inflates, so treat their _absolute_
-percentages as upper bounds — but both are real (the rule-copy is a
-genuine deep copy, §2, and per-token allocation is genuine `struct.new`,
-§1), so the _ordering_ holds.
+allocation-bound costs rose to the top: per-token construction and the
+per-call rule-name `String` allocation at the generic rule wrapper
+(neither present in the old profile at the same weight). Per the
+measurement note, the two leaders are exactly the frames the dev host
+inflates, but both are real allocations (per-token `struct.new`, §1, and
+per-rule `struct.new String`, §2 — the latter confirmed by a spike, not
+just the sampler), so the _ordering_ holds. Note §2 is **not** a subtree
+copy (a WIR-level fact an earlier draft got wrong): the wrapper returns a
+`ref`; the cost is the rule-name allocation at the call site.
 
 ## What would move the needle
 
@@ -128,45 +133,89 @@ per-token allocation disappears in the lex loop. Two ways to get there:
   escaping). Today the pass fires on zero candidates in
   Gale-generated parsers.
 
-### 2. Rule-result subtree copy — `_gale_rule<*>` (~21%)
+### 2. Per-call rule-name `String` allocation — the `_gale_rule` boundary (~40% dev-host)
 
-**New, and the second-largest self-time category.** Every parser rule is
-emitted as `_parse_X(p, follow) = _gale_rule(_parse_X__inner(p, follow),
-"X")`. `_gale_rule<T>` exists only to push the rule name onto the
-`ParseError.rule_stack` on the **error** path:
+**The single largest reducible cost, and not what the profile name
+suggests.** Every parser rule is emitted as
+`_parse_X(p, follow) = _gale_rule(_parse_X__inner(p, follow), "X")`.
+`_gale_rule<T>` records the rule name on the `ParseError.rule_stack` on
+the **error** path only:
 
 ```wado
 fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
     if let Err(mut e) = r { e.rule_stack.push(rule); return Result::Err(e); }
-    return r;   // success: the whole T is passed in by value and returned by value
+    return r;
 }
 ```
 
-On the **success** path the freshly built node `T` is routed _by value_
-into the wrapper and returned _by value_. Value semantics make that a
-deep copy of the entire CST subtree — and `ResultColumnNode` is a
-`variant` whose arms embed `Token`s (each with a `LexerSlice`, a `Span`,
-and a `leading_trivia: List<Token>`), so the copy is not cheap.
-`result_column` is the single hottest rule on this fixture (SELECT lists
-dominate the corpus), so `_gale_rule<ResultColumnNode>` alone is 18.1%;
-the other `_gale_rule<*>` variants add ~3%. The frame is a pure leaf
-(inclusive == self), consistent with an inlined copy and no child calls.
-Two independent levers:
+The profile attributes ~18% self-time to `_gale_rule<ResultColumnNode>`,
+which **misled an earlier draft into calling it a "subtree copy."** It is
+not. The WIR proves the success path is free of any copy — `Result<…>` is
+a boxed `ref`, so `return r` returns a reference and the only
+`$value_copy$` is on the cold `Err` branch:
 
-- **Wado-side (copy/move elision).** A by-value parameter that is
-  returned unchanged on a path where the source is dead after the
-  `return` should **move**, not deep-copy. Teaching the optimizer to
-  elide this removes the cost grammar-wide, for every generated parser,
-  with no Gale change. This is the higher-leverage fix.
-- **Gale-side (keep the success path copy-free).** The wrapper only needs
-  to touch the value on `Err`. Restructure so the node never crosses a
-  generic by-value boundary on success — e.g. push rule context through a
-  side channel (the parser already threads `&mut Parser`), inline the
-  wrapper at the call site so the move is visible to the optimizer, or
-  carry the rule id on the error rather than wrapping the result.
+```text
+fn _gale_rule<ResultColumnNode>(r, rule) {
+    if ref.test …::Err(r) { … $value_copy … }   // cold: only on parse failure
+    return r;                                     // returns a ref — no copy
+}
+```
+
+The real cost lives at the **call site**, in the wrapper `_parse_X`: the
+rule-name `"X"` is rebuilt on **every** rule entry as
+`struct.new String { repr: array.new_data("result_column"), used: 13 }` —
+a fresh GC allocation on the hot success path, consumed only on the cold
+error path. Thousands of these per parse dominate the allocation traffic.
+
+**Measured (dev host, same host throughout — the comparison is valid even
+though absolute times are dev-inflated; spike copies the generated parser
+and drives `queries.sql`):**
+
+| variant                                     | per-iter | throughput |  vs base |
+| ------------------------------------------- | -------: | ---------: | -------: |
+| base (as generated)                         | ~39.1 ms |  ~342 KB/s |        — |
+| rule-name hoisted to a single shared global | ~22.9 ms |  ~582 KB/s | **−41%** |
+| `_gale_rule` bypassed entirely              | ~21.9 ms |  ~610 KB/s | **−44%** |
+
+The middle row is the finding: keeping the wrapper call **and** its
+`ref.test`, changing only the per-call `String` literal into one pre-built
+global, recovers ~93% of the full removal. So:
+
+- **Reducing the call count is not the lever.** Removing the wrapper call
+  and `ref.test` on top of the hoist buys only ~3% more (22.9 → 21.9 ms);
+  the wrapper itself is nearly free. (This contradicts the intuition that
+  the per-rule call overhead matters — it does not.)
+- **Reducing the per-call allocation is the whole win.** Build each
+  distinct rule name once, not on every rule entry.
+
+**Future direction.** Wado already has a const-aggregate → global hoist
+(`const_object_globalization`, see `docs/optimizer.md`), but it does not
+fire here for two reasons, both fixable: (a) its gate `is_globalizable_const`
+does not list `ExprKind::StringLiteral`, and (b) a string only takes the
+inline `array.new_fixed` const repr (vs the opaque `array.new_data` data
+segment) when its byte length is `<= string_inline_max_bytes`, which is
+**4** at `-O2` (`optimize::string_inline_max_bytes`) — far below the
+13–25-byte rule names. Even raising that threshold alone is not enough:
+the strings are inline call arguments, not `let` bindings, and the pass
+only hoists `let`-bound aggregates, so the `struct.new String` stays at
+the call site. Either path closes the gap:
+
+- **Wado-side:** teach the const-aggregate hoist to also globalize a
+  constant `String` (or any constant aggregate) appearing as an inline
+  argument, not just a `let` binding — and let the eager-const-string
+  threshold cover typical identifier-length literals. Fixes this for every
+  generated parser and any Wado program that passes string literals on a
+  hot path, with no Gale change.
+- **Gale-side:** emit each rule name as a module-level
+  `global RULE_<id>: String = "…"` once and pass that to `_gale_rule`
+  (`gen_rule_entry_wrapper` in `parser_gen.wado`), instead of inlining the
+  literal at every call. Lower-leverage but self-contained; the stronger
+  variant passes an `i32` rule-id and turns `rule_stack` into
+  `List<i32>`, eliminating hot-path string work entirely.
 
 (Per the measurement note the dev host over-weights this allocation-bound
-frame; expect a smaller — but still material — share on a release host.)
+cost; the release share is smaller, but the per-parse allocation-count
+reduction is real and host-independent.)
 
 ### 3. `Parser` token reads — `last_end` 5.7%, `expect`, `advance` (~8%)
 
