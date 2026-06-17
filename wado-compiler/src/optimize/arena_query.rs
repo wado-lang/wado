@@ -236,7 +236,7 @@ fn is_pure_block(body: &Body, block: BlockId) -> bool {
         .iter()
         .all(|s| match &body.stmts[*s].kind {
             StmtKind::Expr(e) => is_pure_expr(body, *e),
-            StmtKind::Let { value, .. } => is_pure_expr(body, value.expr()),
+            StmtKind::Let { value, .. } => is_pure_operand(body, *value),
             _ => false,
         })
 }

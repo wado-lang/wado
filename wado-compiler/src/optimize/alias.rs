@@ -637,7 +637,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             StmtKind::Let {
                 local_index, value, ..
             } => {
-                if let Some(src) = local(value.expr()) {
+                if let Some(src) = value.as_expr().and_then(local) {
                     out.insert(*local_index);
                     out.insert(src);
                 }

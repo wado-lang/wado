@@ -304,7 +304,9 @@ fn analyze_expr(
                 result.usage.entry(*index).or_default().has_field_mutation = true;
             }
             analyze_expr(body, target, result, type_table, fpt);
-            analyze_expr(body, value.expr(), result, type_table, fpt);
+            if let Some(ve) = value.as_expr() {
+                analyze_expr(body, ve, result, type_table, fpt);
+            }
         }
         ExprKind::Unary { op, expr: inner } => {
             let (op, inner) = (*op, *inner);

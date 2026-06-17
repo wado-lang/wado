@@ -660,17 +660,22 @@ fn soft_expr(
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
             if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                && is_candidate_local(body, inner.expr(), candidates).is_some()
+                && inner
+                    .as_expr()
+                    .and_then(|e| is_candidate_local(body, e, candidates))
+                    .is_some()
             {
-                soft_expr(
-                    body,
-                    value.expr(),
-                    false,
-                    candidates,
-                    stores_lookup,
-                    current_module,
-                    hard_escaped,
-                );
+                if let Some(ve) = value.as_expr() {
+                    soft_expr(
+                        body,
+                        ve,
+                        false,
+                        candidates,
+                        stores_lookup,
+                        current_module,
+                        hard_escaped,
+                    );
+                }
                 return;
             }
             soft_expr(
@@ -682,15 +687,17 @@ fn soft_expr(
                 current_module,
                 hard_escaped,
             );
-            soft_expr(
-                body,
-                value.expr(),
-                false,
-                candidates,
-                stores_lookup,
-                current_module,
-                hard_escaped,
-            );
+            if let Some(ve) = value.as_expr() {
+                soft_expr(
+                    body,
+                    ve,
+                    false,
+                    candidates,
+                    stores_lookup,
+                    current_module,
+                    hard_escaped,
+                );
+            }
         }
         ExprKind::Local { index, .. } => {
             if candidates.contains(index) && !soft {
@@ -958,20 +965,21 @@ fn expand_struct_let(
     new_stmts: &mut Vec<StmtId>,
 ) {
     // (field_index, value_expr) pairs in field-index order.
-    let mut pairs: Vec<(u32, ExprId)> = match &engine.body.exprs[value].kind {
-        ExprKind::StructLiteral { fields, .. } => fields
-            .iter()
-            .map(|f| (f.field_index, f.value.expr()))
-            .collect(),
+    let mut pairs: Vec<(u32, Operand)> = match &engine.body.exprs[value].kind {
+        ExprKind::StructLiteral { fields, .. } => {
+            fields.iter().map(|f| (f.field_index, f.value)).collect()
+        }
         ExprKind::TupleLiteral { elements, .. } => elements
             .iter()
             .enumerate()
-            .map(|(i, e)| (i as u32, e.expr()))
+            .map(|(i, e)| (i as u32, *e))
             .collect(),
         _ => unreachable!("candidate must be struct or tuple literal"),
     };
     pairs.sort_by_key(|(fi, _)| *fi);
-    for (field_index, field_value) in pairs {
+    for (field_index, field_op) in pairs {
+        // A promoted-constant field becomes a fresh literal init for the scalar.
+        let field_value = engine.materialize_operand(field_op, span);
         rewrite_expr(engine, field_value, ctx);
         push_field_let(
             engine,

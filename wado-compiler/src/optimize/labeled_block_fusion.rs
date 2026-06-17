@@ -1636,8 +1636,10 @@ fn subst_variant_payload_in_expr(
         | ExprKind::Index {
             expr: left,
             index: right,
-        } => Walk::Exprs(vec![left.expr(), right.expr()]),
-        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, value.expr()]),
+        } => Walk::Exprs([*left, *right].into_iter().filter_map(Operand::as_expr).collect()),
+        ExprKind::Assign { target, value } => {
+            Walk::Exprs(std::iter::once(*target).chain(value.as_expr()).collect())
+        }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
@@ -1645,23 +1647,27 @@ fn subst_variant_payload_in_expr(
         | ExprKind::VariantTest { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::ClosureToCanonical { functor: inner, .. }
-        | ExprKind::GlobalVarSet { value: inner, .. } => Walk::Exprs(vec![inner.expr()]),
-        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr.expr()).collect()),
+        | ExprKind::GlobalVarSet { value: inner, .. } => {
+            Walk::Exprs(inner.as_expr().into_iter().collect())
+        }
+        ExprKind::Call { args, .. } => {
+            Walk::Exprs(args.iter().filter_map(|a| a.expr.as_expr()).collect())
+        }
         ExprKind::CmRawCall { args, .. } => {
             Walk::Exprs(args.iter().filter_map(|o| o.as_expr()).collect())
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            let mut v = vec![receiver.expr()];
-            v.extend(args.iter().map(|a| a.expr.expr()));
+            let mut v: Vec<ExprId> = receiver.as_expr().into_iter().collect();
+            v.extend(args.iter().filter_map(|a| a.expr.as_expr()));
             Walk::Exprs(v)
         }
         ExprKind::IndirectCall { callee, args } => {
-            let mut v = vec![callee.expr()];
+            let mut v: Vec<ExprId> = callee.as_expr().into_iter().collect();
             v.extend(args.iter().filter_map(|o| o.as_expr()));
             Walk::Exprs(v)
         }
         ExprKind::StructLiteral { fields, .. } => {
-            Walk::Exprs(fields.iter().map(|f| f.value.expr()).collect())
+            Walk::Exprs(fields.iter().filter_map(|f| f.value.as_expr()).collect())
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             Walk::Exprs(elements.iter().filter_map(|o| o.as_expr()).collect())
@@ -1679,14 +1685,16 @@ fn subst_variant_payload_in_expr(
             if let Some(eb) = else_branch {
                 blocks.push(*eb);
             }
-            Walk::ExprsAndBlocks(vec![condition.expr()], blocks)
+            Walk::ExprsAndBlocks(condition.as_expr().into_iter().collect(), blocks)
         }
         ExprKind::Match { expr, arms } => {
-            let mut exprs = vec![expr.expr()];
+            let mut exprs: Vec<ExprId> = expr.as_expr().into_iter().collect();
             for arm in arms {
-                exprs.push(arm.body.expr());
-                if let Some(g) = arm.guard {
-                    exprs.push(g.expr());
+                if let Some(b) = arm.body.as_expr() {
+                    exprs.push(b);
+                }
+                if let Some(g) = arm.guard.and_then(Operand::as_expr) {
+                    exprs.push(g);
                 }
             }
             Walk::Exprs(exprs)
@@ -1699,7 +1707,7 @@ fn subst_variant_payload_in_expr(
         } => {
             let mut blocks = arms.clone();
             blocks.push(*default);
-            Walk::ExprsAndBlocks(vec![scrutinee.expr()], blocks)
+            Walk::ExprsAndBlocks(scrutinee.as_expr().into_iter().collect(), blocks)
         }
         _ => Walk::None,
     };

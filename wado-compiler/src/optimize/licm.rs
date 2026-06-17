@@ -444,6 +444,10 @@ enum Child {
 /// patterns. Mirrors the child set of the tree `find_hoist`/`replace_hoist`/
 /// `collect_licm_ref` walks (a `Match` yields its scrutinee plus each arm's
 /// guard and body, never the arm pattern).
+fn op_child(op: Operand) -> Option<Child> {
+    op.as_expr().map(Child::Expr)
+}
+
 fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
     match &body.exprs[e].kind {
         ExprKind::FieldAccess { expr: inner, .. }
@@ -453,24 +457,24 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
         | ExprKind::GlobalVarSet { value: inner, .. }
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => vec![Child::Expr(inner.expr())],
+        | ExprKind::VariantPayload { expr: inner, .. } => inner.as_expr().map(Child::Expr).into_iter().collect(),
         ExprKind::Binary { left, right, .. }
         | ExprKind::Index {
             expr: left,
             index: right,
-        } => vec![Child::Expr(left.expr()), Child::Expr(right.expr())],
+        } => [*left, *right].into_iter().filter_map(op_child).collect(),
         ExprKind::Assign { target, value } => {
-            vec![Child::Expr(*target), Child::Expr(value.expr())]
+            [Some(Child::Expr(*target)), op_child(*value)].into_iter().flatten().collect()
         }
-        ExprKind::Call { args, .. } => args.iter().map(|a| Child::Expr(a.expr.expr())).collect(),
+        ExprKind::Call { args, .. } => args.iter().filter_map(|a| op_child(a.expr)).collect(),
         ExprKind::MethodCall { receiver, args, .. } => {
-            std::iter::once(Child::Expr(receiver.expr()))
-                .chain(args.iter().map(|a| Child::Expr(a.expr.expr())))
+            op_child(*receiver).into_iter()
+                .chain(args.iter().filter_map(|a| op_child(a.expr)))
                 .collect()
         }
-        ExprKind::CmRawCall { args, .. } => args.iter().map(|a| Child::Expr(a.expr())).collect(),
-        ExprKind::IndirectCall { callee, args } => std::iter::once(Child::Expr(callee.expr()))
-            .chain(args.iter().map(|a| Child::Expr(a.expr())))
+        ExprKind::CmRawCall { args, .. } => args.iter().filter_map(|a| op_child(*a)).collect(),
+        ExprKind::IndirectCall { callee, args } => op_child(*callee).into_iter()
+            .chain(args.iter().filter_map(|a| op_child(*a)))
             .collect(),
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => vec![Child::Block(*b)],
         ExprKind::If {
@@ -478,37 +482,35 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
             then_branch,
             else_branch,
         } => {
-            let mut v = vec![Child::Expr(condition.expr()), Child::Block(*then_branch)];
+            let mut v: Vec<Child> = op_child(*condition).into_iter().chain(std::iter::once(Child::Block(*then_branch))).collect();
             if let Some(eb) = else_branch {
                 v.push(Child::Block(*eb));
             }
             v
         }
         ExprKind::StructLiteral { fields, .. } => {
-            fields.iter().map(|f| Child::Expr(f.value.expr())).collect()
+            fields.iter().filter_map(|f| op_child(f.value)).collect()
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            elements.iter().map(|e| Child::Expr(e.expr())).collect()
+            elements.iter().filter_map(|e| op_child(*e)).collect()
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.iter().map(|p| Child::Expr(p.expr())).collect()
+            payload.iter().filter_map(|p| op_child(*p)).collect()
         }
         ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
-        } => std::iter::once(Child::Expr(scrutinee.expr()))
+        } => op_child(*scrutinee).into_iter()
             .chain(arms.iter().map(|a| Child::Block(*a)))
             .chain(std::iter::once(Child::Block(*default)))
             .collect(),
         ExprKind::Match { expr, arms } => {
-            let mut v = vec![Child::Expr(expr.expr())];
+            let mut v: Vec<Child> = op_child(*expr).into_iter().collect();
             for arm in arms {
-                v.push(Child::Expr(arm.body.expr()));
-                if let Some(g) = arm.guard {
-                    v.push(Child::Expr(g.expr()));
-                }
+                if let Some(c) = op_child(arm.body) { v.push(c); }
+                if let Some(g) = arm.guard.and_then(op_child) { v.push(g); }
             }
             v
         }
