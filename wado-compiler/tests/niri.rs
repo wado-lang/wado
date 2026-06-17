@@ -19,16 +19,18 @@ use wado_compiler::nir::{
     NirParam, NirUnaryOp, ReturnAbi,
 };
 use wado_compiler::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, PatNode, StmtId,
-    StmtKind, StmtNode,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind,
+    PatNode, StmtId, StmtKind, StmtNode,
 };
+use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
 
-/// A deferred expression builder: appends a subtree to the given arena `Body`
-/// and returns its root id. `Rc` so a builder can be cloned and re-used to
-/// build into more than one body (e.g. an operand shared by two parents).
-type Build = Rc<dyn Fn(&mut Body) -> ExprId>;
+/// A deferred operand builder: appends any needed subtree to the arena `Body`
+/// and returns the operand it produces — a pooled `Operand::Value` for a pure
+/// scalar literal, or `Operand::Expr` for a composite. `Rc` so a builder can be
+/// cloned and re-used (an operand shared by two parents).
+type Build = Rc<dyn Fn(&mut Body) -> Operand>;
 
 fn pe(body: &mut Body, kind: ExprKind, type_id: TypeId) -> ExprId {
     body.exprs.push(ExprNode {
@@ -39,96 +41,90 @@ fn pe(body: &mut Body, kind: ExprKind, type_id: TypeId) -> ExprId {
 }
 
 fn char_lit(c: char) -> Build {
-    Rc::new(move |b| pe(b, ExprKind::CharLiteral(c), TypeTable::CHAR))
+    Rc::new(move |b| Operand::Value(b.values.alloc_unshared(ValueKind::Char(c), TypeTable::CHAR)))
 }
 
 fn cast_expr(inner: Build, target_ty: TypeId) -> Build {
     Rc::new(move |b| {
         let e = inner(b);
-        pe(
+        Operand::Expr(pe(
             b,
             ExprKind::Cast {
-                expr: e.into(),
+                expr: e,
                 target_type: target_ty,
             },
             target_ty,
-        )
+        ))
     })
 }
 
-fn int_lit(value: u64, type_id: TypeId, repr: &str) -> Build {
-    let repr = repr.to_string();
-    Rc::new(move |b| {
-        pe(
-            b,
-            ExprKind::IntLiteral {
-                value,
-                repr: repr.clone(),
-            },
-            type_id,
-        )
-    })
+fn int_lit(value: u64, type_id: TypeId, _repr: &str) -> Build {
+    Rc::new(move |b| Operand::Value(b.values.alloc_unshared(ValueKind::Int(value), type_id)))
 }
 
-fn float_lit(value: f64, type_id: TypeId, repr: &str) -> Build {
-    let repr = repr.to_string();
+fn float_lit(value: f64, type_id: TypeId, _repr: &str) -> Build {
     Rc::new(move |b| {
-        pe(
-            b,
-            ExprKind::FloatLiteral {
-                value,
-                repr: repr.clone(),
-            },
-            type_id,
-        )
+        Operand::Value(b.values.alloc_unshared(ValueKind::Float(value.to_bits()), type_id))
     })
 }
 
 fn bool_lit(value: bool) -> Build {
-    Rc::new(move |b| pe(b, ExprKind::BoolLiteral(value), TypeTable::BOOL))
+    Rc::new(move |b| {
+        Operand::Value(b.values.alloc_unshared(ValueKind::Bool(value), TypeTable::BOOL))
+    })
 }
 
 fn binary(op: NirBinaryOp, left: Build, right: Build, result_ty: TypeId) -> Build {
     Rc::new(move |b| {
         let l = left(b);
         let r = right(b);
-        pe(
+        Operand::Expr(pe(
             b,
             ExprKind::Binary {
-                left: l.into(),
+                left: l,
                 op,
-                right: r.into(),
+                right: r,
             },
             result_ty,
-        )
+        ))
     })
 }
 
 fn unary(op: NirUnaryOp, expr: Build, result_ty: TypeId) -> Build {
     Rc::new(move |b| {
         let e = expr(b);
-        pe(b, ExprKind::Unary { op, expr: e.into() }, result_ty)
+        Operand::Expr(pe(b, ExprKind::Unary { op, expr: e }, result_ty))
     })
 }
 
 fn local_expr(index: u32, type_id: TypeId) -> Build {
     Rc::new(move |b| {
-        pe(
+        Operand::Expr(pe(
             b,
             ExprKind::Local {
                 index,
                 name: format!("l{index}"),
             },
             type_id,
-        )
+        ))
     })
 }
 
 /// Build `build` into a fresh `Body`, returning both so a caller can run an
 /// interpreter method and then inspect the (possibly rewritten) node.
-fn into_body(build: &Build) -> (Body, ExprId) {
+fn into_body(build: &Build) -> (Body, Operand) {
     let mut body = Body::empty();
-    let e = build(&mut body);
+    let op = build(&mut body);
+    (body, op)
+}
+
+/// The `ExprId` of a composite-operand build (the common case for the reducer
+/// tests, which inspect the rewritten node). Panics for a bare-constant build.
+fn into_body_expr(build: &Build) -> (Body, ExprId) {
+    let (body, op) = into_body(build);
+    let e = op
+        .as_expr()
+        .expect("this harness reduces a composite expression, not a bare constant");
     (body, e)
 }
 
@@ -137,14 +133,18 @@ fn into_body(build: &Build) -> (Body, ExprId) {
 /// `reduce_lat(&mut Interpreter::new(&table), &expr)`.
 fn lattice_of(build: &Build) -> Lattice {
     let table = TypeTable::new();
-    let (mut body, e) = into_body(build);
-    Interpreter::new(&table).reduce_to_lattice_full_a(&mut body, e)
+    reduce_lat(&mut Interpreter::new(&table), build)
 }
 
 /// Like [`lattice_of`] but against a caller-supplied (stateful) interpreter.
+/// A composite build reduces in place then projects; a bare-constant build's
+/// lattice is read straight from its pooled value operand.
 fn reduce_lat(interp: &mut Interpreter, build: &Build) -> Lattice {
-    let (mut body, e) = into_body(build);
-    interp.reduce_to_lattice_full_a(&mut body, e)
+    let (mut body, op) = into_body(build);
+    match op {
+        Operand::Expr(e) => interp.reduce_to_lattice_full_a(&mut body, e),
+        Operand::Value(_) => interp.operand_to_lattice_a(&body, op),
+    }
 }
 
 /// Convenience wrapper used by the legacy "is this a Const?" tests: reduce and
@@ -183,7 +183,7 @@ fn expect_bool(expr: &Build, expected: bool) {
 }
 
 fn unit_lit() -> Build {
-    Rc::new(|b| pe(b, ExprKind::Unit, TypeTable::UNIT))
+    Rc::new(|b| Operand::Expr(pe(b, ExprKind::Unit, TypeTable::UNIT)))
 }
 
 /// Build, run the in-place reducer (`reduce_in_place_a`, the arena analogue of
@@ -191,7 +191,7 @@ fn unit_lit() -> Build {
 /// the caller can inspect the rewritten root node via `body.exprs[e].kind`.
 fn reduce_to_expr(build: &Build) -> (Body, ExprId) {
     let table = TypeTable::new();
-    let (mut body, e) = into_body(build);
+    let (mut body, e) = into_body_expr(build);
     Interpreter::new(&table).reduce_in_place_a(&mut body, e);
     (body, e)
 }
@@ -199,7 +199,7 @@ fn reduce_to_expr(build: &Build) -> (Body, ExprId) {
 /// Like [`reduce_to_expr`] but against a caller-supplied (stateful)
 /// interpreter, so env / callee bindings are visible to the reduction.
 fn reduce_with(interp: &mut Interpreter, build: &Build) -> (Body, ExprId) {
-    let (mut body, e) = into_body(build);
+    let (mut body, e) = into_body_expr(build);
     interp.reduce_in_place_a(&mut body, e);
     (body, e)
 }
@@ -207,7 +207,7 @@ fn reduce_with(interp: &mut Interpreter, build: &Build) -> (Body, ExprId) {
 /// Build, apply the single-node `reduce_local_a` rewrite, and return the
 /// `changed` flag plus the arena so the caller can inspect `body.exprs[e]`.
 fn reduce_local_into(interp: &mut Interpreter, build: &Build) -> (bool, Body, ExprId) {
-    let (mut body, e) = into_body(build);
+    let (mut body, e) = into_body_expr(build);
     let changed = interp.reduce_local_a(&mut body, e);
     (changed, body, e)
 }
@@ -1365,10 +1365,10 @@ fn reduce_local_rewrites_if_false_true_to_not_cond() {
         panic!("expected Unary::Not, got {:?}", body.exprs[e].kind);
     };
     assert!(matches!(op, NirUnaryOp::Not));
-    let ExprKind::Local { index, .. } = body.exprs[inner.expr()].kind else {
+    let ExprKind::Local { index, .. } = body.exprs[inner.as_expr().unwrap()].kind else {
         panic!(
             "expected Local inside Unary::Not, got {:?}",
-            body.exprs[inner.expr()].kind
+            body.exprs[inner.as_expr().unwrap()].kind
         );
     };
     assert_eq!(index, 0);
@@ -1425,7 +1425,7 @@ fn reduce_local_leaves_if_mixed_bool_int_arms_alone() {
         TypeTable::BOOL,
     );
     let before = {
-        let (b, e) = into_body(&expr);
+        let (b, e) = into_body_expr(&expr);
         format!("{:?}", b.exprs[e].kind)
     };
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
@@ -2637,10 +2637,10 @@ fn reduce_local_collapses_enum_match_true_false_to_eq() {
         panic!("expected Binary, got {:?}", body.exprs[e].kind);
     };
     assert!(matches!(op, NirBinaryOp::Eq));
-    let ExprKind::Local { index, .. } = body.exprs[left.expr()].kind else {
+    let ExprKind::Local { index, .. } = body.exprs[left.as_expr().unwrap()].kind else {
         panic!(
             "expected Local on left, got {:?}",
-            body.exprs[left.expr()].kind
+            body.exprs[left.as_expr().unwrap()].kind
         );
     };
     assert_eq!(index, 0);
@@ -2648,11 +2648,11 @@ fn reduce_local_collapses_enum_match_true_false_to_eq() {
         case_index,
         case_name,
         ..
-    } = &body.exprs[right.expr()].kind
+    } = &body.exprs[right.as_expr().unwrap()].kind
     else {
         panic!(
             "expected EnumConstruct on right, got {:?}",
-            body.exprs[right.expr()].kind
+            body.exprs[right.as_expr().unwrap()].kind
         );
     };
     assert_eq!(*case_index, 3);
