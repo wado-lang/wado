@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781653796789,
+  "lastUpdate": 1781723625244,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33629,6 +33629,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1b44a8bbc619d6f19769e597c72632638085a04f"
         },
         "date": 1781653796207,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 396125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "93ecee4231382a1baf41eb8f260869101346a95e",
+          "message": "Merge pull request #1393 from wado-lang/claude/g4-frontend-delimiter-scanner-ugg0s2\n\nrefactor(gale): unify g4 delimiter scanners and make visitor_gen GIR-driven",
+          "timestamp": "2026-06-18T04:03:21+09:00",
+          "tree_id": "aabba512b00ab282ea71784a04ac17fca742ca56",
+          "url": "https://github.com/wado-lang/wado/commit/93ecee4231382a1baf41eb8f260869101346a95e"
+        },
+        "date": 1781723624654,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
