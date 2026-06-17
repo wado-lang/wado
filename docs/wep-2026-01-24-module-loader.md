@@ -186,7 +186,7 @@ For non-Wado file imports:
 use helper from "./helper.wasm" with { type: "wasm" };
 ```
 
-See WEP-2026-01-10-wasm-import for details. JSON file import is no longer a core import type — it is lowered by a Kiln generator (WEP: Kiln).
+See WEP-2026-01-10-wasm-import for details. JSON file import is not a core import type.
 
 ## Implementation Status
 

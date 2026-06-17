@@ -3344,13 +3344,11 @@ An inline `with` source and a `wado.toml` entry for the same specifier are mutua
 
 **Rationale**: Explicit type annotations prevent ambiguity and make dependencies clear, aligning with Wado's design philosophy of explicit imports.
 
-JSON and other schema files (`.json`, `.g4`, `.proto`, …) are not core import types — they are lowered by Kiln generators (below).
-
 ### Schema Imports (Kiln)
 
 See [WEP: Kiln](./wep-2026-04-12-kiln.md) and [WEP: Gale](./wep-2026-03-02-gale.md).
 
-A `use` clause whose source is a non-`.wado`, non-`.wasm` schema file (e.g. `.json`, `.g4`, `.proto`, `.graphql`, `.wit`) is processed by **Kiln** — a schema-driven code-generation pipeline that lowers the schema to ordinary Wado source which the compiler then handles like any user-authored module. (`.json` file import is provided this way, not as a core import type.) The `with { generator: { ... } }` clause specifies which generator to invoke:
+A `use` clause whose source is a non-`.wado`, non-`.wasm` schema file (e.g. `.g4`, `.proto`, `.graphql`, `.wit`) is processed by **Kiln** — a schema-driven code-generation pipeline that lowers the schema to ordinary Wado source which the compiler then handles like any user-authored module. The `with { generator: { ... } }` clause specifies which generator to invoke:
 
 ```wado
 // Gale generates a parser from an ANTLR4 grammar
