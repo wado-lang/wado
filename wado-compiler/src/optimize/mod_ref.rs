@@ -786,16 +786,18 @@ mod tests {
             },
         )
     }
-    fn int(body: &mut Body, v: i64) -> ExprId {
-        pe(
-            body,
-            ExprKind::IntLiteral {
-                value: v as u64,
-                repr: v.to_string(),
-            },
+    fn int(body: &mut Body, v: i64) -> Operand {
+        Operand::Value(
+            body.values
+                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(v as u64), ty()),
         )
     }
-    fn bin(body: &mut Body, left: ExprId, op: NirBinaryOp, right: ExprId) -> ExprId {
+    fn bin(
+        body: &mut Body,
+        left: impl Into<Operand>,
+        op: NirBinaryOp,
+        right: impl Into<Operand>,
+    ) -> ExprId {
         pe(
             body,
             ExprKind::Binary {
@@ -814,7 +816,7 @@ mod tests {
             },
         )
     }
-    fn let_stmt(body: &mut Body, index: u32, value: ExprId) -> StmtId {
+    fn let_stmt(body: &mut Body, index: u32, value: impl Into<Operand>) -> StmtId {
         ps(
             body,
             StmtKind::Let {
@@ -828,7 +830,7 @@ mod tests {
             },
         )
     }
-    fn assign(body: &mut Body, target: ExprId, value: ExprId) -> ExprId {
+    fn assign(body: &mut Body, target: ExprId, value: impl Into<Operand>) -> ExprId {
         pe(
             body,
             ExprKind::Assign {
@@ -837,7 +839,7 @@ mod tests {
             },
         )
     }
-    fn expr_stmt(body: &mut Body, e: ExprId) -> StmtId {
+    fn expr_stmt(body: &mut Body, e: impl Into<Operand>) -> StmtId {
         ps(body, StmtKind::Expr(e.into()))
     }
     fn ret_none(body: &mut Body) -> StmtId {
@@ -861,7 +863,7 @@ mod tests {
             },
         )
     }
-    fn global_set(body: &mut Body, name: &str, value: ExprId) -> ExprId {
+    fn global_set(body: &mut Body, name: &str, value: impl Into<Operand>) -> ExprId {
         pe(
             body,
             ExprKind::GlobalVarSet {
@@ -881,13 +883,13 @@ mod tests {
             },
         )
     }
-    fn struct_literal(body: &mut Body, fields: Vec<ExprId>) -> ExprId {
+    fn struct_literal(body: &mut Body, fields: Vec<Operand>) -> ExprId {
         let fields = fields
             .into_iter()
             .enumerate()
             .map(|(i, value)| ArenaStructField {
                 name: format!("f{i}"),
-                value: value.into(),
+                value,
                 field_index: i as u32,
             })
             .collect();
@@ -1013,7 +1015,7 @@ mod tests {
     fn struct_literal_allocates_but_does_not_write_heap() {
         let mr = mr_expr(|b| {
             let l = local(b, 0);
-            struct_literal(b, vec![l])
+            struct_literal(b, vec![l.into()])
         });
         assert!(mr.allocates);
         assert!(!mr.heap.writes);
@@ -1315,7 +1317,13 @@ mod tests {
 
     #[test]
     fn cannot_move_when_intervening_reads_candidate() {
-        let expr = mr_expr(|b| int(b, 0));
+        // A pure binary over constants — empty mod/ref; the move is blocked only
+        // by the intervening read of the erased candidate local.
+        let expr = mr_expr(|b| {
+            let l = int(b, 0);
+            let r = int(b, 1);
+            bin(b, l, NirBinaryOp::Add, r)
+        });
         let intervening = mr_stmt(|b| {
             let v = local(b, 7);
             let_stmt(b, 5, v)
@@ -1545,7 +1553,10 @@ mod tests {
         // loop itself, so its NonLocal contribution must NOT propagate
         // past the Loop boundary.
         let mr = mr_stmt(|b| {
-            let cond = pe(b, ExprKind::BoolLiteral(true));
+            let cond = Operand::Value(
+                b.values
+                    .alloc_unshared(crate::nir_value_graph::ValueKind::Bool(true), ty()),
+            );
             let brk = break_stmt(b, None);
             let then_block = pblock(b, vec![brk]);
             let inner = ps(

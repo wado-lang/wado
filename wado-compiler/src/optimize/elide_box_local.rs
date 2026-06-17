@@ -751,13 +751,10 @@ mod tests {
             },
         )
     }
-    fn int(body: &mut Body, v: i64) -> ExprId {
-        push(
-            body,
-            ExprKind::IntLiteral {
-                value: v as u64,
-                repr: v.to_string(),
-            },
+    fn int(body: &mut Body, v: i64) -> Operand {
+        Operand::Value(
+            body.values
+                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(v as u64), ty()),
         )
     }
     fn field(body: &mut Body, receiver: ExprId, name: &str) -> ExprId {
@@ -779,7 +776,12 @@ mod tests {
             },
         )
     }
-    fn binary(body: &mut Body, op: NirBinaryOp, lhs: ExprId, rhs: ExprId) -> ExprId {
+    fn binary(
+        body: &mut Body,
+        op: NirBinaryOp,
+        lhs: impl Into<Operand>,
+        rhs: impl Into<Operand>,
+    ) -> ExprId {
         push(
             body,
             ExprKind::Binary {
