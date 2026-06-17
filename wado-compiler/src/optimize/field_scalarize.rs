@@ -948,7 +948,9 @@ fn visit_expr_for_alias(
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
-            mark_whole_gc_ref_copy_source(body, value.expr(), type_table, out);
+            if let Some(ve) = value.as_expr() {
+                mark_whole_gc_ref_copy_source(body, ve, type_table, out);
+            }
             visit_expr_for_alias(body, target, false, type_table, out);
             visit_operand_for_alias(body, value, false, type_table, out);
         }
@@ -1131,8 +1133,9 @@ fn count_field_accesses_in_stmt(
             // this creates an alias. Any field modifications through the alias
             // won't be tracked by the scalarization, so mark the original as aliased.
             let value = *value;
-            if let ExprKind::Local { index, .. } = &body.exprs[value.expr()].kind
-                && is_gc_heap_type(body.exprs[value.expr()].type_id, type_table)
+            if let Some(ve) = value.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
+                && is_gc_heap_type(body.exprs[ve].type_id, type_table)
             {
                 mark_local_aliased(*index, counts);
             }
@@ -2011,7 +2014,7 @@ fn walk_stmt(
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            walk_expr(body, condition.expr(), states, true, out, ctx);
+            walk_operand(body, condition, states, true, out, ctx);
             walk_branching_block_if(body, sid, then_block, else_block, states, ctx, span);
             out.push(sid);
         }
@@ -2031,7 +2034,7 @@ fn walk_stmt(
         StmtKind::Return { value } => {
             let value = *value;
             if let Some(v) = value {
-                walk_expr(body, v.expr(), states, true, out, ctx);
+                walk_operand(body, v, states, true, out, ctx);
             }
             // Escape: commit every ScalarOnly candidate to the field
             // before the return. After commit, only the field is
@@ -2091,7 +2094,7 @@ fn walk_stmt(
         StmtKind::Break { value, label } => {
             let (value, label) = (*value, label.clone());
             if let Some(v) = value {
-                walk_expr(body, v.expr(), states, true, out, ctx);
+                walk_operand(body, v, states, true, out, ctx);
             }
             // Unlabeled `break` exits the innermost loop; at the HFS-loop
             // top level (the common case) this leaves the HFS scope, so
@@ -2138,12 +2141,12 @@ fn walk_stmt(
         }
         StmtKind::Let { value, .. } => {
             let value = *value;
-            walk_expr(body, value.expr(), states, true, out, ctx);
+            walk_operand(body, value, states, true, out, ctx);
             out.push(sid);
         }
         StmtKind::LetDestructure { value, .. } => {
             let value = *value;
-            walk_expr(body, value.expr(), states, true, out, ctx);
+            walk_operand(body, value, states, true, out, ctx);
             out.push(sid);
         }
         StmtKind::Expr(expr) => {
@@ -2316,6 +2319,19 @@ fn walk_nested_loop(
 /// `result_used` indicates whether the expression's value is consumed
 /// by its parent. When false, a Call's non-unit return can be discarded
 /// without allocating a temp.
+fn walk_operand(
+    body: &mut Body,
+    op: Operand,
+    states: &mut ScalarStates,
+    result_used: bool,
+    out: &mut Vec<StmtId>,
+    ctx: &mut WalkCtx,
+) {
+    if let Some(e) = op.as_expr() {
+        walk_expr(body, e, states, result_used, out, ctx);
+    }
+}
+
 fn walk_expr(
     body: &mut Body,
     e: ExprId,
@@ -2331,7 +2347,7 @@ fn walk_expr(
         let (target, value) = (*target, *value);
         if let Some((cand_idx, c)) = field_assign_to_candidate(body, target, ctx) {
             // Walk RHS first (state may transition through it).
-            walk_expr(body, value.expr(), states, true, out, ctx);
+            walk_operand(body, value, states, true, out, ctx);
             // Commit the assignment: rewrite target in place and update state.
             body.exprs[target].kind = ExprKind::Local {
                 index: c.new_local_index,
@@ -2343,7 +2359,7 @@ fn walk_expr(
         }
         // Not a scalarized field assign. Fall through to general recursion.
         walk_expr(body, target, states, true, out, ctx);
-        walk_expr(body, value.expr(), states, true, out, ctx);
+        walk_operand(body, value, states, true, out, ctx);
         return;
     }
 
@@ -2473,7 +2489,7 @@ fn recurse_into_call_args(
         .exprs[e]
         .kind
     {
-        ExprKind::Call { args, .. } => (None, None, args.iter().map(|a| a.expr.expr()).collect()),
+        ExprKind::Call { args, .. } => (None, None, args.iter().filter_map(|a| a.expr.as_expr()).collect()),
         ExprKind::MethodCall { receiver, args, .. } => (
             Some(receiver.expr()),
             None,
@@ -2650,25 +2666,25 @@ fn walk_other_expr_kinds(
     match &body.exprs[e].kind {
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            walk_expr(body, inner.expr(), states, true, out, ctx);
+            walk_operand(body, inner, states, true, out, ctx);
         }
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            walk_expr(body, left.expr(), states, true, out, ctx);
-            walk_expr(body, right.expr(), states, true, out, ctx);
+            walk_operand(body, left, states, true, out, ctx);
+            walk_operand(body, right, states, true, out, ctx);
         }
         ExprKind::Unary { expr: inner, .. } => {
             let inner = *inner;
-            walk_expr(body, inner.expr(), states, true, out, ctx);
+            walk_operand(body, inner, states, true, out, ctx);
         }
         ExprKind::Cast { expr: inner, .. } => {
             let inner = *inner;
-            walk_expr(body, inner.expr(), states, true, out, ctx);
+            walk_operand(body, inner, states, true, out, ctx);
         }
         ExprKind::Index { expr: inner, index } => {
             let (inner, index) = (*inner, *index);
-            walk_expr(body, inner.expr(), states, true, out, ctx);
-            walk_expr(body, index.expr(), states, true, out, ctx);
+            walk_operand(body, inner, states, true, out, ctx);
+            walk_operand(body, index, states, true, out, ctx);
         }
         ExprKind::Block(block) => {
             let block = *block;
@@ -2680,7 +2696,7 @@ fn walk_other_expr_kinds(
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            walk_expr(body, condition.expr(), states, true, out, ctx);
+            walk_operand(body, condition, states, true, out, ctx);
             walk_expr_branches_if(
                 body,
                 e,
@@ -2694,21 +2710,21 @@ fn walk_other_expr_kinds(
         }
         ExprKind::StructLiteral { fields, .. } => {
             for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                walk_expr(body, fid.expr(), states, true, out, ctx);
+                walk_operand(body, fid, states, true, out, ctx);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             for eid in elements.clone() {
-                walk_expr(body, eid.expr(), states, true, out, ctx);
+                walk_operand(body, eid, states, true, out, ctx);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
             let functor = *functor;
-            walk_expr(body, functor.expr(), states, true, out, ctx);
+            walk_operand(body, functor, states, true, out, ctx);
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = *payload {
-                walk_expr(body, p.expr(), states, true, out, ctx);
+                walk_operand(body, p, states, true, out, ctx);
             }
         }
         ExprKind::LabeledBlock { label, block, .. } => {
@@ -2717,15 +2733,15 @@ fn walk_other_expr_kinds(
         }
         ExprKind::GlobalVarSet { value, .. } => {
             let value = *value;
-            walk_expr(body, value.expr(), states, true, out, ctx);
+            walk_operand(body, value, states, true, out, ctx);
         }
         ExprKind::VariantTag { expr: inner } | ExprKind::VariantTest { expr: inner, .. } => {
             let inner = *inner;
-            walk_expr(body, inner.expr(), states, true, out, ctx);
+            walk_operand(body, inner, states, true, out, ctx);
         }
         ExprKind::VariantPayload { expr: inner, .. } => {
             let inner = *inner;
-            walk_expr(body, inner.expr(), states, true, out, ctx);
+            walk_operand(body, inner, states, true, out, ctx);
         }
         ExprKind::Switch {
             scrutinee,
@@ -2736,7 +2752,7 @@ fn walk_other_expr_kinds(
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            walk_expr(body, scrutinee.expr(), states, true, out, ctx);
+            walk_operand(body, scrutinee, states, true, out, ctx);
             walk_expr_branches_switch(body, &arms, default, states, ctx, span);
         }
         ExprKind::Match {
@@ -2745,12 +2761,12 @@ fn walk_other_expr_kinds(
         } => {
             let scrutinee = *scrutinee;
             let arms = arms.clone();
-            walk_expr(body, scrutinee.expr(), states, true, out, ctx);
+            walk_operand(body, scrutinee, states, true, out, ctx);
             walk_expr_branches_match(body, &arms, states, result_used, ctx, span);
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
-                walk_expr(body, aid.expr(), states, true, out, ctx);
+                walk_operand(body, aid, states, true, out, ctx);
             }
         }
         ExprKind::IntLiteral { .. }

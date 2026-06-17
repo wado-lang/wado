@@ -376,7 +376,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
                     arm.guard
                         .into_iter()
                         .chain(std::iter::once(arm.body))
-                        .map(|o| o.expr())
+                        .filter_map(Operand::as_expr)
                 })
                 .collect();
             collect_escaping_in_operand(body, inner, escaping);

@@ -644,7 +644,7 @@ fn walk_expr_for_uses(
             {
                 invalid.insert(candidate_idx);
             }
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for a in args {
                 walk_expr_for_uses(body, a, candidate_names, candidates, invalid, tracked);
             }

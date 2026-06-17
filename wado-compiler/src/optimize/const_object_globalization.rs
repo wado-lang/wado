@@ -474,14 +474,12 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         }
         ExprKind::Match { expr: scrut, arms } => {
             let scrut = *scrut;
-            let arms: Vec<(Option<ExprId>, ExprId)> = arms
-                .iter()
-                .map(|a| (a.guard.map(|g| g.expr()), a.body.expr()))
-                .collect();
+            let arms: Vec<(Option<Operand>, Operand)> =
+                arms.iter().map(|a| (a.guard, a.body)).collect();
             expr_readonly_operand(body, scrut, idx, gate)
                 && arms.iter().all(|(guard, arm_body)| {
-                    guard.is_none_or(|g| expr_readonly(body, g, idx, gate))
-                        && expr_readonly(body, *arm_body, idx, gate)
+                    guard.is_none_or(|g| expr_readonly_operand(body, g, idx, gate))
+                        && expr_readonly_operand(body, *arm_body, idx, gate)
                 })
         }
         ExprKind::Switch {
