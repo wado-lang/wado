@@ -1222,8 +1222,9 @@ fn count_field_accesses_in_expr(
                 mark_local_fully_assigned(*index, counts);
             }
             // If value is a local reference (e.g., `other = pos`), the source is aliased
-            if let ExprKind::Local { index, .. } = &body.exprs[value.expr()].kind
-                && is_gc_heap_type(body.exprs[value.expr()].type_id, type_table)
+            if let Some(ve) = value.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
+                && is_gc_heap_type(body.exprs[ve].type_id, type_table)
             {
                 mark_local_aliased(*index, counts);
             }
@@ -2491,9 +2492,9 @@ fn recurse_into_call_args(
     {
         ExprKind::Call { args, .. } => (None, None, args.iter().filter_map(|a| a.expr.as_expr()).collect()),
         ExprKind::MethodCall { receiver, args, .. } => (
-            Some(receiver.expr()),
+            receiver.as_expr(),
             None,
-            args.iter().map(|a| a.expr.expr()).collect(),
+            args.iter().filter_map(|a| a.expr.as_expr()).collect(),
         ),
         ExprKind::IndirectCall { callee, args, .. } => (
             None,

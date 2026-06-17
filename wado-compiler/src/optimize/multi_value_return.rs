@@ -68,9 +68,11 @@ fn walk_call_args_for_uses(
     tracked: &IndexMap<u32, usize>,
 ) {
     let args: Vec<ExprId> = match &body.exprs[expr].kind {
-        ExprKind::Call { args, .. } => args.iter().map(|a| a.expr.expr()).collect(),
-        ExprKind::MethodCall { receiver, args, .. } => std::iter::once(receiver.expr())
-            .chain(args.iter().map(|a| a.expr.expr()))
+        ExprKind::Call { args, .. } => args.iter().filter_map(|a| a.expr.as_expr()).collect(),
+        ExprKind::MethodCall { receiver, args, .. } => receiver
+            .as_expr()
+            .into_iter()
+            .chain(args.iter().filter_map(|a| a.expr.as_expr()))
             .collect(),
         _ => return,
     };
@@ -661,7 +663,7 @@ fn walk_expr_for_uses(
                 invalid.insert(candidate_idx);
             }
             let receiver = *receiver;
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             walk_expr_for_uses_operand(
                 body,
                 receiver,
@@ -743,10 +745,8 @@ fn walk_expr_for_uses(
         }
         ExprKind::Match { expr: scrut, arms } => {
             let scrut = *scrut;
-            let arm_data: Vec<(Option<ExprId>, ExprId)> = arms
-                .iter()
-                .map(|a| (a.guard.map(|g| g.expr()), a.body.expr()))
-                .collect();
+            let arm_data: Vec<(Option<Operand>, Operand)> =
+                arms.iter().map(|a| (a.guard, a.body)).collect();
             walk_expr_for_uses_operand(
                 body,
                 scrut,
@@ -757,9 +757,9 @@ fn walk_expr_for_uses(
             );
             for (guard, arm_body) in arm_data {
                 if let Some(g) = guard {
-                    walk_expr_for_uses(body, g, candidate_names, candidates, invalid, tracked);
+                    walk_expr_for_uses_operand(body, g, candidate_names, candidates, invalid, tracked);
                 }
-                walk_expr_for_uses(
+                walk_expr_for_uses_operand(
                     body,
                     arm_body,
                     candidate_names,
