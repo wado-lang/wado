@@ -220,10 +220,14 @@ reduction is real and host-independent.)
 ### 3. `Parser` token reads — `last_end` 5.7%, `expect`, `advance` (~8%)
 
 `Parser::last_end` is a 4-step `Parser→List→Token→Span→end` load chain.
-**Inlining / per-method micro-opt does not help** (see below): the cost
-is the actual loads, which the SoA decomposition in (1) removes by making
-the end offset a direct `array.get i32`. This is the same lever as §1 —
-SoA pays off in two places at once.
+It ranks high **purely because of call frequency** — it is invoked an
+enormous number of times — not because any single call is expensive.
+That is why **inlining and precomputation both measured zero improvement**
+(see below): there is no call overhead or redundant work to remove; the
+only thing that moves the needle is making each load cheaper. The SoA
+decomposition in (1) does exactly that, turning the end offset into a
+direct `array.get i32`. This is the same lever as §1 — SoA pays off in two
+places at once.
 
 ### 4. Kind-set membership — `_gale_kind_set_*` (~9%)
 
@@ -262,12 +266,15 @@ incorrectly). Candidates:
 
 ## What does not work
 
-- **Inlining hot `Parser` methods / any per-method micro-opt.** Caching
-  `Parser::last_end` as a field or forcing inlining removes the named
-  function from the profile but does not move wall time — the cost is the
-  loads (`Parser→List→Token→Span→end`), not call overhead. wasmtime +
-  Cranelift handle small Wasm calls cheaply enough that inlinability is
-  not the lever. The real fix is removing the loads (SoA, §1).
+- **Inlining hot `Parser` methods / any per-method micro-opt.**
+  `Parser::last_end` is high only because of its huge call count, not
+  per-call expense. Precomputing it (caching the value in a field) or
+  forcing inlining removes the named function from the profile but
+  measured **no wall-time change** — there is no call overhead or
+  redundant work to remove; the cost is performing the loads
+  (`Parser→List→Token→Span→end`) that many times. wasmtime + Cranelift
+  handle small Wasm calls cheaply enough that inlinability is not the
+  lever. The real fix is making each load cheaper (SoA, §1).
 - **Data-driven / bytecode-VM scan** (see below).
 
 ## Failed approaches (do not repeat)
