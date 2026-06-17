@@ -1381,12 +1381,17 @@ impl FunctionTranslator<'_, '_> {
         for (i, stmt_id) in stmts.iter().enumerate() {
             let is_last = i + 1 == len;
             if is_last {
-                // Last statement: if it's an Expr, translate without drop
-                if let StmtKind::Expr(Operand::Expr(expr)) = &arena.stmts[*stmt_id].kind {
-                    let expr = *expr;
-                    let instr = self.translate_expr_as_value(expr);
+                // Last statement: if it's an Expr, translate without drop. A
+                // promoted pure value (`Operand::Value`) is the block's value
+                // directly — extract it; it is never UNIT.
+                if let StmtKind::Expr(op) = &arena.stmts[*stmt_id].kind {
+                    let op = *op;
+                    let instr = match op {
+                        Operand::Expr(expr) => self.translate_expr_as_value(expr),
+                        Operand::Value(_) => self.translate_operand(op),
+                    };
                     instrs.push(instr);
-                    if arena.exprs[expr].type_id == TypeTable::UNIT
+                    if self.operand_type_id(op) == TypeTable::UNIT
                         && !instrs.last().is_some_and(WirInstr::ends_with_terminator)
                     {
                         instrs.push(WirInstr::Unreachable);
@@ -1446,8 +1451,8 @@ impl FunctionTranslator<'_, '_> {
             .stmts
             .last()
             .and_then(|stmt_id| match &arena.stmts[*stmt_id].kind {
-                StmtKind::Expr(Operand::Expr(expr)) => {
-                    let ty = arena.exprs[*expr].type_id;
+                StmtKind::Expr(op) => {
+                    let ty = self.operand_type_id(*op);
                     if ty != TypeTable::UNIT && ty != TypeTable::NEVER {
                         Some(self.ctx.type_id_to_wir_type(self.type_table, ty))
                     } else {

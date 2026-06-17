@@ -1567,7 +1567,10 @@ impl<'a> Builder<'a> {
         for arm in arms {
             if let Some(g) = arm.guard {
                 any_guard = true;
-                collect_writes_in_expr(self.body, g.as_expr().expect("skeleton operand"), &mut guard_writes);
+                // A promoted constant guard (`Operand::Value`) writes nothing.
+                if let Some(ge) = g.as_expr() {
+                    collect_writes_in_expr(self.body, ge, &mut guard_writes);
+                }
             }
         }
         for idx in &guard_writes {

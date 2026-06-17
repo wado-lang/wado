@@ -842,7 +842,7 @@ mod tests {
         )
     }
     fn expr_stmt(body: &mut Body, e: ExprId) -> StmtId {
-        ps(body, StmtKind::Expr(e))
+        ps(body, StmtKind::Expr(e.into()))
     }
     fn ret_none(body: &mut Body) -> StmtId {
         ps(body, StmtKind::Return { value: None })

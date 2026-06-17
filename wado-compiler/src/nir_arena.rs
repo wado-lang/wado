@@ -1025,6 +1025,111 @@ impl Body {
         }
     }
 
+    /// Replace every direct operand child of `node` equal to `Operand::Expr(target)`
+    /// with `new`, returning whether any slot changed. Covers exactly the operand
+    /// positions [`Body::for_each_child`] descends through as `op_child`; non-operand
+    /// `ExprId` slots (`Assign::target`) and structural children (blocks, patterns)
+    /// are untouched. Used by the engine to promote a folded subtree to an
+    /// `Operand::Value` in its parent (WEP: The Live ValueGraph).
+    pub fn replace_operand_to(&mut self, node: NodeRef, target: ExprId, new: Operand) -> bool {
+        let mut changed = false;
+        let mut swap = |o: &mut Operand| {
+            if *o == Operand::Expr(target) {
+                *o = new;
+                changed = true;
+            }
+        };
+        match node {
+            NodeRef::Block(_) => {}
+            NodeRef::Pat(p) => {
+                if let PatKind::ConstantValue { expr } = &mut self.pats[p].kind {
+                    swap(expr);
+                }
+            }
+            NodeRef::Stmt(s) => match &mut self.stmts[s].kind {
+                StmtKind::Let { value, .. }
+                | StmtKind::Expr(value)
+                | StmtKind::LetDestructure { value, .. } => swap(value),
+                StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+                    if let Some(o) = value {
+                        swap(o);
+                    }
+                }
+                StmtKind::If { condition, .. } => swap(condition),
+                StmtKind::Loop { .. } | StmtKind::Continue | StmtKind::LabeledBlock { .. } => {}
+            },
+            NodeRef::Expr(e) => match &mut self.exprs[e].kind {
+                ExprKind::GlobalVarSet { value, .. } => swap(value),
+                ExprKind::Binary { left, right, .. } => {
+                    swap(left);
+                    swap(right);
+                }
+                ExprKind::Unary { expr, .. }
+                | ExprKind::Cast { expr, .. }
+                | ExprKind::FieldAccess { expr, .. }
+                | ExprKind::VariantTag { expr }
+                | ExprKind::VariantTest { expr, .. }
+                | ExprKind::VariantPayload { expr, .. }
+                | ExprKind::Assign { value: expr, .. } => swap(expr),
+                ExprKind::Index { expr, index } => {
+                    swap(expr);
+                    swap(index);
+                }
+                ExprKind::Call { args, .. } => {
+                    for a in args {
+                        swap(&mut a.expr);
+                    }
+                }
+                ExprKind::MethodCall { receiver, args, .. } => {
+                    swap(receiver);
+                    for a in args {
+                        swap(&mut a.expr);
+                    }
+                }
+                ExprKind::CmRawCall { args, .. } => {
+                    for a in args {
+                        swap(a);
+                    }
+                }
+                ExprKind::If { condition, .. } => swap(condition),
+                ExprKind::Match { expr, arms } => {
+                    swap(expr);
+                    for arm in arms {
+                        if let Some(g) = &mut arm.guard {
+                            swap(g);
+                        }
+                        swap(&mut arm.body);
+                    }
+                }
+                ExprKind::StructLiteral { fields, .. } => {
+                    for fld in fields {
+                        swap(&mut fld.value);
+                    }
+                }
+                ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                    for el in elements {
+                        swap(el);
+                    }
+                }
+                ExprKind::IndirectCall { callee, args } => {
+                    swap(callee);
+                    for a in args {
+                        swap(a);
+                    }
+                }
+                ExprKind::ClosureToCanonical { functor, .. } => swap(functor),
+                ExprKind::VariantConstruct { payload, .. } => {
+                    if let Some(p) = payload {
+                        swap(p);
+                    }
+                }
+                ExprKind::Switch { scrutinee, .. } => swap(scrutinee),
+                _ => {}
+            },
+        }
+        changed
+    }
+
     pub fn for_each_child(&self, node: NodeRef, mut f: impl FnMut(NodeRef)) {
         // A promoted pure value (`Operand::Value`) has no skeleton child; only an
         // `Operand::Expr` yields one.

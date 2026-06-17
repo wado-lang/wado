@@ -184,7 +184,12 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
     // ValueId. We intentionally restrict candidates to `Binary` so a single-
     // local read (whose VN is just an `Opaque` / `Local` reaching def) does
     // not get hoisted — there is no benefit in CSE'ing a single local read.
-    let candidates = collect_binary_candidates(engine, guard_expr.as_expr().expect("skeleton operand"));
+    // A promoted constant guard (`Operand::Value`) has no binary subexpression
+    // to hoist.
+    let Some(guard_e) = guard_expr.as_expr() else {
+        return false;
+    };
+    let candidates = collect_binary_candidates(engine, guard_e);
     if candidates.is_empty() {
         return false;
     }

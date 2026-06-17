@@ -370,6 +370,12 @@ pub(crate) trait EditSink {
     /// `e` (literals have none); use [`EditSink::become_expr`] to move an
     /// existing node's content into `e`.
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind);
+    /// Promote `e` to the folded pure scalar `value`, returning whether the edit
+    /// was applied (WEP: The Live ValueGraph). The engine backend swaps `e`'s
+    /// parent operand to an `Operand::Value`; the scratch CTFE backend is a no-op
+    /// (`false`) — its reads recompute the value through the value lattice, so it
+    /// needs no node write-back.
+    fn replace_with_value(&mut self, e: ExprId, value: Value) -> bool;
     /// Make `dst` take `src`'s content (`dst` becomes `src`).
     fn become_expr(&mut self, dst: ExprId, src: ExprId);
     fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId;
@@ -391,6 +397,14 @@ impl EditSink for BodySink<'_> {
     }
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.body.exprs[e].kind = kind;
+    }
+    fn replace_with_value(&mut self, e: ExprId, value: Value) -> bool {
+        // The scratch body is throwaway with no parent map to promote into, so
+        // memoize the fold as a literal node in place — the pre-promotion
+        // behavior. Statement-level CTFE reduction relies on this write-back so a
+        // later statement / the tail read sees the constant.
+        self.body.exprs[e].kind = value_to_arena_kind(value);
+        true
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         // Clone src's whole node into dst (the original short-circuit rewrite
@@ -954,9 +968,14 @@ impl<'a> Interpreter<'a> {
     /// engine-routed visitor keeps the parent map / use index coherent and the
     /// scratch-body CTFE path mutates in place.
     pub(crate) fn reduce_local_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
-        if let Some(kind) = self.flow_fold_kind_a(sink.body(), e) {
-            sink.replace_kind(e, kind);
-            return true;
+        if let Some(value) = self.flow_fold_value_a(sink.body(), e) {
+            // Promote the folded scalar to an `Operand::Value` in `e`'s parent.
+            // The scratch backend declines (`false`); its reads recompute the
+            // value, so falling through to the structural rewrites is a no-op for
+            // a pure constant and the fixpoint settles.
+            if sink.replace_with_value(e, value) {
+                return true;
+            }
         }
         if rewrite_short_circuit_via(sink, e) {
             return true;
@@ -989,11 +1008,19 @@ impl<'a> Interpreter<'a> {
     /// Unlike `reduce_local_a`, this does **not** mutate `body`: the engine
     /// rule installs the returned kind via `Engine::replace_expr_kind`.
     pub fn const_fold_kind_a(&mut self, body: &Body, e: ExprId) -> Option<ExprKind> {
+        self.const_fold_value_a(body, e).map(value_to_arena_kind)
+    }
+
+    /// The environment-free constant value of `e` (the [`Value`] form of
+    /// [`Self::const_fold_kind_a`]), or `None` when it does not fold. The engine
+    /// rule promotes the result to an `Operand::Value` via
+    /// [`Engine::replace_expr_with_value`].
+    pub fn const_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
-            return Some(value_to_arena_kind(v));
+            return Some(v);
         }
         if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
-            return Some(value_to_arena_kind(v));
+            return Some(v);
         }
         None
     }
@@ -1010,8 +1037,15 @@ impl<'a> Interpreter<'a> {
     /// engine edit API. The caller installs the returned kind via
     /// `Engine::replace_expr_kind` so the parent map / use index stay coherent.
     pub fn flow_fold_kind_a(&mut self, body: &Body, e: ExprId) -> Option<ExprKind> {
+        self.flow_fold_value_a(body, e).map(value_to_arena_kind)
+    }
+
+    /// The flow-sensitive constant value of `e` (the [`Value`] form of
+    /// [`Self::flow_fold_kind_a`]), or `None`. The sink promotes the result to an
+    /// `Operand::Value` via [`EditSink::replace_with_value`].
+    pub fn flow_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
-            return Some(value_to_arena_kind(v));
+            return Some(v);
         }
         if let ExprKind::GlobalVarGet {
             module_source,
@@ -1019,10 +1053,10 @@ impl<'a> Interpreter<'a> {
         } = &body.exprs[e].kind
             && let Lattice::Const(v) = self.global_lattice(module_source, name)
         {
-            return Some(value_to_arena_kind(v));
+            return Some(v);
         }
         if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
-            return Some(value_to_arena_kind(v));
+            return Some(v);
         }
         None
     }
@@ -1226,7 +1260,9 @@ impl<'a> Interpreter<'a> {
         if !is_speculatable_a(sink.body(), condition.as_expr().expect("skeleton operand")) {
             return false;
         }
-        sink.replace_kind(e, value_to_arena_kind(t));
+        if !sink.replace_with_value(e, t) {
+            sink.replace_kind(e, value_to_arena_kind(t));
+        }
         true
     }
 
@@ -1339,7 +1375,9 @@ impl<'a> Interpreter<'a> {
             }
         }
         let v = common.expect("at least one arm");
-        sink.replace_kind(e, value_to_arena_kind(v));
+        if !sink.replace_with_value(e, v) {
+            sink.replace_kind(e, value_to_arena_kind(v));
+        }
         true
     }
 

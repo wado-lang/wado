@@ -1555,7 +1555,7 @@ mod tests {
         let mut body = Body::empty();
         let e = build(&mut body);
         let s = body.stmts.push(StmtNode {
-            kind: StmtKind::Expr(e),
+            kind: StmtKind::Expr(e.into()),
             span: Span::default(),
         });
         body.root = body.blocks.push(BlockNode {

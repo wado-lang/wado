@@ -152,11 +152,11 @@ mod tests {
             },
         );
         let s0 = body.stmts.push(StmtNode {
-            kind: StmtKind::Expr(sum),
+            kind: StmtKind::Expr(sum.into()),
             span: Span::default(),
         });
         let s1 = body.stmts.push(StmtNode {
-            kind: StmtKind::Expr(five),
+            kind: StmtKind::Expr(five.into()),
             span: Span::default(),
         });
         body.root = body.blocks.push(BlockNode {
@@ -214,7 +214,7 @@ mod tests {
             },
         );
         let s0 = body.stmts.push(StmtNode {
-            kind: StmtKind::Expr(sum),
+            kind: StmtKind::Expr(sum.into()),
             span: Span::default(),
         });
         body.root = body.blocks.push(BlockNode {

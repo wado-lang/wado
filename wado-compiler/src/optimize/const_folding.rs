@@ -143,14 +143,19 @@ impl<'a> ConstFoldRule<'a> {
 
 impl Rule for ConstFoldRule<'_> {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let Some(kind) = self
+        let Some(value) = self
             .interpreter
             .borrow_mut()
-            .const_fold_kind_a(engine.body, id)
+            .const_fold_value_a(engine.body, id)
         else {
             return false;
         };
-        engine.replace_expr_kind(id, kind);
+        // Promote the folded scalar to an `Operand::Value` in its parent (WEP:
+        // The Live ValueGraph). The fallback keeps the skeleton form for the rare
+        // node with no operand parent slot.
+        if !engine.replace_expr_with_value(id, value) {
+            engine.replace_expr_kind(id, crate::const_eval::value_to_arena_kind(value));
+        }
         true
     }
 }
@@ -169,6 +174,9 @@ impl EditSink for EngineSink<'_, '_> {
     }
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.engine.replace_expr_kind(e, kind);
+    }
+    fn replace_with_value(&mut self, e: ExprId, value: crate::const_eval::Value) -> bool {
+        self.engine.replace_expr_with_value(e, value)
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         self.engine.become_expr(dst, src);

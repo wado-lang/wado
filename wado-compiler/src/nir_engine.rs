@@ -722,6 +722,54 @@ impl<'a> Engine<'a> {
         }
     }
 
+    /// Edit API: promote the folded constant subtree `id` to an `Operand::Value`
+    /// in its parent (WEP: The Live ValueGraph). Interns `value` width-preserving
+    /// (carrying `id`'s recorded type) and swaps the parent's `Operand::Expr(id)`
+    /// slot to the promoted value. `id`'s node is left orphaned (later DCE'd); its
+    /// own `Local` mention, if any, is dropped from the use index, matching
+    /// [`Self::replace_expr_kind`]. Returns `false` (a no-op) when `id` has no
+    /// parent, or the parent references it through a non-operand slot — the caller
+    /// then keeps the skeleton form.
+    pub fn replace_expr_with_value(&mut self, id: ExprId, value: crate::const_eval::Value) -> bool {
+        use crate::const_eval::Value;
+        use crate::nir_value_graph::ValueKind;
+        let Some(parent) = self.parent_of(NodeRef::Expr(id)) else {
+            return false;
+        };
+        let type_id = self.body.exprs[id].type_id;
+        let kind = match value {
+            Value::Int { value, .. } => ValueKind::Int(value),
+            Value::Float { value, .. } => ValueKind::Float(value.to_bits()),
+            Value::Bool(b) => ValueKind::Bool(b),
+            Value::Char(c) => ValueKind::Char(c),
+        };
+        let vid = self.body.values.alloc_unshared(kind, type_id);
+        if !self.body.replace_operand_to(parent, id, Operand::Value(vid)) {
+            return false;
+        }
+        crate::optimize::vg_measure::record_inplace_edit();
+        // `id` is now orphaned. Drop its own `Local` read mention so a binding it
+        // named is not kept artificially live (the discarded subtree's deeper
+        // mentions stay — a stale read is conservative, never drops a live one).
+        if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
+            let index = *index;
+            if let Some(u) = self.buf.uses.get_mut(&index) {
+                u.reads.retain(|&r| r != id);
+            }
+        }
+        self.set_parent(NodeRef::Expr(id), None);
+        self.enqueue(parent);
+        // The promoted value feeds the parent's value derivation directly through
+        // the swapped operand; re-derive up the ancestor chain.
+        if self.value_graph.is_some() {
+            self.value_graph.as_mut().unwrap().value_of.insert(id, vid);
+            if let NodeRef::Expr(p) = parent {
+                self.maintain_value_after_edit(p);
+            }
+        }
+        true
+    }
+
     /// Edit API: promote `src`'s node content (kind + type + span) into `dst`,
     /// leaving `src` a dead `Unit`. The arena analogue of `*dst = *src` when a
     /// rewrite collapses a wrapper onto a nested node it contains — e.g.
@@ -1372,7 +1420,7 @@ mod tests {
         // pass would when creating a temp bound to a known value.
         let mut body = mk_body(|b| {
             let seven = lit(b, 7);
-            let st = s(b, StmtKind::Expr(seven));
+            let st = s(b, StmtKind::Expr(seven.into()));
             vec![st]
         });
         let seven = {
@@ -1418,7 +1466,7 @@ mod tests {
         let mut buf = EngineBuffers::default();
         let mut locals: Vec<NirLocal> = Vec::new();
         let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
-        let v_add = eng.value(add.expr()).unwrap();
+        let v_add = eng.value(add.as_expr().unwrap()).unwrap();
 
         let one = eng.alloc_expr(
             ExprKind::IntLiteral {
@@ -1494,8 +1542,8 @@ mod tests {
             let y = local(b, 1);
             let c1 = lit(b, 5);
             let g = bin(b, y, NirBinaryOp::Add, c1);
-            let sf = s(b, StmtKind::Expr(f));
-            let sg = s(b, StmtKind::Expr(g));
+            let sf = s(b, StmtKind::Expr(f.into()));
+            let sg = s(b, StmtKind::Expr(g.into()));
             vec![sf, sg]
         });
         // The two sum expressions are the second-and-third exprs after each
@@ -1521,8 +1569,8 @@ mod tests {
         let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
         let vf = eng.value(f_expr).unwrap();
         let vg = eng.value(g_expr).unwrap();
-        let vx = eng.value(x_expr.expr()).unwrap();
-        let vy = eng.value(y_expr.expr()).unwrap();
+        let vx = eng.value(x_expr.as_expr().unwrap()).unwrap();
+        let vy = eng.value(y_expr.as_expr().unwrap()).unwrap();
         // x and y are distinct opaques, so the sums start distinct.
         assert_ne!(eng.value_find(vx), eng.value_find(vy));
         assert_ne!(eng.value_find(vf), eng.value_find(vg));
@@ -1573,11 +1621,11 @@ mod tests {
                 ExprKind::Binary { left, op, right } => (*op, *left, *right),
                 _ => return false,
             };
-            let lv = match &e.body.exprs[l.expr()].kind {
+            let lv = match &e.body.exprs[l.as_expr().unwrap()].kind {
                 ExprKind::IntLiteral { value, .. } => *value,
                 _ => return false,
             };
-            let rv = match &e.body.exprs[r.expr()].kind {
+            let rv = match &e.body.exprs[r.as_expr().unwrap()].kind {
                 ExprKind::IntLiteral { value, .. } => *value,
                 _ => return false,
             };
@@ -1621,7 +1669,7 @@ mod tests {
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
         };
-        match &body.exprs[value.expr()].kind {
+        match &body.exprs[value.as_expr().unwrap()].kind {
             ExprKind::IntLiteral { value, .. } => assert_eq!(*value, 12),
             other => panic!("expected folded IntLiteral(12), got {other:?}"),
         }
@@ -1636,9 +1684,9 @@ mod tests {
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
         };
-        let original = value.expr();
+        let original = value.as_expr().unwrap();
         let (orig_left, orig_right) = match &body.exprs[original].kind {
-            ExprKind::Binary { left, right, .. } => (left.expr(), right.expr()),
+            ExprKind::Binary { left, right, .. } => (left.as_expr().unwrap(), right.as_expr().unwrap()),
             other => panic!("expected Binary, got {other:?}"),
         };
         let before = body.exprs.len();
@@ -1652,7 +1700,7 @@ mod tests {
         assert_eq!(body.exprs.len(), before + 3);
         assert_ne!(clone, original);
         let (new_left, new_right) = match &body.exprs[clone].kind {
-            ExprKind::Binary { left, right, .. } => (left.expr(), right.expr()),
+            ExprKind::Binary { left, right, .. } => (left.as_expr().unwrap(), right.as_expr().unwrap()),
             other => panic!("expected cloned Binary, got {other:?}"),
         };
         // Deep copy: the clone's operands are fresh ids, not shared.
@@ -1691,7 +1739,7 @@ mod tests {
             let add = bin(b, one, NirBinaryOp::Add, two);
             let let_stmt = let_x(b, add, false);
             let unit = e(b, ExprKind::Unit);
-            let unit_stmt = s(b, StmtKind::Expr(unit));
+            let unit_stmt = s(b, StmtKind::Expr(unit.into()));
             let ret = ret_x(b);
             vec![let_stmt, unit_stmt, ret]
         });
@@ -1728,7 +1776,7 @@ mod tests {
                     value: seven.into(),
                 },
             );
-            let assign_stmt = s(b, StmtKind::Expr(assign));
+            let assign_stmt = s(b, StmtKind::Expr(assign.into()));
             vec![let_stmt, assign_stmt]
         });
         let mut __buf_eng = EngineBuffers::default();
@@ -1756,11 +1804,11 @@ mod tests {
         // `{ x; 1 + 2; }` — promote the `x` local read into the `1 + 2` node.
         let mut body = mk_body(|b| {
             let lx = local0(b);
-            let s_x = s(b, StmtKind::Expr(lx));
+            let s_x = s(b, StmtKind::Expr(lx.into()));
             let one = lit(b, 1);
             let two = lit(b, 2);
             let add = bin(b, one, NirBinaryOp::Add, two);
-            let s_add = s(b, StmtKind::Expr(add));
+            let s_add = s(b, StmtKind::Expr(add.into()));
             vec![s_x, s_add]
         });
         let root = body.root;
