@@ -33,17 +33,22 @@ remote URL. Two principles anchor the rest:
 
 ### Specifier forms
 
-| Form                             | Resolver                                      |
-| -------------------------------- | --------------------------------------------- |
-| `wasi:…` / `core:…`              | Reserved → compiler-bundled                   |
-| `ns:pkg[/iface][@ver]` (open ns) | Default registry, or `with`/manifest override |
-| `lib:nick`                       | Indirection: alias / rename / private dep     |
-| `./` `../`                       | Local file                                    |
-| `http(s)://`                     | Remote                                        |
+| Form                     | Resolver                                      |
+| ------------------------ | --------------------------------------------- |
+| `wasi:…` / `core:…`      | Reserved → compiler-bundled                   |
+| `ns:pkg[@ver]` (open ns) | Default registry, or `with`/manifest override |
+| `lib:nick`               | Indirection: alias / rename / private dep     |
+| `./` `../`               | Local file                                    |
+| `http(s)://`             | Remote                                        |
 
 `wasi:`/`core:` are not a separate scheme — they are coordinates whose
-namespace happens to be bundled. Nested namespaces (`a:b:pkg`) and `/iface`
-follow WIT.
+namespace happens to be bundled. Nested namespaces (`a:b:pkg`) follow WIT.
+
+A specifier names a **package only**; it carries no interface segment.
+Interfaces and their members are selected in the `use { ... }` list (`Iface`,
+`Iface::{op}`), as Wado already does. A package's internal file layout (the
+bundled stdlib's `core:prelude/array.wado`-style splits) is a loader detail,
+never a user-facing specifier.
 
 ### `lib:` is the sole home for indirection
 

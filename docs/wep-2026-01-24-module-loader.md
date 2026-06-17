@@ -26,9 +26,9 @@ Module paths in `use` declarations follow this grammar:
 ```
 ModulePath := CoordinatePath | LibAlias | LocalPath | RemotePath
 
-CoordinatePath := Namespace (":" Namespace)* ":" Package ("/" Interface)? ("@" Version)?
+CoordinatePath := Namespace (":" Namespace)* ":" Package ("@" Version)?
 LibAlias := "lib:" Identifier
-Namespace, Package, Interface := Identifier
+Namespace, Package := Identifier
 
 LocalPath := ("." | "..") "/" RelativePath
 RelativePath := PathSegment ("/" PathSegment)*
